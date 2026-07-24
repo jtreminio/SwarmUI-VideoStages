@@ -82,7 +82,6 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
         latentInput.ConnectFromPath(bridge, g.CurrentMedia.Path);
         image.ConnectFromPath(bridge, guideImagePath);
         downscale.ConnectToUntyped(loader.LatentDownscaleFactor);
-        bridge.SyncNode(guideNode);
         genInfo.SetConditioning(guide);
         g.CurrentMedia = g.CurrentMedia.WithPath(
             latentOut,
@@ -107,7 +106,6 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
                 bridge,
                 new JArray(controlImagePath[0], controlImagePath[1]));
             repeat.Amount.SetFromToken(bridge, frames.DeepClone());
-            bridge.SyncNode(repeat);
             return WorkflowBridge.ToPath(repeat.IMAGE);
         }
 
@@ -117,7 +115,6 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
             bridge.AddNode(new ImageFromBatchNode().With(BatchIndex: 0));
         trim.Image.TryConnectFromPath(bridge, guideSource);
         trim.Length.SetFromToken(bridge, frames.DeepClone());
-        bridge.SyncNode(trim);
         return WorkflowBridge.ToPath(trim.IMAGE);
     }
 }

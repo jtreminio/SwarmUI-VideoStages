@@ -125,6 +125,7 @@ internal sealed class ControlNetCoreMediaCapture(WorkflowGenerator g)
         if (FindUpstreamScaleToMultipleResize(bridge, controlImage) is ResizeImageMaskNodeNode existing)
         {
             existing.ExtraInputs["resize_type.multiple"] = 64;
+            // Raw ExtraInputs edits are not auto-synced by the bridge.
             bridge.SyncNode(existing);
             return;
         }
@@ -142,8 +143,8 @@ internal sealed class ControlNetCoreMediaCapture(WorkflowGenerator g)
             rewired.Input.ConnectToUntyped(batchSource);
             rewired.ExtraInputs["resize_type.multiple"] = 64;
             batch.Image.ConnectToUntyped(rewired.Resized);
+            // Raw ExtraInputs edits are not auto-synced by the bridge.
             bridge.SyncNode(rewired);
-            bridge.SyncNode(batch);
             return;
         }
         ResizeImageMaskNodeNode resize = bridge.AddNode(new ResizeImageMaskNodeNode()).With(
@@ -151,6 +152,7 @@ internal sealed class ControlNetCoreMediaCapture(WorkflowGenerator g)
             ScaleMethod: "lanczos");
         resize.Input.ConnectToUntyped(consumerOutput);
         resize.ExtraInputs["resize_type.multiple"] = 64;
+        // Raw ExtraInputs edits are not auto-synced by the bridge.
         bridge.SyncNode(resize);
         controlImage[0] = resize.Id;
         controlImage[1] = 0;
@@ -164,7 +166,6 @@ internal sealed class ControlNetCoreMediaCapture(WorkflowGenerator g)
         }
         ImageFromBatchNode batch = bridge.AddNode(new ImageFromBatchNode()).With(BatchIndex: 0, Length: 1);
         batch.Image.TryConnectFromPath(bridge, controlImage);
-        bridge.SyncNode(batch);
         controlImage[0] = batch.Id;
         controlImage[1] = 0;
     }

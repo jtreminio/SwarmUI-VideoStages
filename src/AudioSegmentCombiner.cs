@@ -132,13 +132,11 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
         SwarmEnsureAudioNode ensure = bridge.AddNode(new SwarmEnsureAudioNode().With(
             TargetDuration: segment.TrimStartSeconds + segment.LengthSeconds));
         ensure.Audio.ConnectToUntyped(source);
-        bridge.SyncNode(ensure);
 
         TrimAudioDurationNode trim = bridge.AddNode(new TrimAudioDurationNode()).With(
             StartIndex: segment.TrimStartSeconds,
             Duration: segment.LengthSeconds);
         trim.Audio.ConnectTo(ensure.AUDIO);
-        bridge.SyncNode(trim);
         INodeOutput trimmed = ApplyVolume(bridge, trim.AUDIO, segment.Volume);
 
         if (segment.StartSeconds <= 0)
@@ -150,7 +148,6 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
         AudioConcatNode concat = bridge.AddNode(new AudioConcatNode()).With(Direction: ConcatDirectionAfter);
         concat.Audio1.ConnectToUntyped(silence);
         concat.Audio2.ConnectToUntyped(trimmed);
-        bridge.SyncNode(concat);
         return concat.AUDIO;
     }
 
@@ -173,7 +170,6 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
         AudioAdjustVolumeNode adjust = bridge.AddNode(
             new AudioAdjustVolumeNode().With(Volume: decibels));
         adjust.Audio.ConnectToUntyped(audio);
-        bridge.SyncNode(adjust);
         return adjust.AUDIO;
     }
 
@@ -183,7 +179,6 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
             Duration: durationSeconds,
             SampleRate: SilenceSampleRate,
             Channels: SilenceChannels);
-        bridge.SyncNode(empty);
         return empty.AUDIO;
     }
 
@@ -192,7 +187,6 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
         AudioMergeNode merge = bridge.AddNode(new AudioMergeNode()).With(MergeMethod: MergeMethodAdd);
         merge.Audio1.ConnectToUntyped(baseAudio);
         merge.Audio2.ConnectToUntyped(overlay);
-        bridge.SyncNode(merge);
         return merge.AUDIO;
     }
 }

@@ -122,7 +122,6 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
             LTXVAudioVAEDecodeNode audioDecode = bridge.AddNode(new LTXVAudioVAEDecodeNode());
             audioDecode.Samples.TryConnectFromPath(bridge, latentAudioPath);
             audioDecode.AudioVae.ConnectFrom(audioVae);
-            bridge.SyncNode(audioDecode);
             g.CurrentMedia.AttachedAudio = new WGNodeData(
                 audioDecode.Audio.ToPath(),
                 g,

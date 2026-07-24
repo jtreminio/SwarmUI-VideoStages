@@ -90,7 +90,6 @@ internal static class MultiClipAudioGraphAssembler
                 Duration: clip.Frames / (double)clip.FramesPerSecond,
                 SampleRate: SilenceSampleRate,
                 Channels: SilenceChannels);
-            bridge.SyncNode(silence);
             outputs.Add(silence.AUDIO);
         }
         return outputs;
@@ -133,7 +132,6 @@ internal static class MultiClipAudioGraphAssembler
             AudioConcatNode concat = bridge.AddNode(new AudioConcatNode());
             concat.Audio1.ConnectToUntyped(acc);
             concat.Audio2.ConnectToUntyped(audioOutputs[i]);
-            bridge.SyncNode(concat);
             acc = concat.AUDIO;
         }
         return acc;

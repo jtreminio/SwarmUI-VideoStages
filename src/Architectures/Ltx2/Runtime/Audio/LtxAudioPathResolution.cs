@@ -38,7 +38,6 @@ internal static class LtxAudioPathResolution
             : bridge.AddNode(new SwarmEnsureAudioNode(), swarmEnsureAudioStableNodeId);
         ensure.Audio.ConnectFromPath(bridge, rawRef);
         ensure.TargetDuration.Set(0.1);
-        bridge.SyncNode(ensure);
         return ensure.AUDIO.ToPath();
     }
 }

@@ -249,6 +249,5 @@ internal sealed class LtxStageLatentAudioFactory(
             emptyAudio.FramesNumber.TryConnectFromPath(bridge, framesArr);
         }
         emptyAudio.FrameRate.Set(frameRate);
-        bridge.SyncNode(emptyAudio);
     }
 }

@@ -77,7 +77,6 @@ internal static class LtxPostChainRebuilder
 
         LTXVSeparateAVLatentNode newSeparate = bridge.AddNode(new LTXVSeparateAVLatentNode());
         newSeparate.AvLatent.ConnectToUntyped(recipe.StageOutput);
-        bridge.SyncNode(newSeparate);
 
         ReplaceVideoDecode(
             bridge,
@@ -120,7 +119,6 @@ internal static class LtxPostChainRebuilder
 
         LTXVSeparateAVLatentNode newSeparate = bridge.AddNode(new LTXVSeparateAVLatentNode());
         newSeparate.AvLatent.ConnectToUntyped(recipe.StageOutput);
-        bridge.SyncNode(newSeparate);
 
         ComfyNode dedicatedDecode =
             AddDecode(bridge, recipe.VaeOutput, newSeparate.VideoLatent, decodeConfig);
@@ -128,7 +126,6 @@ internal static class LtxPostChainRebuilder
         LTXVAudioVAEDecodeNode dedicatedAudioDecode = bridge.AddNode(
             new LTXVAudioVAEDecodeNode().With(Samples: newSeparate.AudioLatent));
         dedicatedAudioDecode.AudioVae.ConnectToUntyped(recipe.AudioVaeOutput);
-        bridge.SyncNode(dedicatedAudioDecode);
 
         return new MediaRef
         {
@@ -175,7 +172,6 @@ internal static class LtxPostChainRebuilder
         LTXVAudioVAEDecodeNode audioDecode = bridge.AddNode(
             new LTXVAudioVAEDecodeNode().With(Samples: separate.AudioLatent));
         audioDecode.AudioVae.ConnectFrom(audioVae);
-        bridge.SyncNode(audioDecode);
 
         currentMedia.AttachedAudio = new MediaRef
         {
@@ -204,7 +200,6 @@ internal static class LtxPostChainRebuilder
                 : bridge.AddNode(tiled);
             added.Vae.ConnectToUntyped(vaeOutput);
             added.Samples.ConnectToUntyped(samplesOutput);
-            bridge.SyncNode(added);
             return added;
         }
 
@@ -214,7 +209,6 @@ internal static class LtxPostChainRebuilder
             : bridge.AddNode(basic);
         addedBasic.Vae.ConnectToUntyped(vaeOutput);
         addedBasic.Samples.ConnectToUntyped(samplesOutput);
-        bridge.SyncNode(addedBasic);
         return addedBasic;
     }
 
@@ -259,7 +253,6 @@ internal static class LtxPostChainRebuilder
                           && input.Name == "samples");
         if (retargeted > 0)
         {
-            bridge.SyncNode(audioDecode.Id);
         }
 
         if (!HasAudioDecodeConnectedToSeparate(bridge, audioDecode.Id, newSeparate.Id))

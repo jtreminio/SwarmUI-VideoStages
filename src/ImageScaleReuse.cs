@@ -82,7 +82,6 @@ internal static class ImageScaleReuse
             && !bridge.Graph.FindDownstream(output).Any())
         {
             existing.With(Width: width, Height: height, UpscaleMethod: upscaleMethod);
-            bridge.SyncNode(existing);
             return existing;
         }
         return Create(bridge, sourcePath, width, height, crop, upscaleMethod);

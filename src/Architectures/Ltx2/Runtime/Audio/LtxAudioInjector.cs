@@ -148,7 +148,6 @@ internal sealed class LtxAudioInjector(
                 continue;
             }
             emptyAudio.FramesNumber.ConnectTo(framesOutput);
-            bridge.SyncNode(emptyAudio);
         }
     }
 
@@ -188,7 +187,6 @@ internal sealed class LtxAudioInjector(
                 continue;
             }
             concat.AudioLatent.ConnectTo(maskedLatent);
-            bridge.SyncNode(concat);
         }
     }
 

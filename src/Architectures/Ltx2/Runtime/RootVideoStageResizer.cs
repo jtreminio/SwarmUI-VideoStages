@@ -210,6 +210,5 @@ internal sealed class RootVideoStageResizer(
         {
             scale.UpscaleMethod.Set("lanczos");
         }
-        bridge.SyncNode(scale);
     }
 }

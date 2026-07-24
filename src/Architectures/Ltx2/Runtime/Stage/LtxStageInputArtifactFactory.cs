@@ -85,7 +85,6 @@ internal sealed class LtxStageInputArtifactFactory
         {
             separate = bridge.AddNode(new LTXVSeparateAVLatentNode());
             separate.AvLatent.ConnectToUntyped(avLatentSource);
-            bridge.SyncNode(separate);
         }
 
         string decodeNodeId = LtxPostChainRebuilder.AddDecode(

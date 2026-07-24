@@ -83,6 +83,5 @@ public partial class StageFlowTests
                 ?? throw new InvalidOperationException("Expected seeded root VAE loader.");
             UnknownNode unrelatedSink = bridge.AddStub("UnitTest_UnrelatedPreview", "802");
             unrelatedSink.GetInput("images").ConnectToUntyped(sharedRootVae.FindOutput(0));
-            bridge.SyncNode(unrelatedSink);
         }, 11.25);
 }

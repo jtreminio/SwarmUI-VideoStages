@@ -40,7 +40,6 @@ internal sealed class ControlNetFrameCountService(WorkflowGenerator g)
         }
         GetImageSizeNode sizeNode = bridge.AddNode(new GetImageSizeNode());
         sizeNode.Image.ConnectToUntyped(frameSource);
-        bridge.SyncNode(sizeNode);
         framesConnection = WorkflowBridge.ToPath(sizeNode.BatchSize);
         VideoGraphHelpers.CachePath(g, helperKey, framesConnection);
         return true;

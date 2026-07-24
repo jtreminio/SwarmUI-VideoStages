@@ -41,7 +41,6 @@ internal sealed class IcLoraControlSignalBuilder(WorkflowGenerator g)
     {
         CannyNode canny = bridge.AddNode(new CannyNode());
         canny.Image.TryConnectFromPath(bridge, images);
-        bridge.SyncNode(canny);
         return WorkflowBridge.ToPath(canny.IMAGE);
     }
 
@@ -62,9 +61,6 @@ internal sealed class IcLoraControlSignalBuilder(WorkflowGenerator g)
         };
         bridge.AddNode(render);
         render.Da3Geometry.ConnectToUntyped(inference.Da3Geometry);
-        bridge.SyncNode(model);
-        bridge.SyncNode(inference);
-        bridge.SyncNode(render);
         return WorkflowBridge.ToPath(render.IMAGE);
     }
 
@@ -79,9 +75,6 @@ internal sealed class IcLoraControlSignalBuilder(WorkflowGenerator g)
         MoGeRenderNode render =
             bridge.AddNode(new MoGeRenderNode().With(Output: "normal_opengl"));
         render.MogeGeometry.ConnectToUntyped(inference.MogeGeometry);
-        bridge.SyncNode(model);
-        bridge.SyncNode(inference);
-        bridge.SyncNode(render);
         return WorkflowBridge.ToPath(render.IMAGE);
     }
 }

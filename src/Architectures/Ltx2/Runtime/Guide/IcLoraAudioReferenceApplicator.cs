@@ -54,7 +54,6 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         refTokens.PositiveInput.ConnectFromPath(bridge, genInfo.PosCond);
         refTokens.NegativeInput.ConnectFromPath(bridge, genInfo.NegCond);
         refTokens.AudioLatent.TryConnectFromPath(bridge, audioLatentPath);
-        bridge.SyncNode(refTokens);
         genInfo.PosCond = WorkflowBridge.ToPath(refTokens.Positive);
         genInfo.NegCond = WorkflowBridge.ToPath(refTokens.Negative);
         stageFrame.AudioReferenceActive = true;
@@ -149,8 +148,6 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
                 VideoBase64: VideoGraphHelpers.StripDataUriPrefix(media.Data)));
         GetVideoComponentsNode components = bridge.AddNode(new GetVideoComponentsNode());
         components.Video.ConnectToUntyped(load.VIDEO);
-        bridge.SyncNode(load);
-        bridge.SyncNode(components);
         return components.Audio.ToWGNodeData(g, WGNodeData.DT_AUDIO);
     }
 

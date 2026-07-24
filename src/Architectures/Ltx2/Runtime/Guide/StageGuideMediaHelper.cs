@@ -94,7 +94,6 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
                 match =>
                 {
                     match.Crop.Set("center");
-                    bridge.SyncNode(match);
                 }))
             {
                 resolvedGuideMedia = resolvedGuideMedia.WithPath([reusable.Id, 0]);

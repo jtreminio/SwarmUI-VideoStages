@@ -63,7 +63,6 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
             {
                 loader.ModelInput.ConnectFromPath(bridge, modelPath);
             }
-            bridge.SyncNode(loader);
             genInfo.Model = genInfo.Model.WithPath(loader.Model);
             loaders.Add(loader);
         }

@@ -117,7 +117,6 @@ internal sealed class LtxModelPromptPreparer(
             Epsilon: PromptRelayEpsilon));
         relay.ModelInput.ConnectFromPath(bridge, modelPath);
         relay.Clip.TryConnectToUntyped(clipOutput);
-        bridge.SyncNode(relay);
 
         genInfo.Model = genInfo.Model.WithPath(relay.Model);
         genInfo.PosCond = relay.Positive.ToPath();
@@ -142,7 +141,6 @@ internal sealed class LtxModelPromptPreparer(
             TargetHeight: height,
             Guidance: guidance));
         node.Clip.TryConnectToUntyped(clipOutput);
-        bridge.SyncNode(node);
         return node;
     }
 

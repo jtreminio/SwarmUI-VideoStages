@@ -54,8 +54,6 @@ internal class HdrPostprocessApplicator(WorkflowGenerator g)
                 hdrSave.Audio.ConnectToUntyped(audioSource);
             }
 
-            bridge.SyncNode(post);
-            bridge.SyncNode(hdrSave);
             VideoGraphHelpers.RemoveNode(g, bridge, save.Id);
         }
     }

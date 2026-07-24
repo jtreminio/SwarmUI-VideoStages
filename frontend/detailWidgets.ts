@@ -946,7 +946,7 @@ export const buildRepeatingEditor = (
     const add = document.createElement("button");
     add.type = "button";
     add.className =
-        `vst-add-btn vst-detail-repeating-add ${spec.add.className}`.trim();
+        `basic-button small-button vst-detail-repeating-add ${spec.add.className}`.trim();
     add.textContent = spec.add.label ?? "+ Add";
     add.title = spec.add.title;
     add.setAttribute("aria-label", spec.add.title);

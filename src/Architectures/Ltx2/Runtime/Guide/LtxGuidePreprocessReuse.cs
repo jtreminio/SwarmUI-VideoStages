@@ -57,7 +57,6 @@ internal sealed class LtxGuidePreprocessReuse(
                 out ImageScaleNode existing))
         {
             existing.Crop.Set("center");
-            bridge.SyncNode(existing);
             return guideImagePath;
         }
 
@@ -65,7 +64,6 @@ internal sealed class LtxGuidePreprocessReuse(
         if (ImageScaleReuse.TryFind(bridge, scaleSourcePath, targetW, targetH, out ImageScaleNode reusable))
         {
             reusable.Crop.Set("center");
-            bridge.SyncNode(reusable);
             return reusable.IMAGE.ToPath();
         }
 

@@ -103,7 +103,6 @@ internal sealed class LtxVideoRetakeMasker(WorkflowGenerator g)
             {
                 batch.Images.Add(image);
             }
-            bridge.SyncNode(batch);
             maskImages = batch.IMAGE;
         }
 
@@ -114,7 +113,6 @@ internal sealed class LtxVideoRetakeMasker(WorkflowGenerator g)
         LTXVSetVideoLatentNoiseMasksNode setMask = bridge.AddNode(new LTXVSetVideoLatentNoiseMasksNode().With(
             Masks: toMask.MASK));
         setMask.Samples.ConnectFromPath(bridge, latentPath);
-        bridge.SyncNode(setMask);
 
         return encodedLatent.WithPath(setMask.LATENT.ToPath());
     }

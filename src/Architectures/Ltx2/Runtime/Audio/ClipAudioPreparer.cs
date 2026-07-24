@@ -164,7 +164,6 @@ internal sealed class ClipAudioPreparer(
                 Duration: clipDurationSeconds,
                 SampleRate: SilenceSampleRate,
                 Channels: SilenceChannels);
-            bridge.SyncNode(silence);
             bed = silence.AUDIO;
         }
 
@@ -172,7 +171,6 @@ internal sealed class ClipAudioPreparer(
             new AudioMergeNode().With(MergeMethod: MergeMethodAdd));
         merge.Audio1.ConnectToUntyped(bed);
         merge.Audio2.ConnectToUntyped(carryTail);
-        bridge.SyncNode(merge);
         return new WGNodeData(
             WorkflowBridge.ToPath(merge.AUDIO),
             g,

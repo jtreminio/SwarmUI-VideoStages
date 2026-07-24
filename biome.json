@@ -8,12 +8,12 @@
     "files": {
         "ignoreUnknown": false,
         "includes": [
-            "**",
-            "!Assets",
-            "!coverage",
-            "!comfy_node",
-            "!nonversioned",
-            "!Tests"
+            "frontend/**",
+            "scripts/**",
+            "*.json",
+            "*.cjs",
+            "*.mjs",
+            "!package-lock.json"
         ]
     },
     "formatter": {

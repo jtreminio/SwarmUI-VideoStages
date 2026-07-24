@@ -72,7 +72,7 @@ export const buildRetakeSection = (
         const add = document.createElement("button");
         add.type = "button";
         add.className =
-            "vst-add-btn vst-detail-repeating-add vst-detail-add-retake";
+            "basic-button small-button vst-detail-repeating-add vst-detail-add-retake";
         add.textContent = "+ Add Retake";
         add.title = decision.supported
             ? "Add a retake window"

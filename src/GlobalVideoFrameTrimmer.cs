@@ -54,7 +54,6 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
             TrimStart: trimStartFrames,
             TrimEnd: trimEndFrames));
         trim.Image.ConnectToUntyped(videoOutput);
-        bridge.SyncNode(trim);
 
         int? frames = TrimmedFrameCount(
             originalFrames,
@@ -94,7 +93,6 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
             StartIndex: Math.Max(0, trimStartFrames) / (double)framesPerSecond.Value,
             Duration: keptFrames / (double)framesPerSecond.Value));
         audioTrim.Audio.ConnectToUntyped(audioOutput);
-        bridge.SyncNode(audioTrim);
         return new WGNodeData(
             audioTrim.AUDIO.ToPath(),
             g,

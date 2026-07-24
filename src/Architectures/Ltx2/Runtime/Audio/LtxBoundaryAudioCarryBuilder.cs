@@ -50,7 +50,6 @@ internal sealed class LtxBoundaryAudioCarryBuilder(WorkflowGenerator g)
             StartIndex: (previousFrames - windowFrames) / (double)fps,
             Duration: durationSeconds);
         tail.Audio.ConnectToUntyped(previousAudio);
-        bridge.SyncNode(tail);
 
         return new(
             new WGNodeData(

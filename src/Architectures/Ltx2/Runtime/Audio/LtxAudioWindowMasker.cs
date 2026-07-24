@@ -109,7 +109,6 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
         {
             mask.NegativeInput.ConnectFromPath(bridge, genInfo.NegCond);
         }
-        bridge.SyncNode(mask);
 
         // The node rewrites conditioning alongside the av-latent; thread its outputs to the sampler.
         genInfo.PosCond = mask.Positive.ToPath();

@@ -236,7 +236,7 @@
     }),
     registerPromptPrefix: (prefix, description, examples, isMulti) => {
       if (typeof promptTabComplete === "undefined") {
-        return false;
+        return;
       }
       promptTabComplete.registerPrefix(
         prefix,
@@ -244,7 +244,6 @@
         examples,
         isMulti
       );
-      return true;
     },
     addPostParamBuildStep: (step) => {
       if (typeof postParamBuildSteps === "undefined" || !Array.isArray(postParamBuildSteps)) {
@@ -277,7 +276,7 @@
     },
     registerRefineVideoButton: (onSelect, description) => {
       if (typeof registerMediaButton !== "function") {
-        return false;
+        return;
       }
       registerMediaButton(
         "Refine Video",
@@ -286,7 +285,6 @@
         ["video"],
         true
       );
-      return true;
     },
     getCurrentMediaMetadata: () => typeof currentMetadataVal === "string" ? currentMetadataVal : null,
     interpretMediaMetadata: (metadata) => typeof interpretMetadata === "function" ? interpretMetadata(metadata) : metadata,
@@ -312,120 +310,6 @@
   // frontend/host/index.ts
   var bridge = createDefaultVideoStagesHostBridge();
   var getVideoStagesHostBridge = () => bridge;
-
-  // frontend/selectOption.ts
-  var preserveSelectedOption = (options, selectedValue, position, build) => {
-    const value = `${selectedValue || ""}`.trim();
-    if (!value || options.some((option2) => option2.value === value)) {
-      return;
-    }
-    const option = build(value);
-    if (!option) {
-      return;
-    }
-    if (position === "start") {
-      options.unshift(option);
-    } else {
-      options.push(option);
-    }
-  };
-  var resolveSelectValue = (currentValue, options, fallback) => {
-    const desired = `${currentValue || ""}`;
-    return options.some((option) => option.value === desired) ? desired : fallback;
-  };
-
-  // frontend/audioSource.ts
-  var AUDIO_SOURCE_NATIVE = "Native";
-  var AUDIO_SOURCE_UPLOAD = "Upload";
-  var AUDIO_SOURCE_CONTROLNET = "ControlNet";
-  var AUDIO_SOURCE_DISABLED_KIND = "Disabled";
-  var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
-  var isAceStepFunAudioSource = (source) => ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
-  var audioSourceKind = (source) => {
-    const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
-    return isAceStepFunAudioSource(normalized) ? "AceStepFun" : normalized;
-  };
-  var isAllowedAudioSource = (allowedKinds, source) => {
-    const kind = audioSourceKind(source);
-    return allowedKinds.includes(kind) || kind === AUDIO_SOURCE_NATIVE && allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND);
-  };
-  var defaultAuthoringAudioSource = (allowedKinds) => allowedKinds.includes(AUDIO_SOURCE_NATIVE) || allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND) ? AUDIO_SOURCE_NATIVE : allowedKinds[0] ?? AUDIO_SOURCE_NATIVE;
-  var isControlNetAudioSource = (source) => `${source ?? ""}`.trim() === AUDIO_SOURCE_CONTROLNET;
-  var canUseClipLengthFromAudio = (source) => {
-    const normalized = `${source ?? ""}`.trim();
-    return normalized === AUDIO_SOURCE_UPLOAD || isAceStepFunAudioSource(normalized) || isControlNetAudioSource(normalized);
-  };
-  var getAceStepFunRefs = () => {
-    const snapshot = getVideoStagesHostBridge().getAceStepFunRegistry();
-    if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
-      return [];
-    }
-    const seen = /* @__PURE__ */ new Set();
-    const refs = [];
-    for (const raw of snapshot.refs) {
-      const ref = `${raw || ""}`.trim();
-      if (!ref || seen.has(ref)) {
-        continue;
-      }
-      seen.add(ref);
-      refs.push(ref);
-    }
-    return refs;
-  };
-  var getAceStepFunRefLabel = (ref) => {
-    const audioRef = ACESTEPFUN_AUDIO_REF_PATTERN.exec(ref);
-    if (audioRef) {
-      return `AceStepFun Audio ${audioRef[1]}`;
-    }
-    return ref;
-  };
-  var appendAceStepFunRefs = (options) => {
-    for (const ref of getAceStepFunRefs()) {
-      options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
-    }
-  };
-  var appendMissingSelectedRef = (options, currentValue) => preserveSelectedOption(
-    options,
-    currentValue,
-    "end",
-    (value) => isAceStepFunAudioSource(value) ? { value, label: getAceStepFunRefLabel(value) } : null
-  );
-  var buildSegmentAudioSourceOptions = (currentValue = "") => {
-    const options = [
-      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
-    ];
-    appendAceStepFunRefs(options);
-    appendMissingSelectedRef(options, currentValue);
-    return options;
-  };
-  var buildAudioSourceOptions = (currentValue = "", context = {}) => {
-    const options = [
-      { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
-      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
-    ];
-    appendAceStepFunRefs(options);
-    if (context.controlNetEnabled) {
-      options.push({
-        value: AUDIO_SOURCE_CONTROLNET,
-        label: AUDIO_SOURCE_CONTROLNET
-      });
-    }
-    if (context.allowedKinds) {
-      const allowed = new Set(context.allowedKinds);
-      const filtered = options.filter((option) => {
-        const kind = audioSourceKind(option.value);
-        return allowed.has(kind) || kind === AUDIO_SOURCE_NATIVE && allowed.has(AUDIO_SOURCE_DISABLED_KIND);
-      });
-      options.length = 0;
-      options.push(...filtered);
-    }
-    appendMissingSelectedRef(options, currentValue);
-    preserveSelectedOption(options, currentValue, "start", (value) => ({
-      value,
-      label: `${value} (unsupported persisted value)`
-    }));
-    return options;
-  };
 
   // frontend/constants.ts
   var REF_FRAME_MIN = 1;
@@ -505,6 +389,23 @@
   };
 
   // frontend/normalizationShared.ts
+  var text = (value, fallback = "") => `${value ?? fallback}`;
+  var trimmedText = (value, fallback = "") => text(value, fallback).trim();
+  var textOr = (value, fallback) => text(value, fallback) || fallback;
+  var numberOr = (value, fallback) => toNumber(text(value, fallback), fallback);
+  var clampedNumber = (value, fallback, min, max) => clamp(numberOr(value, fallback), min, max);
+  var nonNegativeNumber = (value) => Math.max(0, numberOr(value, 0));
+  var optionalNonNegativeNumber = (value) => {
+    if (value == null || trimmedText(value) === "") {
+      return null;
+    }
+    const number = toNumber(text(value), Number.NaN);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+  };
+  var optionalPositiveNumber = (value) => {
+    const number = optionalNonNegativeNumber(value);
+    return number !== null && number > 0 ? number : null;
+  };
   var readProp = (raw, ...keys) => {
     for (const key of keys) {
       if (Object.hasOwn(raw, key)) {
@@ -513,13 +414,7 @@
     }
     return void 0;
   };
-  var normalizeOptionalEntityId = (value) => {
-    if (typeof value !== "string") {
-      return void 0;
-    }
-    const id = value.trim();
-    return id || void 0;
-  };
+  var normalizeOptionalEntityId = (value) => typeof value === "string" ? value.trim() || void 0 : void 0;
   var snapToStep = (value, step) => step > 0 ? Math.round(value / step) * step : value;
   var clampWindowInDuration = (startRaw, lengthRaw, clipDuration, minLength) => {
     if (!(lengthRaw > 0)) {
@@ -542,21 +437,19 @@
   ) ?? upscaleMethodValues[0] ?? "";
   var snapValueToStep = (value, fallback, min, max, step) => {
     const unitScale = 1 / step;
-    return Math.round(
-      clamp(toNumber(`${value ?? fallback}`, fallback), min, max) * unitScale
-    ) / unitScale;
+    return Math.round(clampedNumber(value, fallback, min, max) * unitScale) / unitScale;
   };
 
   // frontend/normalizationMedia.ts
   var normalizePromptWindow = (raw) => {
-    const duration = toNumber(`${raw.duration ?? 0}`, 0);
+    const duration = numberOr(raw.duration, 0);
     if (!(duration > 0)) {
       return null;
     }
-    const start = Math.max(0, toNumber(`${raw.start ?? 0}`, 0));
+    const start = nonNegativeNumber(raw.start);
     return {
       id: normalizeOptionalEntityId(raw.id),
-      prompt: `${raw.prompt ?? ""}`,
+      prompt: text(raw.prompt),
       start,
       duration
     };
@@ -572,8 +465,8 @@
     if (!isRecord(value)) {
       return null;
     }
-    const startRaw = Math.max(0, toNumber(`${value.startSeconds ?? 0}`, 0));
-    const lengthRaw = toNumber(`${value.lengthSeconds ?? 0}`, 0);
+    const startRaw = nonNegativeNumber(value.startSeconds);
+    const lengthRaw = numberOr(value.lengthSeconds, 0);
     const window2 = clampWindowInDuration(
       startRaw,
       lengthRaw,
@@ -584,8 +477,9 @@
       return null;
     }
     const strengthRaw = value.strength;
-    const strength = strengthRaw == null ? RETAKE_STRENGTH_DEFAULT : clamp(
-      toNumber(`${strengthRaw}`, RETAKE_STRENGTH_DEFAULT),
+    const strength = strengthRaw == null ? RETAKE_STRENGTH_DEFAULT : clampedNumber(
+      strengthRaw,
+      RETAKE_STRENGTH_DEFAULT,
       RETAKE_STRENGTH_MIN,
       RETAKE_STRENGTH_MAX
     );
@@ -600,14 +494,13 @@
     if (!isRecord(value)) {
       return null;
     }
-    const data = `${value.data ?? ""}`.trim();
+    const data = trimmedText(value.data);
     if (!data) {
       return null;
     }
-    const nonNegative = (raw) => Math.max(0, toNumber(`${raw ?? 0}`, 0));
-    const durationSeconds = nonNegative(value.durationSeconds);
-    let startSeconds = nonNegative(value.startSeconds);
-    let lengthSeconds = nonNegative(value.lengthSeconds);
+    const durationSeconds = nonNegativeNumber(value.durationSeconds);
+    let startSeconds = nonNegativeNumber(value.startSeconds);
+    let lengthSeconds = nonNegativeNumber(value.lengthSeconds);
     if (durationSeconds > 0) {
       startSeconds = Math.min(
         startSeconds,
@@ -624,9 +517,9 @@
     return {
       data,
       fileName: normalizeUploadFileName(
-        value.fileName == null ? null : `${value.fileName}`
+        value.fileName == null ? null : text(value.fileName)
       ),
-      fps: nonNegative(value.fps),
+      fps: nonNegativeNumber(value.fps),
       durationSeconds: roundToTenth(durationSeconds),
       startSeconds: roundToTenth(startSeconds),
       lengthSeconds: roundToTenth(lengthSeconds)
@@ -636,32 +529,21 @@
     if (!isRecord(value)) {
       return null;
     }
-    const data = `${value.data ?? ""}`.trim();
+    const data = trimmedText(value.data);
     if (!data) {
       return null;
     }
     return {
       data,
       fileName: normalizeUploadFileName(
-        value.fileName == null ? null : `${value.fileName}`
+        value.fileName == null ? null : text(value.fileName)
       )
     };
   };
 
   // frontend/normalizationAudio.ts
-  var normalizeOptionalNonNegative = (value) => {
-    if (value == null || `${value}`.trim() === "") {
-      return null;
-    }
-    const number = toNumber(`${value}`, Number.NaN);
-    return Number.isFinite(number) && number >= 0 ? number : null;
-  };
-  var normalizeOptionalPositive = (value) => {
-    const number = normalizeOptionalNonNegative(value);
-    return number !== null && number > 0 ? number : null;
-  };
   var normalizeAudioTrackSourceKind = (value) => {
-    const compact = `${value ?? ""}`.trim().toLowerCase();
+    const compact = trimmedText(value).toLowerCase();
     switch (compact) {
       case "upload":
         return "Upload";
@@ -675,27 +557,20 @@
         return "External";
     }
   };
-  var normalizeClipEntityId = (value) => normalizeOptionalEntityId(value) ?? null;
   var normalizeAudioTrackSpan = (value) => {
     if (!isRecord(value)) {
       return null;
     }
-    const sourceStart = normalizeOptionalNonNegative(value.sourceStartSeconds) ?? 0;
+    const sourceStart = optionalNonNegativeNumber(value.sourceStartSeconds) ?? 0;
     return {
       id: normalizeOptionalEntityId(value.id),
-      firstClipId: normalizeClipEntityId(value.firstClipId),
-      lastClipId: normalizeClipEntityId(value.lastClipId),
-      timelineStartSeconds: normalizeOptionalNonNegative(
+      timelineStartSeconds: optionalNonNegativeNumber(
         value.timelineStartSeconds
       ),
-      timelineLengthSeconds: normalizeOptionalPositive(
+      timelineLengthSeconds: optionalPositiveNumber(
         value.timelineLengthSeconds
       ),
-      sourceStartSeconds: sourceStart,
-      clipStartOffsetSeconds: normalizeOptionalNonNegative(
-        value.clipStartOffsetSeconds
-      ),
-      clipLengthSeconds: normalizeOptionalPositive(value.clipLengthSeconds)
+      sourceStartSeconds: sourceStart
     };
   };
   var normalizeAudioTracks = (value) => {
@@ -710,11 +585,9 @@
       const rawSource = rawTrack.source;
       const source = isRecord(rawSource) ? rawSource : {};
       const rawSpans = rawTrack.spans;
-      const volume = rawTrack.volume === void 0 ? void 0 : clamp(
-        toNumber(
-          `${rawTrack.volume}`,
-          AUDIO_SEGMENT_VOLUME_DEFAULT
-        ),
+      const volume = rawTrack.volume === void 0 ? void 0 : clampedNumber(
+        rawTrack.volume,
+        AUDIO_SEGMENT_VOLUME_DEFAULT,
         AUDIO_SEGMENT_VOLUME_MIN,
         AUDIO_SEGMENT_VOLUME_MAX
       );
@@ -722,7 +595,7 @@
         id: normalizeOptionalEntityId(rawTrack.id),
         source: {
           kind: normalizeAudioTrackSourceKind(source.kind),
-          reference: `${source.reference ?? ""}`.trim(),
+          reference: trimmedText(source.reference),
           uploadedAudio: normalizeUploadedMedia(source.uploadedAudio)
         },
         spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter((span) => span !== null) : [],
@@ -730,49 +603,6 @@
       });
     }
     return tracks;
-  };
-  var normalizeAudioSegment = (value, clipDuration) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const rawSource = value.source;
-    const source = typeof rawSource === "string" && isAceStepFunAudioSource(rawSource) ? rawSource.trim() : normalizeUploadedMedia(rawSource);
-    const startRaw = Math.max(0, toNumber(`${value.startSeconds ?? 0}`, 0));
-    const trimStartRaw = Math.max(
-      0,
-      toNumber(`${value.trimStartSeconds ?? 0}`, 0)
-    );
-    const lengthRaw = toNumber(`${value.lengthSeconds ?? 0}`, 0);
-    const window2 = clampWindowInDuration(
-      startRaw,
-      lengthRaw,
-      clipDuration,
-      AUDIO_SEGMENT_MIN_LENGTH
-    );
-    if (!window2) {
-      return null;
-    }
-    return {
-      id: normalizeOptionalEntityId(value.id),
-      source,
-      startSeconds: roundToTenth(window2.startSeconds),
-      trimStartSeconds: roundToTenth(trimStartRaw),
-      lengthSeconds: roundToTenth(window2.lengthSeconds),
-      volume: clamp(
-        toNumber(
-          `${value.volume ?? AUDIO_SEGMENT_VOLUME_DEFAULT}`,
-          AUDIO_SEGMENT_VOLUME_DEFAULT
-        ),
-        AUDIO_SEGMENT_VOLUME_MIN,
-        AUDIO_SEGMENT_VOLUME_MAX
-      )
-    };
-  };
-  var normalizeAudioSegments = (value, clipDuration) => {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    return value.map((raw) => normalizeAudioSegment(raw, clipDuration)).filter((seg) => seg !== null);
   };
 
   // frontend/clipSemantics.ts
@@ -912,6 +742,7 @@
       controlType: "none",
       // The repo also ships an auxiliary hdr-scene-emb file; only the LoRA itself is fetched.
       weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-HDR/resolve/main/ltx-2.3-22b-ic-lora-hdr-0.9.safetensors`,
+      hdr: true,
       note: "HDR generation; feed the SDR clip as the drive video. Output is auto-tonemapped to SDR (LogC3 decompressed). Suggested prompt: 'HDR footage'."
     },
     {
@@ -1097,6 +928,7 @@
     strength: IC_LORA_STRENGTH_DEFAULT,
     attentionStrength: IC_LORA_ATTENTION_DEFAULT,
     controlType: "none",
+    hdr: false,
     driveMedia: null,
     ...overrides
   });
@@ -1200,6 +1032,9 @@
         IC_LORA_ATTENTION_STEP
       ),
       controlType: driveData !== "visual" ? "none" : normalizeIcLoraControlType(raw.controlType),
+      // Documents authored before the flag existed carry only the preset id; the preset table
+      // (not a name match) seeds the intent, so those documents keep working.
+      hdr: typeof raw.hdr === "boolean" ? raw.hdr : findIcLoraPreset(normalizedPreset)?.hdr ?? false,
       driveMedia
     };
   };
@@ -1219,111 +1054,18 @@
       entry.driveData
     );
   };
-  var isHdrFeature = (entry) => `${entry.preset ?? ""}`.trim().toLowerCase() === "hdr" || `${entry.lora ?? ""}`.toLowerCase().includes("hdr");
+  var isHdrFeature = (entry) => entry.hdr === true;
   var hasSlotSourcedIcLora = (icLoras) => icLoras.some(
     (entry) => entry.driveSource !== IC_LORA_SOURCE_UPLOAD && entry.driveSource !== IC_LORA_SOURCE_INCOMING
   );
 
-  // frontend/architectures/behaviorRegistry.ts
+  // frontend/architectures/ltx2/behavior.ts
   var ltx2Behavior = {
     normalizeIcLoras,
     canonicalizeIcLoraFields,
     reconcileIncomingIcLoraDrives,
     hasSlotSourcedIcLora,
     isHdrFeature
-  };
-  var behaviors = /* @__PURE__ */ new Map([
-    ["ltx2", ltx2Behavior]
-  ]);
-  var architectureBehavior = (architectureId) => behaviors.get(architectureId) ?? null;
-  var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, sourcedClip, allowPersistedLtxFallback = false) => {
-    const behavior = architectureBehavior(architectureId);
-    if (behavior) {
-      return behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip);
-    }
-    return allowPersistedLtxFallback && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? ltx2Behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip) : [];
-  };
-  var canonicalizeArchitectureIcLoraFields = (architectureId, entry) => {
-    architectureBehavior(architectureId)?.canonicalizeIcLoraFields(entry);
-  };
-  var reconcileArchitectureIncomingIcLoraDrives = (clips, generatedEntryMode) => {
-    let changed = false;
-    clips.forEach((clip, clipIdx) => {
-      changed = architectureBehavior(
-        clip.architecture
-      )?.reconcileIncomingIcLoraDrives(
-        clips,
-        clipIdx,
-        generatedEntryMode
-      ) || changed;
-    });
-    return changed;
-  };
-  var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => architectureBehavior(architectureId)?.hasSlotSourcedIcLora(entries) ?? false;
-  var isArchitectureHdrFeature = (architectureId, entry) => architectureBehavior(architectureId)?.isHdrFeature(entry) ?? false;
-
-  // frontend/architectures/boundaryConstraints.ts
-  var GENERIC_BOUNDARY_CONSTRAINTS = {
-    frameStep: 1,
-    minFrames: 1,
-    maxFrames: Number.MAX_SAFE_INTEGER,
-    defaultFrames: 1,
-    continuityExtraFrames: 0
-  };
-  var finitePositive = (value, fallback, allowZero = false) => {
-    const numeric = Math.trunc(Number(value));
-    return Number.isFinite(numeric) && (allowZero ? numeric >= 0 : numeric > 0) ? numeric : fallback;
-  };
-  var boundaryOverlapConstraints = (rule) => {
-    const raw = rule?.constraints;
-    const frameStep = finitePositive(
-      raw?.frameStep,
-      GENERIC_BOUNDARY_CONSTRAINTS.frameStep
-    );
-    const minFrames = finitePositive(
-      raw?.minFrames,
-      GENERIC_BOUNDARY_CONSTRAINTS.minFrames
-    );
-    const maxFrames = Math.max(
-      minFrames,
-      finitePositive(raw?.maxFrames, GENERIC_BOUNDARY_CONSTRAINTS.maxFrames)
-    );
-    const authoredDefault = finitePositive(raw?.defaultFrames, minFrames);
-    return {
-      frameStep,
-      minFrames,
-      maxFrames,
-      defaultFrames: Math.max(
-        minFrames,
-        Math.min(maxFrames, authoredDefault)
-      ),
-      continuityExtraFrames: finitePositive(
-        raw?.continuityExtraFrames,
-        GENERIC_BOUNDARY_CONSTRAINTS.continuityExtraFrames,
-        true
-      )
-    };
-  };
-  var normalizeBoundaryOverlap = (value, constraints) => {
-    const numeric = Math.trunc(Number(value));
-    if (!Number.isFinite(numeric) || numeric <= 0) {
-      return constraints.defaultFrames;
-    }
-    const snapped = numeric < constraints.minFrames ? constraints.minFrames : constraints.minFrames + Math.floor(
-      (numeric - constraints.minFrames) / constraints.frameStep
-    ) * constraints.frameStep;
-    return Math.max(
-      constraints.minFrames,
-      Math.min(constraints.maxFrames, snapped)
-    );
-  };
-  var boundaryOverlapChoices = (constraints) => {
-    const choices = [];
-    for (let value = constraints.minFrames; value <= constraints.maxFrames; value += constraints.frameStep) {
-      choices.push(value);
-      if (choices.length >= 100) break;
-    }
-    return choices;
   };
 
   // frontend/architectures/ltx2/definition.ts
@@ -1547,6 +1289,114 @@
     resolveModelProfile: () => null
   };
 
+  // frontend/architectures/modules.ts
+  var VIDEO_ARCHITECTURE_MODULES = [
+    { definition: ltx2Architecture, behavior: ltx2Behavior },
+    { definition: noneArchitecture, behavior: null }
+  ];
+
+  // frontend/architectures/behaviorRegistry.ts
+  var behaviors = new Map(
+    VIDEO_ARCHITECTURE_MODULES.flatMap(
+      (module) => module.behavior ? [[module.definition.id, module.behavior]] : []
+    )
+  );
+  var architectureBehavior = (architectureId) => behaviors.get(architectureId) ?? null;
+  var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, sourcedClip, allowPersistedLtxFallback = false) => {
+    const behavior = architectureBehavior(architectureId);
+    if (behavior) {
+      return behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip);
+    }
+    return allowPersistedLtxFallback && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? ltx2Behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip) : [];
+  };
+  var canonicalizeArchitectureIcLoraFields = (architectureId, entry) => {
+    architectureBehavior(architectureId)?.canonicalizeIcLoraFields(entry);
+  };
+  var reconcileArchitectureIncomingIcLoraDrives = (clips, generatedEntryMode) => {
+    let changed = false;
+    clips.forEach((clip, clipIdx) => {
+      changed = architectureBehavior(
+        clip.architecture
+      )?.reconcileIncomingIcLoraDrives(
+        clips,
+        clipIdx,
+        generatedEntryMode
+      ) || changed;
+    });
+    return changed;
+  };
+  var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => architectureBehavior(architectureId)?.hasSlotSourcedIcLora(entries) ?? false;
+  var isArchitectureHdrFeature = (architectureId, entry) => architectureBehavior(architectureId)?.isHdrFeature(entry) ?? false;
+  var clipHasActiveHdr = (clip) => clip.icLoras.some(
+    (entry) => isArchitectureHdrFeature(clip.architecture, entry) && clip.stages.some(
+      (stage, rawStageIdx) => stage.skipped !== true && (entry.stage < 0 || entry.stage === rawStageIdx)
+    )
+  );
+
+  // frontend/architectures/boundaryConstraints.ts
+  var GENERIC_BOUNDARY_CONSTRAINTS = {
+    frameStep: 1,
+    minFrames: 1,
+    maxFrames: Number.MAX_SAFE_INTEGER,
+    defaultFrames: 1,
+    continuityExtraFrames: 0
+  };
+  var finitePositive = (value, fallback, allowZero = false) => {
+    const numeric = Math.trunc(Number(value));
+    return Number.isFinite(numeric) && (allowZero ? numeric >= 0 : numeric > 0) ? numeric : fallback;
+  };
+  var boundaryOverlapConstraints = (rule) => {
+    const raw = rule?.constraints;
+    const frameStep = finitePositive(
+      raw?.frameStep,
+      GENERIC_BOUNDARY_CONSTRAINTS.frameStep
+    );
+    const minFrames = finitePositive(
+      raw?.minFrames,
+      GENERIC_BOUNDARY_CONSTRAINTS.minFrames
+    );
+    const maxFrames = Math.max(
+      minFrames,
+      finitePositive(raw?.maxFrames, GENERIC_BOUNDARY_CONSTRAINTS.maxFrames)
+    );
+    const authoredDefault = finitePositive(raw?.defaultFrames, minFrames);
+    return {
+      frameStep,
+      minFrames,
+      maxFrames,
+      defaultFrames: Math.max(
+        minFrames,
+        Math.min(maxFrames, authoredDefault)
+      ),
+      continuityExtraFrames: finitePositive(
+        raw?.continuityExtraFrames,
+        GENERIC_BOUNDARY_CONSTRAINTS.continuityExtraFrames,
+        true
+      )
+    };
+  };
+  var normalizeBoundaryOverlap = (value, constraints) => {
+    const numeric = Math.trunc(Number(value));
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return constraints.defaultFrames;
+    }
+    const snapped = numeric < constraints.minFrames ? constraints.minFrames : constraints.minFrames + Math.floor(
+      (numeric - constraints.minFrames) / constraints.frameStep
+    ) * constraints.frameStep;
+    return Math.max(
+      constraints.minFrames,
+      Math.min(constraints.maxFrames, snapped)
+    );
+  };
+  var boundaryOverlapChoices = (constraints) => {
+    const choices = [];
+    for (let value = constraints.minFrames; value <= constraints.maxFrames; value += constraints.frameStep) {
+      choices.push(value);
+      if (choices.length >= 100) break;
+    }
+    return choices;
+  };
+
   // frontend/architectures/registry.ts
   var createArchitectureRegistry = (initial = []) => {
     const byId = /* @__PURE__ */ new Map();
@@ -1570,17 +1420,16 @@
       }
     };
   };
-  var videoArchitectureRegistry = createArchitectureRegistry([
-    ltx2Architecture,
-    noneArchitecture
-  ]);
+  var videoArchitectureRegistry = createArchitectureRegistry(
+    VIDEO_ARCHITECTURE_MODULES.map((module) => module.definition)
+  );
 
   // frontend/architectures/catalogQueries.ts
+  var architectureDescriptor = (catalog, architectureId) => (architectureId ? catalog?.architectures.find((entry) => entry.id === architectureId) : null) ?? null;
+  var modelCatalogEntry = (catalog, model) => (model ? catalog?.entries.find((entry) => entry.value === model) : null) ?? null;
   var architectureCatalogView = (catalog, architectureId, registry = videoArchitectureRegistry) => {
     const definition = registry.get(architectureId);
-    const catalogArchitecture = catalog.architectures.find(
-      (entry) => entry.id === architectureId
-    );
+    const catalogArchitecture = architectureDescriptor(catalog, architectureId);
     const entries = catalog.entries.filter(
       (entry) => entry.architectureId === architectureId
     );
@@ -1596,16 +1445,12 @@
     source: catalog.source,
     entries: catalog.entries.filter((entry) => entry.architectureId !== null)
   });
-  var architectureForModel = (catalog, model) => catalog.entries.find((entry) => entry.value === model)?.architectureId ?? null;
-  var modelProfileForModel = (catalog, model) => catalog.entries.find((entry) => entry.value === model)?.modelProfileId ?? null;
+  var architectureForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.architectureId ?? null;
+  var modelProfileForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.modelProfileId ?? null;
   var buildArchitectureRetargetPlan = (catalog, model, registry = videoArchitectureRegistry) => {
-    const entry = catalog.entries.find(
-      (candidate) => candidate.value === model
-    );
+    const entry = modelCatalogEntry(catalog, model);
     const architectureId = entry?.architectureId ?? null;
-    const descriptor = architectureId ? catalog.architectures.find(
-      (candidate) => candidate.id === architectureId
-    ) : null;
+    const descriptor = architectureDescriptor(catalog, architectureId);
     const fallback = architectureId ? registry.get(architectureId) : null;
     const profileId = entry?.modelProfileId ?? null;
     const capabilities = descriptor?.capabilities ?? fallback?.capabilities;
@@ -1786,6 +1631,10 @@
     });
     return catalogRequest;
   };
+  var invalidateArchitectureCatalog = () => {
+    authoritativeCatalog = null;
+    catalogRequest = null;
+  };
   var bootstrapArchitectures = (registry) => registry.definitions().map(
     ({
       id,
@@ -1851,6 +1700,120 @@
       return fromCatalog;
     }
     return videoArchitectureRegistry.definitions()[0]?.id ?? "unsupported";
+  };
+
+  // frontend/selectOption.ts
+  var preserveSelectedOption = (options, selectedValue, position, build) => {
+    const value = `${selectedValue || ""}`.trim();
+    if (!value || options.some((option2) => option2.value === value)) {
+      return;
+    }
+    const option = build(value);
+    if (!option) {
+      return;
+    }
+    if (position === "start") {
+      options.unshift(option);
+    } else {
+      options.push(option);
+    }
+  };
+  var resolveSelectValue = (currentValue, options, fallback) => {
+    const desired = `${currentValue || ""}`;
+    return options.some((option) => option.value === desired) ? desired : fallback;
+  };
+
+  // frontend/audioSource.ts
+  var AUDIO_SOURCE_NATIVE = "Native";
+  var AUDIO_SOURCE_UPLOAD = "Upload";
+  var AUDIO_SOURCE_CONTROLNET = "ControlNet";
+  var AUDIO_SOURCE_DISABLED_KIND = "Disabled";
+  var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
+  var isAceStepFunAudioSource = (source) => ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
+  var audioSourceKind = (source) => {
+    const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
+    return isAceStepFunAudioSource(normalized) ? "AceStepFun" : normalized;
+  };
+  var isAllowedAudioSource = (allowedKinds, source) => {
+    const kind = audioSourceKind(source);
+    return allowedKinds.includes(kind) || kind === AUDIO_SOURCE_NATIVE && allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND);
+  };
+  var defaultAuthoringAudioSource = (allowedKinds) => allowedKinds.includes(AUDIO_SOURCE_NATIVE) || allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND) ? AUDIO_SOURCE_NATIVE : allowedKinds[0] ?? AUDIO_SOURCE_NATIVE;
+  var isControlNetAudioSource = (source) => `${source ?? ""}`.trim() === AUDIO_SOURCE_CONTROLNET;
+  var canUseClipLengthFromAudio = (source) => {
+    const normalized = `${source ?? ""}`.trim();
+    return normalized === AUDIO_SOURCE_UPLOAD || isAceStepFunAudioSource(normalized) || isControlNetAudioSource(normalized);
+  };
+  var getAceStepFunRefs = () => {
+    const snapshot = getVideoStagesHostBridge().getAceStepFunRegistry();
+    if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
+      return [];
+    }
+    const seen = /* @__PURE__ */ new Set();
+    const refs = [];
+    for (const raw of snapshot.refs) {
+      const ref = `${raw || ""}`.trim();
+      if (!ref || seen.has(ref)) {
+        continue;
+      }
+      seen.add(ref);
+      refs.push(ref);
+    }
+    return refs;
+  };
+  var getAceStepFunRefLabel = (ref) => {
+    const audioRef = ACESTEPFUN_AUDIO_REF_PATTERN.exec(ref);
+    if (audioRef) {
+      return `AceStepFun Audio ${audioRef[1]}`;
+    }
+    return ref;
+  };
+  var appendAceStepFunRefs = (options) => {
+    for (const ref of getAceStepFunRefs()) {
+      options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
+    }
+  };
+  var appendMissingSelectedRef = (options, currentValue) => preserveSelectedOption(
+    options,
+    currentValue,
+    "end",
+    (value) => isAceStepFunAudioSource(value) ? { value, label: getAceStepFunRefLabel(value) } : null
+  );
+  var buildSegmentAudioSourceOptions = (currentValue = "") => {
+    const options = [
+      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
+    ];
+    appendAceStepFunRefs(options);
+    appendMissingSelectedRef(options, currentValue);
+    return options;
+  };
+  var buildAudioSourceOptions = (currentValue = "", context = {}) => {
+    const options = [
+      { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
+      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
+    ];
+    appendAceStepFunRefs(options);
+    if (context.controlNetEnabled) {
+      options.push({
+        value: AUDIO_SOURCE_CONTROLNET,
+        label: AUDIO_SOURCE_CONTROLNET
+      });
+    }
+    if (context.allowedKinds) {
+      const allowed = new Set(context.allowedKinds);
+      const filtered = options.filter((option) => {
+        const kind = audioSourceKind(option.value);
+        return allowed.has(kind) || kind === AUDIO_SOURCE_NATIVE && allowed.has(AUDIO_SOURCE_DISABLED_KIND);
+      });
+      options.length = 0;
+      options.push(...filtered);
+    }
+    appendMissingSelectedRef(options, currentValue);
+    preserveSelectedOption(options, currentValue, "start", (value) => ({
+      value,
+      label: `${value} (unsupported persisted value)`
+    }));
+    return options;
   };
 
   // frontend/clipColor.ts
@@ -1938,7 +1901,7 @@
   };
 
   // frontend/types.ts
-  var CURRENT_AUTHORING_SCHEMA_VERSION = 4;
+  var CURRENT_AUTHORING_SCHEMA_VERSION = 5;
   var REF_SOURCE_BASE = "Base";
   var REF_SOURCE_REFINER = "Refiner";
   var REF_SOURCE_UPLOAD = "Upload";
@@ -1982,8 +1945,7 @@
     if (value == null) {
       return void 0;
     }
-    const stringValue = `${value}`.trim();
-    return stringValue.length > 0 ? stringValue : void 0;
+    return trimmedText(value) || void 0;
   };
   var normalizeStageLoras = (raw) => {
     if (!Array.isArray(raw)) {
@@ -1994,13 +1956,14 @@
       if (!isRecord(entry)) {
         continue;
       }
-      const name = `${readRawStageProp(entry, "name") ?? ""}`.trim();
+      const name = trimmedText(readRawStageProp(entry, "name"));
       if (!name) {
         continue;
       }
-      const weightRaw = readRawStageProp(entry, "weight");
-      const weight = toNumber(`${weightRaw ?? 1}`, 1);
-      out.push({ name, weight: Number.isFinite(weight) ? weight : 1 });
+      out.push({
+        name,
+        weight: numberOr(readRawStageProp(entry, "weight"), 1)
+      });
     }
     return out;
   };
@@ -2096,23 +2059,22 @@
     } else {
       firstStageUpscale = {
         upscale: snapToStep(
-          clamp(
-            toNumber(
-              `${readRawStageProp(rawStage, "upscale") ?? fallback.upscale}`,
-              fallback.upscale
-            ),
+          clampedNumber(
+            readRawStageProp(rawStage, "upscale"),
+            fallback.upscale,
             defaults.upscaleMin,
             defaults.upscaleMax
           ),
           defaults.upscaleStep
         ),
-        upscaleMethod: `${readRawStageString(rawStage, "upscaleMethod") ?? fallback.upscaleMethod}` || fallback.upscaleMethod
+        upscaleMethod: textOr(
+          readRawStageString(rawStage, "upscaleMethod"),
+          fallback.upscaleMethod
+        )
       };
-      control = clamp(
-        toNumber(
-          `${readRawStageProp(rawStage, "control") ?? fallback.control}`,
-          fallback.control
-        ),
+      control = clampedNumber(
+        readRawStageProp(rawStage, "control"),
+        fallback.control,
         defaults.controlMin,
         defaults.controlMax
       );
@@ -2133,34 +2095,30 @@
       ),
       upscale: firstStageUpscale.upscale,
       upscaleMethod: firstStageUpscale.upscaleMethod,
-      model: `${rawStage.model ?? fallback.model}` || fallback.model,
+      model: textOr(rawStage.model, fallback.model),
       modelProfileId: "unsupported",
       steps: Math.max(
         1,
         Math.round(
-          clamp(
-            toNumber(
-              `${rawStage.steps ?? fallback.steps}`,
-              fallback.steps
-            ),
+          clampedNumber(
+            rawStage.steps,
+            fallback.steps,
             defaults.stepsMin,
             defaults.stepsMax
           )
         )
       ),
-      cfgScale: clamp(
-        toNumber(
-          `${rawStage.cfgScale ?? fallback.cfgScale}`,
-          fallback.cfgScale
-        ),
+      cfgScale: clampedNumber(
+        rawStage.cfgScale,
+        fallback.cfgScale,
         defaults.cfgScaleMin,
         defaults.cfgScaleMax
       ),
-      sampler: `${rawStage.sampler ?? fallback.sampler}` || fallback.sampler,
-      scheduler: `${rawStage.scheduler ?? fallback.scheduler}` || fallback.scheduler,
+      sampler: textOr(rawStage.sampler, fallback.sampler),
+      scheduler: textOr(rawStage.scheduler, fallback.scheduler),
       loras: normalizeStageLoras(readRawStageProp(rawStage, "loras"))
     };
-    stage.modelProfileId = `${readRawStageProp(rawStage, "modelProfileId") ?? ""}`.trim() || modelProfileForModel(defaults.modelCatalog, stage.model) || fallback.modelProfileId;
+    stage.modelProfileId = trimmedText(readRawStageProp(rawStage, "modelProfileId")) || modelProfileForModel(defaults.modelCatalog, stage.model) || fallback.modelProfileId;
     if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
       stage.upscaleMethod = forcedFirstStage ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
     }
@@ -2168,20 +2126,18 @@
   };
   var normalizeRef = (rawRef, frameMax) => {
     const fallback = buildDefaultRef();
-    const source = `${rawRef.source ?? fallback.source}` || fallback.source;
+    const source = textOr(rawRef.source, fallback.source);
     return {
       id: normalizeOptionalEntityId(rawRef.id),
       source,
-      uploadFileName: rawRef.uploadFileName == null || rawRef.uploadFileName === "" ? null : `${rawRef.uploadFileName}`,
+      uploadFileName: textOr(rawRef.uploadFileName, "") || null,
       uploadedImage: normalizeUploadedMedia(rawRef.uploadedImage),
       frame: Math.max(
         REF_FRAME_MIN,
         Math.round(
-          clamp(
-            toNumber(
-              `${rawRef.frame ?? fallback.frame}`,
-              fallback.frame
-            ),
+          clampedNumber(
+            rawRef.frame,
+            fallback.frame,
             REF_FRAME_MIN,
             frameMax
           )
@@ -2193,7 +2149,7 @@
 
   // frontend/normalizationClip.ts
   var normalizeBoundaryOut = (value) => {
-    const raw = `${value ?? ""}`.trim().toLowerCase();
+    const raw = trimmedText(value).toLowerCase();
     return raw === "continue" || raw === "crossfade" ? raw : "cut";
   };
   var normalizeContinueOverlap = (value, constraints = boundaryOverlapConstraints(null)) => {
@@ -2215,13 +2171,14 @@
         includeDefaultRef ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH : STAGE_REF_STRENGTH_DEFAULT
       )
     };
-    const architecture = (previousClip?.architecture !== "none" ? previousClip?.architecture : null) ?? architectureForModel(defaults.modelCatalog, firstStage.model) ?? "unsupported";
-    const continueRule = defaults.modelCatalog.architectures.find(
-      (entry) => entry.id === architecture
+    const architecture = (previousClip?.architecture !== NONE_ARCHITECTURE_ID ? previousClip?.architecture : null) ?? architectureForModel(defaults.modelCatalog, firstStage.model) ?? "unsupported";
+    const continueRule = architectureDescriptor(
+      defaults.modelCatalog,
+      architecture
     )?.boundaryRules.continue;
     return {
       architecture,
-      modelProfileId: (previousClip?.architecture !== "none" ? previousClip?.modelProfileId : null) ?? modelProfileForModel(defaults.modelCatalog, firstStage.model) ?? firstStage.modelProfileId,
+      modelProfileId: (previousClip?.architecture !== NONE_ARCHITECTURE_ID ? previousClip?.modelProfileId : null) ?? modelProfileForModel(defaults.modelCatalog, firstStage.model) ?? firstStage.modelProfileId,
       skipped: false,
       hue: UNASSIGNED_HUE,
       boundaryOut: "cut",
@@ -2238,7 +2195,6 @@
       clipLengthFromControlNet: false,
       reuseAudio: false,
       uploadedAudio: null,
-      audioSegments: [],
       prompt: "",
       promptWindows: [],
       retake: null,
@@ -2249,14 +2205,14 @@
   };
   var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2, effectiveFps) => {
     const defaults = getRootDefaults2();
-    const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
+    const rawAudioSource = text(rawClip.audioSource, AUDIO_SOURCE_NATIVE);
     const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
     const sourceVideo = normalizeSourceVideo(rawClip.sourceVideo);
     const fps = Math.max(
       1,
       typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps
     );
-    const rawDuration = sourceVideo?.lengthSeconds ?? toNumber(`${rawClip.duration}`, defaults.frames / fps);
+    const rawDuration = sourceVideo?.lengthSeconds ?? numberOr(rawClip.duration, defaults.frames / fps);
     const duration = snapDurationToFps(
       Math.max(CLIP_DURATION_MIN, rawDuration),
       fps
@@ -2287,23 +2243,21 @@
     }
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const stageZero = stages[0] ?? null;
-    const persistedArchitecture = `${rawClip.architecture ?? ""}`.trim();
-    const persistedProfile = `${rawClip.modelProfileId ?? ""}`.trim();
+    const persistedArchitecture = trimmedText(rawClip.architecture);
+    const persistedProfile = trimmedText(rawClip.modelProfileId);
     const isSourceOnly = sourceVideo !== null && stages.every((stage) => stage.skipped);
     const architecture = isSourceOnly ? persistedArchitecture || "none" : normalizeClipArchitecture(
       persistedArchitecture,
       stageZero?.model ?? null,
       defaults.modelCatalog
     );
-    const modelProfileId = isSourceOnly ? persistedProfile || (architecture === "none" ? "none" : "unsupported") : persistedProfile || stageZero?.modelProfileId || "unsupported";
+    const modelProfileId = isSourceOnly ? persistedProfile || (architecture === NONE_ARCHITECTURE_ID ? NONE_ARCHITECTURE_ID : "unsupported") : persistedProfile || stageZero?.modelProfileId || "unsupported";
     const icLoras = normalizeArchitectureIcLoras(
       architecture,
       rawClip,
       stagesRaw.length,
       sourceVideo !== null,
-      !defaults.modelCatalog.architectures.some(
-        (entry) => entry.id === architecture
-      ) || architecture === "none"
+      architectureDescriptor(defaults.modelCatalog, architecture) === null || architecture === NONE_ARCHITECTURE_ID
     );
     for (const stage of stages) {
       stage.icLoraStrengths = normalizeStageIcLoraStrengths(
@@ -2312,11 +2266,12 @@
         stage.controlNetStrength
       );
     }
-    const clipLengthFromAudio = canUseClipLengthFromAudio(audioSource) && !!rawClip.clipLengthFromAudio;
-    const clipLengthFromControlNet = hasArchitectureSlotSourcedIcLora(architecture, icLoras) && !clipLengthFromAudio && !!rawClip.clipLengthFromControlNet;
+    const clipLengthFromAudio = !!rawClip.clipLengthFromAudio;
+    const clipLengthFromControlNet = !clipLengthFromAudio && !!rawClip.clipLengthFromControlNet;
     const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
-    const boundaryRule = defaults.modelCatalog.architectures.find(
-      (entry) => entry.id === architecture
+    const boundaryRule = architectureDescriptor(
+      defaults.modelCatalog,
+      architecture
     )?.boundaryRules[boundaryOut];
     return {
       id: normalizeOptionalEntityId(rawClip.id),
@@ -2338,8 +2293,7 @@
       clipLengthFromControlNet,
       reuseAudio: !!rawClip.reuseAudio,
       uploadedAudio: normalizeUploadedMedia(rawClip.uploadedAudio),
-      audioSegments: normalizeAudioSegments(rawClip.audioSegments, duration),
-      prompt: `${rawClip.prompt ?? ""}`,
+      prompt: text(rawClip.prompt),
       promptWindows: normalizePromptWindows(rawClip),
       retake: normalizeRetake(rawClip.retake, duration),
       sourceVideo,
@@ -2403,13 +2357,6 @@
           entity: clip.refs[refIndex],
           kind: "ref",
           repairPath: `${clipIndex}_${refIndex}`
-        });
-      }
-      for (let segmentIndex = 0; segmentIndex < clip.audioSegments.length; segmentIndex++) {
-        entries.push({
-          entity: clip.audioSegments[segmentIndex],
-          kind: "audio_segment",
-          repairPath: `${clipIndex}_${segmentIndex}`
         });
       }
       for (let windowIndex = 0; windowIndex < clip.promptWindows.length; windowIndex++) {
@@ -2482,9 +2429,6 @@
       if (clip.id) ids.push(clip.id);
       for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
       for (const ref of clip.refs) if (ref.id) ids.push(ref.id);
-      for (const segment of clip.audioSegments) {
-        if (segment.id) ids.push(segment.id);
-      }
       for (const window2 of clip.promptWindows) {
         if (window2.id) ids.push(window2.id);
       }
@@ -2495,14 +2439,6 @@
       for (const span of track.spans) if (span.id) ids.push(span.id);
     }
     return ids;
-  };
-
-  // frontend/hostDom.ts
-  var utils = {
-    getInputElement: (id) => getVideoStagesHostBridge().getInput(id),
-    getSelectElement: (id) => getVideoStagesHostBridge().getSelect(id),
-    getSelectValues: (select2) => getVideoStagesHostBridge().getSelectOptions(select2).values,
-    getSelectLabels: (select2) => getVideoStagesHostBridge().getSelectOptions(select2).labels
   };
 
   // frontend/promptSegments.ts
@@ -2561,21 +2497,21 @@
     return preserved;
   };
   var tokenizePrompt = (prompt) => {
-    const text = prompt ?? "";
+    const text2 = prompt ?? "";
     BOUNDARY_RE.lastIndex = 0;
     const starts = [];
-    for (let match = BOUNDARY_RE.exec(text); match !== null; match = BOUNDARY_RE.exec(text)) {
+    for (let match = BOUNDARY_RE.exec(text2); match !== null; match = BOUNDARY_RE.exec(text2)) {
       starts.push(match.index);
     }
     if (starts.length === 0) {
-      return { leading: text, tags: [] };
+      return { leading: text2, tags: [] };
     }
-    const leading = text.slice(0, starts[0]);
+    const leading = text2.slice(0, starts[0]);
     const tags = [];
     for (let i = 0; i < starts.length; i++) {
       const start = starts[i];
-      const nextStart = i + 1 < starts.length ? starts[i + 1] : text.length;
-      const span = text.slice(start, nextStart);
+      const nextStart = i + 1 < starts.length ? starts[i + 1] : text2.length;
+      const span = text2.slice(start, nextStart);
       const close = span.indexOf(">");
       const tagRaw = close < 0 ? span : span.slice(0, close + 1);
       const body = close < 0 ? "" : span.slice(close + 1);
@@ -2651,17 +2587,17 @@
           sections.set(tag.clip, tag.body.trim());
         }
       } else if (tag.owned === "window" && tag.clip !== null && tag.window) {
-        const list = windows.get(tag.clip) ?? [];
-        list.push({
+        const list2 = windows.get(tag.clip) ?? [];
+        list2.push({
           start: Math.max(0, tag.window.start),
           duration: tag.window.end - tag.window.start,
           prompt: tag.body.trim()
         });
-        windows.set(tag.clip, list);
+        windows.set(tag.clip, list2);
       }
     }
-    for (const list of windows.values()) {
-      list.sort((a, b) => a.start - b.start);
+    for (const list2 of windows.values()) {
+      list2.sort((a, b) => a.start - b.start);
     }
     return { sections, windows };
   };
@@ -2735,9 +2671,7 @@
     }
     const catalog = buildArchitectureModelCatalog([modelName], [modelName]);
     const architectureId = architectureForModel(catalog, modelName);
-    const architecture = catalog.architectures.find(
-      (entry) => entry.id === architectureId
-    );
+    const architecture = architectureDescriptor(catalog, architectureId);
     return architecture?.capabilities.entryModes.includes("text-to-video") ?? false;
   };
   var getRootGeneratedEntryMode = () => !`${getRootModelInput()?.value ?? ""}`.trim() || isRootTextToVideoModel() ? "text-to-video" : "image-to-video";
@@ -2769,7 +2703,7 @@
   var rootVideoFpsInput = () => getVideoStagesHostBridge().getRootVideoFpsInput();
   var firstPresentInput = (...ids) => {
     for (let i = 0; i < ids.length; i++) {
-      const el = utils.getInputElement(ids[i]);
+      const el = getVideoStagesHostBridge().getInput(ids[i]);
       if (el) {
         return el;
       }
@@ -2788,7 +2722,9 @@
         return modelName;
       }
     }
-    const videoModel = trimDomValue(utils.getSelectElement("input_videomodel"));
+    const videoModel = trimDomValue(
+      getVideoStagesHostBridge().getSelect("input_videomodel")
+    );
     if (videoModel && supports(videoModel)) {
       return videoModel;
     }
@@ -2801,9 +2737,9 @@
     return `${width}|${height}|${fps}`;
   };
   var getRootDefaults = () => {
-    let model = utils.getSelectElement("input_videomodel");
+    let model = getVideoStagesHostBridge().getSelect("input_videomodel");
     if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {
-      model = utils.getSelectElement("input_model");
+      model = getVideoStagesHostBridge().getSelect("input_model");
     }
     const rawLoras = getDropdownOptions("loras", "input_loras");
     const loras = { values: [], labels: [] };
@@ -2815,13 +2751,15 @@
     });
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
-    const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
-    const upscaleMethodValues = utils.getSelectValues(upscaleMethod);
-    const upscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
+    const upscaleMethod = getVideoStagesHostBridge().getSelect(
+      "input_refinerupscalemethod"
+    );
+    const upscaleMethodValues = getVideoStagesHostBridge().getSelectOptions(upscaleMethod).values;
+    const upscaleMethodLabels = getVideoStagesHostBridge().getSelectOptions(upscaleMethod).labels;
     const modelCatalog = supportedArchitectureCatalog(
       buildArchitectureModelCatalog(
-        utils.getSelectValues(model),
-        utils.getSelectLabels(model)
+        getVideoStagesHostBridge().getSelectOptions(model).values,
+        getVideoStagesHostBridge().getSelectOptions(model).labels
       )
     );
     const models = {
@@ -2883,56 +2821,10 @@
     };
   };
 
-  // frontend/timelineAudioMigration.ts
-  var migrateClipAudioSegmentsToTimeline = (clips, existingTracks) => {
-    const tracks = [...existingTracks];
-    let clipStart = 0;
-    for (const clip of clips) {
-      for (const segment of clip.audioSegments ?? []) {
-        const source = typeof segment.source === "string" && isAceStepFunAudioSource(segment.source) ? {
-          kind: "AceStepFun",
-          reference: segment.source,
-          uploadedAudio: null
-        } : {
-          kind: "Upload",
-          reference: typeof segment.source === "object" ? segment.source?.fileName ?? "" : "",
-          uploadedAudio: typeof segment.source === "object" ? segment.source : null
-        };
-        tracks.push({
-          id: createEntityId("audio_track"),
-          source,
-          volume: segment.volume,
-          spans: [
-            {
-              id: segment.id ?? createEntityId("audio_span"),
-              firstClipId: null,
-              lastClipId: null,
-              timelineStartSeconds: roundToTenth(
-                clipStart + segment.startSeconds
-              ),
-              timelineLengthSeconds: roundToTenth(
-                segment.lengthSeconds
-              ),
-              sourceStartSeconds: roundToTenth(
-                segment.trimStartSeconds
-              ),
-              clipStartOffsetSeconds: null,
-              clipLengthSeconds: null
-            }
-          ]
-        });
-      }
-      clip.audioSegments = [];
-      clipStart += Math.max(0, clip.duration || 0);
-    }
-    return tracks;
-  };
-
   // frontend/persistence/documentCodec.ts
   var toIntOrNull = (value) => {
-    if (value == null || value === "") return null;
-    const num = toNumber(`${value}`, Number.NaN);
-    return Number.isFinite(num) ? Math.round(num) : null;
+    const num = optionalNonNegativeNumber(value);
+    return num === null ? null : Math.round(num);
   };
   var resolveRootDims = (inherited, stored) => {
     const width = toIntOrNull(stored.width);
@@ -2980,6 +2872,7 @@
           strength: entry.strength,
           attentionStrength: entry.attentionStrength,
           controlType: entry.controlType,
+          hdr: entry.hdr,
           driveMedia: entry.driveMedia
         })),
         saveAudioTrack: clip.saveAudioTrack,
@@ -2995,14 +2888,6 @@
           startSeconds: clip.sourceVideo.startSeconds,
           lengthSeconds: clip.sourceVideo.lengthSeconds
         } : null,
-        audioSegments: clip.audioSegments.map((segment) => ({
-          id: segment.id,
-          source: segment.source,
-          startSeconds: segment.startSeconds,
-          trimStartSeconds: segment.trimStartSeconds,
-          lengthSeconds: segment.lengthSeconds,
-          volume: segment.volume
-        })),
         retake: clip.retake ? {
           id: clip.retake.id,
           startSeconds: clip.retake.startSeconds,
@@ -3106,13 +2991,9 @@
       },
       spans: track.spans.map((span) => ({
         id: span.id,
-        firstClipId: span.firstClipId,
-        lastClipId: span.lastClipId,
         timelineStartSeconds: span.timelineStartSeconds,
         timelineLengthSeconds: span.timelineLengthSeconds,
         sourceStartSeconds: span.sourceStartSeconds,
-        clipStartOffsetSeconds: span.clipStartOffsetSeconds,
-        clipLengthSeconds: span.clipLengthSeconds,
         projection: timelineSpanProjection(canonical.clips, span)
       }))
     }));
@@ -3131,11 +3012,6 @@
       }
       if (clip.sourceVideo && isTransientBrowserMedia({ data: clip.sourceVideo.data })) {
         clip.sourceVideo = null;
-      }
-      for (const segment of clip.audioSegments) {
-        if (typeof segment.source === "object" && isTransientBrowserMedia(segment.source)) {
-          segment.source = null;
-        }
       }
       for (const ref of clip.refs) {
         if (isTransientBrowserMedia(ref.uploadedImage)) {
@@ -3170,7 +3046,7 @@
       return false;
     }
     for (const clip of parsed.clips) {
-      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "refs") || !hasArrayOfRecords(clip, "audioSegments") || !hasArrayOfRecords(clip, "icLoras")) {
+      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "refs") || !hasArrayOfRecords(clip, "icLoras")) {
         return false;
       }
       const stages = Array.isArray(clip.stages) ? clip.stages : [];
@@ -3189,29 +3065,43 @@
       (track) => hasArrayOfRecords(track, "spans") && (!Object.hasOwn(track, "source") || isRecord(track.source))
     );
   };
+  var OUTDATED_SCHEMA_NOTICE = "VideoStages: the saved timeline was created by an older version and could not be loaded.";
+  var noticedOutdatedDocument = null;
+  var noticeOutdatedSchema = (serialized) => {
+    if (noticedOutdatedDocument === serialized) {
+      return;
+    }
+    noticedOutdatedDocument = serialized;
+    getVideoStagesHostBridge().showError(OUTDATED_SCHEMA_NOTICE);
+  };
   var decodeStoredDocument = (serialized, inherited) => {
     try {
       const parsed = JSON.parse(serialized);
-      if (!isRecord(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION && parsed.schemaVersion !== 3 || !hasValidStoredCollections(parsed)) {
+      if (!isRecord(parsed)) {
+        return null;
+      }
+      if (parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION) {
+        noticeOutdatedSchema(serialized);
+        return null;
+      }
+      if (!hasValidStoredCollections(parsed)) {
         return null;
       }
       const dims = resolveRootDims(inherited, {
         width: parsed.width,
         height: parsed.height
       });
-      const clips = parsed.clips.map(
-        (entry) => normalizeClip(
-          entry,
-          getRootDefaults,
-          getDefaultStageModel,
-          dims.fps
-        )
-      );
-      const audioTracks = normalizeAudioTracks(parsed.audioTracks);
       return {
         dims,
-        clips,
-        audioTracks: parsed.schemaVersion === 3 ? migrateClipAudioSegmentsToTimeline(clips, audioTracks) : audioTracks
+        clips: parsed.clips.map(
+          (entry) => normalizeClip(
+            entry,
+            getRootDefaults,
+            getDefaultStageModel,
+            dims.fps
+          )
+        ),
+        audioTracks: normalizeAudioTracks(parsed.audioTracks)
       };
     } catch {
       return null;
@@ -3233,7 +3123,7 @@
       const seenIds = /* @__PURE__ */ new Set();
       for (const rawClip of parsed.clips) {
         if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
-        for (const key of ["stages", "refs", "audioSegments"]) {
+        for (const key of ["stages", "refs"]) {
           const children = rawClip[key];
           if (!Array.isArray(children) || children.some(
             (child) => !hasCanonicalStoredId(child, seenIds)
@@ -3270,13 +3160,9 @@
   // frontend/architectures/clipIdentity.ts
   var modelIdentityFromCatalog = (catalog, model) => {
     if (!catalog) return null;
-    const entry = catalog.entries.find(
-      (candidate) => candidate.value === model
-    );
-    if (!entry?.architectureId || !entry.modelProfileId || !catalog.architectures.some(
-      (architecture) => architecture.id === entry.architectureId && architecture.profiles.some(
-        (profile) => profile.id === entry.modelProfileId
-      )
+    const entry = modelCatalogEntry(catalog, model);
+    if (!entry?.architectureId || !entry.modelProfileId || !architectureDescriptor(catalog, entry.architectureId)?.profiles.some(
+      (profile) => profile.id === entry.modelProfileId
     )) {
       return null;
     }
@@ -3302,9 +3188,7 @@
     )) {
       return null;
     }
-    const descriptor = authored ? catalog.architectures.find(
-      (candidate) => candidate.id === authored.architectureId
-    ) : null;
+    const descriptor = authored ? architectureDescriptor(catalog, authored.architectureId) : null;
     if (clip.stages.length > 1 && !descriptor?.capabilities.architecture.includes("multi-stage")) {
       return null;
     }
@@ -3314,8 +3198,8 @@
     };
     if (clip.sourceVideo !== null && clip.stages.every((stage) => stage.skipped)) {
       return {
-        architectureId: "none",
-        modelProfileId: "none",
+        architectureId: NONE_ARCHITECTURE_ID,
+        modelProfileId: NONE_ARCHITECTURE_ID,
         ...authoredIdentity
       };
     }
@@ -3326,10 +3210,10 @@
         ...authoredIdentity
       };
     }
-    if (clip.architecture === "none" && clip.modelProfileId === "none") {
+    if (clip.architecture === NONE_ARCHITECTURE_ID && clip.modelProfileId === NONE_ARCHITECTURE_ID) {
       return {
-        architectureId: "none",
-        modelProfileId: "none",
+        architectureId: NONE_ARCHITECTURE_ID,
+        modelProfileId: NONE_ARCHITECTURE_ID,
         ...authoredIdentity
       };
     }
@@ -3346,6 +3230,380 @@
     clip.architecture = identity.architectureId;
     clip.modelProfileId = identity.modelProfileId;
     return true;
+  };
+
+  // frontend/architectures/conditionalRules.ts
+  var CONDITIONAL_RULE_CODES = {
+    audioReuseRequiresStages: "audio.reuse.requires_three_stages",
+    promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
+    retakeExcludesReferences: "retake-frame-references-unsupported",
+    retakeRequiresSource: "retake-source-required",
+    uniformTimelineHdr: "mixed-hdr-timeline-unsupported"
+  };
+  var conditionalRule = (rules, code) => rules.find((rule) => rule.code === code) ?? null;
+  var finiteConstraint = (rule, key, fallback) => {
+    const value = Number(rule.constraints?.[key]);
+    return Number.isFinite(value) ? value : fallback;
+  };
+  var DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES = 3;
+  var audioReuseMinimumActiveStages = (rule) => rule?.code === CONDITIONAL_RULE_CODES.audioReuseRequiresStages ? finiteConstraint(
+    rule,
+    "minimumActiveStages",
+    DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES
+  ) : DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES;
+  var evaluateConditionalRule = (rule, context) => {
+    const clip = context.clip;
+    switch (rule.code) {
+      case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
+        return clip !== void 0 && activeStageCount(clip) < audioReuseMinimumActiveStages(rule);
+      case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
+        return clip !== void 0 && (clip.clipLengthFromAudio || clip.clipLengthFromControlNet);
+      case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
+        return clip !== void 0 && clip.refs.length > 0 && (clip.sourceVideo !== null || context.globalRefineMode === true);
+      case CONDITIONAL_RULE_CODES.retakeRequiresSource:
+        return clip !== void 0 && clip.sourceVideo === null && context.globalRefineMode !== true;
+      case CONDITIONAL_RULE_CODES.uniformTimelineHdr: {
+        const clips = context.timelineClips;
+        const hasActiveHdr = context.hasActiveHdr;
+        if (!clips || !hasActiveHdr) return false;
+        if (clips.length < finiteConstraint(rule, "minimumTimelineClips", 2)) {
+          return false;
+        }
+        const hdr = clips.map(hasActiveHdr);
+        return hdr.some(Boolean) && hdr.some((value) => !value);
+      }
+      default:
+        return false;
+    }
+  };
+
+  // frontend/architectures/policy/featureValues.ts
+  var FEATURE_LABEL = {
+    multiStage: "Multiple stages",
+    sourceVideo: "Source video",
+    frameReferences: "Frame references",
+    retake: "Retakes",
+    majorPrompt: "Major prompts",
+    promptRelay: "Relay prompts",
+    clipAudio: "Clip audio",
+    audioReuse: "Captured stage audio reuse",
+    stageLoras: "Stage LoRAs",
+    icLora: "IC-LoRA",
+    hdr: "HDR",
+    upscale: "Stage upscaling"
+  };
+  var architectureReason = (label, feature) => `${FEATURE_LABEL[feature]} is not supported by ${label}.`;
+  var noArchitectureReason = (feature) => `${FEATURE_LABEL[feature]} requires a generated clip with a known architecture.`;
+  var upscaleModeForMethod = (method) => {
+    const normalized = method.trim().toLowerCase();
+    if (normalized.startsWith("latentmodel-")) return "latent-model";
+    if (normalized.startsWith("latent-")) return "latent";
+    if (normalized.startsWith("pixel-")) return "pixel";
+    return "model";
+  };
+
+  // frontend/architectures/policy/clipStageViews.ts
+  var FEATURE_RULE_CODES = {
+    promptRelay: [CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength],
+    audioReuse: [CONDITIONAL_RULE_CODES.audioReuseRequiresStages],
+    retake: [
+      CONDITIONAL_RULE_CODES.retakeRequiresSource,
+      CONDITIONAL_RULE_CODES.retakeExcludesReferences
+    ],
+    hdr: [CONDITIONAL_RULE_CODES.uniformTimelineHdr]
+  };
+  var conditionalRuleFor = (clip, feature, descriptor, scope) => {
+    const codes = FEATURE_RULE_CODES[feature];
+    if (!codes) return void 0;
+    for (const code of codes) {
+      const rule = conditionalRule(descriptor.rules, code);
+      if (rule && evaluateConditionalRule(rule, {
+        clip,
+        globalRefineMode: scope.globalRefineMode,
+        timelineClips: scope.timelineClips,
+        hasActiveHdr: clipHasActiveHdr
+      })) {
+        return rule;
+      }
+    }
+    return void 0;
+  };
+  var architectureFeatureSupport = (feature, scope) => {
+    const capability = scope.capabilities;
+    switch (feature) {
+      case "multiStage":
+        return capability.architecture.includes("multi-stage");
+      case "sourceVideo":
+        return capability.clip.includes("source-video");
+      case "frameReferences":
+        return capability.clip.includes("references") && capability.stage.includes("frame-references");
+      case "retake":
+        return capability.clip.includes("retake");
+      case "majorPrompt":
+        return capability.clip.includes("prompts");
+      case "promptRelay":
+        return capability.clip.includes("prompt-relay");
+      case "clipAudio":
+      case "audioReuse":
+        return capability.clip.includes("audio-sources") && (scope.audioSource === void 0 || isAllowedAudioSource(
+          capability.audioSourceKinds,
+          scope.audioSource
+        ));
+      case "stageLoras":
+        return capability.stage.includes("lora") && (scope.profileCapabilities === void 0 || scope.profileCapabilities.includes("normal-lora"));
+      case "icLora":
+        return capability.stage.includes("ic-lora");
+      case "hdr":
+        return capability.stage.includes("hdr");
+      case "upscale":
+        return scope.upscaleMethod === void 0 ? capability.upscaleModes.length > 0 : capability.upscaleModes.includes(
+          upscaleModeForMethod(scope.upscaleMethod)
+        );
+    }
+  };
+  var scopedFeatureSupport = (feature, descriptor, profileId) => architectureFeatureSupport(feature, {
+    capabilities: descriptor.capabilities,
+    profileCapabilities: descriptor.profiles.find(
+      (entry) => entry.id === profileId
+    )?.capabilities
+  });
+  var createClipStageCapabilityViews = (architectureById, scope = {}) => {
+    const forClip = (clip) => {
+      const descriptor = architectureById.get(clip.architecture);
+      const label = descriptor?.label ?? (clip.architecture === NONE_ARCHITECTURE_ID ? "source-only clips" : `unknown architecture '${clip.architecture}'`);
+      const decision = (feature) => {
+        if (!descriptor) {
+          return {
+            supported: false,
+            reason: noArchitectureReason(feature),
+            rule: null
+          };
+        }
+        const conditionalRule2 = conditionalRuleFor(
+          clip,
+          feature,
+          descriptor,
+          scope
+        );
+        const supported = scopedFeatureSupport(
+          feature,
+          descriptor,
+          clip.modelProfileId
+        ) && !conditionalRule2;
+        return {
+          supported,
+          reason: supported ? "" : conditionalRule2?.reason ?? architectureReason(label, feature),
+          rule: conditionalRule2 ?? null
+        };
+      };
+      return {
+        architectureId: clip.architecture,
+        architectureLabel: label,
+        known: descriptor !== void 0,
+        audioSourceKinds: descriptor?.capabilities.audioSourceKinds ?? [],
+        decision,
+        authoringState: (feature, persisted) => {
+          const result = decision(feature);
+          return {
+            ...result,
+            visible: result.supported || persisted,
+            enabled: result.supported
+          };
+        }
+      };
+    };
+    const forStage = (clip, stage) => {
+      const view = forClip(clip);
+      const descriptor = architectureById.get(clip.architecture);
+      const profile = descriptor?.profiles.find(
+        (entry) => entry.id === stage.modelProfileId
+      );
+      const decision = (feature) => {
+        if (feature === "stageLoras" && descriptor) {
+          const supported = descriptor.capabilities.stage.includes("lora") && profile?.capabilities.includes("normal-lora") === true;
+          return {
+            supported,
+            reason: supported ? "" : `Stage LoRAs require normal-LoRA support in ${descriptor.label}.`,
+            rule: null
+          };
+        }
+        if (feature === "sampler" || feature === "scheduler") {
+          const required = feature === "sampler" ? "sampler-selection" : "scheduler-selection";
+          const supported = profile?.capabilities.includes(required) === true;
+          return {
+            supported,
+            reason: supported ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection is not supported by this model profile.`,
+            rule: null
+          };
+        }
+        return view.decision(feature);
+      };
+      return {
+        upscaleModes: descriptor?.capabilities.upscaleModes ?? [],
+        decision,
+        authoringState: (feature, persisted) => {
+          const result = decision(feature);
+          return {
+            ...result,
+            visible: result.supported || persisted,
+            enabled: result.supported
+          };
+        }
+      };
+    };
+    return { forClip, forStage };
+  };
+
+  // frontend/architectures/conversion/plan.ts
+  var countLabel = (count, singular) => `${count} ${singular}${count === 1 ? "" : "s"}`;
+  var ownId = (value) => typeof value === "object" && value !== null && "id" in value && typeof value.id === "string" ? value.id : null;
+  var collectIds = (values) => values.map(ownId).filter((id) => id !== null);
+  var resolveArchitectureRetarget = (requested, catalog) => {
+    if (!catalog) {
+      return null;
+    }
+    const model = modelCatalogEntry(catalog, requested.model);
+    if (!model?.architectureId || !model.modelProfileId || model.architectureId !== requested.architectureId || model.modelProfileId !== requested.modelProfileId) {
+      return null;
+    }
+    const descriptor = architectureDescriptor(catalog, model.architectureId);
+    const profile = descriptor?.profiles.find(
+      (entry) => entry.id === model.modelProfileId
+    );
+    if (!descriptor || !profile) {
+      return null;
+    }
+    return {
+      architectureId: descriptor.id,
+      modelProfileId: profile.id,
+      model: model.value,
+      capabilities: structuredClone(descriptor.capabilities),
+      profileCapabilities: [...profile.capabilities]
+    };
+  };
+  var planArchitectureConversion = (source, requested, catalog) => {
+    const target = resolveArchitectureRetarget(requested, catalog);
+    if (!target) {
+      return null;
+    }
+    const clip = structuredClone(source);
+    const removals = [];
+    const removedEntityIds = [];
+    const supports = (feature, value) => architectureFeatureSupport(feature, {
+      capabilities: target.capabilities,
+      profileCapabilities: target.profileCapabilities,
+      ...value
+    });
+    const supportsMultipleStages = supports("multiStage");
+    const supportsReferences = supports("frameReferences");
+    const supportsNormalLoras = supports("stageLoras");
+    clip.architecture = target.architectureId;
+    clip.modelProfileId = target.modelProfileId;
+    if (!supportsMultipleStages && clip.stages.length > 1) {
+      const removedStages = clip.stages.slice(1);
+      removals.push(countLabel(removedStages.length, "later authored stage"));
+      removedEntityIds.push(...collectIds(removedStages));
+      clip.stages = clip.stages.slice(0, 1);
+    }
+    if (!supportsReferences && clip.refs.length > 0) {
+      removals.push(countLabel(clip.refs.length, "frame reference"));
+      removedEntityIds.push(...collectIds(clip.refs));
+      clip.refs = [];
+    }
+    let removedStageLoras = 0;
+    let removedUpscaleSettings = 0;
+    for (const stage of clip.stages) {
+      stage.model = target.model;
+      stage.modelProfileId = target.modelProfileId;
+      if (!supportsReferences) {
+        stage.refStrengths = [];
+        stage.icLoraStrengths = [];
+      }
+      if (!supportsNormalLoras && stage.loras.length > 0) {
+        removedStageLoras += stage.loras.length;
+        stage.loras = [];
+      }
+      if (stage.upscale !== 1 && !supports("upscale", { upscaleMethod: stage.upscaleMethod })) {
+        removedUpscaleSettings++;
+        stage.upscale = 1;
+      }
+    }
+    if (removedStageLoras > 0) {
+      removals.push(countLabel(removedStageLoras, "stage LoRA"));
+    }
+    if (removedUpscaleSettings > 0) {
+      removals.push("stage upscale settings");
+    }
+    if (!supports("icLora") && clip.icLoras.length > 0) {
+      removals.push(countLabel(clip.icLoras.length, "IC-LoRA"));
+      clip.icLoras = [];
+      clip.clipLengthFromControlNet = false;
+    } else if (supports("icLora")) {
+      if (!supports("hdr")) {
+        const hdrCount = clip.icLoras.filter(
+          (entry) => isArchitectureHdrFeature(source.architecture, entry)
+        ).length;
+        if (hdrCount > 0) {
+          removals.push(countLabel(hdrCount, "HDR IC-LoRA"));
+          clip.icLoras = clip.icLoras.filter(
+            (entry) => !isArchitectureHdrFeature(source.architecture, entry)
+          );
+        }
+      }
+      let repairedTargets = false;
+      for (const entry of clip.icLoras) {
+        if (entry.stage >= clip.stages.length) {
+          entry.stage = IC_LORA_STAGE_ALL;
+          repairedTargets = true;
+        }
+        if (entry.driveData === "none" && entry.driveSource !== IC_LORA_SOURCE_UPLOAD) {
+          entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+          entry.driveMedia = null;
+        }
+      }
+      if (repairedTargets) {
+        removals.push("IC-LoRA targets on removed stages");
+      }
+    }
+    if (!supports("retake") && clip.retake !== null) {
+      removals.push("retake");
+      const id = ownId(clip.retake);
+      if (id) removedEntityIds.push(id);
+      clip.retake = null;
+    }
+    if (!supports("majorPrompt") && clip.prompt.trim()) {
+      removals.push("major prompt");
+      clip.prompt = "";
+    }
+    if (!supports("promptRelay") && clip.promptWindows.length > 0) {
+      removals.push(countLabel(clip.promptWindows.length, "relay prompt"));
+      removedEntityIds.push(...collectIds(clip.promptWindows));
+      clip.promptWindows = [];
+    }
+    if (!supports("sourceVideo") && clip.sourceVideo) {
+      removals.push("source video");
+      clip.sourceVideo = null;
+    }
+    if (!supports("clipAudio", { audioSource: clip.audioSource })) {
+      const hasAudioSettings = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.saveAudioTrack || clip.clipLengthFromAudio || clip.reuseAudio || clip.clipLengthFromControlNet;
+      if (hasAudioSettings) {
+        removals.push("clip audio source settings");
+      }
+      clip.audioSource = defaultAuthoringAudioSource(
+        target.capabilities.audioSourceKinds
+      );
+      clip.uploadedAudio = null;
+      clip.saveAudioTrack = false;
+      clip.clipLengthFromAudio = false;
+      clip.reuseAudio = false;
+      clip.clipLengthFromControlNet = false;
+    }
+    return {
+      clip,
+      removals,
+      removedEntityIds,
+      selectionAffected: removedEntityIds.length > 0
+    };
   };
 
   // frontend/architectures/policy/boundaryPolicy.ts
@@ -3427,384 +3685,139 @@
     };
   };
 
-  // frontend/architectures/conditionalRules.ts
-  var CONDITIONAL_RULE_CODES = {
-    audioReuseRequiresStages: "audio.reuse.requires_three_stages",
-    promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
-    retakeExcludesReferences: "retake-frame-references-unsupported",
-    retakeRequiresSource: "retake-source-required",
-    uniformTimelineHdr: "mixed-hdr-timeline-unsupported"
+  // frontend/documentCommands/listEntities.ts
+  var OWNER_ID_FIELD = {
+    document: null,
+    clip: "clipId",
+    track: "trackId"
   };
-  var conditionalRule = (rules, code) => rules.find((rule) => rule.code === code) ?? null;
-  var finiteConstraint = (rule, key, fallback) => {
-    const value = Number(rule.constraints?.[key]);
-    return Number.isFinite(value) ? value : fallback;
-  };
-  var DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES = 3;
-  var audioReuseMinimumActiveStages = (rule) => rule?.code === CONDITIONAL_RULE_CODES.audioReuseRequiresStages ? finiteConstraint(
-    rule,
-    "minimumActiveStages",
-    DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES
-  ) : DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES;
-  var evaluateConditionalRule = (rule, context) => {
-    const clip = context.clip;
-    switch (rule.code) {
-      case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
-        return clip !== void 0 && activeStageCount(clip) < audioReuseMinimumActiveStages(rule);
-      case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
-        return clip !== void 0 && (clip.clipLengthFromAudio || clip.clipLengthFromControlNet);
-      case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
-        return clip !== void 0 && clip.refs.length > 0 && (clip.sourceVideo !== null || context.globalRefineMode === true);
-      case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-        return clip !== void 0 && clip.sourceVideo === null && context.globalRefineMode !== true;
-      case CONDITIONAL_RULE_CODES.uniformTimelineHdr: {
-        const clips = context.timelineClips;
-        const hasActiveHdr = context.hasActiveHdr;
-        if (!clips || !hasActiveHdr) return false;
-        if (clips.length < finiteConstraint(rule, "minimumTimelineClips", 2)) {
-          return false;
-        }
-        const hdr = clips.map(hasActiveHdr);
-        return hdr.some(Boolean) && hdr.some((value) => !value);
-      }
-      default:
-        return false;
+  var defineList = () => (descriptor) => descriptor;
+  var definePatchKeys = () => (keys) => keys.patchKeys;
+  var ROOT_PATCH_KEYS = definePatchKeys()({
+    patchKeys: ["schemaVersion", "width", "height", "fps", "dimsExplicit"],
+    reservedKeys: ["clips", "audioTracks"]
+  });
+  var RETAKE_PATCH_KEYS = definePatchKeys()({
+    patchKeys: ["startSeconds", "lengthSeconds", "strength"],
+    reservedKeys: ["id"]
+  });
+  var CLIP_ENTITY = defineList()({
+    prefix: "clip",
+    owner: "document",
+    entityField: "clip",
+    idField: "clipId",
+    beforeIdField: "beforeClipId",
+    patchKeys: [
+      "skipped",
+      "hue",
+      "boundaryOut",
+      "boundaryOutCarryAudio",
+      "boundaryOutOverlap",
+      "duration",
+      "audioSource",
+      "icLoras",
+      "saveAudioTrack",
+      "clipLengthFromAudio",
+      "clipLengthFromControlNet",
+      "reuseAudio",
+      "uploadedAudio",
+      "prompt",
+      "sourceVideo"
+    ],
+    reservedKeys: [
+      "id",
+      "architecture",
+      "modelProfileId",
+      "promptWindows",
+      "retake",
+      "refs",
+      "stages"
+    ],
+    collection: (document2) => document2.clips
+  });
+  var STAGE_ENTITY = defineList()({
+    prefix: "stage",
+    owner: "clip",
+    entityField: "stage",
+    idField: "stageId",
+    beforeIdField: "beforeStageId",
+    patchKeys: [
+      "skipped",
+      "control",
+      "controlNetStrength",
+      "icLoraStrengths",
+      "refStrengths",
+      "upscale",
+      "upscaleMethod",
+      "steps",
+      "cfgScale",
+      "sampler",
+      "scheduler",
+      "loras"
+    ],
+    reservedKeys: ["id", "model", "modelProfileId"],
+    reconcilesClipIdentity: true,
+    collection: (clip) => clip.stages
+  });
+  var REF_ENTITY = defineList()({
+    prefix: "ref",
+    owner: "clip",
+    entityField: "ref",
+    idField: "refId",
+    beforeIdField: "beforeRefId",
+    patchKeys: [
+      "source",
+      "uploadFileName",
+      "uploadedImage",
+      "frame",
+      "fromEnd"
+    ],
+    reservedKeys: ["id"],
+    collection: (clip) => clip.refs
+  });
+  var PROMPT_WINDOW_ENTITY = defineList()(
+    {
+      prefix: "prompt-window",
+      owner: "clip",
+      entityField: "window",
+      idField: "windowId",
+      beforeIdField: "beforeWindowId",
+      patchKeys: ["prompt", "start", "duration"],
+      reservedKeys: ["id"],
+      collection: (clip) => clip.promptWindows
     }
-  };
-
-  // frontend/architectures/policy/featureValues.ts
-  var FEATURE_LABEL = {
-    multiStage: "Multiple stages",
-    sourceVideo: "Source video",
-    frameReferences: "Frame references",
-    retake: "Retakes",
-    majorPrompt: "Major prompts",
-    promptRelay: "Relay prompts",
-    clipAudio: "Clip audio",
-    audioReuse: "Captured stage audio reuse",
-    audioSegments: "Audio segments",
-    stageLoras: "Stage LoRAs",
-    icLora: "IC-LoRA",
-    hdr: "HDR",
-    upscale: "Stage upscaling"
-  };
-  var architectureReason = (label, feature) => `${FEATURE_LABEL[feature]} is not supported by ${label}.`;
-  var noArchitectureReason = (feature) => `${FEATURE_LABEL[feature]} requires a generated clip with a known architecture.`;
-  var upscaleModeForMethod = (method) => {
-    const normalized = method.trim().toLowerCase();
-    if (normalized.startsWith("latentmodel-")) return "latent-model";
-    if (normalized.startsWith("latent-")) return "latent";
-    if (normalized.startsWith("pixel-")) return "pixel";
-    return "model";
-  };
-
-  // frontend/architectures/policy/clipStageViews.ts
-  var conditionalRuleFor = (clip, feature, descriptor) => {
-    const code = feature === "promptRelay" ? CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength : feature === "audioReuse" ? CONDITIONAL_RULE_CODES.audioReuseRequiresStages : null;
-    if (!code) return void 0;
-    const rule = conditionalRule(descriptor.rules, code);
-    return rule && evaluateConditionalRule(rule, { clip }) ? rule : void 0;
-  };
-  var scopedFeatureSupport = (feature, descriptor, profileId) => {
-    const capability = descriptor.capabilities;
-    const profile = descriptor.profiles.find((entry) => entry.id === profileId);
-    switch (feature) {
-      case "multiStage":
-        return capability.architecture.includes("multi-stage");
-      case "sourceVideo":
-        return capability.clip.includes("source-video");
-      case "frameReferences":
-        return capability.clip.includes("references") && capability.stage.includes("frame-references");
-      case "retake":
-        return capability.clip.includes("retake");
-      case "majorPrompt":
-        return capability.clip.includes("prompts");
-      case "promptRelay":
-        return capability.clip.includes("prompt-relay");
-      case "clipAudio":
-      case "audioReuse":
-        return capability.clip.includes("audio-sources");
-      case "audioSegments":
-        return capability.clip.includes("audio-segments");
-      case "stageLoras":
-        return capability.stage.includes("lora") && (profile === void 0 || profile.capabilities.includes("normal-lora"));
-      case "icLora":
-        return capability.stage.includes("ic-lora");
-      case "hdr":
-        return capability.stage.includes("hdr");
-      case "upscale":
-        return capability.upscaleModes.length > 0;
-    }
-  };
-  var createClipStageCapabilityViews = (architectureById) => {
-    const forClip = (clip) => {
-      const descriptor = architectureById.get(clip.architecture);
-      const label = descriptor?.label ?? (clip.architecture === "none" ? "source-only clips" : `unknown architecture '${clip.architecture}'`);
-      const decision = (feature) => {
-        if (!descriptor) {
-          return {
-            supported: false,
-            reason: noArchitectureReason(feature),
-            rule: null
-          };
-        }
-        const conditionalRule2 = conditionalRuleFor(
-          clip,
-          feature,
-          descriptor
-        );
-        const supported = scopedFeatureSupport(
-          feature,
-          descriptor,
-          clip.modelProfileId
-        ) && !conditionalRule2;
-        return {
-          supported,
-          reason: supported ? "" : conditionalRule2?.reason ?? architectureReason(label, feature),
-          rule: conditionalRule2 ?? null
-        };
-      };
-      return {
-        architectureId: clip.architecture,
-        architectureLabel: label,
-        known: descriptor !== void 0,
-        audioSourceKinds: descriptor?.capabilities.audioSourceKinds ?? [],
-        decision,
-        authoringState: (feature, persisted) => {
-          const result = decision(feature);
-          return {
-            ...result,
-            visible: result.supported || persisted,
-            enabled: result.supported
-          };
-        }
-      };
-    };
-    const forStage = (clip, stage) => {
-      const view = forClip(clip);
-      const descriptor = architectureById.get(clip.architecture);
-      const profile = descriptor?.profiles.find(
-        (entry) => entry.id === stage.modelProfileId
-      );
-      const decision = (feature) => {
-        if (feature === "stageLoras" && descriptor) {
-          const supported = descriptor.capabilities.stage.includes("lora") && profile?.capabilities.includes("normal-lora") === true;
-          return {
-            supported,
-            reason: supported ? "" : `Stage LoRAs require normal-LoRA support in ${descriptor.label}.`,
-            rule: null
-          };
-        }
-        if (feature === "sampler" || feature === "scheduler") {
-          const required = feature === "sampler" ? "sampler-selection" : "scheduler-selection";
-          const supported = profile?.capabilities.includes(required) === true;
-          return {
-            supported,
-            reason: supported ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection is not supported by this model profile.`,
-            rule: null
-          };
-        }
-        return view.decision(feature);
-      };
-      return {
-        upscaleModes: descriptor?.capabilities.upscaleModes ?? [],
-        decision,
-        authoringState: (feature, persisted) => {
-          const result = decision(feature);
-          return {
-            ...result,
-            visible: result.supported || persisted,
-            enabled: result.supported
-          };
-        }
-      };
-    };
-    return { forClip, forStage };
-  };
-
-  // frontend/architectures/policy/identity.ts
-  var reconcileSourcedClipIdentity = (clip, catalog) => {
-    reconcileClipArchitectureIdentity(clip, catalog);
-  };
-
-  // frontend/architectures/policy.ts
-  var createCapabilityViewResolver = (catalog) => {
-    const architectureById = new Map(
-      catalog.architectures.map((entry) => [entry.id, entry])
-    );
-    const clipStage = createClipStageCapabilityViews(architectureById);
-    const boundaries = createBoundaryCapabilityViews(
-      architectureById,
-      clipStage.forClip
-    );
-    return {
-      catalog,
-      ...clipStage,
-      ...boundaries,
-      executableClipIndexes
-    };
-  };
-
-  // frontend/architectures/conversion/plan.ts
-  var countLabel = (count, singular) => `${count} ${singular}${count === 1 ? "" : "s"}`;
-  var ownId = (value) => typeof value === "object" && value !== null && "id" in value && typeof value.id === "string" ? value.id : null;
-  var collectIds = (values) => values.map(ownId).filter((id) => id !== null);
-  var resolveArchitectureRetarget = (requested, catalog) => {
-    if (!catalog) {
-      return null;
-    }
-    const model = catalog.entries.find(
-      (entry) => entry.value === requested.model
-    );
-    if (!model?.architectureId || !model.modelProfileId || model.architectureId !== requested.architectureId || model.modelProfileId !== requested.modelProfileId) {
-      return null;
-    }
-    const descriptor = catalog.architectures.find(
-      (entry) => entry.id === model.architectureId
-    );
-    const profile = descriptor?.profiles.find(
-      (entry) => entry.id === model.modelProfileId
-    );
-    if (!descriptor || !profile) {
-      return null;
-    }
-    return {
-      architectureId: descriptor.id,
-      modelProfileId: profile.id,
-      model: model.value,
-      capabilities: structuredClone(descriptor.capabilities),
-      profileCapabilities: [...profile.capabilities]
-    };
-  };
-  var planArchitectureConversion = (source, requested, catalog) => {
-    const target = resolveArchitectureRetarget(requested, catalog);
-    if (!target) {
-      return null;
-    }
-    const clip = structuredClone(source);
-    const removals = [];
-    const removedEntityIds = [];
-    const clipCapabilities = target.capabilities.clip;
-    const stageCapabilities = target.capabilities.stage;
-    const supportsMultipleStages = target.capabilities.architecture.includes("multi-stage");
-    const supportsReferences = clipCapabilities.includes("references") && stageCapabilities.includes("frame-references");
-    const supportsNormalLoras = stageCapabilities.includes("lora") && target.profileCapabilities.includes("normal-lora");
-    clip.architecture = target.architectureId;
-    clip.modelProfileId = target.modelProfileId;
-    if (!supportsMultipleStages && clip.stages.length > 1) {
-      const removedStages = clip.stages.slice(1);
-      removals.push(countLabel(removedStages.length, "later authored stage"));
-      removedEntityIds.push(...collectIds(removedStages));
-      clip.stages = clip.stages.slice(0, 1);
-    }
-    if (!supportsReferences && clip.refs.length > 0) {
-      removals.push(countLabel(clip.refs.length, "frame reference"));
-      removedEntityIds.push(...collectIds(clip.refs));
-      clip.refs = [];
-    }
-    let removedStageLoras = 0;
-    let removedUpscaleSettings = 0;
-    for (const stage of clip.stages) {
-      stage.model = target.model;
-      stage.modelProfileId = target.modelProfileId;
-      if (!supportsReferences) {
-        stage.refStrengths = [];
-        stage.icLoraStrengths = [];
-      }
-      if (!supportsNormalLoras && stage.loras.length > 0) {
-        removedStageLoras += stage.loras.length;
-        stage.loras = [];
-      }
-      if (stage.upscale !== 1 && !target.capabilities.upscaleModes.includes(
-        upscaleModeForMethod(stage.upscaleMethod)
-      )) {
-        removedUpscaleSettings++;
-        stage.upscale = 1;
-      }
-    }
-    if (removedStageLoras > 0) {
-      removals.push(countLabel(removedStageLoras, "stage LoRA"));
-    }
-    if (removedUpscaleSettings > 0) {
-      removals.push("stage upscale settings");
-    }
-    if (!stageCapabilities.includes("ic-lora") && clip.icLoras.length > 0) {
-      removals.push(countLabel(clip.icLoras.length, "IC-LoRA"));
-      clip.icLoras = [];
-      clip.clipLengthFromControlNet = false;
-    } else if (stageCapabilities.includes("ic-lora")) {
-      if (!stageCapabilities.includes("hdr")) {
-        const hdrCount = clip.icLoras.filter(
-          (entry) => isArchitectureHdrFeature(source.architecture, entry)
-        ).length;
-        if (hdrCount > 0) {
-          removals.push(countLabel(hdrCount, "HDR IC-LoRA"));
-          clip.icLoras = clip.icLoras.filter(
-            (entry) => !isArchitectureHdrFeature(source.architecture, entry)
-          );
-        }
-      }
-      let repairedTargets = false;
-      for (const entry of clip.icLoras) {
-        if (entry.stage >= clip.stages.length) {
-          entry.stage = IC_LORA_STAGE_ALL;
-          repairedTargets = true;
-        }
-        if (entry.driveData === "none" && entry.driveSource !== IC_LORA_SOURCE_UPLOAD) {
-          entry.driveSource = IC_LORA_SOURCE_UPLOAD;
-          entry.driveMedia = null;
-        }
-      }
-      if (repairedTargets) {
-        removals.push("IC-LoRA targets on removed stages");
-      }
-    }
-    if (!clipCapabilities.includes("retake") && clip.retake !== null) {
-      removals.push("retake");
-      const id = ownId(clip.retake);
-      if (id) removedEntityIds.push(id);
-      clip.retake = null;
-    }
-    if (!clipCapabilities.includes("prompts") && clip.prompt.trim()) {
-      removals.push("major prompt");
-      clip.prompt = "";
-    }
-    if (!clipCapabilities.includes("prompt-relay") && clip.promptWindows.length > 0) {
-      removals.push(countLabel(clip.promptWindows.length, "relay prompt"));
-      removedEntityIds.push(...collectIds(clip.promptWindows));
-      clip.promptWindows = [];
-    }
-    if (!clipCapabilities.includes("audio-segments") && clip.audioSegments.length > 0) {
-      removals.push(countLabel(clip.audioSegments.length, "audio segment"));
-      removedEntityIds.push(...collectIds(clip.audioSegments));
-      clip.audioSegments = [];
-    }
-    if (!clipCapabilities.includes("source-video") && clip.sourceVideo) {
-      removals.push("source video");
-      clip.sourceVideo = null;
-    }
-    if (!clipCapabilities.includes("audio-sources") || !isAllowedAudioSource(
-      target.capabilities.audioSourceKinds,
-      clip.audioSource
-    )) {
-      const hasAudioSettings = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.saveAudioTrack || clip.clipLengthFromAudio || clip.reuseAudio;
-      if (hasAudioSettings) {
-        removals.push("clip audio source settings");
-      }
-      clip.audioSource = defaultAuthoringAudioSource(
-        target.capabilities.audioSourceKinds
-      );
-      clip.uploadedAudio = null;
-      clip.saveAudioTrack = false;
-      clip.clipLengthFromAudio = false;
-      clip.reuseAudio = false;
-    }
-    return {
-      clip,
-      removals,
-      removedEntityIds,
-      selectionAffected: removedEntityIds.length > 0
-    };
+  );
+  var AUDIO_TRACK_ENTITY = defineList()({
+    prefix: "audio-track",
+    owner: "document",
+    entityField: "track",
+    idField: "trackId",
+    beforeIdField: "beforeTrackId",
+    patchKeys: ["source", "volume"],
+    reservedKeys: ["id", "spans"],
+    collection: (document2) => document2.audioTracks
+  });
+  var AUDIO_SPAN_ENTITY = defineList()({
+    prefix: "audio-span",
+    owner: "track",
+    entityField: "span",
+    idField: "spanId",
+    beforeIdField: "beforeSpanId",
+    patchKeys: [
+      "timelineStartSeconds",
+      "timelineLengthSeconds",
+      "sourceStartSeconds"
+    ],
+    reservedKeys: ["id"],
+    collection: (track) => track.spans
+  });
+  var LIST_ENTITIES = {
+    clip: CLIP_ENTITY,
+    stage: STAGE_ENTITY,
+    ref: REF_ENTITY,
+    promptWindow: PROMPT_WINDOW_ENTITY,
+    audioTrack: AUDIO_TRACK_ENTITY,
+    audioSpan: AUDIO_SPAN_ENTITY
   };
 
   // frontend/documentDiff.ts
@@ -3816,81 +3829,6 @@
       this.failure = failure2;
     }
   };
-  var ROOT_PATCH_KEYS = [
-    "schemaVersion",
-    "width",
-    "height",
-    "fps",
-    "dimsExplicit"
-  ];
-  var CLIP_PATCH_KEYS = [
-    "skipped",
-    "hue",
-    "boundaryOut",
-    "boundaryOutCarryAudio",
-    "boundaryOutOverlap",
-    "duration",
-    "audioSource",
-    "icLoras",
-    "saveAudioTrack",
-    "clipLengthFromAudio",
-    "clipLengthFromControlNet",
-    "reuseAudio",
-    "uploadedAudio",
-    "prompt",
-    "sourceVideo"
-  ];
-  var STAGE_PATCH_KEYS = [
-    "skipped",
-    "control",
-    "controlNetStrength",
-    "icLoraStrengths",
-    "refStrengths",
-    "upscale",
-    "upscaleMethod",
-    "steps",
-    "cfgScale",
-    "sampler",
-    "scheduler",
-    "loras"
-  ];
-  var REF_PATCH_KEYS = [
-    "source",
-    "uploadFileName",
-    "uploadedImage",
-    "frame",
-    "fromEnd"
-  ];
-  var AUDIO_SEGMENT_PATCH_KEYS = [
-    "source",
-    "startSeconds",
-    "trimStartSeconds",
-    "lengthSeconds",
-    "volume"
-  ];
-  var PROMPT_WINDOW_PATCH_KEYS = [
-    "prompt",
-    "start",
-    "duration"
-  ];
-  var RETAKE_PATCH_KEYS = [
-    "startSeconds",
-    "lengthSeconds",
-    "strength"
-  ];
-  var AUDIO_TRACK_PATCH_KEYS = [
-    "source",
-    "volume"
-  ];
-  var AUDIO_SPAN_PATCH_KEYS = [
-    "firstClipId",
-    "lastClipId",
-    "timelineStartSeconds",
-    "timelineLengthSeconds",
-    "sourceStartSeconds",
-    "clipStartOffsetSeconds",
-    "clipLengthSeconds"
-  ];
   var clone = (value) => structuredClone(value);
   var isRecord3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var deepEqual = (left, right) => {
@@ -3924,7 +3862,6 @@
       clip.id,
       ...clip.stages.map((stage) => stage.id),
       ...clip.refs.map((ref) => ref.id),
-      ...clip.audioSegments.map((segment) => segment.id),
       ...clip.promptWindows.map((window2) => window2.id),
       ...clip.retake ? [clip.retake.id] : []
     ]),
@@ -3956,13 +3893,38 @@
     ids.splice(ids.indexOf(id), 1);
     insertBeforeId(ids, id, beforeId);
   };
-  var diffEntityList = (before, after, phases, callbacks) => {
+  var listCommand = (descriptor, ownerId, suffix, fields) => {
+    const ownerField = OWNER_ID_FIELD[descriptor.owner];
+    return {
+      type: `${descriptor.prefix}.${suffix}`,
+      ...ownerField === null ? {} : { [ownerField]: ownerId },
+      ...fields
+    };
+  };
+  var emitPatch = (descriptor, ownerId, previous, next, phases) => {
+    const patch = changedPatch(previous, next, descriptor.patchKeys);
+    if (hasPatch(patch)) {
+      phases.patches.push(
+        listCommand(descriptor, ownerId, "patch", {
+          [descriptor.idField]: next.id,
+          patch
+        })
+      );
+    }
+  };
+  var diffList = (descriptor, ownerId, beforeOwner, afterOwner, phases, patchEntity = (previous, next) => emitPatch(descriptor, ownerId, previous, next, phases)) => {
+    const before = descriptor.collection(beforeOwner);
+    const after = descriptor.collection(afterOwner);
     const beforeById = new Map(before.map((entity) => [entity.id, entity]));
     const afterIds = new Set(after.map((entity) => entity.id));
     const currentIds = before.map((entity) => entity.id);
     for (const entity of before) {
       if (!afterIds.has(entity.id)) {
-        phases.removes.push(callbacks.remove(entity.id));
+        phases.removes.push(
+          listCommand(descriptor, ownerId, "remove", {
+            [descriptor.idField]: entity.id
+          })
+        );
         currentIds.splice(currentIds.indexOf(entity.id), 1);
       }
     }
@@ -3972,7 +3934,12 @@
         continue;
       }
       const beforeId = after[index + 1]?.id ?? null;
-      phases.adds.push(callbacks.add(clone(entity), beforeId));
+      phases.adds.push(
+        listCommand(descriptor, ownerId, "add", {
+          [descriptor.entityField]: clone(entity),
+          [descriptor.beforeIdField]: beforeId
+        })
+      );
       insertBeforeId(currentIds, entity.id, beforeId);
     }
     for (let index = 0; index < after.length; index++) {
@@ -3981,35 +3948,28 @@
         continue;
       }
       const beforeId = currentIds[index] ?? null;
-      phases.moves.push(callbacks.move(targetId, beforeId));
+      phases.moves.push(
+        listCommand(descriptor, ownerId, "move", {
+          [descriptor.idField]: targetId,
+          [descriptor.beforeIdField]: beforeId
+        })
+      );
       moveBeforeId(currentIds, targetId, beforeId);
     }
     for (const entity of after) {
       const previous = beforeById.get(entity.id);
       if (previous) {
-        callbacks.patch(previous, entity);
+        patchEntity(previous, entity);
       }
     }
   };
-  var diffStages = (before, after, phases) => diffEntityList(before.stages, after.stages, phases, {
-    remove: (stageId) => ({
-      type: "stage.remove",
-      clipId: before.id,
-      stageId
-    }),
-    add: (stage, beforeStageId) => ({
-      type: "stage.add",
-      clipId: after.id,
-      stage,
-      beforeStageId
-    }),
-    move: (stageId, beforeStageId) => ({
-      type: "stage.move",
-      clipId: after.id,
-      stageId,
-      beforeStageId
-    }),
-    patch: (previous, next) => {
+  var diffStages = (before, after, phases) => diffList(
+    LIST_ENTITIES.stage,
+    after.id,
+    before,
+    after,
+    phases,
+    (previous, next) => {
       if (previous.model !== next.model || previous.modelProfileId !== next.modelProfileId) {
         phases.patches.push({
           type: "stage.retarget-model",
@@ -4022,115 +3982,9 @@
           }
         });
       }
-      const patch = changedPatch(previous, next, STAGE_PATCH_KEYS);
-      if (hasPatch(patch)) {
-        phases.patches.push({
-          type: "stage.patch",
-          clipId: after.id,
-          stageId: next.id,
-          patch
-        });
-      }
+      emitPatch(LIST_ENTITIES.stage, after.id, previous, next, phases);
     }
-  });
-  var diffRefs = (before, after, phases) => diffEntityList(before.refs, after.refs, phases, {
-    remove: (refId) => ({
-      type: "ref.remove",
-      clipId: before.id,
-      refId
-    }),
-    add: (ref, beforeRefId) => ({
-      type: "ref.add",
-      clipId: after.id,
-      ref,
-      beforeRefId
-    }),
-    move: (refId, beforeRefId) => ({
-      type: "ref.move",
-      clipId: after.id,
-      refId,
-      beforeRefId
-    }),
-    patch: (previous, next) => {
-      const patch = changedPatch(previous, next, REF_PATCH_KEYS);
-      if (hasPatch(patch)) {
-        phases.patches.push({
-          type: "ref.patch",
-          clipId: after.id,
-          refId: next.id,
-          patch
-        });
-      }
-    }
-  });
-  var diffAudioSegments = (before, after, phases) => diffEntityList(before.audioSegments, after.audioSegments, phases, {
-    remove: (segmentId) => ({
-      type: "audio-segment.remove",
-      clipId: before.id,
-      segmentId
-    }),
-    add: (segment, beforeSegmentId) => ({
-      type: "audio-segment.add",
-      clipId: after.id,
-      segment,
-      beforeSegmentId
-    }),
-    move: (segmentId, beforeSegmentId) => ({
-      type: "audio-segment.move",
-      clipId: after.id,
-      segmentId,
-      beforeSegmentId
-    }),
-    patch: (previous, next) => {
-      const patch = changedPatch(
-        previous,
-        next,
-        AUDIO_SEGMENT_PATCH_KEYS
-      );
-      if (hasPatch(patch)) {
-        phases.patches.push({
-          type: "audio-segment.patch",
-          clipId: after.id,
-          segmentId: next.id,
-          patch
-        });
-      }
-    }
-  });
-  var diffPromptWindows = (before, after, phases) => diffEntityList(before.promptWindows, after.promptWindows, phases, {
-    remove: (windowId) => ({
-      type: "prompt-window.remove",
-      clipId: before.id,
-      windowId
-    }),
-    add: (window2, beforeWindowId) => ({
-      type: "prompt-window.add",
-      clipId: after.id,
-      window: window2,
-      beforeWindowId
-    }),
-    move: (windowId, beforeWindowId) => ({
-      type: "prompt-window.move",
-      clipId: after.id,
-      windowId,
-      beforeWindowId
-    }),
-    patch: (previous, next) => {
-      const patch = changedPatch(
-        previous,
-        next,
-        PROMPT_WINDOW_PATCH_KEYS
-      );
-      if (hasPatch(patch)) {
-        phases.patches.push({
-          type: "prompt-window.patch",
-          clipId: after.id,
-          windowId: next.id,
-          patch
-        });
-      }
-    }
-  });
+  );
   var diffRetake = (before, after, phases) => {
     if (before.retake?.id !== after.retake?.id) {
       if (before.retake) {
@@ -4164,166 +4018,105 @@
   };
   var diffClipChildren = (before, after, phases) => {
     diffStages(before, after, phases);
-    diffRefs(before, after, phases);
-    diffAudioSegments(before, after, phases);
-    diffPromptWindows(before, after, phases);
+    diffList(LIST_ENTITIES.ref, after.id, before, after, phases);
+    diffList(LIST_ENTITIES.promptWindow, after.id, before, after, phases);
     diffRetake(before, after, phases);
   };
-  var diffSpans = (before, after, phases) => diffEntityList(before.spans, after.spans, phases, {
-    remove: (spanId) => ({
-      type: "audio-span.remove",
-      trackId: before.id,
-      spanId
-    }),
-    add: (span, beforeSpanId) => ({
-      type: "audio-span.add",
-      trackId: after.id,
-      span,
-      beforeSpanId
-    }),
-    move: (spanId, beforeSpanId) => ({
-      type: "audio-span.move",
-      trackId: after.id,
-      spanId,
-      beforeSpanId
-    }),
-    patch: (previous, next) => {
-      const patch = changedPatch(previous, next, AUDIO_SPAN_PATCH_KEYS);
-      if (hasPatch(patch)) {
-        phases.patches.push({
-          type: "audio-span.patch",
-          trackId: after.id,
-          spanId: next.id,
-          patch
-        });
-      }
-    }
-  });
-  var diffClips = (before, after, phases, context) => diffEntityList(before.clips, after.clips, phases, {
-    remove: (clipId) => ({ type: "clip.remove", clipId }),
-    add: (clip, beforeClipId) => ({
-      type: "clip.add",
-      clip,
-      beforeClipId
-    }),
-    move: (clipId, beforeClipId) => ({
-      type: "clip.move",
-      clipId,
-      beforeClipId
-    }),
-    patch: (previous, next) => {
-      const changesEffectiveIdentity = previous.architecture !== next.architecture || previous.modelProfileId !== next.modelProfileId;
-      const previousIdentity = deriveClipArchitectureIdentity(
-        previous,
-        context.architectureCatalog
-      );
-      const nextIdentity = deriveClipArchitectureIdentity(
-        next,
-        context.architectureCatalog
-      );
-      if (changesEffectiveIdentity) {
-        if (!nextIdentity || nextIdentity.architectureId !== next.architecture || nextIdentity.modelProfileId !== next.modelProfileId) {
-          throw new DocumentDiffError("architecture-invariant");
-        }
-      }
-      const changesAuthoredArchitecture = previousIdentity?.authoredArchitectureId !== null && previousIdentity?.authoredArchitectureId !== void 0 && nextIdentity?.authoredArchitectureId !== null && nextIdentity?.authoredArchitectureId !== void 0 && previousIdentity.authoredArchitectureId !== nextIdentity.authoredArchitectureId;
-      if (changesEffectiveIdentity && !changesAuthoredArchitecture && (previousIdentity?.authoredArchitectureId == null || nextIdentity?.authoredArchitectureId == null || previousIdentity.authoredArchitectureId !== nextIdentity.authoredArchitectureId)) {
+  var clipDiffBase = (previous, next, phases, context) => {
+    const changesEffectiveIdentity = previous.architecture !== next.architecture || previous.modelProfileId !== next.modelProfileId;
+    const previousIdentity = deriveClipArchitectureIdentity(
+      previous,
+      context.architectureCatalog
+    );
+    const nextIdentity = deriveClipArchitectureIdentity(
+      next,
+      context.architectureCatalog
+    );
+    if (changesEffectiveIdentity) {
+      if (!nextIdentity || nextIdentity.architectureId !== next.architecture || nextIdentity.modelProfileId !== next.modelProfileId) {
         throw new DocumentDiffError("architecture-invariant");
       }
-      let diffBase = previous;
-      if (changesAuthoredArchitecture) {
-        const catalog = context.architectureCatalog;
-        const sourceArchitectureId = previousIdentity?.authoredArchitectureId;
-        const targetStage = next.stages[0];
-        const targetEntry = catalog?.entries.find(
-          (entry) => entry.value === targetStage?.model
-        );
-        const targetDescriptor = catalog?.architectures.find(
-          (entry) => entry.id === targetEntry?.architectureId
-        );
-        if (!catalog || !sourceArchitectureId || !targetStage || !targetEntry?.architectureId || !targetEntry.modelProfileId || !targetDescriptor || targetEntry.architectureId !== nextIdentity?.authoredArchitectureId || targetEntry.modelProfileId !== targetStage.modelProfileId) {
-          throw new DocumentDiffError("architecture-invariant");
-        }
-        const target = {
-          architectureId: targetEntry.architectureId,
-          modelProfileId: targetEntry.modelProfileId,
-          model: targetEntry.value,
-          capabilities: clone(targetDescriptor.capabilities)
-        };
-        const requestedForCleanup = clone(next);
-        requestedForCleanup.architecture = sourceArchitectureId;
-        const requestedPlan = planArchitectureConversion(
-          requestedForCleanup,
-          target,
-          catalog
-        );
-        const baselinePlan = planArchitectureConversion(
-          previous,
-          target,
-          catalog
-        );
-        if (!requestedPlan || !baselinePlan) {
-          throw new DocumentDiffError("architecture-invariant");
-        }
-        const cleanedRequested = requestedPlan.clip;
-        if (cleanedRequested.stages.length === next.stages.length) {
-          for (let index = 0; index < next.stages.length; index++) {
-            cleanedRequested.stages[index].model = next.stages[index].model;
-            cleanedRequested.stages[index].modelProfileId = next.stages[index].modelProfileId;
-          }
-        }
-        if (!reconcileClipArchitectureIdentity(
-          cleanedRequested,
-          catalog
-        ) || !deepEqual(cleanedRequested, next)) {
-          throw new DocumentDiffError("architecture-invariant");
-        }
-        const convertedBase = baselinePlan.clip;
-        if (!reconcileClipArchitectureIdentity(convertedBase, catalog)) {
-          throw new DocumentDiffError("architecture-invariant");
-        }
-        phases.conversions.push({
-          type: "clip.convert-architecture",
-          clipId: next.id,
-          target
-        });
-        diffBase = convertedBase;
+    }
+    const changesAuthoredArchitecture = previousIdentity?.authoredArchitectureId !== null && previousIdentity?.authoredArchitectureId !== void 0 && nextIdentity?.authoredArchitectureId !== null && nextIdentity?.authoredArchitectureId !== void 0 && previousIdentity.authoredArchitectureId !== nextIdentity.authoredArchitectureId;
+    const nextIsSourceOnlyClip = next.stages.length === 0 && next.sourceVideo !== null && nextIdentity?.authoredArchitectureId == null && nextIdentity?.architectureId === NONE_ARCHITECTURE_ID;
+    if (changesEffectiveIdentity && !changesAuthoredArchitecture && !nextIsSourceOnlyClip && (previousIdentity?.authoredArchitectureId == null || nextIdentity?.authoredArchitectureId == null || previousIdentity.authoredArchitectureId !== nextIdentity.authoredArchitectureId)) {
+      throw new DocumentDiffError("architecture-invariant");
+    }
+    if (!changesAuthoredArchitecture) {
+      return previous;
+    }
+    const catalog = context.architectureCatalog;
+    const sourceArchitectureId = previousIdentity?.authoredArchitectureId;
+    const targetStage = next.stages[0];
+    const targetEntry = modelCatalogEntry(catalog, targetStage?.model);
+    const targetDescriptor = architectureDescriptor(
+      catalog,
+      targetEntry?.architectureId
+    );
+    if (!catalog || !sourceArchitectureId || !targetStage || !targetEntry?.architectureId || !targetEntry.modelProfileId || !targetDescriptor || targetEntry.architectureId !== nextIdentity?.authoredArchitectureId || targetEntry.modelProfileId !== targetStage.modelProfileId) {
+      throw new DocumentDiffError("architecture-invariant");
+    }
+    const target = {
+      architectureId: targetEntry.architectureId,
+      modelProfileId: targetEntry.modelProfileId,
+      model: targetEntry.value,
+      capabilities: clone(targetDescriptor.capabilities)
+    };
+    const requestedForCleanup = clone(next);
+    requestedForCleanup.architecture = sourceArchitectureId;
+    const requestedPlan = planArchitectureConversion(
+      requestedForCleanup,
+      target,
+      catalog
+    );
+    const baselinePlan = planArchitectureConversion(previous, target, catalog);
+    if (!requestedPlan || !baselinePlan) {
+      throw new DocumentDiffError("architecture-invariant");
+    }
+    const cleanedRequested = requestedPlan.clip;
+    if (cleanedRequested.stages.length === next.stages.length) {
+      for (let index = 0; index < next.stages.length; index++) {
+        cleanedRequested.stages[index].model = next.stages[index].model;
+        cleanedRequested.stages[index].modelProfileId = next.stages[index].modelProfileId;
       }
-      const patch = changedPatch(diffBase, next, CLIP_PATCH_KEYS);
-      if (hasPatch(patch)) {
-        phases.patches.push({
-          type: "clip.patch",
-          clipId: next.id,
-          patch
-        });
-      }
+    }
+    if (!reconcileClipArchitectureIdentity(cleanedRequested, catalog) || !deepEqual(cleanedRequested, next)) {
+      throw new DocumentDiffError("architecture-invariant");
+    }
+    const convertedBase = baselinePlan.clip;
+    if (!reconcileClipArchitectureIdentity(convertedBase, catalog)) {
+      throw new DocumentDiffError("architecture-invariant");
+    }
+    phases.conversions.push({
+      type: "clip.convert-architecture",
+      clipId: next.id,
+      target
+    });
+    return convertedBase;
+  };
+  var diffClips = (before, after, phases, context) => diffList(
+    LIST_ENTITIES.clip,
+    null,
+    before,
+    after,
+    phases,
+    (previous, next) => {
+      const diffBase = clipDiffBase(previous, next, phases, context);
+      emitPatch(LIST_ENTITIES.clip, null, diffBase, next, phases);
       diffClipChildren(diffBase, next, phases);
     }
-  });
-  var diffAudioTracks = (before, after, phases) => diffEntityList(before.audioTracks, after.audioTracks, phases, {
-    remove: (trackId) => ({ type: "audio-track.remove", trackId }),
-    add: (track, beforeTrackId) => ({
-      type: "audio-track.add",
-      track,
-      beforeTrackId
-    }),
-    move: (trackId, beforeTrackId) => ({
-      type: "audio-track.move",
-      trackId,
-      beforeTrackId
-    }),
-    patch: (previous, next) => {
-      const patch = changedPatch(previous, next, AUDIO_TRACK_PATCH_KEYS);
-      if (hasPatch(patch)) {
-        phases.patches.push({
-          type: "audio-track.patch",
-          trackId: next.id,
-          patch
-        });
-      }
-      diffSpans(previous, next, phases);
+  );
+  var diffAudioTracks = (before, after, phases) => diffList(
+    LIST_ENTITIES.audioTrack,
+    null,
+    before,
+    after,
+    phases,
+    (previous, next) => {
+      emitPatch(LIST_ENTITIES.audioTrack, null, previous, next, phases);
+      diffList(LIST_ENTITIES.audioSpan, next.id, previous, next, phases);
     }
-  });
+  );
   var diffDocuments = (before, after, context = { architectureCatalog: null }) => {
     validateDocumentIds(before);
     validateDocumentIds(after);
@@ -4367,35 +4160,6 @@
   };
 
   // frontend/documentCommands/helpers.ts
-  var VALUE = ["value"];
-  var VALUE_CAPABILITIES = [
-    "value",
-    "capabilities"
-  ];
-  var STRUCTURE = ["structure", "capabilities"];
-  var ARCHITECTURE_CONVERSION = [
-    "value",
-    "structure",
-    "capabilities"
-  ];
-  var ARCHITECTURE_CONVERSION_WITH_SELECTION = [
-    "value",
-    "structure",
-    "selection",
-    "capabilities"
-  ];
-  var REMOVE_STRUCTURE = [
-    "structure",
-    "selection",
-    "capabilities"
-  ];
-  var MOVE_STRUCTURE = ["structure"];
-  var IMPACT_ORDER = [
-    "value",
-    "structure",
-    "selection",
-    "capabilities"
-  ];
   var clone2 = (value) => structuredClone(value);
   var findClip = (document2, clipId) => document2.clips.find((clip) => clip.id === clipId) ?? null;
   var findTrack = (document2, trackId) => document2.audioTracks.find((track) => track.id === trackId) ?? null;
@@ -4405,7 +4169,6 @@
         entity.id,
         ...entity.stages.map((stage) => stage.id),
         ...entity.refs.map((ref) => ref.id),
-        ...entity.audioSegments.map((segment) => segment.id),
         ...entity.promptWindows.map((window2) => window2.id),
         ...entity.retake ? [entity.retake.id] : []
       ];
@@ -4467,20 +4230,84 @@
     Object.assign(entity, clone2(patch), { id });
     return true;
   };
-  var success = (document2, impacts) => ({ document: document2, applied: true, impacts });
+  var success = (document2) => ({ document: document2, applied: true });
   var failure = (document2, reason) => ({
     document: document2,
     applied: false,
-    impacts: [],
     failure: reason
   });
-  var combineImpacts = (impacts) => {
-    const included = new Set(impacts.flat());
-    return IMPACT_ORDER.filter((impact) => included.has(impact));
-  };
   var hasOwn = (value, key) => Object.hasOwn(value, key);
 
+  // frontend/documentCommands/listReducer.ts
+  var applyListCommand = (document2, descriptor, operation, command, context) => {
+    const fields = command;
+    const ownerField = OWNER_ID_FIELD[descriptor.owner];
+    const ownerId = ownerField === null ? "" : fields[ownerField];
+    const owner = descriptor.owner === "document" ? document2 : descriptor.owner === "clip" ? findClip(document2, ownerId) : findTrack(document2, ownerId);
+    if (!owner) {
+      return failure(document2, "missing-target");
+    }
+    const target = descriptor.reconcilesClipIdentity ? clone2(owner) : owner;
+    const items = descriptor.collection(
+      target
+    );
+    const id = fields[descriptor.idField];
+    const beforeId = fields[descriptor.beforeIdField] ?? null;
+    let mutated;
+    switch (operation) {
+      case "add": {
+        const entity = fields[descriptor.entityField];
+        const invalid = invalidNewEntity(
+          document2,
+          entity
+        );
+        if (invalid) {
+          return invalid;
+        }
+        mutated = addBefore(items, clone2(entity), beforeId);
+        break;
+      }
+      case "remove":
+        mutated = removeById(items, id);
+        break;
+      case "move":
+        mutated = moveBefore(items, id, beforeId);
+        break;
+      case "patch": {
+        const patch = fields.patch;
+        if (descriptor.reservedKeys.some(
+          (key) => key !== "id" && hasOwn(patch, key)
+        )) {
+          return failure(document2, "architecture-invariant");
+        }
+        mutated = patchById(items, id, patch);
+        break;
+      }
+    }
+    if (!mutated) {
+      return failure(document2, "missing-target");
+    }
+    if (descriptor.reconcilesClipIdentity) {
+      const candidate = target;
+      if (!reconcileClipArchitectureIdentity(
+        candidate,
+        context.architectureCatalog
+      )) {
+        return failure(document2, "architecture-invariant");
+      }
+      document2.clips[document2.clips.indexOf(owner)] = candidate;
+    }
+    return success(document2);
+  };
+
   // frontend/documentCommands.ts
+  var list = (document2, entity, operation, command, context) => applyListCommand(
+    document2,
+    LIST_ENTITIES[entity],
+    operation,
+    command,
+    context
+  );
   var assertNever = (command) => {
     throw new Error(`Unhandled document command: ${JSON.stringify(command)}`);
   };
@@ -4489,7 +4316,6 @@
     switch (command.type) {
       case "batch": {
         let current = document2;
-        const impacts = [];
         for (const child of command.commands) {
           const result = reduceDocumentCommand(current, child, context);
           if (!result.applied) {
@@ -4499,13 +4325,12 @@
             );
           }
           current = result.document;
-          impacts.push(result.impacts);
         }
-        return success(current, combineImpacts(impacts));
+        return success(current);
       }
       case "root.patch": {
         Object.assign(document2, clone2(command.patch));
-        return success(document2, VALUE_CAPABILITIES);
+        return success(document2);
       }
       case "clip.add": {
         const invalid = invalidNewEntity(document2, command.clip);
@@ -4520,24 +4345,12 @@
         if (!addBefore(document2.clips, addedClip, command.beforeClipId)) {
           return failure(clone2(source), "missing-target");
         }
-        return success(document2, STRUCTURE);
+        return success(document2);
       }
-      case "clip.remove": {
-        if (!removeById(document2.clips, command.clipId)) {
-          return failure(document2, "missing-target");
-        }
-        return success(document2, REMOVE_STRUCTURE);
-      }
-      case "clip.move": {
-        if (!moveBefore(
-          document2.clips,
-          command.clipId,
-          command.beforeClipId
-        )) {
-          return failure(document2, "missing-target");
-        }
-        return success(document2, MOVE_STRUCTURE);
-      }
+      case "clip.remove":
+        return list(document2, "clip", "remove", command, context);
+      case "clip.move":
+        return list(document2, "clip", "move", command, context);
       case "clip.patch": {
         if (hasOwn(command.patch, "architecture") || hasOwn(command.patch, "modelProfileId")) {
           return failure(document2, "architecture-invariant");
@@ -4555,7 +4368,7 @@
           return failure(document2, "architecture-invariant");
         }
         document2.clips[document2.clips.indexOf(clip)] = candidate;
-        return success(document2, VALUE_CAPABILITIES);
+        return success(document2);
       }
       case "clip.convert-architecture": {
         const clipIndex = document2.clips.findIndex(
@@ -4583,33 +4396,10 @@
         }
         document2.clips[clipIndex] = converted;
         forceCrossArchitectureCutsForConversion(document2.clips);
-        return success(
-          document2,
-          conversion.selectionAffected ? ARCHITECTURE_CONVERSION_WITH_SELECTION : ARCHITECTURE_CONVERSION
-        );
+        return success(document2);
       }
-      case "stage.add": {
-        const clip = findClip(document2, command.clipId);
-        if (!clip) return failure(document2, "missing-target");
-        const invalid = invalidNewEntity(document2, command.stage);
-        if (invalid) return invalid;
-        const candidate = clone2(clip);
-        if (!addBefore(
-          candidate.stages,
-          clone2(command.stage),
-          command.beforeStageId
-        )) {
-          return failure(clone2(source), "missing-target");
-        }
-        if (!reconcileClipArchitectureIdentity(
-          candidate,
-          context.architectureCatalog
-        )) {
-          return failure(document2, "architecture-invariant");
-        }
-        document2.clips[document2.clips.indexOf(clip)] = candidate;
-        return success(document2, STRUCTURE);
-      }
+      case "stage.add":
+        return list(document2, "stage", "add", command, context);
       case "stage.retarget-model": {
         const clip = findClip(document2, command.clipId);
         const stage = clip?.stages.find(
@@ -4641,151 +4431,30 @@
           return failure(document2, "architecture-invariant");
         }
         document2.clips[document2.clips.indexOf(clip)] = candidate;
-        return success(document2, VALUE_CAPABILITIES);
+        return success(document2);
       }
-      case "stage.remove": {
-        const clip = findClip(document2, command.clipId);
-        if (!clip) {
-          return failure(document2, "missing-target");
-        }
-        const candidate = clone2(clip);
-        if (!removeById(candidate.stages, command.stageId)) {
-          return failure(document2, "missing-target");
-        }
-        if (!reconcileClipArchitectureIdentity(
-          candidate,
-          context.architectureCatalog
-        )) {
-          return failure(document2, "architecture-invariant");
-        }
-        document2.clips[document2.clips.indexOf(clip)] = candidate;
-        return success(document2, REMOVE_STRUCTURE);
-      }
-      case "stage.move": {
-        const clip = findClip(document2, command.clipId);
-        if (!clip) {
-          return failure(document2, "missing-target");
-        }
-        const candidate = clone2(clip);
-        if (!moveBefore(
-          candidate.stages,
-          command.stageId,
-          command.beforeStageId
-        )) {
-          return failure(document2, "missing-target");
-        }
-        if (!reconcileClipArchitectureIdentity(
-          candidate,
-          context.architectureCatalog
-        )) {
-          return failure(document2, "architecture-invariant");
-        }
-        document2.clips[document2.clips.indexOf(clip)] = candidate;
-        return success(document2, MOVE_STRUCTURE);
-      }
-      case "stage.patch": {
-        const clip = findClip(document2, command.clipId);
-        if (hasOwn(command.patch, "model") || hasOwn(command.patch, "modelProfileId")) {
-          return failure(document2, "architecture-invariant");
-        }
-        if (!clip) {
-          return failure(document2, "missing-target");
-        }
-        const candidate = clone2(clip);
-        if (!patchById(candidate.stages, command.stageId, command.patch)) {
-          return failure(document2, "missing-target");
-        }
-        if (!reconcileClipArchitectureIdentity(
-          candidate,
-          context.architectureCatalog
-        )) {
-          return failure(document2, "architecture-invariant");
-        }
-        document2.clips[document2.clips.indexOf(clip)] = candidate;
-        return success(document2, VALUE_CAPABILITIES);
-      }
-      case "ref.add": {
-        const clip = findClip(document2, command.clipId);
-        if (!clip) return failure(document2, "missing-target");
-        const invalid = invalidNewEntity(document2, command.ref);
-        if (invalid) return invalid;
-        if (!addBefore(clip.refs, clone2(command.ref), command.beforeRefId)) {
-          return failure(clone2(source), "missing-target");
-        }
-        return success(document2, STRUCTURE);
-      }
-      case "ref.remove": {
-        const clip = findClip(document2, command.clipId);
-        return clip && removeById(clip.refs, command.refId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
-      }
-      case "ref.move": {
-        const clip = findClip(document2, command.clipId);
-        return clip && moveBefore(clip.refs, command.refId, command.beforeRefId) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
-      }
-      case "ref.patch": {
-        const clip = findClip(document2, command.clipId);
-        return clip && patchById(clip.refs, command.refId, command.patch) ? success(document2, VALUE_CAPABILITIES) : failure(document2, "missing-target");
-      }
-      case "audio-segment.add": {
-        const clip = findClip(document2, command.clipId);
-        if (!clip) return failure(document2, "missing-target");
-        const invalid = invalidNewEntity(document2, command.segment);
-        if (invalid) return invalid;
-        if (!addBefore(
-          clip.audioSegments,
-          clone2(command.segment),
-          command.beforeSegmentId
-        )) {
-          return failure(clone2(source), "missing-target");
-        }
-        return success(document2, STRUCTURE);
-      }
-      case "audio-segment.remove": {
-        const clip = findClip(document2, command.clipId);
-        return clip && removeById(clip.audioSegments, command.segmentId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
-      }
-      case "audio-segment.move": {
-        const clip = findClip(document2, command.clipId);
-        return clip && moveBefore(
-          clip.audioSegments,
-          command.segmentId,
-          command.beforeSegmentId
-        ) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
-      }
-      case "audio-segment.patch": {
-        const clip = findClip(document2, command.clipId);
-        return clip && patchById(clip.audioSegments, command.segmentId, command.patch) ? success(document2, VALUE) : failure(document2, "missing-target");
-      }
-      case "prompt-window.add": {
-        const clip = findClip(document2, command.clipId);
-        if (!clip) return failure(document2, "missing-target");
-        const invalid = invalidNewEntity(document2, command.window);
-        if (invalid) return invalid;
-        if (!addBefore(
-          clip.promptWindows,
-          clone2(command.window),
-          command.beforeWindowId
-        )) {
-          return failure(clone2(source), "missing-target");
-        }
-        return success(document2, STRUCTURE);
-      }
-      case "prompt-window.remove": {
-        const clip = findClip(document2, command.clipId);
-        return clip && removeById(clip.promptWindows, command.windowId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
-      }
-      case "prompt-window.move": {
-        const clip = findClip(document2, command.clipId);
-        return clip && moveBefore(
-          clip.promptWindows,
-          command.windowId,
-          command.beforeWindowId
-        ) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
-      }
-      case "prompt-window.patch": {
-        const clip = findClip(document2, command.clipId);
-        return clip && patchById(clip.promptWindows, command.windowId, command.patch) ? success(document2, VALUE) : failure(document2, "missing-target");
-      }
+      case "stage.remove":
+        return list(document2, "stage", "remove", command, context);
+      case "stage.move":
+        return list(document2, "stage", "move", command, context);
+      case "stage.patch":
+        return list(document2, "stage", "patch", command, context);
+      case "ref.add":
+        return list(document2, "ref", "add", command, context);
+      case "ref.remove":
+        return list(document2, "ref", "remove", command, context);
+      case "ref.move":
+        return list(document2, "ref", "move", command, context);
+      case "ref.patch":
+        return list(document2, "ref", "patch", command, context);
+      case "prompt-window.add":
+        return list(document2, "promptWindow", "add", command, context);
+      case "prompt-window.remove":
+        return list(document2, "promptWindow", "remove", command, context);
+      case "prompt-window.move":
+        return list(document2, "promptWindow", "move", command, context);
+      case "prompt-window.patch":
+        return list(document2, "promptWindow", "patch", command, context);
       case "retake.add": {
         const clip = findClip(document2, command.clipId);
         if (!clip) return failure(document2, "missing-target");
@@ -4795,7 +4464,7 @@
         const invalid = invalidNewEntity(document2, command.retake);
         if (invalid) return invalid;
         clip.retake = clone2(command.retake);
-        return success(document2, STRUCTURE);
+        return success(document2);
       }
       case "retake.remove": {
         const clip = findClip(document2, command.clipId);
@@ -4803,7 +4472,7 @@
           return failure(document2, "missing-target");
         }
         clip.retake = null;
-        return success(document2, REMOVE_STRUCTURE);
+        return success(document2);
       }
       case "retake.patch": {
         const clip = findClip(document2, command.clipId);
@@ -4813,60 +4482,24 @@
         Object.assign(clip.retake, clone2(command.patch), {
           id: command.retakeId
         });
-        return success(document2, VALUE_CAPABILITIES);
+        return success(document2);
       }
-      case "audio-track.add": {
-        const invalid = invalidNewEntity(document2, command.track);
-        if (invalid) return invalid;
-        if (!addBefore(
-          document2.audioTracks,
-          clone2(command.track),
-          command.beforeTrackId
-        )) {
-          return failure(clone2(source), "missing-target");
-        }
-        return success(document2, STRUCTURE);
-      }
+      case "audio-track.add":
+        return list(document2, "audioTrack", "add", command, context);
       case "audio-track.remove":
-        return removeById(document2.audioTracks, command.trackId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
+        return list(document2, "audioTrack", "remove", command, context);
       case "audio-track.move":
-        return moveBefore(
-          document2.audioTracks,
-          command.trackId,
-          command.beforeTrackId
-        ) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
+        return list(document2, "audioTrack", "move", command, context);
       case "audio-track.patch":
-        return patchById(
-          document2.audioTracks,
-          command.trackId,
-          command.patch
-        ) ? success(document2, VALUE) : failure(document2, "missing-target");
-      case "audio-span.add": {
-        const track = findTrack(document2, command.trackId);
-        if (!track) return failure(document2, "missing-target");
-        const invalid = invalidNewEntity(document2, command.span);
-        if (invalid) return invalid;
-        if (!addBefore(
-          track.spans,
-          clone2(command.span),
-          command.beforeSpanId
-        )) {
-          return failure(clone2(source), "missing-target");
-        }
-        return success(document2, STRUCTURE);
-      }
-      case "audio-span.remove": {
-        const track = findTrack(document2, command.trackId);
-        return track && removeById(track.spans, command.spanId) ? success(document2, REMOVE_STRUCTURE) : failure(document2, "missing-target");
-      }
-      case "audio-span.move": {
-        const track = findTrack(document2, command.trackId);
-        return track && moveBefore(track.spans, command.spanId, command.beforeSpanId) ? success(document2, MOVE_STRUCTURE) : failure(document2, "missing-target");
-      }
-      case "audio-span.patch": {
-        const track = findTrack(document2, command.trackId);
-        return track && patchById(track.spans, command.spanId, command.patch) ? success(document2, VALUE) : failure(document2, "missing-target");
-      }
+        return list(document2, "audioTrack", "patch", command, context);
+      case "audio-span.add":
+        return list(document2, "audioSpan", "add", command, context);
+      case "audio-span.remove":
+        return list(document2, "audioSpan", "remove", command, context);
+      case "audio-span.move":
+        return list(document2, "audioSpan", "move", command, context);
+      case "audio-span.patch":
+        return list(document2, "audioSpan", "patch", command, context);
       default:
         return assertNever(command);
     }
@@ -4928,7 +4561,7 @@
         }
       }
     };
-    const commit = (state, origin, notifyDomChange, hint, impacts) => {
+    const commit = (state, origin, notifyDomChange, hint) => {
       let serialized;
       try {
         serialized = deps.serialize(state);
@@ -4952,11 +4585,7 @@
       if (notifyDomChange) {
         deps.notifyHost();
       }
-      notify({
-        origin,
-        hint,
-        impacts: impacts ? [...impacts] : void 0
-      });
+      notify({ origin, hint });
       return serialized;
     };
     const dispatch = (command, origin, notifyDomChange, expectedRevision, hint) => {
@@ -4965,8 +4594,7 @@
         return {
           applied: false,
           failure: "stale-revision",
-          revision: documentRevision,
-          impacts: []
+          revision: documentRevision
         };
       }
       ensureAuthoringDocumentIdentity(source);
@@ -4977,36 +4605,31 @@
         return {
           applied: false,
           failure: reduced.failure,
-          revision: documentRevision,
-          impacts: []
+          revision: documentRevision
         };
       }
-      if (reduced.impacts.length === 0) {
+      if (command.type === "batch" && command.commands.length === 0) {
         return {
           applied: true,
-          revision: documentRevision,
-          impacts: []
+          revision: documentRevision
         };
       }
       const serialized = commit(
         reduced.document,
         origin,
         notifyDomChange,
-        hint,
-        reduced.impacts
+        hint
       );
       if (serialized === null) {
         return {
           applied: false,
           failure: "invalid-serialized-state",
-          revision: documentRevision,
-          impacts: []
+          revision: documentRevision
         };
       }
       return {
         applied: true,
-        revision: documentRevision,
-        impacts: [...reduced.impacts]
+        revision: documentRevision
       };
     };
     const syncFromCarrier = () => {
@@ -5442,8 +5065,7 @@
       notifyDomChange: options?.notifyDomChange,
       willNotifyDom,
       commandCount: command.commands.length,
-      revision: result.revision,
-      impacts: result.impacts
+      revision: result.revision
     });
   };
   var saveState = (state, options) => saveRequestedState(state, options);
@@ -5461,7 +5083,6 @@
       applied: result.applied,
       failure: result.failure,
       revision: result.revision,
-      impacts: result.impacts,
       willNotifyDom
     });
     return result;
@@ -5563,6 +5184,29 @@
     );
   };
 
+  // frontend/architectures/policy/identity.ts
+  var reconcileSourcedClipIdentity = (clip, catalog) => {
+    reconcileClipArchitectureIdentity(clip, catalog);
+  };
+
+  // frontend/architectures/policy.ts
+  var createCapabilityViewResolver = (catalog, scope = {}) => {
+    const architectureById = new Map(
+      catalog.architectures.map((entry) => [entry.id, entry])
+    );
+    const clipStage = createClipStageCapabilityViews(architectureById, scope);
+    const boundaries = createBoundaryCapabilityViews(
+      architectureById,
+      clipStage.forClip
+    );
+    return {
+      catalog,
+      ...clipStage,
+      ...boundaries,
+      executableClipIndexes
+    };
+  };
+
   // frontend/architectures/currentPolicy.ts
   var currentCapabilityViewResolver = () => createCapabilityViewResolver(getRootDefaults().modelCatalog);
 
@@ -5582,8 +5226,7 @@
   var issue = (code, message, clipIdx) => ({ severity: "error", code, message, clipIdx });
   var persistedCapabilityIssues = (clip, clipIdx, capabilities) => {
     const diagnostics = [];
-    const clipCapabilities = capabilities.clip;
-    const stageCapabilities = capabilities.stage;
+    const supports = (feature, value) => architectureFeatureSupport(feature, { capabilities, ...value });
     const unsupported = (active, key, label) => {
       if (active) {
         diagnostics.push(
@@ -5596,75 +5239,83 @@
       }
     };
     unsupported(
-      !capabilities.architecture.includes("multi-stage") && activeStageCount(clip) > 1,
+      !supports("multiStage") && activeStageCount(clip) > 1,
       "multi-stage",
       "Multiple active stages"
     );
     unsupported(
-      (!clipCapabilities.includes("references") || !stageCapabilities.includes("frame-references")) && clip.refs.length > 0,
+      !supports("frameReferences") && clip.refs.length > 0,
       "frame-references",
       "Frame references"
     );
     unsupported(
-      !stageCapabilities.includes("ic-lora") && clip.icLoras.length > 0,
+      !supports("icLora") && clip.icLoras.length > 0,
       "ic-lora",
       "IC-LoRA"
     );
     unsupported(
-      !stageCapabilities.includes("hdr") && clip.icLoras.some(
+      !supports("hdr") && clip.icLoras.some(
         (entry) => isArchitectureHdrFeature(clip.architecture, entry)
       ),
       "hdr",
       "HDR"
     );
     unsupported(
-      !clipCapabilities.includes("retake") && clip.retake !== null,
+      !supports("retake") && clip.retake !== null,
       "retake",
       "Retake"
     );
     unsupported(
-      !clipCapabilities.includes("prompts") && clip.prompt.trim().length > 0,
+      !supports("majorPrompt") && clip.prompt.trim().length > 0,
       "major-prompt",
       "Major prompt"
     );
     unsupported(
-      !clipCapabilities.includes("source-video") && clip.sourceVideo !== null,
+      !supports("sourceVideo") && clip.sourceVideo !== null,
       "source-video",
       "Source video"
     );
     unsupported(
-      !clipCapabilities.includes("audio-segments") && clip.audioSegments.length > 0,
-      "audio-segments",
-      "Audio segments"
-    );
-    unsupported(
-      !clipCapabilities.includes("prompt-relay") && clip.promptWindows.length > 0,
+      !supports("promptRelay") && clip.promptWindows.length > 0,
       "prompt-relay",
       "Prompt relay"
     );
     unsupported(
-      !stageCapabilities.includes("lora") && clip.stages.some((stage) => stage.loras.length > 0),
+      !supports("stageLoras") && clip.stages.some((stage) => stage.loras.length > 0),
       "stage-loras",
       "Stage LoRAs"
     );
     unsupported(
       clip.stages.some(
-        (stage) => stage.upscale !== 1 && !capabilities.upscaleModes.includes(
-          upscaleModeForMethod(stage.upscaleMethod)
-        )
+        (stage) => stage.upscale !== 1 && !supports("upscale", { upscaleMethod: stage.upscaleMethod })
       ),
       "upscale",
       "Stage upscaling"
     );
     const sourceKind = audioSourceKind(clip.audioSource);
     unsupported(
-      (!clipCapabilities.includes("audio-sources") || !isAllowedAudioSource(
-        capabilities.audioSourceKinds,
-        clip.audioSource
-      )) && (sourceKind !== "Native" || clip.uploadedAudio !== null || clip.saveAudioTrack || clip.reuseAudio || clip.clipLengthFromAudio || clip.clipLengthFromControlNet),
+      !supports("clipAudio", { audioSource: clip.audioSource }) && (sourceKind !== "Native" || clip.uploadedAudio !== null || clip.saveAudioTrack || clip.reuseAudio || clip.clipLengthFromAudio || clip.clipLengthFromControlNet),
       "audio-source",
       `Audio source '${sourceKind}'`
     );
+    if (clip.clipLengthFromAudio && !canUseClipLengthFromAudio(clip.audioSource)) {
+      diagnostics.push(
+        issue(
+          "architecture.unusable.clip-length-from-audio",
+          `Clip length from audio is persisted on Clip ${clipIdx}, but audio source '${sourceKind}' cannot supply a length. Turn it off or pick a source that can.`,
+          clipIdx
+        )
+      );
+    }
+    if (clip.clipLengthFromControlNet && !hasArchitectureSlotSourcedIcLora(clip.architecture, clip.icLoras)) {
+      diagnostics.push(
+        issue(
+          "architecture.unusable.clip-length-from-control-net",
+          `Clip length from the control signal is persisted on Clip ${clipIdx}, but no IC-LoRA supplies one. Turn it off or add a slot-sourced IC-LoRA.`,
+          clipIdx
+        )
+      );
+    }
     return diagnostics;
   };
   var deriveArchitectureDiagnostics = (clips, catalog, generatedEntryMode = "text-to-video") => {
@@ -5672,13 +5323,17 @@
     const architectureById = new Map(
       catalog.architectures.map((entry) => [entry.id, entry])
     );
+    const boundaries = createBoundaryCapabilityViews(
+      architectureById,
+      createClipStageCapabilityViews(architectureById).forClip
+    );
     const modelByName = new Map(
       catalog.entries.map((entry) => [entry.value, entry])
     );
     clips.forEach((clip, clipIdx) => {
       const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
       if (sourceOnly) {
-        if (clip.architecture !== "none" || clip.modelProfileId !== "none") {
+        if (clip.architecture !== NONE_ARCHITECTURE_ID || clip.modelProfileId !== NONE_ARCHITECTURE_ID) {
           diagnostics.push(
             issue(
               "architecture.source-only-requires-none",
@@ -5782,12 +5437,18 @@
         );
         continue;
       }
-      const descriptor = architectureById.get(left.clip.architecture);
-      if (descriptor && descriptor.boundaryRules[left.clip.boundaryOut]?.support === "unsupported") {
+      const boundary = boundaries.forBoundary(
+        left.clip,
+        right.clip,
+        left.clipIdx,
+        right.clipIdx
+      );
+      if (boundary.effective(left.clip.boundaryOut) !== left.clip.boundaryOut) {
+        const reason = boundary.reason ? ` ${boundary.reason}` : ` Its requested value is preserved for repair, but only '${boundary.effective(left.clip.boundaryOut)}' can execute.`;
         diagnostics.push(
           issue(
             "architecture.boundary-unsupported",
-            `Clip ${left.clipIdx} architecture '${left.clip.architecture}' does not support '${left.clip.boundaryOut}' boundaries.`,
+            `Clip ${left.clipIdx} cannot execute a '${left.clip.boundaryOut}' boundary into Clip ${right.clipIdx}.${reason}`,
             left.clipIdx
           )
         );
@@ -5797,11 +5458,6 @@
   };
 
   // frontend/authoringDiagnostics.ts
-  var clipHasActiveHdr = (clip) => clip.icLoras.some(
-    (entry) => isArchitectureHdrFeature(clip.architecture, entry) && clip.stages.some(
-      (stage, rawStageIdx) => stage.skipped !== true && (entry.stage < 0 || entry.stage === rawStageIdx)
-    )
-  );
   var diagnostic = (severity, code, message, clipIdx) => ({ severity, code, message, clipIdx });
   var deriveAuthoringDiagnostics = (clips, context = {}) => {
     const diagnostics = [];
@@ -5816,8 +5472,9 @@
     }
     const executable = clips.map((clip, clipIdx) => ({ clip, clipIdx })).filter(({ clip }) => isExecutableClip(clip));
     for (const { clip, clipIdx } of executable) {
-      const descriptor = context.catalog?.architectures.find(
-        (entry) => entry.id === clip.architecture
+      const descriptor = architectureDescriptor(
+        context.catalog,
+        clip.architecture
       );
       const rule = (code) => descriptor ? conditionalRule(descriptor.rules, code) : null;
       const reuseRule = rule(CONDITIONAL_RULE_CODES.audioReuseRequiresStages);
@@ -6071,9 +5728,6 @@
     if (a.kind === "prompt-minor" && b.kind === "prompt-minor") {
       return a.windowIdx === b.windowIdx;
     }
-    if (a.kind === "audio-segment" && b.kind === "audio-segment") {
-      return a.segIdx === b.segIdx;
-    }
     return true;
   };
   var isSameSelection = (a, b) => sameSelection(a, b);
@@ -6106,38 +5760,7 @@
       selectionSubscribers.delete(cb);
     };
   };
-
-  // frontend/timelineAuthoringSettings.ts
-  var SETTINGS_KEY = "videostages.timeline.authoringSettings";
-  var DEFAULT_SETTINGS = {
-    snap: true,
-    autoCollapse: true
-  };
-  var getTimelineAuthoringSettings = () => {
-    try {
-      const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) {
-        return { ...DEFAULT_SETTINGS };
-      }
-      const parsed = JSON.parse(raw);
-      return {
-        snap: typeof parsed.snap === "boolean" ? parsed.snap : DEFAULT_SETTINGS.snap,
-        autoCollapse: typeof parsed.autoCollapse === "boolean" ? parsed.autoCollapse : DEFAULT_SETTINGS.autoCollapse
-      };
-    } catch {
-      return { ...DEFAULT_SETTINGS };
-    }
-  };
-  var setTimelineAuthoringSetting = (key, value) => {
-    const next = {
-      ...getTimelineAuthoringSettings(),
-      [key]: value
-    };
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
-    } catch {
-    }
-  };
+  var selectionAfterRemoval = (index, remaining, neighbour, fallback) => remaining > 0 ? neighbour(Math.min(index, remaining - 1)) : fallback;
 
   // frontend/timelineSnap.ts
   var SNAP_THRESHOLD_PX = 8;
@@ -6193,127 +5816,36 @@
     return edges;
   };
 
-  // frontend/timelineDetail.ts
-  var DEFAULT_FPS = 24;
-  var safeFps = (fps) => typeof fps === "number" && Number.isFinite(fps) && fps > 0 ? fps : DEFAULT_FPS;
-  var keyframeTimeSeconds = (frame, fromEnd, clipDurationSeconds, fps) => {
-    const duration = Math.max(0, clipDurationSeconds || 0);
-    const offset = Math.max(0, frame || 0) / safeFps(fps);
-    const raw = fromEnd ? duration - offset : offset;
-    return Math.min(Math.max(raw, 0), duration);
+  // frontend/timelineAuthoringSettings.ts
+  var SETTINGS_KEY = "videostages.timeline.authoringSettings";
+  var DEFAULT_SETTINGS = {
+    snap: true,
+    autoCollapse: true
   };
-  var keyframeLeftPercent = (time, duration) => {
-    const dur = Math.max(0, duration || 0);
-    const fraction = dur > 0 ? (time || 0) / dur : 0;
-    return Math.min(100, Math.max(0, fraction * 100));
-  };
-  var formatTimeLabel = (seconds, unit, fps) => {
-    if (unit === "frames") {
-      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
-    }
-    const rounded = Math.round((seconds || 0) * 10) / 10;
-    return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`;
-  };
-  var formatOverlapSeconds = (frames, fps) => `${(frames / Math.max(1, fps)).toFixed(2)}s`;
-  var RULER_MIN_TICK_SPACING_PX = 60;
-  var RULER_STEP_LADDER_SECONDS = [
-    0.5,
-    1,
-    2,
-    5,
-    10,
-    15,
-    30,
-    60,
-    120,
-    300,
-    600,
-    900,
-    1800,
-    3600
-  ];
-  var chooseRulerStepSeconds = (pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
-    const pps = pxPerSecond > 0 ? pxPerSecond : 1;
-    for (const step of RULER_STEP_LADDER_SECONDS) {
-      if (step * pps >= minSpacingPx) {
-        return step;
+  var getTimelineAuthoringSettings = () => {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) {
+        return { ...DEFAULT_SETTINGS };
       }
+      const parsed = JSON.parse(raw);
+      return {
+        snap: typeof parsed.snap === "boolean" ? parsed.snap : DEFAULT_SETTINGS.snap,
+        autoCollapse: typeof parsed.autoCollapse === "boolean" ? parsed.autoCollapse : DEFAULT_SETTINGS.autoCollapse
+      };
+    } catch {
+      return { ...DEFAULT_SETTINGS };
     }
-    return RULER_STEP_LADDER_SECONDS[RULER_STEP_LADDER_SECONDS.length - 1];
   };
-  var computeRulerTicks = (totalSeconds, pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
-    const total = Math.max(0, totalSeconds || 0);
-    if (total <= 0 || pxPerSecond <= 0) {
-      return [{ x: 0, seconds: 0 }];
+  var setTimelineAuthoringSetting = (key, value) => {
+    const next = {
+      ...getTimelineAuthoringSettings(),
+      [key]: value
+    };
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+    } catch {
     }
-    const step = chooseRulerStepSeconds(pxPerSecond, minSpacingPx);
-    const ticks = [];
-    const MAX_TICKS = 1e3;
-    for (let i = 0; i < MAX_TICKS; i++) {
-      const t = i * step;
-      if (t > total + 1e-6) {
-        break;
-      }
-      ticks.push({ x: t * pxPerSecond, seconds: t });
-    }
-    return ticks;
-  };
-  var formatRulerLabel = (seconds, unit, fps) => {
-    if (unit === "frames") {
-      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
-    }
-    const s = Math.max(0, seconds || 0);
-    if (s >= 60) {
-      const totalWhole = Math.round(s);
-      const mm = Math.floor(totalWhole / 60);
-      const ss = totalWhole % 60;
-      return `${mm}:${`${ss}`.padStart(2, "0")}`;
-    }
-    return formatTimeLabel(s, unit, fps);
-  };
-  var truncate = (value, max = 80) => {
-    const text = `${value ?? ""}`;
-    return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`;
-  };
-  var refSourceLabel = (source) => {
-    const value = `${source ?? ""}`.trim();
-    if (!value) {
-      return REF_SOURCE_REFINER;
-    }
-    const editStage = parseBase2EditStageIndex(value);
-    if (editStage != null) {
-      return `Base2Edit Edit ${editStage}`;
-    }
-    return value;
-  };
-  var audioSourceBadge = (source) => {
-    const value = `${source ?? ""}`.trim();
-    if (!value || value === "Native") {
-      return { label: "Native", title: "Audio source: Native" };
-    }
-    return { label: value, title: `Audio source: ${value}` };
-  };
-  var shortModelName = (model) => {
-    const raw = `${model ?? ""}`.trim();
-    if (!raw) {
-      return "(default)";
-    }
-    const segment = raw.split(/[\\/]/).pop() ?? raw;
-    return segment.replace(/\.(safetensors|ckpt|pt|pth|gguf|sft|bin)$/i, "");
-  };
-  var stageChipLabel = (index) => `S${index}`;
-  var stageChipTitle = (stage, index) => {
-    const parts = [
-      `Stage ${index}${index === 0 ? " (full gen)" : " (refine)"}`,
-      `model: ${shortModelName(stage?.model ?? "")}`,
-      `steps: ${stage?.steps ?? "?"}`,
-      `cfg: ${stage?.cfgScale ?? "?"}`,
-      `control: ${stage?.control ?? "?"}`
-    ];
-    if (stage?.skipped) {
-      parts.push("skipped");
-    }
-    return parts.join(" · ");
   };
 
   // frontend/timelineView/layout.ts
@@ -6380,834 +5912,6 @@
     return layouts;
   };
 
-  // frontend/timelineView/rendering.ts
-  var clipInnerWidth = (widthPx) => Math.max(1, widthPx - 2);
-  var backgroundImageDataAttr = (source) => ` data-vst-background-image="${escapeAttr(source)}"`;
-  var applyBackgroundImages = (root) => {
-    for (const element of root.querySelectorAll(
-      "[data-vst-background-image]"
-    )) {
-      const source = element.dataset.vstBackgroundImage;
-      if (source) {
-        element.style.backgroundImage = `url(${JSON.stringify(source)})`;
-      }
-      element.removeAttribute("data-vst-background-image");
-    }
-  };
-  var renderWindowSpan = (options) => {
-    const start = clamp(options.startSeconds, 0, options.durationSeconds);
-    const end = clamp(
-      options.startSeconds + options.lengthSeconds,
-      start,
-      options.durationSeconds
-    );
-    if (end <= start) {
-      return "";
-    }
-    const left = start / options.durationSeconds * 100;
-    const width = (end - start) / options.durationSeconds * 100;
-    return `<div class="${options.className}${options.extraClassName ? ` ${options.extraClassName}` : ""}" ${options.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeAttr(options.title)}" aria-label="${escapeAttr(options.ariaLabel)}"><span class="${options.className}-resize ${options.className}-resize-l" ${options.edgeAttr}="left" aria-hidden="true"></span>` + (options.decoration ?? "") + `<span class="${options.labelClass}">${escapeAttr(options.label)}</span><span class="${options.className}-resize ${options.className}-resize-r" ${options.edgeAttr}="right" aria-hidden="true"></span></div>`;
-  };
-  var headTag = (kind, label, options) => {
-    const classes = `vst-head-tag vst-head-tag-${kind}` + (options?.active ? " vst-head-tag-active" : "") + (options?.muted ? " vst-head-tag-muted" : "");
-    const style = options?.style ? ` style="${options.style}"` : "";
-    return `<div class="${classes}"${style} aria-hidden="true"><span class="vst-head-tag-pill">${label}</span><span class="vst-head-tag-tick"></span></div>`;
-  };
-  var renderTrackHead = (iconClass, icon, title, tags) => `<div class="vst-track-head"><div class="vst-head-top"><div class="vst-track-icon ${iconClass}" aria-hidden="true">${icon}</div><div class="vst-track-label"><strong>${title}</strong></div></div>` + (tags ? `<div class="vst-head-tags">${tags}</div>` : "") + `</div>`;
-
-  // frontend/timelineView/regionRenderer.ts
-  var refFrame = (ref) => Math.max(0, ref.frame ?? 0);
-  var renderRegionThumb = (clip) => {
-    const withImage = (clip.refs ?? []).filter(
-      (ref) => !!ref.uploadedImage?.data
-    );
-    if (withImage.length === 0) {
-      return "";
-    }
-    const startPool = withImage.filter((ref) => ref.fromEnd !== true);
-    const startRef = (startPool.length > 0 ? startPool : withImage).reduce(
-      (best, ref) => refFrame(ref) < refFrame(best) ? ref : best
-    );
-    let endRef = withImage.find((ref) => ref.fromEnd === true) ?? null;
-    if (!endRef) {
-      const highest = withImage.reduce(
-        (best, ref) => refFrame(ref) > refFrame(best) ? ref : best
-      );
-      if (highest !== startRef) {
-        endRef = highest;
-      }
-    }
-    const cell = (ref, side) => {
-      const source = mediaPreviewSrc(ref.uploadedImage?.data ?? "");
-      return `<div class="vst-region-thumb-cell vst-region-thumb-${side}"${backgroundImageDataAttr(source)}></div>`;
-    };
-    const cells = cell(startRef, "start") + (endRef ? cell(endRef, "end") : "");
-    return `<div class="vst-region-thumb" data-cells="${endRef ? 2 : 1}" aria-hidden="true">${cells}</div>`;
-  };
-  var renderRetakeRegionShade = (clip, durationSeconds) => {
-    const retake = clip.retake;
-    if (!retake || durationSeconds <= 0) {
-      return "";
-    }
-    const start = clamp(retake.startSeconds, 0, durationSeconds);
-    const end = clamp(
-      retake.startSeconds + retake.lengthSeconds,
-      start,
-      durationSeconds
-    );
-    if (end <= start) {
-      return "";
-    }
-    const left = start / durationSeconds * 100;
-    const width = (end - start) / durationSeconds * 100;
-    return `<div class="vst-region-off" style="left:${left}%;width:${width}%" aria-hidden="true"></div>`;
-  };
-  var renderRetakeOverlay = (clip, clipIdx, durationSeconds) => {
-    const retake = clip.retake;
-    if (!retake || durationSeconds <= 0) {
-      return "";
-    }
-    const start = clamp(retake.startSeconds, 0, durationSeconds);
-    const end = clamp(
-      retake.startSeconds + retake.lengthSeconds,
-      start,
-      durationSeconds
-    );
-    const label = `RETAKE ${roundToTenth(start)}–${roundToTenth(end)} s`;
-    return renderWindowSpan({
-      className: "vst-retake",
-      dataAttrs: `data-vst-retake data-clip-idx="${clipIdx}"`,
-      edgeAttr: "data-vst-retake-edge",
-      labelClass: "vst-retake-label",
-      label,
-      title: `${label} · drag to move/resize · Shift+click to delete`,
-      ariaLabel: label,
-      startSeconds: retake.startSeconds,
-      lengthSeconds: retake.lengthSeconds,
-      durationSeconds
-    });
-  };
-  var renderKeyframes = (clip, clipIdx, durationSeconds, fps, unit) => {
-    const refs = clip.refs ?? [];
-    if (refs.length === 0) {
-      return "";
-    }
-    const markers = refs.map((ref, refIdx) => {
-      const time = keyframeTimeSeconds(
-        ref.frame,
-        ref.fromEnd === true,
-        durationSeconds,
-        fps
-      );
-      const left = keyframeLeftPercent(time, durationSeconds);
-      const isEnd = ref.fromEnd === true;
-      const isPrimary = (ref.frame ?? 0) === 1 && !isEnd;
-      const source = refSourceLabel(ref.source ?? "");
-      const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""}${isPrimary ? " (cover)" : ""} · ${formatTimeLabel(time, unit, fps)}`;
-      const kindClass = (isEnd ? " vst-key-end" : " vst-key-start") + (isPrimary ? " vst-key-primary" : "");
-      return `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeAttr(title)}" aria-hidden="true"><span class="vst-key-dot" aria-hidden="true"></span></span>`;
-    }).join("");
-    return `<div class="vst-keys" title="Reference markers">${markers}</div>`;
-  };
-  var renderBadges = (clip, clipIdx) => {
-    const firstStage = (clip.stages ?? [])[0];
-    if (!firstStage) {
-      return `<div class="vst-badges"></div>`;
-    }
-    const model = firstStage.model ?? "";
-    const title = `Clip model: ${`${model}`.trim() || "(default)"} — click to change (applies to Stage 0)`;
-    const modelBadge = `<span class="vst-badge vst-badge-model" data-vst-model data-clip-idx="${clipIdx}" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}">${escapeAttr(shortModelName(model))}</span>`;
-    const icLoraCount = (clip.icLoras ?? []).length;
-    const icLoraTitle = `${icLoraCount} IC-LoRA${icLoraCount === 1 ? "" : "s"} on this clip — edit in the clip panel`;
-    const icLoraBadge = icLoraCount > 0 ? `<span class="vst-badge vst-badge-iclora" title="${escapeAttr(icLoraTitle)}" aria-label="${escapeAttr(icLoraTitle)}">IC×${icLoraCount}</span>` : "";
-    return `<div class="vst-badges">${modelBadge}${icLoraBadge}</div>`;
-  };
-  var renderStageChips = (clip, clipIdx) => (clip.stages ?? []).map((stage, stageIdx) => {
-    const skipped = stage?.skipped === true;
-    const skippedClass = skipped ? " vst-stage-chip-skipped" : "";
-    const title = `${stageChipTitle(stage, stageIdx)}${skipped ? " (skipped)" : ""} · click to edit · Shift+click to delete`;
-    const label = `${skipped ? "⊘ " : ""}${stageChipLabel(stageIdx)}`;
-    return `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeAttr(title)}">${escapeAttr(label)}</span>`;
-  }).join("");
-  var lengthDerived = (clip) => clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
-  var BOUNDARY_GLYPH = {
-    cut: "│",
-    continue: "→",
-    crossfade: "⤬"
-  };
-  var BOUNDARY_LABEL = {
-    cut: "Cut",
-    continue: "Continue",
-    crossfade: "Crossfade"
-  };
-  var renderBoundarySeams = (clips, layouts, capabilities) => {
-    const seams = [];
-    for (let i = 1; i < layouts.length; i++) {
-      const leftClipIdx = i - 1;
-      const clip = clips[leftClipIdx];
-      if (!clip) {
-        continue;
-      }
-      const value = clip.boundaryOut ?? "cut";
-      const capability = capabilities?.forBoundaryIndex(clips, leftClipIdx);
-      const effective = capability?.effective(value) ?? value;
-      const glyph = BOUNDARY_GLYPH[effective] ?? BOUNDARY_GLYPH.cut;
-      const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
-      const effectiveLabel = BOUNDARY_LABEL[effective];
-      const targetNumber = capability?.rightClipIdx === null || capability?.rightClipIdx === void 0 ? i : capability.rightClipIdx;
-      const fallback = value === effective ? "" : ` Requested ${label}; effective ${effectiveLabel}.`;
-      const title = `Boundary clip ${leftClipIdx} → ${targetNumber}: ${label}.${fallback} Click to edit.`;
-      const ariaLabel = `Clip ${leftClipIdx} outgoing boundary: ${label}.${fallback} Click to edit.`;
-      seams.push(
-        `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${layouts[i].startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
-      );
-    }
-    return seams.join("");
-  };
-  var renderRegions = (clips, layouts, fps, unit, capabilities) => layouts.map((layout) => {
-    const clip = clips[layout.index];
-    const skippedClass = layout.skipped ? " vst-region-skipped" : "";
-    const tinyClass = layout.widthPx <= 12 ? " vst-region-tiny" : "";
-    const skippedChip = layout.skipped ? `<span class="vst-chip vst-chip-skip">skipped</span>` : "";
-    const duration = escapeAttr(
-      formatTimeLabel(layout.durationSeconds, unit, fps)
-    );
-    const skipTitle = layout.skipped ? "Unskip clip" : "Skip clip";
-    const skipGlyph = layout.skipped ? "⟲" : "⊘";
-    const controls = `<div class="vst-region-controls"><button type="button" class="vst-region-btn${layout.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipTitle}" aria-label="${skipTitle}">${skipGlyph}</button></div>`;
-    const resizeGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
-    const width = clipInnerWidth(layout.widthPx);
-    const retakeSupported = capabilities?.forClip(clip).decision("retake").supported ?? true;
-    const canAddRetake = retakeSupported && !clip.retake;
-    const retakeLaneAttrs = canAddRetake ? " data-vst-retake-add" : retakeSupported ? " data-vst-retake-full" : ' data-vst-capability-disabled="retake"';
-    const retakeLaneTitle = canAddRetake ? "Click empty space to add a retake window" : retakeSupported ? "This clip already has a retake window" : "Retakes are not supported by this clip architecture";
-    return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index} · ${duration} · Click to edit · Shift+click to delete">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
-      clip,
-      layout.index,
-      layout.durationSeconds,
-      fps,
-      unit
-    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` + renderRetakeOverlay(
-      clip,
-      layout.index,
-      layout.durationSeconds
-    ) + `</div>`;
-  }).join("");
-  var renderVideoTrackRow = (clips, layouts, fps, unit, capabilities) => {
-    const head = renderTrackHead(
-      "vst-track-icon-video",
-      "▶",
-      "Video",
-      headTag("clip", "Clip", { active: true }) + headTag("retake", "Retake", {
-        active: clips.some((clip) => clip.retake != null)
-      })
-    );
-    return `<div class="vst-track-row vst-track-video">${head}<div class="vst-track-cell">` + renderRegions(clips, layouts, fps, unit, capabilities) + renderBoundarySeams(clips, layouts, capabilities) + `</div></div>`;
-  };
-
-  // frontend/dimensionPresets.ts
-  var DIMENSION_PRESET_METADATA = {
-    "256x384": [
-      "384x576,1.5",
-      "576x864,1.5,1.5",
-      "*768x1152,1.5,2",
-      "1152x1728,1.5,1.5,2"
-    ],
-    "384x512": [
-      "576x768,1.5",
-      "864x1152,1.5,1.5",
-      "*1152x1536,1.5,2",
-      "1728x2304,1.5,1.5,2"
-    ],
-    "384x640": [
-      "576x960,1.5",
-      "864x1440,1.5,1.5",
-      "1152x1920,1.5,2",
-      "1728x2880,1.5,1.5,2"
-    ],
-    "512x768": [
-      "768x1152,1.5",
-      "*1152x1728,1.5,1.5",
-      "*1536x2304,1.5,2",
-      "2304x3456,1.5,1.5,2"
-    ],
-    "512x896": ["*1536x2688,1.5,2"],
-    "512x1024": ["*1152x2304,1.5,1.5", "*1536x3072,1.5,2"],
-    "768x1024": ["*1728x2304,1.5,1.5", "*2304x3072,1.5,2"],
-    "384x256": [
-      "576x384,1.5",
-      "864x576,1.5,1.5",
-      "*1152x768,1.5,2",
-      "1728x1152,1.5,1.5,2"
-    ],
-    "512x384": [
-      "768x576,1.5",
-      "1152x864,1.5,1.5",
-      "*1536x1152,1.5,2",
-      "2304x1728,1.5,1.5,2"
-    ],
-    "640x384": [
-      "960x576,1.5",
-      "1440x864,1.5,1.5",
-      "1920x1152,1.5,2",
-      "2880x1728,1.5,1.5,2"
-    ],
-    "768x512": [
-      "1152x768,1.5",
-      "*1728x1152,1.5,1.5",
-      "*2304x1536,1.5,2",
-      "3456x2304,1.5,1.5,2"
-    ],
-    "896x512": ["*2688x1536,1.5,2"],
-    "1024x512": ["*2304x1152,1.5,1.5", "*3072x1536,1.5,2"],
-    "1024x768": ["*2304x1728,1.5,1.5", "*3072x2304,1.5,2"]
-  };
-  var DIMENSION_PRESET_KEYS = Object.keys(
-    DIMENSION_PRESET_METADATA
-  );
-  var splitDimensionLabel = (label) => {
-    const [w, h] = label.replace("*", "").split("x");
-    return { width: Math.round(Number(w)), height: Math.round(Number(h)) };
-  };
-  var presetDimensions = (presetKey) => {
-    if (!presetKey || !DIMENSION_PRESET_METADATA[presetKey]) {
-      return null;
-    }
-    return splitDimensionLabel(presetKey);
-  };
-  var matchPresetKey = (width, height) => {
-    const w = Math.round(width);
-    const h = Math.round(height);
-    for (const key of DIMENSION_PRESET_KEYS) {
-      const dims = splitDimensionLabel(key);
-      if (dims.width === w && dims.height === h) {
-        return key;
-      }
-    }
-    return null;
-  };
-  var parsePresetStops = (presetKey) => {
-    const presetLines = DIMENSION_PRESET_METADATA[presetKey];
-    if (!presetLines || presetLines.length === 0) {
-      return [];
-    }
-    const out = [];
-    for (let i = 0; i < presetLines.length; i++) {
-      let line = presetLines[i].trim();
-      let controlNetFriendly = false;
-      if (line.startsWith("*")) {
-        controlNetFriendly = true;
-        line = line.slice(1);
-      }
-      const parts = line.split(",");
-      const { width, height } = splitDimensionLabel(parts[0]);
-      out.push({
-        width,
-        height,
-        controlNetFriendly,
-        steps: parts.slice(1)
-      });
-    }
-    return out;
-  };
-  var upscaleBadgeElement = (stop) => {
-    const badge = document.createElement("span");
-    badge.className = "param_view_block tag-text tag-type-8";
-    const resolution = `${stop.width}x${stop.height}`;
-    const stepCount = stop.steps.length;
-    const timesWord = stepCount === 1 ? "time" : "times";
-    let altText = `The chosen resolution can be scaled to ${stepCount} ${timesWord} for a resolution of ${resolution}`;
-    if (stop.controlNetFriendly) {
-      altText += ". It is also ControlNet-friendly";
-    }
-    badge.title = altText;
-    badge.setAttribute("aria-label", altText);
-    const star = stop.controlNetFriendly ? `<span class="controlnet-friendly">*</span> ` : "";
-    const stops = stop.steps.map((s) => `${s}x`).join(" ⇒ ");
-    badge.innerHTML = `${star}${resolution}, ${stops}`;
-    return badge;
-  };
-  var presetBadgeElements = (presetKey) => parsePresetStops(presetKey).map((stop) => upscaleBadgeElement(stop));
-
-  // frontend/timelineView/toolbar.ts
-  var renderDiagnosticPanel = (diagnostics = []) => {
-    const content = diagnostics.map(
-      (item) => `<div class="vst-diagnostic vst-diagnostic-${item.severity}" data-vst-diagnostic="${escapeAttr(item.code)}">${item.clipIdx === void 0 ? "" : `<strong>Clip ${item.clipIdx}:</strong> `}${escapeAttr(item.message)}</div>`
-    ).join("");
-    return content ? `<div class="vst-diagnostics" role="status">${content}</div>` : "";
-  };
-  var renderTimelineHeader = (clipCount, totalSeconds, fps, unit, pxPerSecond, options) => {
-    const toggleLabel = unit === "frames" ? "Show seconds" : "Show frames";
-    const clipWord = `clip${clipCount === 1 ? "" : "s"}`;
-    const totalLabel = escapeAttr(formatTimeLabel(totalSeconds, unit, fps));
-    const zoomPct = Math.round(pxPerSecond / DEFAULT_PX_PER_SECOND * 100);
-    const rawSelected = options?.selectedIndex;
-    const selectedIndex = typeof rawSelected === "number" && Number.isInteger(rawSelected) && rawSelected >= 0 && rawSelected < clipCount ? rawSelected : null;
-    const selectedHidden = selectedIndex === null ? " hidden" : "";
-    const readout = `<span class="vst-readout" data-vst-readout><span title="Sequence total">${totalLabel} total</span><span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
-    const width = Math.max(0, Math.round(options?.width ?? 0));
-    const height = Math.max(0, Math.round(options?.height ?? 0));
-    const dimsExplicit = options?.dimsExplicit === true;
-    const presetKey = dimsExplicit && width > 0 && height > 0 ? matchPresetKey(width, height) : null;
-    const dimsSource = dimsExplicit ? presetKey ? `${presetKey} preset` : "custom" : "inherited from image resolution";
-    const fpsSource = "synced with Video FPS";
-    const settingsTip = `Resolution: ${dimsSource}; FPS: ${fpsSource}. Click to edit.`;
-    const settingsChip = `<button type="button" class="basic-button small-button vst-settings-chip" data-vst-settings title="${escapeAttr(settingsTip)}" aria-label="${escapeAttr(settingsTip)}"><span class="vst-settings-dims">${width}×${height}</span><span class="vst-settings-chip-sep" aria-hidden="true">·</span><span class="vst-settings-fps">${fps} fps</span></button>`;
-    const enabled = options?.enabled !== false;
-    const enableToggle = `<label class="vst-enable" title="Enable VideoStages. While off, none of this timeline is sent to the backend — a normal image/video generates as usual."><span class="toggle-switch"><input type="checkbox" class="auto-slider-toggle vst-enable-input" role="switch" data-vst-enable${enabled ? " checked" : ""}><div class="auto-slider-toggle-content"></div></span><span class="vst-enable-label">Enable</span></label>`;
-    return `<div class="vst-topbar${enabled ? "" : " vst-topbar-disabled"}"><div class="vst-topbar-main"><span class="vst-title">Timeline</span>` + enableToggle + `<span class="vst-sub"><span class="vst-stat-num">${clipCount}</span> ${clipWord}</span>` + settingsChip + `</div><div class="vst-topbar-tools"><button type="button" class="basic-button small-button btn-primary vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button><span class="vst-tool-sep" aria-hidden="true"></span><div class="vst-zoom" role="group" aria-label="Timeline zoom (Ctrl+wheel over the track)"><button type="button" class="basic-button small-button" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button><span class="vst-zoom-pct" data-vst-zoom-pct title="Zoom level (100% = default)">${zoomPct}%</span><input type="range" class="vst-zoom-slider" data-vst-zoom-slider min="${MIN_PX_PER_SECOND}" max="${MAX_PX_PER_SECOND}" step="1" value="${Math.round(pxPerSecond)}" aria-label="Zoom (pixels per second)" title="Zoom (applies on release)"><button type="button" class="basic-button small-button" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button><button type="button" class="basic-button small-button" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button></div><span class="vst-tool-sep" aria-hidden="true"></span><button type="button" class="basic-button small-button vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button></div>` + readout + `</div>`;
-  };
-  var wireTimelineToolbar = (body, options) => {
-    const wire = (selector, handler) => {
-      if (!handler) {
-        return;
-      }
-      body.querySelector(selector)?.addEventListener(
-        "click",
-        () => handler()
-      );
-    };
-    const enableInput = body.querySelector("[data-vst-enable]");
-    if (enableInput && options?.onToggleEnabled) {
-      enableInput.addEventListener("change", () => {
-        options.onToggleEnabled?.(enableInput.checked);
-      });
-    }
-    const settingsButton = body.querySelector(
-      "[data-vst-settings]"
-    );
-    if (settingsButton && options?.onOpenSettings) {
-      settingsButton.addEventListener("click", () => {
-        options.onOpenSettings?.(settingsButton);
-      });
-    }
-    wire("[data-vst-unit-toggle]", options?.onToggleUnit);
-    wire("[data-vst-zoom-in]", options?.onZoomIn);
-    wire("[data-vst-zoom-out]", options?.onZoomOut);
-    wire("[data-vst-zoom-fit]", options?.onZoomFit);
-    wire("[data-vst-undo]", options?.onUndo);
-    wire("[data-vst-redo]", options?.onRedo);
-    const slider = body.querySelector(
-      "[data-vst-zoom-slider]"
-    );
-    if (slider) {
-      slider.addEventListener("input", () => {
-        const percent = body.querySelector(
-          "[data-vst-zoom-pct]"
-        );
-        if (percent) {
-          const value = Number.parseFloat(slider.value);
-          percent.textContent = `${Math.round(value / DEFAULT_PX_PER_SECOND * 100)}%`;
-        }
-      });
-      if (options?.onZoomSlider) {
-        slider.addEventListener("change", () => {
-          options.onZoomSlider?.(Number.parseFloat(slider.value));
-        });
-      }
-    }
-    if (options?.onAddClip) {
-      for (const button of body.querySelectorAll("[data-vst-add-clip]")) {
-        button.addEventListener("click", () => options.onAddClip?.());
-      }
-    }
-  };
-  var wireTimelineZoomWheel = (body, options) => {
-    const onZoomWheel = options?.onZoomWheel;
-    if (!onZoomWheel) {
-      return;
-    }
-    body.querySelector(".vst-scroll")?.addEventListener(
-      "wheel",
-      (event) => {
-        if (!event.ctrlKey && !event.metaKey) {
-          return;
-        }
-        event.preventDefault();
-        const factor = event.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
-        onZoomWheel(factor, event.clientX);
-      },
-      { passive: false }
-    );
-  };
-
-  // frontend/timelineView/trackRows.ts
-  var promptWindowGeom = (layout, window2, pxPerSecond) => {
-    const duration = Math.max(0, layout.durationSeconds);
-    const startSec = clamp(window2.start, 0, duration);
-    const endSec = clamp(window2.start + window2.duration, startSec, duration);
-    return {
-      startSec,
-      endSec,
-      leftPx: startSec * pxPerSecond,
-      widthPx: Math.max(2, (endSec - startSec) * pxPerSecond),
-      active: `${window2.prompt ?? ""}`.trim() !== ""
-    };
-  };
-  var PROMPT_PLACEHOLDER = "(no prompt)";
-  var renderPromptTrackRow = (clips, layouts, pxPerSecond, globalPrompt, capabilities) => {
-    const globalTrimmed = `${globalPrompt ?? ""}`.trim();
-    const parts = [];
-    for (let i = 0; i < layouts.length; i++) {
-      const layout = layouts[i];
-      const clip = clips[i];
-      if (!clip) {
-        continue;
-      }
-      const width = clipInnerWidth(layout.widthPx);
-      const windows = clip.promptWindows ?? [];
-      const clipCapabilities = capabilities?.forClip(clip);
-      const majorSupported = clipCapabilities?.decision("majorPrompt").supported ?? true;
-      const relaySupported = clipCapabilities?.decision("promptRelay").supported ?? true;
-      const ownPrompt = `${clip.prompt ?? ""}`.trim();
-      const inherited = ownPrompt === "";
-      const major = inherited ? globalTrimmed : ownPrompt;
-      const overlays = windows.map((window2) => promptWindowGeom(layout, window2, pxPerSecond)).filter(
-        (geometry) => geometry.active && geometry.endSec > geometry.startSec
-      ).map(
-        (geometry) => `<div class="vst-major-off" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" aria-hidden="true"></div>`
-      ).join("");
-      const majorText = major === "" ? PROMPT_PLACEHOLDER : truncate(major, 120);
-      const majorClass = (major === "" ? " vst-major-empty" : "") + (inherited && major !== "" ? " vst-major-inherited" : "");
-      const majorTitle = (major === "" ? PROMPT_PLACEHOLDER : major) + (inherited && major !== "" ? " — inherited from the global prompt; click to set a clip prompt" : " — click to edit");
-      if (majorSupported || ownPrompt !== "") {
-        parts.push(
-          `<div class="vst-major-seg${majorClass}${majorSupported ? "" : " vst-capability-disabled"}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(majorSupported ? majorTitle : `${majorTitle} — unsupported by this architecture`)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
-        );
-      }
-      const minorSegments = windows.map((window2, windowIdx) => {
-        const geometry = promptWindowGeom(layout, window2, pxPerSecond);
-        const text = `${window2.prompt ?? ""}`.trim();
-        const label = text === "" ? "(empty)" : truncate(text, 60);
-        return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeAttr(`${text || "(empty minor prompt)"} · Shift+click to delete`)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
-      }).join("");
-      if (relaySupported || windows.length > 0) {
-        parts.push(
-          `<div class="vst-minor-lane${relaySupported ? "" : " vst-capability-disabled"}"${relaySupported ? " data-vst-prompt-add" : ""} data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${relaySupported ? "Click empty space to add a minor prompt" : "Relay prompts are unsupported; existing windows can be removed"}">${minorSegments}</div>`
-        );
-      }
-    }
-    return `<div class="vst-track-row vst-track-prompt">` + renderTrackHead(
-      "vst-track-icon-prompt",
-      "✎",
-      "Prompt",
-      headTag("major", "Major", { active: true }) + headTag("relay", "Relay", {
-        active: clips.some(
-          (clip) => (clip.promptWindows?.length ?? 0) > 0
-        )
-      })
-    ) + `<div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div></div>`;
-  };
-  var audioFlagChips = (clip) => {
-    const chips = [];
-    if (clip.reuseAudio === true) {
-      chips.push(
-        `<span class="vst-audio-flag" title="Capture audio after the second active stage and reuse it from the third active stage onward">↻</span>`
-      );
-    }
-    if (clip.clipLengthFromAudio === true) {
-      chips.push(
-        `<span class="vst-audio-flag" title="Clip length follows the audio length">⇥</span>`
-      );
-    }
-    if (clip.saveAudioTrack === true) {
-      chips.push(
-        `<span class="vst-audio-flag" title="Save a standalone MP3 for this clip's audio">MP3</span>`
-      );
-    }
-    return chips.length === 0 ? "" : `<span class="vst-audio-flags" aria-hidden="true">${chips.join("")}</span>`;
-  };
-  var renderAudioSegmentBlock = (segment, clipIdx, segmentIdx, durationSeconds) => {
-    const start = clamp(segment.startSeconds, 0, durationSeconds);
-    const end = clamp(
-      segment.startSeconds + segment.lengthSeconds,
-      start,
-      durationSeconds
-    );
-    const name = typeof segment.source === "string" ? segment.source : segment.source?.fileName;
-    const labelText = name || "audio segment";
-    const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
-    const waveform = audioSegmentWaveBarHeights(clipIdx, segmentIdx, 28).map((height) => `<span style="height:${height}%"></span>`).join("");
-    return renderWindowSpan({
-      className: "vst-audio-seg",
-      extraClassName: `vst-audio-seg-tone-${segmentIdx % 5}`,
-      dataAttrs: `data-vst-audio-seg data-clip-idx="${clipIdx}" data-seg-idx="${segmentIdx}"`,
-      edgeAttr: "data-vst-audio-seg-edge",
-      labelClass: "vst-audio-label",
-      label: labelText,
-      title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
-      ariaLabel: `Edit audio segment ${segmentIdx + 1} for clip ${clipIdx}`,
-      startSeconds: segment.startSeconds,
-      lengthSeconds: segment.lengthSeconds,
-      durationSeconds,
-      decoration: `<span class="vst-audio-seg-wave" aria-hidden="true">${waveform}</span>`
-    });
-  };
-  var renderAudioSegmentLanes = (clip, clipIdx, durationSeconds, startPx, widthPx, canCreate) => {
-    const place = (laneIdx) => `left:${startPx}px;width:${widthPx}px;--vst-audio-lane-idx:${laneIdx}`;
-    const blankLane = (laneIdx) => canCreate ? `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add data-clip-idx="${clipIdx}" style="${place(laneIdx)}" title="Click or drag to add an audio segment"></div>` : "";
-    if (durationSeconds <= 0) {
-      return blankLane(0);
-    }
-    const segments = clip.audioSegments ?? [];
-    const lanes = segments.map(
-      (segment, segmentIdx) => `<div class="vst-audio-seg-lane" style="${place(segmentIdx)}">` + renderAudioSegmentBlock(
-        segment,
-        clipIdx,
-        segmentIdx,
-        durationSeconds
-      ) + `</div>`
-    );
-    lanes.push(blankLane(segments.length));
-    return lanes.join("");
-  };
-  var renderTimelineAudioSegmentBlock = (track, trackIdx, totalSeconds) => {
-    const span = track.spans[0];
-    if (!span || span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
-      return "";
-    }
-    const start = clamp(span.timelineStartSeconds, 0, totalSeconds);
-    const end = clamp(
-      span.timelineStartSeconds + span.timelineLengthSeconds,
-      start,
-      totalSeconds
-    );
-    const labelText = track.source.reference || track.source.uploadedAudio?.fileName || "audio segment";
-    const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
-    const waveform = audioSegmentWaveBarHeights(trackIdx, trackIdx, 40).map((height) => `<span style="height:${height}%"></span>`).join("");
-    return renderWindowSpan({
-      className: "vst-audio-seg",
-      extraClassName: `vst-audio-seg-tone-${trackIdx % 5}`,
-      dataAttrs: `data-vst-audio-seg data-track-idx="${trackIdx}"`,
-      edgeAttr: "data-vst-audio-seg-edge",
-      labelClass: "vst-audio-label",
-      label: labelText,
-      title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
-      ariaLabel: `Edit timeline audio segment ${trackIdx}`,
-      startSeconds: start,
-      lengthSeconds: end - start,
-      durationSeconds: totalSeconds,
-      decoration: `<span class="vst-audio-seg-wave" aria-hidden="true">${waveform}</span>`
-    });
-  };
-  var renderTimelineAudioSegmentLanes = (tracks, totalSeconds, totalWidthPx) => {
-    const place = (laneIdx) => `left:0;width:${totalWidthPx}px;--vst-audio-lane-idx:${laneIdx}`;
-    const lanes = tracks.map(
-      (track, trackIdx) => `<div class="vst-audio-seg-lane" data-track-idx="${trackIdx}" style="${place(trackIdx)}">` + renderTimelineAudioSegmentBlock(track, trackIdx, totalSeconds) + `</div>`
-    );
-    lanes.push(
-      `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add style="${place(tracks.length)}" title="Click or drag to add a timeline-wide audio segment"></div>`
-    );
-    return lanes.join("");
-  };
-  var renderAudioTrackRow = (clips, layouts, capabilities, audioTracks, pxPerSecond = 1) => {
-    const baseSegments = layouts.map((layout) => {
-      const clip = clips[layout.index];
-      if (!clip) {
-        return "";
-      }
-      const badge = audioSourceBadge(clip.audioSource ?? "");
-      const clipCapabilities = capabilities?.forClip(clip);
-      const clipAudioSupported = clipCapabilities?.decision("clipAudio").supported ?? true;
-      const persistedAudio = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.reuseAudio || clip.clipLengthFromAudio || clip.saveAudioTrack;
-      const native = badge.label === "Native";
-      const width = clipInnerWidth(layout.widthPx);
-      const kindClass = native ? " vst-audio-native vst-audio-kind-native" : isAceStepFunAudioSource(clip.audioSource ?? "") ? " vst-audio-kind-ace" : " vst-audio-kind-upload";
-      const upload = !native && clip.audioSource === "Upload" ? clip.uploadedAudio?.fileName : null;
-      const labelText = upload ? `${badge.label} · ${upload}` : badge.label;
-      const title = native ? "Audio: Native — click to choose an audio source" : `${badge.title} — click to edit`;
-      const barCount = Math.min(
-        400,
-        Math.max(8, Math.floor(width / 5.5))
-      );
-      const bars = waveBarHeights(layout.index, barCount).map((height) => `<span style="height:${height}%"></span>`).join("");
-      const hint = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : "";
-      const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
-      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${clipAudioSupported || persistedAudio ? ' data-vst-audio="clip"' : ""} data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(clipAudioSupported ? title : "Clip audio is unsupported; click persisted audio to remove it")}" aria-label="Edit audio for clip ${layout.index}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>`;
-    }).join("");
-    const totalSeconds = layouts.reduce(
-      (sum, layout) => sum + layout.durationSeconds,
-      0
-    );
-    const totalWidthPx = totalSeconds * pxPerSecond;
-    const overlaySegments = audioTracks === void 0 ? layouts.map((layout) => {
-      const clip = clips[layout.index];
-      if (!clip) {
-        return "";
-      }
-      const canCreate = capabilities?.forClip(clip).decision("audioSegments").supported ?? true;
-      return renderAudioSegmentLanes(
-        clip,
-        layout.index,
-        clip.duration || 0,
-        layout.startPx,
-        clipInnerWidth(layout.widthPx),
-        canCreate
-      );
-    }).join("") : renderTimelineAudioSegmentLanes(
-      audioTracks,
-      totalSeconds,
-      totalWidthPx
-    );
-    const laneCount = audioTracks === void 0 ? Math.max(
-      1,
-      ...clips.map((clip) => (clip.audioSegments?.length ?? 0) + 1)
-    ) : Math.max(1, audioTracks.length + 1);
-    const laneTags = [headTag("src", "Clip", { active: true })];
-    for (let i = 0; i < laneCount; i++) {
-      const blank = i === laneCount - 1;
-      laneTags.push(
-        headTag(
-          "seg",
-          blank ? "+" : `S${audioTracks === void 0 ? i + 1 : i}`,
-          {
-            active: !blank,
-            muted: blank,
-            style: `--vst-audio-lane-idx:${i}`
-          }
-        )
-      );
-    }
-    return `<div class="vst-track-row vst-track-audio" style="--vst-audio-lane-count:${laneCount}">` + renderTrackHead(
-      "vst-track-icon-audio",
-      "♪",
-      "Audio",
-      laneTags.join("")
-    ) + `<div class="vst-track-cell vst-audio-cell">${baseSegments}${overlaySegments}</div></div>`;
-  };
-  var REF_EDGE_ALIGN_FRAMES = 3;
-  var renderReferencesTrackRow = (clips, layouts, fps, unit, capabilities) => {
-    const lanes = layouts.map((layout) => {
-      const clip = clips[layout.index];
-      if (!clip) {
-        return "";
-      }
-      const width = clipInnerWidth(layout.widthPx);
-      const refsSupported = capabilities?.forClip(clip).decision("frameReferences").supported ?? true;
-      const marks = (clip.refs ?? []).map((ref, refIdx) => {
-        const isEnd = ref.fromEnd === true;
-        const frame = Math.max(0, ref.frame ?? 0);
-        const isPrimary = frame === 1 && !isEnd;
-        const time = keyframeTimeSeconds(
-          ref.frame,
-          isEnd,
-          layout.durationSeconds,
-          fps
-        );
-        const left = keyframeLeftPercent(
-          time,
-          layout.durationSeconds
-        );
-        const source = refSourceLabel(ref.source ?? "");
-        const image = ref.uploadedImage?.data;
-        const thumbnailData = image ? backgroundImageDataAttr(mediaPreviewSrc(image)) : "";
-        const frameLabel = `R ${isEnd ? "-" : ""}${frame}`;
-        const thumbnailClass = `vst-refs-thumb${image ? " vst-refs-has-image" : ""}`;
-        const alignClass = frame > REF_EDGE_ALIGN_FRAMES ? "" : isEnd ? " vst-refs-align-end" : " vst-refs-align-start";
-        const kindClass = (isPrimary ? " vst-refs-primary" : "") + (isEnd ? " vst-refs-fromend" : "") + alignClass;
-        const title = `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move · Shift+click to delete`;
-        const label = `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})`;
-        return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}"><span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeAttr(frameLabel)}</span></span></div>`;
-      }).join("");
-      return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a reference image at this frame" : "Frame references are unsupported; existing references can be removed"}">${marks}</div>`;
-    }).join("");
-    return `<div class="vst-track-row vst-track-refs">` + renderTrackHead("vst-track-icon-refs", "⧉", "References", "") + `<div class="vst-track-cell">${lanes}</div></div>`;
-  };
-
-  // frontend/timelineView.ts
-  var renderRulerTicks = (layouts, totalSeconds, pxPerSecond, fps, unit) => {
-    const lastLayout = layouts[layouts.length - 1];
-    const endPx = lastLayout.startPx + lastLayout.widthPx;
-    const gridTicks = computeRulerTicks(totalSeconds, pxPerSecond).map(
-      (tick) => `<span class="vst-tick vst-tick-grid" style="left:${tick.x}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(tick.seconds, unit, fps))}</span></span>`
-    );
-    const minorStep = chooseRulerStepSeconds(pxPerSecond) / 5;
-    const minorTicks = [];
-    const maxMinorTicks = 5e3;
-    for (let i = 1; i <= maxMinorTicks; i++) {
-      const seconds = i * minorStep;
-      if (seconds > totalSeconds + 1e-6) {
-        break;
-      }
-      if (i % 5 === 0) {
-        continue;
-      }
-      minorTicks.push(
-        `<span class="vst-tick vst-tick-minor" style="left:${seconds * pxPerSecond}px" aria-hidden="true"></span>`
-      );
-    }
-    const seamTicks = layouts.slice(1).map(
-      (layout) => `<span class="vst-tick vst-tick-seam" style="left:${layout.startPx}px" aria-hidden="true"></span>`
-    );
-    const endTick = `<span class="vst-tick vst-tick-end" style="left:${endPx}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(totalSeconds, unit, fps))}</span></span>`;
-    return [...minorTicks, ...gridTicks, ...seamTicks, endTick].join("");
-  };
-  var renderTimeline = (body, clips, options) => {
-    const fps = safeFps(options?.fps);
-    const unit = options?.unit === "frames" ? "frames" : "seconds";
-    const pxPerSecond = clampPxPerSecond(
-      options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND
-    );
-    body.dataset.vstPps = String(pxPerSecond);
-    body.dataset.vstFps = String(fps);
-    const layouts = computeRegionLayout(clips, { pxPerSecond });
-    const totalSeconds = layouts.reduce(
-      (sum, layout) => sum + layout.durationSeconds,
-      0
-    );
-    const totalPx = layouts.reduce(
-      (max, layout) => Math.max(max, layout.startPx + layout.widthPx),
-      0
-    );
-    const header = renderTimelineHeader(
-      clips.length,
-      totalSeconds,
-      fps,
-      unit,
-      pxPerSecond,
-      options
-    );
-    const diagnostics = renderDiagnosticPanel(options?.diagnostics);
-    if (clips.length === 0) {
-      body.innerHTML = `${header}${diagnostics}<div class="vst-empty"><div class="vst-empty-icon" aria-hidden="true">🎬</div><div class="vst-empty-title">No clips yet.</div><div class="vst-empty-hint">Add one here — or in the VideoStages panel on the left — to start building your sequence.</div><button type="button" class="basic-button btn-primary vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button></div>`;
-      wireTimelineToolbar(body, options);
-      return;
-    }
-    const promptRow = renderPromptTrackRow(
-      clips,
-      layouts,
-      pxPerSecond,
-      `${options?.globalPrompt ?? ""}`,
-      options?.capabilities
-    );
-    const videoRow = renderVideoTrackRow(
-      clips,
-      layouts,
-      fps,
-      unit,
-      options?.capabilities
-    );
-    const referencesRow = renderReferencesTrackRow(
-      clips,
-      layouts,
-      fps,
-      unit,
-      options?.capabilities
-    );
-    const renderedAudioRow = renderAudioTrackRow(
-      clips,
-      layouts,
-      options?.capabilities,
-      options?.audioTracks,
-      pxPerSecond
-    );
-    const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
-    body.innerHTML = `${header}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, pxPerSecond, fps, unit)}</div></div>` + promptRow + videoRow + referencesRow + renderedAudioRow + `</div></div>`;
-    applyBackgroundImages(body);
-    wireTimelineToolbar(body, options);
-    wireTimelineZoomWheel(body, options);
-  };
-
   // frontend/trackDomUtils.ts
   var livePxPerSecond = (body) => {
     const pps = Number.parseFloat(body.dataset.vstPps ?? "");
@@ -7225,11 +5929,36 @@
     return Number.isInteger(value) && value >= 0 ? value : null;
   };
   var clipDurationOf = (clip) => clip ? Math.max(0, clip.duration || 0) : 0;
-  var leftPct = (start, duration) => duration > 0 ? clamp(start, 0, duration) / duration * 100 : 0;
-  var widthPct = (length, duration) => duration > 0 ? clamp(length, 0, duration) / duration * 100 : 0;
-  var isStaleToken = (sourceToken) => readStateToken() !== sourceToken;
-  var commitClipMutation = (sourceToken, origin, mutate) => {
-    if (isStaleToken(sourceToken)) {
+  var spanGeometry = (startSeconds, lengthSeconds, durationSeconds, options = {}) => {
+    const duration = Math.max(0, durationSeconds || 0);
+    const rawStart = startSeconds || 0;
+    const start = clamp(rawStart, 0, duration);
+    const end = clamp(rawStart + (lengthSeconds || 0), start, duration);
+    const percent = (options.unit ?? "percent") === "percent";
+    const scale = percent ? duration > 0 ? 100 / duration : 0 : options.pxPerSecond ?? 0;
+    let left = start * scale;
+    let width = (end - start) * scale;
+    if (options.clampOutput ?? percent) {
+      const bound = percent ? 100 : Number.MAX_SAFE_INTEGER;
+      left = clamp(left, 0, bound);
+      width = clamp(width, 0, bound - left);
+    }
+    if (options.minWidth !== void 0) {
+      width = Math.max(options.minWidth, width);
+    }
+    return {
+      startSeconds: start,
+      endSeconds: end,
+      left,
+      width,
+      empty: end <= start
+    };
+  };
+  var keyframeLeftPercent = (time, duration) => spanGeometry(time, 0, duration).left;
+  var currentRevision = () => getTimelineStore().revision();
+  var isStaleRevision = (sourceRevision) => currentRevision() !== sourceRevision;
+  var commitClipMutation = (sourceRevision, origin, mutate) => {
+    if (isStaleRevision(sourceRevision)) {
       return false;
     }
     const next = mutate(getClips());
@@ -7307,35 +6036,72 @@
     const start = clamp(press.start + deltaSec, lo, end - minLen);
     return { start, length: end - start };
   };
+  var clipWindowTrackScope = (origin) => {
+    const laneFor = (clip, ownerIdx) => clip ? { owner: clip, ownerIdx, duration: clipDurationOf(clip) } : null;
+    return {
+      read: (ownerIdx) => laneFor(getClips()[ownerIdx], ownerIdx),
+      resolveLane: (lane) => {
+        const ownerIdx = parseIntAttr(lane, "data-clip-idx");
+        return ownerIdx === null ? null : laneFor(getClips()[ownerIdx], ownerIdx);
+      },
+      write: (ownerIdx, _create, mutate) => {
+        const clips = getClips();
+        const lane = laneFor(clips[ownerIdx], ownerIdx);
+        if (!lane || !mutate(lane)) {
+          return false;
+        }
+        saveClips(clips, { origin });
+        return true;
+      }
+    };
+  };
   var createWindowTrack = (config) => {
     let boundBody = null;
     let unregister = null;
-    const leftStyle = (start, clipDur, pps) => config.unit === "pct" ? `${leftPct(start, clipDur)}%` : `${start * pps}px`;
-    const widthStyle = (length, clipDur, pps) => config.unit === "pct" ? `${widthPct(length, clipDur)}%` : `${Math.max(2, length * pps)}px`;
-    const moveTarget = (clip, itemIdx, press, desiredStart, pps) => {
-      const raw = config.moveTargetStart(clip, itemIdx, press, desiredStart);
+    const ownerAttr = config.ownerIdxAttr ?? "data-clip-idx";
+    const snapTargets = (ownerIdx, duration) => config.snapTargets?.(ownerIdx, duration) ?? {
+      primary: [],
+      fallback: [0, duration]
+    };
+    const spanStyle = (start, length, laneDuration, pps) => {
+      const pct = config.unit === "pct";
+      const geometry = spanGeometry(start, length, laneDuration, {
+        unit: pct ? "percent" : "px",
+        pxPerSecond: pps,
+        minWidth: pct ? void 0 : 2
+      });
+      const suffix = pct ? "%" : "px";
+      return {
+        left: `${geometry.left}${suffix}`,
+        width: `${geometry.width}${suffix}`
+      };
+    };
+    const moveTarget = (lane, itemIdx, press, desiredStart, pps) => {
+      const raw = config.moveTargetStart(lane, itemIdx, press, desiredStart);
       if (!getTimelineAuthoringSettings().snap) {
         return raw;
       }
+      const targets = snapTargets(lane.ownerIdx, lane.duration);
       const snapped = snapMovedStart(
         raw,
         press.length,
-        [],
-        [0, clipDurationOf(clip)],
+        targets.primary,
+        targets.fallback,
         SNAP_THRESHOLD_PX / pps
       );
-      return config.moveTargetStart(clip, itemIdx, press, snapped);
+      return config.moveTargetStart(lane, itemIdx, press, snapped);
     };
-    const resizeTarget = (clip, itemIdx, edge, press, deltaSec, pps) => {
-      const raw = config.resizeTarget(clip, itemIdx, edge, press, deltaSec);
+    const resizeTarget = (lane, itemIdx, edge, press, deltaSec, pps) => {
+      const raw = config.resizeTarget(lane, itemIdx, edge, press, deltaSec);
       if (!getTimelineAuthoringSettings().snap) {
         return raw;
       }
+      const targets = snapTargets(lane.ownerIdx, lane.duration);
       const rawEdge = edge === "left" ? raw.start : raw.start + raw.length;
       const snappedEdge = snapPoint(
         rawEdge,
-        [],
-        [0, clipDurationOf(clip)],
+        targets.primary,
+        targets.fallback,
         SNAP_THRESHOLD_PX / pps
       );
       if (snappedEdge === rawEdge) {
@@ -7343,88 +6109,96 @@
       }
       const pressEdge = edge === "left" ? press.start : press.start + press.length;
       return config.resizeTarget(
-        clip,
+        lane,
         itemIdx,
         edge,
         press,
         snappedEdge - pressEdge
       );
     };
+    const commitEdit = (state, write) => {
+      if (isStaleRevision(state.sourceRevision)) {
+        return;
+      }
+      const saved = config.scope.write(state.lane.ownerIdx, false, (txn) => {
+        if (config.canEdit && !config.canEdit(txn) || !config.readSpan(txn, state.itemIdx)) {
+          return false;
+        }
+        write(txn);
+        return true;
+      });
+      if (saved) {
+        setSelection(
+          config.selectionFor(state.lane.ownerIdx, state.itemIdx)
+        );
+      }
+    };
     const commitMove = (state, dxPx, pps) => {
-      if (isStaleToken(state.sourceJson)) {
-        return;
-      }
-      const clips = getClips();
-      const clip = clips[state.clipIdx];
-      if (!clip || config.canEdit && !config.canEdit(clip) || !config.readSpan(clip, state.itemIdx)) {
-        return;
-      }
-      const start = moveTarget(
-        clip,
-        state.itemIdx,
-        state.press,
-        state.press.start + dxPx / pps,
-        pps
-      );
-      config.writeMove(clip, state.itemIdx, state.press, start);
-      saveClips(clips, { origin: config.origin });
-      setSelection(config.selectionFor(state.clipIdx, state.itemIdx));
+      commitEdit(state, (txn) => {
+        config.writeMove(
+          txn,
+          state.itemIdx,
+          state.press,
+          moveTarget(
+            txn,
+            state.itemIdx,
+            state.press,
+            state.press.start + dxPx / pps,
+            pps
+          )
+        );
+      });
     };
     const commitResize = (state, dxPx, pps) => {
-      if (isStaleToken(state.sourceJson)) {
-        return;
-      }
-      const clips = getClips();
-      const clip = clips[state.clipIdx];
-      if (!clip || config.canEdit && !config.canEdit(clip) || !config.readSpan(clip, state.itemIdx)) {
-        return;
-      }
-      const geom = resizeTarget(
-        clip,
-        state.itemIdx,
-        state.edge,
-        state.press,
-        dxPx / pps,
-        pps
-      );
-      config.writeResize(clip, state.itemIdx, state.edge, state.press, geom);
-      saveClips(clips, { origin: config.origin });
-      setSelection(config.selectionFor(state.clipIdx, state.itemIdx));
+      commitEdit(state, (txn) => {
+        config.writeResize(
+          txn,
+          state.itemIdx,
+          state.edge,
+          state.press,
+          resizeTarget(
+            txn,
+            state.itemIdx,
+            state.edge,
+            state.press,
+            dxPx / pps,
+            pps
+          )
+        );
+      });
     };
     const commitCreate = (state, endSec) => {
-      if (isStaleToken(state.sourceJson)) {
+      if (isStaleRevision(state.sourceRevision)) {
         return;
       }
-      const clips = getClips();
-      const clip = clips[state.clipIdx];
-      if (!clip || config.canCreate && !config.canCreate(clip)) {
-        return;
+      const created = {
+        selection: null
+      };
+      const saved = config.scope.write(state.ownerIdx, true, (txn) => {
+        if (config.canCreate && !config.canCreate(txn)) {
+          return false;
+        }
+        created.selection = config.createSpan(txn, state.startSec, endSec);
+        return created.selection !== null;
+      });
+      if (saved && created.selection) {
+        setSelection(created.selection);
       }
-      const selection2 = config.createSpan(
-        clip,
-        state.clipIdx,
-        state.startSec,
-        endSec
-      );
-      if (!selection2) {
-        return;
-      }
-      saveClips(clips, { origin: config.origin });
-      setSelection(selection2);
     };
-    const laneTimeAt = (state, clientX, pps) => {
-      const raw = clamp(
-        (clientX - state.laneLeft) / pps,
-        0,
-        state.clipDuration
-      );
-      return getTimelineAuthoringSettings().snap ? snapPoint(
+    const timeAtX = (lane, laneLeft, clientX, pps) => {
+      const raw = clamp((clientX - laneLeft) / pps, 0, lane.duration);
+      if (!getTimelineAuthoringSettings().snap) {
+        return raw;
+      }
+      const targets = snapTargets(lane.ownerIdx, lane.duration);
+      return snapPoint(
         raw,
-        [],
-        [0, state.clipDuration],
+        targets.primary,
+        targets.fallback,
         SNAP_THRESHOLD_PX / pps
-      ) : raw;
+      );
     };
+    const laneTimeAt = (state, clientX, pps) => timeAtX(state, state.laneLeft, clientX, pps);
     const moveSession = (body, state) => {
       const restore = () => {
         state.el.style.left = state.originalLeft;
@@ -7435,13 +6209,18 @@
           body.classList.add(config.draggingClass);
           const pps = livePxPerSecond(body);
           const start = moveTarget(
-            state.clipAtPress,
+            state.lane,
             state.itemIdx,
             state.press,
             state.press.start + ctx.dx / pps,
             pps
           );
-          state.el.style.left = leftStyle(start, state.clipDuration, pps);
+          state.el.style.left = spanStyle(
+            start,
+            state.press.length,
+            state.lane.duration,
+            pps
+          ).left;
         },
         onCommit: (ctx) => {
           body.classList.remove(config.draggingClass);
@@ -7465,25 +6244,23 @@
           body.classList.add(config.draggingClass);
           const pps = livePxPerSecond(body);
           const geom = resizeTarget(
-            state.clipAtPress,
+            state.lane,
             state.itemIdx,
             state.edge,
             state.press,
             ctx.dx / pps,
             pps
           );
-          if (state.edge === "left") {
-            state.el.style.left = leftStyle(
-              geom.start,
-              state.clipDuration,
-              pps
-            );
-          }
-          state.el.style.width = widthStyle(
+          const style = spanStyle(
+            geom.start,
             geom.length,
-            state.clipDuration,
+            state.lane.duration,
             pps
           );
+          if (state.edge === "left") {
+            state.el.style.left = style.left;
+          }
+          state.el.style.width = style.width;
         },
         onCommit: (ctx) => {
           body.classList.remove(config.draggingClass);
@@ -7515,15 +6292,12 @@
           if (!state.ghost) {
             const ghost = document.createElement("div");
             ghost.className = config.ghostClass;
-            state.lane.appendChild(ghost);
+            state.laneEl.appendChild(ghost);
             state.ghost = ghost;
           }
-          state.ghost.style.left = leftStyle(a, state.clipDuration, pps);
-          state.ghost.style.width = widthStyle(
-            b - a,
-            state.clipDuration,
-            pps
-          );
+          const ghostStyle = spanStyle(a, b - a, state.duration, pps);
+          state.ghost.style.left = ghostStyle.left;
+          state.ghost.style.width = ghostStyle.width;
         },
         onCommit: (ctx) => {
           body.classList.remove(config.draggingClass);
@@ -7544,6 +6318,16 @@
       };
     };
     const itemIdxOf = (span) => config.itemIdxAttr ? parseIntAttr(span, config.itemIdxAttr) : 0;
+    const spanAt = (span) => {
+      const ownerIdx = parseIntAttr(span, ownerAttr);
+      const itemIdx = itemIdxOf(span);
+      if (ownerIdx === null || itemIdx === null) {
+        return null;
+      }
+      const lane = config.scope.read(ownerIdx);
+      const press = lane ? config.readSpan(lane, itemIdx) : null;
+      return lane && press ? { lane, itemIdx, press } : null;
+    };
     const onPress = (me, body) => {
       if (!(me.target instanceof Element)) {
         return null;
@@ -7554,29 +6338,21 @@
           me.preventDefault();
           return claimOnly();
         }
-        const clipIdx = parseIntAttr(span, "data-clip-idx");
-        const itemIdx = itemIdxOf(span);
-        if (clipIdx === null || itemIdx === null) {
+        const found = spanAt(span);
+        if (!found) {
           return null;
         }
-        const clip = getClips()[clipIdx];
-        const press = clip ? config.readSpan(clip, itemIdx) : null;
-        if (!clip || !press) {
-          return null;
-        }
-        if (config.canEdit && !config.canEdit(clip)) {
+        if (config.canEdit && !config.canEdit(found.lane)) {
           me.preventDefault();
           return claimOnly();
         }
         const base = {
-          clipIdx,
-          itemIdx,
+          lane: found.lane,
+          itemIdx: found.itemIdx,
           el: span,
-          press,
-          clipAtPress: clip,
-          clipDuration: clipDurationOf(clip),
+          press: found.press,
           originalLeft: span.style.left,
-          sourceJson: readStateToken()
+          sourceRevision: currentRevision()
         };
         me.preventDefault();
         const edgeEl = me.target.closest(config.edgeSelector);
@@ -7589,42 +6365,37 @@
         }
         return moveSession(body, base);
       }
-      const lane = me.target.closest(config.laneSelector);
-      if (lane instanceof HTMLElement) {
-        const clipIdx = parseIntAttr(lane, "data-clip-idx");
-        if (clipIdx === null) {
+      const laneEl = me.target.closest(config.laneSelector);
+      if (laneEl instanceof HTMLElement) {
+        const lane = config.scope.resolveLane(laneEl);
+        if (!lane || config.canCreate && !config.canCreate(lane)) {
           return null;
         }
-        const clip = getClips()[clipIdx];
-        if (!clip || config.canCreate && !config.canCreate(clip)) {
-          return null;
-        }
-        const rect = lane.getBoundingClientRect();
-        const pps = livePxPerSecond(body);
-        const clipDuration = clipDurationOf(clip);
-        const rawStart = clamp(
-          (me.clientX - rect.left) / pps,
-          0,
-          clipDuration
-        );
-        const startSec = getTimelineAuthoringSettings().snap ? snapPoint(
-          rawStart,
-          [],
-          [0, clipDuration],
-          SNAP_THRESHOLD_PX / pps
-        ) : rawStart;
+        const rect = laneEl.getBoundingClientRect();
         me.preventDefault();
         return createSession(body, {
-          clipIdx,
-          lane,
+          ownerIdx: lane.ownerIdx,
+          duration: lane.duration,
+          laneEl,
           laneLeft: rect.left,
-          startSec,
-          clipDuration,
+          startSec: timeAtX(
+            lane,
+            rect.left,
+            me.clientX,
+            livePxPerSecond(body)
+          ),
           ghost: null,
-          sourceJson: readStateToken()
+          sourceRevision: currentRevision()
         });
       }
       return null;
+    };
+    const activate = (selection2) => {
+      if (config.revealOnActivate) {
+        activateSelection(selection2);
+      } else {
+        setSelection(selection2);
+      }
     };
     const onBodyClick = (event) => {
       if (!(event.target instanceof Element)) {
@@ -7638,28 +6409,28 @@
       if (config.isolateClicks) {
         event.stopImmediatePropagation();
       }
-      const clipIdx = parseIntAttr(span, "data-clip-idx");
-      const itemIdx = itemIdxOf(span);
-      if (clipIdx === null || itemIdx === null) {
-        return;
-      }
-      const clips = getClips();
-      const clip = clips[clipIdx];
-      if (!clip || !config.readSpan(clip, itemIdx)) {
+      const found = spanAt(span);
+      if (!found) {
         return;
       }
       if (event.shiftKey) {
-        if (config.deleteItem(clip, itemIdx)) {
-          saveClips(clips, { origin: config.origin });
+        const removed = {
+          selection: null
+        };
+        const saved = config.scope.write(
+          found.lane.ownerIdx,
+          false,
+          (txn) => {
+            removed.selection = config.deleteItem(txn, found.itemIdx);
+            return removed.selection !== null;
+          }
+        );
+        if (saved && removed.selection) {
+          setSelection(removed.selection);
         }
         return;
       }
-      const selection2 = config.selectionFor(clipIdx, itemIdx);
-      if (config.revealOnActivate) {
-        activateSelection(selection2);
-      } else {
-        setSelection(selection2);
-      }
+      activate(config.selectionFor(found.lane.ownerIdx, found.itemIdx));
     };
     const onBodyKeyDown = (event) => {
       const ke = event;
@@ -7677,21 +6448,11 @@
       if (config.isolateClicks) {
         ke.stopImmediatePropagation();
       }
-      const clipIdx = parseIntAttr(span, "data-clip-idx");
-      const itemIdx = itemIdxOf(span);
-      if (clipIdx === null || itemIdx === null) {
+      const found = spanAt(span);
+      if (!found) {
         return;
       }
-      const clip = getClips()[clipIdx];
-      if (!clip || !config.readSpan(clip, itemIdx)) {
-        return;
-      }
-      const selection2 = config.selectionFor(clipIdx, itemIdx);
-      if (config.revealOnActivate) {
-        activateSelection(selection2);
-      } else {
-        setSelection(selection2);
-      }
+      activate(config.selectionFor(found.lane.ownerIdx, found.itemIdx));
     };
     const attach = (body, router) => {
       if (boundBody === body) {
@@ -7722,524 +6483,163 @@
   };
 
   // frontend/timelineAudioSegmentTrack.ts
-  var segmentOf = (clip, segIdx) => clip.audioSegments?.[segIdx];
-  var createLegacyTimelineAudioSegmentTrack = (getCapabilities) => createWindowTrack({
-    routeId: "audio-segment",
+  var timelineDuration = (state) => state.clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
+  var pressSpanOf = (span) => span && span.timelineStartSeconds !== null && span.timelineLengthSeconds !== null ? {
+    start: span.timelineStartSeconds,
+    length: span.timelineLengthSeconds,
+    trim: span.sourceStartSeconds
+  } : null;
+  var blankTrack = () => ({
+    id: createEntityId("audio_track"),
+    source: { kind: "Upload", reference: "", uploadedAudio: null },
+    volume: AUDIO_SEGMENT_VOLUME_DEFAULT,
+    spans: []
+  });
+  var audioTrackScope = () => ({
+    read: (ownerIdx) => {
+      const state = getState();
+      const owner = state.audioTracks?.[ownerIdx];
+      return owner ? { owner, ownerIdx, duration: timelineDuration(state) } : null;
+    },
+    // The blank lane carries no index: a create appends a new track.
+    resolveLane: () => {
+      const state = getState();
+      return {
+        owner: null,
+        ownerIdx: state.audioTracks?.length ?? 0,
+        duration: timelineDuration(state)
+      };
+    },
+    write: (ownerIdx, create, mutate) => {
+      const state = getState();
+      state.audioTracks ??= [];
+      const tracks = state.audioTracks;
+      if (create && ownerIdx === tracks.length) {
+        tracks.push(blankTrack());
+      }
+      const owner = tracks[ownerIdx];
+      if (!owner) {
+        return false;
+      }
+      const applied = mutate({
+        owner,
+        ownerIdx,
+        duration: timelineDuration(state),
+        removeOwner: () => {
+          tracks.splice(ownerIdx, 1);
+          return tracks.length;
+        }
+      });
+      if (!applied) {
+        return false;
+      }
+      saveState(state, { origin: "audio-segment-track" });
+      return true;
+    }
+  });
+  var createTimelineAudioSegmentTrack = () => createWindowTrack({
+    routeId: "timeline-audio-segment",
     priority: 40,
-    origin: "audio-segment-track",
-    spanSelector: ".vst-audio-seg[data-clip-idx]",
-    itemIdxAttr: "data-seg-idx",
+    scope: audioTrackScope(),
+    spanSelector: ".vst-audio-seg[data-track-idx]",
+    ownerIdxAttr: "data-track-idx",
+    itemIdxAttr: null,
     edgeSelector: "[data-vst-audio-seg-edge]",
     edgeAttr: "data-vst-audio-seg-edge",
-    laneSelector: ".vst-audio-seg-lane[data-vst-audio-seg-add]",
+    laneSelector: ".vst-audio-seg-lane[data-vst-audio-seg-add]:not([data-clip-idx])",
     draggingClass: "vst-audio-seg-dragging",
     ghostClass: "vst-audio-seg-ghost",
     unit: "pct",
     keyboardSelect: true,
-    // Segments sit on the audio row; their clicks must not bubble into
-    // the audio clip's select handler.
+    // The segment sits on the audio row; its clicks must not bubble
+    // into that row's select handler.
     isolateClicks: true,
-    readSpan: (clip, segIdx) => {
-      const segment = segmentOf(clip, segIdx);
-      return segment ? {
-        start: segment.startSeconds,
-        length: segment.lengthSeconds,
-        trim: segment.trimStartSeconds
-      } : null;
-    },
-    canEdit: (clip) => getCapabilities?.().forClip(clip).decision("audioSegments").supported ?? true,
-    canCreate: (clip) => getCapabilities?.().forClip(clip).decision("audioSegments").supported ?? true,
-    moveTargetStart: (clip, _segIdx, press, desiredStart) => {
-      const clipDur = clipDurationOf(clip);
-      const length = Math.min(press.length, clipDur);
-      return clamp(desiredStart, 0, Math.max(0, clipDur - length));
-    },
-    writeMove: (clip, segIdx, press, start) => {
-      const segment = segmentOf(clip, segIdx);
-      if (!segment) {
-        return;
-      }
-      const clipDur = clipDurationOf(clip);
-      const length = Math.min(press.length, clipDur);
-      segment.startSeconds = roundToTenth(start);
-      segment.lengthSeconds = roundToTenth(
-        Math.min(length, clipDur - segment.startSeconds)
+    readSpan: ({ owner }) => pressSpanOf(owner.spans[0]),
+    canCreate: ({ duration }) => duration >= AUDIO_SEGMENT_MIN_LENGTH,
+    // Segments snap to the track immediately above before falling back
+    // to the clip boundaries underneath them.
+    snapTargets: (ownerIdx) => {
+      const state = getState();
+      const above = pressSpanOf(
+        ownerIdx > 0 ? state.audioTracks?.[ownerIdx - 1]?.spans[0] : void 0
       );
+      return {
+        primary: above ? [above.start, above.start + above.length] : [],
+        fallback: timelineClipEdges(state.clips)
+      };
     },
-    resizeTarget: (clip, _segIdx, edge, press, deltaSec) => (
-      // Left edge: trim follows, lower wall dips below 0 (un-trims further).
-      // Right edge: walled by clip end.
-      resizeSpanEdge(
-        edge,
-        press,
-        deltaSec,
-        AUDIO_SEGMENT_MIN_LENGTH,
-        Math.min(
-          0,
-          press.start + press.length - AUDIO_SEGMENT_MIN_LENGTH
-        ),
-        clipDurationOf(clip)
-      )
+    moveTargetStart: ({ duration }, _itemIdx, press, desiredStart) => Math.min(
+      Math.max(desiredStart, 0),
+      Math.max(0, duration - press.length)
     ),
-    writeResize: (clip, segIdx, edge, press, geom) => {
-      const segment = segmentOf(clip, segIdx);
-      if (!segment) {
-        return;
+    writeMove: ({ owner }, _itemIdx, _press, start) => {
+      const span = owner.spans[0];
+      if (span) {
+        span.timelineStartSeconds = roundToTenth(start);
       }
-      if (edge === "right") {
-        segment.startSeconds = roundToTenth(press.start);
-        segment.lengthSeconds = roundToTenth(geom.length);
-        return;
-      }
-      segment.startSeconds = roundToTenth(geom.start);
-      segment.trimStartSeconds = roundToTenth(
-        Math.max(0, press.trim + (geom.start - press.start))
-      );
-      segment.lengthSeconds = roundToTenth(geom.length);
     },
-    createSpan: (clip, clipIdx, startSec, endSec) => {
+    // A left resize may run back to the start of the untrimmed source,
+    // so its wall sits `trim` seconds before the pressed start.
+    resizeTarget: ({ duration }, _itemIdx, edge, press, delta) => resizeSpanEdge(
+      edge,
+      press,
+      delta,
+      AUDIO_SEGMENT_MIN_LENGTH,
+      Math.max(0, press.start - press.trim),
+      duration
+    ),
+    writeResize: ({ owner }, _itemIdx, edge, press, geom) => {
+      const span = owner.spans[0];
+      if (!span) {
+        return;
+      }
+      span.timelineStartSeconds = roundToTenth(geom.start);
+      span.timelineLengthSeconds = roundToTenth(geom.length);
+      if (edge === "left") {
+        span.sourceStartSeconds = roundToTenth(
+          press.trim + (geom.start - press.start)
+        );
+      }
+    },
+    createSpan: ({ owner, ownerIdx, duration }, startSec, endSec) => {
       const geom = createDefaultOrDraggedSpan(
         startSec,
         endSec,
         0,
-        clipDurationOf(clip),
+        duration,
         AUDIO_SEGMENT_MIN_LENGTH,
         AUDIO_SEGMENT_DEFAULT_LENGTH
       );
       if (!geom) {
         return null;
       }
-      const segment = {
-        source: null,
-        startSeconds: roundToTenth(geom.start),
-        trimStartSeconds: 0,
-        lengthSeconds: roundToTenth(geom.length),
-        volume: AUDIO_SEGMENT_VOLUME_DEFAULT
-      };
-      const segments = [...clip.audioSegments ?? [], segment];
-      clip.audioSegments = segments;
-      return {
-        kind: "audio-segment",
-        clipIdx,
-        segIdx: segments.length - 1
-      };
+      owner.spans.push({
+        id: createEntityId("audio_span"),
+        timelineStartSeconds: roundToTenth(geom.start),
+        timelineLengthSeconds: roundToTenth(geom.length),
+        sourceStartSeconds: 0
+      });
+      return { kind: "audio-track", trackIdx: ownerIdx };
     },
-    deleteItem: (clip, segIdx) => {
-      if (!segmentOf(clip, segIdx)) {
-        return false;
+    // A track exists only for its segments: deleting the last one
+    // deletes the track, and the selection moves to a sibling track.
+    deleteItem: ({ owner, ownerIdx, removeOwner }, itemIdx) => {
+      if (!owner.spans[itemIdx]) {
+        return null;
       }
-      clip.audioSegments = clip.audioSegments.filter(
-        (_, i) => i !== segIdx
+      owner.spans.splice(itemIdx, 1);
+      if (owner.spans.length > 0) {
+        return { kind: "audio-track", trackIdx: ownerIdx };
+      }
+      return selectionAfterRemoval(
+        ownerIdx,
+        removeOwner?.() ?? 0,
+        (index) => ({ kind: "audio-track", trackIdx: index }),
+        { kind: "none" }
       );
-      return true;
     },
-    selectionFor: (clipIdx, segIdx) => ({
-      kind: "audio-segment",
-      clipIdx,
-      segIdx
-    })
+    selectionFor: (trackIdx) => ({ kind: "audio-track", trackIdx })
   });
-  var DRAG_THRESHOLD_PX2 = 4;
-  var timelineDuration = (state) => state.clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
-  var trackAndSpan = (state, trackIdx) => {
-    const track = state.audioTracks?.[trackIdx];
-    const span = track?.spans[0];
-    return track && span ? { track, span } : null;
-  };
-  var spanGeometry = (span) => {
-    if (span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
-      return null;
-    }
-    return {
-      start: span.timelineStartSeconds,
-      length: span.timelineLengthSeconds,
-      trim: span.sourceStartSeconds
-    };
-  };
-  var audioSnapTargets = (state, trackIdx) => {
-    const above = trackIdx > 0 ? trackAndSpan(state, trackIdx - 1) : null;
-    const aboveGeometry = above ? spanGeometry(above.span) : null;
-    return {
-      primary: aboveGeometry ? [aboveGeometry.start, aboveGeometry.start + aboveGeometry.length] : [],
-      fallback: timelineClipEdges(state.clips)
-    };
-  };
-  var snapAudioPoint = (state, trackIdx, value, pps) => {
-    if (!getTimelineAuthoringSettings().snap) {
-      return value;
-    }
-    const targets = audioSnapTargets(state, trackIdx);
-    return snapPoint(
-      value,
-      targets.primary,
-      targets.fallback,
-      SNAP_THRESHOLD_PX / pps
-    );
-  };
-  var snapAudioMovedStart = (state, trackIdx, start, length, pps) => {
-    if (!getTimelineAuthoringSettings().snap) {
-      return start;
-    }
-    const targets = audioSnapTargets(state, trackIdx);
-    return snapMovedStart(
-      start,
-      length,
-      targets.primary,
-      targets.fallback,
-      SNAP_THRESHOLD_PX / pps
-    );
-  };
-  var pct = (seconds, total) => `${total > 0 ? seconds / total * 100 : 0}%`;
-  var createGlobalTimelineAudioSegmentTrack = () => {
-    let body = null;
-    let unregister = null;
-    let unbindClick = null;
-    const commit = (sourceToken, trackIdx, mutate) => {
-      if (isStaleToken(sourceToken)) {
-        return false;
-      }
-      const state = structuredClone(getState());
-      const found = trackAndSpan(state, trackIdx);
-      if (!found) {
-        return false;
-      }
-      mutate(state, found.track, found.span);
-      saveState(state, { origin: "audio-segment-track" });
-      setSelection({ kind: "audio-track", trackIdx });
-      return true;
-    };
-    const onPress = (event, boundBody) => {
-      if (!(event.target instanceof Element)) {
-        return null;
-      }
-      const element = event.target.closest(".vst-audio-seg[data-track-idx]");
-      if (element instanceof HTMLElement) {
-        const trackIdx = parseIntAttr(element, "data-track-idx");
-        if (trackIdx === null) {
-          return null;
-        }
-        if (event.shiftKey) {
-          event.preventDefault();
-          return claimOnly();
-        }
-        const state2 = getState();
-        const found = trackAndSpan(state2, trackIdx);
-        const press = found ? spanGeometry(found.span) : null;
-        const total2 = timelineDuration(state2);
-        if (!press || total2 <= 0) {
-          return null;
-        }
-        const originalLeft = element.style.left;
-        const originalWidth = element.style.width;
-        const sourceToken2 = readStateToken();
-        const edgeElement = event.target.closest(
-          "[data-vst-audio-seg-edge]"
-        );
-        const edge = edgeElement?.getAttribute("data-vst-audio-seg-edge") === "left" ? "left" : edgeElement ? "right" : null;
-        event.preventDefault();
-        const restore = () => {
-          element.style.left = originalLeft;
-          element.style.width = originalWidth;
-        };
-        const rightLength = (delta, pps2) => {
-          const rawLength = clamp(
-            press.length + delta,
-            AUDIO_SEGMENT_MIN_LENGTH,
-            total2 - press.start
-          );
-          const snappedEnd = snapAudioPoint(
-            state2,
-            trackIdx,
-            press.start + rawLength,
-            pps2
-          );
-          return clamp(
-            snappedEnd - press.start,
-            AUDIO_SEGMENT_MIN_LENGTH,
-            total2 - press.start
-          );
-        };
-        const leftStart = (delta, pps2) => {
-          const end = press.start + press.length;
-          const lo = Math.max(0, press.start - press.trim);
-          const rawStart = clamp(
-            press.start + delta,
-            lo,
-            end - AUDIO_SEGMENT_MIN_LENGTH
-          );
-          return clamp(
-            snapAudioPoint(state2, trackIdx, rawStart, pps2),
-            lo,
-            end - AUDIO_SEGMENT_MIN_LENGTH
-          );
-        };
-        const movedStart = (delta, pps2) => {
-          const rawStart = clamp(
-            press.start + delta,
-            0,
-            Math.max(0, total2 - press.length)
-          );
-          return clamp(
-            snapAudioMovedStart(
-              state2,
-              trackIdx,
-              rawStart,
-              press.length,
-              pps2
-            ),
-            0,
-            Math.max(0, total2 - press.length)
-          );
-        };
-        return {
-          threshold: DRAG_THRESHOLD_PX2,
-          onMove: (ctx) => {
-            boundBody.classList.add("vst-audio-seg-dragging");
-            const pps2 = livePxPerSecond(boundBody);
-            const delta = ctx.dx / pps2;
-            if (edge === "right") {
-              const length = rightLength(delta, pps2);
-              element.style.width = pct(length, total2);
-            } else if (edge === "left") {
-              const end = press.start + press.length;
-              const start = leftStart(delta, pps2);
-              element.style.left = pct(start, total2);
-              element.style.width = pct(end - start, total2);
-            } else {
-              const start = movedStart(delta, pps2);
-              element.style.left = pct(start, total2);
-            }
-          },
-          onCommit: (ctx) => {
-            boundBody.classList.remove("vst-audio-seg-dragging");
-            const pps2 = livePxPerSecond(boundBody);
-            const delta = ctx.dx / pps2;
-            commit(sourceToken2, trackIdx, (_state, _track, span) => {
-              if (edge === "right") {
-                span.timelineLengthSeconds = roundToTenth(
-                  rightLength(delta, pps2)
-                );
-              } else if (edge === "left") {
-                const end = press.start + press.length;
-                const start = leftStart(delta, pps2);
-                span.timelineStartSeconds = roundToTenth(start);
-                span.timelineLengthSeconds = roundToTenth(
-                  end - start
-                );
-                span.sourceStartSeconds = roundToTenth(
-                  press.trim + (start - press.start)
-                );
-              } else {
-                span.timelineStartSeconds = roundToTenth(
-                  movedStart(delta, pps2)
-                );
-              }
-            });
-          },
-          onTap: restore,
-          onCancel: () => {
-            restore();
-            boundBody.classList.remove("vst-audio-seg-dragging");
-          }
-        };
-      }
-      const lane = event.target.closest(
-        ".vst-audio-seg-lane[data-vst-audio-seg-add]:not([data-clip-idx])"
-      );
-      if (!(lane instanceof HTMLElement)) {
-        return null;
-      }
-      const state = getState();
-      const total = timelineDuration(state);
-      if (total < AUDIO_SEGMENT_MIN_LENGTH) {
-        return null;
-      }
-      const rect = lane.getBoundingClientRect();
-      const pps = livePxPerSecond(boundBody);
-      const trackIdxAtPress = state.audioTracks?.length ?? 0;
-      const startAtPress = snapAudioPoint(
-        state,
-        trackIdxAtPress,
-        clamp((event.clientX - rect.left) / pps, 0, total),
-        pps
-      );
-      const sourceToken = readStateToken();
-      let ghost = null;
-      event.preventDefault();
-      const removeGhost = () => {
-        ghost?.remove();
-        ghost = null;
-      };
-      const timeAt = (clientX) => {
-        const livePps = livePxPerSecond(boundBody);
-        return snapAudioPoint(
-          state,
-          trackIdxAtPress,
-          clamp((clientX - rect.left) / livePps, 0, total),
-          livePps
-        );
-      };
-      const create = (endAt) => {
-        if (isStaleToken(sourceToken)) {
-          return;
-        }
-        const geometry = createDefaultOrDraggedSpan(
-          startAtPress,
-          endAt,
-          0,
-          total,
-          AUDIO_SEGMENT_MIN_LENGTH,
-          AUDIO_SEGMENT_DEFAULT_LENGTH
-        );
-        if (!geometry) {
-          return;
-        }
-        const next = structuredClone(getState());
-        next.audioTracks ??= [];
-        const trackIdx = next.audioTracks.length;
-        next.audioTracks.push({
-          id: createEntityId("audio_track"),
-          source: {
-            kind: "Upload",
-            reference: "",
-            uploadedAudio: null
-          },
-          volume: AUDIO_SEGMENT_VOLUME_DEFAULT,
-          spans: [
-            {
-              id: createEntityId("audio_span"),
-              firstClipId: null,
-              lastClipId: null,
-              timelineStartSeconds: roundToTenth(geometry.start),
-              timelineLengthSeconds: roundToTenth(geometry.length),
-              sourceStartSeconds: 0,
-              clipStartOffsetSeconds: null,
-              clipLengthSeconds: null
-            }
-          ]
-        });
-        saveState(next, { origin: "audio-segment-track" });
-        setSelection({ kind: "audio-track", trackIdx });
-      };
-      return {
-        threshold: DRAG_THRESHOLD_PX2,
-        suppressTapClick: true,
-        onMove: (ctx) => {
-          boundBody.classList.add("vst-audio-seg-dragging");
-          const now = timeAt(ctx.event.clientX);
-          const start = Math.min(startAtPress, now);
-          const end = Math.max(startAtPress, now);
-          if (!ghost) {
-            ghost = document.createElement("div");
-            ghost.className = "vst-audio-seg-ghost";
-            lane.appendChild(ghost);
-          }
-          ghost.style.left = pct(start, total);
-          ghost.style.width = pct(end - start, total);
-        },
-        onCommit: (ctx) => {
-          boundBody.classList.remove("vst-audio-seg-dragging");
-          removeGhost();
-          create(timeAt(ctx.event.clientX));
-        },
-        onTap: () => {
-          removeGhost();
-          create(null);
-        },
-        onCancel: () => {
-          removeGhost();
-          boundBody.classList.remove("vst-audio-seg-dragging");
-        }
-      };
-    };
-    const onClick = (event) => {
-      if (!(event.target instanceof Element)) {
-        return;
-      }
-      const span = event.target.closest(".vst-audio-seg[data-track-idx]");
-      if (!(span instanceof HTMLElement)) {
-        return;
-      }
-      event.stopImmediatePropagation();
-      const trackIdx = parseIntAttr(span, "data-track-idx");
-      if (trackIdx === null || !trackAndSpan(getState(), trackIdx)) {
-        return;
-      }
-      if (event.shiftKey) {
-        const next = structuredClone(getState());
-        next.audioTracks?.splice(trackIdx, 1);
-        saveState(next, { origin: "audio-segment-track" });
-        const count = next.audioTracks?.length ?? 0;
-        setSelection(
-          count > 0 ? {
-            kind: "audio-track",
-            trackIdx: Math.min(trackIdx, count - 1)
-          } : { kind: "none" }
-        );
-        return;
-      }
-      setSelection({ kind: "audio-track", trackIdx });
-    };
-    const onKeyDown = (event) => {
-      const keyboard = event;
-      if (!isActivateKey(keyboard) || !(keyboard.target instanceof Element)) {
-        return;
-      }
-      const span = keyboard.target.closest(".vst-audio-seg[data-track-idx]");
-      if (!(span instanceof HTMLElement)) {
-        return;
-      }
-      const trackIdx = parseIntAttr(span, "data-track-idx");
-      if (trackIdx === null) {
-        return;
-      }
-      keyboard.preventDefault();
-      keyboard.stopImmediatePropagation();
-      setSelection({ kind: "audio-track", trackIdx });
-    };
-    return {
-      attach: (nextBody, router) => {
-        if (body === nextBody) {
-          return;
-        }
-        unbindClick?.();
-        unregister?.();
-        body = nextBody;
-        unregister = router.register({
-          id: "timeline-audio-segment",
-          priority: 40,
-          onPress
-        });
-        nextBody.addEventListener("click", onClick);
-        nextBody.addEventListener("keydown", onKeyDown);
-        unbindClick = () => {
-          nextBody.removeEventListener("click", onClick);
-          nextBody.removeEventListener("keydown", onKeyDown);
-        };
-      },
-      dispose: () => {
-        unbindClick?.();
-        unregister?.();
-        unbindClick = null;
-        unregister = null;
-        body = null;
-      }
-    };
-  };
-  var createTimelineAudioSegmentTrack = (getCapabilities) => {
-    const legacy = createLegacyTimelineAudioSegmentTrack(getCapabilities);
-    const global = createGlobalTimelineAudioSegmentTrack();
-    return {
-      attach: (body, router) => {
-        legacy.attach(body, router);
-        global.attach(body, router);
-      },
-      dispose: () => {
-        legacy.dispose();
-        global.dispose();
-      }
-    };
-  };
 
   // frontend/timelineAudioTrack.ts
   var CLIP_SELECTOR = '.vst-audio-clip[data-vst-audio="clip"]';
@@ -8314,6 +6714,124 @@
     return { attach, dispose };
   };
 
+  // frontend/timelineDetail.ts
+  var DEFAULT_FPS = 24;
+  var safeFps = (fps) => typeof fps === "number" && Number.isFinite(fps) && fps > 0 ? fps : DEFAULT_FPS;
+  var keyframeTimeSeconds = (frame, fromEnd, clipDurationSeconds, fps) => {
+    const duration = Math.max(0, clipDurationSeconds || 0);
+    const offset = Math.max(0, frame || 0) / safeFps(fps);
+    const raw = fromEnd ? duration - offset : offset;
+    return Math.min(Math.max(raw, 0), duration);
+  };
+  var formatTimeLabel = (seconds, unit, fps) => {
+    if (unit === "frames") {
+      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
+    }
+    const rounded = Math.round((seconds || 0) * 10) / 10;
+    return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`;
+  };
+  var formatOverlapSeconds = (frames, fps) => `${(frames / Math.max(1, fps)).toFixed(2)}s`;
+  var RULER_MIN_TICK_SPACING_PX = 60;
+  var RULER_STEP_LADDER_SECONDS = [
+    0.5,
+    1,
+    2,
+    5,
+    10,
+    15,
+    30,
+    60,
+    120,
+    300,
+    600,
+    900,
+    1800,
+    3600
+  ];
+  var chooseRulerStepSeconds = (pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
+    const pps = pxPerSecond > 0 ? pxPerSecond : 1;
+    for (const step of RULER_STEP_LADDER_SECONDS) {
+      if (step * pps >= minSpacingPx) {
+        return step;
+      }
+    }
+    return RULER_STEP_LADDER_SECONDS[RULER_STEP_LADDER_SECONDS.length - 1];
+  };
+  var computeRulerTicks = (totalSeconds, pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
+    const total = Math.max(0, totalSeconds || 0);
+    if (total <= 0 || pxPerSecond <= 0) {
+      return [{ x: 0, seconds: 0 }];
+    }
+    const step = chooseRulerStepSeconds(pxPerSecond, minSpacingPx);
+    const ticks = [];
+    const MAX_TICKS = 1e3;
+    for (let i = 0; i < MAX_TICKS; i++) {
+      const t = i * step;
+      if (t > total + 1e-6) {
+        break;
+      }
+      ticks.push({ x: t * pxPerSecond, seconds: t });
+    }
+    return ticks;
+  };
+  var formatRulerLabel = (seconds, unit, fps) => {
+    if (unit === "frames") {
+      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
+    }
+    const s = Math.max(0, seconds || 0);
+    if (s >= 60) {
+      const totalWhole = Math.round(s);
+      const mm = Math.floor(totalWhole / 60);
+      const ss = totalWhole % 60;
+      return `${mm}:${`${ss}`.padStart(2, "0")}`;
+    }
+    return formatTimeLabel(s, unit, fps);
+  };
+  var truncate = (value, max = 80) => {
+    const text2 = `${value ?? ""}`;
+    return text2.length <= max ? text2 : `${text2.slice(0, Math.max(0, max - 1))}…`;
+  };
+  var refSourceLabel = (source) => {
+    const value = `${source ?? ""}`.trim();
+    if (!value) {
+      return REF_SOURCE_REFINER;
+    }
+    const editStage = parseBase2EditStageIndex(value);
+    if (editStage != null) {
+      return `Base2Edit Edit ${editStage}`;
+    }
+    return value;
+  };
+  var audioSourceBadge = (source) => {
+    const value = `${source ?? ""}`.trim();
+    if (!value || value === "Native") {
+      return { label: "Native", title: "Audio source: Native" };
+    }
+    return { label: value, title: `Audio source: ${value}` };
+  };
+  var shortModelName = (model) => {
+    const raw = `${model ?? ""}`.trim();
+    if (!raw) {
+      return "(default)";
+    }
+    const segment = raw.split(/[\\/]/).pop() ?? raw;
+    return segment.replace(/\.(safetensors|ckpt|pt|pth|gguf|sft|bin)$/i, "");
+  };
+  var stageChipLabel = (index) => `S${index}`;
+  var stageChipTitle = (stage, index) => {
+    const parts = [
+      `Stage ${index}${index === 0 ? " (full gen)" : " (refine)"}`,
+      `model: ${shortModelName(stage?.model ?? "")}`,
+      `steps: ${stage?.steps ?? "?"}`,
+      `cfg: ${stage?.cfgScale ?? "?"}`,
+      `control: ${stage?.control ?? "?"}`
+    ];
+    if (stage?.skipped) {
+      parts.push("skipped");
+    }
+    return parts.join(" · ");
+  };
+
   // frontend/detailWidgets.ts
   var sliderSeq = 0;
   var helpSeq = 0;
@@ -8384,10 +6902,10 @@
   };
   var buildFieldLabel = (label) => {
     const labelEl = document.createElement("label");
-    const text = document.createElement("span");
-    text.className = "auto-input-name vst-detail-field-label";
-    text.textContent = label;
-    labelEl.appendChild(text);
+    const text2 = document.createElement("span");
+    text2.className = "auto-input-name vst-detail-field-label";
+    text2.textContent = label;
+    labelEl.appendChild(text2);
     return labelEl;
   };
   var buildField = (label, control, hint, help) => {
@@ -8824,6 +7342,9 @@
       if (item.focusKey) {
         header.dataset.vstFocusKey = item.focusKey;
       }
+      if (item.title) {
+        header.title = item.title;
+      }
       const labelWrap = document.createElement("span");
       labelWrap.className = "header-label-wrap";
       const symbol = document.createElement("span");
@@ -8937,7 +7458,7 @@
     });
     const add = document.createElement("button");
     add.type = "button";
-    add.className = `vst-add-btn vst-detail-repeating-add ${spec.add.className}`.trim();
+    add.className = `basic-button small-button vst-detail-repeating-add ${spec.add.className}`.trim();
     add.textContent = spec.add.label ?? "+ Add";
     add.title = spec.add.title;
     add.setAttribute("aria-label", spec.add.title);
@@ -9023,16 +7544,17 @@
   };
 
   // frontend/detailStrip/draftQueue.ts
+  var asCommand = (outcome) => typeof outcome === "object" && outcome !== null && "command" in outcome ? outcome : null;
   var DEBOUNCE_MS = 200;
   var createDetailDraftQueue = (options) => {
-    let sourceToken = "";
+    let sourceRevision = -1;
     let pendingTimer = null;
     let flushing = false;
     const pending = /* @__PURE__ */ new Map();
     const markCurrentSource = () => {
-      sourceToken = readStateToken();
+      sourceRevision = getTimelineStore().revision();
     };
-    const isStale = () => readStateToken() !== sourceToken;
+    const isStale = () => getTimelineStore().revision() !== sourceRevision;
     const writeBackClamped = (entries, clips) => {
       const dock = options.getDock();
       if (!dock || !clips) {
@@ -9156,23 +7678,40 @@
         options.render();
         return;
       }
+      const snapshot = getTimelineStore().getSnapshot();
       const clips = getClips();
       const outcome = apply(clips);
       if (outcome === null) {
         return;
       }
-      saveClips(clips, { origin: "detail-strip" });
+      const commanded = asCommand(outcome);
+      if (commanded) {
+        const result = dispatchDocumentCommand(commanded.command, {
+          origin: "detail-strip",
+          expectedRevision: snapshot.revision
+        });
+        if (!result.applied) {
+          options.render();
+          return;
+        }
+      } else {
+        saveClips(clips, { origin: "detail-strip" });
+      }
       markCurrentSource();
-      if (outcome === "render") {
+      const selection2 = commanded ? commanded.selection : outcome;
+      if (selection2 === null) {
+        return;
+      }
+      if (selection2 === "render") {
         options.render();
         return;
       }
       if (structuralOptions?.rebuildAfterSelect) {
-        options.setSelectionSilently(outcome);
+        options.setSelectionSilently(selection2);
         options.render();
         return;
       }
-      setSelection(outcome);
+      setSelection(selection2);
     };
     return {
       markCurrentSource,
@@ -9418,248 +7957,6 @@
     });
   };
 
-  // frontend/detailStrip/capabilityUi.ts
-  var buildCapabilityNotice = (decision) => {
-    const notice = document.createElement("p");
-    notice.className = "vst-detail-note vst-capability-notice";
-    notice.textContent = decision.reason;
-    notice.dataset.vstCapabilityUnsupported = "true";
-    return notice;
-  };
-  var disableCapabilityControls = (root, decision, removableSelectors = []) => {
-    const removable = new Set(
-      removableSelectors.flatMap(
-        (selector) => Array.from(root.querySelectorAll(selector))
-      )
-    );
-    for (const control of root.querySelectorAll("input, select, textarea, button")) {
-      if (removable.has(control) || [...removable].some((element) => element.contains(control))) {
-        continue;
-      }
-      control.disabled = true;
-      control.title = decision.reason;
-    }
-    if (root instanceof DocumentFragment) {
-      for (const child of root.children) {
-        child.classList.add("vst-capability-readonly");
-      }
-    } else {
-      root.classList.add("vst-capability-readonly");
-    }
-    root.prepend(buildCapabilityNotice(decision));
-  };
-
-  // frontend/detailStrip/audioSegmentPanel.ts
-  var buildAudioSegmentSection = (ctx, clipIdx, selectedSegmentIndex, clips, open = selectedSegmentIndex !== null) => {
-    const clip = clips[clipIdx];
-    const segments = clip?.audioSegments ?? [];
-    const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
-    const decision = ctx.capabilities().forClip(clip).decision("audioSegments");
-    const clampSegment = (start, length) => clampStartLength(start, length, clipDur, AUDIO_SEGMENT_MIN_LENGTH);
-    const activeSegmentIndex = selectedSegmentIndex !== null && selectedSegmentIndex >= 0 && selectedSegmentIndex < segments.length ? selectedSegmentIndex : segments.length > 0 ? 0 : null;
-    const buildEditor = (segIdx) => {
-      const segment = segments[segIdx];
-      if (!segment) {
-        return void 0;
-      }
-      const fields = document.createElement("div");
-      fields.className = "vst-detail-col vst-detail-instance-fields vst-detail-seg-row";
-      fields.dataset.vstSegIndex = `${segIdx}`;
-      const segSourceRef = typeof segment.source === "string" ? segment.source : "";
-      const segSourceValue = segSourceRef || AUDIO_SOURCE_UPLOAD;
-      const segSourceSelect = buildOptionSelect(
-        buildSegmentAudioSourceOptions(segSourceRef),
-        segSourceValue,
-        (value) => {
-          ctx.commit((cs) => {
-            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-            if (!seg) {
-              return;
-            }
-            if (isAceStepFunAudioSource(value)) {
-              seg.source = value;
-            } else if (typeof seg.source === "string") {
-              seg.source = null;
-            }
-          });
-          ctx.render();
-        }
-      );
-      fields.appendChild(
-        buildField(
-          "Source",
-          segSourceSelect,
-          void 0,
-          "Where this overlay segment's audio comes from — an uploaded file or a generated track. It is mixed on top of the clip's base audio."
-        )
-      );
-      if (!segSourceRef) {
-        fields.appendChild(
-          buildMediaPickRow(
-            "Audio Upload",
-            "audio/*",
-            ["audio"],
-            typeof segment.source === "string" ? void 0 : segment.source?.fileName,
-            (data, fileName) => {
-              ctx.commit((cs) => {
-                const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                if (seg) {
-                  seg.source = { data, fileName };
-                }
-              });
-              ctx.render();
-            },
-            () => {
-              ctx.commit((cs) => {
-                const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-                if (seg) {
-                  seg.source = null;
-                }
-              });
-              ctx.render();
-            }
-          )
-        );
-      }
-      const volumeSlider = buildSlider(
-        "Volume",
-        segment.volume,
-        AUDIO_SEGMENT_VOLUME_MIN,
-        AUDIO_SEGMENT_VOLUME_MAX,
-        AUDIO_SEGMENT_VOLUME_SLIDER_STEP,
-        (value) => {
-          ctx.debouncedCommit(`seg-${segIdx}-volume`, (cs) => {
-            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-            if (seg) {
-              seg.volume = Math.min(
-                AUDIO_SEGMENT_VOLUME_MAX,
-                Math.max(AUDIO_SEGMENT_VOLUME_MIN, value)
-              );
-            }
-          });
-        },
-        {
-          sliderMin: AUDIO_SEGMENT_VOLUME_SLIDER_MIN,
-          sliderMax: AUDIO_SEGMENT_VOLUME_SLIDER_MAX,
-          numberStep: "any",
-          help: "Relative loudness before this segment is mixed over the clip. 1 keeps its original level, values below 1 make it quieter, and values above 1 make it louder. The slider covers 0.1–4; the number input accepts 0.00001–100000 (-100 dB to +100 dB)."
-        }
-      );
-      volumeSlider.querySelector("input.auto-slider-number")?.setAttribute("data-vst-focus-key", `seg-${segIdx}-volume`);
-      fields.appendChild(volumeSlider);
-      const startInput = ctx.buildClampedNumber({
-        key: `seg-${segIdx}-start`,
-        value: segment.startSeconds,
-        min: 0,
-        max: Math.max(0, clipDur - AUDIO_SEGMENT_MIN_LENGTH),
-        step: AUDIO_SEGMENT_STEP,
-        readBack: (cs) => cs[clipIdx]?.audioSegments?.[segIdx]?.startSeconds ?? null,
-        mutate: (cs, value) => {
-          const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-          if (seg) {
-            const next = clampSegment(value, seg.lengthSeconds);
-            seg.startSeconds = next.start;
-            seg.lengthSeconds = next.length;
-          }
-        }
-      });
-      fields.appendChild(
-        buildField(
-          "Start (s)",
-          startInput,
-          void 0,
-          "When this segment begins on the clip's timeline, in seconds from the clip start."
-        )
-      );
-      const trimInput = buildNumber(
-        segment.trimStartSeconds,
-        0,
-        CLIP_DURATION_MAX,
-        AUDIO_SEGMENT_STEP,
-        (value) => {
-          ctx.debouncedCommit(`seg-${segIdx}-trim`, (cs) => {
-            const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-            if (seg) {
-              seg.trimStartSeconds = Math.max(
-                0,
-                Math.round(value * 10) / 10
-              );
-            }
-          });
-        }
-      );
-      trimInput.setAttribute("data-vst-focus-key", `seg-${segIdx}-trim`);
-      fields.appendChild(
-        buildField(
-          "Trim start (s)",
-          trimInput,
-          void 0,
-          "Skip this many seconds from the beginning of the source audio before it starts playing — lets you use a later portion of the file."
-        )
-      );
-      const lengthInput = ctx.buildClampedNumber({
-        key: `seg-${segIdx}-length`,
-        value: segment.lengthSeconds,
-        min: AUDIO_SEGMENT_MIN_LENGTH,
-        max: clipDur,
-        step: AUDIO_SEGMENT_STEP,
-        readBack: (cs) => cs[clipIdx]?.audioSegments?.[segIdx]?.lengthSeconds ?? null,
-        mutate: (cs, value) => {
-          const seg = cs[clipIdx]?.audioSegments?.[segIdx];
-          if (seg) {
-            const next = clampSegment(seg.startSeconds, value);
-            seg.startSeconds = next.start;
-            seg.lengthSeconds = next.length;
-          }
-        }
-      });
-      fields.appendChild(
-        buildField(
-          "Length (s)",
-          lengthInput,
-          void 0,
-          "How long this segment plays on the clip, in seconds."
-        )
-      );
-      if (!decision.supported) {
-        disableCapabilityControls(fields, decision);
-      }
-      return fields;
-    };
-    const note = document.createElement("p");
-    note.className = "vst-detail-note";
-    note.textContent = segments.length === 0 ? "No overlay segments." : "Overlaid additively over the base audio; overlapping segments mix together.";
-    const built = buildRepeatingEditor({
-      key: "audio-segments",
-      label: "Audio Segments",
-      sectionClass: "vst-detail-audio-segments",
-      open,
-      items: segments.map((_, segIdx) => ({
-        label: `S${segIdx + 1}`,
-        focusKey: `audio-segment-tab-${segIdx}`,
-        title: `Edit segment ${segIdx + 1}`,
-        active: segIdx === activeSegmentIndex,
-        className: "vst-segment-tab",
-        onSelect: () => setSelection({ kind: "audio-segment", clipIdx, segIdx }),
-        onShiftDelete: () => ctx.removeAudioSegment(clipIdx, segIdx)
-      })),
-      add: {
-        title: decision.supported ? "Overlay an extra audio piece on this clip" : decision.reason,
-        label: "+ Add Audio Segment",
-        className: "vst-detail-add-segment",
-        disabled: !decision.supported,
-        onClick: () => ctx.addAudioSegment(clipIdx)
-      },
-      remove: {
-        title: activeSegmentIndex === null ? "No audio segment to delete" : `Delete audio segment ${activeSegmentIndex + 1}`,
-        className: "vst-detail-delete-segment"
-      },
-      editorForItem: buildEditor
-    });
-    built.content.insertBefore(note, built.content.firstChild);
-    return built.section;
-  };
-
   // frontend/detailStrip/audioTracksPanel.ts
   var timelineDuration2 = (state) => state.clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
   var primarySpan = (track) => track.spans[0] ?? null;
@@ -9902,16 +8199,12 @@
         spans: [
           {
             id: createEntityId("audio_span"),
-            firstClipId: null,
-            lastClipId: null,
             timelineStartSeconds: start,
             timelineLengthSeconds: Math.min(
               AUDIO_SEGMENT_DEFAULT_LENGTH,
               availableLength
             ),
-            sourceStartSeconds: 0,
-            clipStartOffsetSeconds: null,
-            clipLengthSeconds: null
+            sourceStartSeconds: 0
           }
         ]
       });
@@ -9941,12 +8234,13 @@
           ctx.commitState((next) => {
             next.audioTracks?.splice(trackIndex, 1);
           });
-          const remaining = tracks.length - 1;
           setSelection(
-            remaining > 0 ? {
-              kind: "audio-track",
-              trackIdx: Math.min(trackIndex, remaining - 1)
-            } : { kind: "none" }
+            selectionAfterRemoval(
+              trackIndex,
+              tracks.length - 1,
+              (index) => ({ kind: "audio-track", trackIdx: index }),
+              { kind: "none" }
+            )
           );
           ctx.render();
         }
@@ -9984,6 +8278,37 @@
     return body;
   };
 
+  // frontend/detailStrip/capabilityUi.ts
+  var buildCapabilityNotice = (decision) => {
+    const notice = document.createElement("p");
+    notice.className = "vst-detail-note vst-capability-notice";
+    notice.textContent = decision.reason;
+    notice.dataset.vstCapabilityUnsupported = "true";
+    return notice;
+  };
+  var disableCapabilityControls = (root, decision, removableSelectors = []) => {
+    const removable = new Set(
+      removableSelectors.flatMap(
+        (selector) => Array.from(root.querySelectorAll(selector))
+      )
+    );
+    for (const control of root.querySelectorAll("input, select, textarea, button")) {
+      if (removable.has(control) || [...removable].some((element) => element.contains(control))) {
+        continue;
+      }
+      control.disabled = true;
+      control.title = decision.reason;
+    }
+    if (root instanceof DocumentFragment) {
+      for (const child of root.children) {
+        child.classList.add("vst-capability-readonly");
+      }
+    } else {
+      root.classList.add("vst-capability-readonly");
+    }
+    root.prepend(buildCapabilityNotice(decision));
+  };
+
   // frontend/detailStrip/audioPanel.ts
   var buildAudioBody = (ctx, sel, clips) => {
     const { clipIdx } = sel;
@@ -9991,7 +8316,6 @@
     const capabilityView = ctx.capabilities().forClip(clip);
     const audioDecision = capabilityView.decision("clipAudio");
     const reuseDecision = capabilityView.decision("audioReuse");
-    const segmentDecision = capabilityView.decision("audioSegments");
     const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
       clip.architecture,
       clip.icLoras
@@ -10148,39 +8472,22 @@
         key: "base-audio",
         label: "Base Audio",
         content: base,
-        open: sel.kind === "audio",
+        open: true,
         flattenContent: true
       }).section
     );
-    if (sel.kind === "audio-segment" || (clip.audioSegments?.length ?? 0) > 0) {
-      const segments = buildAudioSegmentSection(
+    const state = getState();
+    body.appendChild(
+      buildAudioTracksPanel(
         ctx,
-        clipIdx,
-        sel.kind === "audio-segment" ? sel.segIdx : null,
-        clips,
-        sel.kind === "audio-segment"
-      );
-      if (!segmentDecision.supported && (clip.audioSegments?.length ?? 0) > 0) {
-        segments.appendChild(buildCapabilityNotice(segmentDecision));
-      }
-      body.appendChild(segments);
-    } else {
-      const state = getState();
-      body.appendChild(
-        buildAudioTracksPanel(
-          ctx,
-          state,
-          { kind: "none" },
-          {
-            trackIndices: audioTrackIndicesForClipWindow(
-              state,
-              clipIdx
-            ),
-            clipWindow: clipTimelineWindow(state.clips, clipIdx) ?? void 0
-          }
-        )
-      );
-    }
+        state,
+        { kind: "none" },
+        {
+          trackIndices: audioTrackIndicesForClipWindow(state, clipIdx),
+          clipWindow: clipTimelineWindow(state.clips, clipIdx) ?? void 0
+        }
+      )
+    );
     return body;
   };
 
@@ -10248,6 +8555,768 @@
       overlaps,
       fallback: requested > 0 && !modes.some((_mode, index) => active(index))
     };
+  };
+
+  // frontend/skipVocabulary.ts
+  var skipGlyph = (skipped) => skipped ? "⟲" : "⏭︎";
+  var skipTitle = (subject, skipped) => `${skipped ? "Re-enable" : "Skip"} ${subject}`;
+
+  // frontend/timelineView/rendering.ts
+  var clipInnerWidth = (widthPx) => Math.max(1, widthPx - 2);
+  var backgroundImageDataAttr = (source) => ` data-vst-background-image="${escapeAttr(source)}"`;
+  var applyBackgroundImages = (root) => {
+    for (const element of root.querySelectorAll(
+      "[data-vst-background-image]"
+    )) {
+      const source = element.dataset.vstBackgroundImage;
+      if (source) {
+        element.style.backgroundImage = `url(${JSON.stringify(source)})`;
+      }
+      element.removeAttribute("data-vst-background-image");
+    }
+  };
+  var renderWindowSpan = (options) => {
+    const { left, width, empty } = spanGeometry(
+      options.startSeconds,
+      options.lengthSeconds,
+      options.durationSeconds
+    );
+    if (empty) {
+      return "";
+    }
+    return `<div class="${options.className}${options.extraClassName ? ` ${options.extraClassName}` : ""}" ${options.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeAttr(options.title)}" aria-label="${escapeAttr(options.ariaLabel)}"><span class="${options.className}-resize ${options.className}-resize-l" ${options.edgeAttr}="left" aria-hidden="true"></span>` + (options.decoration ?? "") + `<span class="${options.labelClass}">${escapeAttr(options.label)}</span><span class="${options.className}-resize ${options.className}-resize-r" ${options.edgeAttr}="right" aria-hidden="true"></span></div>`;
+  };
+  var headTag = (kind, label, options) => {
+    const classes = `vst-head-tag vst-head-tag-${kind}` + (options?.active ? " vst-head-tag-active" : "") + (options?.muted ? " vst-head-tag-muted" : "");
+    const style = options?.style ? ` style="${options.style}"` : "";
+    return `<div class="${classes}"${style} aria-hidden="true"><span class="vst-head-tag-pill">${label}</span><span class="vst-head-tag-tick"></span></div>`;
+  };
+  var renderTrackHead = (iconClass, icon, title, tags) => `<div class="vst-track-head"><div class="vst-head-top"><div class="vst-track-icon ${iconClass}" aria-hidden="true">${icon}</div><div class="vst-track-label"><strong>${title}</strong></div></div>` + (tags ? `<div class="vst-head-tags">${tags}</div>` : "") + `</div>`;
+
+  // frontend/timelineView/regionRenderer.ts
+  var refFrame = (ref) => Math.max(0, ref.frame ?? 0);
+  var renderRegionThumb = (clip) => {
+    const withImage = (clip.refs ?? []).filter(
+      (ref) => !!ref.uploadedImage?.data
+    );
+    if (withImage.length === 0) {
+      return "";
+    }
+    const startPool = withImage.filter((ref) => ref.fromEnd !== true);
+    const startRef = (startPool.length > 0 ? startPool : withImage).reduce(
+      (best, ref) => refFrame(ref) < refFrame(best) ? ref : best
+    );
+    let endRef = withImage.find((ref) => ref.fromEnd === true) ?? null;
+    if (!endRef) {
+      const highest = withImage.reduce(
+        (best, ref) => refFrame(ref) > refFrame(best) ? ref : best
+      );
+      if (highest !== startRef) {
+        endRef = highest;
+      }
+    }
+    const cell = (ref, side) => {
+      const source = mediaPreviewSrc(ref.uploadedImage?.data ?? "");
+      return `<div class="vst-region-thumb-cell vst-region-thumb-${side}"${backgroundImageDataAttr(source)}></div>`;
+    };
+    const cells = cell(startRef, "start") + (endRef ? cell(endRef, "end") : "");
+    return `<div class="vst-region-thumb" data-cells="${endRef ? 2 : 1}" aria-hidden="true">${cells}</div>`;
+  };
+  var renderRetakeRegionShade = (clip, durationSeconds) => {
+    const retake = clip.retake;
+    if (!retake || durationSeconds <= 0) {
+      return "";
+    }
+    const { left, width, empty } = spanGeometry(
+      retake.startSeconds,
+      retake.lengthSeconds,
+      durationSeconds
+    );
+    if (empty) {
+      return "";
+    }
+    return `<div class="vst-region-off" style="left:${left}%;width:${width}%" aria-hidden="true"></div>`;
+  };
+  var renderRetakeOverlay = (clip, clipIdx, durationSeconds) => {
+    const retake = clip.retake;
+    if (!retake || durationSeconds <= 0) {
+      return "";
+    }
+    const { startSeconds: start, endSeconds: end } = spanGeometry(
+      retake.startSeconds,
+      retake.lengthSeconds,
+      durationSeconds
+    );
+    const label = `RETAKE ${roundToTenth(start)}–${roundToTenth(end)} s`;
+    return renderWindowSpan({
+      className: "vst-retake",
+      dataAttrs: `data-vst-retake data-clip-idx="${clipIdx}"`,
+      edgeAttr: "data-vst-retake-edge",
+      labelClass: "vst-retake-label",
+      label,
+      title: `${label} · drag to move/resize · Shift+click to delete`,
+      ariaLabel: label,
+      startSeconds: retake.startSeconds,
+      lengthSeconds: retake.lengthSeconds,
+      durationSeconds
+    });
+  };
+  var renderKeyframes = (clip, clipIdx, durationSeconds, fps, unit) => {
+    const refs = clip.refs ?? [];
+    if (refs.length === 0) {
+      return "";
+    }
+    const markers = refs.map((ref, refIdx) => {
+      const time = keyframeTimeSeconds(
+        ref.frame,
+        ref.fromEnd === true,
+        durationSeconds,
+        fps
+      );
+      const left = keyframeLeftPercent(time, durationSeconds);
+      const isEnd = ref.fromEnd === true;
+      const isPrimary = (ref.frame ?? 0) === 1 && !isEnd;
+      const source = refSourceLabel(ref.source ?? "");
+      const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""}${isPrimary ? " (cover)" : ""} · ${formatTimeLabel(time, unit, fps)}`;
+      const kindClass = (isEnd ? " vst-key-end" : " vst-key-start") + (isPrimary ? " vst-key-primary" : "");
+      return `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeAttr(title)}" aria-hidden="true"><span class="vst-key-dot" aria-hidden="true"></span></span>`;
+    }).join("");
+    return `<div class="vst-keys" title="Reference markers">${markers}</div>`;
+  };
+  var renderBadges = (clip, clipIdx) => {
+    const firstStage = (clip.stages ?? [])[0];
+    if (!firstStage) {
+      return `<div class="vst-badges"></div>`;
+    }
+    const model = firstStage.model ?? "";
+    const title = `Clip model: ${`${model}`.trim() || "(default)"} — click to change (applies to Stage 0)`;
+    const modelBadge = `<span class="vst-badge vst-badge-model" data-vst-model data-clip-idx="${clipIdx}" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}">${escapeAttr(shortModelName(model))}</span>`;
+    const icLoraCount = (clip.icLoras ?? []).length;
+    const icLoraTitle = `${icLoraCount} IC-LoRA${icLoraCount === 1 ? "" : "s"} on this clip — edit in the clip panel`;
+    const icLoraBadge = icLoraCount > 0 ? `<span class="vst-badge vst-badge-iclora" title="${escapeAttr(icLoraTitle)}" aria-label="${escapeAttr(icLoraTitle)}">IC×${icLoraCount}</span>` : "";
+    return `<div class="vst-badges">${modelBadge}${icLoraBadge}</div>`;
+  };
+  var renderStageChips = (clip, clipIdx) => (clip.stages ?? []).map((stage, stageIdx) => {
+    const skipped = stage?.skipped === true;
+    const skippedClass = skipped ? " vst-stage-chip-skipped" : "";
+    const title = `${stageChipTitle(stage, stageIdx)}${skipped ? " (skipped)" : ""} · click to edit · Shift+click to delete`;
+    const label = `${skipped ? "⊘ " : ""}${stageChipLabel(stageIdx)}`;
+    return `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeAttr(title)}">${escapeAttr(label)}</span>`;
+  }).join("");
+  var lengthDerived = (clip) => clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
+  var BOUNDARY_GLYPH = {
+    cut: "│",
+    continue: "→",
+    crossfade: "⤬"
+  };
+  var BOUNDARY_LABEL = {
+    cut: "Cut",
+    continue: "Continue",
+    crossfade: "Crossfade"
+  };
+  var renderBoundarySeams = (clips, layouts, capabilities) => {
+    const seams = [];
+    for (let i = 1; i < layouts.length; i++) {
+      const leftClipIdx = i - 1;
+      const clip = clips[leftClipIdx];
+      if (!clip) {
+        continue;
+      }
+      const value = clip.boundaryOut ?? "cut";
+      const capability = capabilities?.forBoundaryIndex(clips, leftClipIdx);
+      const effective = capability?.effective(value) ?? value;
+      const glyph = BOUNDARY_GLYPH[effective] ?? BOUNDARY_GLYPH.cut;
+      const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
+      const effectiveLabel = BOUNDARY_LABEL[effective];
+      const targetNumber = capability?.rightClipIdx === null || capability?.rightClipIdx === void 0 ? i : capability.rightClipIdx;
+      const fallback = value === effective ? "" : ` Requested ${label}; effective ${effectiveLabel}.`;
+      const title = `Boundary clip ${leftClipIdx} → ${targetNumber}: ${label}.${fallback} Click to edit.`;
+      const ariaLabel = `Clip ${leftClipIdx} outgoing boundary: ${label}.${fallback} Click to edit.`;
+      seams.push(
+        `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${layouts[i].startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
+      );
+    }
+    return seams.join("");
+  };
+  var renderRegions = (clips, layouts, fps, unit, capabilities) => layouts.map((layout) => {
+    const clip = clips[layout.index];
+    const skippedClass = layout.skipped ? " vst-region-skipped" : "";
+    const tinyClass = layout.widthPx <= 12 ? " vst-region-tiny" : "";
+    const skippedChip = layout.skipped ? `<span class="vst-chip vst-chip-skip">skipped</span>` : "";
+    const duration = escapeAttr(
+      formatTimeLabel(layout.durationSeconds, unit, fps)
+    );
+    const skipLabel = skipTitle("clip", layout.skipped);
+    const skipMark = skipGlyph(layout.skipped);
+    const controls = `<div class="vst-region-controls"><button type="button" class="vst-region-btn${layout.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipLabel}" aria-label="${skipLabel}">${skipMark}</button></div>`;
+    const resizeGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
+    const width = clipInnerWidth(layout.widthPx);
+    const retakeSupported = capabilities?.forClip(clip).decision("retake").supported ?? true;
+    const canAddRetake = retakeSupported && !clip.retake;
+    const retakeLaneAttrs = canAddRetake ? " data-vst-retake-add" : retakeSupported ? " data-vst-retake-full" : ' data-vst-capability-disabled="retake"';
+    const retakeLaneTitle = canAddRetake ? "Click empty space to add a retake window" : retakeSupported ? "This clip already has a retake window" : "Retakes are not supported by this clip architecture";
+    return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index} · ${duration} · Click to edit · Shift+click to delete">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
+      clip,
+      layout.index,
+      layout.durationSeconds,
+      fps,
+      unit
+    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` + renderRetakeOverlay(
+      clip,
+      layout.index,
+      layout.durationSeconds
+    ) + `</div>`;
+  }).join("");
+  var renderVideoTrackRow = (clips, layouts, fps, unit, capabilities) => {
+    const head = renderTrackHead(
+      "vst-track-icon-video",
+      "▶",
+      "Video",
+      headTag("clip", "Clip", { active: true }) + headTag("retake", "Retake", {
+        active: clips.some((clip) => clip.retake != null)
+      })
+    );
+    return `<div class="vst-track-row vst-track-video">${head}<div class="vst-track-cell">` + renderRegions(clips, layouts, fps, unit, capabilities) + renderBoundarySeams(clips, layouts, capabilities) + `</div></div>`;
+  };
+
+  // frontend/dimensionPresets.ts
+  var DIMENSION_PRESET_METADATA = {
+    "256x384": [
+      "384x576,1.5",
+      "576x864,1.5,1.5",
+      "*768x1152,1.5,2",
+      "1152x1728,1.5,1.5,2"
+    ],
+    "384x512": [
+      "576x768,1.5",
+      "864x1152,1.5,1.5",
+      "*1152x1536,1.5,2",
+      "1728x2304,1.5,1.5,2"
+    ],
+    "384x640": [
+      "576x960,1.5",
+      "864x1440,1.5,1.5",
+      "1152x1920,1.5,2",
+      "1728x2880,1.5,1.5,2"
+    ],
+    "512x768": [
+      "768x1152,1.5",
+      "*1152x1728,1.5,1.5",
+      "*1536x2304,1.5,2",
+      "2304x3456,1.5,1.5,2"
+    ],
+    "512x896": ["*1536x2688,1.5,2"],
+    "512x1024": ["*1152x2304,1.5,1.5", "*1536x3072,1.5,2"],
+    "768x1024": ["*1728x2304,1.5,1.5", "*2304x3072,1.5,2"],
+    "384x256": [
+      "576x384,1.5",
+      "864x576,1.5,1.5",
+      "*1152x768,1.5,2",
+      "1728x1152,1.5,1.5,2"
+    ],
+    "512x384": [
+      "768x576,1.5",
+      "1152x864,1.5,1.5",
+      "*1536x1152,1.5,2",
+      "2304x1728,1.5,1.5,2"
+    ],
+    "640x384": [
+      "960x576,1.5",
+      "1440x864,1.5,1.5",
+      "1920x1152,1.5,2",
+      "2880x1728,1.5,1.5,2"
+    ],
+    "768x512": [
+      "1152x768,1.5",
+      "*1728x1152,1.5,1.5",
+      "*2304x1536,1.5,2",
+      "3456x2304,1.5,1.5,2"
+    ],
+    "896x512": ["*2688x1536,1.5,2"],
+    "1024x512": ["*2304x1152,1.5,1.5", "*3072x1536,1.5,2"],
+    "1024x768": ["*2304x1728,1.5,1.5", "*3072x2304,1.5,2"]
+  };
+  var DIMENSION_PRESET_KEYS = Object.keys(
+    DIMENSION_PRESET_METADATA
+  );
+  var splitDimensionLabel = (label) => {
+    const [w, h] = label.replace("*", "").split("x");
+    return { width: Math.round(Number(w)), height: Math.round(Number(h)) };
+  };
+  var presetDimensions = (presetKey) => {
+    if (!presetKey || !DIMENSION_PRESET_METADATA[presetKey]) {
+      return null;
+    }
+    return splitDimensionLabel(presetKey);
+  };
+  var matchPresetKey = (width, height) => {
+    const w = Math.round(width);
+    const h = Math.round(height);
+    for (const key of DIMENSION_PRESET_KEYS) {
+      const dims = splitDimensionLabel(key);
+      if (dims.width === w && dims.height === h) {
+        return key;
+      }
+    }
+    return null;
+  };
+  var parsePresetStops = (presetKey) => {
+    const presetLines = DIMENSION_PRESET_METADATA[presetKey];
+    if (!presetLines || presetLines.length === 0) {
+      return [];
+    }
+    const out = [];
+    for (let i = 0; i < presetLines.length; i++) {
+      let line = presetLines[i].trim();
+      let controlNetFriendly = false;
+      if (line.startsWith("*")) {
+        controlNetFriendly = true;
+        line = line.slice(1);
+      }
+      const parts = line.split(",");
+      const { width, height } = splitDimensionLabel(parts[0]);
+      out.push({
+        width,
+        height,
+        controlNetFriendly,
+        steps: parts.slice(1)
+      });
+    }
+    return out;
+  };
+  var upscaleBadgeElement = (stop) => {
+    const badge = document.createElement("span");
+    badge.className = "param_view_block tag-text tag-type-8";
+    const resolution = `${stop.width}x${stop.height}`;
+    const stepCount = stop.steps.length;
+    const timesWord = stepCount === 1 ? "time" : "times";
+    let altText = `The chosen resolution can be scaled to ${stepCount} ${timesWord} for a resolution of ${resolution}`;
+    if (stop.controlNetFriendly) {
+      altText += ". It is also ControlNet-friendly";
+    }
+    badge.title = altText;
+    badge.setAttribute("aria-label", altText);
+    const star = stop.controlNetFriendly ? `<span class="controlnet-friendly">*</span> ` : "";
+    const stops = stop.steps.map((s) => `${s}x`).join(" ⇒ ");
+    badge.innerHTML = `${star}${resolution}, ${stops}`;
+    return badge;
+  };
+  var presetBadgeElements = (presetKey) => parsePresetStops(presetKey).map((stop) => upscaleBadgeElement(stop));
+
+  // frontend/timelineView/toolbar.ts
+  var renderDiagnosticPanel = (diagnostics = []) => {
+    const content = diagnostics.map(
+      (item) => `<div class="vst-diagnostic vst-diagnostic-${item.severity}" data-vst-diagnostic="${escapeAttr(item.code)}">${item.clipIdx === void 0 ? "" : `<strong>Clip ${item.clipIdx}:</strong> `}${escapeAttr(item.message)}</div>`
+    ).join("");
+    return content ? `<div class="vst-diagnostics" role="status">${content}</div>` : "";
+  };
+  var renderTimelineHeader = (clipCount, totalSeconds, fps, unit, pxPerSecond, options) => {
+    const toggleLabel = unit === "frames" ? "Show seconds" : "Show frames";
+    const clipWord = `clip${clipCount === 1 ? "" : "s"}`;
+    const totalLabel = escapeAttr(formatTimeLabel(totalSeconds, unit, fps));
+    const zoomPct = Math.round(pxPerSecond / DEFAULT_PX_PER_SECOND * 100);
+    const rawSelected = options?.selectedIndex;
+    const selectedIndex = typeof rawSelected === "number" && Number.isInteger(rawSelected) && rawSelected >= 0 && rawSelected < clipCount ? rawSelected : null;
+    const selectedHidden = selectedIndex === null ? " hidden" : "";
+    const readout = `<span class="vst-readout" data-vst-readout><span title="Sequence total">${totalLabel} total</span><span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
+    const width = Math.max(0, Math.round(options?.width ?? 0));
+    const height = Math.max(0, Math.round(options?.height ?? 0));
+    const dimsExplicit = options?.dimsExplicit === true;
+    const presetKey = dimsExplicit && width > 0 && height > 0 ? matchPresetKey(width, height) : null;
+    const dimsSource = dimsExplicit ? presetKey ? `${presetKey} preset` : "custom" : "inherited from image resolution";
+    const fpsSource = "synced with Video FPS";
+    const settingsTip = `Resolution: ${dimsSource}; FPS: ${fpsSource}. Click to edit.`;
+    const settingsChip = `<button type="button" class="basic-button small-button vst-settings-chip" data-vst-settings title="${escapeAttr(settingsTip)}" aria-label="${escapeAttr(settingsTip)}"><span class="vst-settings-dims">${width}×${height}</span><span class="vst-settings-chip-sep" aria-hidden="true">·</span><span class="vst-settings-fps">${fps} fps</span></button>`;
+    const enabled = options?.enabled !== false;
+    const enableToggle = `<label class="vst-enable" title="Enable VideoStages. While off, none of this timeline is sent to the backend — a normal image/video generates as usual."><span class="toggle-switch"><input type="checkbox" class="auto-slider-toggle vst-enable-input" role="switch" data-vst-enable${enabled ? " checked" : ""}><div class="auto-slider-toggle-content"></div></span><span class="vst-enable-label">Enable</span></label>`;
+    return `<div class="vst-topbar${enabled ? "" : " vst-topbar-disabled"}"><div class="vst-topbar-main"><span class="vst-title">Timeline</span>` + enableToggle + `<span class="vst-sub"><span class="vst-stat-num">${clipCount}</span> ${clipWord}</span>` + settingsChip + `</div><div class="vst-topbar-tools"><button type="button" class="basic-button small-button btn-primary vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button><span class="vst-tool-sep" aria-hidden="true"></span><div class="vst-zoom" role="group" aria-label="Timeline zoom (Ctrl+wheel over the track)"><button type="button" class="basic-button small-button" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button><span class="vst-zoom-pct" data-vst-zoom-pct title="Zoom level (100% = default)">${zoomPct}%</span><input type="range" class="vst-zoom-slider" data-vst-zoom-slider min="${MIN_PX_PER_SECOND}" max="${MAX_PX_PER_SECOND}" step="1" value="${Math.round(pxPerSecond)}" aria-label="Zoom (pixels per second)" title="Zoom (applies on release)"><button type="button" class="basic-button small-button" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button><button type="button" class="basic-button small-button" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button></div><span class="vst-tool-sep" aria-hidden="true"></span><button type="button" class="basic-button small-button vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button></div>` + readout + `</div>`;
+  };
+  var wireTimelineToolbar = (body, options) => {
+    const wire = (selector, handler) => {
+      if (!handler) {
+        return;
+      }
+      body.querySelector(selector)?.addEventListener(
+        "click",
+        () => handler()
+      );
+    };
+    const enableInput = body.querySelector("[data-vst-enable]");
+    if (enableInput && options?.onToggleEnabled) {
+      enableInput.addEventListener("change", () => {
+        options.onToggleEnabled?.(enableInput.checked);
+      });
+    }
+    const settingsButton = body.querySelector(
+      "[data-vst-settings]"
+    );
+    if (settingsButton && options?.onOpenSettings) {
+      settingsButton.addEventListener("click", () => {
+        options.onOpenSettings?.(settingsButton);
+      });
+    }
+    wire("[data-vst-unit-toggle]", options?.onToggleUnit);
+    wire("[data-vst-zoom-in]", options?.onZoomIn);
+    wire("[data-vst-zoom-out]", options?.onZoomOut);
+    wire("[data-vst-zoom-fit]", options?.onZoomFit);
+    wire("[data-vst-undo]", options?.onUndo);
+    wire("[data-vst-redo]", options?.onRedo);
+    const slider = body.querySelector(
+      "[data-vst-zoom-slider]"
+    );
+    if (slider) {
+      slider.addEventListener("input", () => {
+        const percent = body.querySelector(
+          "[data-vst-zoom-pct]"
+        );
+        if (percent) {
+          const value = Number.parseFloat(slider.value);
+          percent.textContent = `${Math.round(value / DEFAULT_PX_PER_SECOND * 100)}%`;
+        }
+      });
+      if (options?.onZoomSlider) {
+        slider.addEventListener("change", () => {
+          options.onZoomSlider?.(Number.parseFloat(slider.value));
+        });
+      }
+    }
+    if (options?.onAddClip) {
+      for (const button of body.querySelectorAll("[data-vst-add-clip]")) {
+        button.addEventListener("click", () => options.onAddClip?.());
+      }
+    }
+  };
+  var wireTimelineZoomWheel = (body, options) => {
+    const onZoomWheel = options?.onZoomWheel;
+    if (!onZoomWheel) {
+      return;
+    }
+    body.querySelector(".vst-scroll")?.addEventListener(
+      "wheel",
+      (event) => {
+        if (!event.ctrlKey && !event.metaKey) {
+          return;
+        }
+        event.preventDefault();
+        const factor = event.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
+        onZoomWheel(factor, event.clientX);
+      },
+      { passive: false }
+    );
+  };
+
+  // frontend/timelineView/trackRows.ts
+  var promptWindowGeom = (layout, window2, pxPerSecond) => {
+    const geometry = spanGeometry(
+      window2.start,
+      window2.duration,
+      layout.durationSeconds,
+      { unit: "px", pxPerSecond, minWidth: 2 }
+    );
+    return {
+      startSec: geometry.startSeconds,
+      endSec: geometry.endSeconds,
+      leftPx: geometry.left,
+      widthPx: geometry.width,
+      active: `${window2.prompt ?? ""}`.trim() !== ""
+    };
+  };
+  var PROMPT_PLACEHOLDER = "(no prompt)";
+  var renderPromptTrackRow = (clips, layouts, pxPerSecond, globalPrompt, capabilities) => {
+    const globalTrimmed = `${globalPrompt ?? ""}`.trim();
+    const parts = [];
+    for (let i = 0; i < layouts.length; i++) {
+      const layout = layouts[i];
+      const clip = clips[i];
+      if (!clip) {
+        continue;
+      }
+      const width = clipInnerWidth(layout.widthPx);
+      const windows = clip.promptWindows ?? [];
+      const clipCapabilities = capabilities?.forClip(clip);
+      const majorSupported = clipCapabilities?.decision("majorPrompt").supported ?? true;
+      const relaySupported = clipCapabilities?.decision("promptRelay").supported ?? true;
+      const ownPrompt = `${clip.prompt ?? ""}`.trim();
+      const inherited = ownPrompt === "";
+      const major = inherited ? globalTrimmed : ownPrompt;
+      const overlays = windows.map((window2) => promptWindowGeom(layout, window2, pxPerSecond)).filter(
+        (geometry) => geometry.active && geometry.endSec > geometry.startSec
+      ).map(
+        (geometry) => `<div class="vst-major-off" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" aria-hidden="true"></div>`
+      ).join("");
+      const majorText = major === "" ? PROMPT_PLACEHOLDER : truncate(major, 120);
+      const majorClass = (major === "" ? " vst-major-empty" : "") + (inherited && major !== "" ? " vst-major-inherited" : "");
+      const majorTitle = (major === "" ? PROMPT_PLACEHOLDER : major) + (inherited && major !== "" ? " — inherited from the global prompt; click to set a clip prompt" : " — click to edit");
+      if (majorSupported || ownPrompt !== "") {
+        parts.push(
+          `<div class="vst-major-seg${majorClass}${majorSupported ? "" : " vst-capability-disabled"}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(majorSupported ? majorTitle : `${majorTitle} — unsupported by this architecture`)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
+        );
+      }
+      const minorSegments = windows.map((window2, windowIdx) => {
+        const geometry = promptWindowGeom(layout, window2, pxPerSecond);
+        const text2 = `${window2.prompt ?? ""}`.trim();
+        const label = text2 === "" ? "(empty)" : truncate(text2, 60);
+        return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeAttr(`${text2 || "(empty minor prompt)"} · Shift+click to delete`)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
+      }).join("");
+      if (relaySupported || windows.length > 0) {
+        parts.push(
+          `<div class="vst-minor-lane${relaySupported ? "" : " vst-capability-disabled"}"${relaySupported ? " data-vst-prompt-add" : ""} data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${relaySupported ? "Click empty space to add a minor prompt" : "Relay prompts are unsupported; existing windows can be removed"}">${minorSegments}</div>`
+        );
+      }
+    }
+    return `<div class="vst-track-row vst-track-prompt">` + renderTrackHead(
+      "vst-track-icon-prompt",
+      "✎",
+      "Prompt",
+      headTag("major", "Major", { active: true }) + headTag("relay", "Relay", {
+        active: clips.some(
+          (clip) => (clip.promptWindows?.length ?? 0) > 0
+        )
+      })
+    ) + `<div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div></div>`;
+  };
+  var audioFlagChips = (clip) => {
+    const chips = [];
+    if (clip.reuseAudio === true) {
+      chips.push(
+        `<span class="vst-audio-flag" title="Capture audio after the second active stage and reuse it from the third active stage onward">↻</span>`
+      );
+    }
+    if (clip.clipLengthFromAudio === true) {
+      chips.push(
+        `<span class="vst-audio-flag" title="Clip length follows the audio length">⇥</span>`
+      );
+    }
+    if (clip.saveAudioTrack === true) {
+      chips.push(
+        `<span class="vst-audio-flag" title="Save a standalone MP3 for this clip's audio">MP3</span>`
+      );
+    }
+    return chips.length === 0 ? "" : `<span class="vst-audio-flags" aria-hidden="true">${chips.join("")}</span>`;
+  };
+  var renderTimelineAudioSegmentBlock = (track, trackIdx, totalSeconds) => {
+    const span = track.spans[0];
+    if (!span || span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
+      return "";
+    }
+    const { startSeconds: start, endSeconds: end } = spanGeometry(
+      span.timelineStartSeconds,
+      span.timelineLengthSeconds,
+      totalSeconds
+    );
+    const labelText = track.source.reference || track.source.uploadedAudio?.fileName || "audio segment";
+    const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
+    const waveform = audioSegmentWaveBarHeights(trackIdx, trackIdx, 40).map((height) => `<span style="height:${height}%"></span>`).join("");
+    return renderWindowSpan({
+      className: "vst-audio-seg",
+      extraClassName: `vst-audio-seg-tone-${trackIdx % 5}`,
+      dataAttrs: `data-vst-audio-seg data-track-idx="${trackIdx}"`,
+      edgeAttr: "data-vst-audio-seg-edge",
+      labelClass: "vst-audio-label",
+      label: labelText,
+      title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
+      ariaLabel: `Edit timeline audio segment ${trackIdx}`,
+      startSeconds: start,
+      lengthSeconds: end - start,
+      durationSeconds: totalSeconds,
+      decoration: `<span class="vst-audio-seg-wave" aria-hidden="true">${waveform}</span>`
+    });
+  };
+  var renderTimelineAudioSegmentLanes = (tracks, totalSeconds, totalWidthPx) => {
+    const place = (laneIdx) => `left:0;width:${totalWidthPx}px;--vst-audio-lane-idx:${laneIdx}`;
+    const lanes = tracks.map(
+      (track, trackIdx) => `<div class="vst-audio-seg-lane" data-track-idx="${trackIdx}" style="${place(trackIdx)}">` + renderTimelineAudioSegmentBlock(track, trackIdx, totalSeconds) + `</div>`
+    );
+    lanes.push(
+      `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add style="${place(tracks.length)}" title="Click or drag to add a timeline-wide audio segment"></div>`
+    );
+    return lanes.join("");
+  };
+  var renderAudioTrackRow = (clips, layouts, capabilities, audioTracks = [], pxPerSecond = 1) => {
+    const baseSegments = layouts.map((layout) => {
+      const clip = clips[layout.index];
+      if (!clip) {
+        return "";
+      }
+      const badge = audioSourceBadge(clip.audioSource ?? "");
+      const clipCapabilities = capabilities?.forClip(clip);
+      const clipAudioSupported = clipCapabilities?.decision("clipAudio").supported ?? true;
+      const persistedAudio = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.reuseAudio || clip.clipLengthFromAudio || clip.saveAudioTrack;
+      const native = badge.label === "Native";
+      const width = clipInnerWidth(layout.widthPx);
+      const kindClass = native ? " vst-audio-native vst-audio-kind-native" : isAceStepFunAudioSource(clip.audioSource ?? "") ? " vst-audio-kind-ace" : " vst-audio-kind-upload";
+      const upload = !native && clip.audioSource === "Upload" ? clip.uploadedAudio?.fileName : null;
+      const labelText = upload ? `${badge.label} · ${upload}` : badge.label;
+      const title = native ? "Audio: Native — click to choose an audio source" : `${badge.title} — click to edit`;
+      const barCount = Math.min(
+        400,
+        Math.max(8, Math.floor(width / 5.5))
+      );
+      const bars = waveBarHeights(layout.index, barCount).map((height) => `<span style="height:${height}%"></span>`).join("");
+      const hint = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : "";
+      const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
+      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${clipAudioSupported || persistedAudio ? ' data-vst-audio="clip"' : ""} data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(clipAudioSupported ? title : "Clip audio is unsupported; click persisted audio to remove it")}" aria-label="Edit audio for clip ${layout.index}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>`;
+    }).join("");
+    const totalSeconds = layouts.reduce(
+      (sum, layout) => sum + layout.durationSeconds,
+      0
+    );
+    const totalWidthPx = totalSeconds * pxPerSecond;
+    const overlaySegments = renderTimelineAudioSegmentLanes(
+      audioTracks,
+      totalSeconds,
+      totalWidthPx
+    );
+    const laneCount = Math.max(1, audioTracks.length + 1);
+    const laneTags = [headTag("src", "Clip", { active: true })];
+    for (let i = 0; i < laneCount; i++) {
+      const blank = i === laneCount - 1;
+      laneTags.push(
+        headTag("seg", blank ? "+" : `S${i}`, {
+          active: !blank,
+          muted: blank,
+          style: `--vst-audio-lane-idx:${i}`
+        })
+      );
+    }
+    return `<div class="vst-track-row vst-track-audio" style="--vst-audio-lane-count:${laneCount}">` + renderTrackHead(
+      "vst-track-icon-audio",
+      "♪",
+      "Audio",
+      laneTags.join("")
+    ) + `<div class="vst-track-cell vst-audio-cell">${baseSegments}${overlaySegments}</div></div>`;
+  };
+  var REF_EDGE_ALIGN_FRAMES = 3;
+  var renderReferencesTrackRow = (clips, layouts, fps, unit, capabilities) => {
+    const lanes = layouts.map((layout) => {
+      const clip = clips[layout.index];
+      if (!clip) {
+        return "";
+      }
+      const width = clipInnerWidth(layout.widthPx);
+      const refsSupported = capabilities?.forClip(clip).decision("frameReferences").supported ?? true;
+      const marks = (clip.refs ?? []).map((ref, refIdx) => {
+        const isEnd = ref.fromEnd === true;
+        const frame = Math.max(0, ref.frame ?? 0);
+        const isPrimary = frame === 1 && !isEnd;
+        const time = keyframeTimeSeconds(
+          ref.frame,
+          isEnd,
+          layout.durationSeconds,
+          fps
+        );
+        const left = keyframeLeftPercent(
+          time,
+          layout.durationSeconds
+        );
+        const source = refSourceLabel(ref.source ?? "");
+        const image = ref.uploadedImage?.data;
+        const thumbnailData = image ? backgroundImageDataAttr(mediaPreviewSrc(image)) : "";
+        const frameLabel = `R ${isEnd ? "-" : ""}${frame}`;
+        const thumbnailClass = `vst-refs-thumb${image ? " vst-refs-has-image" : ""}`;
+        const alignClass = frame > REF_EDGE_ALIGN_FRAMES ? "" : isEnd ? " vst-refs-align-end" : " vst-refs-align-start";
+        const kindClass = (isPrimary ? " vst-refs-primary" : "") + (isEnd ? " vst-refs-fromend" : "") + alignClass;
+        const title = `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move · Shift+click to delete`;
+        const label = `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})`;
+        return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}"><span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeAttr(frameLabel)}</span></span></div>`;
+      }).join("");
+      return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a reference image at this frame" : "Frame references are unsupported; existing references can be removed"}">${marks}</div>`;
+    }).join("");
+    return `<div class="vst-track-row vst-track-refs">` + renderTrackHead("vst-track-icon-refs", "⧉", "References", "") + `<div class="vst-track-cell">${lanes}</div></div>`;
+  };
+
+  // frontend/timelineView.ts
+  var renderRulerTicks = (layouts, totalSeconds, pxPerSecond, fps, unit) => {
+    const lastLayout = layouts[layouts.length - 1];
+    const endPx = lastLayout.startPx + lastLayout.widthPx;
+    const gridTicks = computeRulerTicks(totalSeconds, pxPerSecond).map(
+      (tick) => `<span class="vst-tick vst-tick-grid" style="left:${tick.x}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(tick.seconds, unit, fps))}</span></span>`
+    );
+    const minorStep = chooseRulerStepSeconds(pxPerSecond) / 5;
+    const minorTicks = [];
+    const maxMinorTicks = 5e3;
+    for (let i = 1; i <= maxMinorTicks; i++) {
+      const seconds = i * minorStep;
+      if (seconds > totalSeconds + 1e-6) {
+        break;
+      }
+      if (i % 5 === 0) {
+        continue;
+      }
+      minorTicks.push(
+        `<span class="vst-tick vst-tick-minor" style="left:${seconds * pxPerSecond}px" aria-hidden="true"></span>`
+      );
+    }
+    const seamTicks = layouts.slice(1).map(
+      (layout) => `<span class="vst-tick vst-tick-seam" style="left:${layout.startPx}px" aria-hidden="true"></span>`
+    );
+    const endTick = `<span class="vst-tick vst-tick-end" style="left:${endPx}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(totalSeconds, unit, fps))}</span></span>`;
+    return [...minorTicks, ...gridTicks, ...seamTicks, endTick].join("");
+  };
+  var renderTimeline = (body, clips, options) => {
+    const fps = safeFps(options?.fps);
+    const unit = options?.unit === "frames" ? "frames" : "seconds";
+    const pxPerSecond = clampPxPerSecond(
+      options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND
+    );
+    body.dataset.vstPps = String(pxPerSecond);
+    body.dataset.vstFps = String(fps);
+    const layouts = computeRegionLayout(clips, { pxPerSecond });
+    const totalSeconds = layouts.reduce(
+      (sum, layout) => sum + layout.durationSeconds,
+      0
+    );
+    const totalPx = layouts.reduce(
+      (max, layout) => Math.max(max, layout.startPx + layout.widthPx),
+      0
+    );
+    const header = renderTimelineHeader(
+      clips.length,
+      totalSeconds,
+      fps,
+      unit,
+      pxPerSecond,
+      options
+    );
+    const diagnostics = renderDiagnosticPanel(options?.diagnostics);
+    if (clips.length === 0) {
+      body.innerHTML = `${header}${diagnostics}<div class="vst-empty"><div class="vst-empty-icon" aria-hidden="true">🎬</div><div class="vst-empty-title">No clips yet.</div><div class="vst-empty-hint">Add one here — or in the VideoStages panel on the left — to start building your sequence.</div><button type="button" class="basic-button btn-primary vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button></div>`;
+      wireTimelineToolbar(body, options);
+      return;
+    }
+    const promptRow = renderPromptTrackRow(
+      clips,
+      layouts,
+      pxPerSecond,
+      `${options?.globalPrompt ?? ""}`,
+      options?.capabilities
+    );
+    const videoRow = renderVideoTrackRow(
+      clips,
+      layouts,
+      fps,
+      unit,
+      options?.capabilities
+    );
+    const referencesRow = renderReferencesTrackRow(
+      clips,
+      layouts,
+      fps,
+      unit,
+      options?.capabilities
+    );
+    const renderedAudioRow = renderAudioTrackRow(
+      clips,
+      layouts,
+      options?.capabilities,
+      options?.audioTracks,
+      pxPerSecond
+    );
+    const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
+    body.innerHTML = `${header}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, pxPerSecond, fps, unit)}</div></div>` + promptRow + videoRow + referencesRow + renderedAudioRow + `</div></div>`;
+    applyBackgroundImages(body);
+    wireTimelineToolbar(body, options);
+    wireTimelineZoomWheel(body, options);
   };
 
   // frontend/detailStrip/boundaryPanel.ts
@@ -10383,14 +9452,14 @@
         info.textContent = "This continue will fall back to a cut — a clip is too short for the overlap.";
       } else {
         const requested = (clip?.boundaryOutOverlap ?? overlapPolicy.defaultFrames) + overlapPolicy.continuityExtraFrames;
-        let text = `Continue — the next clip is generated with this clip's last ${window2} frame${window2 === 1 ? "" : "s"} (~${formatOverlapSeconds(window2, fps)}) as frozen context, and the merge collapses the duplicated frames.`;
+        let text2 = `Continue — the next clip is generated with this clip's last ${window2} frame${window2 === 1 ? "" : "s"} (~${formatOverlapSeconds(window2, fps)}) as frozen context, and the merge collapses the duplicated frames.`;
         if (window2 < requested) {
-          text += " The window was reduced because a clip is too short.";
+          text2 += " The window was reduced because a clip is too short.";
         }
         if (carryAudioActive) {
-          text += " Its audio tail becomes preserved opening context for the next clip's generated audio.";
+          text2 += " Its audio tail becomes preserved opening context for the next clip's generated audio.";
         }
-        info.textContent = text;
+        info.textContent = text2;
       }
     } else {
       const plan = crossfadePlanForClips(
@@ -10404,14 +9473,14 @@
         info.textContent = "This crossfade will fall back to a cut — a clip is too short for the overlap window.";
       } else {
         const requested = clip?.boundaryOutOverlap ?? capability.overlapConstraints(value).defaultFrames;
-        let text = `Crossfade — ${overlapFrames} frame${overlapFrames === 1 ? "" : "s"} (~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
+        let text2 = `Crossfade — ${overlapFrames} frame${overlapFrames === 1 ? "" : "s"} (~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
         if (overlapFrames < requested) {
-          text += " The window was reduced because a clip is too short.";
+          text2 += " The window was reduced because a clip is too short.";
         }
         if (carryAudioActive) {
-          text += " Its audio tail becomes preserved opening context for the next clip's generated audio.";
+          text2 += " Its audio tail becomes preserved opening context for the next clip's generated audio.";
         }
-        info.textContent = text;
+        info.textContent = text2;
       }
     }
     fields.appendChild(info);
@@ -10452,9 +9521,9 @@
   };
   var setStatus = (preset, status) => {
     statuses.set(preset.id, status);
-    const text = statusTextFor(preset, status);
+    const text2 = statusTextFor(preset, status);
     document.querySelectorAll(`[${IC_LORA_AUTO_HINT_ATTR}="${preset.id}"]`).forEach((el) => {
-      el.textContent = text;
+      el.textContent = text2;
     });
   };
   var finish = (preset, onSettled) => {
@@ -10623,7 +9692,7 @@
         const driveMediaKinds = entry.driveMediaKinds;
         const audioDriveMedia = entry.driveData === "audio";
         const presetOptions = IC_LORA_PRESETS.filter(
-          (preset2) => hdrDecision.supported || !`${preset2.id} ${preset2.displayName}`.toLowerCase().includes("hdr")
+          (preset2) => hdrDecision.supported || preset2.hdr !== true
         );
         const presetSpecs = [
           { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
@@ -10658,6 +9727,7 @@
                 target.strength = preset2.strength;
                 target.controlType = preset2.controlType;
               }
+              target.hdr = preset2?.hdr === true;
               const nextContract = icLoraDriveMediaContract(preset2);
               target.driveData = nextContract.driveData;
               target.driveMediaKinds = [
@@ -11035,7 +10105,7 @@
 
   // frontend/architectures/authoringPanels.ts
   var panels = /* @__PURE__ */ new Map([
-    ["ltx2", { buildIcLorasSection }]
+    [LTX2_ARCHITECTURE_ID, { buildIcLorasSection }]
   ]);
   var persistedIcLoraRemovalPanel = (context, clip, clipIdx, selectedEntryIdx, open) => {
     const entryIdx = clip.icLoras.length === 0 ? null : Math.max(
@@ -11187,23 +10257,11 @@
     return column;
   };
   var buildClipSkipAction = (context, clip, clipIdx) => ({
-    label: "⏭︎",
-    title: clip.skipped ? "Re-enable clip" : "Skip clip",
+    label: skipGlyph(clip.skipped === true),
+    title: skipTitle("clip", clip.skipped === true),
     className: "vst-detail-skip-clip",
     active: clip.skipped === true,
-    onClick: () => {
-      context.commit((clips) => {
-        const target = clips[clipIdx];
-        if (target) {
-          target.skipped = !target.skipped;
-          reconcileArchitectureIncomingIcLoraDrives(
-            clips,
-            context.generatedEntryMode()
-          );
-        }
-      });
-      context.render();
-    }
+    onClick: () => context.toggleClipSkip(clipIdx)
   });
 
   // frontend/imageSource.ts
@@ -11451,7 +10509,7 @@
       col.appendChild(hint);
       const add = document.createElement("button");
       add.type = "button";
-      add.className = "vst-add-btn vst-detail-repeating-add vst-detail-add-retake";
+      add.className = "basic-button small-button vst-detail-repeating-add vst-detail-add-retake";
       add.textContent = "+ Add Retake";
       add.title = decision.supported ? "Add a retake window" : decision.reason;
       add.setAttribute("aria-label", add.title);
@@ -11625,8 +10683,8 @@
     };
     return {
       clipId,
-      claim: (currentRevision) => {
-        const current = currentRevision === revisionAtStart && currentOperations.get(clipId) === operationId;
+      claim: (currentRevision2) => {
+        const current = currentRevision2 === revisionAtStart && currentOperations.get(clipId) === operationId;
         release();
         return current;
       },
@@ -11954,8 +11012,9 @@ The conversion is one undoable change.`;
   }) => {
     const modelView = stageIdx === 0 ? {
       values: defaults.modelCatalog.entries.flatMap((entry) => {
-        const architecture = defaults.modelCatalog.architectures.find(
-          (candidate) => candidate.id === entry.architectureId
+        const architecture = architectureDescriptor(
+          defaults.modelCatalog,
+          entry.architectureId
         );
         return architecture && architectureSupportsClipStart(
           architecture.capabilities,
@@ -11965,8 +11024,9 @@ The conversion is one undoable change.`;
       }),
       labels: defaults.modelCatalog.entries.flatMap(
         (entry) => {
-          const architecture = defaults.modelCatalog.architectures.find(
-            (candidate) => candidate.id === entry.architectureId
+          const architecture = architectureDescriptor(
+            defaults.modelCatalog,
+            entry.architectureId
           );
           return architecture && architectureSupportsClipStart(
             architecture.capabilities,
@@ -12009,11 +11069,13 @@ The conversion is one undoable change.`;
             modelSelect.value = stage.model;
             return;
           }
-          const fromLabel = defaults.modelCatalog.architectures.find(
-            (entry) => entry.id === clip.architecture
+          const fromLabel = architectureDescriptor(
+            defaults.modelCatalog,
+            clip.architecture
           )?.label ?? clip.architecture;
-          const toLabel = defaults.modelCatalog.architectures.find(
-            (entry) => entry.id === plan.architectureId
+          const toLabel = architectureDescriptor(
+            defaults.modelCatalog,
+            plan.architectureId
           )?.label ?? plan.architectureId;
           const confirmedAndApplied = confirmArchitectureConversion(
             architectureConversionMessage(
@@ -12437,29 +11499,14 @@ The conversion is one undoable change.`;
         deleteDisabled: cannotDelete,
         deleteTitle: cannotDelete ? clip.stages.length === 0 ? "This source-only clip has no generation stage" : "Add a source video before removing the only generation stage" : `Delete stage ${stageChipLabel(index)}`,
         headerAction: {
-          label: "⏭︎",
-          title: stage.skipped ? `Re-enable stage ${stageChipLabel(index)}` : `Skip stage ${stageChipLabel(index)}`,
+          label: skipGlyph(stage.skipped === true),
+          title: skipTitle(
+            `stage ${stageChipLabel(index)}`,
+            stage.skipped === true
+          ),
           className: "vst-detail-skip-stage",
           active: stage.skipped,
-          onClick: () => {
-            context.commit((clips) => {
-              const targetClip = clips[clipIdx];
-              const target = targetClip?.stages[index];
-              if (!targetClip || !target) {
-                return;
-              }
-              target.skipped = !target.skipped;
-              reconcileSourcedClipIdentity(
-                targetClip,
-                context.capabilities().catalog
-              );
-              reconcileArchitectureIncomingIcLoraDrives(
-                clips,
-                context.generatedEntryMode()
-              );
-            });
-            context.render();
-          }
+          onClick: () => context.toggleStageSkip(clipIdx, index)
         }
       })),
       editorForItem: editorForStage,
@@ -13139,18 +12186,6 @@ The conversion is one undoable change.`;
     if (selection2.kind === "retake") {
       return selection2;
     }
-    if (selection2.kind === "audio-segment") {
-      const segments = clip.audioSegments ?? [];
-      if (segments.length === 0) {
-        return { kind: "audio", clipIdx: selection2.clipIdx };
-      }
-      const segIdx = clamp(selection2.segIdx, 0, segments.length - 1);
-      return segIdx === selection2.segIdx ? selection2 : {
-        kind: "audio-segment",
-        clipIdx: selection2.clipIdx,
-        segIdx
-      };
-    }
     return selection2;
   };
   var detailBreadcrumb = (selection2, clips) => {
@@ -13163,17 +12198,6 @@ The conversion is one undoable change.`;
         return `IC-LoRA ${selection2.entryIdx} · Clip ${selection2.clipIdx}`;
       case "audio":
         return `Audio · Clip ${selection2.clipIdx}`;
-      case "audio-segment": {
-        const segment = clips[selection2.clipIdx]?.audioSegments?.[selection2.segIdx];
-        if (!segment) {
-          return `Audio segment · Clip ${selection2.clipIdx}`;
-        }
-        const start = roundToTenth(segment.startSeconds);
-        const end = roundToTenth(
-          segment.startSeconds + segment.lengthSeconds
-        );
-        return `Audio segment · Clip ${selection2.clipIdx} · ${start}–${end} s`;
-      }
       case "audio-track":
         return `Audio segment S${selection2.trackIdx}`;
       case "audio-track-span":
@@ -13232,8 +12256,6 @@ The conversion is one undoable change.`;
         return buildClipBody(context, selection2, clips);
       case "audio":
         return buildAudioBody(context, selection2, clips);
-      case "audio-segment":
-        return buildAudioBody(context, selection2, clips);
       case "audio-track":
       case "audio-track-span":
         return buildTimelineAudioSegmentsBody(
@@ -13254,40 +12276,23 @@ The conversion is one undoable change.`;
     }
   };
 
-  // frontend/detailStrip/panelSelectionSession.ts
-  var createPanelSelectionSession = () => {
-    let rendered = null;
-    const syncBreadcrumb = (dock, clips) => {
-      if (!dock || !rendered) {
-        return;
-      }
-      const breadcrumb = dock.querySelector(".vst-detail-crumb");
-      if (breadcrumb) {
-        breadcrumb.textContent = detailBreadcrumb(rendered, clips);
-      }
-    };
-    const targetedReselect = (_selection, _dock, _clips) => {
-      return false;
-    };
-    return {
-      getRendered: () => rendered,
-      setRendered: (selection2) => {
-        rendered = selection2;
-      },
-      clear: () => {
-        rendered = null;
-      },
-      syncBreadcrumb,
-      targetedReselect
-    };
-  };
-  var isRenderedSelection = (session, selection2) => {
-    const rendered = session.getRendered();
-    return !!rendered && isSameSelection(selection2, rendered);
-  };
-
   // frontend/detailStrip/renderShell.ts
   var DETAIL_CLASS = "vst-detail";
+  var revealRepeaterKey = (selection2) => {
+    switch (selection2.kind) {
+      case "ref":
+        return "references";
+      case "audio-track":
+      case "audio-track-span":
+        return "audio-tracks";
+      case "prompt-minor":
+        return "relay-prompts";
+      case "ic-lora":
+        return "ic-loras";
+      default:
+        return null;
+    }
+  };
   var renderDetailShell = (options) => {
     const previousBody = options.detail.querySelector(".vst-detail-body");
     const savedScroll = previousBody?.scrollTop ?? 0;
@@ -13310,7 +12315,7 @@ The conversion is one undoable change.`;
       newBody.scrollTop = savedScroll;
     }
     if (options.revealSelection) {
-      const key = options.selection.kind === "ref" ? "references" : options.selection.kind === "audio-segment" ? "audio-segments" : options.selection.kind === "audio-track" ? "audio-tracks" : options.selection.kind === "audio-track-span" ? "audio-track-spans" : options.selection.kind === "prompt-minor" ? "relay-prompts" : options.selection.kind === "ic-lora" ? "ic-loras" : null;
+      const key = revealRepeaterKey(options.selection);
       const target = options.selection.kind === "retake" ? options.detail.querySelector(
         '[data-vst-accordion-key="retake"]'
       ) : key ? options.detail.querySelector(
@@ -13324,15 +12329,49 @@ The conversion is one undoable change.`;
   };
 
   // frontend/detailStrip/selectionDomainOperations.ts
-  var createDetailSelectionDomainOperations = (structuralCommit, getCapabilities, renderAfterExternalCommand = () => {
-  }, getGeneratedEntryMode = () => "text-to-video") => {
-    const commitRemoval = (remove, index, neighbour, fallback) => structuralCommit(
+  var refStrengthPatches = (clip, next) => clip.stages.flatMap(
+    (stage) => stage.id ? [
+      {
+        type: "stage.patch",
+        clipId: clip.id,
+        stageId: stage.id,
+        patch: { refStrengths: next(stage.refStrengths) }
+      }
+    ] : []
+  );
+  var applyClipSkip = (clips, clipIdx, generatedEntryMode) => {
+    const clip = clips[clipIdx];
+    if (!clip) {
+      return false;
+    }
+    clip.skipped = !clip.skipped;
+    reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
+    return true;
+  };
+  var applyStageSkip = (clips, clipIdx, stageIdx, catalog, generatedEntryMode) => {
+    const clip = clips[clipIdx];
+    const stage = clip?.stages[stageIdx];
+    if (!clip || !stage) {
+      return false;
+    }
+    stage.skipped = !stage.skipped;
+    reconcileSourcedClipIdentity(clip, catalog);
+    reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
+    return true;
+  };
+  var createDetailSelectionDomainOperations = (structuralCommit, getCapabilities, getGeneratedEntryMode = () => "text-to-video") => {
+    const commitRemoval = (build, index, neighbour, fallback) => structuralCommit(
       (clips) => {
-        const remaining = remove(clips);
-        if (remaining === null) {
-          return null;
-        }
-        return remaining > 0 ? neighbour(Math.min(index, remaining - 1)) : fallback;
+        const removal = build(clips);
+        return removal === null ? null : {
+          command: removal.command,
+          selection: selectionAfterRemoval(
+            index,
+            removal.remaining,
+            neighbour,
+            fallback
+          )
+        };
       },
       // Deleting the last inactive item, or the first of several items,
       // can leave the selected numeric index unchanged. A normal
@@ -13344,7 +12383,29 @@ The conversion is one undoable change.`;
       commitRemoval(
         (clips) => {
           const clip = clips[clipIdx];
-          return clip && removeRefAt(clip, refIdx) ? clip.refs.length : null;
+          const ref = clip?.refs[refIdx];
+          if (!clip?.id || !ref?.id) {
+            return null;
+          }
+          return {
+            command: {
+              type: "batch",
+              commands: [
+                {
+                  type: "ref.remove",
+                  clipId: clip.id,
+                  refId: ref.id
+                },
+                ...refStrengthPatches(
+                  clip,
+                  (strengths) => strengths.filter(
+                    (_, index) => index !== refIdx
+                  )
+                )
+              ]
+            },
+            remaining: clip.refs.length - 1
+          };
         },
         refIdx,
         (index) => ({ kind: "ref", clipIdx, refIdx: index }),
@@ -13354,14 +12415,32 @@ The conversion is one undoable change.`;
     const addRefEntry = (clipIdx) => {
       structuralCommit((clips) => {
         const clip = clips[clipIdx];
-        if (!clip || !getCapabilities().forClip(clip).decision("frameReferences").supported) {
+        if (!clip?.id || !getCapabilities().forClip(clip).decision("frameReferences").supported) {
           return null;
         }
-        appendRefToClip(clip, buildDefaultRef());
         return {
-          kind: "ref",
-          clipIdx,
-          refIdx: clip.refs.length - 1
+          command: {
+            type: "batch",
+            commands: [
+              {
+                type: "ref.add",
+                clipId: clip.id,
+                ref: {
+                  ...buildDefaultRef(),
+                  id: createEntityId("ref")
+                }
+              },
+              ...refStrengthPatches(clip, (strengths) => [
+                ...strengths,
+                STAGE_REF_STRENGTH_DEFAULT
+              ])
+            ]
+          },
+          selection: {
+            kind: "ref",
+            clipIdx,
+            refIdx: clip.refs.length
+          }
         };
       });
     };
@@ -13369,13 +12448,11 @@ The conversion is one undoable change.`;
       structuralCommit(
         (clips) => {
           const clip = clips[clipIdx];
-          if (!clip || !getCapabilities().forClip(clip).decision("promptRelay").supported) {
+          if (!clip?.id || !getCapabilities().forClip(clip).decision("promptRelay").supported) {
             return null;
           }
           const clipDuration = Math.max(0, clip.duration || 0);
-          const windows = [...clip.promptWindows ?? []].sort(
-            (a, b) => a.start - b.start
-          );
+          const windows = clip.promptWindows ?? [];
           let start = 0;
           let end = clipDuration;
           for (const window3 of windows) {
@@ -13401,18 +12478,29 @@ The conversion is one undoable change.`;
             return null;
           }
           const window2 = {
+            id: createEntityId("prompt_window"),
             prompt: "",
             start: roundToTenth(start),
             duration: roundToTenth(
               Math.min(PROMPT_WINDOW_DEFAULT_DURATION, end - start)
             )
           };
-          clip.promptWindows.push(window2);
-          clip.promptWindows.sort((a, b) => a.start - b.start);
+          const insertAt = windows.findIndex(
+            (candidate) => candidate.start > window2.start
+          );
+          const beforeWindowId = insertAt < 0 ? null : windows[insertAt].id ?? null;
           return {
-            kind: "prompt-minor",
-            clipIdx,
-            windowIdx: clip.promptWindows.indexOf(window2)
+            command: {
+              type: "prompt-window.add",
+              clipId: clip.id,
+              window: window2,
+              beforeWindowId
+            },
+            selection: {
+              kind: "prompt-minor",
+              clipIdx,
+              windowIdx: insertAt < 0 ? windows.length : insertAt
+            }
           };
         },
         // A newly sorted leading window can reuse the currently selected
@@ -13423,12 +12511,19 @@ The conversion is one undoable change.`;
     const deleteWindowEntry = (clipIdx, windowIdx) => {
       commitRemoval(
         (clips) => {
-          const windows = clips[clipIdx]?.promptWindows;
-          if (!windows || windowIdx < 0 || windowIdx >= windows.length) {
+          const clip = clips[clipIdx];
+          const window2 = clip?.promptWindows?.[windowIdx];
+          if (!clip?.id || !window2?.id) {
             return null;
           }
-          windows.splice(windowIdx, 1);
-          return windows.length;
+          return {
+            command: {
+              type: "prompt-window.remove",
+              clipId: clip.id,
+              windowId: window2.id
+            },
+            remaining: clip.promptWindows.length - 1
+          };
         },
         windowIdx,
         (index) => ({
@@ -13443,22 +12538,29 @@ The conversion is one undoable change.`;
       structuralCommit(
         (clips) => {
           const clip = clips[clipIdx];
-          if (!clip || clip.retake || !getCapabilities().forClip(clip).decision("retake").supported) {
+          if (!clip?.id || clip.retake || !getCapabilities().forClip(clip).decision("retake").supported) {
             return null;
           }
           const clipDuration = Math.max(0, clip.duration || 0);
-          clip.retake = {
-            startSeconds: 0,
-            lengthSeconds: Math.max(
-              RETAKE_MIN_DURATION,
-              Math.min(
-                RETAKE_DEFAULT_DURATION,
-                clipDuration || RETAKE_DEFAULT_DURATION
-              )
-            ),
-            strength: RETAKE_STRENGTH_DEFAULT
+          return {
+            command: {
+              type: "retake.add",
+              clipId: clip.id,
+              retake: {
+                id: createEntityId("retake"),
+                startSeconds: 0,
+                lengthSeconds: Math.max(
+                  RETAKE_MIN_DURATION,
+                  Math.min(
+                    RETAKE_DEFAULT_DURATION,
+                    clipDuration || RETAKE_DEFAULT_DURATION
+                  )
+                ),
+                strength: RETAKE_STRENGTH_DEFAULT
+              }
+            },
+            selection: { kind: "retake", clipIdx }
           };
-          return { kind: "retake", clipIdx };
         },
         { rebuildAfterSelect: true }
       );
@@ -13467,62 +12569,20 @@ The conversion is one undoable change.`;
       structuralCommit(
         (clips) => {
           const clip = clips[clipIdx];
-          if (!clip?.retake) {
+          if (!clip?.id || !clip.retake?.id) {
             return null;
           }
           const keepRetakeSelected = getCapabilities().forClip(clip).decision("retake").supported;
-          clip.retake = null;
-          return keepRetakeSelected ? { kind: "retake", clipIdx } : { kind: "clip", clipIdx, stageIdx: 0 };
+          return {
+            command: {
+              type: "retake.remove",
+              clipId: clip.id,
+              retakeId: clip.retake.id
+            },
+            selection: keepRetakeSelected ? { kind: "retake", clipIdx } : { kind: "clip", clipIdx, stageIdx: 0 }
+          };
         },
         { rebuildAfterSelect: true }
-      );
-    };
-    const addAudioSegment = (clipIdx) => {
-      structuralCommit((clips) => {
-        const clip = clips[clipIdx];
-        if (!clip || !getCapabilities().forClip(clip).decision("audioSegments").supported) {
-          return null;
-        }
-        const clipDuration = Math.max(0, clip.duration || 0);
-        if (clipDuration < AUDIO_SEGMENT_MIN_LENGTH) {
-          return null;
-        }
-        const segment = {
-          source: null,
-          startSeconds: 0,
-          trimStartSeconds: 0,
-          lengthSeconds: roundToTenth(
-            Math.min(AUDIO_SEGMENT_DEFAULT_LENGTH, clipDuration)
-          ),
-          volume: AUDIO_SEGMENT_VOLUME_DEFAULT
-        };
-        clip.audioSegments = [...clip.audioSegments ?? [], segment];
-        return {
-          kind: "audio-segment",
-          clipIdx,
-          segIdx: clip.audioSegments.length - 1
-        };
-      });
-    };
-    const removeAudioSegment = (clipIdx, segmentIdx) => {
-      commitRemoval(
-        (clips) => {
-          const clip = clips[clipIdx];
-          if (!clip?.audioSegments?.[segmentIdx]) {
-            return null;
-          }
-          clip.audioSegments = clip.audioSegments.filter(
-            (_, index) => index !== segmentIdx
-          );
-          return clip.audioSegments.length;
-        },
-        segmentIdx,
-        (index) => ({
-          kind: "audio-segment",
-          clipIdx,
-          segIdx: index
-        }),
-        { kind: "audio", clipIdx }
       );
     };
     const selectStage = (clipIdx, stageIdx) => {
@@ -13540,58 +12600,43 @@ The conversion is one undoable change.`;
           }
           const last = clip.stages[clip.stages.length - 1] ?? null;
           const defaults = getRootDefaults();
-          const lockedArchitecture = clip.architecture === "none" ? void 0 : clip.architecture;
+          const lockedArchitecture = clip.architecture === NONE_ARCHITECTURE_ID ? void 0 : clip.architecture;
           const stage = buildDefaultStage(
             getRootDefaults,
             (values) => getDefaultStageModel(values, lockedArchitecture),
             last,
             clip.refs.length
           );
-          if (clip.architecture === "none" && clip.stages.length === 0) {
+          if (clip.architecture === NONE_ARCHITECTURE_ID && clip.stages.length === 0) {
             const target = buildArchitectureRetargetPlan(
               defaults.modelCatalog,
               stage.model
             );
-            const snapshot = getTimelineStore().getSnapshot();
-            const clipId = snapshot.state.clips[clipIdx]?.id;
-            if (!target || !clipId) {
+            if (!target || !clip.id) {
               return null;
             }
-            const canonicalStage = {
-              ...stage,
-              id: createEntityId("stage"),
-              modelProfileId: target.modelProfileId
-            };
-            const result = dispatchDocumentCommand(
-              {
+            return {
+              command: {
                 type: "batch",
                 commands: [
                   {
                     type: "clip.convert-architecture",
-                    clipId,
+                    clipId: clip.id,
                     target
                   },
                   {
                     type: "stage.add",
-                    clipId,
-                    stage: canonicalStage
+                    clipId: clip.id,
+                    stage: {
+                      ...stage,
+                      id: createEntityId("stage"),
+                      modelProfileId: target.modelProfileId
+                    }
                   }
                 ]
               },
-              {
-                expectedRevision: snapshot.revision,
-                origin: "detail-strip"
-              }
-            );
-            if (result.applied) {
-              setSelection({
-                kind: "clip",
-                clipIdx,
-                stageIdx: 0
-              });
-              renderAfterExternalCommand();
-            }
-            return null;
+              selection: { kind: "clip", clipIdx, stageIdx: 0 }
+            };
           }
           clip.stages.push(stage);
           if (!reconcileClipArchitectureIdentity(
@@ -13642,6 +12687,74 @@ The conversion is one undoable change.`;
         { rebuildAfterSelect: true }
       );
     };
+    const commitSkip = (clips, mutate, skipCommand) => {
+      const beforeDrives = clips.map((clip) => JSON.stringify(clip.icLoras));
+      if (!mutate(clips)) {
+        return null;
+      }
+      const skip = skipCommand(clips);
+      if (!skip) {
+        return null;
+      }
+      return {
+        command: {
+          type: "batch",
+          commands: [
+            skip,
+            ...clips.flatMap(
+              (clip, index) => clip.id && JSON.stringify(clip.icLoras) !== beforeDrives[index] ? [
+                {
+                  type: "clip.patch",
+                  clipId: clip.id,
+                  patch: { icLoras: clip.icLoras }
+                }
+              ] : []
+            )
+          ]
+        },
+        selection: "render"
+      };
+    };
+    const toggleClipSkip = (clipIdx) => {
+      structuralCommit(
+        (clips) => commitSkip(
+          clips,
+          (working) => applyClipSkip(working, clipIdx, getGeneratedEntryMode()),
+          (working) => {
+            const clip = working[clipIdx];
+            return clip.id ? {
+              type: "clip.patch",
+              clipId: clip.id,
+              patch: { skipped: clip.skipped }
+            } : null;
+          }
+        )
+      );
+    };
+    const toggleStageSkip = (clipIdx, stageIdx) => {
+      structuralCommit(
+        (clips) => commitSkip(
+          clips,
+          (working) => applyStageSkip(
+            working,
+            clipIdx,
+            stageIdx,
+            getCapabilities().catalog,
+            getGeneratedEntryMode()
+          ),
+          (working) => {
+            const clip = working[clipIdx];
+            const stage = clip.stages[stageIdx];
+            return clip.id && stage.id ? {
+              type: "stage.patch",
+              clipId: clip.id,
+              stageId: stage.id,
+              patch: { skipped: stage.skipped }
+            } : null;
+          }
+        )
+      );
+    };
     return {
       addRefEntry,
       deleteRefEntry,
@@ -13649,11 +12762,11 @@ The conversion is one undoable change.`;
       deleteWindowEntry,
       createRetake,
       removeRetake,
-      addAudioSegment,
-      removeAudioSegment,
       addStage,
       deleteStage,
-      selectStage
+      selectStage,
+      toggleClipSkip,
+      toggleStageSkip
     };
   };
 
@@ -13661,12 +12774,10 @@ The conversion is one undoable change.`;
   var STAGE_SELECTOR = "[data-vst-stage]";
   var MODEL_SELECTOR = "[data-vst-model]";
   var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
-  var createDetailSelectionOperations = (structuralCommit, getCapabilities, renderAfterExternalCommand = () => {
-  }, getGeneratedEntryMode = () => "text-to-video") => {
+  var createDetailSelectionOperations = (structuralCommit, getCapabilities, getGeneratedEntryMode = () => "text-to-video") => {
     const domain = createDetailSelectionDomainOperations(
       structuralCommit,
       getCapabilities,
-      renderAfterExternalCommand,
       getGeneratedEntryMode
     );
     const handleActivation = (target, shiftKey) => {
@@ -13736,23 +12847,29 @@ The conversion is one undoable change.`;
     let renderImplementation = () => {
     };
     const render = (meta) => renderImplementation(meta);
-    const panelSelection = createPanelSelectionSession();
+    let renderedSelection = null;
     const focus = createDetailFocusSession({
       getDock: () => dockEl,
       isRendering: () => rendering,
       flushPending: () => draftQueue?.flush()
     });
     const syncValueDerivedUi = (selection2) => {
-      if (!selection2) {
+      if (!selection2 || !dockEl || !renderedSelection) {
         return;
       }
-      panelSelection.syncBreadcrumb(dockEl, getClips());
+      const breadcrumb = dockEl.querySelector(".vst-detail-crumb");
+      if (breadcrumb) {
+        breadcrumb.textContent = detailBreadcrumb(
+          renderedSelection,
+          getClips()
+        );
+      }
     };
     draftQueue = createDetailDraftQueue({
       focus,
       getDock: () => dockEl,
       isRendering: () => rendering,
-      getRenderedSelection: panelSelection.getRendered,
+      getRenderedSelection: () => renderedSelection,
       syncValueDerivedUi,
       render,
       setSelectionSilently: (selection2) => {
@@ -13764,7 +12881,6 @@ The conversion is one undoable change.`;
     const selectionOperations = createDetailSelectionOperations(
       draftQueue.structuralCommit,
       () => createCapabilityViewResolver(getRootDefaults().modelCatalog),
-      render,
       getRootGeneratedEntryMode
     );
     const context = {
@@ -13783,11 +12899,11 @@ The conversion is one undoable change.`;
       deleteWindowEntry: selectionOperations.deleteWindowEntry,
       createRetake: selectionOperations.createRetake,
       removeRetake: selectionOperations.removeRetake,
-      addAudioSegment: selectionOperations.addAudioSegment,
-      removeAudioSegment: selectionOperations.removeAudioSegment,
       addStage: selectionOperations.addStage,
       deleteStage: selectionOperations.deleteStage,
       selectStage: selectionOperations.selectStage,
+      toggleClipSkip: selectionOperations.toggleClipSkip,
+      toggleStageSkip: selectionOperations.toggleStageSkip,
       getBoundBody: () => boundBody,
       getDockEl: () => dockEl,
       getSettingsMode: () => settingsMode,
@@ -13805,8 +12921,7 @@ The conversion is one undoable change.`;
       if (!dockEl) {
         return;
       }
-      const renderedSelection = panelSelection.getRendered();
-      if (meta?.origin === "detail-strip" && meta.hint === "value-only" && renderedSelection && isRenderedSelection(panelSelection, getSelection())) {
+      if (meta?.origin === "detail-strip" && meta.hint === "value-only" && renderedSelection && isSameSelection(getSelection(), renderedSelection)) {
         draftQueue.markCurrentSource();
         syncValueDerivedUi(renderedSelection);
         return;
@@ -13833,16 +12948,13 @@ The conversion is one undoable change.`;
           selection: selection2,
           revealSelection
         });
-        panelSelection.setRendered(selection2);
+        renderedSelection = selection2;
       } finally {
         rendering = false;
       }
     };
-    const onSelectionChanged = (selection2) => {
+    const onSelectionChanged = () => {
       if (suppressSelectionRender) {
-        return;
-      }
-      if (panelSelection.targetedReselect(selection2, dockEl, getClips())) {
         return;
       }
       focus.beginSelectionSession();
@@ -13902,7 +13014,7 @@ The conversion is one undoable change.`;
         dockEl.innerHTML = "";
         dockEl = null;
       }
-      panelSelection.clear();
+      renderedSelection = null;
     };
     const attach = (body, dock) => {
       if (boundBody === body && dockEl === dock) {
@@ -13988,8 +13100,9 @@ The conversion is one undoable change.`;
       suppress = true;
       try {
         deps.write(target);
-      } catch {
-        return false;
+      } catch (error) {
+        from.pop();
+        throw error;
       } finally {
         suppress = false;
       }
@@ -14062,6 +13175,7 @@ The conversion is one undoable change.`;
       }
       if (!paramRefreshCleanup) {
         paramRefreshCleanup = getVideoStagesHostBridge().addParamRefreshHook(() => {
+          options.refreshCatalog();
           setTimeout(options.refresh, 0);
         });
       }
@@ -14110,16 +13224,64 @@ The conversion is one undoable change.`;
   };
   var isNoOpMove = (from, to) => to === from || to === from + 1;
 
+  // frontend/timelineSelectionView.ts
+  var SELECTED = "vst-selected";
+  var REGION_SELECTED = "vst-region-selected";
+  var applySelectionHighlight = (body) => {
+    const sel = getSelection();
+    for (const el of body.querySelectorAll(`.${SELECTED}`)) {
+      el.classList.remove(SELECTED);
+    }
+    for (const el of body.querySelectorAll(`.${REGION_SELECTED}`)) {
+      el.classList.remove(REGION_SELECTED);
+    }
+    if (sel.kind === "clip" || sel.kind === "ic-lora") {
+      body.querySelector(
+        `.vst-region[data-clip-idx="${sel.clipIdx}"]`
+      )?.classList.add(REGION_SELECTED);
+      return;
+    }
+    let selector = null;
+    switch (sel.kind) {
+      case "ref":
+        selector = `.vst-refs-mark[data-clip-idx="${sel.clipIdx}"][data-ref-idx="${sel.refIdx}"]`;
+        break;
+      case "audio":
+        selector = `.vst-audio-clip[data-clip-idx="${sel.clipIdx}"]`;
+        break;
+      case "audio-track":
+      case "audio-track-span":
+        selector = `.vst-audio-seg[data-track-idx="${sel.trackIdx}"]`;
+        break;
+      case "prompt-major":
+        selector = `.vst-major-seg[data-clip-idx="${sel.clipIdx}"]`;
+        break;
+      case "prompt-minor":
+        selector = `.vst-minor-seg[data-clip-idx="${sel.clipIdx}"][data-window-idx="${sel.windowIdx}"]`;
+        break;
+      case "retake":
+        selector = `.vst-retake[data-clip-idx="${sel.clipIdx}"]`;
+        break;
+      case "boundary":
+        selector = `.vst-boundary-chip[data-left-clip-idx="${sel.leftClipIdx}"]`;
+        break;
+      default:
+        selector = null;
+    }
+    if (selector) {
+      body.querySelector(selector)?.classList.add(SELECTED);
+    }
+  };
+
   // frontend/timelineLinking.ts
   var REGION_SELECTOR = ".vst-region[data-clip-idx]";
   var REGION_ACTION_SELECTOR = "[data-vst-region-action]";
   var REGION_RESIZE_SELECTOR = ".vst-region-resize";
   var CLIP_SHIFT_SELECTOR = ".vst-region[data-clip-idx], .vst-audio-clip[data-clip-idx]";
-  var REGION_SELECTED_CLASS = "vst-region-selected";
   var DRAGGING_CLASS = "vst-dragging";
   var RESIZING_CLASS = "vst-resizing";
   var DROP_INDICATOR_CLASS = "vst-drop-indicator";
-  var DRAG_THRESHOLD_PX3 = 5;
+  var DRAG_THRESHOLD_PX2 = 5;
   var MIN_RESIZE_WIDTH_PX = 24;
   var REGION_DRAGGING_CLASS = "vst-region-dragging";
   var resolveSelectedIndex = (selectedIndex, clipCount) => {
@@ -14153,18 +13315,6 @@ The conversion is one undoable change.`;
     };
     let dropIndicator = null;
     const findRegion = (body, idx) => body.querySelector(`.vst-region[data-clip-idx="${idx}"]`);
-    const markSelection = (body) => {
-      for (const region of body.querySelectorAll(
-        `.${REGION_SELECTED_CLASS}`
-      )) {
-        region.classList.remove(REGION_SELECTED_CLASS);
-      }
-      const idx = selectedClip();
-      if (idx === null) {
-        return;
-      }
-      findRegion(body, idx)?.classList.add(REGION_SELECTED_CLASS);
-    };
     const onRegionClick = (body, event) => {
       const target = event.target;
       if (!(target instanceof Element)) {
@@ -14194,7 +13344,7 @@ The conversion is one undoable change.`;
         return;
       }
       selectClip(idx, 0);
-      markSelection(body);
+      applySelectionHighlight(body);
     };
     const readRegions = (body) => {
       const els = Array.from(
@@ -14230,15 +13380,9 @@ The conversion is one undoable change.`;
     };
     const applySkip = (idx) => {
       const clips = getClips();
-      if (idx < 0 || idx >= clips.length) {
-        return;
+      if (applyClipSkip(clips, idx, getRootGeneratedEntryMode())) {
+        saveClips(clips, { origin: "linking" });
       }
-      clips[idx].skipped = !clips[idx].skipped;
-      reconcileArchitectureIncomingIcLoraDrives(
-        clips,
-        getRootGeneratedEntryMode()
-      );
-      saveClips(clips, { origin: "linking" });
     };
     const applyDelete = (idx) => {
       const clips = getClips();
@@ -14250,15 +13394,23 @@ The conversion is one undoable change.`;
         clips,
         getRootGeneratedEntryMode()
       );
-      const sel = getSelection();
-      if (sel.kind === "clip") {
-        if (sel.clipIdx === idx) {
-          setSelection({ kind: "none" });
-        } else if (sel.clipIdx > idx) {
-          setSelection({ ...sel, clipIdx: sel.clipIdx - 1 });
-        }
-      }
       saveClips(clips, { origin: "linking" });
+      const sel = getSelection();
+      if (sel.kind !== "clip") {
+        return;
+      }
+      if (sel.clipIdx === idx) {
+        setSelection(
+          selectionAfterRemoval(
+            idx,
+            clips.length,
+            (index) => ({ kind: "clip", clipIdx: index, stageIdx: 0 }),
+            { kind: "none" }
+          )
+        );
+      } else if (sel.clipIdx > idx) {
+        setSelection({ ...sel, clipIdx: sel.clipIdx - 1 });
+      }
     };
     const resizeSession = (body, state) => {
       const restore = () => {
@@ -14267,7 +13419,7 @@ The conversion is one undoable change.`;
         body.classList.remove(RESIZING_CLASS);
       };
       return {
-        threshold: DRAG_THRESHOLD_PX3,
+        threshold: DRAG_THRESHOLD_PX2,
         suppressEscapeClick: true,
         onMove: (ctx) => {
           const width = Math.max(
@@ -14281,7 +13433,7 @@ The conversion is one undoable change.`;
         onCommit: (ctx) => {
           const width = ctx.event.clientX - state.startLeftPx;
           const committed = commitClipMutation(
-            state.sourceJson,
+            state.sourceRevision,
             "linking",
             (clips) => {
               const clip = clips[state.idx];
@@ -14325,7 +13477,7 @@ The conversion is one undoable change.`;
         body.classList.remove(DRAGGING_CLASS);
       };
       return {
-        threshold: DRAG_THRESHOLD_PX3,
+        threshold: DRAG_THRESHOLD_PX2,
         axis: "xy",
         suppressEscapeClick: true,
         onMove: (ctx) => {
@@ -14346,10 +13498,10 @@ The conversion is one undoable change.`;
           const from = state.sourceIdx;
           if (isNoOpMove(from, gap)) {
             selectClip(from, stageForClip(from));
-            markSelection(body);
+            applySelectionHighlight(body);
             return;
           }
-          commitClipMutation(state.sourceJson, "linking", (clips) => {
+          commitClipMutation(state.sourceRevision, "linking", (clips) => {
             if (from < 0 || from >= clips.length) {
               return null;
             }
@@ -14391,7 +13543,7 @@ The conversion is one undoable change.`;
           el: region,
           startLeftPx: rect.left,
           originalWidthPx: rect.width,
-          sourceJson: readStateToken()
+          sourceRevision: currentRevision()
         });
       }
       const target = me.target.closest(REGION_SELECTOR);
@@ -14401,7 +13553,7 @@ The conversion is one undoable change.`;
       }
       return dragSession(body, {
         sourceIdx: idx,
-        sourceJson: readStateToken()
+        sourceRevision: currentRevision()
       });
     };
     let bodyClickHandler = null;
@@ -14427,7 +13579,7 @@ The conversion is one undoable change.`;
       if (idx !== null && resolveSelectedIndex(idx, clipCount) === null) {
         setSelection({ kind: "none" });
       }
-      markSelection(body);
+      applySelectionHighlight(body);
     };
     const dispose = () => {
       if (attachedBody) {
@@ -14458,7 +13610,7 @@ The conversion is one undoable change.`;
   var createTimelinePromptTrack = (getCapabilities) => createWindowTrack({
     routeId: "prompt-track",
     priority: 20,
-    origin: "prompt-track",
+    scope: clipWindowTrackScope("prompt-track"),
     spanSelector: ".vst-minor-seg[data-clip-idx]",
     itemIdxAttr: "data-window-idx",
     edgeSelector: "[data-vst-minor-edge]",
@@ -14469,19 +13621,19 @@ The conversion is one undoable change.`;
     unit: "px",
     keyboardSelect: false,
     isolateClicks: false,
-    readSpan: (clip, windowIdx) => {
-      const window2 = clip.promptWindows?.[windowIdx];
+    readSpan: ({ owner }, windowIdx) => {
+      const window2 = owner.promptWindows?.[windowIdx];
       return window2 ? { start: window2.start, length: window2.duration, trim: 0 } : null;
     },
-    canEdit: (clip) => getCapabilities?.().forClip(clip).decision("promptRelay").supported ?? true,
-    canCreate: (clip) => getCapabilities?.().forClip(clip).decision("promptRelay").supported ?? true,
-    moveTargetStart: (clip, windowIdx, press, desiredStart) => {
+    canEdit: ({ owner }) => getCapabilities?.().forClip(owner).decision("promptRelay").supported ?? true,
+    canCreate: ({ owner }) => owner !== null && (getCapabilities?.().forClip(owner).decision("promptRelay").supported ?? true),
+    moveTargetStart: ({ owner: clip }, windowIdx, press, desiredStart) => {
       const clipDur = clipDurationOf(clip);
       const [lo, hi] = wallsFor(clip, windowIdx, press);
       const dur = Math.min(press.length, clipDur);
       return clamp(desiredStart, lo, Math.max(lo, hi - dur));
     },
-    writeMove: (clip, windowIdx, press, start) => {
+    writeMove: ({ owner: clip }, windowIdx, press, start) => {
       const window2 = clip.promptWindows?.[windowIdx];
       if (!window2) {
         return;
@@ -14497,7 +13649,7 @@ The conversion is one undoable change.`;
         )
       );
     },
-    resizeTarget: (clip, windowIdx, edge, press, deltaSec) => {
+    resizeTarget: ({ owner: clip }, windowIdx, edge, press, deltaSec) => {
       const clipDur = clipDurationOf(clip);
       const spans = otherSpans(
         clip.promptWindows ?? [],
@@ -14520,7 +13672,7 @@ The conversion is one undoable change.`;
         hi
       );
     },
-    writeResize: (clip, windowIdx, _edge, _press, geom) => {
+    writeResize: ({ owner: clip }, windowIdx, _edge, _press, geom) => {
       const window2 = clip.promptWindows?.[windowIdx];
       if (!window2) {
         return;
@@ -14528,7 +13680,7 @@ The conversion is one undoable change.`;
       window2.start = roundToTenth(geom.start);
       window2.duration = roundToTenth(geom.length);
     },
-    createSpan: (clip, clipIdx, startSec, endSec) => {
+    createSpan: ({ owner: clip, ownerIdx: clipIdx }, startSec, endSec) => {
       const clipDur = clipDurationOf(clip);
       const spans = otherSpans(clip.promptWindows ?? [], -1, clipDur);
       const [lo, hi] = freeIntervalAt(spans, clipDur, startSec);
@@ -14553,12 +13705,21 @@ The conversion is one undoable change.`;
       const newIdx = clip.promptWindows.indexOf(window2);
       return newIdx >= 0 ? { kind: "prompt-minor", clipIdx, windowIdx: newIdx } : null;
     },
-    deleteItem: (clip, windowIdx) => {
+    deleteItem: ({ owner: clip, ownerIdx: clipIdx }, windowIdx) => {
       if (!clip.promptWindows?.[windowIdx]) {
-        return false;
+        return null;
       }
       clip.promptWindows.splice(windowIdx, 1);
-      return true;
+      return selectionAfterRemoval(
+        windowIdx,
+        clip.promptWindows.length,
+        (index) => ({
+          kind: "prompt-minor",
+          clipIdx,
+          windowIdx: index
+        }),
+        { kind: "prompt-major", clipIdx }
+      );
     },
     selectionFor: (clipIdx, windowIdx) => ({
       kind: "prompt-minor",
@@ -14586,7 +13747,7 @@ The conversion is one undoable change.`;
   var THUMB_SELECTOR = '.vst-refs-mark[data-vst-ref="thumb"]';
   var LANE_SELECTOR = ".vst-refs-lane[data-vst-ref-add]";
   var DRAGGING_CLASS2 = "vst-refs-dragging";
-  var DRAG_THRESHOLD_PX4 = 5;
+  var DRAG_THRESHOLD_PX3 = 5;
   var createTimelineReferencesTrack = (getCapabilities) => {
     let boundBody = null;
     let unregister = null;
@@ -14596,21 +13757,21 @@ The conversion is one undoable change.`;
     ) ?? null;
     const positionRefMarker = (mark, arrow, frame, fromEnd, durationSeconds, fps) => {
       const time = keyframeTimeSeconds(frame, fromEnd, durationSeconds, fps);
-      const leftPct2 = `${keyframeLeftPercent(time, durationSeconds)}%`;
-      mark.style.left = leftPct2;
+      const leftPct = `${keyframeLeftPercent(time, durationSeconds)}%`;
+      mark.style.left = leftPct;
       if (arrow) {
-        arrow.style.left = leftPct2;
+        arrow.style.left = leftPct;
       }
       const ph = mark.querySelector(".vst-refs-ph");
       if (ph) {
         ph.textContent = `R ${fromEnd ? "-" : ""}${frame}`;
       }
     };
-    const addRefAtFrame = (clipIdx, frame, sourceJson) => {
+    const addRefAtFrame = (clipIdx, frame, sourceRevision) => {
       const fps = documentFps(getState());
       let newRefIdx = -1;
       const saved = commitClipMutation(
-        sourceJson,
+        sourceRevision,
         "references-track",
         (clips) => {
           const clip = clips[clipIdx];
@@ -14633,8 +13794,8 @@ The conversion is one undoable change.`;
         setSelection({ kind: "ref", clipIdx, refIdx: newRefIdx });
       }
     };
-    const deleteRef = (clipIdx, refIdx, sourceJson) => {
-      commitClipMutation(sourceJson, "references-track", (clips) => {
+    const deleteRef = (clipIdx, refIdx, sourceRevision) => {
+      commitClipMutation(sourceRevision, "references-track", (clips) => {
         const clip = clips[clipIdx];
         return clip && removeRefAt(clip, refIdx) ? clips : null;
       });
@@ -14675,7 +13836,7 @@ The conversion is one undoable change.`;
       }
     };
     const dragSession = (body, state) => ({
-      threshold: DRAG_THRESHOLD_PX4,
+      threshold: DRAG_THRESHOLD_PX3,
       suppressEscapeClick: true,
       onMove: (ctx) => {
         body.classList.add(DRAGGING_CLASS2);
@@ -14692,7 +13853,7 @@ The conversion is one undoable change.`;
         body.classList.remove(DRAGGING_CLASS2);
         const newFrame = dragFrameAt(state, ctx.event.clientX);
         const saved = commitClipMutation(
-          state.sourceJson,
+          state.sourceRevision,
           "references-track",
           (clips) => {
             const ref = clips[state.clipIdx]?.refs?.[state.refIdx];
@@ -14756,7 +13917,7 @@ The conversion is one undoable change.`;
         fps,
         frameMax: getReferenceFrameMax(getRootDefaults, clip, fps),
         fromEnd: ref.fromEnd === true,
-        sourceJson: readStateToken()
+        sourceRevision: currentRevision()
       });
     };
     const selectRef = (clipIdx, refIdx) => {
@@ -14772,7 +13933,7 @@ The conversion is one undoable change.`;
         const refIdx = parseIntAttr(thumb, "data-ref-idx");
         if (clipIdx2 !== null && refIdx !== null) {
           if (event.shiftKey) {
-            deleteRef(clipIdx2, refIdx, readStateToken());
+            deleteRef(clipIdx2, refIdx, currentRevision());
           } else {
             selectRef(clipIdx2, refIdx);
           }
@@ -14802,7 +13963,7 @@ The conversion is one undoable change.`;
         documentFps(getState()),
         false
       );
-      addRefAtFrame(clipIdx, frame, readStateToken());
+      addRefAtFrame(clipIdx, frame, currentRevision());
     };
     const onBodyKeyDown = (event) => {
       const ke = event;
@@ -14854,7 +14015,7 @@ The conversion is one undoable change.`;
   var createTimelineRetakeTrack = (getCapabilities) => createWindowTrack({
     routeId: "retake",
     priority: 50,
-    origin: "retake-track",
+    scope: clipWindowTrackScope("retake-track"),
     spanSelector: ".vst-retake[data-clip-idx]",
     itemIdxAttr: null,
     edgeSelector: "[data-vst-retake-edge]",
@@ -14868,131 +14029,77 @@ The conversion is one undoable change.`;
     // The retake sits inside the clip region; its clicks must not bubble
     // into the region's clip-select handler.
     isolateClicks: true,
-    readSpan: (clip) => clip.retake ? {
-      start: clip.retake.startSeconds,
-      length: clip.retake.lengthSeconds,
+    readSpan: ({ owner }) => owner.retake ? {
+      start: owner.retake.startSeconds,
+      length: owner.retake.lengthSeconds,
       trim: 0
     } : null,
-    canEdit: (clip) => getCapabilities?.().forClip(clip).decision("retake").supported ?? true,
-    canCreate: (clip) => !clip.retake && (getCapabilities?.().forClip(clip).decision("retake").supported ?? true),
-    moveTargetStart: (clip, _itemIdx, press, desiredStart) => {
-      const clipDur = clipDurationOf(clip);
-      const length = Math.min(press.length, clipDur);
-      return clamp(desiredStart, 0, Math.max(0, clipDur - length));
+    canEdit: ({ owner }) => getCapabilities?.().forClip(owner).decision("retake").supported ?? true,
+    canCreate: ({ owner }) => owner !== null && !owner.retake && (getCapabilities?.().forClip(owner).decision("retake").supported ?? true),
+    moveTargetStart: ({ duration }, _itemIdx, press, desiredStart) => {
+      const length = Math.min(press.length, duration);
+      return clamp(desiredStart, 0, Math.max(0, duration - length));
     },
-    writeMove: (clip, _itemIdx, press, start) => {
-      if (!clip.retake) {
+    writeMove: ({ owner, duration }, _itemIdx, press, start) => {
+      if (!owner.retake) {
         return;
       }
-      const clipDur = clipDurationOf(clip);
-      const length = Math.min(press.length, clipDur);
-      clip.retake.startSeconds = roundToTenth(start);
-      clip.retake.lengthSeconds = roundToTenth(
-        Math.min(length, clipDur - clip.retake.startSeconds)
+      const length = Math.min(press.length, duration);
+      owner.retake.startSeconds = roundToTenth(start);
+      owner.retake.lengthSeconds = roundToTenth(
+        Math.min(length, duration - owner.retake.startSeconds)
       );
     },
-    resizeTarget: (clip, _itemIdx, edge, press, deltaSec) => resizeSpanEdge(
+    resizeTarget: ({ duration }, _itemIdx, edge, press, deltaSec) => resizeSpanEdge(
       edge,
       press,
       deltaSec,
       RETAKE_MIN_DURATION,
       0,
-      clipDurationOf(clip)
+      duration
     ),
-    writeResize: (clip, _itemIdx, _edge, _press, geom) => {
-      if (!clip.retake) {
+    writeResize: ({ owner }, _itemIdx, _edge, _press, geom) => {
+      if (!owner.retake) {
         return;
       }
-      clip.retake.startSeconds = roundToTenth(geom.start);
-      clip.retake.lengthSeconds = roundToTenth(geom.length);
+      owner.retake.startSeconds = roundToTenth(geom.start);
+      owner.retake.lengthSeconds = roundToTenth(geom.length);
     },
     // A plain tap places a default-length window at the pressed time; a
     // drag sizes it.
-    createSpan: (clip, clipIdx, startSec, endSec) => {
-      if (clip.retake) {
+    createSpan: ({ owner, ownerIdx, duration }, startSec, endSec) => {
+      if (owner.retake) {
         return null;
       }
       const geom = createDefaultOrDraggedSpan(
         startSec,
         endSec,
         0,
-        clipDurationOf(clip),
+        duration,
         RETAKE_MIN_DURATION,
         RETAKE_DEFAULT_DURATION
       );
       if (!geom) {
         return null;
       }
-      clip.retake = {
+      owner.retake = {
         startSeconds: roundToTenth(geom.start),
         lengthSeconds: roundToTenth(geom.length),
         strength: RETAKE_STRENGTH_DEFAULT
       };
-      return { kind: "retake", clipIdx };
+      return { kind: "retake", clipIdx: ownerIdx };
     },
-    deleteItem: (clip) => {
-      if (!clip.retake) {
-        return false;
+    // The clip owns at most one retake, so its removal always falls back
+    // to the clip itself.
+    deleteItem: ({ owner, ownerIdx }) => {
+      if (!owner.retake) {
+        return null;
       }
-      clip.retake = null;
-      return true;
+      owner.retake = null;
+      return { kind: "clip", clipIdx: ownerIdx, stageIdx: 0 };
     },
     selectionFor: (clipIdx) => ({ kind: "retake", clipIdx })
   });
-
-  // frontend/timelineSelectionView.ts
-  var SELECTED = "vst-selected";
-  var REGION_SELECTED = "vst-region-selected";
-  var applySelectionHighlight = (body) => {
-    const sel = getSelection();
-    for (const el of body.querySelectorAll(`.${SELECTED}`)) {
-      el.classList.remove(SELECTED);
-    }
-    if (sel.kind !== "clip" && sel.kind !== "ic-lora") {
-      for (const el of body.querySelectorAll(`.${REGION_SELECTED}`)) {
-        el.classList.remove(REGION_SELECTED);
-      }
-    }
-    if (sel.kind === "ic-lora") {
-      body.querySelector(
-        `.vst-region[data-clip-idx="${sel.clipIdx}"]`
-      )?.classList.add(REGION_SELECTED);
-      return;
-    }
-    let selector = null;
-    switch (sel.kind) {
-      case "ref":
-        selector = `.vst-refs-mark[data-clip-idx="${sel.clipIdx}"][data-ref-idx="${sel.refIdx}"]`;
-        break;
-      case "audio":
-        selector = `.vst-audio-clip[data-clip-idx="${sel.clipIdx}"]`;
-        break;
-      case "audio-segment":
-        selector = `.vst-audio-seg[data-clip-idx="${sel.clipIdx}"][data-seg-idx="${sel.segIdx}"]`;
-        break;
-      case "audio-track":
-      case "audio-track-span":
-        selector = `.vst-audio-seg[data-track-idx="${sel.trackIdx}"]`;
-        break;
-      case "prompt-major":
-        selector = `.vst-major-seg[data-clip-idx="${sel.clipIdx}"]`;
-        break;
-      case "prompt-minor":
-        selector = `.vst-minor-seg[data-clip-idx="${sel.clipIdx}"][data-window-idx="${sel.windowIdx}"]`;
-        break;
-      case "retake":
-        selector = `.vst-retake[data-clip-idx="${sel.clipIdx}"]`;
-        break;
-      case "boundary":
-        selector = `.vst-boundary-chip[data-left-clip-idx="${sel.leftClipIdx}"]`;
-        break;
-      default:
-        selector = null;
-    }
-    if (selector) {
-      body.querySelector(selector)?.classList.add(SELECTED);
-    }
-  };
 
   // frontend/timelineViewState.ts
   var VIEW_STATE_KEY = "videostages.timeline.viewState";
@@ -15136,7 +14243,7 @@ The conversion is one undoable change.`;
     const retakeTrack = createTimelineRetakeTrack(capabilities);
     const promptTrack = createTimelinePromptTrack(capabilities);
     const audioTrack = createTimelineAudioTrack();
-    const audioSegmentTrack = createTimelineAudioSegmentTrack(capabilities);
+    const audioSegmentTrack = createTimelineAudioSegmentTrack();
     const boundaryTrack = createTimelineBoundaryTrack();
     const referencesTrack = createTimelineReferencesTrack(capabilities);
     let addClipInFlight = false;
@@ -15161,6 +14268,10 @@ The conversion is one undoable change.`;
     });
     const hostLifecycle = createTimelineHostLifecycle({
       refresh: () => refresh(),
+      refreshCatalog: () => {
+        invalidateArchitectureCatalog();
+        void adoptArchitectureCatalog();
+      },
       syncFromCarrier: () => getTimelineStore().syncFromCarrier(),
       flushPending: () => detailStrip.flushPending(),
       undo: () => history.undo(),
@@ -15298,6 +14409,13 @@ The conversion is one undoable change.`;
       }
     };
     const refresh = () => renderAll();
+    const adoptArchitectureCatalog = () => loadAuthoritativeArchitectureCatalog().then((catalog) => {
+      if (!catalog) {
+        return;
+      }
+      getTimelineStore().invalidate();
+      refresh();
+    });
     const init = () => {
       viewport.load();
       injectTimelineTab();
@@ -15332,13 +14450,7 @@ The conversion is one undoable change.`;
       history.syncBaseline();
       hostLifecycle.bind();
       refresh();
-      void loadAuthoritativeArchitectureCatalog().then((catalog) => {
-        if (!catalog) {
-          return;
-        }
-        getTimelineStore().invalidate();
-        refresh();
-      });
+      void adoptArchitectureCatalog();
     };
     const dispose = () => {
       hostLifecycle.dispose();
@@ -15407,12 +14519,7 @@ The conversion is one undoable change.`;
       console.warn("VideoStages: failed to init timeline", error);
     }
   };
-  var scheduleTimelineInit = () => {
-    if (!getVideoStagesHostBridge().addPostParamBuildStep(initTimeline)) {
-      setTimeout(scheduleTimelineInit, 200);
-    }
-  };
-  scheduleTimelineInit();
+  getVideoStagesHostBridge().addPostParamBuildStep(initTimeline);
   registerVideoStagesPromptPrefix();
   refineVideoButton();
   injectTimelineTab();

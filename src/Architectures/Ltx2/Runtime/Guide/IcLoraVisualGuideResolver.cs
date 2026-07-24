@@ -124,7 +124,6 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
             SwarmLoadImageB64Node loadImage =
                 bridge.AddNode(new SwarmLoadImageB64Node().With(
                     ImageBase64: VideoGraphHelpers.StripDataUriPrefix(data)));
-            bridge.SyncNode(loadImage);
             path = WorkflowBridge.ToPath(loadImage.IMAGE);
         }
         else if (mediaKind == IcLoraDriveMediaKind.Video)
@@ -135,8 +134,6 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
             GetVideoComponentsNode components =
                 bridge.AddNode(new GetVideoComponentsNode());
             components.Video.ConnectToUntyped(load.VIDEO);
-            bridge.SyncNode(load);
-            bridge.SyncNode(components);
             path = WorkflowBridge.ToPath(components.Images);
         }
         else
@@ -167,6 +164,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         resize.ExtraInputs["resize_type.width"] = genInfo.Width.DeepClone();
         resize.ExtraInputs["resize_type.height"] = genInfo.Height.DeepClone();
         resize.ExtraInputs["resize_type.crop"] = "center";
+        // Raw ExtraInputs edits are not auto-synced by the bridge.
         bridge.SyncNode(resize);
         return WorkflowBridge.ToPath(resize.Resized);
     }
