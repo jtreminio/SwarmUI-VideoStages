@@ -71,7 +71,9 @@ export const buildIcLorasSection = (
                   0,
                   Math.min(selectedEntryIdx ?? 0, clip.icLoras.length - 1),
               );
-    const buildSection = (editor?: HTMLElement): HTMLElement => {
+    const buildSection = (
+        editorForItem?: (index: number) => HTMLElement | undefined,
+    ): HTMLElement => {
         const built = buildRepeatingEditor({
             key: "ic-loras",
             label: "IC-LoRAs",
@@ -153,7 +155,7 @@ export const buildIcLorasSection = (
                         : `Delete IC-LoRA ${entryIdx}`,
                 className: "vst-detail-delete-iclora",
             },
-            editor,
+            editorForItem,
         });
         appendHelp(
             built.heading,
@@ -169,317 +171,268 @@ export const buildIcLorasSection = (
         return buildSection();
     }
 
-    const col = document.createElement("div");
-    col.className =
-        "vst-detail-col vst-detail-instance-fields vst-detail-iclora vst-detail-iclora-col";
-    col.setAttribute("data-vst-iclora-idx", `${entryIdx}`);
-    const entry = clip.icLoras[entryIdx];
-
-    const entryAt = (clips: Clip[], index: number): IcLora | undefined =>
-        clips[clipIdx]?.icLoras[index];
-    const hdrDecision = clipCapabilities.decision("hdr");
-
-    {
-        const fields = col;
-
-        const persistedHdr = isHdrFeature(entry);
-        const preset = findIcLoraPreset(entry.preset);
-        const driveMediaKinds = entry.driveMediaKinds;
-        const audioDriveMedia = entry.driveData === "audio";
-        const presetOptions = IC_LORA_PRESETS.filter(
-            (preset) =>
-                hdrDecision.supported ||
-                !`${preset.id} ${preset.displayName}`
-                    .toLowerCase()
-                    .includes("hdr"),
-        );
-        const presetSpecs = [
-            { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
-            ...presetOptions.map((preset) => ({
-                value: preset.id,
-                label: preset.displayName,
-            })),
-        ];
-        preserveSelectedOption(presetSpecs, entry.preset, "start", (value) => ({
-            value,
-            label: `${value} (unsupported persisted value)`,
-            disabled: true,
-        }));
-        const presetSelect = buildOptionSelect(
-            presetSpecs,
-            entry.preset,
-            (value) => {
-                context.commit((clips) => {
-                    const target = entryAt(clips, entryIdx);
-                    if (!target) {
-                        return;
-                    }
-                    target.preset = value;
-                    const preset = findIcLoraPreset(value);
-                    if (preset) {
-                        target.lora = IC_LORA_AUTO;
-                        target.strength = preset.strength;
-                        target.controlType = preset.controlType;
-                    }
-                    const nextContract = icLoraDriveMediaContract(preset);
-                    target.driveData = nextContract.driveData;
-                    target.driveMediaKinds = [...nextContract.acceptedKinds];
-                    if (nextContract.driveData !== "visual") {
-                        target.controlType = "none";
-                    }
-                    const driveData = target.driveMedia?.data ?? "";
-                    if (
-                        driveData &&
-                        !target.driveMediaKinds.some((kind) =>
-                            driveData.startsWith(`data:${kind}/`),
-                        )
-                    ) {
-                        target.driveMedia = null;
-                    }
-                    const targetClip = clips[clipIdx];
-                    if (
-                        targetClip &&
-                        target.driveSource === IC_LORA_SOURCE_INCOMING &&
-                        !canUseIncomingIcLoraDrive(
-                            target,
-                            targetClip,
-                            clipIdx,
-                            clips,
-                            context.generatedEntryMode(),
-                        )
-                    ) {
-                        target.driveSource = IC_LORA_SOURCE_UPLOAD;
-                    }
-                });
-                clearIcLoraAutoFailure(value);
-                context.render();
-            },
-        );
-        fields.appendChild(
-            buildField(
-                "Preset",
-                presetSelect,
-                undefined,
-                "A curated IC-LoRA setup — picking one fills in the LoRA, " +
-                    "strength, and control type for a known effect (pose, " +
-                    "depth, style, etc.). Choose Custom to set everything " +
-                    "yourself.",
-            ),
-        );
-
-        const loraSpecs = [
-            { value: IC_LORA_AUTO, label: IC_LORA_AUTO },
-            ...defaults.loraValues.map((value, optionIdx) => ({
-                value,
-                label: defaults.loraLabels[optionIdx] ?? value,
-            })),
-        ];
-        preserveSelectedOption(loraSpecs, entry.lora, "start", (value) => ({
-            value,
-            label: `${value} (unsupported persisted value)`,
-            disabled: true,
-        }));
-        const loraSelect = buildOptionSelect(loraSpecs, entry.lora, (value) => {
-            context.commit((clips) => {
-                const target = entryAt(clips, entryIdx);
-                if (target) {
-                    target.lora = value;
-                }
-            });
-            if (value === IC_LORA_AUTO) {
-                clearIcLoraAutoFailure(entry.preset);
-            }
-            context.render();
-        });
-        fields.appendChild(
-            buildField(
-                "LoRA",
-                loraSelect,
-                undefined,
-                "The in-context LoRA weights that turn the drive media into " +
-                    "conditioning. [AUTO] downloads the preset's recommended " +
-                    "weights when they are not installed.",
-            ),
-        );
-
-        const strength = context.buildClampedNumber({
-            key: `iclora-${entryIdx}-strength`,
-            value: entry.strength,
-            min: IC_LORA_STRENGTH_MIN,
-            max: IC_LORA_STRENGTH_MAX,
-            step: IC_LORA_STRENGTH_STEP,
-            readBack: (clips) => entryAt(clips, entryIdx)?.strength ?? null,
-            mutate: (clips, value) => {
-                const target = entryAt(clips, entryIdx);
-                if (target) {
-                    target.strength = value;
-                }
-            },
-        });
-        fields.appendChild(
-            buildField(
-                "Strength",
-                strength,
-                undefined,
-                "How strongly this IC-LoRA steers generation. Higher follows " +
-                    "the drive media more closely; too high can overpower the " +
-                    "prompt.",
-            ),
-        );
-
-        if (entry.driveData === "visual") {
-            const attention = context.buildClampedNumber({
-                key: `iclora-${entryIdx}-attention`,
-                value: entry.attentionStrength,
-                min: IC_LORA_ATTENTION_MIN,
-                max: IC_LORA_ATTENTION_MAX,
-                step: IC_LORA_ATTENTION_STEP,
-                readBack: (clips) =>
-                    entryAt(clips, entryIdx)?.attentionStrength ?? null,
-                mutate: (clips, value) => {
-                    const target = entryAt(clips, entryIdx);
-                    if (target) {
-                        target.attentionStrength = value;
-                    }
-                },
-            });
-            fields.appendChild(
-                buildField(
-                    "Attention",
-                    attention,
-                    undefined,
-                    "Scales how much the IC-LoRA influences the model's attention " +
-                        "layers. A finer control than Strength; leave at the " +
-                        "default unless a preset tunes it.",
-                ),
-            );
+    const buildEditor = (editorEntryIdx: number): HTMLElement | undefined => {
+        const entry = clip.icLoras[editorEntryIdx];
+        if (!entry) {
+            return undefined;
         }
+        const entryIdx = editorEntryIdx;
+        const col = document.createElement("div");
+        col.className =
+            "vst-detail-col vst-detail-instance-fields vst-detail-iclora vst-detail-iclora-col";
+        col.setAttribute("data-vst-iclora-idx", `${entryIdx}`);
+        const entryAt = (clips: Clip[], index: number): IcLora | undefined =>
+            clips[clipIdx]?.icLoras[index];
+        const hdrDecision = clipCapabilities.decision("hdr");
 
-        if (
-            entry.driveData === "visual" &&
-            (!preset || (preset.allowedControlTypes?.length ?? 0) > 1)
-        ) {
-            const allowedControlTypes =
-                preset?.allowedControlTypes ??
-                (["none", "canny", "depth", "normal"] as const);
-            const controlSelect = buildOptionSelect(
-                [
-                    { value: "none", label: "None (raw video)" },
-                    { value: "canny", label: "Canny edges" },
-                    { value: "depth", label: "Depth map" },
-                    { value: "normal", label: "Normal map" },
-                ].filter((option) =>
-                    allowedControlTypes.includes(
-                        option.value as IcLoraControlType,
-                    ),
-                ),
-                entry.controlType,
-                (value) => {
-                    context.commit((clips) => {
-                        const target = entryAt(clips, entryIdx);
-                        if (target) {
-                            target.controlType = value as IcLoraControlType;
-                        }
-                    });
-                },
-            );
-            fields.appendChild(
-                buildField(
-                    "Control",
-                    controlSelect,
-                    undefined,
-                    "Preprocesses visual drive media into a control signal before " +
-                        "conditioning: Canny edges, a depth map, or a normal " +
-                        "map. None feeds the raw video straight in.",
-                ),
-            );
-        }
+        {
+            const fields = col;
 
-        const applySelect = buildOptionSelect(
-            [
-                { value: `${IC_LORA_STAGE_ALL}`, label: "All stages" },
-                ...clip.stages.map((_, stageIdx) => ({
-                    value: `${stageIdx}`,
-                    label: `Stage ${stageIdx}`,
+            const persistedHdr = isHdrFeature(entry);
+            const preset = findIcLoraPreset(entry.preset);
+            const driveMediaKinds = entry.driveMediaKinds;
+            const audioDriveMedia = entry.driveData === "audio";
+            const presetOptions = IC_LORA_PRESETS.filter(
+                (preset) =>
+                    hdrDecision.supported ||
+                    !`${preset.id} ${preset.displayName}`
+                        .toLowerCase()
+                        .includes("hdr"),
+            );
+            const presetSpecs = [
+                { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
+                ...presetOptions.map((preset) => ({
+                    value: preset.id,
+                    label: preset.displayName,
                 })),
-            ],
-            `${entry.stage}`,
-            (value) => {
-                context.commit((clips) => {
-                    const target = entryAt(clips, entryIdx);
-                    if (!target) {
-                        return;
-                    }
-                    const stage = Number(value);
-                    target.stage =
-                        Number.isInteger(stage) && stage >= 0
-                            ? stage
-                            : IC_LORA_STAGE_ALL;
-                    canonicalizeIcLoraFields(target);
-                    const targetClip = clips[clipIdx];
-                    if (
-                        targetClip &&
-                        target.driveSource === IC_LORA_SOURCE_INCOMING &&
-                        !canUseIncomingIcLoraDrive(
-                            target,
-                            targetClip,
-                            clipIdx,
-                            clips,
-                            context.generatedEntryMode(),
-                        )
-                    ) {
-                        target.driveSource = IC_LORA_SOURCE_UPLOAD;
-                    }
-                });
-                context.render();
-            },
-        );
-        fields.appendChild(
-            buildField(
-                "Apply on",
-                applySelect,
-                undefined,
-                "Which stage this IC-LoRA conditions — a single stage, or All " +
-                    "stages of the clip.",
-            ),
-        );
-
-        if (!preset) {
-            const dataSelect = buildOptionSelect(
-                [
-                    { value: "visual", label: "Visual frames" },
-                    { value: "audio", label: "Audio" },
-                    { value: "none", label: "None (model only)" },
-                ],
-                entry.driveData,
+            ];
+            preserveSelectedOption(
+                presetSpecs,
+                entry.preset,
+                "start",
+                (value) => ({
+                    value,
+                    label: `${value} (unsupported persisted value)`,
+                    disabled: true,
+                }),
+            );
+            const presetSelect = buildOptionSelect(
+                presetSpecs,
+                entry.preset,
                 (value) => {
                     context.commit((clips) => {
                         const target = entryAt(clips, entryIdx);
                         if (!target) {
                             return;
                         }
-                        target.driveData = value as IcLora["driveData"];
+                        target.preset = value;
+                        const preset = findIcLoraPreset(value);
+                        if (preset) {
+                            target.lora = IC_LORA_AUTO;
+                            target.strength = preset.strength;
+                            target.controlType = preset.controlType;
+                        }
+                        const nextContract = icLoraDriveMediaContract(preset);
+                        target.driveData = nextContract.driveData;
                         target.driveMediaKinds = [
-                            ...icLoraDriveMediaContractForData(target.driveData)
-                                .acceptedKinds,
+                            ...nextContract.acceptedKinds,
                         ];
-                        if (target.driveData !== "visual") {
+                        if (nextContract.driveData !== "visual") {
                             target.controlType = "none";
                         }
-                        if (target.driveData === "none") {
-                            target.driveSource = IC_LORA_SOURCE_UPLOAD;
-                            target.driveMedia = null;
-                            return;
-                        }
-                        const data = target.driveMedia?.data ?? "";
+                        const driveData = target.driveMedia?.data ?? "";
                         if (
-                            data &&
+                            driveData &&
                             !target.driveMediaKinds.some((kind) =>
-                                data.startsWith(`data:${kind}/`),
+                                driveData.startsWith(`data:${kind}/`),
                             )
                         ) {
                             target.driveMedia = null;
                         }
+                        const targetClip = clips[clipIdx];
+                        if (
+                            targetClip &&
+                            target.driveSource === IC_LORA_SOURCE_INCOMING &&
+                            !canUseIncomingIcLoraDrive(
+                                target,
+                                targetClip,
+                                clipIdx,
+                                clips,
+                                context.generatedEntryMode(),
+                            )
+                        ) {
+                            target.driveSource = IC_LORA_SOURCE_UPLOAD;
+                        }
+                    });
+                    clearIcLoraAutoFailure(value);
+                    context.render();
+                },
+            );
+            fields.appendChild(
+                buildField(
+                    "Preset",
+                    presetSelect,
+                    undefined,
+                    "A curated IC-LoRA setup — picking one fills in the LoRA, " +
+                        "strength, and control type for a known effect (pose, " +
+                        "depth, style, etc.). Choose Custom to set everything " +
+                        "yourself.",
+                ),
+            );
+
+            const loraSpecs = [
+                { value: IC_LORA_AUTO, label: IC_LORA_AUTO },
+                ...defaults.loraValues.map((value, optionIdx) => ({
+                    value,
+                    label: defaults.loraLabels[optionIdx] ?? value,
+                })),
+            ];
+            preserveSelectedOption(loraSpecs, entry.lora, "start", (value) => ({
+                value,
+                label: `${value} (unsupported persisted value)`,
+                disabled: true,
+            }));
+            const loraSelect = buildOptionSelect(
+                loraSpecs,
+                entry.lora,
+                (value) => {
+                    context.commit((clips) => {
+                        const target = entryAt(clips, entryIdx);
+                        if (target) {
+                            target.lora = value;
+                        }
+                    });
+                    if (value === IC_LORA_AUTO) {
+                        clearIcLoraAutoFailure(entry.preset);
+                    }
+                    context.render();
+                },
+            );
+            fields.appendChild(
+                buildField(
+                    "LoRA",
+                    loraSelect,
+                    undefined,
+                    "The in-context LoRA weights that turn the drive media into " +
+                        "conditioning. [AUTO] downloads the preset's recommended " +
+                        "weights when they are not installed.",
+                ),
+            );
+
+            const strength = context.buildClampedNumber({
+                key: `iclora-${entryIdx}-strength`,
+                value: entry.strength,
+                min: IC_LORA_STRENGTH_MIN,
+                max: IC_LORA_STRENGTH_MAX,
+                step: IC_LORA_STRENGTH_STEP,
+                readBack: (clips) => entryAt(clips, entryIdx)?.strength ?? null,
+                mutate: (clips, value) => {
+                    const target = entryAt(clips, entryIdx);
+                    if (target) {
+                        target.strength = value;
+                    }
+                },
+            });
+            fields.appendChild(
+                buildField(
+                    "Strength",
+                    strength,
+                    undefined,
+                    "How strongly this IC-LoRA steers generation. Higher follows " +
+                        "the drive media more closely; too high can overpower the " +
+                        "prompt.",
+                ),
+            );
+
+            if (entry.driveData === "visual") {
+                const attention = context.buildClampedNumber({
+                    key: `iclora-${entryIdx}-attention`,
+                    value: entry.attentionStrength,
+                    min: IC_LORA_ATTENTION_MIN,
+                    max: IC_LORA_ATTENTION_MAX,
+                    step: IC_LORA_ATTENTION_STEP,
+                    readBack: (clips) =>
+                        entryAt(clips, entryIdx)?.attentionStrength ?? null,
+                    mutate: (clips, value) => {
+                        const target = entryAt(clips, entryIdx);
+                        if (target) {
+                            target.attentionStrength = value;
+                        }
+                    },
+                });
+                fields.appendChild(
+                    buildField(
+                        "Attention",
+                        attention,
+                        undefined,
+                        "Scales how much the IC-LoRA influences the model's attention " +
+                            "layers. A finer control than Strength; leave at the " +
+                            "default unless a preset tunes it.",
+                    ),
+                );
+            }
+
+            if (
+                entry.driveData === "visual" &&
+                (!preset || (preset.allowedControlTypes?.length ?? 0) > 1)
+            ) {
+                const allowedControlTypes =
+                    preset?.allowedControlTypes ??
+                    (["none", "canny", "depth", "normal"] as const);
+                const controlSelect = buildOptionSelect(
+                    [
+                        { value: "none", label: "None (raw video)" },
+                        { value: "canny", label: "Canny edges" },
+                        { value: "depth", label: "Depth map" },
+                        { value: "normal", label: "Normal map" },
+                    ].filter((option) =>
+                        allowedControlTypes.includes(
+                            option.value as IcLoraControlType,
+                        ),
+                    ),
+                    entry.controlType,
+                    (value) => {
+                        context.commit((clips) => {
+                            const target = entryAt(clips, entryIdx);
+                            if (target) {
+                                target.controlType = value as IcLoraControlType;
+                            }
+                        });
+                    },
+                );
+                fields.appendChild(
+                    buildField(
+                        "Control",
+                        controlSelect,
+                        undefined,
+                        "Preprocesses visual drive media into a control signal before " +
+                            "conditioning: Canny edges, a depth map, or a normal " +
+                            "map. None feeds the raw video straight in.",
+                    ),
+                );
+            }
+
+            const applySelect = buildOptionSelect(
+                [
+                    { value: `${IC_LORA_STAGE_ALL}`, label: "All stages" },
+                    ...clip.stages.map((_, stageIdx) => ({
+                        value: `${stageIdx}`,
+                        label: `Stage ${stageIdx}`,
+                    })),
+                ],
+                `${entry.stage}`,
+                (value) => {
+                    context.commit((clips) => {
+                        const target = entryAt(clips, entryIdx);
+                        if (!target) {
+                            return;
+                        }
+                        const stage = Number(value);
+                        target.stage =
+                            Number.isInteger(stage) && stage >= 0
+                                ? stage
+                                : IC_LORA_STAGE_ALL;
+                        canonicalizeIcLoraFields(target);
                         const targetClip = clips[clipIdx];
                         if (
                             targetClip &&
@@ -500,153 +453,226 @@ export const buildIcLorasSection = (
             );
             fields.appendChild(
                 buildField(
-                    "Drive data",
-                    dataSelect,
+                    "Apply on",
+                    applySelect,
                     undefined,
-                    "Which stream this custom IC-LoRA extracts from its drive " +
-                        "source. Visual frames create an IC-LoRA guide; Audio " +
-                        "creates speaker/audio reference tokens; None applies " +
-                        "only the model patch.",
+                    "Which stage this IC-LoRA conditions — a single stage, or All " +
+                        "stages of the clip.",
                 ),
             );
-        }
 
-        if (entry.driveData !== "none") {
-            const currentClips = getClips();
-            const incomingAvailable = canUseIncomingIcLoraDrive(
-                entry,
-                clip,
-                clipIdx,
-                currentClips,
-                context.generatedEntryMode(),
-            );
-            const sourceSelect = buildOptionSelect(
-                [
-                    { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
-                    {
-                        value: IC_LORA_SOURCE_INCOMING,
-                        label: incomingAvailable
-                            ? "Incoming media"
-                            : "Incoming media (unavailable)",
-                        disabled: !incomingAvailable,
-                    },
-                ],
-                entry.driveSource,
-                (value) => {
-                    context.commit((clips) => {
-                        const target = entryAt(clips, entryIdx);
-                        if (target) {
-                            target.driveSource = value;
-                            if (value !== IC_LORA_SOURCE_UPLOAD) {
-                                target.driveMedia = null;
-                            }
-                        }
-                    });
-                    context.render();
-                },
-            );
-            fields.appendChild(
-                buildField(
-                    "Source",
-                    sourceSelect,
-                    undefined,
-                    "Where the selected drive data comes from: Upload your own " +
-                        "media, or use compatible media already entering this " +
-                        "generation point.",
-                ),
-            );
-        }
-
-        if (
-            entry.driveData !== "none" &&
-            entry.driveSource === IC_LORA_SOURCE_UPLOAD
-        ) {
-            const acceptedKinds = driveMediaKinds;
-            fields.appendChild(
-                buildMediaPickRow(
-                    "Drive Media",
-                    acceptedKinds.map((kind) => `${kind}/*`).join(","),
-                    [...acceptedKinds],
-                    entry.driveMedia?.fileName,
-                    (data, fileName) => {
+            if (!preset) {
+                const dataSelect = buildOptionSelect(
+                    [
+                        { value: "visual", label: "Visual frames" },
+                        { value: "audio", label: "Audio" },
+                        { value: "none", label: "None (model only)" },
+                    ],
+                    entry.driveData,
+                    (value) => {
                         context.commit((clips) => {
                             const target = entryAt(clips, entryIdx);
-                            if (target) {
-                                target.driveMedia = { data, fileName };
+                            if (!target) {
+                                return;
+                            }
+                            target.driveData = value as IcLora["driveData"];
+                            target.driveMediaKinds = [
+                                ...icLoraDriveMediaContractForData(
+                                    target.driveData,
+                                ).acceptedKinds,
+                            ];
+                            if (target.driveData !== "visual") {
+                                target.controlType = "none";
+                            }
+                            if (target.driveData === "none") {
+                                target.driveSource = IC_LORA_SOURCE_UPLOAD;
+                                target.driveMedia = null;
+                                return;
+                            }
+                            const data = target.driveMedia?.data ?? "";
+                            if (
+                                data &&
+                                !target.driveMediaKinds.some((kind) =>
+                                    data.startsWith(`data:${kind}/`),
+                                )
+                            ) {
+                                target.driveMedia = null;
+                            }
+                            const targetClip = clips[clipIdx];
+                            if (
+                                targetClip &&
+                                target.driveSource ===
+                                    IC_LORA_SOURCE_INCOMING &&
+                                !canUseIncomingIcLoraDrive(
+                                    target,
+                                    targetClip,
+                                    clipIdx,
+                                    clips,
+                                    context.generatedEntryMode(),
+                                )
+                            ) {
+                                target.driveSource = IC_LORA_SOURCE_UPLOAD;
                             }
                         });
                         context.render();
                     },
-                    () => {
+                );
+                fields.appendChild(
+                    buildField(
+                        "Drive data",
+                        dataSelect,
+                        undefined,
+                        "Which stream this custom IC-LoRA extracts from its drive " +
+                            "source. Visual frames create an IC-LoRA guide; Audio " +
+                            "creates speaker/audio reference tokens; None applies " +
+                            "only the model patch.",
+                    ),
+                );
+            }
+
+            if (entry.driveData !== "none") {
+                const currentClips = getClips();
+                const incomingAvailable = canUseIncomingIcLoraDrive(
+                    entry,
+                    clip,
+                    clipIdx,
+                    currentClips,
+                    context.generatedEntryMode(),
+                );
+                const sourceSelect = buildOptionSelect(
+                    [
+                        { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
+                        {
+                            value: IC_LORA_SOURCE_INCOMING,
+                            label: incomingAvailable
+                                ? "Incoming media"
+                                : "Incoming media (unavailable)",
+                            disabled: !incomingAvailable,
+                        },
+                    ],
+                    entry.driveSource,
+                    (value) => {
                         context.commit((clips) => {
                             const target = entryAt(clips, entryIdx);
                             if (target) {
-                                target.driveMedia = null;
+                                target.driveSource = value;
+                                if (value !== IC_LORA_SOURCE_UPLOAD) {
+                                    target.driveMedia = null;
+                                }
                             }
                         });
                         context.render();
                     },
-                ),
-            );
-            if (audioDriveMedia) {
+                );
+                fields.appendChild(
+                    buildField(
+                        "Source",
+                        sourceSelect,
+                        undefined,
+                        "Where the selected drive data comes from: Upload your own " +
+                            "media, or use compatible media already entering this " +
+                            "generation point.",
+                    ),
+                );
+            }
+
+            if (
+                entry.driveData !== "none" &&
+                entry.driveSource === IC_LORA_SOURCE_UPLOAD
+            ) {
+                const acceptedKinds = driveMediaKinds;
+                fields.appendChild(
+                    buildMediaPickRow(
+                        "Drive Media",
+                        acceptedKinds.map((kind) => `${kind}/*`).join(","),
+                        [...acceptedKinds],
+                        entry.driveMedia?.fileName,
+                        (data, fileName) => {
+                            context.commit((clips) => {
+                                const target = entryAt(clips, entryIdx);
+                                if (target) {
+                                    target.driveMedia = { data, fileName };
+                                }
+                            });
+                            context.render();
+                        },
+                        () => {
+                            context.commit((clips) => {
+                                const target = entryAt(clips, entryIdx);
+                                if (target) {
+                                    target.driveMedia = null;
+                                }
+                            });
+                            context.render();
+                        },
+                    ),
+                );
+                if (audioDriveMedia) {
+                    const hint = document.createElement("small");
+                    hint.className = "vst-detail-field-hint";
+                    hint.textContent =
+                        "Only this media's audio is used as the reference sample. " +
+                        "For a video upload, its frames are ignored; the clip's normal " +
+                        "text, image, or video entry path supplies visuals.";
+                    fields.appendChild(hint);
+                }
+            } else if (entry.driveSource === IC_LORA_SOURCE_INCOMING) {
                 const hint = document.createElement("small");
                 hint.className = "vst-detail-field-hint";
                 hint.textContent =
-                    "Only this media's audio is used as the reference sample. " +
-                    "For a video upload, its frames are ignored; the clip's normal " +
-                    "text, image, or video entry path supplies visuals.";
+                    entry.stage >= 0
+                        ? `Uses ${entry.driveData} from stage ${entry.stage}'s incoming media.`
+                        : `Uses ${entry.driveData} from each stage's incoming media.`;
+                fields.appendChild(hint);
+            } else if (entry.driveData !== "none") {
+                const slot = document.createElement("small");
+                slot.className = "vst-detail-field-hint";
+                slot.textContent = `Driven by ${entry.driveSource} (legacy source)`;
+                fields.appendChild(slot);
+            }
+
+            const hintText = [preset?.note ?? "", icLoraTriggerHint(preset)]
+                .filter(Boolean)
+                .join(" ");
+            if (hintText || preset) {
+                const hint = document.createElement("small");
+                hint.className = "vst-detail-field-hint";
+                hint.textContent = hintText ? `${hintText} ` : "";
+                if (preset) {
+                    const link = document.createElement("a");
+                    link.href = icLoraRepoUrl(preset);
+                    link.target = "_blank";
+                    link.rel = "noopener";
+                    link.textContent = "repo";
+                    hint.appendChild(link);
+                }
                 fields.appendChild(hint);
             }
-        } else if (entry.driveSource === IC_LORA_SOURCE_INCOMING) {
-            const hint = document.createElement("small");
-            hint.className = "vst-detail-field-hint";
-            hint.textContent =
-                entry.stage >= 0
-                    ? `Uses ${entry.driveData} from stage ${entry.stage}'s incoming media.`
-                    : `Uses ${entry.driveData} from each stage's incoming media.`;
-            fields.appendChild(hint);
-        } else if (entry.driveData !== "none") {
-            const slot = document.createElement("small");
-            slot.className = "vst-detail-field-hint";
-            slot.textContent = `Driven by ${entry.driveSource} (legacy source)`;
-            fields.appendChild(slot);
-        }
 
-        const hintText = [preset?.note ?? "", icLoraTriggerHint(preset)]
-            .filter(Boolean)
-            .join(" ");
-        if (hintText || preset) {
-            const hint = document.createElement("small");
-            hint.className = "vst-detail-field-hint";
-            hint.textContent = hintText ? `${hintText} ` : "";
-            if (preset) {
-                const link = document.createElement("a");
-                link.href = icLoraRepoUrl(preset);
-                link.target = "_blank";
-                link.rel = "noopener";
-                link.textContent = "repo";
-                hint.appendChild(link);
+            if (!persistedHdr || hdrDecision.supported) {
+                ensureIcLoraAutoWeights(
+                    entry,
+                    defaults.loraValues,
+                    context.render,
+                );
             }
-            fields.appendChild(hint);
-        }
-
-        if (!persistedHdr || hdrDecision.supported) {
-            ensureIcLoraAutoWeights(entry, defaults.loraValues, context.render);
-        }
-        const autoText = icLoraAutoHint(entry, defaults.loraValues);
-        if (autoText) {
-            const autoHint = document.createElement("small");
-            autoHint.className = "vst-detail-field-hint";
-            if (preset) {
-                autoHint.setAttribute(IC_LORA_AUTO_HINT_ATTR, preset.id);
+            const autoText = icLoraAutoHint(entry, defaults.loraValues);
+            if (autoText) {
+                const autoHint = document.createElement("small");
+                autoHint.className = "vst-detail-field-hint";
+                if (preset) {
+                    autoHint.setAttribute(IC_LORA_AUTO_HINT_ATTR, preset.id);
+                }
+                autoHint.textContent = autoText;
+                fields.appendChild(autoHint);
             }
-            autoHint.textContent = autoText;
-            fields.appendChild(autoHint);
+            if (persistedHdr && !hdrDecision.supported) {
+                disableCapabilityControls(fields, hdrDecision);
+            }
         }
-        if (persistedHdr && !hdrDecision.supported) {
-            disableCapabilityControls(fields, hdrDecision);
-        }
-    }
 
-    return buildSection(col);
+        return col;
+    };
+
+    return buildSection(buildEditor);
 };

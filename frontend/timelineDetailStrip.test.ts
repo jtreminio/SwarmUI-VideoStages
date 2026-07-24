@@ -4011,6 +4011,66 @@ describe("createTimelineDetailStrip", () => {
             ).toBe(true);
         });
 
+        it("keeps previously selected repeating item editors open when Auto-collapse is disabled", () => {
+            setup([{ duration: 4, stages: [{}, {}] }]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            detail()
+                ?.querySelector<HTMLButtonElement>(
+                    ".vst-detail-settings-button",
+                )
+                ?.click();
+            const autoCollapse = Array.from(
+                document.querySelectorAll<HTMLInputElement>(
+                    ".vst-timeline-settings-modal input[type='checkbox']",
+                ),
+            ).find((input) => input.dataset.name === "Auto-collapse");
+            if (!autoCollapse) {
+                throw new Error("Auto-collapse setting missing");
+            }
+            autoCollapse.checked = false;
+            autoCollapse.dispatchEvent(new Event("change", { bubbles: true }));
+            document
+                .querySelector<HTMLButtonElement>(
+                    ".vst-timeline-settings-modal .modal-header button",
+                )
+                ?.click();
+
+            detailBody()
+                ?.querySelectorAll<HTMLElement>(
+                    '[data-vst-repeater-key="stages"] > .input-group-content > .vst-detail-repeating-group > .input-group-header',
+                )[1]
+                ?.click();
+
+            const stageGroups = (): HTMLElement[] =>
+                Array.from(
+                    detailBody()?.querySelectorAll<HTMLElement>(
+                        '[data-vst-repeater-key="stages"] > .input-group-content > .vst-detail-repeating-group',
+                    ) ?? [],
+                );
+            expect(
+                stageGroups().every((group) =>
+                    group.classList.contains("input-group-open"),
+                ),
+            ).toBe(true);
+            expect(
+                detailBody()?.querySelectorAll(
+                    '[data-vst-repeater-key="stages"] .vst-detail-params',
+                ),
+            ).toHaveLength(2);
+
+            renderStrip();
+            expect(
+                stageGroups().every((group) =>
+                    group.classList.contains("input-group-open"),
+                ),
+            ).toBe(true);
+            expect(
+                detailBody()?.querySelectorAll(
+                    '[data-vst-repeater-key="stages"] .vst-detail-params',
+                ),
+            ).toHaveLength(2);
+        });
+
         it("places every info popover button before its field or section label", () => {
             setup([{ duration: 4, stages: [{}, {}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });

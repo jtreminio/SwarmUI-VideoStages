@@ -388,6 +388,13 @@ export const buildAudioTracksPanel = (
                 ctx.render();
             },
         })),
+        editorForItem: (itemIndex) => {
+            const trackIndex = visibleTrackIndices[itemIndex];
+            const track = tracks[trackIndex];
+            return track
+                ? buildTrackEditor(ctx, state, track, trackIndex)
+                : undefined;
+        },
         add: {
             title: "Add a timeline-wide audio segment",
             label: "+ Add Audio Segment",
@@ -405,15 +412,6 @@ export const buildAudioTracksPanel = (
                     : `Delete audio segment ${activeTrackIndex}`,
             className: "vst-audio-track-delete",
         },
-        editor:
-            activeTrackIndex === null
-                ? undefined
-                : buildTrackEditor(
-                      ctx,
-                      state,
-                      tracks[activeTrackIndex],
-                      activeTrackIndex,
-                  ),
     });
     const note = document.createElement("p");
     note.className = "vst-detail-note";

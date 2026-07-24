@@ -35,19 +35,23 @@ const persistedIcLoraRemovalPanel = (
                   0,
                   Math.min(selectedEntryIdx ?? 0, clip.icLoras.length - 1),
               );
-    const content = document.createElement("div");
-    content.className = "vst-detail-col vst-detail-iclora-col";
-    const note = document.createElement("p");
-    note.className = "vst-detail-note";
-    note.textContent =
-        "This architecture has no IC-LoRA editor. Existing entries remain available for removal.";
-    content.appendChild(note);
-    if (entryIdx !== null) {
-        const entry = clip.icLoras[entryIdx];
+    const buildEditor = (index: number): HTMLElement | undefined => {
+        const entry = clip.icLoras[index];
+        if (!entry) {
+            return undefined;
+        }
+        const content = document.createElement("div");
+        content.className = "vst-detail-col vst-detail-iclora-col";
+        const note = document.createElement("p");
+        note.className = "vst-detail-note";
+        note.textContent =
+            "This architecture has no IC-LoRA editor. Existing entries remain available for removal.";
+        content.appendChild(note);
         const label = document.createElement("span");
-        label.textContent = entry.lora || `IC-LoRA ${entryIdx}`;
+        label.textContent = entry.lora || `IC-LoRA ${index}`;
         content.appendChild(label);
-    }
+        return content;
+    };
     return buildRepeatingEditor({
         key: "ic-loras",
         label: "Persisted IC-LoRAs",
@@ -100,7 +104,7 @@ const persistedIcLoraRemovalPanel = (
                     : `Delete persisted IC-LoRA ${entryIdx}`,
             className: "vst-detail-delete-iclora",
         },
-        editor: content,
+        editorForItem: buildEditor,
     }).section;
 };
 

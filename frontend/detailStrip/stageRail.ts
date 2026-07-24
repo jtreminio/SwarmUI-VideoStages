@@ -10,7 +10,7 @@ export const buildStageRail = (
     clip: Clip,
     clipIdx: number,
     stageIdx: number,
-    editor?: HTMLElement,
+    editorForStage?: (stageIdx: number) => HTMLElement | undefined,
     open = true,
 ): HTMLElement => {
     const canAdd =
@@ -72,6 +72,7 @@ export const buildStageRail = (
                 },
             },
         })),
+        editorForItem: editorForStage,
         add: {
             title: addTitle,
             label: "+ Add Video Stage",
@@ -83,6 +84,5 @@ export const buildStageRail = (
             title: "Delete stage",
             className: "vst-detail-delete-stage",
         },
-        editor,
     }).section;
 };

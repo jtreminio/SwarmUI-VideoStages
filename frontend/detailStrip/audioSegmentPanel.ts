@@ -63,11 +63,11 @@ export const buildAudioSegmentSection = (
             : segments.length > 0
               ? 0
               : null;
-    let editor: HTMLElement | undefined;
-
-    if (activeSegmentIndex !== null) {
-        const segment = segments[activeSegmentIndex];
-        const segIdx = activeSegmentIndex;
+    const buildEditor = (segIdx: number): HTMLElement | undefined => {
+        const segment = segments[segIdx];
+        if (!segment) {
+            return undefined;
+        }
         const fields = document.createElement("div");
         fields.className =
             "vst-detail-col vst-detail-instance-fields vst-detail-seg-row";
@@ -254,8 +254,8 @@ export const buildAudioSegmentSection = (
         if (!decision.supported) {
             disableCapabilityControls(fields, decision);
         }
-        editor = fields;
-    }
+        return fields;
+    };
 
     const note = document.createElement("p");
     note.className = "vst-detail-note";
@@ -294,7 +294,7 @@ export const buildAudioSegmentSection = (
                     : `Delete audio segment ${activeSegmentIndex + 1}`,
             className: "vst-detail-delete-segment",
         },
-        editor,
+        editorForItem: buildEditor,
     });
     built.content.insertBefore(note, built.content.firstChild);
     return built.section;

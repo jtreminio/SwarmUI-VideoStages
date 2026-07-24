@@ -5,7 +5,9 @@ import {
     buildMediaPickRow,
     buildRepeatingEditor,
     buildStaticSection,
+    resetRememberedAccordionSections,
 } from "./detailWidgets";
+import { setTimelineAuthoringSetting } from "./timelineAuthoringSettings";
 
 type MutableGlobal = typeof globalThis & {
     doPopover?: (id: string, e?: Event) => void;
@@ -182,7 +184,10 @@ describe("buildMediaPickRow", () => {
 });
 
 describe("native detail groups", () => {
-    beforeEach(() => localStorage.clear());
+    beforeEach(() => {
+        localStorage.clear();
+        resetRememberedAccordionSections();
+    });
 
     it("builds an always-open input group without accordion behavior", () => {
         const content = document.createElement("div");
@@ -261,5 +266,61 @@ describe("native detail groups", () => {
                 ".vst-detail-repeating-group-content",
             )?.hidden,
         ).toBe(false);
+    });
+
+    it("keeps selected repeater editors open when Auto-collapse is disabled", () => {
+        setTimelineAuthoringSetting("autoCollapse", false);
+        const host = document.createElement("div");
+        let selectedIndex = 0;
+        const render = (): void => {
+            host.replaceChildren(
+                buildRepeatingEditor({
+                    key: "multi-open-selection-test",
+                    label: "Stages",
+                    open: true,
+                    items: ["Stage 0", "Stage 1"].map((label, index) => ({
+                        label,
+                        active: index === selectedIndex,
+                        onSelect: () => {
+                            selectedIndex = index;
+                            render();
+                        },
+                    })),
+                    editorForItem: (index) => {
+                        const editor = document.createElement("div");
+                        editor.className = "test-editor";
+                        editor.textContent = `Editor ${index}`;
+                        return editor;
+                    },
+                    add: {
+                        title: "Add stage",
+                        className: "test-add",
+                        onClick: () => {},
+                    },
+                    remove: {
+                        title: "Delete stage",
+                        className: "test-remove",
+                    },
+                }).section,
+            );
+        };
+
+        render();
+        host.querySelectorAll<HTMLElement>(
+            ".vst-detail-repeating-group .input-group-header",
+        )[1]?.click();
+
+        const children = host.querySelectorAll<HTMLElement>(
+            ".vst-detail-repeating-group",
+        );
+        expect(children).toHaveLength(2);
+        expect(
+            Array.from(children).every((child) =>
+                child.classList.contains("input-group-open"),
+            ),
+        ).toBe(true);
+        expect(host.querySelectorAll(".test-editor")).toHaveLength(2);
+        expect(children[0].textContent).toContain("Editor 0");
+        expect(children[1].textContent).toContain("Editor 1");
     });
 });

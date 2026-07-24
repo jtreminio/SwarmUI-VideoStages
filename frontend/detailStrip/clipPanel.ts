@@ -29,7 +29,6 @@ export const buildClipBody = (
     const stageIdx = selection.kind === "clip" ? selection.stageIdx : 0;
     const clip = clips[clipIdx];
     body.classList.toggle("vst-detail-clip-skipped", clip.skipped === true);
-    const stage = clip.stages[stageIdx];
     const defaults = getRootDefaults();
     const capabilityView = context.capabilities().forClip(clip);
 
@@ -43,26 +42,27 @@ export const buildClipBody = (
             headerAction: buildClipSkipAction(context, clip, clipIdx),
         }).section,
     );
-    let stageEditor: HTMLElement | undefined;
-    if (stage) {
-        stageEditor = buildStageParamsColumn(
-            context,
-            clip,
-            clipIdx,
-            stageIdx,
-            stage,
-            defaults,
-        );
-    }
     const stages = buildStageRail(
         context,
         clip,
         clipIdx,
         stageIdx,
-        stageEditor,
+        (editorStageIdx) => {
+            const editorStage = clip.stages[editorStageIdx];
+            return editorStage
+                ? buildStageParamsColumn(
+                      context,
+                      clip,
+                      clipIdx,
+                      editorStageIdx,
+                      editorStage,
+                      defaults,
+                  )
+                : undefined;
+        },
         selection.kind === "clip",
     );
-    if (!stage) {
+    if (!clip.stages[stageIdx]) {
         const note = document.createElement("p");
         note.className = "vst-detail-note vst-source-only-note";
         note.textContent =
