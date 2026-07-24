@@ -66,14 +66,17 @@ export const renderDetailShell = (options: {
                         ? "relay-prompts"
                         : options.selection.kind === "ic-lora"
                           ? "ic-loras"
-                          : options.selection.kind === "retake"
-                            ? "retakes"
-                            : null;
-        const target = key
-            ? options.detail.querySelector<HTMLElement>(
-                  `[data-vst-repeater-key="${key}"]`,
-              )
-            : null;
+                          : null;
+        const target =
+            options.selection.kind === "retake"
+                ? options.detail.querySelector<HTMLElement>(
+                      '[data-vst-accordion-key="retake"]',
+                  )
+                : key
+                  ? options.detail.querySelector<HTMLElement>(
+                        `[data-vst-repeater-key="${key}"]`,
+                    )
+                  : null;
         if (target && typeof target.scrollIntoView === "function") {
             target.scrollIntoView({ block: "nearest" });
         }

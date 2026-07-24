@@ -1,20 +1,15 @@
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
-import { buildGroup } from "../detailWidgets";
+import { buildAccordionSection } from "../detailWidgets";
 import { getRootDefaults } from "../rootDefaults";
 import type { Clip, TimelineSelection } from "../types";
 import { disableCapabilityControls } from "./capabilityUi";
 import { buildClipColumn } from "./clipBasics";
 import type { DetailStripContext } from "./context";
-import { buildRefSection, GROUP_REF } from "./refPanel";
+import { buildRefSection } from "./refPanel";
 import { buildRetakeSection } from "./retakePanel";
 import { buildSourceVideoSection } from "./sourceVideoPanel";
 import { buildStageParamsColumn } from "./stagePanel";
 import { buildStageRail } from "./stageRail";
-
-const GROUP_STAGES = "vstdock_stages";
-const GROUP_ICLORA = "vstdock_iclora";
-const GROUP_RETAKE = "vstdock_retake";
-const GROUP_SOURCE = "vstdock_source";
 
 /**
  * Composes the clip detail panel from focused editors. Each editor owns one
@@ -37,7 +32,15 @@ export const buildClipBody = (
     const defaults = getRootDefaults();
     const capabilityView = context.capabilities().forClip(clip);
 
-    body.appendChild(buildClipColumn(context, clip, clipIdx));
+    body.appendChild(
+        buildAccordionSection({
+            key: "clip",
+            label: "Clip",
+            content: buildClipColumn(context, clip, clipIdx),
+            open: false,
+            flattenContent: true,
+        }).section,
+    );
     let stageEditor: HTMLElement | undefined;
     if (stage) {
         stageEditor = buildStageParamsColumn(
@@ -55,6 +58,7 @@ export const buildClipBody = (
         clipIdx,
         stageIdx,
         stageEditor,
+        selection.kind === "clip",
     );
     if (!stage) {
         const note = document.createElement("p");
@@ -63,12 +67,11 @@ export const buildClipBody = (
             "Source-only clip. Add a stage to choose an architecture and refine this footage.";
         stages.appendChild(note);
     }
-    body.appendChild(buildGroup(GROUP_STAGES, stages));
-    const appendCapabilityGroup = (
-        groupId: string,
+    body.appendChild(stages);
+    const appendCapabilitySection = (
         feature: "frameReferences" | "icLora" | "sourceVideo" | "retake",
         persisted: boolean,
-        content: () => HTMLElement,
+        content: () => HTMLElement | DocumentFragment,
         removableSelectors: readonly string[],
     ): void => {
         const state = capabilityView.authoringState(feature, persisted);
@@ -79,10 +82,9 @@ export const buildClipBody = (
         if (!state.enabled) {
             disableCapabilityControls(section, state, removableSelectors);
         }
-        body.appendChild(buildGroup(groupId, section));
+        body.appendChild(section);
     };
-    appendCapabilityGroup(
-        GROUP_REF,
+    appendCapabilitySection(
         "frameReferences",
         clip.refs.length > 0,
         () =>
@@ -91,11 +93,11 @@ export const buildClipBody = (
                 clipIdx,
                 selection.kind === "ref" ? selection.refIdx : null,
                 clips,
+                selection.kind === "ref",
             ),
         [],
     );
-    appendCapabilityGroup(
-        GROUP_ICLORA,
+    appendCapabilitySection(
         "icLora",
         clip.icLoras.length > 0,
         () =>
@@ -105,21 +107,26 @@ export const buildClipBody = (
                 clipIdx,
                 defaults,
                 selection.kind === "ic-lora" ? selection.entryIdx : null,
+                selection.kind === "ic-lora",
             ),
         [".vst-detail-delete"],
     );
-    appendCapabilityGroup(
-        GROUP_SOURCE,
+    appendCapabilitySection(
         "sourceVideo",
         clip.sourceVideo !== null,
-        () => buildSourceVideoSection(context, clip, clipIdx),
+        () => buildSourceVideoSection(context, clip, clipIdx, false),
         [".vst-detail-delete"],
     );
-    appendCapabilityGroup(
-        GROUP_RETAKE,
+    appendCapabilitySection(
         "retake",
         clip.retake !== null,
-        () => buildRetakeSection(context, clip, clipIdx),
+        () =>
+            buildRetakeSection(
+                context,
+                clip,
+                clipIdx,
+                selection.kind === "retake",
+            ),
         [".vst-detail-delete"],
     );
     return body;

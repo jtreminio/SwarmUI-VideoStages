@@ -132,7 +132,6 @@ const document = (): CanonicalVideoStagesConfig => {
         height: 576,
         fps: 24,
         dimsExplicit: true,
-        fpsExplicit: true,
         clips: [first, second],
         audioTracks: [firstTrack, track("track-b")],
     };
@@ -184,13 +183,13 @@ describe("reduceDocumentCommand", () => {
         const source = document();
         const result = reduceDocumentCommand(source, {
             type: "root.patch",
-            patch: { width: 768, fpsExplicit: false },
+            patch: { width: 768, dimsExplicit: false },
         });
 
         const impacts: readonly ChangeImpact[] = ["value", "capabilities"];
         expect(result.impacts).toEqual(impacts);
         expect(result.document.width).toBe(768);
-        expect(result.document.fpsExplicit).toBe(false);
+        expect(result.document.dimsExplicit).toBe(false);
         expect(source.width).toBe(1024);
         expect(result.document).not.toBe(source);
         expect(result.document.clips[0]).not.toBe(source.clips[0]);

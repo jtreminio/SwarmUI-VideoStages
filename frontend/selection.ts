@@ -49,6 +49,9 @@ const sameSelection = (a: TimelineSelection, b: TimelineSelection): boolean => {
     if (a.kind === "ref" && b.kind === "ref") {
         return a.refIdx === b.refIdx;
     }
+    if (a.kind === "ic-lora" && b.kind === "ic-lora") {
+        return a.entryIdx === b.entryIdx;
+    }
     if (a.kind === "prompt-minor" && b.kind === "prompt-minor") {
         return a.windowIdx === b.windowIdx;
     }

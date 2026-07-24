@@ -772,10 +772,11 @@ describe("renderTimeline (DOM)", () => {
             retake: { startSeconds: 1, lengthSeconds: 2, strength: 1 },
         } as unknown as Clip;
         renderTimeline(body, [withRetake, makeClip(2, 1, 0)]);
-        const lanes = body.querySelectorAll(
-            ".vst-retake-lane[data-vst-retake-add]",
-        );
-        expect(lanes).toHaveLength(2); // one per clip, retake or not
+        const lanes = body.querySelectorAll(".vst-retake-lane");
+        expect(lanes).toHaveLength(2);
+        expect(lanes[0].hasAttribute("data-vst-retake-add")).toBe(false);
+        expect(lanes[0].hasAttribute("data-vst-retake-full")).toBe(true);
+        expect(lanes[1].hasAttribute("data-vst-retake-add")).toBe(true);
         // The retake window lives in the LANE, not inside the region.
         const retake = body.querySelector(".vst-retake");
         expect(retake).not.toBeNull();

@@ -11,6 +11,7 @@ export const buildStageRail = (
     clipIdx: number,
     stageIdx: number,
     editor?: HTMLElement,
+    open = true,
 ): HTMLElement => {
     const canAdd =
         clip.stages.length === 0 ||
@@ -28,7 +29,7 @@ export const buildStageRail = (
         key: "stages",
         label: "Stages",
         sectionClass: "vst-detail-stage-groups",
-        listClass: "vst-detail-stage-group-list",
+        open,
         items: clip.stages.map((stage, index) => ({
             label: `Stage ${stageChipLabel(index)}`,
             focusKey: `stage-group-${index}`,
@@ -44,9 +45,9 @@ export const buildStageRail = (
                     : "Add a source video before removing the only generation stage"
                 : `Delete stage ${stageChipLabel(index)}`,
             headerAction: {
-                label: stage.skipped ? "Enable" : "Skip",
+                label: "⏭︎",
                 title: stage.skipped
-                    ? `Enable stage ${stageChipLabel(index)}`
+                    ? `Re-enable stage ${stageChipLabel(index)}`
                     : `Skip stage ${stageChipLabel(index)}`,
                 className: "vst-detail-skip-stage",
                 active: stage.skipped,
@@ -73,6 +74,7 @@ export const buildStageRail = (
         })),
         add: {
             title: addTitle,
+            label: "+ Add Video Stage",
             className: "vst-detail-add-stage",
             disabled: !canAdd,
             onClick: () => context.addStage(clipIdx),

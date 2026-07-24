@@ -18,7 +18,6 @@ export interface RenderTimelineOptions {
     width?: number;
     height?: number;
     dimsExplicit?: boolean;
-    fpsExplicit?: boolean;
     unit?: TimelineUnit;
     pxPerSecond?: number;
     selectedIndex?: number | null;
@@ -86,7 +85,6 @@ export const renderTimelineHeader = (
     const width = Math.max(0, Math.round(options?.width ?? 0));
     const height = Math.max(0, Math.round(options?.height ?? 0));
     const dimsExplicit = options?.dimsExplicit === true;
-    const fpsExplicit = options?.fpsExplicit === true;
     const presetKey =
         dimsExplicit && width > 0 && height > 0
             ? matchPresetKey(width, height)
@@ -96,7 +94,7 @@ export const renderTimelineHeader = (
             ? `${presetKey} preset`
             : "custom"
         : "inherited from image resolution";
-    const fpsSource = fpsExplicit ? "custom" : "inherited from Video FPS";
+    const fpsSource = "synced with Video FPS";
     const settingsTip = `Resolution: ${dimsSource}; FPS: ${fpsSource}. Click to edit.`;
     const settingsChip =
         `<button type="button" class="basic-button small-button vst-settings-chip" data-vst-settings title="${escapeHtml(settingsTip)}" aria-label="${escapeHtml(settingsTip)}">` +

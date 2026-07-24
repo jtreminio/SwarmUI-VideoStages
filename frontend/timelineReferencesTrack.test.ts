@@ -6,7 +6,11 @@ import {
     it,
     jest,
 } from "@jest/globals";
-import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import {
+    mountPromptBox,
+    mountVideoFps,
+    mountVideoStagesData,
+} from "./__test_helpers__/dom";
 import { createGestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence";
 import {
@@ -53,10 +57,10 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
 
 const mountPrompt = (clips: ClipFixture[], fps?: number): void => {
     mountPromptBox("");
-    mountVideoStagesData({
-        ...(fps === undefined ? {} : { fps }),
-        clips: clips.map(clipRecord),
-    });
+    if (fps !== undefined) {
+        mountVideoFps(fps);
+    }
+    mountVideoStagesData({ clips: clips.map(clipRecord) });
 };
 
 const makeBody = (): HTMLElement => {

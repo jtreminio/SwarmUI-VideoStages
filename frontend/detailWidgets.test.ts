@@ -83,13 +83,27 @@ describe("buildField help popovers", () => {
         const check = buildCheckbox("Reuse Audio", false, () => {}, {
             help: "Carry the previous clip's audio.",
         });
+        expect(check.tagName).toBe("DIV");
+        expect(check.children[0]?.classList.contains("auto-input-name")).toBe(
+            true,
+        );
+        expect(check.children[1]?.classList.contains("auto-checkbox")).toBe(
+            true,
+        );
+        expect(
+            check.querySelector<HTMLInputElement>(".auto-checkbox")?.dataset
+                .name,
+        ).toBe("Reuse Audio");
         expect(check.querySelector(".info-popover-button")).not.toBeNull();
         expect(check.querySelector(".sui-popover")?.id).toMatch(
             /^popover_vst_reuse-audio_\d+$/,
         );
-        // Checkbox label text stays clean.
+        // SwarmUI nests the help button inside the label span.
+        expect(
+            check.querySelector(".auto-input-name")?.firstChild?.textContent,
+        ).toBe("Reuse Audio");
         expect(check.querySelector(".auto-input-name")?.textContent).toBe(
-            "Reuse Audio",
+            "Reuse Audio?",
         );
     });
 });
@@ -118,10 +132,19 @@ describe("buildMediaPickRow", () => {
             () => {},
         );
         expect(row.querySelector(".vst-media-pick-select")).not.toBeNull();
-        // The browser upload path is always present too.
+        expect(row.classList.contains("auto-file-box")).toBe(true);
+        expect(row.classList.contains("auto-input-flex-wide")).toBe(false);
         expect(
-            row.querySelector<HTMLInputElement>('input[type="file"]')?.accept,
-        ).toBe("audio/*");
+            row.querySelector(".auto-file-input-label > .auto-input-name")
+                ?.textContent,
+        ).toBe("Audio Upload");
+        expect(
+            row.querySelector(".auto-file-label .auto-file-input-filename"),
+        ).not.toBeNull();
+        // The browser upload path is always present too.
+        const input = row.querySelector<HTMLInputElement>('input[type="file"]');
+        expect(input?.accept).toBe("audio/*");
+        expect(input?.classList.contains("auto-file")).toBe(true);
     });
 
     it("falls back to plain upload when inputBrowserHelper is absent", () => {

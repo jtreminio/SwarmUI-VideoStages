@@ -21,7 +21,7 @@ export const buildStageParamsColumn = (
     defaults: RootDefaults,
 ): HTMLElement => {
     const column = document.createElement("div");
-    column.className = "vst-detail-col vst-detail-params";
+    column.className = "vst-detail-fields vst-detail-params";
     const sourcedStage0 =
         stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
     const isRefine = stageIdx >= 1 || sourcedStage0;
@@ -71,9 +71,7 @@ export const buildStageParamsColumn = (
             ),
             focusKey,
         );
-    const fields = document.createElement("div");
-    fields.className = "vst-detail-fields";
-    column.appendChild(fields);
+    const fields = column;
     fields.classList.toggle("vst-stage-fields-muted", stage.skipped === true);
 
     const bindings: StagePanelBindings = {
@@ -120,7 +118,7 @@ export const buildStageParamsColumn = (
         note.className = "vst-detail-note vst-stage-passthrough-note";
         note.textContent =
             "This stage starts from the source footage — Control sets how much is re-generated (0 passes it through).";
-        column.insertBefore(note, fields);
+        column.insertBefore(note, column.firstChild);
     }
     return column;
 };

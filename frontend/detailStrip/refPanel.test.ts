@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { testArchitectureCatalog } from "../__test_helpers__/architectureFixtures";
-import { mountPromptBox, mountVideoStagesData } from "../__test_helpers__/dom";
+import {
+    mountPromptBox,
+    mountVideoFps,
+    mountVideoStagesData,
+} from "../__test_helpers__/dom";
 import { createCapabilityViewResolver } from "../architectures/policy";
 import { __resetPersistenceForTests, getClips } from "../persistence";
 import type { DetailStripContext } from "./context";
@@ -17,9 +21,9 @@ describe("buildRefBody", () => {
         document.body.innerHTML = "";
     });
 
-    it("uses the stored custom FPS for the reference frame limit", () => {
+    it("uses the core Video FPS for the reference frame limit", () => {
+        mountVideoFps(16);
         mountVideoStagesData({
-            fps: 16,
             clips: [
                 {
                     duration: 5,

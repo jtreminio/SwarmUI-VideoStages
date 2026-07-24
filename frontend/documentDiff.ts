@@ -59,7 +59,6 @@ const ROOT_PATCH_KEYS = [
     "height",
     "fps",
     "dimsExplicit",
-    "fpsExplicit",
 ] as const satisfies readonly (keyof CanonicalVideoStagesConfig)[];
 
 const CLIP_PATCH_KEYS = [

@@ -2852,14 +2852,13 @@
     const width = toIntOrNull(stored.width);
     const height = toIntOrNull(stored.height);
     const dimsExplicit = width !== null && width >= ROOT_DIMENSION_MIN && height !== null && height >= ROOT_DIMENSION_MIN;
-    const fps = toIntOrNull(stored.fps);
-    const fpsExplicit = fps !== null && fps >= ROOT_FPS_MIN;
     return {
       width: dimsExplicit ? width : inherited.width,
       height: dimsExplicit ? height : inherited.height,
-      fps: fpsExplicit ? fps : inherited.fps,
-      dimsExplicit,
-      fpsExplicit
+      // fps is never stored: the timeline always follows the core Video FPS
+      // param (the backend falls back to it too when the JSON has no fps).
+      fps: inherited.fps,
+      dimsExplicit
     };
   };
   var createRootConfig = (dims, clips, audioTracks = []) => {
@@ -2963,7 +2962,6 @@
       out.width = Math.round(state.width);
       out.height = Math.round(state.height);
     }
-    if (state.fpsExplicit) out.fps = Math.round(state.fps);
     out.clips = serializeClipsForStorage(state.clips);
     out.audioTracks = state.audioTracks.map((track) => ({
       id: track.id,
@@ -3025,8 +3023,7 @@
       }
       const dims = resolveRootDims(inherited, {
         width: parsed.width,
-        height: parsed.height,
-        fps: parsed.fps
+        height: parsed.height
       });
       return {
         dims,
@@ -3647,8 +3644,7 @@
     "width",
     "height",
     "fps",
-    "dimsExplicit",
-    "fpsExplicit"
+    "dimsExplicit"
   ];
   var CLIP_PATCH_KEYS = [
     "skipped",
@@ -5701,6 +5697,9 @@
     if (a.kind === "ref" && b.kind === "ref") {
       return a.refIdx === b.refIdx;
     }
+    if (a.kind === "ic-lora" && b.kind === "ic-lora") {
+      return a.entryIdx === b.entryIdx;
+    }
     if (a.kind === "prompt-minor" && b.kind === "prompt-minor") {
       return a.windowIdx === b.windowIdx;
     }
@@ -6125,14 +6124,16 @@
     const resizeGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
     const width = clipInnerWidth(layout.widthPx);
     const retakeSupported = capabilities?.forClip(clip).decision("retake").supported ?? true;
-    const retakeLaneAttrs = retakeSupported ? " data-vst-retake-add" : ' data-vst-capability-disabled="retake"';
+    const canAddRetake = retakeSupported && !clip.retake;
+    const retakeLaneAttrs = canAddRetake ? " data-vst-retake-add" : retakeSupported ? " data-vst-retake-full" : ' data-vst-capability-disabled="retake"';
+    const retakeLaneTitle = canAddRetake ? "Click empty space to add a retake window" : retakeSupported ? "This clip already has a retake window" : "Retakes are not supported by this clip architecture";
     return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index + 1} · ${duration} · Click to edit · Shift+click to delete">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
       clip,
       layout.index,
       layout.durationSeconds,
       fps,
       unit
-    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index + 1}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeSupported ? "Click empty space to add a retake window" : "Retakes are not supported by this clip architecture"}">` + renderRetakeOverlay(
+    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index + 1}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` + renderRetakeOverlay(
       clip,
       layout.index,
       layout.durationSeconds
@@ -6293,10 +6294,9 @@
     const width = Math.max(0, Math.round(options?.width ?? 0));
     const height = Math.max(0, Math.round(options?.height ?? 0));
     const dimsExplicit = options?.dimsExplicit === true;
-    const fpsExplicit = options?.fpsExplicit === true;
     const presetKey = dimsExplicit && width > 0 && height > 0 ? matchPresetKey(width, height) : null;
     const dimsSource = dimsExplicit ? presetKey ? `${presetKey} preset` : "custom" : "inherited from image resolution";
-    const fpsSource = fpsExplicit ? "custom" : "inherited from Video FPS";
+    const fpsSource = "synced with Video FPS";
     const settingsTip = `Resolution: ${dimsSource}; FPS: ${fpsSource}. Click to edit.`;
     const settingsChip = `<button type="button" class="basic-button small-button vst-settings-chip" data-vst-settings title="${escapeAttr(settingsTip)}" aria-label="${escapeAttr(settingsTip)}"><span class="vst-settings-dims">${width}×${height}</span><span class="vst-settings-chip-sep" aria-hidden="true">·</span><span class="vst-settings-fps">${fps} fps</span></button>`;
     const enabled = options?.enabled !== false;
@@ -7075,7 +7075,12 @@
         }
         return;
       }
-      setSelection(config.selectionFor(clipIdx, itemIdx));
+      const selection2 = config.selectionFor(clipIdx, itemIdx);
+      if (config.revealOnActivate) {
+        activateSelection(selection2);
+      } else {
+        setSelection(selection2);
+      }
     };
     const onBodyKeyDown = (event) => {
       const ke = event;
@@ -7102,7 +7107,12 @@
       if (!clip || !config.readSpan(clip, itemIdx)) {
         return;
       }
-      setSelection(config.selectionFor(clipIdx, itemIdx));
+      const selection2 = config.selectionFor(clipIdx, itemIdx);
+      if (config.revealOnActivate) {
+        activateSelection(selection2);
+      } else {
+        setSelection(selection2);
+      }
     };
     const attach = (body, router) => {
       if (boundBody === body) {
@@ -7327,6 +7337,7 @@
   // frontend/detailWidgets.ts
   var sliderSeq = 0;
   var helpSeq = 0;
+  var checkboxSeq = 0;
   var slugify = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "field";
   var appendHelp = (labelEl, row, fieldName, helpText) => {
     const key = `vst_${slugify(fieldName)}_${++helpSeq}`;
@@ -7380,6 +7391,9 @@
   var buildField = (label, control, hint, help) => {
     const row = document.createElement("div");
     row.className = "auto-input vst-detail-field";
+    row.classList.add(
+      control.classList.contains("auto-text-block") ? "auto-input-flex-wide" : "auto-input-flex"
+    );
     const boxClass = boxClassFor(control);
     if (boxClass) {
       row.classList.add(boxClass);
@@ -7395,7 +7409,7 @@
     row.append(labelEl, control);
     if (hint) {
       const small = document.createElement("small");
-      small.className = "vst-detail-field-hint";
+      small.className = "auto-input-description vst-detail-field-hint";
       small.textContent = hint;
       row.appendChild(small);
     }
@@ -7429,7 +7443,7 @@
   };
   var buildSlider = (label, value, min, max, step, onChange, opts) => {
     const holder = document.createElement("div");
-    holder.className = "vst-stage-slider";
+    holder.className = "vst-stage-slider auto-input-flex-wide";
     const id = `vst_stage_slider_${++sliderSeq}`;
     holder.innerHTML = renderHostSlider({
       id,
@@ -7466,23 +7480,26 @@
     return holder;
   };
   var buildCheckbox = (label, checked, onChange, opts) => {
-    const row = document.createElement("label");
+    const row = document.createElement("div");
     row.className = "auto-input auto-checkbox-box auto-input-flex vst-detail-field vst-detail-field-check";
+    row.dataset.disabled = `${opts?.disabled === true}`;
     const input2 = document.createElement("input");
     input2.type = "checkbox";
     input2.className = "auto-checkbox";
+    input2.id = `vst_checkbox_${slugify(label)}_${++checkboxSeq}`;
+    input2.dataset.name = label;
     input2.checked = checked;
     input2.addEventListener("change", () => onChange(input2.checked));
     const text = document.createElement("span");
     text.className = "auto-input-name vst-detail-field-label";
     text.textContent = label;
-    row.append(input2, text);
+    row.append(text, input2);
     if (opts?.help) {
-      appendHelp(row, row, label, opts.help);
+      appendHelp(text, row, label, opts.help);
     }
     if (opts?.disabled) {
       row.classList.add("vst-audio-disabled");
-      input2.setAttribute("disabled", "");
+      input2.disabled = true;
     }
     return row;
   };
@@ -7509,26 +7526,38 @@
   var mediaPickCounter = 0;
   var buildMediaPickRow = (label, accept, browserTypes, name, onFile, onClear) => {
     const row = document.createElement("div");
-    row.className = "auto-input vst-detail-field vst-audio-upload";
+    row.className = "auto-input auto-file-box vst-detail-field vst-audio-upload";
+    const controls = document.createElement("label");
+    controls.className = "auto-file-input-label";
     const pickLabel = document.createElement("span");
     pickLabel.className = "auto-input-name vst-detail-field-label";
     pickLabel.textContent = label;
     const fileInput = document.createElement("input");
     fileInput.type = "file";
+    fileInput.className = "auto-file";
     fileInput.accept = accept;
     fileInput.id = `vst-media-pick-${++mediaPickCounter}`;
+    const uploadBtn = document.createElement("button");
+    uploadBtn.type = "button";
+    uploadBtn.className = "basic-button auto-file-input-button vst-media-pick-upload";
+    uploadBtn.textContent = "Upload";
+    uploadBtn.addEventListener("click", () => fileInput.click());
+    controls.append(pickLabel, uploadBtn);
+    const fileDrop = document.createElement("label");
+    fileDrop.className = "auto-file-label";
+    fileDrop.htmlFor = fileInput.id;
+    const fileDisplay = document.createElement("div");
+    fileDisplay.className = "auto-file-input";
     const fileName = document.createElement("span");
-    fileName.className = "vst-audio-upload-name";
+    fileName.className = "auto-file-input-filename vst-audio-upload-name";
     fileName.textContent = name ? name : "No file chosen";
+    fileDisplay.appendChild(fileName);
+    fileDrop.append(fileInput, fileDisplay);
     const preview = document.createElement("div");
     preview.className = "auto-input-preview";
-    preview.hidden = true;
-    const previewName = document.createElement("span");
-    previewName.className = "auto-file-input-filename";
-    previewName.hidden = true;
     const clearBtn = document.createElement("button");
     clearBtn.type = "button";
-    clearBtn.className = "basic-button small-button vst-audio-upload-clear";
+    clearBtn.className = "basic-button auto-file-input-button vst-audio-upload-clear";
     clearBtn.textContent = "Clear";
     clearBtn.hidden = !name;
     fileInput.addEventListener("change", () => {
@@ -7549,39 +7578,129 @@
       void getVideoStagesHostBridge().toDataUrl(picked).then((data) => onFile(data, pickedName));
     });
     clearBtn.addEventListener("click", () => onClear());
-    row.append(pickLabel, fileInput, fileName, clearBtn, preview, previewName);
     if (hasHostInputBrowser()) {
       const selectBtn = document.createElement("button");
       selectBtn.type = "button";
-      selectBtn.className = "basic-button small-button vst-media-pick-select";
+      selectBtn.className = "basic-button auto-file-input-button vst-media-pick-select";
       selectBtn.textContent = "Select";
       selectBtn.addEventListener(
         "click",
         () => openHostInputBrowser(fileInput.id, browserTypes)
       );
-      clearBtn.before(selectBtn);
+      controls.appendChild(selectBtn);
     }
+    controls.appendChild(clearBtn);
+    row.append(controls, fileDrop, preview);
     return row;
   };
-  var sectionLabel = (text) => {
-    const sec = document.createElement("div");
-    sec.className = "vst-detail-sec vst-detail-wrap-sec";
-    sec.textContent = text;
-    return sec;
+  var setAccordionOpen = (section, open) => {
+    const header = section.querySelector(
+      ":scope > .input-group-header"
+    );
+    const content = section.querySelector(
+      ":scope > .input-group-content"
+    );
+    const symbol = header?.querySelector(".auto-symbol");
+    section.classList.toggle("input-group-open", open);
+    section.classList.toggle("input-group-closed", !open);
+    header?.setAttribute("aria-expanded", `${open}`);
+    if (section.classList.contains("vst-detail-repeating-group")) {
+      header?.setAttribute("aria-pressed", `${open}`);
+    }
+    if (content) {
+      content.style.removeProperty("display");
+      content.hidden = !open;
+      if (section.classList.contains("vst-detail-repeating-group") && content.childNodes.length > 0) {
+        content.classList.toggle(
+          "vst-detail-repeating-editor-active",
+          open
+        );
+      }
+    }
+    if (symbol) {
+      symbol.textContent = open ? "⮟" : "⮞";
+    }
+  };
+  var closeSiblingAccordionSections = (section) => {
+    const parent = section.parentElement;
+    if (!parent) {
+      return;
+    }
+    for (const sibling of parent.children) {
+      if (sibling instanceof HTMLElement && sibling !== section && sibling.classList.contains("vst-detail-section")) {
+        setAccordionOpen(sibling, false);
+      }
+    }
+  };
+  var appendSectionContent = (target, source, flatten) => {
+    if (!flatten || source instanceof DocumentFragment) {
+      target.appendChild(source);
+      return;
+    }
+    for (const { name, value } of Array.from(source.attributes)) {
+      if (name.startsWith("data-")) {
+        target.setAttribute(name, value);
+      }
+    }
+    target.classList.add(...Array.from(source.classList));
+    target.append(...Array.from(source.childNodes));
+  };
+  var buildAccordionSection = (spec) => {
+    const section = document.createElement("div");
+    section.className = `input-group vst-detail-section ${spec.open ? "input-group-open" : "input-group-closed"} ${spec.className ?? ""}`.trim();
+    section.dataset.vstAccordionKey = spec.key;
+    const header = document.createElement("span");
+    header.className = "input-group-header input-group-shrinkable vst-detail-section-header";
+    header.tabIndex = 0;
+    header.setAttribute("role", "button");
+    header.setAttribute("aria-expanded", `${spec.open === true}`);
+    const labelWrap = document.createElement("span");
+    labelWrap.className = "header-label-wrap";
+    const symbol = document.createElement("span");
+    symbol.className = "auto-symbol";
+    symbol.textContent = spec.open ? "⮟" : "⮞";
+    const heading = document.createElement("span");
+    heading.className = "header-label";
+    heading.textContent = spec.label;
+    const spacer = document.createElement("span");
+    spacer.className = "header-label-spacer";
+    labelWrap.append(symbol, heading, spacer);
+    if (spec.counter !== void 0) {
+      const counter = document.createElement("span");
+      counter.className = "header-label-counter";
+      counter.textContent = `${spec.counter}`;
+      labelWrap.appendChild(counter);
+    }
+    header.appendChild(labelWrap);
+    const content = document.createElement("div");
+    content.className = "input-group-content vst-detail-section-content";
+    content.hidden = spec.open !== true;
+    appendSectionContent(content, spec.content, spec.flattenContent === true);
+    const toggle = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const opening = content.hidden === true;
+      if (opening) {
+        closeSiblingAccordionSections(section);
+      }
+      setAccordionOpen(section, opening);
+    };
+    header.addEventListener("click", toggle);
+    header.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        toggle(event);
+      }
+    });
+    section.append(header, content);
+    return { section, heading, content };
   };
   var buildRepeatingEditor = (spec) => {
-    const section = document.createElement("div");
-    section.className = `vst-detail-stages-wrap vst-detail-repeating-editor ${spec.sectionClass ?? ""}`.trim();
-    section.dataset.vstRepeaterKey = spec.key;
-    const heading = sectionLabel(spec.label);
-    section.appendChild(heading);
-    const list = document.createElement("div");
-    list.className = `vst-detail-repeating-group-list ${spec.listClass ?? ""}`.trim();
+    const children = document.createDocumentFragment();
     spec.items.forEach((item, index) => {
       const active = item.active === true;
       const group = document.createElement("div");
-      group.className = `input-group vst-detail-repeating-group ${active ? "input-group-open" : "input-group-closed"}`;
-      const header = document.createElement("div");
+      group.className = `input-group vst-detail-repeating-group ${active ? "input-group-open" : "input-group-closed"} ${item.groupClassName ?? ""}`.trim();
+      const header = document.createElement("span");
       header.className = `input-group-header input-group-shrinkable vst-detail-repeating-group-header ${item.className ?? ""}`.trim();
       header.tabIndex = 0;
       header.setAttribute("role", "button");
@@ -7594,7 +7713,7 @@
       labelWrap.className = "header-label-wrap";
       const symbol = document.createElement("span");
       symbol.className = "auto-symbol";
-      symbol.textContent = active ? "▾" : "▸";
+      symbol.textContent = active ? "⮟" : "⮞";
       const label = document.createElement("span");
       label.className = "header-label";
       label.textContent = item.label;
@@ -7605,12 +7724,12 @@
       if (item.headerAction) {
         const action = document.createElement("button");
         action.type = "button";
-        action.className = `basic-button small-button vst-detail-repeating-group-action ${item.headerAction.className ?? ""}`.trim();
+        action.className = `basic-button vst-btn-tiny vst-detail-repeating-group-action ${item.headerAction.className ?? ""}`.trim();
         action.textContent = item.headerAction.label;
         action.title = item.headerAction.title;
         action.setAttribute("aria-label", item.headerAction.title);
         action.classList.toggle(
-          "vst-detail-repeating-group-action-active",
+          "vst-btn-skip-active",
           item.headerAction.active === true
         );
         action.addEventListener("click", (event) => {
@@ -7624,8 +7743,8 @@
       if (onDelete) {
         const remove = document.createElement("button");
         remove.type = "button";
-        remove.className = `basic-button small-button vst-refs-delete vst-detail-delete vst-detail-repeating-group-delete ${spec.remove.className}`.trim();
-        remove.textContent = "- Delete";
+        remove.className = `interrupt-button vst-btn-tiny vst-detail-delete vst-detail-repeating-group-delete ${spec.remove.className}`.trim();
+        remove.textContent = "×";
         remove.title = item.deleteTitle ?? (active ? spec.remove.title : `Delete ${item.label}`);
         remove.setAttribute("aria-label", remove.title);
         remove.disabled = item.deleteDisabled === true;
@@ -7640,40 +7759,48 @@
       header.appendChild(labelWrap);
       const content = document.createElement("div");
       content.className = "input-group-content vst-detail-repeating-group-content";
-      if (active && spec.editor) {
-        spec.editor.classList.add("vst-detail-repeating-editor-active");
-        content.appendChild(spec.editor);
-      } else {
-        content.hidden = true;
+      const editor = item.editor ?? (active ? spec.editor : void 0);
+      if (editor) {
+        appendSectionContent(content, editor, true);
       }
-      const activateOrToggle = () => {
-        if (!active) {
+      content.hidden = !active;
+      content.classList.toggle(
+        "vst-detail-repeating-editor-active",
+        active && editor !== void 0
+      );
+      const activateOrToggle = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!active && item.onSelect) {
           item.onSelect();
           return;
         }
         const opening = content.hidden === true;
-        content.hidden = !opening;
-        group.classList.toggle("input-group-open", opening);
-        group.classList.toggle("input-group-closed", !opening);
-        header.setAttribute("aria-expanded", `${opening}`);
-        symbol.textContent = opening ? "▾" : "▸";
+        if (opening) {
+          for (const sibling of Array.from(
+            group.parentElement?.children ?? []
+          )) {
+            if (sibling instanceof HTMLElement && sibling !== group && sibling.classList.contains("vst-detail-repeating-group")) {
+              setAccordionOpen(sibling, false);
+            }
+          }
+        }
+        setAccordionOpen(group, opening);
       };
       header.addEventListener("click", activateOrToggle);
       header.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          activateOrToggle();
+          activateOrToggle(event);
         }
       });
       group.append(header, content);
-      list.appendChild(group);
+      children.appendChild(group);
       group.dataset.vstRepeaterItem = `${index}`;
     });
-    section.appendChild(list);
     const add = document.createElement("button");
     add.type = "button";
-    add.className = `basic-button small-button vst-add-btn vst-detail-repeating-add ${spec.add.className}`.trim();
-    add.textContent = "+ Add";
+    add.className = `vst-add-btn vst-detail-repeating-add ${spec.add.className}`.trim();
+    add.textContent = spec.add.label ?? "+ Add";
     add.title = spec.add.title;
     add.setAttribute("aria-label", spec.add.title);
     add.disabled = spec.add.disabled === true;
@@ -7681,29 +7808,39 @@
       event.preventDefault();
       spec.add.onClick();
     });
-    section.appendChild(add);
-    return { section, heading, list, editor: spec.editor ?? null };
+    children.appendChild(add);
+    const built = buildAccordionSection({
+      key: spec.key,
+      label: spec.label,
+      content: children,
+      counter: spec.items.length,
+      open: spec.open,
+      className: `vst-detail-repeating-editor ${spec.sectionClass ?? ""}`.trim()
+    });
+    built.section.dataset.vstRepeaterKey = spec.key;
+    return {
+      section: built.section,
+      heading: built.heading,
+      editor: spec.editor ?? null
+    };
   };
   var clampStartLength = (start, length, clipDur, minLength) => {
     const s = clamp(start, 0, Math.max(0, clipDur - minLength));
     const l = clamp(length, minLength, Math.max(minLength, clipDur - s));
     return { start: s, length: l };
   };
-  var buildGroup = (groupId, content) => {
-    const group = document.createElement("div");
-    group.className = "input-group input-group-open";
-    group.id = `auto-group-${groupId}`;
-    const contentEl = document.createElement("div");
-    contentEl.className = "input-group-content";
-    contentEl.id = `input_group_content_${groupId}`;
-    contentEl.appendChild(content);
-    group.appendChild(contentEl);
-    return group;
-  };
-  var wrapForm = (groupId, content) => {
+  var wrapForm = (key, label, content) => {
     const body = document.createElement("div");
     body.className = "vst-detail-body";
-    body.appendChild(buildGroup(groupId, content));
+    body.appendChild(
+      buildAccordionSection({
+        key,
+        label,
+        content,
+        open: true,
+        flattenContent: true
+      }).section
+    );
     return body;
   };
   var tagFocus = (field, key) => {
@@ -7711,14 +7848,17 @@
     control?.setAttribute("data-vst-focus-key", key);
     return field;
   };
-  var buildStackSection = (label, colClass) => {
-    const wrap = document.createElement("div");
-    wrap.className = "vst-detail-stages-wrap";
-    wrap.appendChild(sectionLabel(label));
+  var buildStackSection = (key, label, colClass, open = false) => {
     const col = document.createElement("div");
     col.className = `vst-detail-col ${colClass}`;
-    wrap.appendChild(col);
-    return { wrap, col };
+    const built = buildAccordionSection({
+      key,
+      label,
+      content: col,
+      open,
+      flattenContent: true
+    });
+    return { wrap: built.section, col: built.content };
   };
 
   // frontend/detailStrip/draftQueue.ts
@@ -8107,12 +8247,18 @@
       control.disabled = true;
       control.title = decision.reason;
     }
-    root.classList.add("vst-capability-readonly");
+    if (root instanceof DocumentFragment) {
+      for (const child of root.children) {
+        child.classList.add("vst-capability-readonly");
+      }
+    } else {
+      root.classList.add("vst-capability-readonly");
+    }
     root.prepend(buildCapabilityNotice(decision));
   };
 
   // frontend/detailStrip/audioSegmentPanel.ts
-  var buildAudioSegmentSection = (ctx, clipIdx, selectedSegmentIndex, clips) => {
+  var buildAudioSegmentSection = (ctx, clipIdx, selectedSegmentIndex, clips, open = selectedSegmentIndex !== null) => {
     const clip = clips[clipIdx];
     const segments = clip?.audioSegments ?? [];
     const clipDur = Math.max(AUDIO_SEGMENT_MIN_LENGTH, clip?.duration || 0);
@@ -8294,7 +8440,7 @@
       key: "audio-segments",
       label: "Segments",
       sectionClass: "vst-detail-audio-segments",
-      listClass: "vst-detail-segment-rail",
+      open,
       items: segments.map((_, segIdx) => ({
         label: `S${segIdx + 1}`,
         focusKey: `audio-segment-tab-${segIdx}`,
@@ -8306,6 +8452,7 @@
       })),
       add: {
         title: decision.supported ? "Overlay an extra audio piece on this clip" : decision.reason,
+        label: "+ Add Audio Segment",
         className: "vst-detail-add-segment",
         disabled: !decision.supported,
         onClick: () => ctx.addAudioSegment(clipIdx)
@@ -8321,7 +8468,6 @@
   };
 
   // frontend/detailStrip/audioPanel.ts
-  var GROUP_AUDIO_SEGMENTS = "vstdock_audiosegments";
   var buildAudioBody = (ctx, sel, clips) => {
     const { clipIdx } = sel;
     const clip = clips[clipIdx];
@@ -8360,8 +8506,6 @@
     body.className = "vst-detail-body vst-detail-audio-body";
     const base = document.createElement("div");
     base.className = "vst-detail-col vst-detail-audio";
-    base.appendChild(sectionLabel("Base audio"));
-    body.appendChild(base);
     const select2 = buildOptionSelect(
       options.map((o) => ({ value: o.value, label: o.label })),
       source,
@@ -8398,7 +8542,7 @@
       reuseRow.appendChild(buildCapabilityNotice(reuseDecision));
       const remove = document.createElement("button");
       remove.type = "button";
-      remove.className = "basic-button small-button vst-detail-delete";
+      remove.className = "interrupt-button vst-btn-tiny vst-detail-delete";
       remove.textContent = "Remove unsupported reuse";
       remove.addEventListener("click", () => {
         commitAudio((target) => {
@@ -8482,16 +8626,26 @@
       });
       base.appendChild(remove);
     }
+    body.appendChild(
+      buildAccordionSection({
+        key: "base-audio",
+        label: "Base Audio",
+        content: base,
+        open: sel.kind === "audio",
+        flattenContent: true
+      }).section
+    );
     const segments = buildAudioSegmentSection(
       ctx,
       clipIdx,
       sel.kind === "audio-segment" ? sel.segIdx : null,
-      clips
+      clips,
+      sel.kind === "audio-segment"
     );
     if (!segmentDecision.supported && (clip.audioSegments?.length ?? 0) > 0) {
       segments.appendChild(buildCapabilityNotice(segmentDecision));
     }
-    body.appendChild(buildGroup(GROUP_AUDIO_SEGMENTS, segments));
+    body.appendChild(segments);
     return body;
   };
 
@@ -8562,7 +8716,6 @@
   };
 
   // frontend/detailStrip/boundaryPanel.ts
-  var GROUP_BOUNDARY = "vstdock_boundary";
   var buildBoundaryBody = (ctx, sel, clips) => {
     const { leftClipIdx } = sel;
     const body = document.createElement("div");
@@ -8725,7 +8878,7 @@
       }
     }
     body.appendChild(info);
-    return wrapForm(GROUP_BOUNDARY, body);
+    return wrapForm("boundary", "Boundary", body);
   };
 
   // frontend/architectures/ltx2/icLoraAutoDownload.ts
@@ -8818,7 +8971,7 @@
   };
 
   // frontend/architectures/ltx2/icLoraPanel.ts
-  var buildIcLorasSection = (context, clip, clipIdx, defaults, selectedEntryIdx = null) => {
+  var buildIcLorasSection = (context, clip, clipIdx, defaults, selectedEntryIdx = null, open = selectedEntryIdx !== null) => {
     const clipCapabilities = context.capabilities().forClip(clip);
     const icLoraDecision = clipCapabilities.decision("icLora");
     const entryIdx = clip.icLoras.length === 0 ? null : Math.max(
@@ -8830,7 +8983,7 @@
         key: "ic-loras",
         label: "IC-LoRAs",
         sectionClass: "vst-detail-iclora-section",
-        listClass: "vst-detail-iclora-rail",
+        open,
         items: clip.icLoras.map((_, index) => ({
           label: `IC${index + 1}`,
           focusKey: `ic-lora-tab-${index}`,
@@ -8843,25 +8996,29 @@
             entryIdx: index
           }),
           onDelete: () => {
-            context.structuralCommit((clips) => {
-              const target = clips[clipIdx];
-              if (!target?.icLoras[index]) {
-                return null;
-              }
-              target.icLoras.splice(index, 1);
-              return target.icLoras.length > 0 ? {
-                kind: "ic-lora",
-                clipIdx,
-                entryIdx: Math.min(
-                  index,
-                  target.icLoras.length - 1
-                )
-              } : { kind: "clip", clipIdx, stageIdx: 0 };
-            });
+            context.structuralCommit(
+              (clips) => {
+                const target = clips[clipIdx];
+                if (!target?.icLoras[index]) {
+                  return null;
+                }
+                target.icLoras.splice(index, 1);
+                return target.icLoras.length > 0 ? {
+                  kind: "ic-lora",
+                  clipIdx,
+                  entryIdx: Math.min(
+                    index,
+                    target.icLoras.length - 1
+                  )
+                } : { kind: "clip", clipIdx, stageIdx: 0 };
+              },
+              { rebuildAfterSelect: true }
+            );
           }
         })),
         add: {
           title: icLoraDecision.supported ? "Add an IC-LoRA" : icLoraDecision.reason,
+          label: "+ Add IC-LoRA",
           className: "vst-detail-add-iclora",
           disabled: !icLoraDecision.supported,
           onClick: () => {
@@ -9308,7 +9465,7 @@
   var panels = /* @__PURE__ */ new Map([
     ["ltx2", { buildIcLorasSection }]
   ]);
-  var persistedIcLoraRemovalPanel = (context, clip, clipIdx, selectedEntryIdx) => {
+  var persistedIcLoraRemovalPanel = (context, clip, clipIdx, selectedEntryIdx, open) => {
     const entryIdx = clip.icLoras.length === 0 ? null : Math.max(
       0,
       Math.min(selectedEntryIdx ?? 0, clip.icLoras.length - 1)
@@ -9329,7 +9486,7 @@
       key: "ic-loras",
       label: "Persisted IC-LoRAs",
       sectionClass: "vst-detail-iclora-section",
-      listClass: "vst-detail-iclora-rail",
+      open,
       items: clip.icLoras.map((_, index) => ({
         label: `IC${index + 1}`,
         focusKey: `ic-lora-tab-${index}`,
@@ -9341,23 +9498,27 @@
           entryIdx: index
         }),
         onDelete: () => {
-          context.structuralCommit((clips) => {
-            const target = clips[clipIdx];
-            if (!target?.icLoras[index]) return null;
-            target.icLoras.splice(index, 1);
-            return target.icLoras.length > 0 ? {
-              kind: "ic-lora",
-              clipIdx,
-              entryIdx: Math.min(
-                index,
-                target.icLoras.length - 1
-              )
-            } : { kind: "clip", clipIdx, stageIdx: 0 };
-          });
+          context.structuralCommit(
+            (clips) => {
+              const target = clips[clipIdx];
+              if (!target?.icLoras[index]) return null;
+              target.icLoras.splice(index, 1);
+              return target.icLoras.length > 0 ? {
+                kind: "ic-lora",
+                clipIdx,
+                entryIdx: Math.min(
+                  index,
+                  target.icLoras.length - 1
+                )
+              } : { kind: "clip", clipIdx, stageIdx: 0 };
+            },
+            { rebuildAfterSelect: true }
+          );
         }
       })),
       add: {
         title: "This architecture has no IC-LoRA editor",
+        label: "+ Add IC-LoRA",
         className: "vst-detail-add-iclora",
         disabled: true,
         onClick: () => {
@@ -9370,13 +9531,14 @@
       editor: content
     }).section;
   };
-  var buildArchitectureIcLorasSection = (context, clip, clipIdx, defaults, selectedEntryIdx = null) => panels.get(clip.architecture)?.buildIcLorasSection(
+  var buildArchitectureIcLorasSection = (context, clip, clipIdx, defaults, selectedEntryIdx = null, open = selectedEntryIdx !== null) => panels.get(clip.architecture)?.buildIcLorasSection(
     context,
     clip,
     clipIdx,
     defaults,
-    selectedEntryIdx
-  ) ?? persistedIcLoraRemovalPanel(context, clip, clipIdx, selectedEntryIdx);
+    selectedEntryIdx,
+    open
+  ) ?? persistedIcLoraRemovalPanel(context, clip, clipIdx, selectedEntryIdx, open);
 
   // frontend/timelineEdit.ts
   var pxToDuration = (px, pxPerSecond, fps) => {
@@ -9457,7 +9619,6 @@
             );
           }
         });
-        context.render();
       })
     );
     return column;
@@ -9490,8 +9651,7 @@
   var resolveImageSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, REF_SOURCE_REFINER);
 
   // frontend/detailStrip/refPanel.ts
-  var GROUP_REF = "vstdock_ref";
-  var buildRefSection = (ctx, clipIdx, selectedRefIdx, clips) => {
+  var buildRefSection = (ctx, clipIdx, selectedRefIdx, clips, open = selectedRefIdx !== null) => {
     const clip = clips[clipIdx];
     const decision = ctx.capabilities().forClip(clip).decision("frameReferences");
     const activeRefIdx = clip.refs.length === 0 ? null : clamp(selectedRefIdx ?? 0, 0, clip.refs.length - 1);
@@ -9499,7 +9659,7 @@
       key: "references",
       label: "Reference Images",
       sectionClass: "vst-detail-ref-section",
-      listClass: "vst-detail-ref-rail",
+      open,
       items: clip.refs.map((_, refIdx) => ({
         label: `R${refIdx + 1}`,
         focusKey: `reference-tab-${refIdx}`,
@@ -9511,6 +9671,7 @@
       })),
       add: {
         title: decision.supported ? "Add a reference image" : decision.reason,
+        label: "+ Add Reference Image",
         className: "vst-detail-add-ref",
         disabled: !decision.supported,
         onClick: () => ctx.addRefEntry(clipIdx)
@@ -9653,39 +9814,37 @@
   };
 
   // frontend/detailStrip/retakePanel.ts
-  var buildRetakeSection = (context, clip, clipIdx) => {
+  var buildRetakeSection = (context, clip, clipIdx, open = false) => {
     const retake = clip.retake;
     const decision = context.capabilities().forClip(clip).decision("retake");
     const col = document.createElement("div");
     col.className = "vst-detail-col vst-detail-retake-col";
     const buildSection = () => {
-      const built = buildRepeatingEditor({
-        key: "retakes",
+      const built = buildAccordionSection({
+        key: "retake",
         label: "Retake",
-        sectionClass: "vst-detail-retake-section",
-        listClass: "vst-detail-retake-rail",
-        items: retake ? [
-          {
-            label: "RT",
-            title: "Edit retake window",
-            active: true,
-            className: "vst-retake-tab",
-            onSelect: () => setSelection({ kind: "retake", clipIdx }),
-            onDelete: () => context.removeRetake(clipIdx)
-          }
-        ] : [],
-        add: {
-          title: retake ? "This clip already has a retake window" : decision.supported ? "Add a retake window" : decision.reason,
-          className: "vst-detail-add-retake",
-          disabled: !!retake || !decision.supported,
-          onClick: () => context.createRetake(clipIdx)
-        },
-        remove: {
-          title: retake ? "Delete the retake window" : "No retake window to delete",
-          className: "vst-detail-delete-retake"
-        },
-        editor: col
+        className: "vst-detail-retake-section",
+        open,
+        content: col,
+        flattenContent: true
       });
+      if (retake) {
+        const actions = document.createElement("span");
+        actions.className = "vst-detail-repeating-group-actions";
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "interrupt-button vst-btn-tiny vst-detail-delete vst-detail-delete-retake";
+        remove.textContent = "×";
+        remove.title = "Delete the retake window";
+        remove.setAttribute("aria-label", remove.title);
+        remove.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          context.removeRetake(clipIdx);
+        });
+        actions.appendChild(remove);
+        built.heading.parentElement?.appendChild(actions);
+      }
       appendHelp(
         built.heading,
         built.section,
@@ -9699,6 +9858,18 @@
       hint.className = "vst-detail-field-hint";
       hint.textContent = "Regenerates a sub-range when refining a base video.";
       col.appendChild(hint);
+      const add = document.createElement("button");
+      add.type = "button";
+      add.className = "vst-add-btn vst-detail-repeating-add vst-detail-add-retake";
+      add.textContent = "+ Add Retake";
+      add.title = decision.supported ? "Add a retake window" : decision.reason;
+      add.setAttribute("aria-label", add.title);
+      add.disabled = !decision.supported;
+      add.addEventListener("click", (event) => {
+        event.preventDefault();
+        context.createRetake(clipIdx);
+      });
+      col.appendChild(add);
       return buildSection();
     }
     const clipDuration = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
@@ -9909,15 +10080,19 @@
       context.render();
     }, operation.cancel);
   };
-  var buildSourceVideoSection = (context, clip, clipIdx) => {
+  var buildSourceVideoSection = (context, clip, clipIdx, open = false) => {
     const { wrap, col } = buildStackSection(
+      "source-video",
       "Source Video",
-      "vst-detail-source-col"
+      "vst-detail-source-col",
+      open
     );
-    const sectionLabel2 = wrap.querySelector(".vst-detail-sec");
-    if (sectionLabel2) {
+    const sectionLabel = wrap.querySelector(
+      ":scope > .input-group-header .header-label"
+    );
+    if (sectionLabel) {
       appendHelp(
-        sectionLabel2,
+        sectionLabel,
         wrap,
         "Source Video",
         "Start this clip from an existing video instead of generating it. Stages then refine/upscale the footage and a retake can regenerate part of it."
@@ -10038,7 +10213,7 @@
     col.appendChild(note);
     const removeButton = document.createElement("button");
     removeButton.type = "button";
-    removeButton.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
+    removeButton.className = "interrupt-button vst-btn-tiny vst-detail-delete vst-detail-rail-btn";
     removeButton.textContent = "Remove source video";
     removeButton.addEventListener("click", (event) => {
       event.preventDefault();
@@ -10052,24 +10227,8 @@
   var LORA_WEIGHT_STEP = 0.05;
   var LORA_WEIGHT_DEFAULT = 1;
   var buildStageLorasSection = (context, clipIdx, stageIdx, stage, defaults) => {
-    const section = document.createElement("div");
-    section.className = "vst-stage-loras vst-detail-span-full";
-    const heading = sectionLabel("LoRAs");
-    section.appendChild(heading);
-    appendHelp(
-      heading,
-      section,
-      "Stage LoRAs",
-      "LoRAs applied only to this stage. A newly added stage copies every LoRA and weight from the previous stage."
-    );
-    const list = document.createElement("div");
-    list.className = "vst-stage-lora-list";
-    section.appendChild(list);
-    stage.loras.forEach((lora, loraIdx) => {
-      const entry = document.createElement("div");
-      entry.className = "vst-stage-lora-entry";
-      const row = document.createElement("div");
-      row.className = "vst-stage-lora-row";
+    const items = stage.loras.map((lora, loraIdx) => {
+      const editor = document.createElement("div");
       const options = defaults.loraValues.map(
         (value, optionIdx) => ({
           value,
@@ -10093,28 +10252,7 @@
         "data-vst-focus-key",
         `stage-${stageIdx}-lora-${loraIdx}-model`
       );
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "basic-button small-button vst-refs-delete vst-detail-delete vst-stage-lora-remove";
-      remove.textContent = "×";
-      remove.title = `Delete LoRA ${loraIdx + 1}`;
-      remove.setAttribute("aria-label", remove.title);
-      remove.addEventListener("click", (event) => {
-        event.preventDefault();
-        context.structuralCommit(
-          (clips) => {
-            const target = clips[clipIdx]?.stages[stageIdx];
-            if (!target?.loras[loraIdx]) {
-              return null;
-            }
-            target.loras.splice(loraIdx, 1);
-            return { kind: "clip", clipIdx, stageIdx };
-          },
-          { rebuildAfterSelect: true }
-        );
-      });
-      row.append(buildField(`LoRA ${loraIdx + 1}`, select2), remove);
-      entry.appendChild(row);
+      editor.appendChild(buildField("Model", select2));
       const weight = buildSlider(
         "Weight",
         lora.weight,
@@ -10142,40 +10280,72 @@
         "data-vst-focus-key",
         `stage-${stageIdx}-lora-${loraIdx}-weight`
       );
-      entry.appendChild(weight);
-      list.appendChild(entry);
-    });
-    if (defaults.loraValues.length === 0 && stage.loras.length === 0) {
-      const empty = document.createElement("small");
-      empty.className = "vst-detail-field-hint";
-      empty.textContent = "(no LoRAs available)";
-      list.appendChild(empty);
-    }
-    const add = document.createElement("button");
-    add.type = "button";
-    add.className = "basic-button small-button vst-add-btn vst-stage-lora-add";
-    add.textContent = "+ Add LoRA";
-    add.title = defaults.loraValues.length > 0 ? "Add a LoRA to this stage" : "No LoRAs are available";
-    add.disabled = defaults.loraValues.length === 0;
-    add.addEventListener("click", (event) => {
-      event.preventDefault();
-      context.structuralCommit(
-        (clips) => {
-          const target = clips[clipIdx]?.stages[stageIdx];
-          if (!target || defaults.loraValues.length === 0) {
-            return null;
-          }
-          target.loras.push({
-            name: defaults.loraValues[0],
-            weight: LORA_WEIGHT_DEFAULT
-          });
-          return { kind: "clip", clipIdx, stageIdx };
+      editor.appendChild(weight);
+      return {
+        label: `LoRA ${loraIdx + 1}`,
+        active: loraIdx === 0,
+        groupClassName: "vst-stage-lora-entry",
+        editor,
+        onDelete: () => {
+          context.structuralCommit(
+            (clips) => {
+              const target = clips[clipIdx]?.stages[stageIdx];
+              if (!target?.loras[loraIdx]) {
+                return null;
+              }
+              target.loras.splice(loraIdx, 1);
+              return { kind: "clip", clipIdx, stageIdx };
+            },
+            { rebuildAfterSelect: true }
+          );
         },
-        { rebuildAfterSelect: true }
-      );
+        deleteTitle: `Delete LoRA ${loraIdx + 1}`
+      };
     });
-    section.appendChild(add);
-    return section;
+    const built = buildRepeatingEditor({
+      key: `stage-${stageIdx}-loras`,
+      label: "LoRAs",
+      sectionClass: "vst-stage-loras",
+      // Stage LoRAs do not have their own timeline selection kind. Structural
+      // add/remove commits therefore rebuild the owning stage selection; keep
+      // the nested editor open while it still has items instead of resetting
+      // it to the hard-coded closed state on every rebuild.
+      open: items.length > 0,
+      items,
+      add: {
+        title: defaults.loraValues.length > 0 ? "Add a LoRA to this stage" : "No LoRAs are available",
+        label: "+ Add LoRA",
+        className: "vst-stage-lora-add",
+        disabled: defaults.loraValues.length === 0,
+        onClick: () => {
+          context.structuralCommit(
+            (clips) => {
+              const target = clips[clipIdx]?.stages[stageIdx];
+              if (!target || defaults.loraValues.length === 0) {
+                return null;
+              }
+              target.loras.push({
+                name: defaults.loraValues[0],
+                weight: LORA_WEIGHT_DEFAULT
+              });
+              return { kind: "clip", clipIdx, stageIdx };
+            },
+            { rebuildAfterSelect: true }
+          );
+        }
+      },
+      remove: {
+        title: "Delete LoRA",
+        className: "vst-stage-lora-remove"
+      }
+    });
+    appendHelp(
+      built.heading,
+      built.section,
+      "Stage LoRAs",
+      "LoRAs applied only to this stage. A newly added stage copies every LoRA and weight from the previous stage."
+    );
+    return built.section;
   };
 
   // frontend/architectures/conversion/presentation.ts
@@ -10593,7 +10763,7 @@ The conversion is one undoable change.`;
   // frontend/detailStrip/stagePanel.ts
   var buildStageParamsColumn = (context, clip, clipIdx, stageIdx, stage, defaults) => {
     const column = document.createElement("div");
-    column.className = "vst-detail-col vst-detail-params";
+    column.className = "vst-detail-fields vst-detail-params";
     const sourcedStage0 = stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
     const isRefine = stageIdx >= 1 || sourcedStage0;
     const stageCapabilities = context.capabilities().forStage(clip, stage);
@@ -10627,9 +10797,7 @@ The conversion is one undoable change.`;
       ),
       focusKey
     );
-    const fields = document.createElement("div");
-    fields.className = "vst-detail-fields";
-    column.appendChild(fields);
+    const fields = column;
     fields.classList.toggle("vst-stage-fields-muted", stage.skipped === true);
     const bindings = {
       context,
@@ -10672,13 +10840,13 @@ The conversion is one undoable change.`;
       const note = document.createElement("p");
       note.className = "vst-detail-note vst-stage-passthrough-note";
       note.textContent = "This stage starts from the source footage — Control sets how much is re-generated (0 passes it through).";
-      column.insertBefore(note, fields);
+      column.insertBefore(note, column.firstChild);
     }
     return column;
   };
 
   // frontend/detailStrip/stageRail.ts
-  var buildStageRail = (context, clip, clipIdx, stageIdx, editor) => {
+  var buildStageRail = (context, clip, clipIdx, stageIdx, editor, open = true) => {
     const canAdd = clip.stages.length === 0 || context.capabilities().forClip(clip).decision("multiStage").supported;
     const addTitle = canAdd ? clip.stages.length === 0 ? "Add the first stage and choose its architecture" : "Add a refine stage" : context.capabilities().forClip(clip).decision("multiStage").reason;
     const cannotDelete = clip.stages.length === 0 || clip.stages.length === 1 && clip.sourceVideo === null;
@@ -10686,7 +10854,7 @@ The conversion is one undoable change.`;
       key: "stages",
       label: "Stages",
       sectionClass: "vst-detail-stage-groups",
-      listClass: "vst-detail-stage-group-list",
+      open,
       items: clip.stages.map((stage, index) => ({
         label: `Stage ${stageChipLabel(index)}`,
         focusKey: `stage-group-${index}`,
@@ -10698,8 +10866,8 @@ The conversion is one undoable change.`;
         deleteDisabled: cannotDelete,
         deleteTitle: cannotDelete ? clip.stages.length === 0 ? "This source-only clip has no generation stage" : "Add a source video before removing the only generation stage" : `Delete stage ${stageChipLabel(index)}`,
         headerAction: {
-          label: stage.skipped ? "Enable" : "Skip",
-          title: stage.skipped ? `Enable stage ${stageChipLabel(index)}` : `Skip stage ${stageChipLabel(index)}`,
+          label: "⏭︎",
+          title: stage.skipped ? `Re-enable stage ${stageChipLabel(index)}` : `Skip stage ${stageChipLabel(index)}`,
           className: "vst-detail-skip-stage",
           active: stage.skipped,
           onClick: () => {
@@ -10725,6 +10893,7 @@ The conversion is one undoable change.`;
       })),
       add: {
         title: addTitle,
+        label: "+ Add Video Stage",
         className: "vst-detail-add-stage",
         disabled: !canAdd,
         onClick: () => context.addStage(clipIdx)
@@ -10738,10 +10907,6 @@ The conversion is one undoable change.`;
   };
 
   // frontend/detailStrip/clipPanel.ts
-  var GROUP_STAGES = "vstdock_stages";
-  var GROUP_ICLORA = "vstdock_iclora";
-  var GROUP_RETAKE = "vstdock_retake";
-  var GROUP_SOURCE = "vstdock_source";
   var buildClipBody = (context, selection2, clips) => {
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-clip-body";
@@ -10751,7 +10916,15 @@ The conversion is one undoable change.`;
     const stage = clip.stages[stageIdx];
     const defaults = getRootDefaults();
     const capabilityView = context.capabilities().forClip(clip);
-    body.appendChild(buildClipColumn(context, clip, clipIdx));
+    body.appendChild(
+      buildAccordionSection({
+        key: "clip",
+        label: "Clip",
+        content: buildClipColumn(context, clip, clipIdx),
+        open: false,
+        flattenContent: true
+      }).section
+    );
     let stageEditor;
     if (stage) {
       stageEditor = buildStageParamsColumn(
@@ -10768,7 +10941,8 @@ The conversion is one undoable change.`;
       clip,
       clipIdx,
       stageIdx,
-      stageEditor
+      stageEditor,
+      selection2.kind === "clip"
     );
     if (!stage) {
       const note = document.createElement("p");
@@ -10776,8 +10950,8 @@ The conversion is one undoable change.`;
       note.textContent = "Source-only clip. Add a stage to choose an architecture and refine this footage.";
       stages.appendChild(note);
     }
-    body.appendChild(buildGroup(GROUP_STAGES, stages));
-    const appendCapabilityGroup = (groupId, feature, persisted, content, removableSelectors) => {
+    body.appendChild(stages);
+    const appendCapabilitySection = (feature, persisted, content, removableSelectors) => {
       const state = capabilityView.authoringState(feature, persisted);
       if (!state.visible) {
         return;
@@ -10786,22 +10960,21 @@ The conversion is one undoable change.`;
       if (!state.enabled) {
         disableCapabilityControls(section, state, removableSelectors);
       }
-      body.appendChild(buildGroup(groupId, section));
+      body.appendChild(section);
     };
-    appendCapabilityGroup(
-      GROUP_REF,
+    appendCapabilitySection(
       "frameReferences",
       clip.refs.length > 0,
       () => buildRefSection(
         context,
         clipIdx,
         selection2.kind === "ref" ? selection2.refIdx : null,
-        clips
+        clips,
+        selection2.kind === "ref"
       ),
       []
     );
-    appendCapabilityGroup(
-      GROUP_ICLORA,
+    appendCapabilitySection(
       "icLora",
       clip.icLoras.length > 0,
       () => buildArchitectureIcLorasSection(
@@ -10809,22 +10982,26 @@ The conversion is one undoable change.`;
         clip,
         clipIdx,
         defaults,
-        selection2.kind === "ic-lora" ? selection2.entryIdx : null
+        selection2.kind === "ic-lora" ? selection2.entryIdx : null,
+        selection2.kind === "ic-lora"
       ),
       [".vst-detail-delete"]
     );
-    appendCapabilityGroup(
-      GROUP_SOURCE,
+    appendCapabilitySection(
       "sourceVideo",
       clip.sourceVideo !== null,
-      () => buildSourceVideoSection(context, clip, clipIdx),
+      () => buildSourceVideoSection(context, clip, clipIdx, false),
       [".vst-detail-delete"]
     );
-    appendCapabilityGroup(
-      GROUP_RETAKE,
+    appendCapabilitySection(
       "retake",
       clip.retake !== null,
-      () => buildRetakeSection(context, clip, clipIdx),
+      () => buildRetakeSection(
+        context,
+        clip,
+        clipIdx,
+        selection2.kind === "retake"
+      ),
       [".vst-detail-delete"]
     );
     return body;
@@ -10899,33 +11076,39 @@ The conversion is one undoable change.`;
   };
 
   // frontend/detailStrip/promptPanels.ts
-  var GROUP_PROMPTS = "vstdock_prompts";
-  var buildMajorPromptSection = (ctx, clip, clipIdx) => {
-    const section = document.createElement("div");
-    section.className = "vst-detail-col vst-detail-prompt-major vst-detail-prompt-body";
-    section.appendChild(sectionLabel("Major Prompt"));
-    section.appendChild(
-      buildTextarea(
-        clip.prompt ?? "",
-        "Clip prompt (blank inherits the global prompt)…",
-        "prompt-major",
-        (value) => {
-          ctx.debouncedCommit("prompt-major", (clips) => {
-            const target = clips[clipIdx];
-            if (target) {
-              target.prompt = value.trim();
-            }
-          });
-        }
-      )
+  var buildMajorPromptSection = (ctx, clip, clipIdx, open) => {
+    const col = document.createElement("div");
+    col.className = "vst-detail-col vst-detail-prompt-body";
+    const prompt = buildTextarea(
+      clip.prompt ?? "",
+      "Clip prompt (blank inherits the global prompt)…",
+      "prompt-major",
+      (value) => {
+        ctx.debouncedCommit("prompt-major", (clips) => {
+          const target = clips[clipIdx];
+          if (target) {
+            target.prompt = value.trim();
+          }
+        });
+      }
     );
+    prompt.rows = 8;
+    col.appendChild(buildField("Prompt", prompt));
+    const built = buildAccordionSection({
+      key: "major-prompt",
+      label: "Major Prompt",
+      content: col,
+      open,
+      flattenContent: true,
+      className: "vst-detail-prompt-major"
+    });
     const decision = ctx.capabilities().forClip(clip).decision("majorPrompt");
     if (!decision.supported) {
-      disableCapabilityControls(section, decision);
+      disableCapabilityControls(built.section, decision);
       if (clip.prompt.trim()) {
         const clear = document.createElement("button");
         clear.type = "button";
-        clear.className = "basic-button small-button vst-remove-unsupported-prompt";
+        clear.className = "interrupt-button vst-btn-tiny vst-remove-unsupported-prompt";
         clear.textContent = "Remove unsupported clip prompt";
         clear.addEventListener("click", () => {
           ctx.commit((clips) => {
@@ -10936,12 +11119,12 @@ The conversion is one undoable change.`;
           });
           ctx.render();
         });
-        section.appendChild(clear);
+        built.content.appendChild(clear);
       }
     }
-    return section;
+    return built.section;
   };
-  var buildRelayPromptSection = (ctx, clip, clipIdx, selectedWindowIdx) => {
+  var buildRelayPromptSection = (ctx, clip, clipIdx, selectedWindowIdx, open) => {
     const windows = clip.promptWindows ?? [];
     const decision = ctx.capabilities().forClip(clip).decision("promptRelay");
     const activeWindowIdx = windows.length === 0 ? null : clamp(selectedWindowIdx ?? 0, 0, windows.length - 1);
@@ -10949,7 +11132,7 @@ The conversion is one undoable change.`;
       key: "relay-prompts",
       label: "Relay Prompts",
       sectionClass: "vst-detail-relay-section",
-      listClass: "vst-detail-relay-rail",
+      open,
       items: windows.map((window3, index) => ({
         label: `R${index + 1}`,
         focusKey: `relay-tab-${index}`,
@@ -10965,6 +11148,7 @@ The conversion is one undoable change.`;
       })),
       add: {
         title: decision.supported ? "Add a relay prompt in the first available time window" : decision.reason,
+        label: "+ Add Relay Prompt",
         className: "vst-detail-add-relay",
         disabled: !decision.supported,
         onClick: () => ctx.addPromptWindow(clipIdx)
@@ -10986,8 +11170,6 @@ The conversion is one undoable change.`;
     const editorSection = document.createElement("div");
     editorSection.className = "vst-detail-col vst-detail-prompt-body vst-detail-minor-window";
     editorSection.setAttribute("data-vst-minor-window", `${activeWindowIdx}`);
-    const range = document.createElement("div");
-    range.className = "vst-detail-minor-range";
     const bounds = promptWindowNeighborBounds(clip, activeWindowIdx);
     const beginInput = ctx.buildClampedNumber({
       key: `minor-${activeWindowIdx}-begin`,
@@ -11006,7 +11188,7 @@ The conversion is one undoable change.`;
         }
       }
     });
-    range.appendChild(
+    editorSection.appendChild(
       buildField(
         "Begin (s)",
         beginInput,
@@ -11031,7 +11213,7 @@ The conversion is one undoable change.`;
         }
       }
     });
-    range.appendChild(
+    editorSection.appendChild(
       buildField(
         "End (s)",
         endInput,
@@ -11039,7 +11221,6 @@ The conversion is one undoable change.`;
         "When this relay prompt ends. It cannot cross a neighbouring relay."
       )
     );
-    editorSection.appendChild(range);
     const editor = buildTextarea(
       window2.prompt ?? "",
       "Relay prompt for this window…",
@@ -11060,7 +11241,8 @@ The conversion is one undoable change.`;
         windowIdx: activeWindowIdx
       });
     });
-    editorSection.appendChild(editor);
+    editor.rows = 4;
+    editorSection.appendChild(buildField("Prompt", editor));
     if (!decision.supported) {
       disableCapabilityControls(editorSection, decision);
     }
@@ -11071,16 +11253,21 @@ The conversion is one undoable change.`;
     const clip = clips[clipIdx];
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-prompts-body";
-    body.appendChild(buildMajorPromptSection(ctx, clip, clipIdx));
     body.appendChild(
-      buildGroup(
-        GROUP_PROMPTS,
-        buildRelayPromptSection(
-          ctx,
-          clip,
-          clipIdx,
-          selection2.kind === "prompt-minor" ? selection2.windowIdx : null
-        )
+      buildMajorPromptSection(
+        ctx,
+        clip,
+        clipIdx,
+        selection2.kind === "prompt-major"
+      )
+    );
+    body.appendChild(
+      buildRelayPromptSection(
+        ctx,
+        clip,
+        clipIdx,
+        selection2.kind === "prompt-minor" ? selection2.windowIdx : null,
+        selection2.kind === "prompt-minor"
       )
     );
     return body;
@@ -11301,6 +11488,7 @@ The conversion is one undoable change.`;
       key: "audio-track-spans",
       label: "Spans",
       sectionClass: "vst-audio-track-spans",
+      open: selectedSpanIndex !== null,
       items: track.spans.map((_, spanIndex) => ({
         label: `S${spanIndex + 1}`,
         focusKey: `audio-track-${trackIndex}-span-tab-${spanIndex}`,
@@ -11330,6 +11518,7 @@ The conversion is one undoable change.`;
       })),
       add: {
         title: "Add a span to this audio track",
+        label: "+ Add Span",
         className: "vst-audio-track-add-span",
         onClick: () => {
           const ownerId = state.clips[0]?.id ?? null;
@@ -11381,6 +11570,7 @@ The conversion is one undoable change.`;
       key: "audio-tracks",
       label: "Planned multi-clip audio",
       sectionClass: "vst-audio-tracks-panel",
+      open: selection2.kind === "audio-track" || selection2.kind === "audio-track-span",
       items: tracks.map((_, trackIndex) => ({
         label: `T${trackIndex + 1}`,
         focusKey: `audio-track-tab-${trackIndex}`,
@@ -11405,6 +11595,7 @@ The conversion is one undoable change.`;
       })),
       add: {
         title: "Add a planned multi-clip audio track",
+        label: "+ Add Audio Track",
         className: "vst-audio-track-add",
         onClick: () => {
           ctx.commitState((next) => {
@@ -11441,12 +11632,11 @@ The conversion is one undoable change.`;
     const warning = document.createElement("div");
     warning.className = "vst-audio-tracks-planned-warning";
     warning.textContent = "Planned — runtime mixer not yet connected";
-    built.list.before(warning);
+    built.heading.after(warning);
     return built.section;
   };
 
   // frontend/detailStrip/settingsPanel.ts
-  var GROUP_SETTINGS = "vstdock_settings";
   var SETTINGS_INHERIT = "inherit";
   var SETTINGS_CUSTOM = "custom";
   var clampDimension = (value) => clamp(
@@ -11455,6 +11645,23 @@ The conversion is one undoable change.`;
     ROOT_DIMENSION_MAX
   );
   var clampFps = (value) => clamp(Math.round(value) || ROOT_FPS_MIN, ROOT_FPS_MIN, ROOT_FPS_MAX);
+  var FPS_WRITE_DEBOUNCE_MS = 300;
+  var fpsWriteTimer = null;
+  var scheduleCoreFpsWrite = (value) => {
+    if (fpsWriteTimer !== null) {
+      clearTimeout(fpsWriteTimer);
+    }
+    fpsWriteTimer = setTimeout(() => {
+      fpsWriteTimer = null;
+      const bridge2 = getVideoStagesHostBridge();
+      const core = bridge2.getRootVideoFpsInput();
+      if (!core || core.value === `${value}`) {
+        return;
+      }
+      core.value = `${value}`;
+      bridge2.notifyChanged(core);
+    }, FPS_WRITE_DEBOUNCE_MS);
+  };
   var buildSettingsBody = (ctx, selection2 = { kind: "none" }) => {
     const state = getState();
     const defaults = getRootDefaults();
@@ -11507,47 +11714,43 @@ The conversion is one undoable change.`;
       ctx.render();
     });
     body.appendChild(buildField("Resolution", resSelect));
-    const widthInput = buildNumber(
-      displayed.width,
-      ROOT_DIMENSION_MIN,
-      ROOT_DIMENSION_MAX,
-      ROOT_DIMENSION_STEP,
-      (value) => {
-        ctx.debouncedCommitState("settings-width", (next) => {
-          next.dimsExplicit = true;
-          next.width = clampDimension(value);
-        });
-      }
-    );
-    widthInput.classList.add("vst-settings-num");
-    widthInput.disabled = !isCustom;
-    widthInput.setAttribute("data-vst-focus-key", "settings-width");
-    const heightInput = buildNumber(
-      displayed.height,
-      ROOT_DIMENSION_MIN,
-      ROOT_DIMENSION_MAX,
-      ROOT_DIMENSION_STEP,
-      (value) => {
-        ctx.debouncedCommitState("settings-height", (next) => {
-          next.dimsExplicit = true;
-          next.height = clampDimension(value);
-        });
-      }
-    );
-    heightInput.classList.add("vst-settings-num");
-    heightInput.disabled = !isCustom;
-    heightInput.setAttribute("data-vst-focus-key", "settings-height");
-    const dimsPair = document.createElement("div");
-    dimsPair.className = "vst-settings-dims";
-    const dimsSep = document.createElement("span");
-    dimsSep.className = "vst-settings-dims-sep";
-    dimsSep.textContent = "×";
-    dimsPair.append(widthInput, dimsSep, heightInput);
-    const dimsField = buildField("Dimensions", dimsPair);
-    if (!isCustom) {
-      dimsField.classList.add("vst-audio-disabled");
+    if (isCustom) {
+      const widthInput = buildNumber(
+        displayed.width,
+        ROOT_DIMENSION_MIN,
+        ROOT_DIMENSION_MAX,
+        ROOT_DIMENSION_STEP,
+        (value) => {
+          ctx.debouncedCommitState("settings-width", (next) => {
+            next.dimsExplicit = true;
+            next.width = clampDimension(value);
+          });
+        }
+      );
+      widthInput.classList.add("vst-settings-num");
+      widthInput.setAttribute("data-vst-focus-key", "settings-width");
+      const heightInput = buildNumber(
+        displayed.height,
+        ROOT_DIMENSION_MIN,
+        ROOT_DIMENSION_MAX,
+        ROOT_DIMENSION_STEP,
+        (value) => {
+          ctx.debouncedCommitState("settings-height", (next) => {
+            next.dimsExplicit = true;
+            next.height = clampDimension(value);
+          });
+        }
+      );
+      heightInput.classList.add("vst-settings-num");
+      heightInput.setAttribute("data-vst-focus-key", "settings-height");
+      const dimsPair = document.createElement("div");
+      dimsPair.className = "vst-settings-dims";
+      const dimsSep = document.createElement("span");
+      dimsSep.className = "vst-settings-dims-sep";
+      dimsSep.textContent = "×";
+      dimsPair.append(widthInput, dimsSep, heightInput);
+      body.appendChild(buildField("Dimensions", dimsPair));
     }
-    body.appendChild(dimsField);
     const badges = document.createElement("div");
     badges.className = "vst-settings-badges";
     if (mode !== SETTINGS_CUSTOM && mode !== SETTINGS_INHERIT) {
@@ -11558,42 +11761,29 @@ The conversion is one undoable change.`;
     }
     badges.hidden = badges.childElementCount === 0;
     body.appendChild(badges);
-    const fpsRow = buildCheckbox(
-      "Custom FPS",
-      state.fpsExplicit === true,
-      (value) => {
-        ctx.commitState((next) => {
-          next.fpsExplicit = value;
-          if (value) {
-            next.fps = clampFps(next.fps);
-          }
-        });
-        ctx.render();
-      }
-    );
-    body.appendChild(fpsRow);
+    const hasCoreFps = getVideoStagesHostBridge().getRootVideoFpsInput() !== null;
     const fpsInput = buildNumber(
-      state.fpsExplicit ? clampFps(state.fps) : core.fps,
+      clampFps(state.fps),
       ROOT_FPS_MIN,
       ROOT_FPS_MAX,
       1,
       (value) => {
-        ctx.debouncedCommitState("settings-fps", (next) => {
-          next.fpsExplicit = true;
-          next.fps = clampFps(value);
-        });
+        scheduleCoreFpsWrite(clampFps(value));
       }
     );
     fpsInput.classList.add("vst-settings-num");
-    fpsInput.disabled = state.fpsExplicit !== true;
+    fpsInput.disabled = !hasCoreFps;
     fpsInput.setAttribute("data-vst-focus-key", "settings-fps");
-    const fpsField = buildField("FPS", fpsInput);
-    if (state.fpsExplicit !== true) {
-      fpsField.classList.add("vst-audio-disabled");
-    }
-    body.appendChild(fpsField);
+    body.appendChild(
+      buildField(
+        "FPS",
+        fpsInput,
+        hasCoreFps ? void 0 : "(no core Video FPS parameter found)",
+        "Frames per second for the whole timeline. This is the same value as the core Video FPS parameter — editing either updates both."
+      )
+    );
     body.appendChild(buildAudioTracksPanel(ctx, state, selection2));
-    return wrapForm(GROUP_SETTINGS, body);
+    return wrapForm("timeline-settings", "Timeline", body);
   };
 
   // frontend/detailStrip/panelRouter.ts
@@ -11640,7 +11830,7 @@ The conversion is one undoable change.`;
       return selection2.windowIdx >= 0 && selection2.windowIdx < windows.length ? selection2 : { kind: "none" };
     }
     if (selection2.kind === "retake") {
-      return clip.retake ? selection2 : { kind: "none" };
+      return selection2;
     }
     if (selection2.kind === "audio-segment") {
       const segments = clip.audioSegments ?? [];
@@ -11822,8 +12012,10 @@ The conversion is one undoable change.`;
       newBody.scrollTop = savedScroll;
     }
     if (options.revealSelection && !options.collapsed) {
-      const key = options.selection.kind === "ref" ? "references" : options.selection.kind === "audio-segment" ? "audio-segments" : options.selection.kind === "audio-track" ? "audio-tracks" : options.selection.kind === "audio-track-span" ? "audio-track-spans" : options.selection.kind === "prompt-minor" ? "relay-prompts" : options.selection.kind === "ic-lora" ? "ic-loras" : options.selection.kind === "retake" ? "retakes" : null;
-      const target = key ? options.detail.querySelector(
+      const key = options.selection.kind === "ref" ? "references" : options.selection.kind === "audio-segment" ? "audio-segments" : options.selection.kind === "audio-track" ? "audio-tracks" : options.selection.kind === "audio-track-span" ? "audio-track-spans" : options.selection.kind === "prompt-minor" ? "relay-prompts" : options.selection.kind === "ic-lora" ? "ic-loras" : null;
+      const target = options.selection.kind === "retake" ? options.detail.querySelector(
+        '[data-vst-accordion-key="retake"]'
+      ) : key ? options.detail.querySelector(
         `[data-vst-repeater-key="${key}"]`
       ) : null;
       if (target && typeof target.scrollIntoView === "function") {
@@ -11838,13 +12030,20 @@ The conversion is one undoable change.`;
   // frontend/detailStrip/selectionDomainOperations.ts
   var createDetailSelectionDomainOperations = (structuralCommit, getCapabilities, renderAfterExternalCommand = () => {
   }, getGeneratedEntryMode = () => "text-to-video") => {
-    const commitRemoval = (remove, index, neighbour, fallback) => structuralCommit((clips) => {
-      const remaining = remove(clips);
-      if (remaining === null) {
-        return null;
-      }
-      return remaining > 0 ? neighbour(Math.min(index, remaining - 1)) : fallback;
-    });
+    const commitRemoval = (remove, index, neighbour, fallback) => structuralCommit(
+      (clips) => {
+        const remaining = remove(clips);
+        if (remaining === null) {
+          return null;
+        }
+        return remaining > 0 ? neighbour(Math.min(index, remaining - 1)) : fallback;
+      },
+      // Deleting the last inactive item, or the first of several items,
+      // can leave the selected numeric index unchanged. A normal
+      // setSelection then emits no event, so force the repeater DOM to
+      // rebuild around the surviving entities.
+      { rebuildAfterSelect: true }
+    );
     const deleteRefEntry = (clipIdx, refIdx) => {
       commitRemoval(
         (clips) => {
@@ -11871,54 +12070,59 @@ The conversion is one undoable change.`;
       });
     };
     const addPromptWindow = (clipIdx) => {
-      structuralCommit((clips) => {
-        const clip = clips[clipIdx];
-        if (!clip || !getCapabilities().forClip(clip).decision("promptRelay").supported) {
-          return null;
-        }
-        const clipDuration = Math.max(0, clip.duration || 0);
-        const windows = [...clip.promptWindows ?? []].sort(
-          (a, b) => a.start - b.start
-        );
-        let start = 0;
-        let end = clipDuration;
-        for (const window3 of windows) {
-          const windowStart = clamp(window3.start, 0, clipDuration);
-          if (windowStart - start >= PROMPT_WINDOW_MIN_DURATION) {
-            end = windowStart;
-            break;
+      structuralCommit(
+        (clips) => {
+          const clip = clips[clipIdx];
+          if (!clip || !getCapabilities().forClip(clip).decision("promptRelay").supported) {
+            return null;
           }
-          start = Math.max(
-            start,
-            clamp(window3.start + window3.duration, 0, clipDuration)
+          const clipDuration = Math.max(0, clip.duration || 0);
+          const windows = [...clip.promptWindows ?? []].sort(
+            (a, b) => a.start - b.start
           );
-        }
-        if (end === clipDuration) {
-          const next = windows.find(
-            (window3) => window3.start >= start + PROMPT_WINDOW_MIN_DURATION
-          );
-          if (next) {
-            end = clamp(next.start, start, clipDuration);
+          let start = 0;
+          let end = clipDuration;
+          for (const window3 of windows) {
+            const windowStart = clamp(window3.start, 0, clipDuration);
+            if (windowStart - start >= PROMPT_WINDOW_MIN_DURATION) {
+              end = windowStart;
+              break;
+            }
+            start = Math.max(
+              start,
+              clamp(window3.start + window3.duration, 0, clipDuration)
+            );
           }
-        }
-        if (end - start < PROMPT_WINDOW_MIN_DURATION) {
-          return null;
-        }
-        const window2 = {
-          prompt: "",
-          start: roundToTenth(start),
-          duration: roundToTenth(
-            Math.min(PROMPT_WINDOW_DEFAULT_DURATION, end - start)
-          )
-        };
-        clip.promptWindows.push(window2);
-        clip.promptWindows.sort((a, b) => a.start - b.start);
-        return {
-          kind: "prompt-minor",
-          clipIdx,
-          windowIdx: clip.promptWindows.indexOf(window2)
-        };
-      });
+          if (end === clipDuration) {
+            const next = windows.find(
+              (window3) => window3.start >= start + PROMPT_WINDOW_MIN_DURATION
+            );
+            if (next) {
+              end = clamp(next.start, start, clipDuration);
+            }
+          }
+          if (end - start < PROMPT_WINDOW_MIN_DURATION) {
+            return null;
+          }
+          const window2 = {
+            prompt: "",
+            start: roundToTenth(start),
+            duration: roundToTenth(
+              Math.min(PROMPT_WINDOW_DEFAULT_DURATION, end - start)
+            )
+          };
+          clip.promptWindows.push(window2);
+          clip.promptWindows.sort((a, b) => a.start - b.start);
+          return {
+            kind: "prompt-minor",
+            clipIdx,
+            windowIdx: clip.promptWindows.indexOf(window2)
+          };
+        },
+        // A newly sorted leading window can reuse the currently selected
+        // numeric index; rebuild even when setSelection would be a no-op.
+        { rebuildAfterSelect: true }
+      );
     };
     const deleteWindowEntry = (clipIdx, windowIdx) => {
       commitRemoval(
@@ -11940,35 +12144,42 @@ The conversion is one undoable change.`;
       );
     };
     const createRetake = (clipIdx) => {
-      structuralCommit((clips) => {
-        const clip = clips[clipIdx];
-        if (!clip || clip.retake || !getCapabilities().forClip(clip).decision("retake").supported) {
-          return null;
-        }
-        const clipDuration = Math.max(0, clip.duration || 0);
-        clip.retake = {
-          startSeconds: 0,
-          lengthSeconds: Math.max(
-            RETAKE_MIN_DURATION,
-            Math.min(
-              RETAKE_DEFAULT_DURATION,
-              clipDuration || RETAKE_DEFAULT_DURATION
-            )
-          ),
-          strength: RETAKE_STRENGTH_DEFAULT
-        };
-        return { kind: "retake", clipIdx };
-      });
+      structuralCommit(
+        (clips) => {
+          const clip = clips[clipIdx];
+          if (!clip || clip.retake || !getCapabilities().forClip(clip).decision("retake").supported) {
+            return null;
+          }
+          const clipDuration = Math.max(0, clip.duration || 0);
+          clip.retake = {
+            startSeconds: 0,
+            lengthSeconds: Math.max(
+              RETAKE_MIN_DURATION,
+              Math.min(
+                RETAKE_DEFAULT_DURATION,
+                clipDuration || RETAKE_DEFAULT_DURATION
+              )
+            ),
+            strength: RETAKE_STRENGTH_DEFAULT
+          };
+          return { kind: "retake", clipIdx };
+        },
+        { rebuildAfterSelect: true }
+      );
     };
     const removeRetake = (clipIdx) => {
-      structuralCommit((clips) => {
-        const clip = clips[clipIdx];
-        if (!clip?.retake) {
-          return null;
-        }
-        clip.retake = null;
-        return { kind: "clip", clipIdx, stageIdx: 0 };
-      });
+      structuralCommit(
+        (clips) => {
+          const clip = clips[clipIdx];
+          if (!clip?.retake) {
+            return null;
+          }
+          const keepRetakeSelected = getCapabilities().forClip(clip).decision("retake").supported;
+          clip.retake = null;
+          return keepRetakeSelected ? { kind: "retake", clipIdx } : { kind: "clip", clipIdx, stageIdx: 0 };
+        },
+        { rebuildAfterSelect: true }
+      );
     };
     const addAudioSegment = (clipIdx) => {
       structuralCommit((clips) => {
@@ -13346,6 +13557,7 @@ The conversion is one undoable change.`;
     ghostClass: "vst-retake-ghost",
     unit: "pct",
     keyboardSelect: true,
+    revealOnActivate: true,
     // The retake sits inside the clip region; its clicks must not bubble
     // into the region's clip-select handler.
     isolateClicks: true,
@@ -13390,6 +13602,9 @@ The conversion is one undoable change.`;
     // A plain tap places a default-length window at the pressed time; a
     // drag sizes it.
     createSpan: (clip, clipIdx, startSec, endSec) => {
+      if (clip.retake) {
+        return null;
+      }
       const geom = createDefaultOrDraggedSpan(
         startSec,
         endSec,
@@ -13749,7 +13964,6 @@ The conversion is one undoable change.`;
           width: state.width,
           height: state.height,
           dimsExplicit: state.dimsExplicit,
-          fpsExplicit: state.fpsExplicit,
           unit: viewport.unit(),
           pxPerSecond: viewport.pxPerSecond(),
           selectedIndex: linking.getSelectedIndex(),

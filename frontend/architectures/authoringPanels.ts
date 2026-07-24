@@ -12,6 +12,7 @@ interface ArchitectureAuthoringPanel {
         clipIdx: number,
         defaults: RootDefaults,
         selectedEntryIdx?: number | null,
+        open?: boolean,
     ): HTMLElement;
 }
 
@@ -24,6 +25,7 @@ const persistedIcLoraRemovalPanel = (
     clip: Clip,
     clipIdx: number,
     selectedEntryIdx: number | null,
+    open: boolean,
 ): HTMLElement => {
     const entryIdx =
         clip.icLoras.length === 0
@@ -49,7 +51,7 @@ const persistedIcLoraRemovalPanel = (
         key: "ic-loras",
         label: "Persisted IC-LoRAs",
         sectionClass: "vst-detail-iclora-section",
-        listClass: "vst-detail-iclora-rail",
+        open,
         items: clip.icLoras.map((_, index) => ({
             label: `IC${index + 1}`,
             focusKey: `ic-lora-tab-${index}`,
@@ -62,25 +64,29 @@ const persistedIcLoraRemovalPanel = (
                     entryIdx: index,
                 }),
             onDelete: () => {
-                context.structuralCommit((clips) => {
-                    const target = clips[clipIdx];
-                    if (!target?.icLoras[index]) return null;
-                    target.icLoras.splice(index, 1);
-                    return target.icLoras.length > 0
-                        ? {
-                              kind: "ic-lora",
-                              clipIdx,
-                              entryIdx: Math.min(
-                                  index,
-                                  target.icLoras.length - 1,
-                              ),
-                          }
-                        : { kind: "clip", clipIdx, stageIdx: 0 };
-                });
+                context.structuralCommit(
+                    (clips) => {
+                        const target = clips[clipIdx];
+                        if (!target?.icLoras[index]) return null;
+                        target.icLoras.splice(index, 1);
+                        return target.icLoras.length > 0
+                            ? {
+                                  kind: "ic-lora",
+                                  clipIdx,
+                                  entryIdx: Math.min(
+                                      index,
+                                      target.icLoras.length - 1,
+                                  ),
+                              }
+                            : { kind: "clip", clipIdx, stageIdx: 0 };
+                    },
+                    { rebuildAfterSelect: true },
+                );
             },
         })),
         add: {
             title: "This architecture has no IC-LoRA editor",
+            label: "+ Add IC-LoRA",
             className: "vst-detail-add-iclora",
             disabled: true,
             onClick: () => {},
@@ -102,6 +108,7 @@ export const buildArchitectureIcLorasSection = (
     clipIdx: number,
     defaults: RootDefaults,
     selectedEntryIdx: number | null = null,
+    open = selectedEntryIdx !== null,
 ): HTMLElement =>
     panels
         .get(clip.architecture)
@@ -111,5 +118,6 @@ export const buildArchitectureIcLorasSection = (
             clipIdx,
             defaults,
             selectedEntryIdx,
+            open,
         ) ??
-    persistedIcLoraRemovalPanel(context, clip, clipIdx, selectedEntryIdx);
+    persistedIcLoraRemovalPanel(context, clip, clipIdx, selectedEntryIdx, open);

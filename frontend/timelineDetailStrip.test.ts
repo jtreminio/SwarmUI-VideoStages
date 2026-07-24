@@ -12,6 +12,7 @@ import {
 import {
     mountPromptBox,
     mountSelect,
+    mountVideoFps,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
 import {
@@ -127,6 +128,7 @@ const promptText = (fixtures: ClipFixture[]): string => {
 };
 
 const mountRootDefaults = (loras: string[] = ["lora-x.safetensors"]): void => {
+    mountVideoFps(24);
     mountSelect("input_videomodel", {
         value: "ltx-2.3.safetensors",
         options: ["ltx-2.3.safetensors", "ltx-2.3-alt.safetensors"],
@@ -185,15 +187,13 @@ const crumbText = (): string | undefined =>
 
 const railChips = (): HTMLElement[] =>
     Array.from(
-        document.querySelectorAll<HTMLElement>(
-            ".vst-detail-repeating-group-list .vst-stage-tab",
-        ),
+        document.querySelectorAll<HTMLElement>(".vst-detail .vst-stage-tab"),
     );
 
 const activeRailLabel = (): string | undefined =>
     document
         .querySelector<HTMLElement>(
-            '.vst-detail-repeating-group-list .vst-stage-tab[aria-pressed="true"] .header-label',
+            '.vst-detail .vst-stage-tab[aria-pressed="true"] .header-label',
         )
         ?.textContent?.replace(/^Stage /, "") ?? undefined;
 
@@ -216,7 +216,8 @@ const fieldByLabel = (label: string): HTMLElement => {
     );
     const row = rows.find(
         (r) =>
-            r.querySelector(".vst-detail-field-label")?.textContent === label,
+            r.querySelector(".vst-detail-field-label")?.firstChild
+                ?.textContent === label,
     );
     if (!row) {
         throw new Error(`field not found: ${label}`);
@@ -343,22 +344,16 @@ describe("createTimelineDetailStrip", () => {
                 ".vst-detail .vst-detail-field-label",
             ),
         ).map((el) => el.textContent);
-        expect(labels).toEqual(
-            expect.arrayContaining(["Resolution", "Dimensions", "FPS"]),
-        );
-        const dims = detail()?.querySelector<HTMLElement>(".vst-settings-dims");
-        expect(dims).not.toBeNull();
-        expect(dims?.querySelectorAll("input")).toHaveLength(2);
+        expect(labels).toEqual(expect.arrayContaining(["Resolution", "FPS"]));
+        // Width/Height inputs only exist while the Resolution mode is Custom.
+        expect(labels).not.toContain("Dimensions");
+        expect(detail()?.querySelector(".vst-settings-dims")).toBeNull();
+        // The FPS field is always editable — it mirrors the core Video FPS.
         expect(
-            dims
-                ?.querySelector<HTMLInputElement>(
-                    'input[data-vst-focus-key="settings-width"]',
-                )
-                ?.getAttribute("data-vst-focus-key"),
-        ).toBe("settings-width");
-        expect(
-            dims?.querySelector('input[data-vst-focus-key="settings-height"]'),
-        ).not.toBeNull();
+            detail()?.querySelector<HTMLInputElement>(
+                'input[data-vst-focus-key="settings-fps"]',
+            )?.disabled,
+        ).toBe(false);
         expect(
             detail()?.querySelector(".vst-audio-tracks-panel"),
         ).not.toBeNull();
@@ -375,7 +370,7 @@ describe("createTimelineDetailStrip", () => {
         expect(activeRailLabel()).toBe("S1");
         expect(detailBody()?.querySelector(".vst-detail-clip")).not.toBeNull();
         expect(
-            detailBody()?.querySelector(".vst-detail-repeating-group-list"),
+            detailBody()?.querySelector(".vst-detail-repeating-group"),
         ).not.toBeNull();
         expect(
             detailBody()?.querySelector(".vst-detail-params"),
@@ -1264,12 +1259,12 @@ describe("createTimelineDetailStrip", () => {
             ".vst-detail-delete-stage",
         );
         expect(del).not.toBeNull();
-        expect(del?.textContent).toBe("- Delete");
+        expect(del?.textContent).toBe("×");
         expect(del?.disabled).toBe(true);
         const add = document.querySelector<HTMLElement>(
             ".vst-detail-add-stage",
         );
-        expect(add?.textContent).toBe("+ Add");
+        expect(add?.textContent).toBe("+ Add Video Stage");
         add?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(saveSpy).toHaveBeenCalledTimes(1);
         expect(savedClips(saveSpy)[0].stages).toHaveLength(2);
@@ -1443,7 +1438,7 @@ describe("createTimelineDetailStrip", () => {
         expect(retake?.strength).toBe(1);
     });
 
-    it("disables the Retake add action once a retake exists", () => {
+    it("shows no second Retake add action once a retake exists", () => {
         setup([
             {
                 duration: 10,
@@ -1453,9 +1448,8 @@ describe("createTimelineDetailStrip", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(
-            document.querySelector<HTMLButtonElement>(".vst-detail-add-retake")
-                ?.disabled,
-        ).toBe(true);
+            document.querySelector<HTMLButtonElement>(".vst-detail-add-retake"),
+        ).toBeNull();
     });
 
     it("renders the retake editor with the breadcrumb, fields, note and remove", () => {
@@ -1482,7 +1476,7 @@ describe("createTimelineDetailStrip", () => {
         ).toContain("Applies when refining a base video");
         expect(
             detailBody()?.querySelector(".vst-detail-delete")?.textContent,
-        ).toBe("- Delete");
+        ).toBe("×");
     });
 
     it("live-applies a retake Start edit through the debounce", () => {
@@ -1518,21 +1512,29 @@ describe("createTimelineDetailStrip", () => {
         // The clip panel (bare fields + Stages group) is what renders…
         expect(detailBody()?.querySelector(".vst-detail-clip")).not.toBeNull();
         expect(
-            detail()?.querySelector("#auto-group-vstdock_stages"),
+            detail()?.querySelector('[data-vst-repeater-key="stages"]'),
         ).not.toBeNull();
         // …and its Retake section carries the editable fields.
-        const retakeGroup = detail()?.querySelector(
-            "#auto-group-vstdock_retake",
-        );
         expect(
-            retakeGroup?.querySelector(
+            detail()?.querySelector('[data-vst-accordion-key="retake"]'),
+        ).not.toBeNull();
+        expect(
+            detail()?.querySelector('[data-vst-repeater-key="retakes"]'),
+        ).toBeNull();
+        expect(
+            detail()
+                ?.querySelector(".vst-detail-retake-section")
+                ?.querySelector(".vst-detail-repeating-group"),
+        ).toBeNull();
+        expect(
+            detailBody()?.querySelector(
                 'input[data-vst-focus-key="retake-start"]',
             ),
         ).not.toBeNull();
         expect(crumbText()).toBe("Retake · Clip 1 · 2–5 s");
     });
 
-    it("removes the retake and falls back to the owning clip's panel", () => {
+    it("removes the retake without leaving or collapsing its section", () => {
         setup([
             {
                 duration: 10,
@@ -1541,28 +1543,47 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
-        detailBody()
+        const beforeDelete = detailBody();
+        if (!beforeDelete) {
+            throw new Error("dock body missing");
+        }
+        beforeDelete.scrollTop = 140;
+        beforeDelete
             ?.querySelector<HTMLElement>(".vst-detail-delete-retake")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(savedClips(saveSpy)[0].retake).toBeNull();
-        expect(getSelection()).toEqual({
-            kind: "clip",
-            clipIdx: 0,
-            stageIdx: 0,
-        });
+        expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
+        expect(
+            detail()
+                ?.querySelector('[data-vst-accordion-key="retake"]')
+                ?.classList.contains("input-group-open"),
+        ).toBe(true);
+        expect(
+            detail()?.querySelector(".vst-detail-add-retake"),
+        ).not.toBeNull();
+        expect(detailBody()?.scrollTop).toBe(140);
     });
 
-    it("falls back to no selection when a retake selection points at a clip with none", () => {
+    it("keeps the empty single-instance Retake section selectable", () => {
         setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "retake", clipIdx: 0 });
-        // clampSelection drops it since the clip has no retake.
-        expect(crumbText()).toBe("Timeline settings");
-        expect(getSelection()).toEqual({ kind: "none" });
+        expect(crumbText()).toBe("Retake · Clip 1");
+        expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
+        expect(
+            detail()
+                ?.querySelector('[data-vst-accordion-key="retake"]')
+                ?.classList.contains("input-group-open"),
+        ).toBe(true);
     });
 
     it("adds and persists a LoRA row", () => {
         setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        document
+            .querySelector<HTMLElement>(
+                ".vst-detail .vst-stage-loras > .input-group-header",
+            )
+            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         document
             .querySelector<HTMLElement>(".vst-detail .vst-stage-lora-add")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -1573,6 +1594,11 @@ describe("createTimelineDetailStrip", () => {
         expect(savedClips(saveSpy)[0].stages[0].loras).toEqual([
             { name: "lora-x.safetensors", weight: 1 },
         ]);
+        expect(
+            document
+                .querySelector(".vst-detail .vst-stage-loras")
+                ?.classList.contains("input-group-open"),
+        ).toBe(true);
     });
 
     it("renders a LoRA row with a name select and a weight input", () => {
@@ -1660,6 +1686,33 @@ describe("createTimelineDetailStrip", () => {
         expect(
             document.querySelectorAll(".vst-detail .vst-stage-lora-entry"),
         ).toHaveLength(1);
+        expect(
+            document
+                .querySelector(".vst-detail .vst-stage-loras")
+                ?.classList.contains("input-group-open"),
+        ).toBe(true);
+    });
+
+    it("uses SwarmUI's native full-width flex class for every stage slider", () => {
+        setup([
+            {
+                duration: 4,
+                refs: [{ source: "Upload", frame: 0 }],
+                stages: [
+                    {
+                        loras: [{ name: "lora-x.safetensors", weight: 0.7 }],
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        for (const label of ["Steps", "CFG Scale", "R0", "Weight"]) {
+            expect(
+                sliderNumberByLabel(label)
+                    .closest(".vst-stage-slider")
+                    ?.classList.contains("auto-input-flex-wide"),
+            ).toBe(true);
+        }
     });
 
     it("copies every LoRA and weight into a newly added stage", () => {
@@ -2000,7 +2053,7 @@ describe("createTimelineDetailStrip", () => {
             ".vst-detail-add-segment",
         );
         expect(addBtn).not.toBeNull();
-        expect(addBtn?.textContent).toBe("+ Add");
+        expect(addBtn?.textContent).toBe("+ Add Audio Segment");
         addBtn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
         expect(getSelection()).toEqual({
@@ -2154,7 +2207,7 @@ describe("createTimelineDetailStrip", () => {
         expect(volumeRange?.step).toBe("0.1");
         const remove =
             detailBody()?.querySelector<HTMLElement>(".vst-detail-delete");
-        expect(remove?.textContent).toBe("- Delete");
+        expect(remove?.textContent).toBe("×");
         expect(remove?.classList.contains("vst-detail-delete-segment")).toBe(
             true,
         );
@@ -3183,14 +3236,18 @@ describe("createTimelineDetailStrip", () => {
         const major = detail()?.querySelector<HTMLElement>(
             ".vst-detail-prompt-major",
         );
-        const relays = detail()?.querySelector<HTMLElement>(
-            "#auto-group-vstdock_prompts",
+        const relayHead = detail()?.querySelector<HTMLElement>(
+            '[data-vst-repeater-key="relay-prompts"]',
         );
         expect(major).not.toBeNull();
-        expect(relays).not.toBeNull();
-        expect(relays?.querySelector(".input-group-header")).not.toBeNull();
+        expect(relayHead).not.toBeNull();
+        expect(relayHead?.classList.contains("vst-detail-relay-section")).toBe(
+            true,
+        );
         expect(
-            relays?.querySelector(".vst-detail-relay-section"),
+            detailBody()?.querySelector(
+                ".vst-detail-repeating-group .input-group-header",
+            ),
         ).not.toBeNull();
         expect(crumbText()).toBe("Prompts · Clip 1");
     });
@@ -3386,60 +3443,65 @@ describe("createTimelineDetailStrip", () => {
     });
 
     describe("dock groups & collapse", () => {
-        const group = (key: string): HTMLElement | null =>
-            detail()?.querySelector<HTMLElement>(`#auto-group-${key}`) ?? null;
-
-        it("renders bare clip fields plus ONE Stages group (rail + parameters)", () => {
+        it("renders clip concerns as progressive native accordion sections", () => {
             setup([{ duration: 4, stages: [{}, {}, {}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
 
-            // The clip's own fields render directly in the body — no group
-            // container, no header (the breadcrumb already names the clip).
-            expect(group("vstdock_clip")).toBeNull();
             const clipCol = detailBody()?.querySelector(".vst-detail-clip");
             expect(clipCol).not.toBeNull();
-            expect(clipCol?.closest(".input-group")).toBeNull();
-
-            // One Stages section containing one native input-group per stage;
-            // only the selected stage is expanded.
-            expect(group("vstdock_stageparams")).toBeNull();
-            const stages = group("vstdock_stages");
-            expect(stages).not.toBeNull();
             expect(
-                stages?.querySelector("#input_group_content_vstdock_stages"),
-            ).not.toBeNull();
-            const wrap = stages?.querySelector(".vst-detail-stages-wrap");
-            expect(wrap).not.toBeNull();
-            const cols = wrap ? Array.from(wrap.children) : [];
-            expect(cols[0]?.classList.contains("vst-detail-sec")).toBe(true);
-            expect(cols[0]?.textContent).toBe("Stages");
-            expect(
-                cols[1]?.classList.contains("vst-detail-repeating-group-list"),
+                clipCol
+                    ?.closest(".vst-detail-section")
+                    ?.classList.contains("input-group-closed"),
             ).toBe(true);
-            expect(cols[1]?.querySelector(".vst-detail-params")).not.toBeNull();
-            expect(
-                wrap?.querySelector(".vst-detail-params .vst-stage-loras"),
-            ).not.toBeNull();
-            expect(group("vstdock_loras")).toBeNull();
 
-            // The Retake section lives in the clip panel too, labelled, with
-            // an add button when the clip has no retake.
-            const retake = group("vstdock_retake");
-            expect(retake).not.toBeNull();
-            const retakeSec =
-                retake?.querySelector<HTMLElement>(".vst-detail-sec");
-            // The label text is the section's leading text node; a trailing "?"
-            // help button now shares the element, so read the text node itself.
-            expect(retakeSec?.firstChild?.textContent).toBe("Retake");
+            const stagesSection = detailBody()?.querySelector<HTMLElement>(
+                '[data-vst-repeater-key="stages"]',
+            );
+            expect(stagesSection).not.toBeNull();
+            expect(stagesSection?.classList.contains("input-group")).toBe(true);
+            expect(stagesSection?.classList.contains("input-group-open")).toBe(
+                true,
+            );
+            expect(
+                stagesSection?.querySelector(
+                    ":scope > .input-group-header .header-label",
+                )?.textContent,
+            ).toBe("Stages");
+            expect(
+                stagesSection?.querySelectorAll(
+                    ":scope > .input-group-content > .vst-detail-repeating-group",
+                ),
+            ).toHaveLength(3);
+            expect(
+                stagesSection?.querySelector(
+                    ".vst-detail-repeating-group .vst-detail-params",
+                ),
+            ).not.toBeNull();
+            expect(
+                detailBody()?.querySelector(
+                    ".vst-detail-params .vst-stage-loras",
+                ),
+            ).not.toBeNull();
+
+            const retakeSec = detailBody()?.querySelector<HTMLElement>(
+                '[data-vst-accordion-key="retake"]',
+            );
+            expect(retakeSec).not.toBeNull();
+            expect(
+                retakeSec?.querySelector(
+                    ":scope > .input-group-header .header-label",
+                )?.firstChild?.textContent,
+            ).toBe("Retake");
             expect(
                 retakeSec?.querySelector(".info-popover-button"),
             ).not.toBeNull();
             expect(
-                retake?.querySelector(".vst-detail-add-retake"),
+                detailBody()?.querySelector(".vst-detail-add-retake"),
             ).not.toBeNull();
         });
 
-        it("keeps base audio bare and wraps child segments in their own group", () => {
+        it("opens Base Audio or Segments according to the audio selection", () => {
             setup([
                 {
                     duration: 10,
@@ -3448,32 +3510,44 @@ describe("createTimelineDetailStrip", () => {
                 },
             ]);
             setSelection({ kind: "audio", clipIdx: 0 });
-            const segments = group("vstdock_audiosegments");
-            expect(
-                detail()?.querySelector(
-                    ".vst-detail-audio-body > .vst-detail-audio",
-                ),
-            ).not.toBeNull();
-            expect(segments).not.toBeNull();
             expect(crumbText()).toBe("Audio · Clip 1");
+            const base = detail()?.querySelector<HTMLElement>(
+                '[data-vst-accordion-key="base-audio"]',
+            );
+            expect(base?.classList.contains("input-group-open")).toBe(true);
+            expect(base?.querySelector(".vst-detail-audio")).not.toBeNull();
+            const segments = detail()?.querySelector<HTMLElement>(
+                '[data-vst-repeater-key="audio-segments"]',
+            );
+            expect(segments).not.toBeNull();
+            expect(segments?.classList.contains("input-group-closed")).toBe(
+                true,
+            );
             expect(
-                segments?.querySelector(".input-group-header"),
-            ).not.toBeNull();
-            expect(
-                detail()?.querySelectorAll(
-                    ".vst-detail-repeating-group.input-group",
+                segments?.querySelectorAll(
+                    ":scope > .input-group-content > .vst-detail-repeating-group",
                 ),
             ).toHaveLength(2);
-            const repeat = segments?.querySelector(
-                ".vst-detail-repeating-editor",
-            );
-            expect(repeat?.children[0]?.textContent).toContain("Segments");
             expect(
-                repeat?.querySelector(".vst-detail-add-segment"),
+                detail()?.querySelector(
+                    ".vst-detail-repeating-group .input-group-header",
+                ),
             ).not.toBeNull();
             expect(
-                repeat?.querySelector(".vst-detail-repeating-group-list"),
+                detail()?.querySelector(".vst-detail-add-segment"),
             ).not.toBeNull();
+
+            setSelection({ kind: "audio-segment", clipIdx: 0, segIdx: 1 });
+            expect(
+                detail()
+                    ?.querySelector('[data-vst-accordion-key="base-audio"]')
+                    ?.classList.contains("input-group-closed"),
+            ).toBe(true);
+            expect(
+                detail()
+                    ?.querySelector('[data-vst-repeater-key="audio-segments"]')
+                    ?.classList.contains("input-group-open"),
+            ).toBe(true);
         });
 
         it("lists references above IC-LoRAs using the shared selector rails", () => {
@@ -3489,57 +3563,154 @@ describe("createTimelineDetailStrip", () => {
                 },
             ]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-            const refs = group("vstdock_ref");
-            const icLoras = group("vstdock_iclora");
-            expect(refs).not.toBeNull();
-            expect(icLoras).not.toBeNull();
-            const children = Array.from(detailBody()?.children ?? []);
-            expect(children.indexOf(refs as HTMLElement)).toBeLessThan(
-                children.indexOf(icLoras as HTMLElement),
+            const body = detailBody();
+            const refsHead = body?.querySelector<HTMLElement>(
+                '[data-vst-repeater-key="references"]',
             );
-            expect(refs?.querySelectorAll(".vst-ref-tab")).toHaveLength(2);
+            const icLorasHead = body?.querySelector<HTMLElement>(
+                '[data-vst-repeater-key="ic-loras"]',
+            );
+            expect(refsHead).not.toBeNull();
+            expect(icLorasHead).not.toBeNull();
             expect(
-                refs?.querySelector(".vst-detail-add-ref")?.textContent,
-            ).toBe("+ Add");
+                refsHead && icLorasHead
+                    ? refsHead.compareDocumentPosition(icLorasHead) &
+                          Node.DOCUMENT_POSITION_FOLLOWING
+                    : 0,
+            ).toBeTruthy();
+            expect(body?.querySelectorAll(".vst-ref-tab")).toHaveLength(2);
             expect(
-                refs?.querySelector(".vst-detail-delete-ref")?.textContent,
-            ).toBe("- Delete");
-            expect(icLoras?.querySelectorAll(".vst-iclora-tab")).toHaveLength(
-                2,
+                body?.querySelector(".vst-detail-add-ref")?.textContent,
+            ).toBe("+ Add Reference Image");
+            expect(
+                body?.querySelector(".vst-detail-delete-ref")?.textContent,
+            ).toBe("×");
+            expect(body?.querySelectorAll(".vst-iclora-tab")).toHaveLength(2);
+            expect(body?.querySelectorAll(".vst-detail-iclora")).toHaveLength(
+                1,
             );
             expect(
-                icLoras?.querySelectorAll(".vst-detail-iclora"),
-            ).toHaveLength(1);
+                body?.querySelector(".vst-detail-add-iclora")?.textContent,
+            ).toBe("+ Add IC-LoRA");
             expect(
-                icLoras?.querySelector(".vst-detail-add-iclora")?.textContent,
-            ).toBe("+ Add");
+                body?.querySelector(".vst-detail-delete-iclora")?.textContent,
+            ).toBe("×");
+
+            const itemStructure = (
+                section: Element | null | undefined,
+            ): string[][] =>
+                Array.from(
+                    section?.querySelectorAll(
+                        ":scope > .input-group-content > .vst-detail-repeating-group",
+                    ) ?? [],
+                ).map((item) =>
+                    Array.from(item.children).map((child) =>
+                        child.classList.contains("input-group-header")
+                            ? "header"
+                            : child.classList.contains("input-group-content")
+                              ? "content"
+                              : "other",
+                    ),
+                );
+            expect(itemStructure(refsHead)).toEqual([
+                ["header", "content"],
+                ["header", "content"],
+            ]);
+            expect(itemStructure(icLorasHead)).toEqual(itemStructure(refsHead));
+
+            setSelection({ kind: "ic-lora", clipIdx: 0, entryIdx: 1 });
             expect(
-                icLoras?.querySelector(".vst-detail-delete-iclora")
-                    ?.textContent,
-            ).toBe("- Delete");
+                detailBody()
+                    ?.querySelector(".vst-detail-iclora")
+                    ?.getAttribute("data-vst-iclora-idx"),
+            ).toBe("1");
+            const firstIcHeader = detailBody()?.querySelector<HTMLElement>(
+                '[data-vst-repeater-key="ic-loras"] [data-vst-repeater-item="0"] > .input-group-header',
+            );
+            firstIcHeader?.click();
+            expect(
+                detailBody()
+                    ?.querySelector(".vst-detail-iclora")
+                    ?.getAttribute("data-vst-iclora-idx"),
+            ).toBe("0");
+            expect(
+                detailBody()
+                    ?.querySelector(
+                        '[data-vst-repeater-key="ic-loras"] [data-vst-repeater-item="0"]',
+                    )
+                    ?.classList.contains("input-group-open"),
+            ).toBe(true);
         });
 
-        it("renders every group headerless, always open, cookies ignored", () => {
-            // Even a stale group_open_*=closed cookie must not collapse
-            // anything: per-section headers and minimize are gone entirely.
+        it("uses local native groups without consulting host group cookies", () => {
             const globals = globalThis as unknown as {
                 getCookie: (name: string) => string;
             };
             expect(typeof globals.getCookie).toBe("function");
             jest.spyOn(globals, "getCookie").mockImplementation(() => "closed");
             setup([{ duration: 4, stages: [{}] }]);
-            // Default selection is none → the settings group.
-            const settings = group("vstdock_settings");
-            expect(settings?.querySelector(".input-group-header")).toBeNull();
-            expect(settings?.querySelector(".auto-symbol")).toBeNull();
+            const body = detailBody();
+            expect(body?.querySelector(".vst-detail-settings")).not.toBeNull();
+            const settings = body?.querySelector<HTMLElement>(
+                '[data-vst-accordion-key="timeline-settings"]',
+            );
             expect(settings?.classList.contains("input-group-open")).toBe(true);
-            expect(settings?.classList.contains("input-group-closed")).toBe(
-                false,
+            expect(globals.getCookie).not.toHaveBeenCalled();
+        });
+
+        it("keeps only one top-level section open at a time", () => {
+            setup([{ duration: 4, stages: [{}] }]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            const hostDelegatedToggle = jest.fn();
+            document.addEventListener("click", hostDelegatedToggle);
+            const stages = detailBody()?.querySelector<HTMLElement>(
+                '[data-vst-repeater-key="stages"]',
             );
-            const content = settings?.querySelector<HTMLElement>(
-                ".input-group-content",
+            const source = detailBody()?.querySelector<HTMLElement>(
+                '[data-vst-accordion-key="source-video"]',
             );
-            expect(content?.style.display).not.toBe("none");
+            expect(stages?.classList.contains("input-group-open")).toBe(true);
+            source
+                ?.querySelector<HTMLElement>(":scope > .input-group-header")
+                ?.click();
+            expect(source?.classList.contains("input-group-open")).toBe(true);
+            expect(stages?.classList.contains("input-group-closed")).toBe(true);
+            expect(
+                source?.querySelector<HTMLElement>(
+                    ":scope > .input-group-content",
+                )?.hidden,
+            ).toBe(false);
+            expect(
+                source
+                    ?.querySelector<HTMLElement>(":scope > .input-group-header")
+                    ?.getAttribute("aria-expanded"),
+            ).toBe("true");
+            expect(hostDelegatedToggle).not.toHaveBeenCalled();
+            document.removeEventListener("click", hostDelegatedToggle);
+        });
+
+        it("keeps Clip open when Skip this clip changes", () => {
+            setup([{ duration: 4, stages: [{}] }]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            const clip = detailBody()?.querySelector<HTMLElement>(
+                '[data-vst-accordion-key="clip"]',
+            );
+            const stages = detailBody()?.querySelector<HTMLElement>(
+                '[data-vst-repeater-key="stages"]',
+            );
+            clip?.querySelector<HTMLElement>(
+                ":scope > .input-group-header",
+            )?.click();
+            expect(clip?.classList.contains("input-group-open")).toBe(true);
+            expect(stages?.classList.contains("input-group-closed")).toBe(true);
+
+            const skip = checkboxByLabel("Skip this clip");
+            skip.checked = true;
+            skip.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(savedClips(saveSpy)[0].skipped).toBe(true);
+            expect(clip?.classList.contains("input-group-open")).toBe(true);
+            expect(stages?.classList.contains("input-group-closed")).toBe(true);
         });
 
         it("width-collapses the dock via the header chevron", () => {
@@ -3584,13 +3755,13 @@ describe("createTimelineDetailStrip", () => {
             return field?.querySelector<HTMLSelectElement>("select") ?? null;
         };
         const carryAudioCheckbox = (): HTMLInputElement | null => {
-            const labels = Array.from(
-                detailBody()?.querySelectorAll<HTMLLabelElement>(
-                    "label.vst-detail-field-check",
+            const rows = Array.from(
+                detailBody()?.querySelectorAll<HTMLElement>(
+                    ".vst-detail-field-check",
                 ) ?? [],
             );
-            const row = labels.find((label) =>
-                label.textContent?.includes(
+            const row = rows.find((candidate) =>
+                candidate.textContent?.includes(
                     "Continue outgoing audio into next clip",
                 ),
             );
@@ -3942,15 +4113,10 @@ describe("createTimelineDetailStrip", () => {
 
     // ---- #2: native-widget markup + dock-override CSSOM probe -------------
     // The refactor swapped the dock's custom field markup for SwarmUI's native
-    // `.auto-input` widget vocabulary, so HOST site.css styles the controls and
-    // only a short, native-class-keyed override remains in our sheet. This probe
-    // is the regression net that would have caught all three prior CSS rounds:
-    // it loads the real host site.css alongside ours and asserts, on the actual
-    // rendered rows, that (a) rows carry the native host classes, (b) our few
-    // `.vst-detail` overrides resolve, and (c) with both sheets cascading, the
-    // controls read full-width and left-aligned (never narrow or centered).
+    // `.auto-input` and `.input-group` are the host's own sidebar vocabulary.
+    // The extension intentionally does not override their geometry.
 
-    describe("native widget markup + dock override (CSSOM probe)", () => {
+    describe("native sidebar markup (CSSOM probe)", () => {
         // The main checkout reaches host wwwroot at ../../../wwwroot; inside a
         // git worktree the extension is nested deeper, so walk up for it.
         const wwwrootDir = ((): string => {
@@ -3975,11 +4141,7 @@ describe("createTimelineDetailStrip", () => {
             document.head.appendChild(style);
         };
         // Host site.css + the default theme (modern_dark = modern.css + vars)
-        // FIRST, our dock sheet SECOND — mirrors production load order and lets
-        // our higher-specificity `.vst-detail` overrides win. The theme MUST be
-        // in the probe: modern.css styles `.input-group .input-group-content>div`
-        // (padding + align-items:center) at a specificity that beat our
-        // single-class wrappers undetected until it was probed.
+        // load before the extension sheet, matching production.
         const injectHostCss = (): void => {
             injectCss(
                 "vst-probe-host-css",
@@ -4057,53 +4219,40 @@ describe("createTimelineDetailStrip", () => {
             expect(editor?.classList.contains("auto-text-block")).toBe(true);
         });
 
-        it("(b) resolves the dock's native-class overrides (label left, controls full-width)", () => {
+        it("(b) leaves field geometry to the host's native classes", () => {
+            injectHostCss();
             injectDockCss();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
-            // Label typography override: host centers `.auto-input-name`; the
-            // dock reads left.
-            const name = document.querySelector(".vst-detail .auto-input-name");
-            expect(name).not.toBeNull();
-            if (name) {
-                expect(computed(name).textAlign).toBe("left");
+            const model = fieldByLabel("Model");
+            expect(model.classList.contains("auto-input-flex")).toBe(true);
+            expect(computed(model).display).toBe("flex");
+            const dropdown = model.querySelector(".auto-dropdown");
+            expect(dropdown).not.toBeNull();
+            if (dropdown) {
+                expect(computed(dropdown).width).toBe("auto");
             }
-            for (const control of document.querySelectorAll(
-                ".vst-detail .auto-dropdown, .vst-detail .auto-number",
-            )) {
-                expect(computed(control).width).toBe("100%");
-            }
-            const check = document.querySelector(
-                ".vst-detail .auto-checkbox-box",
+            const source = fs.readFileSync(
+                path.join(__dirname, "..", "Assets", "video-stages.css"),
+                "utf8",
             );
-            expect(check).not.toBeNull();
-            if (check) {
-                expect(computed(check).alignItems).toBe("center");
+            expect(source).not.toMatch(/\.vst-detail\s+\.auto-input\s*\{/);
+            expect(source).not.toMatch(/\.vst-detail\s+\.auto-dropdown/);
+            expect(computed(detailBody() as HTMLElement).marginBottom).toBe(
+                "10px",
+            );
+            const activeStage = document.querySelector<HTMLElement>(
+                '[data-vst-repeater-key="stages"] > .input-group-content > .input-group-open',
+            );
+            expect(activeStage).not.toBeNull();
+            if (activeStage) {
+                expect(computed(activeStage).marginBottom).toBe("0px");
             }
         });
 
-        it("(d) every ancestor from group-content down to the prompt textarea declares full-width/stretch", () => {
+        it("(d) wraps prompt textareas in the host's wide text-field row", () => {
             injectHostCss();
             injectDockCss();
-            // A node passes if it will fill its parent's width: an explicit
-            // width:100%, a plain block box, OR a flex box that stretches its
-            // children (align-items stretch/normal). A regression that shrink-
-            // wraps a parent (inline-block, width:auto/fit-content, align-items
-            // center/flex-start) fails this. The textarea itself must be a
-            // full-width block, never the default inline-block.
-            const stretches = (el: Element): boolean => {
-                const c = computed(el);
-                if (c.width === "100%") {
-                    return true;
-                }
-                if (c.display === "block") {
-                    return true;
-                }
-                return (
-                    c.display.includes("flex") &&
-                    ["", "normal", "stretch"].includes(c.alignItems)
-                );
-            };
-            const walkFromTextarea = (): void => {
+            const assertNativePrompt = (): void => {
                 const ta = document.querySelector<HTMLElement>(
                     ".vst-detail .vst-detail-prompt",
                 );
@@ -4112,56 +4261,38 @@ describe("createTimelineDetailStrip", () => {
                     return;
                 }
                 expect(computed(ta).width).toBe("100%");
-                expect(computed(ta).display).not.toBe("inline");
-                expect(computed(ta).display).not.toBe("inline-block");
-                // Walk through the prompt's owning body/group: every link must
-                // keep the width, or 100% resolves against a shrunk box.
-                let node: HTMLElement | null = ta.parentElement;
-                let sawLayoutBoundary = false;
-                while (node) {
-                    expect({
-                        node: node.className,
-                        stretches: stretches(node),
-                    }).toEqual({ node: node.className, stretches: true });
-                    if (
-                        node.classList.contains("input-group-content") ||
-                        node.classList.contains("vst-detail-body")
-                    ) {
-                        sawLayoutBoundary = true;
-                        break;
-                    }
-                    node = node.parentElement;
-                }
-                expect(sawLayoutBoundary).toBe(true);
+                const row = ta.closest(".auto-input");
+                expect(row?.classList.contains("auto-text-box")).toBe(true);
+                expect(row?.classList.contains("auto-input-flex-wide")).toBe(
+                    true,
+                );
+                expect(row?.parentElement?.classList).toContain(
+                    "input-group-content",
+                );
             };
 
             setSelection({ kind: "prompt-major", clipIdx: 0 });
-            walkFromTextarea();
+            assertNativePrompt();
             setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
-            walkFromTextarea();
+            assertNativePrompt();
         });
 
-        it("(e) out-specifies the theme's content>div center rule — sections stretch", () => {
-            // themes/modern.css ships `.input-group .input-group-content>div
-            // { padding: 5px 10px; align-items: center }`, which center-shrinks
-            // every dock section wrapper unless our higher-specificity counter
-            // rule wins.
+        it("(e) uses native groups for both sections and repeatable items", () => {
             injectHostCss();
             injectDockCss();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-            const wraps = document.querySelectorAll<HTMLElement>(
-                ".vst-detail .input-group-content > div",
+            const sections = document.querySelectorAll(
+                ".vst-detail-body > .vst-detail-section.input-group",
             );
-            expect(wraps.length).toBeGreaterThan(0);
-            for (const wrap of wraps) {
-                expect({
-                    node: wrap.className,
-                    alignItems: computed(wrap).alignItems,
-                }).toEqual({ node: wrap.className, alignItems: "stretch" });
-            }
+            expect(sections.length).toBeGreaterThan(1);
+            expect(
+                document.querySelector(
+                    ".vst-detail-section .vst-detail-repeating-group.input-group",
+                ),
+            ).not.toBeNull();
         });
 
-        it("(c) with HOST site.css cascading, prompt/select/number rows read full-width, never centered", () => {
+        it("(c) emits the matching native row variant across every panel", () => {
             injectHostCss();
             injectDockCss();
             const panels: (() => void)[] = [
@@ -4184,29 +4315,15 @@ describe("createTimelineDetailStrip", () => {
             ];
             for (const select of panels) {
                 select();
-                // Every field row + its label reads left (no host centering
-                // leaks through), across every panel.
                 for (const field of document.querySelectorAll(
                     ".vst-detail .auto-input",
                 )) {
-                    expect(computed(field).textAlign).toBe("left");
-                }
-                for (const nm of document.querySelectorAll(
-                    ".vst-detail .auto-input:not(.auto-checkbox-box) .auto-input-name",
-                )) {
-                    expect(computed(nm).textAlign).toBe("left");
-                }
-                // Native textareas / dropdowns / numbers + the upload box fill
-                // the dock column — the round-3 "not full width" symptom.
-                for (const control of document.querySelectorAll(
-                    [
-                        ".vst-detail .auto-text",
-                        ".vst-detail .auto-dropdown",
-                        ".vst-detail .auto-number",
-                        ".vst-detail .vst-audio-upload",
-                    ].join(", "),
-                )) {
-                    expect(computed(control).width).toBe("100%");
+                    expect(
+                        field.classList.contains("auto-slider-box") ||
+                            field.classList.contains("auto-file-box") ||
+                            field.classList.contains("auto-input-flex") ||
+                            field.classList.contains("auto-input-flex-wide"),
+                    ).toBe(true);
                 }
             }
         });

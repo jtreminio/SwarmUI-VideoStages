@@ -2,7 +2,6 @@ import { clamp, mediaPreviewSrc, REF_FRAME_MIN } from "../constants";
 import {
     buildCheckbox,
     buildField,
-    buildGroup,
     buildMediaPickRow,
     buildNumber,
     buildOptionSelect,
@@ -20,8 +19,6 @@ import { type Clip, REF_SOURCE_UPLOAD, type TimelineSelection } from "../types";
 import { disableCapabilityControls } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
-export const GROUP_REF = "vstdock_ref";
-
 /**
  * Stage-style reference-image child section for the owning clip panel. The
  * rail lists every reference while only the selected reference editor renders.
@@ -31,6 +28,7 @@ export const buildRefSection = (
     clipIdx: number,
     selectedRefIdx: number | null,
     clips: Clip[],
+    open = selectedRefIdx !== null,
 ): HTMLElement => {
     const clip = clips[clipIdx];
     const decision = ctx
@@ -46,7 +44,7 @@ export const buildRefSection = (
             key: "references",
             label: "Reference Images",
             sectionClass: "vst-detail-ref-section",
-            listClass: "vst-detail-ref-rail",
+            open,
             items: clip.refs.map((_, refIdx) => ({
                 label: `R${refIdx + 1}`,
                 focusKey: `reference-tab-${refIdx}`,
@@ -60,6 +58,7 @@ export const buildRefSection = (
                 title: decision.supported
                     ? "Add a reference image"
                     : decision.reason,
+                label: "+ Add Reference Image",
                 className: "vst-detail-add-ref",
                 disabled: !decision.supported,
                 onClick: () => ctx.addRefEntry(clipIdx),
@@ -225,11 +224,6 @@ export const buildRefBody = (
 ): HTMLElement => {
     const body = document.createElement("div");
     body.className = "vst-detail-body";
-    body.appendChild(
-        buildGroup(
-            GROUP_REF,
-            buildRefSection(ctx, sel.clipIdx, sel.refIdx, clips),
-        ),
-    );
+    body.appendChild(buildRefSection(ctx, sel.clipIdx, sel.refIdx, clips));
     return body;
 };

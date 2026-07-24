@@ -7,7 +7,6 @@ import {
     ROOT_FPS_MIN,
 } from "../constants";
 import {
-    buildCheckbox,
     buildField,
     buildNumber,
     buildOptionSelect,
@@ -20,13 +19,13 @@ import {
     presetBadgeElements,
     presetDimensions,
 } from "../dimensionPresets";
+import { getVideoStagesHostBridge } from "../host";
 import { getState } from "../persistence";
 import { getRootDefaults } from "../rootDefaults";
 import type { TimelineSelection } from "../types";
 import { buildAudioTracksPanel } from "./audioTracksPanel";
 import type { DetailStripContext } from "./context";
 
-const GROUP_SETTINGS = "vstdock_settings";
 const SETTINGS_INHERIT = "inherit";
 const SETTINGS_CUSTOM = "custom";
 
@@ -39,6 +38,30 @@ const clampDimension = (value: number): number =>
 
 const clampFps = (value: number): number =>
     clamp(Math.round(value) || ROOT_FPS_MIN, ROOT_FPS_MIN, ROOT_FPS_MAX);
+
+const FPS_WRITE_DEBOUNCE_MS = 300;
+let fpsWriteTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * The panel's FPS field is a second view of the core Video FPS param: edits
+ * here write through to the core input (debounced), and core edits flow back
+ * via the carrier token's inherited-dims signature.
+ */
+const scheduleCoreFpsWrite = (value: number): void => {
+    if (fpsWriteTimer !== null) {
+        clearTimeout(fpsWriteTimer);
+    }
+    fpsWriteTimer = setTimeout(() => {
+        fpsWriteTimer = null;
+        const bridge = getVideoStagesHostBridge();
+        const core = bridge.getRootVideoFpsInput();
+        if (!core || core.value === `${value}`) {
+            return;
+        }
+        core.value = `${value}`;
+        bridge.notifyChanged(core);
+    }, FPS_WRITE_DEBOUNCE_MS);
+};
 
 export const buildSettingsBody = (
     ctx: DetailStripContext,
@@ -108,51 +131,49 @@ export const buildSettingsBody = (
     });
     body.appendChild(buildField("Resolution", resSelect));
 
-    const widthInput = buildNumber(
-        displayed.width,
-        ROOT_DIMENSION_MIN,
-        ROOT_DIMENSION_MAX,
-        ROOT_DIMENSION_STEP,
-        (value) => {
-            ctx.debouncedCommitState("settings-width", (next) => {
-                next.dimsExplicit = true;
-                next.width = clampDimension(value);
-            });
-        },
-    );
-    widthInput.classList.add("vst-settings-num");
-    widthInput.disabled = !isCustom;
-    widthInput.setAttribute("data-vst-focus-key", "settings-width");
+    // Width and Height only exist as inputs while the resolution is Custom;
+    // presets and inherit modes fully determine the dimensions.
+    if (isCustom) {
+        const widthInput = buildNumber(
+            displayed.width,
+            ROOT_DIMENSION_MIN,
+            ROOT_DIMENSION_MAX,
+            ROOT_DIMENSION_STEP,
+            (value) => {
+                ctx.debouncedCommitState("settings-width", (next) => {
+                    next.dimsExplicit = true;
+                    next.width = clampDimension(value);
+                });
+            },
+        );
+        widthInput.classList.add("vst-settings-num");
+        widthInput.setAttribute("data-vst-focus-key", "settings-width");
 
-    const heightInput = buildNumber(
-        displayed.height,
-        ROOT_DIMENSION_MIN,
-        ROOT_DIMENSION_MAX,
-        ROOT_DIMENSION_STEP,
-        (value) => {
-            ctx.debouncedCommitState("settings-height", (next) => {
-                next.dimsExplicit = true;
-                next.height = clampDimension(value);
-            });
-        },
-    );
-    heightInput.classList.add("vst-settings-num");
-    heightInput.disabled = !isCustom;
-    heightInput.setAttribute("data-vst-focus-key", "settings-height");
+        const heightInput = buildNumber(
+            displayed.height,
+            ROOT_DIMENSION_MIN,
+            ROOT_DIMENSION_MAX,
+            ROOT_DIMENSION_STEP,
+            (value) => {
+                ctx.debouncedCommitState("settings-height", (next) => {
+                    next.dimsExplicit = true;
+                    next.height = clampDimension(value);
+                });
+            },
+        );
+        heightInput.classList.add("vst-settings-num");
+        heightInput.setAttribute("data-vst-focus-key", "settings-height");
 
-    // Width and Height share one "Dimensions" row (W × H) to keep the
-    // wrapping settings flow dense.
-    const dimsPair = document.createElement("div");
-    dimsPair.className = "vst-settings-dims";
-    const dimsSep = document.createElement("span");
-    dimsSep.className = "vst-settings-dims-sep";
-    dimsSep.textContent = "×";
-    dimsPair.append(widthInput, dimsSep, heightInput);
-    const dimsField = buildField("Dimensions", dimsPair);
-    if (!isCustom) {
-        dimsField.classList.add("vst-audio-disabled");
+        // Width and Height share one "Dimensions" row (W × H) to keep the
+        // wrapping settings flow dense.
+        const dimsPair = document.createElement("div");
+        dimsPair.className = "vst-settings-dims";
+        const dimsSep = document.createElement("span");
+        dimsSep.className = "vst-settings-dims-sep";
+        dimsSep.textContent = "×";
+        dimsPair.append(widthInput, dimsSep, heightInput);
+        body.appendChild(buildField("Dimensions", dimsPair));
     }
-    body.appendChild(dimsField);
 
     const badges = document.createElement("div");
     badges.className = "vst-settings-badges";
@@ -165,41 +186,30 @@ export const buildSettingsBody = (
     badges.hidden = badges.childElementCount === 0;
     body.appendChild(badges);
 
-    const fpsRow = buildCheckbox(
-        "Custom FPS",
-        state.fpsExplicit === true,
-        (value) => {
-            ctx.commitState((next) => {
-                next.fpsExplicit = value;
-                if (value) {
-                    next.fps = clampFps(next.fps);
-                }
-            });
-            ctx.render();
-        },
-    );
-    body.appendChild(fpsRow);
-
+    const hasCoreFps =
+        getVideoStagesHostBridge().getRootVideoFpsInput() !== null;
     const fpsInput = buildNumber(
-        state.fpsExplicit ? clampFps(state.fps) : core.fps,
+        clampFps(state.fps),
         ROOT_FPS_MIN,
         ROOT_FPS_MAX,
         1,
         (value) => {
-            ctx.debouncedCommitState("settings-fps", (next) => {
-                next.fpsExplicit = true;
-                next.fps = clampFps(value);
-            });
+            scheduleCoreFpsWrite(clampFps(value));
         },
     );
     fpsInput.classList.add("vst-settings-num");
-    fpsInput.disabled = state.fpsExplicit !== true;
+    fpsInput.disabled = !hasCoreFps;
     fpsInput.setAttribute("data-vst-focus-key", "settings-fps");
-    const fpsField = buildField("FPS", fpsInput);
-    if (state.fpsExplicit !== true) {
-        fpsField.classList.add("vst-audio-disabled");
-    }
-    body.appendChild(fpsField);
+    body.appendChild(
+        buildField(
+            "FPS",
+            fpsInput,
+            hasCoreFps ? undefined : "(no core Video FPS parameter found)",
+            "Frames per second for the whole timeline. This is the same " +
+                "value as the core Video FPS parameter — editing either " +
+                "updates both.",
+        ),
+    );
     body.appendChild(buildAudioTracksPanel(ctx, state, selection));
-    return wrapForm(GROUP_SETTINGS, body);
+    return wrapForm("timeline-settings", "Timeline", body);
 };

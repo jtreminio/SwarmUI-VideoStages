@@ -33,7 +33,6 @@ const baseState = (
     height: 1024,
     fps: 24,
     dimsExplicit: false,
-    fpsExplicit: false,
     clips,
     ...overrides,
 });

@@ -34,12 +34,7 @@ export interface DocumentCommandResult {
 type RootSettingsPatch = Partial<
     Pick<
         CanonicalVideoStagesConfig,
-        | "schemaVersion"
-        | "width"
-        | "height"
-        | "fps"
-        | "dimsExplicit"
-        | "fpsExplicit"
+        "schemaVersion" | "width" | "height" | "fps" | "dimsExplicit"
     >
 >;
 type ClipPatch = Partial<

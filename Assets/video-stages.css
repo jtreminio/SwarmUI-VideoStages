@@ -1059,6 +1059,8 @@
     position: absolute;
     bottom: 6px;
     height: var(--vst-retake-lane-h);
+}
+.vst-retake-lane[data-vst-retake-add] {
     cursor: copy;
 }
 /* Retake range: hatched window inside its lane. */
@@ -1287,73 +1289,6 @@
     cursor: not-allowed;
 }
 
-.vst-stage-slider {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-}
-.vst-detail .vst-stage-slider .auto-slider-box {
-    display: block;
-    width: 100%;
-    margin: 0;
-    padding: 0;
-}
-.vst-detail .vst-stage-slider .auto-input-name {
-    font-size: var(--vst-font-3xs);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-soft);
-}
-.vst-detail .vst-stage-slider label {
-    display: block;
-    margin: 0;
-}
-.vst-detail .vst-stage-slider .auto-slider-number {
-    float: right;
-    width: 3.5rem;
-    text-align: right;
-    color: var(--text);
-    font-size: var(--vst-font-xs);
-}
-.vst-detail .vst-stage-slider .auto-slider-range-wrapper {
-    width: 100%;
-    margin-top: 8px;
-    margin-bottom: 4px;
-}
-.vst-detail .vst-stage-slider .auto-slider-range {
-    width: 100%;
-}
-.vst-detail .vst-stage-slider .vst-detail-field-hint {
-    display: block;
-    margin-top: 2px;
-}
-.vst-stage-ref-slider {
-    gap: 1px;
-}
-.vst-detail .vst-stage-ref-slider .auto-slider-range-wrapper {
-    margin-top: 6px;
-    margin-bottom: 2px;
-}
-/* Dock prompt textareas render as native `.auto-text.auto-text-block` (host
-   supplies the full-width box, border and background). These add only the
-   dock's taller editing affordance — vertical resize + roomier padding — which
-   the host's inline sidebar textareas don't carry.
-   `display: block` is load-bearing: a bare `<textarea>` defaults to
-   `inline-block`, so its `width: 100%` (from `.auto-text-block`) only reads
-   full-width when the containing block itself is full-width AND the textarea is
-   blockified by a flex parent. When the major/relay prompt is NOT wrapped in the
-   host's `.auto-input.auto-text-box` block wrapper, the inline-block collapses
-   toward content width if any ancestor fails to stretch — the recurring
-   "prompt not full width" regression. Forcing block makes it fill unconditionally. */
-.vst-detail .vst-prompt-editor {
-    display: block;
-    width: 100%;
-    padding: 8px 10px;
-    line-height: 1.45;
-    resize: vertical;
-    box-sizing: border-box;
-}
-
 .vst-audio-clip:hover {
     filter: brightness(1.06);
 }
@@ -1408,28 +1343,6 @@
 .vst-audio-disabled {
     opacity: 0.45;
     cursor: not-allowed;
-}
-.vst-audio-upload {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 5px;
-}
-.vst-audio-upload input[type="file"] {
-    font-size: var(--vst-font-3xs);
-    color: var(--text-soft);
-    max-width: 100%;
-}
-.vst-audio-upload-name {
-    font-family: var(--vst-mono);
-    font-size: var(--vst-font-3xs);
-    color: var(--text-soft);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.vst-audio-upload-clear {
-    align-self: flex-start;
 }
 
 /* ── References track (image refs, below the video clip) ── */
@@ -1552,60 +1465,66 @@
     border-style: solid;
     border-color: color-mix(in srgb, var(--emphasis) 40%, var(--vst-hairline));
 }
-.vst-refs-delete {
-    align-self: flex-start;
-    margin-top: 2px;
+/* --- shared button idioms (match the main-branch / Base2Edit editors) ------
+   Delete buttons are the host's native `.interrupt-button` (danger chrome);
+   `.vst-btn-tiny` only compacts whatever host button class it rides on. */
+.vst-btn-tiny {
+    height: 22px;
+    min-width: 24px;
+    padding: 0 6px;
+    font-size: 12px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
 }
-/* Destructive buttons: red-tinted background on top of the host chrome. */
-.vst-refs-delete {
-    background-color: color-mix(in srgb, var(--red) 30%, var(--button-background));
-    border-color: color-mix(in srgb, var(--red) 50%, var(--button-border));
+.vst-btn-skip-active {
+    border-color: color-mix(in srgb, var(--bs-warning) 55%, var(--light-border) 45%);
+    background: color-mix(in srgb, var(--bs-warning) 24%, var(--background-panel) 76%);
+    color: var(--text);
 }
-.vst-refs-delete:hover {
-    background-color: color-mix(in srgb, var(--red) 50%, var(--button-background-hover));
+.vst-btn-skip-active:hover {
+    border-color: color-mix(in srgb, var(--bs-warning) 70%, var(--light-border) 30%);
+    background: color-mix(in srgb, var(--bs-warning) 34%, var(--background-panel) 66%);
+}
+.vst-add-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px dashed var(--light-border);
+    background: transparent;
+    color: var(--text-soft);
+    border-radius: 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition:
+        border-color 0.15s,
+        color 0.15s,
+        background 0.15s;
+}
+.vst-add-btn:hover {
+    border-color: var(--emphasis);
+    color: var(--emphasis);
+    background: color-mix(in srgb, var(--emphasis) 8%, transparent);
+}
+.vst-add-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+.vst-add-btn:disabled:hover {
+    border-color: var(--light-border);
+    color: var(--text-soft);
+    background: transparent;
 }
 
-.vst-stage-loras {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-top: 6px;
-}
-.vst-stage-loras > .vst-detail-wrap-sec {
-    padding: 0;
-}
-.vst-stage-lora-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-.vst-stage-lora-entry {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--vst-hairline);
-}
-.vst-stage-lora-row {
-    display: flex;
-    align-items: flex-end;
-    gap: 6px;
-}
-.vst-stage-lora-row > .vst-detail-field {
-    flex: 1 1 auto;
-    min-width: 0;
-}
-.vst-stage-lora-remove {
-    flex: none;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    line-height: 1;
-}
-.vst-stage-lora-add {
-    align-self: stretch;
-    margin: 0;
-}
 /* --- Settings chip (topbar) + popover --- */
 .vst-settings-chip {
     display: inline-flex;
@@ -1744,285 +1663,17 @@
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+    margin-bottom: 10px;
 }
-
-/* --- host-convention input-group sections (headerless containers) -------- */
-.vst-detail .input-group {
-    flex: none;
-    /* Bootstrap's `.input-group` defaults to a horizontal flex row; force a
-       clean vertical stack (header over content) so nothing is laid out or
-       nudged toward center inside the narrow dock column. */
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    width: 100%;
-    border-bottom: 1px solid var(--vst-hairline);
-    /* The host gives groups big page-form margins (1.2rem top, 2rem bottom on
-       -open); in the dock the hairline is the separator — stack them tight. */
-    margin-top: 0;
+.vst-detail-section-content .input-group-open {
     margin-bottom: 0;
 }
-/* Groups are headerless: the dock breadcrumb is the single panel label. */
-.vst-detail .input-group-content {
-    display: flex;
-    flex-direction: column;
-    flex-wrap: nowrap;
-    align-items: stretch;
-    align-content: flex-start;
-    width: 100%;
-    max-width: 100%;
-    padding-left: 0;
-    text-align: left;
-}
-/* The modern theme ships `.input-group .input-group-content>div
-   { padding: 5px 10px; align-items: center }` (themes/modern.css), whose
-   specificity beats every single-class dock wrapper — it center-shrinks the
-   section wraps (labels looked centered, the stage rail never filled the
-   column) and silently replaced panel-body padding. Out-specify it: sections
-   stretch, and padding is routed through --vst-content-pad so each container
-   states its own (default 0). */
-.vst-detail .input-group .input-group-content > div {
-    padding: var(--vst-content-pad, 0);
-    align-items: stretch;
-}
-/* Form editors (ref / audio / prompt / settings) stack vertically in the dock;
-   the shared `.vst-detail-field` base is already label-above. */
-.vst-detail-form-body {
-    --vst-content-pad: 12px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 12px 14px;
-    /* Explicit full width so the prompt/field controls inside never resolve
-       their `width: 100%` against a stretch-collapsed parent (regression net for
-       "prompt not full width"). */
-    width: 100%;
-    box-sizing: border-box;
-}
-.vst-detail-prompt-body {
-    flex: 1 1 auto;
-}
-.vst-detail-prompt {
-    width: 100%;
-    min-height: 140px;
-    flex: 1 1 auto;
-}
-.vst-detail-delete {
-    align-self: flex-start;
-}
-/* Relay panel: every minor window of the clip, stacked. */
-.vst-detail-minor-body {
-    gap: 12px;
-}
-/* Repeating child editors are separated by their parent input-group and
-   header/rail hierarchy, not by nested cards. */
-.vst-detail-minor-window {
-    display: flex;
-    flex-direction: column;
-    padding: 8px;
-    /* Explicit full width: the card is its fields' containing block, so it
-       must span the dock rather than lean on flex-stretch alone. */
-    width: 100%;
-    box-sizing: border-box;
-}
-.vst-detail-minor-window {
-    gap: 5px;
-}
-/* Begin/end edge editors sit side-by-side above the window prompt. */
-.vst-detail-minor-range {
-    display: flex;
-    gap: 8px;
-}
-.vst-detail-minor-range > .vst-detail-field {
-    flex: 1 1 0;
-    min-width: 0;
-}
-.vst-detail-minor-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
-.vst-detail-minor-title {
-    font-size: var(--vst-font-3xs);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    font-weight: 600;
-    color: var(--text-soft);
-}
-.vst-detail-minor-delete {
-    margin-top: 0;
-    min-width: 24px;
-    padding: 1px 6px;
-    font-size: var(--vst-font-sm);
-    line-height: 1;
-}
-.vst-detail-minor-window .vst-detail-prompt {
-    min-height: 72px;
-    flex: none;
-}
-.vst-detail-instance-fields {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-.vst-detail-col {
-    padding: 12px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    min-width: 0;
-}
-/* ────────────────────────────────────────────────────────────────────────
-   Dock field layout — the ONE deliberate deviation from the host sidebar idiom
-   ────────────────────────────────────────────────────────────────────────
-   Field rows are native SwarmUI `.auto-input` widgets, so host site.css styles
-   the control internals (border, radius, background, spin buttons, focus). The
-   host lays those rows out as a wrapping, center-aligned, label-BESIDE-control
-   flex line sized for the wide Generate sidebar. The dock is a narrow 352px
-   editing column, so here — and ONLY here, keyed on the host's own native
-   classes rather than a pile of per-widget resets — we re-flow each row into a
-   LEFT-aligned, label-ABOVE stack whose control fills the column width.
-   Panel-body / instance / relay containers already stack vertically via their
-   own `display: flex; flex-direction: column` rules above (flex columns stretch
-   their children by default), so no container reset is needed here. */
-.vst-detail .auto-input {
-    display: block; /* over `.auto-input-flex`'s inline baseline flex row */
-    width: 100%;
-    max-width: 100%;
-    overflow: visible; /* host clips `.auto-input`; dock hints/menus must show */
-    margin: 0;
-    padding: 0;
-    text-align: left; /* host `.auto-input-name` centers; the dock reads left */
-}
-.vst-detail .auto-input > label {
-    display: block;
-    margin: 0;
-}
-.vst-detail .auto-input-name {
-    display: block;
-    text-align: left;
-    font-weight: 600;
-    font-size: var(--vst-font-3xs);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-soft);
-    white-space: normal;
-}
-/* Controls span the dock column. The host sizes dropdowns fit-content and
-   numbers to ~1rem + flex-grow (sized by the wide inline sidebar row); the
-   dock's block stack needs them to fill width instead. Flex children that carry
-   an explicit flex-basis (lora weight, dims pair, ref rows) are unaffected —
-   flex-basis wins over width. */
-.vst-detail .auto-dropdown,
-.vst-detail .auto-number,
-.vst-detail .auto-text {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-}
-/* The host pins sidebar dropdowns narrow with `.input-group .auto-dropdown {
-   width: auto !important }` (site.css) so they hug their inline label. The dock
-   stacks label-above, so the select must fill the column — the only place we
-   must answer the host's `!important` in kind. */
-.vst-detail .auto-dropdown {
-    width: 100% !important;
-}
-/* Checkbox rows stay a horizontal box + label row: re-assert flex over the
-   `.auto-input` block rule above, and keep the label regular (not small-caps). */
-.vst-detail .auto-checkbox-box {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 7px;
-    cursor: pointer;
-}
-.vst-detail .auto-checkbox-box .auto-checkbox {
-    margin: 0;
-    flex: none;
-}
-.vst-detail .auto-checkbox-box .auto-input-name {
-    text-transform: none;
-    letter-spacing: 0;
-    font-size: var(--vst-font-xs);
-    color: var(--text);
-}
-/* Upload/file rows: the intrinsically-narrow native file picker fills width. */
-.vst-detail .vst-audio-upload,
-.vst-detail .vst-audio-upload input[type="file"] {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-}
-/* Field hints drop onto their own line below the control in the block stack. */
-.vst-detail .vst-detail-field-hint {
-    display: block;
-    font-size: var(--vst-font-3xs);
-    color: var(--text-soft);
-}
-/* Clip panel: the clip's own fields render bare (no group container); a
-   hairline separates them from the Stages group below. */
-.vst-detail-clip-body > .vst-detail-clip {
-    border-bottom: 1px solid var(--vst-hairline);
-}
-.vst-detail-audio-body > .vst-detail-audio {
-    border-bottom: 1px solid var(--vst-hairline);
-}
-.vst-detail-prompts-body > .vst-detail-prompt-major {
-    border-bottom: 1px solid var(--vst-hairline);
-}
-.vst-detail-audio > .vst-detail-wrap-sec {
-    margin: 0;
-    padding: 0;
-}
-.vst-detail-prompt-major > .vst-detail-wrap-sec {
-    margin: 0;
-    padding: 0;
-}
-/* Repeating sidebar collections follow SwarmUI's input-group card hierarchy:
-   one collapsible group per item, item actions in the header, Add below. */
-.vst-detail-stages-wrap {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-}
-.vst-detail-wrap-sec {
-    margin: 0;
-    padding: 10px 14px 0;
-}
-.vst-detail-repeating-group-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 8px 10px;
-    min-width: 0;
-}
-.vst-detail .vst-detail-repeating-group.input-group {
-    border: 1px solid var(--vst-hairline);
-    border-radius: var(--vst-radius-sm);
-    overflow: hidden;
-}
-.vst-detail-repeating-group-header {
-    display: flex;
-    align-items: center;
-    min-height: 34px;
-    padding: 4px 7px;
-    cursor: pointer;
-    background: color-mix(in srgb, var(--background) 55%, var(--vst-panel));
-}
-.vst-detail-repeating-group-header > .header-label-wrap {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    min-width: 0;
-}
-.vst-detail-repeating-group-header .header-label {
-    font-weight: 600;
-}
-.vst-detail-repeating-group-header .header-label-spacer {
-    flex: 1 1 auto;
+
+/* All form geometry below the breadcrumb is SwarmUI's native `.input-group`
+   and `.auto-input` layout. VideoStages only wires progressive disclosure and
+   keeps its repeatable-item actions. */
+.vst-detail [hidden] {
+    display: none !important;
 }
 .vst-detail-repeating-group-actions {
     display: flex;
@@ -2031,41 +1682,12 @@
 }
 .vst-detail-repeating-group-actions > button {
     margin: 0;
-    padding: 2px 7px;
     white-space: nowrap;
-}
-.vst-detail-repeating-group-action-active {
-    color: var(--red);
-}
-.vst-detail .vst-detail-repeating-group-content.input-group-content[hidden] {
-    display: none;
 }
 .vst-detail-repeating-add {
     align-self: stretch;
-    margin: 0 10px 10px;
-}
-.vst-detail-repeating-editor-active {
-    width: 100%;
-    box-sizing: border-box;
-}
-.vst-detail-fields {
-    display: grid;
-    grid-template-columns: 1fr;
-    column-gap: 12px;
-    row-gap: 8px;
-    align-content: start;
-}
-.vst-detail-fields > .vst-detail-span-2,
-.vst-detail-fields > .vst-detail-span-full {
-    grid-column: 1 / -1;
-}
-.vst-detail-sec {
-    margin: 8px 0 2px;
-    font-size: var(--vst-font-3xs);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-soft);
-    font-weight: 600;
+    width: calc(100% - 20px);
+    margin: 12px 10px;
 }
 
 /* --- boundary (seam) chips ------------------------------------------------ */

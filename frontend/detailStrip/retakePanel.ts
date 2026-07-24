@@ -8,12 +8,11 @@ import {
 } from "../constants";
 import {
     appendHelp,
+    buildAccordionSection,
     buildField,
-    buildRepeatingEditor,
     buildSlider,
     clampStartLength,
 } from "../detailWidgets";
-import { setSelection } from "../selection";
 import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
 
@@ -21,48 +20,39 @@ export const buildRetakeSection = (
     context: DetailStripContext,
     clip: Clip,
     clipIdx: number,
+    open = false,
 ): HTMLElement => {
     const retake = clip.retake;
     const decision = context.capabilities().forClip(clip).decision("retake");
     const col = document.createElement("div");
     col.className = "vst-detail-col vst-detail-retake-col";
     const buildSection = (): HTMLElement => {
-        const built = buildRepeatingEditor({
-            key: "retakes",
+        const built = buildAccordionSection({
+            key: "retake",
             label: "Retake",
-            sectionClass: "vst-detail-retake-section",
-            listClass: "vst-detail-retake-rail",
-            items: retake
-                ? [
-                      {
-                          label: "RT",
-                          title: "Edit retake window",
-                          active: true,
-                          className: "vst-retake-tab",
-                          onSelect: () =>
-                              setSelection({ kind: "retake", clipIdx }),
-                          onDelete: () => context.removeRetake(clipIdx),
-                      },
-                  ]
-                : [],
-            add: {
-                title: retake
-                    ? "This clip already has a retake window"
-                    : decision.supported
-                      ? "Add a retake window"
-                      : decision.reason,
-                className: "vst-detail-add-retake",
-                disabled: !!retake || !decision.supported,
-                onClick: () => context.createRetake(clipIdx),
-            },
-            remove: {
-                title: retake
-                    ? "Delete the retake window"
-                    : "No retake window to delete",
-                className: "vst-detail-delete-retake",
-            },
-            editor: col,
+            className: "vst-detail-retake-section",
+            open,
+            content: col,
+            flattenContent: true,
         });
+        if (retake) {
+            const actions = document.createElement("span");
+            actions.className = "vst-detail-repeating-group-actions";
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className =
+                "interrupt-button vst-btn-tiny vst-detail-delete vst-detail-delete-retake";
+            remove.textContent = "×";
+            remove.title = "Delete the retake window";
+            remove.setAttribute("aria-label", remove.title);
+            remove.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                context.removeRetake(clipIdx);
+            });
+            actions.appendChild(remove);
+            built.heading.parentElement?.appendChild(actions);
+        }
         appendHelp(
             built.heading,
             built.section,
@@ -79,6 +69,21 @@ export const buildRetakeSection = (
         hint.textContent =
             "Regenerates a sub-range when refining a base video.";
         col.appendChild(hint);
+        const add = document.createElement("button");
+        add.type = "button";
+        add.className =
+            "vst-add-btn vst-detail-repeating-add vst-detail-add-retake";
+        add.textContent = "+ Add Retake";
+        add.title = decision.supported
+            ? "Add a retake window"
+            : decision.reason;
+        add.setAttribute("aria-label", add.title);
+        add.disabled = !decision.supported;
+        add.addEventListener("click", (event) => {
+            event.preventDefault();
+            context.createRetake(clipIdx);
+        });
+        col.appendChild(add);
         return buildSection();
     }
 

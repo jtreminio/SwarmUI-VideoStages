@@ -260,9 +260,17 @@ const renderRegions = (
             const retakeSupported =
                 capabilities?.forClip(clip).decision("retake").supported ??
                 true;
-            const retakeLaneAttrs = retakeSupported
+            const canAddRetake = retakeSupported && !clip.retake;
+            const retakeLaneAttrs = canAddRetake
                 ? " data-vst-retake-add"
-                : ' data-vst-capability-disabled="retake"';
+                : retakeSupported
+                  ? " data-vst-retake-full"
+                  : ' data-vst-capability-disabled="retake"';
+            const retakeLaneTitle = canAddRetake
+                ? "Click empty space to add a retake window"
+                : retakeSupported
+                  ? "This clip already has a retake window"
+                  : "Retakes are not supported by this clip architecture";
             return (
                 `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index + 1} · ${duration} · Click to edit · Shift+click to delete">` +
                 renderRegionThumb(clip) +
@@ -285,7 +293,7 @@ const renderRegions = (
                 controls +
                 resizeGrip +
                 `</div>` +
-                `<div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeSupported ? "Click empty space to add a retake window" : "Retakes are not supported by this clip architecture"}">` +
+                `<div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` +
                 renderRetakeOverlay(
                     clip,
                     layout.index,

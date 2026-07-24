@@ -63,15 +63,22 @@ export const createDetailSelectionDomainOperations = (
         neighbour: (index: number) => TimelineSelection,
         fallback: TimelineSelection,
     ): void =>
-        structuralCommit((clips) => {
-            const remaining = remove(clips);
-            if (remaining === null) {
-                return null;
-            }
-            return remaining > 0
-                ? neighbour(Math.min(index, remaining - 1))
-                : fallback;
-        });
+        structuralCommit(
+            (clips) => {
+                const remaining = remove(clips);
+                if (remaining === null) {
+                    return null;
+                }
+                return remaining > 0
+                    ? neighbour(Math.min(index, remaining - 1))
+                    : fallback;
+            },
+            // Deleting the last inactive item, or the first of several items,
+            // can leave the selected numeric index unchanged. A normal
+            // setSelection then emits no event, so force the repeater DOM to
+            // rebuild around the surviving entities.
+            { rebuildAfterSelect: true },
+        );
 
     const deleteRefEntry = (clipIdx: number, refIdx: number): void => {
         commitRemoval(
@@ -107,59 +114,64 @@ export const createDetailSelectionDomainOperations = (
     };
 
     const addPromptWindow = (clipIdx: number): void => {
-        structuralCommit((clips) => {
-            const clip = clips[clipIdx];
-            if (
-                !clip ||
-                !getCapabilities().forClip(clip).decision("promptRelay")
-                    .supported
-            ) {
-                return null;
-            }
-            const clipDuration = Math.max(0, clip.duration || 0);
-            const windows = [...(clip.promptWindows ?? [])].sort(
-                (a, b) => a.start - b.start,
-            );
-            let start = 0;
-            let end = clipDuration;
-            for (const window of windows) {
-                const windowStart = clamp(window.start, 0, clipDuration);
-                if (windowStart - start >= PROMPT_WINDOW_MIN_DURATION) {
-                    end = windowStart;
-                    break;
+        structuralCommit(
+            (clips) => {
+                const clip = clips[clipIdx];
+                if (
+                    !clip ||
+                    !getCapabilities().forClip(clip).decision("promptRelay")
+                        .supported
+                ) {
+                    return null;
                 }
-                start = Math.max(
-                    start,
-                    clamp(window.start + window.duration, 0, clipDuration),
+                const clipDuration = Math.max(0, clip.duration || 0);
+                const windows = [...(clip.promptWindows ?? [])].sort(
+                    (a, b) => a.start - b.start,
                 );
-            }
-            if (end === clipDuration) {
-                const next = windows.find(
-                    (window) =>
-                        window.start >= start + PROMPT_WINDOW_MIN_DURATION,
-                );
-                if (next) {
-                    end = clamp(next.start, start, clipDuration);
+                let start = 0;
+                let end = clipDuration;
+                for (const window of windows) {
+                    const windowStart = clamp(window.start, 0, clipDuration);
+                    if (windowStart - start >= PROMPT_WINDOW_MIN_DURATION) {
+                        end = windowStart;
+                        break;
+                    }
+                    start = Math.max(
+                        start,
+                        clamp(window.start + window.duration, 0, clipDuration),
+                    );
                 }
-            }
-            if (end - start < PROMPT_WINDOW_MIN_DURATION) {
-                return null;
-            }
-            const window = {
-                prompt: "",
-                start: roundToTenth(start),
-                duration: roundToTenth(
-                    Math.min(PROMPT_WINDOW_DEFAULT_DURATION, end - start),
-                ),
-            };
-            clip.promptWindows.push(window);
-            clip.promptWindows.sort((a, b) => a.start - b.start);
-            return {
-                kind: "prompt-minor",
-                clipIdx,
-                windowIdx: clip.promptWindows.indexOf(window),
-            };
-        });
+                if (end === clipDuration) {
+                    const next = windows.find(
+                        (window) =>
+                            window.start >= start + PROMPT_WINDOW_MIN_DURATION,
+                    );
+                    if (next) {
+                        end = clamp(next.start, start, clipDuration);
+                    }
+                }
+                if (end - start < PROMPT_WINDOW_MIN_DURATION) {
+                    return null;
+                }
+                const window = {
+                    prompt: "",
+                    start: roundToTenth(start),
+                    duration: roundToTenth(
+                        Math.min(PROMPT_WINDOW_DEFAULT_DURATION, end - start),
+                    ),
+                };
+                clip.promptWindows.push(window);
+                clip.promptWindows.sort((a, b) => a.start - b.start);
+                return {
+                    kind: "prompt-minor",
+                    clipIdx,
+                    windowIdx: clip.promptWindows.indexOf(window),
+                };
+            },
+            // A newly sorted leading window can reuse the currently selected
+            // numeric index; rebuild even when setSelection would be a no-op.
+            { rebuildAfterSelect: true },
+        );
     };
 
     const deleteWindowEntry = (clipIdx: number, windowIdx: number): void => {
@@ -183,40 +195,52 @@ export const createDetailSelectionDomainOperations = (
     };
 
     const createRetake = (clipIdx: number): void => {
-        structuralCommit((clips) => {
-            const clip = clips[clipIdx];
-            if (
-                !clip ||
-                clip.retake ||
-                !getCapabilities().forClip(clip).decision("retake").supported
-            ) {
-                return null;
-            }
-            const clipDuration = Math.max(0, clip.duration || 0);
-            clip.retake = {
-                startSeconds: 0,
-                lengthSeconds: Math.max(
-                    RETAKE_MIN_DURATION,
-                    Math.min(
-                        RETAKE_DEFAULT_DURATION,
-                        clipDuration || RETAKE_DEFAULT_DURATION,
+        structuralCommit(
+            (clips) => {
+                const clip = clips[clipIdx];
+                if (
+                    !clip ||
+                    clip.retake ||
+                    !getCapabilities().forClip(clip).decision("retake")
+                        .supported
+                ) {
+                    return null;
+                }
+                const clipDuration = Math.max(0, clip.duration || 0);
+                clip.retake = {
+                    startSeconds: 0,
+                    lengthSeconds: Math.max(
+                        RETAKE_MIN_DURATION,
+                        Math.min(
+                            RETAKE_DEFAULT_DURATION,
+                            clipDuration || RETAKE_DEFAULT_DURATION,
+                        ),
                     ),
-                ),
-                strength: RETAKE_STRENGTH_DEFAULT,
-            };
-            return { kind: "retake", clipIdx };
-        });
+                    strength: RETAKE_STRENGTH_DEFAULT,
+                };
+                return { kind: "retake", clipIdx };
+            },
+            { rebuildAfterSelect: true },
+        );
     };
 
     const removeRetake = (clipIdx: number): void => {
-        structuralCommit((clips) => {
-            const clip = clips[clipIdx];
-            if (!clip?.retake) {
-                return null;
-            }
-            clip.retake = null;
-            return { kind: "clip", clipIdx, stageIdx: 0 };
-        });
+        structuralCommit(
+            (clips) => {
+                const clip = clips[clipIdx];
+                if (!clip?.retake) {
+                    return null;
+                }
+                const keepRetakeSelected = getCapabilities()
+                    .forClip(clip)
+                    .decision("retake").supported;
+                clip.retake = null;
+                return keepRetakeSelected
+                    ? { kind: "retake", clipIdx }
+                    : { kind: "clip", clipIdx, stageIdx: 0 };
+            },
+            { rebuildAfterSelect: true },
+        );
     };
 
     const addAudioSegment = (clipIdx: number): void => {

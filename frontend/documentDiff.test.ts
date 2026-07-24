@@ -142,7 +142,6 @@ const document = (): CanonicalVideoStagesConfig => {
         height: 576,
         fps: 24,
         dimsExplicit: true,
-        fpsExplicit: true,
         clips: [clipA, clip("clip-b"), clip("clip-c")],
         audioTracks: [trackA, track("track-b"), track("track-c")],
     };

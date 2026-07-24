@@ -14,6 +14,7 @@ import {
 import {
     mountPromptBox,
     mountSelect,
+    mountVideoFps,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
 import {
@@ -705,7 +706,6 @@ describe("persistence", () => {
             height: 1024,
             fps: 24,
             dimsExplicit: false,
-            fpsExplicit: false,
             clips: [minimalClip({ duration: 2 })],
             ...overrides,
         });
@@ -740,23 +740,20 @@ describe("persistence", () => {
             expect("fps" in parsed).toBe(false);
         });
 
-        it("includes fps only when fps is explicit", () => {
-            const json = serializeStateForStorage(
-                baseState({ fps: 30, fpsExplicit: true }),
-            );
+        it("never serializes fps (it always mirrors the core Video FPS)", () => {
+            const json = serializeStateForStorage(baseState({ fps: 30 }));
             const parsed = JSON.parse(json) as Record<string, unknown>;
-            expect(parsed.fps).toBe(30);
+            expect("fps" in parsed).toBe(false);
             expect("width" in parsed).toBe(false);
         });
 
-        it("round-trips explicit dims + fps through getState", () => {
+        it("round-trips explicit dims through getState; fps stays inherited", () => {
             saveState(
                 baseState({
                     width: 640,
                     height: 384,
                     dimsExplicit: true,
                     fps: 16,
-                    fpsExplicit: true,
                 }),
             );
             expect(dataInput().value).toContain('"width":640');
@@ -764,15 +761,16 @@ describe("persistence", () => {
             expect(state.dimsExplicit).toBe(true);
             expect(state.width).toBe(640);
             expect(state.height).toBe(384);
-            expect(state.fpsExplicit).toBe(true);
-            expect(state.fps).toBe(16);
+            // An in-memory fps never persists: the reloaded document re-reads
+            // the core Video FPS (host default 24 here).
+            expect(state.fps).toBe(24);
         });
 
-        it("normalizes stored refs with an explicit FPS before serializing and reloading", () => {
+        it("normalizes stored refs with the core Video FPS before serializing and reloading", () => {
+            mountVideoFps(16);
             saveState(
                 baseState({
                     fps: 16,
-                    fpsExplicit: true,
                     clips: [
                         minimalClip({
                             duration: 5,
@@ -782,20 +780,19 @@ describe("persistence", () => {
                 }),
             );
 
-            // 5 seconds at the saved 16fps timeline has an aligned max of 81,
-            // not the host's 24fps max of 121.
+            // 5 seconds at the core 16fps timeline has an aligned max of 81,
+            // not the host's default 24fps max of 121.
             __resetPersistenceForTests();
             const reloaded = getState();
             expect(reloaded.fps).toBe(16);
             expect(reloaded.clips[0].refs[0].frame).toBe(81);
-            expect(JSON.parse(dataInput().value).fps).toBe(16);
+            expect("fps" in JSON.parse(dataInput().value)).toBe(false);
         });
 
         it("treats omitted keys as inherit, falling back to root defaults", () => {
             saveState(baseState());
             const state = getState();
             expect(state.dimsExplicit).toBe(false);
-            expect(state.fpsExplicit).toBe(false);
             expect(state.width).toBe(1024);
             expect(state.height).toBe(1024);
             expect(state.fps).toBe(24);
@@ -805,7 +802,6 @@ describe("persistence", () => {
             dataInput().value = '{"width":100,"height":100,"fps":0,"clips":[]}';
             const state = getState();
             expect(state.dimsExplicit).toBe(false);
-            expect(state.fpsExplicit).toBe(false);
             expect(state.width).toBe(1024);
         });
 

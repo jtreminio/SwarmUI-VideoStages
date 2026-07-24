@@ -71,7 +71,10 @@ export const clampDetailSelection = (
             : { kind: "none" };
     }
     if (selection.kind === "retake") {
-        return clip.retake ? selection : { kind: "none" };
+        // Retake is a single-instance clip concern. Keep its selection valid
+        // while empty so deleting it leaves the same section open with its Add
+        // action instead of jumping the sidebar back to the top.
+        return selection;
     }
     if (selection.kind === "audio-segment") {
         const segments = clip.audioSegments ?? [];

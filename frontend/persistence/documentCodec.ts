@@ -1,4 +1,4 @@
-import { ROOT_DIMENSION_MIN, ROOT_FPS_MIN } from "../constants";
+import { ROOT_DIMENSION_MIN } from "../constants";
 import {
     ensureAuthoringDocumentIdentity,
     ensureClipEntityIdentities,
@@ -17,7 +17,7 @@ import { isRecord, toNumber } from "../utils";
 export type InheritedDims = Pick<VideoStagesConfig, "width" | "height" | "fps">;
 export type RootDims = Pick<
     VideoStagesConfig,
-    "width" | "height" | "fps" | "dimsExplicit" | "fpsExplicit"
+    "width" | "height" | "fps" | "dimsExplicit"
 >;
 
 export interface DecodedStoredDocument {
@@ -34,7 +34,7 @@ const toIntOrNull = (value: unknown): number | null => {
 
 export const resolveRootDims = (
     inherited: InheritedDims,
-    stored: { width?: unknown; height?: unknown; fps?: unknown },
+    stored: { width?: unknown; height?: unknown },
 ): RootDims => {
     const width = toIntOrNull(stored.width);
     const height = toIntOrNull(stored.height);
@@ -43,14 +43,13 @@ export const resolveRootDims = (
         width >= ROOT_DIMENSION_MIN &&
         height !== null &&
         height >= ROOT_DIMENSION_MIN;
-    const fps = toIntOrNull(stored.fps);
-    const fpsExplicit = fps !== null && fps >= ROOT_FPS_MIN;
     return {
         width: dimsExplicit ? width : inherited.width,
         height: dimsExplicit ? height : inherited.height,
-        fps: fpsExplicit ? fps : inherited.fps,
+        // fps is never stored: the timeline always follows the core Video FPS
+        // param (the backend falls back to it too when the JSON has no fps).
+        fps: inherited.fps,
         dimsExplicit,
-        fpsExplicit,
     };
 };
 
@@ -165,7 +164,6 @@ export const serializeStateForStorage = (state: VideoStagesConfig): string => {
         out.width = Math.round(state.width);
         out.height = Math.round(state.height);
     }
-    if (state.fpsExplicit) out.fps = Math.round(state.fps);
     out.clips = serializeClipsForStorage(state.clips);
     out.audioTracks = state.audioTracks.map((track) => ({
         id: track.id,
@@ -268,7 +266,6 @@ export const decodeStoredDocument = (
         const dims = resolveRootDims(inherited, {
             width: parsed.width,
             height: parsed.height,
-            fps: parsed.fps,
         });
         return {
             dims,

@@ -11,7 +11,6 @@ const config = (): VideoStagesConfig => ({
     height: 720,
     fps: 24,
     dimsExplicit: false,
-    fpsExplicit: false,
     clips: [
         minimalClip({ id: "clip-a" }),
         minimalClip({ id: "clip-b" }),

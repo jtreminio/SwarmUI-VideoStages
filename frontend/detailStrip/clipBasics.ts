@@ -62,7 +62,6 @@ export const buildClipColumn = (
                     );
                 }
             });
-            context.render();
         }),
     );
     return column;

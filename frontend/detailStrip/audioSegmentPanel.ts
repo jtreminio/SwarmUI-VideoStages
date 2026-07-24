@@ -37,6 +37,7 @@ export const buildAudioSegmentSection = (
     clipIdx: number,
     selectedSegmentIndex: number | null,
     clips: Clip[],
+    open = selectedSegmentIndex !== null,
 ): HTMLElement => {
     const clip = clips[clipIdx];
     const segments = clip?.audioSegments ?? [];
@@ -266,7 +267,7 @@ export const buildAudioSegmentSection = (
         key: "audio-segments",
         label: "Segments",
         sectionClass: "vst-detail-audio-segments",
-        listClass: "vst-detail-segment-rail",
+        open,
         items: segments.map((_, segIdx) => ({
             label: `S${segIdx + 1}`,
             focusKey: `audio-segment-tab-${segIdx}`,
@@ -281,6 +282,7 @@ export const buildAudioSegmentSection = (
             title: decision.supported
                 ? "Overlay an extra audio piece on this clip"
                 : decision.reason,
+            label: "+ Add Audio Segment",
             className: "vst-detail-add-segment",
             disabled: !decision.supported,
             onClick: () => ctx.addAudioSegment(clipIdx),

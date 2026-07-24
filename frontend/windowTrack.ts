@@ -22,7 +22,7 @@ import {
     type GestureSession,
 } from "./gestureRouter";
 import { getClips, saveClips } from "./persistence";
-import { setSelection } from "./selection";
+import { activateSelection, setSelection } from "./selection";
 import type { UpdateOrigin } from "./store";
 import { readStateToken } from "./swarmInputs";
 import {
@@ -138,6 +138,11 @@ export interface WindowTrackConfig {
      * audio row).
      */
     isolateClicks: boolean;
+    /**
+     * Re-emit span activation even when it is already selected. Singleton
+     * tracks use this to reopen/reveal a manually closed sidebar section.
+     */
+    revealOnActivate?: boolean;
     readSpan(clip: Clip, itemIdx: number): PressSpan | null;
     /** Existing unsupported persisted spans remain selectable/removable only. */
     canEdit?(clip: Clip): boolean;
@@ -569,7 +574,12 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
             }
             return;
         }
-        setSelection(config.selectionFor(clipIdx, itemIdx));
+        const selection = config.selectionFor(clipIdx, itemIdx);
+        if (config.revealOnActivate) {
+            activateSelection(selection);
+        } else {
+            setSelection(selection);
+        }
     };
 
     const onBodyKeyDown = (event: Event): void => {
@@ -597,7 +607,12 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
         if (!clip || !config.readSpan(clip, itemIdx)) {
             return;
         }
-        setSelection(config.selectionFor(clipIdx, itemIdx));
+        const selection = config.selectionFor(clipIdx, itemIdx);
+        if (config.revealOnActivate) {
+            activateSelection(selection);
+        } else {
+            setSelection(selection);
+        }
     };
 
     const attach = (body: HTMLElement, router: GestureRouter): void => {

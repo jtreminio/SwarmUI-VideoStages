@@ -43,6 +43,7 @@ export const createTimelineRetakeTrack = (
         ghostClass: "vst-retake-ghost",
         unit: "pct",
         keyboardSelect: true,
+        revealOnActivate: true,
         // The retake sits inside the clip region; its clicks must not bubble
         // into the region's clip-select handler.
         isolateClicks: true,
@@ -96,6 +97,12 @@ export const createTimelineRetakeTrack = (
         // A plain tap places a default-length window at the pressed time; a
         // drag sizes it.
         createSpan: (clip, clipIdx, startSec, endSec) => {
+            // The add hook and press-time canCreate guard normally make this
+            // impossible. Re-check at commit time so a concurrent retake
+            // cannot be overwritten between press and release.
+            if (clip.retake) {
+                return null;
+            }
             const geom = createDefaultOrDraggedSpan(
                 startSec,
                 endSec,

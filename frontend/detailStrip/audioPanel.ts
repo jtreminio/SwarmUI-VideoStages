@@ -6,12 +6,11 @@ import {
     isAceStepFunAudioSource,
 } from "../audioSource";
 import {
+    buildAccordionSection,
     buildCheckbox,
     buildField,
-    buildGroup,
     buildMediaPickRow,
     buildOptionSelect,
-    sectionLabel,
 } from "../detailWidgets";
 import type { Clip, TimelineSelection } from "../types";
 import { buildAudioSegmentSection } from "./audioSegmentPanel";
@@ -20,8 +19,6 @@ import {
     disableCapabilityControls,
 } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
-
-const GROUP_AUDIO_SEGMENTS = "vstdock_audiosegments";
 
 export const buildAudioBody = (
     ctx: DetailStripContext,
@@ -79,8 +76,6 @@ export const buildAudioBody = (
     body.className = "vst-detail-body vst-detail-audio-body";
     const base = document.createElement("div");
     base.className = "vst-detail-col vst-detail-audio";
-    base.appendChild(sectionLabel("Base audio"));
-    body.appendChild(base);
 
     const select = buildOptionSelect(
         options.map((o) => ({ value: o.value, label: o.label })),
@@ -124,7 +119,7 @@ export const buildAudioBody = (
         reuseRow.appendChild(buildCapabilityNotice(reuseDecision));
         const remove = document.createElement("button");
         remove.type = "button";
-        remove.className = "basic-button small-button vst-detail-delete";
+        remove.className = "interrupt-button vst-btn-tiny vst-detail-delete";
         remove.textContent = "Remove unsupported reuse";
         remove.addEventListener("click", () => {
             commitAudio((target) => {
@@ -217,17 +212,27 @@ export const buildAudioBody = (
         });
         base.appendChild(remove);
     }
+    body.appendChild(
+        buildAccordionSection({
+            key: "base-audio",
+            label: "Base Audio",
+            content: base,
+            open: sel.kind === "audio",
+            flattenContent: true,
+        }).section,
+    );
 
     const segments = buildAudioSegmentSection(
         ctx,
         clipIdx,
         sel.kind === "audio-segment" ? sel.segIdx : null,
         clips,
+        sel.kind === "audio-segment",
     );
     if (!segmentDecision.supported && (clip.audioSegments?.length ?? 0) > 0) {
         segments.appendChild(buildCapabilityNotice(segmentDecision));
     }
-    body.appendChild(buildGroup(GROUP_AUDIO_SEGMENTS, segments));
+    body.appendChild(segments);
 
     return body;
 };

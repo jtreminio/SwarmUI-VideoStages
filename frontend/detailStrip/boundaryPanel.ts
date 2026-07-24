@@ -17,8 +17,6 @@ import type { BoundaryOut, Clip, TimelineSelection } from "../types";
 import { buildCapabilityNotice } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
-const GROUP_BOUNDARY = "vstdock_boundary";
-
 export const buildBoundaryBody = (
     ctx: DetailStripContext,
     sel: Extract<TimelineSelection, { kind: "boundary" }>,
@@ -227,5 +225,5 @@ export const buildBoundaryBody = (
     }
     body.appendChild(info);
 
-    return wrapForm(GROUP_BOUNDARY, body);
+    return wrapForm("boundary", "Boundary", body);
 };

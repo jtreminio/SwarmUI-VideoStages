@@ -6,7 +6,11 @@ import {
     it,
     jest,
 } from "@jest/globals";
-import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import {
+    mountPromptBox,
+    mountVideoFps,
+    mountVideoStagesData,
+} from "./__test_helpers__/dom";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence";
 import { resetSelectionForTests } from "./selection";
@@ -72,10 +76,10 @@ const clipsSection = (
     fps?: number,
 ): HTMLTextAreaElement => {
     mountPromptBox("");
-    return mountVideoStagesData({
-        ...(fps === undefined ? {} : { fps }),
-        clips,
-    });
+    if (fps !== undefined) {
+        mountVideoFps(fps);
+    }
+    return mountVideoStagesData({ clips });
 };
 
 const durationClips = (durations: number[]): Array<Record<string, unknown>> =>

@@ -10,6 +10,7 @@ import {
 
 let sliderSeq = 0;
 let helpSeq = 0;
+let checkboxSeq = 0;
 
 const slugify = (value: string): string =>
     value
@@ -26,7 +27,7 @@ const slugify = (value: string): string =>
  */
 export const appendHelp = (
     labelEl: HTMLElement,
-    row: HTMLElement,
+    row: HTMLElement | DocumentFragment,
     fieldName: string,
     helpText: string,
 ): void => {
@@ -95,6 +96,11 @@ export const buildField = (
 ): HTMLElement => {
     const row = document.createElement("div");
     row.className = "auto-input vst-detail-field";
+    row.classList.add(
+        control.classList.contains("auto-text-block")
+            ? "auto-input-flex-wide"
+            : "auto-input-flex",
+    );
     const boxClass = boxClassFor(control);
     if (boxClass) {
         row.classList.add(boxClass);
@@ -110,7 +116,7 @@ export const buildField = (
     row.append(labelEl, control);
     if (hint) {
         const small = document.createElement("small");
-        small.className = "vst-detail-field-hint";
+        small.className = "auto-input-description vst-detail-field-hint";
         small.textContent = hint;
         row.appendChild(small);
     }
@@ -190,7 +196,7 @@ export const buildSlider = (
     },
 ): HTMLElement => {
     const holder = document.createElement("div");
-    holder.className = "vst-stage-slider";
+    holder.className = "vst-stage-slider auto-input-flex-wide";
     const id = `vst_stage_slider_${++sliderSeq}`;
     holder.innerHTML = renderHostSlider({
         id,
@@ -233,24 +239,27 @@ export const buildCheckbox = (
     onChange: (value: boolean) => void,
     opts?: { disabled?: boolean; help?: string },
 ): HTMLElement => {
-    const row = document.createElement("label");
+    const row = document.createElement("div");
     row.className =
         "auto-input auto-checkbox-box auto-input-flex vst-detail-field vst-detail-field-check";
+    row.dataset.disabled = `${opts?.disabled === true}`;
     const input = document.createElement("input");
     input.type = "checkbox";
     input.className = "auto-checkbox";
+    input.id = `vst_checkbox_${slugify(label)}_${++checkboxSeq}`;
+    input.dataset.name = label;
     input.checked = checked;
     input.addEventListener("change", () => onChange(input.checked));
     const text = document.createElement("span");
     text.className = "auto-input-name vst-detail-field-label";
     text.textContent = label;
-    row.append(input, text);
+    row.append(text, input);
     if (opts?.help) {
-        appendHelp(row, row, label, opts.help);
+        appendHelp(text, row, label, opts.help);
     }
     if (opts?.disabled) {
         row.classList.add("vst-audio-disabled");
-        input.setAttribute("disabled", "");
+        input.disabled = true;
     }
     return row;
 };
@@ -307,26 +316,41 @@ export const buildMediaPickRow = (
     onClear: () => void,
 ): HTMLElement => {
     const row = document.createElement("div");
-    row.className = "auto-input vst-detail-field vst-audio-upload";
+    row.className =
+        "auto-input auto-file-box vst-detail-field vst-audio-upload";
+    const controls = document.createElement("label");
+    controls.className = "auto-file-input-label";
     const pickLabel = document.createElement("span");
     pickLabel.className = "auto-input-name vst-detail-field-label";
     pickLabel.textContent = label;
     const fileInput = document.createElement("input");
     fileInput.type = "file";
+    fileInput.className = "auto-file";
     fileInput.accept = accept;
     fileInput.id = `vst-media-pick-${++mediaPickCounter}`;
+    const uploadBtn = document.createElement("button");
+    uploadBtn.type = "button";
+    uploadBtn.className =
+        "basic-button auto-file-input-button vst-media-pick-upload";
+    uploadBtn.textContent = "Upload";
+    uploadBtn.addEventListener("click", () => fileInput.click());
+    controls.append(pickLabel, uploadBtn);
+    const fileDrop = document.createElement("label");
+    fileDrop.className = "auto-file-label";
+    fileDrop.htmlFor = fileInput.id;
+    const fileDisplay = document.createElement("div");
+    fileDisplay.className = "auto-file-input";
     const fileName = document.createElement("span");
-    fileName.className = "vst-audio-upload-name";
+    fileName.className = "auto-file-input-filename vst-audio-upload-name";
     fileName.textContent = name ? name : "No file chosen";
+    fileDisplay.appendChild(fileName);
+    fileDrop.append(fileInput, fileDisplay);
     const preview = document.createElement("div");
     preview.className = "auto-input-preview";
-    preview.hidden = true;
-    const previewName = document.createElement("span");
-    previewName.className = "auto-file-input-filename";
-    previewName.hidden = true;
     const clearBtn = document.createElement("button");
     clearBtn.type = "button";
-    clearBtn.className = "basic-button small-button vst-audio-upload-clear";
+    clearBtn.className =
+        "basic-button auto-file-input-button vst-audio-upload-clear";
     clearBtn.textContent = "Clear";
     clearBtn.hidden = !name;
     fileInput.addEventListener("change", () => {
@@ -349,25 +373,164 @@ export const buildMediaPickRow = (
             .then((data) => onFile(data, pickedName));
     });
     clearBtn.addEventListener("click", () => onClear());
-    row.append(pickLabel, fileInput, fileName, clearBtn, preview, previewName);
     if (hasHostInputBrowser()) {
         const selectBtn = document.createElement("button");
         selectBtn.type = "button";
-        selectBtn.className = "basic-button small-button vst-media-pick-select";
+        selectBtn.className =
+            "basic-button auto-file-input-button vst-media-pick-select";
         selectBtn.textContent = "Select";
         selectBtn.addEventListener("click", () =>
             openHostInputBrowser(fileInput.id, browserTypes),
         );
-        clearBtn.before(selectBtn);
+        controls.appendChild(selectBtn);
     }
+    controls.appendChild(clearBtn);
+    row.append(controls, fileDrop, preview);
     return row;
 };
 
-export const sectionLabel = (text: string): HTMLElement => {
-    const sec = document.createElement("div");
-    sec.className = "vst-detail-sec vst-detail-wrap-sec";
-    sec.textContent = text;
-    return sec;
+const setAccordionOpen = (section: HTMLElement, open: boolean): void => {
+    const header = section.querySelector<HTMLElement>(
+        ":scope > .input-group-header",
+    );
+    const content = section.querySelector<HTMLElement>(
+        ":scope > .input-group-content",
+    );
+    const symbol = header?.querySelector<HTMLElement>(".auto-symbol");
+    section.classList.toggle("input-group-open", open);
+    section.classList.toggle("input-group-closed", !open);
+    header?.setAttribute("aria-expanded", `${open}`);
+    if (section.classList.contains("vst-detail-repeating-group")) {
+        header?.setAttribute("aria-pressed", `${open}`);
+    }
+    if (content) {
+        content.style.removeProperty("display");
+        content.hidden = !open;
+        if (
+            section.classList.contains("vst-detail-repeating-group") &&
+            content.childNodes.length > 0
+        ) {
+            content.classList.toggle(
+                "vst-detail-repeating-editor-active",
+                open,
+            );
+        }
+    }
+    if (symbol) {
+        symbol.textContent = open ? "⮟" : "⮞";
+    }
+};
+
+const closeSiblingAccordionSections = (section: HTMLElement): void => {
+    const parent = section.parentElement;
+    if (!parent) {
+        return;
+    }
+    for (const sibling of parent.children) {
+        if (
+            sibling instanceof HTMLElement &&
+            sibling !== section &&
+            sibling.classList.contains("vst-detail-section")
+        ) {
+            setAccordionOpen(sibling, false);
+        }
+    }
+};
+
+const appendSectionContent = (
+    target: HTMLElement,
+    source: HTMLElement | DocumentFragment,
+    flatten: boolean,
+): void => {
+    if (!flatten || source instanceof DocumentFragment) {
+        target.appendChild(source);
+        return;
+    }
+    for (const { name, value } of Array.from(source.attributes)) {
+        if (name.startsWith("data-")) {
+            target.setAttribute(name, value);
+        }
+    }
+    target.classList.add(...Array.from(source.classList));
+    target.append(...Array.from(source.childNodes));
+};
+
+export interface AccordionSectionSpec {
+    key: string;
+    label: string;
+    content: HTMLElement | DocumentFragment;
+    open?: boolean;
+    counter?: string | number;
+    className?: string;
+    flattenContent?: boolean;
+}
+
+/**
+ * Native SwarmUI sidebar group with a wired shrinkable header. Sibling
+ * VideoStages sections form a progressive accordion: opening one closes the
+ * others in the same panel. Geometry and field chrome are left to the host
+ * `.input-group` styles.
+ */
+export const buildAccordionSection = (
+    spec: AccordionSectionSpec,
+): {
+    section: HTMLElement;
+    heading: HTMLElement;
+    content: HTMLElement;
+} => {
+    const section = document.createElement("div");
+    section.className =
+        `input-group vst-detail-section ${spec.open ? "input-group-open" : "input-group-closed"} ${spec.className ?? ""}`.trim();
+    section.dataset.vstAccordionKey = spec.key;
+
+    const header = document.createElement("span");
+    header.className =
+        "input-group-header input-group-shrinkable vst-detail-section-header";
+    header.tabIndex = 0;
+    header.setAttribute("role", "button");
+    header.setAttribute("aria-expanded", `${spec.open === true}`);
+
+    const labelWrap = document.createElement("span");
+    labelWrap.className = "header-label-wrap";
+    const symbol = document.createElement("span");
+    symbol.className = "auto-symbol";
+    symbol.textContent = spec.open ? "⮟" : "⮞";
+    const heading = document.createElement("span");
+    heading.className = "header-label";
+    heading.textContent = spec.label;
+    const spacer = document.createElement("span");
+    spacer.className = "header-label-spacer";
+    labelWrap.append(symbol, heading, spacer);
+    if (spec.counter !== undefined) {
+        const counter = document.createElement("span");
+        counter.className = "header-label-counter";
+        counter.textContent = `${spec.counter}`;
+        labelWrap.appendChild(counter);
+    }
+    header.appendChild(labelWrap);
+
+    const content = document.createElement("div");
+    content.className = "input-group-content vst-detail-section-content";
+    content.hidden = spec.open !== true;
+    appendSectionContent(content, spec.content, spec.flattenContent === true);
+
+    const toggle = (event: Event): void => {
+        event.preventDefault();
+        event.stopPropagation();
+        const opening = content.hidden === true;
+        if (opening) {
+            closeSiblingAccordionSections(section);
+        }
+        setAccordionOpen(section, opening);
+    };
+    header.addEventListener("click", toggle);
+    header.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+            toggle(event);
+        }
+    });
+    section.append(header, content);
+    return { section, heading, content };
 };
 
 export interface RepeatingGroupItem {
@@ -376,7 +539,9 @@ export interface RepeatingGroupItem {
     title?: string;
     active?: boolean;
     className?: string;
-    onSelect: () => void;
+    groupClassName?: string;
+    editor?: HTMLElement;
+    onSelect?: () => void;
     onShiftDelete?: () => void;
     onDelete?: () => void;
     deleteTitle?: string;
@@ -393,6 +558,7 @@ export interface RepeatingGroupItem {
 export interface RepeatingGroupAddAction {
     title: string;
     className: string;
+    label?: string;
     disabled?: boolean;
     onClick: () => void;
 }
@@ -408,38 +574,28 @@ export interface RepeatingEditorSpec {
     };
     editor?: HTMLElement;
     sectionClass?: string;
-    listClass?: string;
+    open?: boolean;
 }
 
 /**
- * Canonical repeating-child section. Every repeater gets the same title,
- * collapsible input-group items, per-item actions, an Add button, active-editor slot, and stable key
- * used by the detail shell for scroll preservation and external reveal.
+ * Canonical repeating-child section: one native outer SwarmUI accordion group,
+ * containing one native group per item and the extension's Add action.
  */
 export const buildRepeatingEditor = (
     spec: RepeatingEditorSpec,
 ): {
     section: HTMLElement;
     heading: HTMLElement;
-    list: HTMLElement;
     editor: HTMLElement | null;
 } => {
-    const section = document.createElement("div");
-    section.className =
-        `vst-detail-stages-wrap vst-detail-repeating-editor ${spec.sectionClass ?? ""}`.trim();
-    section.dataset.vstRepeaterKey = spec.key;
-    const heading = sectionLabel(spec.label);
-    section.appendChild(heading);
-    const list = document.createElement("div");
-    list.className =
-        `vst-detail-repeating-group-list ${spec.listClass ?? ""}`.trim();
+    const children = document.createDocumentFragment();
     spec.items.forEach((item, index) => {
         const active = item.active === true;
         const group = document.createElement("div");
         group.className = `input-group vst-detail-repeating-group ${
             active ? "input-group-open" : "input-group-closed"
-        }`;
-        const header = document.createElement("div");
+        } ${item.groupClassName ?? ""}`.trim();
+        const header = document.createElement("span");
         header.className =
             `input-group-header input-group-shrinkable vst-detail-repeating-group-header ${item.className ?? ""}`.trim();
         header.tabIndex = 0;
@@ -453,7 +609,7 @@ export const buildRepeatingEditor = (
         labelWrap.className = "header-label-wrap";
         const symbol = document.createElement("span");
         symbol.className = "auto-symbol";
-        symbol.textContent = active ? "▾" : "▸";
+        symbol.textContent = active ? "⮟" : "⮞";
         const label = document.createElement("span");
         label.className = "header-label";
         label.textContent = item.label;
@@ -465,12 +621,12 @@ export const buildRepeatingEditor = (
             const action = document.createElement("button");
             action.type = "button";
             action.className =
-                `basic-button small-button vst-detail-repeating-group-action ${item.headerAction.className ?? ""}`.trim();
+                `basic-button vst-btn-tiny vst-detail-repeating-group-action ${item.headerAction.className ?? ""}`.trim();
             action.textContent = item.headerAction.label;
             action.title = item.headerAction.title;
             action.setAttribute("aria-label", item.headerAction.title);
             action.classList.toggle(
-                "vst-detail-repeating-group-action-active",
+                "vst-btn-skip-active",
                 item.headerAction.active === true,
             );
             action.addEventListener("click", (event) => {
@@ -485,8 +641,8 @@ export const buildRepeatingEditor = (
             const remove = document.createElement("button");
             remove.type = "button";
             remove.className =
-                `basic-button small-button vst-refs-delete vst-detail-delete vst-detail-repeating-group-delete ${spec.remove.className}`.trim();
-            remove.textContent = "- Delete";
+                `interrupt-button vst-btn-tiny vst-detail-delete vst-detail-repeating-group-delete ${spec.remove.className}`.trim();
+            remove.textContent = "×";
             remove.title =
                 item.deleteTitle ??
                 (active ? spec.remove.title : `Delete ${item.label}`);
@@ -504,41 +660,53 @@ export const buildRepeatingEditor = (
         const content = document.createElement("div");
         content.className =
             "input-group-content vst-detail-repeating-group-content";
-        if (active && spec.editor) {
-            spec.editor.classList.add("vst-detail-repeating-editor-active");
-            content.appendChild(spec.editor);
-        } else {
-            content.hidden = true;
+        const editor = item.editor ?? (active ? spec.editor : undefined);
+        if (editor) {
+            appendSectionContent(content, editor, true);
         }
-        const activateOrToggle = (): void => {
-            if (!active) {
+        content.hidden = !active;
+        content.classList.toggle(
+            "vst-detail-repeating-editor-active",
+            active && editor !== undefined,
+        );
+        const activateOrToggle = (event: Event): void => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!active && item.onSelect) {
                 item.onSelect();
                 return;
             }
             const opening = content.hidden === true;
-            content.hidden = !opening;
-            group.classList.toggle("input-group-open", opening);
-            group.classList.toggle("input-group-closed", !opening);
-            header.setAttribute("aria-expanded", `${opening}`);
-            symbol.textContent = opening ? "▾" : "▸";
+            if (opening) {
+                for (const sibling of Array.from(
+                    group.parentElement?.children ?? [],
+                )) {
+                    if (
+                        sibling instanceof HTMLElement &&
+                        sibling !== group &&
+                        sibling.classList.contains("vst-detail-repeating-group")
+                    ) {
+                        setAccordionOpen(sibling, false);
+                    }
+                }
+            }
+            setAccordionOpen(group, opening);
         };
         header.addEventListener("click", activateOrToggle);
         header.addEventListener("keydown", (event) => {
             if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                activateOrToggle();
+                activateOrToggle(event);
             }
         });
         group.append(header, content);
-        list.appendChild(group);
+        children.appendChild(group);
         group.dataset.vstRepeaterItem = `${index}`;
     });
-    section.appendChild(list);
     const add = document.createElement("button");
     add.type = "button";
     add.className =
-        `basic-button small-button vst-add-btn vst-detail-repeating-add ${spec.add.className}`.trim();
-    add.textContent = "+ Add";
+        `vst-add-btn vst-detail-repeating-add ${spec.add.className}`.trim();
+    add.textContent = spec.add.label ?? "+ Add";
     add.title = spec.add.title;
     add.setAttribute("aria-label", spec.add.title);
     add.disabled = spec.add.disabled === true;
@@ -546,8 +714,22 @@ export const buildRepeatingEditor = (
         event.preventDefault();
         spec.add.onClick();
     });
-    section.appendChild(add);
-    return { section, heading, list, editor: spec.editor ?? null };
+    children.appendChild(add);
+    const built = buildAccordionSection({
+        key: spec.key,
+        label: spec.label,
+        content: children,
+        counter: spec.items.length,
+        open: spec.open,
+        className:
+            `vst-detail-repeating-editor ${spec.sectionClass ?? ""}`.trim(),
+    });
+    built.section.dataset.vstRepeaterKey = spec.key;
+    return {
+        section: built.section,
+        heading: built.heading,
+        editor: spec.editor ?? null,
+    };
 };
 
 export const clampStartLength = (
@@ -561,30 +743,22 @@ export const clampStartLength = (
     return { start: s, length: l };
 };
 
-export const buildGroup = (
-    groupId: string,
-    content: HTMLElement,
-): HTMLElement => {
-    const group = document.createElement("div");
-    group.className = "input-group input-group-open";
-    group.id = `auto-group-${groupId}`;
-
-    const contentEl = document.createElement("div");
-    contentEl.className = "input-group-content";
-    contentEl.id = `input_group_content_${groupId}`;
-    contentEl.appendChild(content);
-
-    group.appendChild(contentEl);
-    return group;
-};
-
 export const wrapForm = (
-    groupId: string,
+    key: string,
+    label: string,
     content: HTMLElement,
 ): HTMLElement => {
     const body = document.createElement("div");
     body.className = "vst-detail-body";
-    body.appendChild(buildGroup(groupId, content));
+    body.appendChild(
+        buildAccordionSection({
+            key,
+            label,
+            content,
+            open: true,
+            flattenContent: true,
+        }).section,
+    );
     return body;
 };
 
@@ -601,20 +775,20 @@ export const tagFocus = (field: HTMLElement, key: string): HTMLElement => {
     return field;
 };
 
-/**
- * The `wrap.vst-detail-stages-wrap` > [label, `col`] skeleton shared by the
- * clip panel's Retake and IC-LoRA sections: a plain section label above a
- * column that the caller fills with per-entry rows and a trailing Add button.
- */
 export const buildStackSection = (
+    key: string,
     label: string,
     colClass: string,
+    open = false,
 ): { wrap: HTMLElement; col: HTMLElement } => {
-    const wrap = document.createElement("div");
-    wrap.className = "vst-detail-stages-wrap";
-    wrap.appendChild(sectionLabel(label));
     const col = document.createElement("div");
     col.className = `vst-detail-col ${colClass}`;
-    wrap.appendChild(col);
-    return { wrap, col };
+    const built = buildAccordionSection({
+        key,
+        label,
+        content: col,
+        open,
+        flattenContent: true,
+    });
+    return { wrap: built.section, col: built.content };
 };

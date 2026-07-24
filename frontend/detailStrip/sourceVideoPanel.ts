@@ -77,12 +77,17 @@ export const buildSourceVideoSection = (
     context: DetailStripContext,
     clip: Clip,
     clipIdx: number,
+    open = false,
 ): HTMLElement => {
     const { wrap, col } = buildStackSection(
+        "source-video",
         "Source Video",
         "vst-detail-source-col",
+        open,
     );
-    const sectionLabel = wrap.querySelector<HTMLElement>(".vst-detail-sec");
+    const sectionLabel = wrap.querySelector<HTMLElement>(
+        ":scope > .input-group-header .header-label",
+    );
     if (sectionLabel) {
         appendHelp(
             sectionLabel,
@@ -235,7 +240,7 @@ export const buildSourceVideoSection = (
     const removeButton = document.createElement("button");
     removeButton.type = "button";
     removeButton.className =
-        "basic-button small-button vst-refs-delete vst-detail-delete vst-detail-rail-btn";
+        "interrupt-button vst-btn-tiny vst-detail-delete vst-detail-rail-btn";
     removeButton.textContent = "Remove source video";
     removeButton.addEventListener("click", (event) => {
         event.preventDefault();

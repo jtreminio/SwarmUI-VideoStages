@@ -26,7 +26,6 @@ const config = (clips: Clip[]): VideoStagesConfig => ({
     height: 720,
     fps: 24,
     dimsExplicit: false,
-    fpsExplicit: false,
     clips,
 });
 

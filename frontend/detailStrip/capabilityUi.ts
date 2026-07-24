@@ -11,7 +11,7 @@ export const buildCapabilityNotice = (
 };
 
 export const disableCapabilityControls = (
-    root: HTMLElement,
+    root: HTMLElement | DocumentFragment,
     decision: CapabilityDecision,
     removableSelectors: readonly string[] = [],
 ): void => {
@@ -35,6 +35,13 @@ export const disableCapabilityControls = (
         control.disabled = true;
         control.title = decision.reason;
     }
-    root.classList.add("vst-capability-readonly");
+    if (root instanceof DocumentFragment) {
+        // Wrapperless sections: mark each top-level element instead.
+        for (const child of root.children) {
+            child.classList.add("vst-capability-readonly");
+        }
+    } else {
+        root.classList.add("vst-capability-readonly");
+    }
     root.prepend(buildCapabilityNotice(decision));
 };

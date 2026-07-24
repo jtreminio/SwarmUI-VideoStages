@@ -235,7 +235,6 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 width: state.width,
                 height: state.height,
                 dimsExplicit: state.dimsExplicit,
-                fpsExplicit: state.fpsExplicit,
                 unit: viewport.unit(),
                 pxPerSecond: viewport.pxPerSecond(),
                 selectedIndex: linking.getSelectedIndex(),

@@ -294,6 +294,7 @@ const buildTrackEditor = (
         key: "audio-track-spans",
         label: "Spans",
         sectionClass: "vst-audio-track-spans",
+        open: selectedSpanIndex !== null,
         items: track.spans.map((_, spanIndex) => ({
             label: `S${spanIndex + 1}`,
             focusKey: `audio-track-${trackIndex}-span-tab-${spanIndex}`,
@@ -324,6 +325,7 @@ const buildTrackEditor = (
         })),
         add: {
             title: "Add a span to this audio track",
+            label: "+ Add Span",
             className: "vst-audio-track-add-span",
             onClick: () => {
                 const ownerId = state.clips[0]?.id ?? null;
@@ -399,6 +401,9 @@ export const buildAudioTracksPanel = (
         key: "audio-tracks",
         label: "Planned multi-clip audio",
         sectionClass: "vst-audio-tracks-panel",
+        open:
+            selection.kind === "audio-track" ||
+            selection.kind === "audio-track-span",
         items: tracks.map((_, trackIndex) => ({
             label: `T${trackIndex + 1}`,
             focusKey: `audio-track-tab-${trackIndex}`,
@@ -424,6 +429,7 @@ export const buildAudioTracksPanel = (
         })),
         add: {
             title: "Add a planned multi-clip audio track",
+            label: "+ Add Audio Track",
             className: "vst-audio-track-add",
             onClick: () => {
                 ctx.commitState((next) => {
@@ -466,6 +472,6 @@ export const buildAudioTracksPanel = (
     const warning = document.createElement("div");
     warning.className = "vst-audio-tracks-planned-warning";
     warning.textContent = "Planned — runtime mixer not yet connected";
-    built.list.before(warning);
+    built.heading.after(warning);
     return built.section;
 };

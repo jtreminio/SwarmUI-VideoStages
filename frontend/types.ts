@@ -46,9 +46,13 @@ export interface VideoStagesConfig {
     schemaVersion?: number;
     width: number;
     height: number;
+    /**
+     * Always mirrors the core Video FPS param: the panel's FPS field writes
+     * through to the core input and re-reads it as the inherited value, so
+     * fps is never serialized into the authoring document.
+     */
     fps: number;
     dimsExplicit: boolean;
-    fpsExplicit: boolean;
     clips: Clip[];
     /**
      * Planned timeline-wide audio authoring. The backend currently ignores
