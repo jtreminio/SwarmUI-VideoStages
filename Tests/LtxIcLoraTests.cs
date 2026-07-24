@@ -688,13 +688,13 @@ public sealed class LtxIcLoraTests
     {
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        RegisterLora("UnitTest_MyHDRUpscale");
+        RegisterLora("UnitTest_ic-lora-hdr-0.9");
 
-        // The frontend called this entry HDR (its name contains "hdr") while the backend did not
-        // (name does not contain "ic-lora-hdr" and the preset is not "hdr"): the user was told HDR
-        // was on, the uniform-timeline rule fired, and the footage came out flat log. Both sides
-        // now read one persisted typed contract.
-        JObject entry = MakeIcLora("UnitTest_MyHDRUpscale");
+        // The name is one the retired predicate matched ("ic-lora-hdr"), but the persisted typed
+        // flag says this entry is not HDR. Name matching would publish an HDR chain here; only the
+        // typed contract gets this right. The inverse case - a plain name carrying hdr: true - is
+        // covered by Hdr_activation_follows_the_typed_flag_on_a_custom_preset.
+        JObject entry = MakeIcLora("UnitTest_ic-lora-hdr-0.9");
         entry["preset"] = "custom";
         entry["hdr"] = false;
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
