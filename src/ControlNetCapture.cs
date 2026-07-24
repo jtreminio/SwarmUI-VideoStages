@@ -2,7 +2,7 @@ using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages;
 
 /// <summary>
 /// Typed facade for the focused ControlNet capture services.

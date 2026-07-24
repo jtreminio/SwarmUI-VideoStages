@@ -183,7 +183,7 @@ internal sealed class OutputPublisher(
             {
                 if (suppressionBridge.Graph.GetNode(saveId) is not null)
                 {
-                    suppressionBridge.RemoveNode(saveId);
+                    VideoGraphHelpers.RemoveNode(generator, suppressionBridge, saveId);
                 }
             }
             return OutputPublication.Suppressed;

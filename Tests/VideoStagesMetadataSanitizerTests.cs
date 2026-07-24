@@ -107,6 +107,41 @@ public class MetadataSanitizerTests
     }
 
     [Fact]
+    public void StripUploadData_TimelineAudioTrackUpload_IsStripped()
+    {
+        // The sanitizer used to walk `clips` only, so every generation using a timeline-wide audio
+        // upload embedded the whole base64 payload in its output metadata.
+        string raw = new JObject
+        {
+            ["clips"] = new JArray(),
+            ["audioTracks"] = new JArray
+            {
+                new JObject
+                {
+                    ["id"] = "track-0",
+                    ["source"] = new JObject
+                    {
+                        ["kind"] = "Upload",
+                        ["reference"] = "bed.wav",
+                        ["uploadedAudio"] = new JObject
+                        {
+                            ["data"] = "data:audio/wav;base64,QUJD",
+                            ["fileName"] = "bed.wav"
+                        }
+                    }
+                }
+            }
+        }.ToString();
+        string sanitized = MetadataSanitizer.StripUploadDataFromJsonParameter(raw);
+        JObject track = (JObject)JObject.Parse(sanitized)["audioTracks"]![0]!;
+        JObject source = (JObject)track["source"]!;
+        Assert.Null(source["uploadedAudio"]!["data"]);
+        Assert.Equal("bed.wav", $"{source["uploadedAudio"]!["fileName"]}");
+        Assert.Equal("Upload", $"{source["kind"]}");
+        Assert.DoesNotContain("QUJD", sanitized);
+    }
+
+    [Fact]
     public void StripUploadData_BareClipArrayRoot_IsLeftUnchanged()
     {
         // The document envelope is always a versioned root object; a bare clip array is not a

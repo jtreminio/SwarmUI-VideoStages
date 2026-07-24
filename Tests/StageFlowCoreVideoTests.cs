@@ -1401,8 +1401,14 @@ public partial class StageFlowTests
         Assert.Empty(bridge.Graph.NodesOfType<LTXVAddGuideNode>());
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
 
+        // Replacing the core stage deletes the native chain the base/refiner/generated refs were
+        // captured from. Those captures must read as absent, not as dangling node references —
+        // they used to survive because the helper-cache invalidation could not decode the
+        // pipe-delimited marker encoding StageRefStore writes.
         StageRefStore store = new(generator);
-        Assert.NotNull(store.Generated);
+        Assert.Null(store.Generated);
+        Assert.Null(store.Base);
+        Assert.Null(store.Refiner);
     }
 
     [Fact]

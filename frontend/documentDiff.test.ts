@@ -204,6 +204,62 @@ describe("diffDocuments", () => {
         ).toThrow(new DocumentDiffError("architecture-invariant"));
     });
 
+    it("accepts deleting the last stage of a sourced clip", () => {
+        // A sourced clip with no stages is the documented `none` architecture case, but the diff
+        // used to reject a null next authored architecture outright, so the delete threw
+        // architecture-invariant on save (and the undo across it silently did nothing).
+        const before = document();
+        before.clips[0].sourceVideo = {
+            data: "data:video/mp4;base64,AAAA",
+            fileName: "source.mp4",
+            fps: 24,
+            durationSeconds: 4,
+            startSeconds: 0,
+            lengthSeconds: 4,
+        };
+        before.clips[0].stages = [stage("stage-only")];
+        before.clips[0].refs = [];
+        before.clips[0].retake = null;
+        const catalog = testArchitectureCatalog();
+        expect(
+            reconcileClipArchitectureIdentity(before.clips[0], catalog),
+        ).toBe(true);
+        const after = structuredClone(before);
+        after.clips[0].stages = [];
+        expect(reconcileClipArchitectureIdentity(after.clips[0], catalog)).toBe(
+            true,
+        );
+        expect(after.clips[0].architecture).toBe("none");
+
+        const command = diffDocuments(before, after, {
+            architectureCatalog: catalog,
+        });
+        const result = reduceDocumentCommand(before, command, {
+            architectureCatalog: catalog,
+        });
+
+        expect(result.failure).toBeUndefined();
+        expect(result.document.clips[0].stages).toEqual([]);
+        expect(result.document.clips[0].architecture).toBe("none");
+    });
+
+    it("still rejects emptying a clip that has no source video", () => {
+        const before = document();
+        before.clips[0].stages = [stage("stage-only")];
+        before.clips[0].refs = [];
+        before.clips[0].retake = null;
+        const after = structuredClone(before);
+        after.clips[0].stages = [];
+        after.clips[0].architecture = "none";
+        after.clips[0].modelProfileId = "none";
+
+        expect(() =>
+            diffDocuments(before, after, {
+                architectureCatalog: testArchitectureCatalog(),
+            }),
+        ).toThrow(new DocumentDiffError("architecture-invariant"));
+    });
+
     it("accepts only catalog-derived source/skipped identity transitions", () => {
         const before = document();
         const after = structuredClone(before);
@@ -485,6 +541,7 @@ describe("diffDocuments", () => {
                         strength: 0.75,
                         attentionStrength: 0.5,
                         controlType: "depth",
+                        hdr: false,
                         driveMedia: null,
                     },
                 ];

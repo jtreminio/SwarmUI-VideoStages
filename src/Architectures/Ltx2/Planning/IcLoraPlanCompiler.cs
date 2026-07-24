@@ -215,7 +215,8 @@ internal static class IcLoraPlanCompiler
                 driveMedia,
                 input,
                 IcLoraDimensionPolicyResolver.Resolve(entry.Preset, entry.Lora),
-                guideStrength));
+                guideStrength,
+                entry.Hdr));
         }
         return plans.ToImmutable();
     }

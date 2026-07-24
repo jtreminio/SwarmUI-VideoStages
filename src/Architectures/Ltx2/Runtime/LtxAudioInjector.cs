@@ -200,7 +200,7 @@ internal sealed class LtxAudioInjector(
         {
             if (!g.NodeIsConnectedAnywhere(sourceId))
             {
-                bridge.RemoveNode(sourceId);
+                VideoGraphHelpers.RemoveNode(g, bridge, sourceId);
             }
         }
     }

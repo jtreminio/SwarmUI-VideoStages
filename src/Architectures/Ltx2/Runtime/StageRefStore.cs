@@ -45,9 +45,9 @@ internal class StageRefStore(WorkflowGenerator g)
 
     public bool DiscardPreRootVideo()
     {
-        bool removedMedia = g.NodeHelpers.Remove(MediaKey(StageKind.PreRootVideo));
-        bool removedVae = g.NodeHelpers.Remove(VaeKey(StageKind.PreRootVideo));
-        g.NodeHelpers.Remove(AudioKey(StageKind.PreRootVideo));
+        bool removedMedia = VideoGraphHelpers.RemoveCached(g, MediaKey(StageKind.PreRootVideo));
+        bool removedVae = VideoGraphHelpers.RemoveCached(g, VaeKey(StageKind.PreRootVideo));
+        VideoGraphHelpers.RemoveCached(g, AudioKey(StageKind.PreRootVideo));
         return removedMedia || removedVae;
     }
 
@@ -66,7 +66,7 @@ internal class StageRefStore(WorkflowGenerator g)
         }
         else
         {
-            g.NodeHelpers.Remove(AudioKey(kind));
+            VideoGraphHelpers.RemoveCached(g, AudioKey(kind));
         }
     }
 
@@ -79,17 +79,17 @@ internal class StageRefStore(WorkflowGenerator g)
     {
         if (data?.Path is not JArray { Count: 2 } path)
         {
-            g.NodeHelpers.Remove(key);
+            VideoGraphHelpers.RemoveCached(g, key);
             return;
         }
-        g.NodeHelpers[key] = string.Join("|",
+        VideoGraphHelpers.CacheMarker(g, key, [
             $"{path[0]}", $"{path[1]}",
             data.DataType ?? WGNodeData.DT_IMAGE,
             data.Width.HasValue ? $"{data.Width.Value}" : "",
             data.Height.HasValue ? $"{data.Height.Value}" : "",
             data.Frames.HasValue ? $"{data.Frames.Value}" : "",
             data.GetRawFPS() is int fpsVal ? $"{fpsVal}" : "",
-            data.Compat?.ID ?? "");
+            data.Compat?.ID ?? ""]);
     }
 
     private StageRef LoadStageRef(StageKind kind)
@@ -110,7 +110,7 @@ internal class StageRefStore(WorkflowGenerator g)
         {
             return null;
         }
-        string[] parts = encoded.Split('|');
+        string[] parts = encoded.Split(VideoGraphHelpers.MarkerSeparator);
         if (parts.Length < 8 || !int.TryParse(parts[1], out int slot))
         {
             return null;

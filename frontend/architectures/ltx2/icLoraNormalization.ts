@@ -21,6 +21,7 @@ import type {
 } from "../../types";
 import { isRecord } from "../../utils";
 import {
+    findIcLoraPreset,
     IC_LORA_PRESET_CUSTOM_ID,
     icLoraDriveMediaContractForData,
 } from "./icLoraPresets";
@@ -51,6 +52,7 @@ export const defaultIcLora = (overrides: Partial<IcLora> = {}): IcLora => ({
     strength: IC_LORA_STRENGTH_DEFAULT,
     attentionStrength: IC_LORA_ATTENTION_DEFAULT,
     controlType: "none",
+    hdr: false,
     driveMedia: null,
     ...overrides,
 });
@@ -192,6 +194,12 @@ export const normalizeIcLora = (
             driveData !== "visual"
                 ? "none"
                 : normalizeIcLoraControlType(raw.controlType),
+        // Documents authored before the flag existed carry only the preset id; the preset table
+        // (not a name match) seeds the intent, so those documents keep working.
+        hdr:
+            typeof raw.hdr === "boolean"
+                ? raw.hdr
+                : (findIcLoraPreset(normalizedPreset)?.hdr ?? false),
         driveMedia,
     };
 };
@@ -221,10 +229,8 @@ export const canonicalizeIcLoraFields = (entry: IcLora): void => {
     );
 };
 
-/** LTX-specific recognition of its HDR preset and weight naming convention. */
-export const isHdrFeature = (entry: IcLora): boolean =>
-    `${entry.preset ?? ""}`.trim().toLowerCase() === "hdr" ||
-    `${entry.lora ?? ""}`.toLowerCase().includes("hdr");
+/** Reads the persisted typed HDR contract; never the preset or LoRA name. */
+export const isHdrFeature = (entry: IcLora): boolean => entry.hdr === true;
 
 /** True when any entry is driven by a captured core "ControlNet N" branch. */
 export const hasSlotSourcedIcLora = (icLoras: IcLora[]): boolean =>

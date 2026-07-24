@@ -623,6 +623,7 @@ describe("reduceDocumentCommand", () => {
                 strength: 1,
                 attentionStrength: 1,
                 controlType: "none",
+                hdr: true,
                 driveMedia: null,
             },
         ];
@@ -745,6 +746,7 @@ describe("reduceDocumentCommand", () => {
                 strength: 1,
                 attentionStrength: 1,
                 controlType: "none",
+                hdr: false,
                 driveMedia: null,
             },
         ];

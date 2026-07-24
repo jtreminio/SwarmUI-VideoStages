@@ -1,7 +1,6 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 
@@ -21,26 +20,23 @@ internal sealed class ControlNetAudioCapture(WorkflowGenerator g)
             ?? bridge.Graph.FindNearestUpstream<GetVideoComponentsNode>(startNode);
         if (components is null)
         {
-            g.NodeHelpers.Remove(ControlNetCaptureKeys.Audio(index));
+            VideoGraphHelpers.RemoveCached(g, ControlNetCaptureKeys.Audio(index));
             return;
         }
-        g.NodeHelpers[ControlNetCaptureKeys.Audio(index)] =
-            WorkflowBridge.ToPath(components.Audio).ToString(Formatting.None);
+        VideoGraphHelpers.CachePath(
+            g,
+            ControlNetCaptureKeys.Audio(index),
+            WorkflowBridge.ToPath(components.Audio));
     }
 
     public bool TryGetCapturedAudio(int index, out WGNodeData audio)
     {
         audio = null;
-        if (!ControlNetCaptureKeys.IsValidIndex(index)
-            || !g.NodeHelpers.TryGetValue(ControlNetCaptureKeys.Audio(index), out string encoded)
-            || string.IsNullOrWhiteSpace(encoded)
-            || JToken.Parse(encoded) is not JArray { Count: 2 } path)
-        {
-            return false;
-        }
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        INodeOutput output = bridge.ResolvePath(path);
-        if (output is null)
+        if (!ControlNetCaptureKeys.IsValidIndex(index)
+            || !VideoGraphHelpers.TryGetCachedPath(
+                g, bridge, ControlNetCaptureKeys.Audio(index), out JArray path)
+            || bridge.ResolvePath(path) is not INodeOutput output)
         {
             return false;
         }

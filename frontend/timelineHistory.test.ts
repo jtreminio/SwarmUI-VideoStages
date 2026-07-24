@@ -71,7 +71,9 @@ describe("timelineHistory", () => {
         expect(get()).toBe("B");
     });
 
-    it("keeps both stacks intact when a guarded restore fails", () => {
+    it("surfaces a failed restore and consumes the unwritable entry", () => {
+        // A restore whose write throws used to return false without popping: the caller saw a
+        // plain "nothing to undo", and every later undo re-offered the same unwritable snapshot.
         let value = "A";
         let rejectRestore = false;
         const history = createTimelineHistory({
@@ -88,15 +90,10 @@ describe("timelineHistory", () => {
         history.capture();
         rejectRestore = true;
 
-        expect(history.undo()).toBe(false);
+        expect(() => history.undo()).toThrow("stale-revision");
         expect(value).toBe("B");
-        expect(history.canUndo()).toBe(true);
+        expect(history.canUndo()).toBe(false);
         expect(history.canRedo()).toBe(false);
-
-        rejectRestore = false;
-        expect(history.undo()).toBe(true);
-        expect(value).toBe("A");
-        expect(history.canRedo()).toBe(true);
     });
 
     it("caps the undo stack at maxDepth", () => {

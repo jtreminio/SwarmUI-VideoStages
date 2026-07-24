@@ -89,7 +89,7 @@ public sealed class AudioHandler(WorkflowGenerator g)
         return int.TryParse(indexText, out trackIndex) && trackIndex >= 0;
     }
 
-    private static void PruneDownstreamSaveAudio(WorkflowBridge bridge, VAEDecodeAudioNode decode)
+    private void PruneDownstreamSaveAudio(WorkflowBridge bridge, VAEDecodeAudioNode decode)
     {
         List<ComfyNode> toRemove = [];
         foreach (SaveAudioMP3Node save in bridge.Graph.NodesOfType<SaveAudioMP3Node>())
@@ -108,7 +108,7 @@ public sealed class AudioHandler(WorkflowGenerator g)
         }
         foreach (ComfyNode node in toRemove)
         {
-            bridge.RemoveNode(node);
+            VideoGraphHelpers.RemoveNode(g, bridge, node.Id);
         }
     }
 

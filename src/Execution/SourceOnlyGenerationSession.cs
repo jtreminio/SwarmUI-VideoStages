@@ -10,6 +10,7 @@ namespace VideoStages.Execution;
 internal sealed record SourceOnlyClipExecutionContext(
     ClipPlan Clip,
     int ClipIndex,
+    int FramesPerSecond,
     AudioRuntimeSources AudioSources);
 
 /// <summary>
@@ -34,6 +35,7 @@ internal sealed class SourceOnlyGenerationSession(
             new SourceOnlyClipExecutionContext(
                 context.Clip,
                 context.ClipIndex,
+                context.Plan.FramesPerSecond,
                 context.AudioSources));
     }
 

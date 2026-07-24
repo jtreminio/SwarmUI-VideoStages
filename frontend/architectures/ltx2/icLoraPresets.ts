@@ -30,6 +30,8 @@ export interface IcLoraPreset {
     note: string;
     /** LTX-owned declaration of which part of a drive source this preset consumes. */
     driveMedia?: IcLoraDriveMediaContract;
+    /** Seeds the entry's typed `hdr` flag; only the HDR preset declares it. */
+    hdr?: boolean;
 }
 
 export interface IcLoraDriveMediaContract {
@@ -120,6 +122,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         controlType: "none",
         // The repo also ships an auxiliary hdr-scene-emb file; only the LoRA itself is fetched.
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-HDR/resolve/main/ltx-2.3-22b-ic-lora-hdr-0.9.safetensors`,
+        hdr: true,
         note: "HDR generation; feed the SDR clip as the drive video. Output is auto-tonemapped to SDR (LogC3 decompressed). Suggested prompt: 'HDR footage'.",
     },
     {

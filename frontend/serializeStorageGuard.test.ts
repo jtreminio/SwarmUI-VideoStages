@@ -82,6 +82,7 @@ const maximalClip = (): Clip =>
                 strength: 0.75,
                 attentionStrength: 0.5,
                 controlType: "canny",
+                hdr: false,
                 driveMedia: {
                     data: "data:video/mp4;base64,AAAA",
                     fileName: "d.mp4",

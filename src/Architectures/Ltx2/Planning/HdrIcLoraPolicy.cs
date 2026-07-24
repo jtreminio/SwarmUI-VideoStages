@@ -9,9 +9,6 @@ internal static class HdrIcLoraPolicy
         stage.ArchitecturePayload is Ltx2StagePayload payload
         && payload.IcLoras.Any(IsHdr));
 
-    private static bool IsHdr(IcLoraPlan entry) =>
-        StringUtils.Equals(entry.Preset?.Trim(), "hdr")
-        || (entry.ModelName?.Contains(
-            "ic-lora-hdr",
-            StringComparison.OrdinalIgnoreCase) ?? false);
+    /// <summary>Reads the persisted typed contract; never a preset or weight name.</summary>
+    private static bool IsHdr(IcLoraPlan entry) => entry.IsHdr;
 }

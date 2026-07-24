@@ -666,6 +666,7 @@ public sealed class LtxIcLoraTests
 
         JObject entry = MakeIcLora("UnitTest_IcLoraHdr");
         entry["preset"] = "hdr";
+        entry["hdr"] = true;
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["icLoras"] = new JArray(entry);
 
@@ -683,6 +684,52 @@ public sealed class LtxIcLoraTests
     }
 
     [Fact]
+    public void Hdr_activation_reads_the_typed_flag_not_the_lora_or_preset_name()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_MyHDRUpscale");
+
+        // The frontend called this entry HDR (its name contains "hdr") while the backend did not
+        // (name does not contain "ic-lora-hdr" and the preset is not "hdr"): the user was told HDR
+        // was on, the uniform-timeline rule fired, and the footage came out flat log. Both sides
+        // now read one persisted typed contract.
+        JObject entry = MakeIcLora("UnitTest_MyHDRUpscale");
+        entry["preset"] = "custom";
+        entry["hdr"] = false;
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["icLoras"] = new JArray(entry);
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVHDRDecodePostprocessNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmSaveHDRAnimationWSNode>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+    }
+
+    [Fact]
+    public void Hdr_activation_follows_the_typed_flag_on_a_custom_preset()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_PlainName");
+
+        JObject entry = MakeIcLora("UnitTest_PlainName");
+        entry["preset"] = "custom";
+        entry["hdr"] = true;
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["icLoras"] = new JArray(entry);
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        Assert.Single(bridge.Graph.NodesOfType<LTXVHDRDecodePostprocessNode>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmSaveHDRAnimationWSNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+    }
+
+    [Fact]
     public void Hdr_entry_rewrites_only_the_owned_final_save()
     {
         using SwarmUiTestContext testContext = new();
@@ -691,6 +738,7 @@ public sealed class LtxIcLoraTests
 
         JObject entry = MakeIcLora("UnitTest_IcLoraHdr");
         entry["preset"] = "hdr";
+        entry["hdr"] = true;
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["icLoras"] = new JArray(entry);
 

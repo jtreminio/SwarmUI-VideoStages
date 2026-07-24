@@ -193,11 +193,7 @@ export const buildIcLorasSection = (
             const driveMediaKinds = entry.driveMediaKinds;
             const audioDriveMedia = entry.driveData === "audio";
             const presetOptions = IC_LORA_PRESETS.filter(
-                (preset) =>
-                    hdrDecision.supported ||
-                    !`${preset.id} ${preset.displayName}`
-                        .toLowerCase()
-                        .includes("hdr"),
+                (preset) => hdrDecision.supported || preset.hdr !== true,
             );
             const presetSpecs = [
                 { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
@@ -232,6 +228,9 @@ export const buildIcLorasSection = (
                             target.strength = preset.strength;
                             target.controlType = preset.controlType;
                         }
+                        // The preset table is the only thing that declares HDR intent; picking a
+                        // non-HDR preset clears it rather than leaving a stale flag behind.
+                        target.hdr = preset?.hdr === true;
                         const nextContract = icLoraDriveMediaContract(preset);
                         target.driveData = nextContract.driveData;
                         target.driveMediaKinds = [

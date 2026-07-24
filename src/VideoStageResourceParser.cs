@@ -80,7 +80,8 @@ internal static class VideoStageResourceParser
                 ControlType: VideoStagesJsonReader.GetString(entry, "controlType")?.Trim(),
                 DriveMedia: driveMedia,
                 DriveData: ParseDriveData(rawDriveData),
-                DriveMediaKinds: ParseDriveMediaKinds(entry)));
+                DriveMediaKinds: ParseDriveMediaKinds(entry),
+                Hdr: VideoStagesJsonReader.GetOptionalBool(entry, "hdr", false)));
         }
         return entries;
     }

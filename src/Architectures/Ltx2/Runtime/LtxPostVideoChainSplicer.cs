@@ -20,7 +20,7 @@ internal static class LtxPostVideoChainSplicer
         MediaRef stageOutput = MediaRef.FromWGNodeData(g.CurrentMedia, bridge);
         MediaRef vaeRef =
             MediaRef.FromWGNodeData(vae, bridge) ?? MediaRef.FromWGNodeData(g.CurrentVae, bridge);
-        LtxDecodeConfig decodeConfig = LtxPostChainRebuilder.BuildDecodeConfig(g);
+        LtxDecodeConfig decodeConfig = LtxDecodeConfig.From(g);
 
         MediaRef result =
             LtxPostChainRebuilder.SpliceCurrentOutput(
@@ -57,7 +57,7 @@ internal static class LtxPostVideoChainSplicer
         MediaRef stageOutput = MediaRef.FromWGNodeData(g.CurrentMedia, bridge);
         MediaRef vaeRef =
             MediaRef.FromWGNodeData(vae, bridge) ?? MediaRef.FromWGNodeData(g.CurrentVae, bridge);
-        LtxDecodeConfig decodeConfig = LtxPostChainRebuilder.BuildDecodeConfig(g);
+        LtxDecodeConfig decodeConfig = LtxDecodeConfig.From(g);
 
         MediaRef result = LtxPostChainRebuilder.SpliceCurrentOutputToDedicatedBranch(
             bridge,

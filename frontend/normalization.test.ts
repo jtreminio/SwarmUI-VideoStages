@@ -292,6 +292,7 @@ describe("normalization", () => {
                         strength: 99,
                         attentionStrength: -3,
                         controlType: "DEPTH",
+                        hdr: false,
                         driveMedia: {
                             data: "data:video/mp4;base64,QUJD",
                             fileName: "d.mp4",

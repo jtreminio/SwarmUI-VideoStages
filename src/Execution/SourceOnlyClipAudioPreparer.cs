@@ -20,11 +20,10 @@ internal sealed class SourceOnlyClipAudioPreparer(WorkflowGenerator generator)
             context.Clip.Audio.Base,
             sources,
             suppressNative: false);
-        double duration = context.Clip.Frames is int frames
-            && sourcedMedia.GetRawFPS() is int fps
-            && fps > 0
-                ? (double)frames / fps
-                : 0;
+        double duration = ClipAudioBedDuration.Seconds(
+            context.Clip,
+            context.FramesPerSecond,
+            sourcedMedia);
         WGNodeData combinedAudio = new AudioSegmentCombiner(generator).Combine(
             context.Clip.ClipId,
             context.Clip.Audio.Segments,

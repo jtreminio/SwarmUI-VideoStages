@@ -1,18 +1,25 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages;
 
 /// <summary>Captures each active core video ControlNet's full image path and normalizes it for LTX.</summary>
 internal sealed class ControlNetCoreMediaCapture(WorkflowGenerator g)
 {
+    private const string CapturedMarkerKey = "videostages.controlnet.captured";
+
     public void Capture()
     {
+        // The phase is dispatched once per active architecture; the capture is a whole-graph,
+        // architecture-neutral concern, so the first participant does it for everyone.
+        if (!g.NodeHelpers.TryAdd(CapturedMarkerKey, "captured"))
+        {
+            return;
+        }
         using WorkflowBridge bridge = BridgeSync.For(g);
         ControlNetGraphDiscovery discovery = new(g);
         HashSet<string> usedApplyNodes = [];
@@ -26,30 +33,34 @@ internal sealed class ControlNetCoreMediaCapture(WorkflowGenerator g)
                     bridge, model, usedApplyNodes, out (string Id, JObject Node) applyNode, out JArray controlImage)
                 || !HasVideoUpstream(bridge, controlImage))
             {
-                g.NodeHelpers.Remove(ControlNetCaptureKeys.Image(index));
-                g.NodeHelpers.Remove(ControlNetCaptureKeys.Audio(index));
+                VideoGraphHelpers.RemoveCached(g, ControlNetCaptureKeys.Image(index));
+                VideoGraphHelpers.RemoveCached(g, ControlNetCaptureKeys.Audio(index));
                 continue;
             }
 
             EnsureResizeMultiple(bridge, controlImage);
-            g.NodeHelpers[ControlNetCaptureKeys.Image(index)] =
-                new JArray(controlImage[0], controlImage[1]).ToString(Formatting.None);
+            VideoGraphHelpers.CachePath(
+                g,
+                ControlNetCaptureKeys.Image(index),
+                new JArray(controlImage[0], controlImage[1]));
             ControlNetAudioCapture.CaptureUpstreamAudio(g, bridge, controlImage, index);
             EnsureSingleFrameWrap(bridge, controlImage);
             usedApplyNodes.Add(applyNode.Id);
         }
     }
 
+    /// <summary>Resolves the cached capture against the live graph: a captured node that a later
+    /// cleanup removed must read as "not captured", never as a dangling reference.</summary>
     internal static bool TryGetCapturedControlImage(
         WorkflowGenerator g,
         int index,
         out WGNodeData controlImage)
     {
         controlImage = null;
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         if (!ControlNetCaptureKeys.IsValidIndex(index)
-            || !g.NodeHelpers.TryGetValue(ControlNetCaptureKeys.Image(index), out string encoded)
-            || string.IsNullOrWhiteSpace(encoded)
-            || JToken.Parse(encoded) is not JArray { Count: 2 } path)
+            || !VideoGraphHelpers.TryGetCachedPath(
+                g, bridge, ControlNetCaptureKeys.Image(index), out JArray path))
         {
             return false;
         }

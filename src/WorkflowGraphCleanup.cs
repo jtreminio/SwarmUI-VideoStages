@@ -197,24 +197,6 @@ internal static class WorkflowGraphCleanup
 
     public static void InvalidateNodeHelperCacheForRemovedIds(
         IDictionary<string, string> nodeHelpers,
-        IReadOnlyCollection<string> removedNodeIds)
-    {
-        if (nodeHelpers is null || removedNodeIds is null || removedNodeIds.Count == 0)
-        {
-            return;
-        }
-
-        List<string> staleKeys = [];
-        foreach (KeyValuePair<string, string> entry in nodeHelpers)
-        {
-            if (!string.IsNullOrEmpty(entry.Value) && removedNodeIds.Contains(entry.Value))
-            {
-                staleKeys.Add(entry.Key);
-            }
-        }
-        foreach (string key in staleKeys)
-        {
-            nodeHelpers.Remove(key);
-        }
-    }
+        IReadOnlyCollection<string> removedNodeIds) =>
+        VideoGraphHelpers.InvalidateForRemovedNodes(nodeHelpers, removedNodeIds);
 }

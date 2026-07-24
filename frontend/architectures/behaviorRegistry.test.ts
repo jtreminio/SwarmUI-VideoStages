@@ -17,6 +17,7 @@ const hdrEntry: IcLora = {
     strength: 1,
     attentionStrength: 1,
     controlType: "none",
+    hdr: true,
     driveMedia: null,
 };
 
@@ -26,6 +27,26 @@ describe("architecture behavior registry", () => {
         expect(architectureBehavior("future-video")).toBeNull();
         expect(isArchitectureHdrFeature("ltx2", hdrEntry)).toBe(true);
         expect(isArchitectureHdrFeature("future-video", hdrEntry)).toBe(false);
+    });
+
+    it("reads the typed hdr contract instead of matching preset or lora names", () => {
+        // A LoRA named "MyHDRUpscale" used to be HDR to the UI (name contains "hdr") and not to
+        // the backend, so the user was told HDR was on and got flat log footage.
+        const namedButNotHdr: IcLora = {
+            ...hdrEntry,
+            lora: "MyHDRUpscale.safetensors",
+            preset: "custom",
+            hdr: false,
+        };
+        const unnamedButHdr: IcLora = {
+            ...hdrEntry,
+            lora: "plain-name.safetensors",
+            preset: "custom",
+            hdr: true,
+        };
+
+        expect(isArchitectureHdrFeature("ltx2", namedButNotHdr)).toBe(false);
+        expect(isArchitectureHdrFeature("ltx2", unnamedButHdr)).toBe(true);
     });
 
     it("does not silently apply LTX normalization to another architecture", () => {

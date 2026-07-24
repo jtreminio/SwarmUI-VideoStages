@@ -92,7 +92,7 @@ internal sealed class LtxStageInputArtifactFactory
             bridge,
             vaeSource,
             separate.VideoLatent,
-            LtxPostChainRebuilder.BuildDecodeConfig(g)).Id;
+            LtxDecodeConfig.From(g)).Id;
 
         WGNodeData detachedGuide = WithCurrentMediaDimensions(new WGNodeData(
             new JArray(decodeNodeId, 0),

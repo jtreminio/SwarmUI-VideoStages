@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages;
 
 /// <summary>Finds the host ControlNet apply node that belongs to a configured model.</summary>
 internal sealed class ControlNetGraphDiscovery(WorkflowGenerator g)

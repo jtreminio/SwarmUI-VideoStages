@@ -378,7 +378,8 @@ public class VideoExecutionPlanCompilerTests
             1,
             Constants.IcLoraControlNone,
             null,
-            Preset: "hdr");
+            Preset: "hdr",
+            Hdr: true);
         ClipSpec hdrClip = GeneratedClip(0, Stage(10)) with { IcLoras = [hdr] };
         ClipSpec sdrClip = GeneratedClip(1, Stage(11));
 

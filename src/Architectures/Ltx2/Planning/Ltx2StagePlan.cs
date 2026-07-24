@@ -136,7 +136,8 @@ internal sealed record IcLoraPlan(
     IcLoraDriveMediaPlan DriveMedia,
     IcLoraMediaInputPlan MediaInput,
     int DimensionDownscaleFactor,
-    double? GuideStrength)
+    double? GuideStrength,
+    bool IsHdr = false)
 {
     internal bool HasVisualGuide => MediaContract.ConsumesVisual && MediaInput.HasInput;
 

@@ -44,12 +44,10 @@ internal sealed class ClipAudioPreparer(
         WGNodeData baseAudio = carryStartsGeneratedAudio
             ? null
             : selectedBaseAudio;
-        int? fps = context.FramesPerSecond > 0
-            ? context.FramesPerSecond
-            : g.CurrentMedia.GetRawFPS();
-        double duration = context.PlannedClip.Frames is int frames && fps is > 0
-            ? (double)frames / fps.Value
-            : 0;
+        double duration = ClipAudioBedDuration.Seconds(
+            context.PlannedClip,
+            context.FramesPerSecond,
+            g.CurrentMedia);
         WGNodeData baseWithBoundaryCarry = ApplyBoundaryAudioCarry(
             baseAudio,
             boundaryAudioCarry,

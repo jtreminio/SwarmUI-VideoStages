@@ -26,6 +26,7 @@
                     "strength": 0.9,
                     "attentionStrength": 0.8,
                     "controlType": "canny",
+                    "hdr": true,
                     "driveMedia": {
                         "data": "data:video/mp4;base64,QUJD",
                         "fileName": "drive.mp4"

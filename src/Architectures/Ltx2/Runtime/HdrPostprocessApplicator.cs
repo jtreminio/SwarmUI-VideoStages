@@ -56,7 +56,7 @@ internal class HdrPostprocessApplicator(WorkflowGenerator g)
 
             bridge.SyncNode(post);
             bridge.SyncNode(hdrSave);
-            bridge.RemoveNode(save);
+            VideoGraphHelpers.RemoveNode(g, bridge, save.Id);
         }
     }
 }

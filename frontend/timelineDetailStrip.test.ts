@@ -574,6 +574,7 @@ describe("createTimelineDetailStrip", () => {
             strength: 1,
             attentionStrength: 1,
             controlType: "none",
+            hdr: false,
             driveMedia: null,
         });
         expect(document.querySelector(".vst-detail-iclora")).not.toBeNull();

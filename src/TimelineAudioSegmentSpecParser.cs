@@ -30,7 +30,9 @@ internal static class TimelineAudioSegmentSpecParser
         for (int trackIndex = 0; trackIndex < tracks.Count; trackIndex++)
         {
             JObject track = tracks[trackIndex];
-            JObject sourceObject = VideoStagesJsonReader.GetObject(track, "source");
+            JObject sourceObject = VideoStagesJsonReader.GetObject(
+                track,
+                UploadContainers.AudioTrackSource);
             if (sourceObject is null)
             {
                 continue;
@@ -40,7 +42,7 @@ internal static class TimelineAudioSegmentSpecParser
             string reference = VideoStagesJsonReader.GetString(sourceObject, "reference")?.Trim();
             UploadedMediaSpec upload = VideoStagesJsonReader.GetEmbeddedUpload(
                 sourceObject,
-                "uploadedAudio");
+                UploadContainers.ClipAudio);
             string aceStepSource =
                 string.Equals(kind, "AceStepFun", StringComparison.OrdinalIgnoreCase)
                 && AudioHandler.TryParseAceStepFunAudioSource(reference, out _)

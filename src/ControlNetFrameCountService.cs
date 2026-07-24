@@ -4,7 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages;
 
 /// <summary>Builds and caches the frame-count path for a captured full ControlNet video image.</summary>
 internal sealed class ControlNetFrameCountService(WorkflowGenerator g)
@@ -42,7 +42,7 @@ internal sealed class ControlNetFrameCountService(WorkflowGenerator g)
         sizeNode.Image.ConnectToUntyped(frameSource);
         bridge.SyncNode(sizeNode);
         framesConnection = WorkflowBridge.ToPath(sizeNode.BatchSize);
-        g.NodeHelpers[helperKey] = framesConnection.ToString(Newtonsoft.Json.Formatting.None);
+        VideoGraphHelpers.CachePath(g, helperKey, framesConnection);
         return true;
     }
 }

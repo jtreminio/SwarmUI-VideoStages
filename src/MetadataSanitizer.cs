@@ -13,18 +13,13 @@ internal static class MetadataSanitizer
         }
         try
         {
-            JToken root = JToken.Parse(raw);
-            JArray clips = root is JObject obj ? GetProperty(obj, "clips") as JArray : null;
-            if (clips is null)
+            if (JToken.Parse(raw) is not JObject root)
             {
                 return raw;
             }
-            foreach (JToken clipToken in clips)
+            foreach (UploadContainerPath path in UploadContainers.AllPaths)
             {
-                if (clipToken is JObject clip)
-                {
-                    ProcessClip(clip);
-                }
+                Walk(root, path, stepIndex: 0);
             }
             return root.ToString(Formatting.None);
         }
@@ -34,32 +29,39 @@ internal static class MetadataSanitizer
         }
     }
 
-    private static void ProcessClip(JObject clip)
+    private static void Walk(JObject parent, UploadContainerPath path, int stepIndex)
     {
-        foreach ((string collection, string container) in UploadContainers.All)
+        if (stepIndex >= path.Steps.Count)
         {
-            if (collection is null)
+            StripUploadContainer(parent, path.Container);
+            return;
+        }
+        UploadPathStep step = path.Steps[stepIndex];
+        JToken next = JsonUtil.Get(parent, step.Name);
+        if (!step.IsArray)
+        {
+            if (next is JObject child)
             {
-                StripUploadContainer(clip, container);
-                continue;
+                Walk(child, path, stepIndex + 1);
             }
-            if (GetProperty(clip, collection) is not JArray items)
+            return;
+        }
+        if (next is not JArray items)
+        {
+            return;
+        }
+        foreach (JToken item in items)
+        {
+            if (item is JObject element)
             {
-                continue;
-            }
-            foreach (JToken itemToken in items)
-            {
-                if (itemToken is JObject itemObj)
-                {
-                    StripUploadContainer(itemObj, container);
-                }
+                Walk(element, path, stepIndex + 1);
             }
         }
     }
 
     private static void StripUploadContainer(JObject parent, string containerKey)
     {
-        if (GetProperty(parent, containerKey) is not JObject upload)
+        if (JsonUtil.Get(parent, containerKey) is not JObject upload)
         {
             return;
         }
@@ -69,6 +71,4 @@ internal static class MetadataSanitizer
             parent.Remove(containerKey);
         }
     }
-
-    private static JToken GetProperty(JObject obj, string name) => JsonUtil.Get(obj, name);
 }

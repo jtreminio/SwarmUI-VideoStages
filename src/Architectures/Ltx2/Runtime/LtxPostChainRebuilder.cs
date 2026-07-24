@@ -8,12 +8,48 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages.Architectures.Ltx2;
 
+/// <summary>SwarmUI's own runtime VAE-decode tiling fallbacks, mirrored so VideoStages decodes
+/// look like every other Swarm decode.</summary>
+internal static class LtxDecodeDefaults
+{
+    internal const int TileSize = 256;
+    internal const int Overlap = 64;
+    internal const int TemporalSize = 32;
+    internal const int TemporalOverlap = 4;
+}
+
+/// <summary>
+/// The single owner of "how does this generation decode latents". Every VideoStages decode - the
+/// spliced post-chain rebuild and the ad-hoc <see cref="VaeDecodePreference"/> path alike - reads
+/// its tiling decision from here, so a stage cannot get different tile geometry purely because of
+/// which builder produced its decode node.
+/// </summary>
 internal sealed record LtxDecodeConfig(
     bool UseTiledDecode,
-    int TileSize = 768,
-    int Overlap = 64,
-    int TemporalSize = 4096,
-    int TemporalOverlap = 4);
+    int TileSize = LtxDecodeDefaults.TileSize,
+    int Overlap = LtxDecodeDefaults.Overlap,
+    int TemporalSize = LtxDecodeDefaults.TemporalSize,
+    int TemporalOverlap = LtxDecodeDefaults.TemporalOverlap)
+{
+    internal static LtxDecodeConfig From(WorkflowGenerator generator)
+    {
+        ArgumentNullException.ThrowIfNull(generator);
+        if (!generator.UserInput.TryGet(T2IParamTypes.VAETileSize, out _))
+        {
+            return new LtxDecodeConfig(UseTiledDecode: false);
+        }
+        return new LtxDecodeConfig(
+            UseTiledDecode: true,
+            TileSize: generator.UserInput.Get(
+                T2IParamTypes.VAETileSize, LtxDecodeDefaults.TileSize),
+            Overlap: generator.UserInput.Get(
+                T2IParamTypes.VAETileOverlap, LtxDecodeDefaults.Overlap),
+            TemporalSize: generator.UserInput.Get(
+                T2IParamTypes.VAETemporalTileSize, LtxDecodeDefaults.TemporalSize),
+            TemporalOverlap: generator.UserInput.Get(
+                T2IParamTypes.VAETemporalTileOverlap, LtxDecodeDefaults.TemporalOverlap));
+    }
+}
 
 /// <summary>
 /// Rebuilds decode branches and retargets consumers after a stage replaces the AV latent.
@@ -149,21 +185,6 @@ internal static class LtxPostChainRebuilder
         };
     }
 
-    internal static LtxDecodeConfig BuildDecodeConfig(WorkflowGenerator generator)
-    {
-        if (!generator.UserInput.TryGet(T2IParamTypes.VAETileSize, out _))
-        {
-            return new LtxDecodeConfig(false);
-        }
-
-        return new LtxDecodeConfig(
-            UseTiledDecode: true,
-            TileSize: generator.UserInput.Get(T2IParamTypes.VAETileSize, 768),
-            Overlap: generator.UserInput.Get(T2IParamTypes.VAETileOverlap, 64),
-            TemporalSize: generator.UserInput.Get(T2IParamTypes.VAETemporalTileSize, 4096),
-            TemporalOverlap: generator.UserInput.Get(T2IParamTypes.VAETemporalTileOverlap, 4));
-    }
-
     internal static ComfyNode AddDecode(
         WorkflowBridge bridge,
         INodeOutput vaeOutput,
@@ -205,6 +226,8 @@ internal static class LtxPostChainRebuilder
         LtxDecodeConfig decodeConfig)
     {
         INodeOutput oldImageOutput = oldDecode.Outputs[0];
+        // Deliberately not routed through VideoGraphHelpers.RemoveNode: the replacement decode is
+        // re-added under the same id below, so cached references to it stay valid.
         bridge.RemoveNode(oldDecode.Id);
 
         ComfyNode newDecode = AddDecode(

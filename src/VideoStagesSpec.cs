@@ -120,7 +120,8 @@ public sealed record SourceVideoSpec(
 /// <c>DriveMediaKinds</c> optionally narrows the accepted source containers using <c>image</c>,
 /// <c>video</c>, and/or <c>audio</c>. <c>Stage</c> scopes the entry to one authored stage
 /// (-1 = every stage). <c>DriveMedia</c> is the upload used only by the Upload source and is
-/// independent from the clip's base audio track.
+/// independent from the clip's base audio track. <c>Hdr</c> is the explicit, preset-independent
+/// HDR intent the authoring UI persists; planning never infers it from a preset or weight name.
 /// </summary>
 public sealed record IcLoraSpec(
     string Lora,
@@ -132,7 +133,8 @@ public sealed record IcLoraSpec(
     IcLoraDriveData DriveData = IcLoraDriveData.None,
     string Preset = null,
     int Stage = -1,
-    IReadOnlyList<string> DriveMediaKinds = null
+    IReadOnlyList<string> DriveMediaKinds = null,
+    bool Hdr = false
 );
 
 /// <summary>

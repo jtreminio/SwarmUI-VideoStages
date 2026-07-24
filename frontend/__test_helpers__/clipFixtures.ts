@@ -29,6 +29,7 @@ export const hdrIcLoraFixture = (overrides: Partial<IcLora> = {}): IcLora => ({
     strength: 1,
     attentionStrength: 1,
     controlType: "none",
+    hdr: true,
     driveMedia: null,
     ...overrides,
 });

@@ -57,8 +57,12 @@ export const createTimelineHistory = (
         suppress = true;
         try {
             deps.write(target);
-        } catch {
-            return false;
+        } catch (error) {
+            // The entry is unwritable; consume it so the stack advances instead of re-offering the
+            // same failing snapshot forever, and surface the failure rather than reporting a
+            // successful no-op.
+            from.pop();
+            throw error;
         } finally {
             suppress = false;
         }

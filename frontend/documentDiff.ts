@@ -7,6 +7,7 @@ import {
     reconcileClipArchitectureIdentity,
 } from "./architectures/clipIdentity";
 import { planArchitectureConversion } from "./architectures/conversion/plan";
+import { NONE_ARCHITECTURE_ID } from "./architectures/none/definition";
 import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
 import type { ArchitectureModelCatalog } from "./architectures/types";
 import type { CommandFailure, DocumentCommand } from "./documentCommands";
@@ -365,9 +366,20 @@ const clipDiffBase = (
         nextIdentity?.authoredArchitectureId !== undefined &&
         previousIdentity.authoredArchitectureId !==
             nextIdentity.authoredArchitectureId;
+    // Deleting the last stage of a sourced clip leaves a valid source-only clip: the documented
+    // `none` architecture case. It legitimately has no authored Stage 0 and therefore no next
+    // authored architecture to convert to, so the stage removals plus the clip's own architecture
+    // patch describe the change completely. An empty clip that is NOT sourced still has no
+    // authoritative model target and keeps failing below.
+    const nextIsSourceOnlyClip =
+        next.stages.length === 0 &&
+        next.sourceVideo !== null &&
+        nextIdentity?.authoredArchitectureId == null &&
+        nextIdentity?.architectureId === NONE_ARCHITECTURE_ID;
     if (
         changesEffectiveIdentity &&
         !changesAuthoredArchitecture &&
+        !nextIsSourceOnlyClip &&
         (previousIdentity?.authoredArchitectureId == null ||
             nextIdentity?.authoredArchitectureId == null ||
             previousIdentity.authoredArchitectureId !==
