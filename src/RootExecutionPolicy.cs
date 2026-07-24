@@ -3,38 +3,34 @@ using VideoStages.Planning;
 namespace VideoStages;
 
 /// <summary>
-/// Facts that are only known while a compiled root plan is being executed. They are deliberately
-/// separate from <see cref="RootPlan"/>: source installation is a runtime action, while the plan
-/// remains graph-free.
-/// </summary>
-internal sealed record RootExecutionFacts(
-    bool HasInstalledRefineSource,
-    bool FirstClipIsSourced,
-    bool HasSourcedLeadWithGeneratedClips)
-{
-    public static RootExecutionFacts FromPlan(
-        VideoExecutionPlan plan,
-        bool hasInstalledRefineSource)
-    {
-        ArgumentNullException.ThrowIfNull(plan);
-        ClipPlan first = plan.Clips.FirstOrDefault();
-        return new(
-            hasInstalledRefineSource,
-            first?.IsSourced == true,
-            first?.IsSourced == true && plan.Clips.Any(clip => !clip.IsSourced));
-    }
-}
-
-/// <summary>
 /// The one runtime interpretation of root ownership. All root handoff, text-to-video replacement,
 /// native-audio suppression, and source-lead behavior derives from this policy rather than from
-/// separate boolean predicates.
+/// separate boolean predicates. Every fact it needs is already in the compiled plan, so runtime
+/// callers cannot supply a second, divergent view of the same timeline.
 /// </summary>
-internal sealed class RootExecutionPolicy(RootPlan plan, RootExecutionFacts facts)
+internal sealed class RootExecutionPolicy
 {
-    public RootPlan Plan { get; } = plan ?? throw new ArgumentNullException(nameof(plan));
+    public RootExecutionPolicy(VideoExecutionPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        Plan = plan.Root ?? throw new ArgumentException("Plan has no root.", nameof(plan));
+        ClipPlan first = plan.Clips.FirstOrDefault();
+        FirstClipIsSourced = first?.IsSourced == true;
+        HasSourcedLeadWithGeneratedClips =
+            FirstClipIsSourced && plan.Clips.Any(clip => !clip.IsSourced);
+    }
 
-    public RootExecutionFacts Facts { get; } = facts ?? throw new ArgumentNullException(nameof(facts));
+    public RootPlan Plan { get; }
+
+    /// <summary>
+    /// A global refine source is installed exactly when the root plan committed to it; the
+    /// coordinator fails the generation rather than executing a refine plan without its source.
+    /// </summary>
+    public bool HasInstalledRefineSource => Plan.HostKind == HostRootKind.GlobalRefineSource;
+
+    public bool FirstClipIsSourced { get; }
+
+    public bool HasSourcedLeadWithGeneratedClips { get; }
 
     public bool InterceptsHostCore => Plan.CoreDisposition is not HostCoreDisposition.Keep;
 
@@ -43,15 +39,15 @@ internal sealed class RootExecutionPolicy(RootPlan plan, RootExecutionFacts fact
     /// supplied refine source and sourced first clip both provide their own stage input instead.
     /// </summary>
     public bool UsesStageHandoff => InterceptsHostCore
-        && !Facts.HasInstalledRefineSource
-        && !Facts.FirstClipIsSourced;
+        && !HasInstalledRefineSource
+        && !FirstClipIsSourced;
 
     public bool DropsTextToVideoRootDonor => Plan.HostKind == HostRootKind.TextToVideoRoot
-        && Facts.HasSourcedLeadWithGeneratedClips;
+        && HasSourcedLeadWithGeneratedClips;
 
-    public bool ConformsSurvivingRootMedia => !Facts.HasInstalledRefineSource
+    public bool ConformsSurvivingRootMedia => !HasInstalledRefineSource
         && !DropsTextToVideoRootDonor
-        && Facts.HasSourcedLeadWithGeneratedClips;
+        && HasSourcedLeadWithGeneratedClips;
 
     /// <summary>
     /// Only the first generated stage of a normal text-to-video timeline replaces the host text
@@ -61,7 +57,7 @@ internal sealed class RootExecutionPolicy(RootPlan plan, RootExecutionFacts fact
     public bool ReplacesTextToVideoRootStage(StagePlan stage, ClipPlan clip) =>
         Plan.HostKind == HostRootKind.TextToVideoRoot
         && Plan.Use == RootUse.Discard
-        && !Facts.HasInstalledRefineSource
+        && !HasInstalledRefineSource
         && clip?.Input == ClipInputKind.EmptyLatent
         && stage?.Input == StageInputKind.EmptyLatent
         && stage.ClipStageIndex == 0;

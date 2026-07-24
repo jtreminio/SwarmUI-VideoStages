@@ -1,5 +1,6 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Utils;
+using VideoStages.Architectures;
 
 namespace VideoStages;
 
@@ -8,12 +9,25 @@ namespace VideoStages;
 /// </summary>
 internal static class ClipTimelineSpecParser
 {
-    private const int FrameAlignment = 8;
+    /// <summary>
+    /// The frame grid authored durations snap to. It is a model-family fact, so it is read from the
+    /// registered model profiles rather than hardcoded here; the coarsest declared grid is used
+    /// because it also satisfies every finer one.
+    /// </summary>
+    private static readonly Lazy<int> Grid = new(() => VideoArchitectureRegistry.Production.Catalog
+        .SelectMany(architecture => architecture.Profiles)
+        .Select(profile => profile.FrameGrid)
+        .Where(grid => grid > 0)
+        .DefaultIfEmpty(1)
+        .Max());
+
+    internal static int FrameAlignment => Grid.Value;
 
     public static int CalculateAlignedFrameCount(double durationSeconds, int fps)
     {
+        int alignment = Math.Max(1, FrameAlignment);
         int rawFrames = Math.Max(0, (int)Math.Ceiling(durationSeconds * fps));
-        int alignedFrames = (int)Math.Ceiling(rawFrames / (double)FrameAlignment) * FrameAlignment;
+        int alignedFrames = (int)Math.Ceiling(rawFrames / (double)alignment) * alignment;
         return Math.Max(1, alignedFrames + 1);
     }
 

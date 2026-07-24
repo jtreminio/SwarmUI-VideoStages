@@ -47,25 +47,18 @@ internal sealed class MultiClipParallelMerger(
                     $"VideoStages: clip {i} is missing decoded video metadata.");
             }
         }
-        IReadOnlyList<WGNodeData> clipOutputsInOrder = [
-            .. clipArtifacts.Select(ToNodeData)
-        ];
-
-        int sumFrames = 0;
-        foreach (WGNodeData clip in clipOutputsInOrder)
-        {
-            sumFrames += clip?.Frames ?? 0;
-        }
+        int sumFrames = clipArtifacts.Sum(clip => clip.Frames);
 
         BoundaryBudgetResolution runtimeBoundaries =
-            BoundaryOverlapPlanner.ValidateRuntime(clipOutputsInOrder, boundaries);
+            BoundaryOverlapPlanner.ValidateRuntime(clipArtifacts, boundaries);
         using WorkflowBridge bridge = BridgeSync.For(g);
-        List<INodeOutput> videoOutputs = ResolveOutputs(bridge, clipOutputsInOrder.Select(clip => clip?.Path));
-        if (videoOutputs.Count != clipOutputsInOrder.Count)
+        List<INodeOutput> videoOutputs =
+            ResolveOutputs(bridge, clipArtifacts.Select(clip => clip.Video.ToPath()));
+        if (videoOutputs.Count != clipArtifacts.Count)
         {
             throw new SwarmUserErrorException(
                 $"VideoStages: timeline assembly could resolve only {videoOutputs.Count} of "
-                + $"{clipOutputsInOrder.Count} planned clip video outputs.");
+                + $"{clipArtifacts.Count} planned clip video outputs.");
         }
 
         if (runtimeBoundaries.Degraded)
@@ -90,7 +83,7 @@ internal sealed class MultiClipParallelMerger(
             ? MultiClipVideoGraphAssembler.MergeCut(bridge, videoOutputs)
             : MergeArchitectureRuns(
                 bridge,
-                clipOutputsInOrder,
+                clipArtifacts,
                 videoOutputs,
                 architectureRuns);
 
@@ -107,15 +100,13 @@ internal sealed class MultiClipParallelMerger(
                 overlapPlan)
             : null;
 
-        WGNodeData template = clipOutputsInOrder[0];
+        DecodedClipArtifact template = clipArtifacts[0];
         g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(mergedVideo), g, WGNodeData.DT_VIDEO, null)
         {
             Width = template.Width,
             Height = template.Height,
-            Frames = clipOutputsInOrder.All(clip => clip?.Frames is > 0)
-                ? sumFrames - (overlapPlan?.RemovedFrames ?? 0)
-                : template.Frames,
-            FPS = template.FPS
+            Frames = sumFrames - (overlapPlan?.RemovedFrames ?? 0),
+            FPS = template.FramesPerSecond
         };
         if (mergedAudio is not null)
         {
@@ -128,33 +119,9 @@ internal sealed class MultiClipParallelMerger(
         return runtimeBoundaries;
     }
 
-    private WGNodeData ToNodeData(DecodedClipArtifact artifact)
-    {
-        WGNodeData video = new(
-            artifact.Video.ToPath(),
-            g,
-            WGNodeData.DT_VIDEO,
-            null)
-        {
-            Width = artifact.Width,
-            Height = artifact.Height,
-            Frames = artifact.Frames,
-            FPS = artifact.FramesPerSecond,
-        };
-        if (artifact.Audio is not null)
-        {
-            video.AttachedAudio = new(
-                artifact.Audio.ToPath(),
-                g,
-                WGNodeData.DT_AUDIO,
-                null);
-        }
-        return video;
-    }
-
-    private INodeOutput MergeArchitectureRuns(
+    private static INodeOutput MergeArchitectureRuns(
         WorkflowBridge bridge,
-        IReadOnlyList<WGNodeData> clips,
+        IReadOnlyList<DecodedClipArtifact> clips,
         IReadOnlyList<INodeOutput> videoOutputs,
         IReadOnlyList<ArchitectureMergeRun> runs)
     {

@@ -82,7 +82,7 @@ internal sealed class RootRuntimeSession
         OutputPublisher publisher = new(
             _generator,
             _outputs,
-            _generator.GetStableDynamicID(OutputPublisher.DefaultFinalSaveId, 0));
+            StableNodeIds.Id(_generator, StableNodeIds.FinalSave));
         OutputPublication publication = publisher.Publish(
             timeline,
             publishAudio: rootIsDisplaced || _requiresDedicatedAudioPublication);
@@ -172,8 +172,6 @@ internal sealed class OutputPublisher(
     OutputRegistry outputs,
     string fallbackSaveId)
 {
-    internal const int DefaultFinalSaveId = 52200;
-
     public OutputPublication Publish(RuntimeArtifact artifact, bool publishAudio)
     {
         if (generator.UserInput.Get(T2IParamTypes.DoNotSave, false))

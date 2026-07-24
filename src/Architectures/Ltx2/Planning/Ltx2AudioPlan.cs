@@ -9,30 +9,48 @@ internal sealed record AudioReusePlan(
     int CaptureStageIndex,
     int ReuseFromStageIndex);
 
+/// <summary>
+/// How the LTX runtime preparers match an injected audio track to video length. The coordinator's
+/// non-handoff injection matches a native source to video length even without the checkbox; the
+/// root-handoff path only does so for an external source with the checkbox. This asymmetry is LTX
+/// runtime behaviour, so it lives with the LTX plan rather than on the generic audio plan.
+/// </summary>
+internal sealed record Ltx2AudioInjectionPlan(
+    bool NonHandoffMatchesAudioLength,
+    bool RootHandoffMatchesAudioLength);
+
 internal sealed record Ltx2AudioPlan(
     AudioReusePlan Reuse,
+    Ltx2AudioInjectionPlan Injection,
     int? ControlNetSourceIndex,
-    ImmutableArray<AudioPlanDiagnostic> Diagnostics);
+    ImmutableArray<PlanDiagnostic> Diagnostics);
 
 internal static class Ltx2AudioPlanCompiler
 {
     internal static Ltx2AudioPlan Compile(ClipSpec clip)
     {
+        bool external = AudioSourceParser.Parse(clip.AudioSource).Kind
+            is AudioSourceKind.Upload or AudioSourceKind.AceStepFun or AudioSourceKind.ControlNet;
+        Ltx2AudioInjectionPlan injection = new(
+            external ? clip.ClipLengthFromAudio : true,
+            external && clip.ClipLengthFromAudio);
         AudioPlanComponentResult<AudioReusePlan> reuse =
             AudioReusePlanCompiler.Compile(clip);
         int? controlNetSourceIndex =
             IcLoraPlanCompiler.ResolvePrimaryControlNetSourceIndex(clip);
-        ImmutableArray<AudioPlanDiagnostic>.Builder diagnostics =
-            ImmutableArray.CreateBuilder<AudioPlanDiagnostic>();
+        ImmutableArray<PlanDiagnostic>.Builder diagnostics =
+            ImmutableArray.CreateBuilder<PlanDiagnostic>();
         diagnostics.AddRange(reuse.Diagnostics);
         if (clip.ClipLengthFromControlNet && controlNetSourceIndex is null)
         {
             diagnostics.Add(new(
+                PlanDiagnosticSeverity.Warning,
                 "audio.length.controlnet_owner_has_no_source",
                 "ControlNet owns clip length, but no valid LTX ControlNet 1-3 drive source is configured."));
         }
         return new(
             reuse.Plan,
+            injection,
             controlNetSourceIndex,
             diagnostics.ToImmutable());
     }

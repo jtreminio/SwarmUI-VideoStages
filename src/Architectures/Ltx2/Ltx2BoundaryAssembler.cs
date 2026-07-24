@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Execution;
 using VideoStages.Generated;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -13,7 +14,7 @@ internal sealed class Ltx2BoundaryAssembler : IArchitectureBoundaryAssembler
 
     public INodeOutput MergeOverlaps(
         WorkflowBridge bridge,
-        IReadOnlyList<WGNodeData> clips,
+        IReadOnlyList<DecodedClipArtifact> clips,
         IReadOnlyList<INodeOutput> videoOutputs,
         BoundaryOverlapPlan plan)
     {
@@ -25,8 +26,8 @@ internal sealed class Ltx2BoundaryAssembler : IArchitectureBoundaryAssembler
                 mask = BuildCrossfadeRampMask(
                     bridge,
                     frames,
-                    clips[0].Width.Value,
-                    clips[0].Height.Value);
+                    clips[0].Width,
+                    clips[0].Height);
                 rampMasks[frames] = mask;
             }
             return mask;
@@ -37,7 +38,7 @@ internal sealed class Ltx2BoundaryAssembler : IArchitectureBoundaryAssembler
         {
             int startTrim = i > 0 ? plan.BoundaryOverlap[i - 1] : 0;
             int endTrim = i < videoOutputs.Count - 1 ? plan.BoundaryOverlap[i] : 0;
-            int frames = clips[i].Frames.Value;
+            int frames = clips[i].Frames;
             segments.Add(SliceImageFrames(
                 bridge,
                 videoOutputs[i],

@@ -53,6 +53,7 @@ internal static class ClipPlanCompiler
         {
             Architecture = context.Architecture?.Architecture,
             ArchitecturePayload = context.ArchitecturePayload,
+            EntryMode = context.EntryMode,
         };
     }
 
@@ -120,5 +121,6 @@ internal sealed record ClipPlanCompilationContext(
     bool IsMultiClip,
     int TotalStageCount,
     int FirstStageOrdinal,
+    ArchitectureEntryMode EntryMode,
     ClipArchitectureAssignment Architecture = null,
     IArchitectureClipPayload ArchitecturePayload = null);

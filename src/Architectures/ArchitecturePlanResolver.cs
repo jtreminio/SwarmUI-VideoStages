@@ -11,10 +11,10 @@ internal sealed record ClipArchitectureAssignment(
 
 internal sealed record ArchitecturePlanningResult(
     IReadOnlyDictionary<int, ClipArchitectureAssignment> Clips,
-    IReadOnlyList<VideoPlanDiagnostic> Diagnostics)
+    IReadOnlyList<PlanDiagnostic> Diagnostics)
 {
     internal bool HasErrors => Diagnostics.Any(
-        diagnostic => diagnostic.Severity == VideoPlanDiagnosticSeverity.Error);
+        diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
 }
 
 internal static class ArchitecturePlanResolver
@@ -26,7 +26,7 @@ internal static class ArchitecturePlanResolver
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(registry);
         Dictionary<int, ClipArchitectureAssignment> assignments = [];
-        List<VideoPlanDiagnostic> diagnostics = [];
+        List<PlanDiagnostic> diagnostics = [];
 
         foreach (ClipSpec clip in spec.Clips ?? [])
         {
@@ -110,7 +110,7 @@ internal static class ArchitecturePlanResolver
         ClipSpec clip,
         IReadOnlyList<AuthoredStageModelSpec> authoredStages,
         IVideoArchitectureRegistry registry,
-        ICollection<VideoPlanDiagnostic> diagnostics)
+        ICollection<PlanDiagnostic> diagnostics)
     {
         Dictionary<int, ResolvedVideoModel> stageModels = [];
         int firstRawIndex = authoredStages.FirstOrDefault()?.RawIndex ?? 0;
@@ -163,7 +163,7 @@ internal static class ArchitecturePlanResolver
 
     private static void ValidateSourceOnlyIdentity(
         ClipSpec clip,
-        ICollection<VideoPlanDiagnostic> diagnostics)
+        ICollection<PlanDiagnostic> diagnostics)
     {
         if (!string.IsNullOrWhiteSpace(clip.AuthoredArchitectureId)
             && !string.Equals(
@@ -199,7 +199,7 @@ internal static class ArchitecturePlanResolver
         ClipSpec clip,
         AuthoredStageModelSpec firstStage,
         ResolvedVideoModel firstModel,
-        ICollection<VideoPlanDiagnostic> diagnostics)
+        ICollection<PlanDiagnostic> diagnostics)
     {
         if (!string.IsNullOrWhiteSpace(clip.AuthoredArchitectureId)
             && !string.Equals(
@@ -238,7 +238,7 @@ internal static class ArchitecturePlanResolver
         IReadOnlyList<AuthoredStageModelSpec> authoredStages,
         IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
         ResolvedVideoModel firstModel,
-        ICollection<VideoPlanDiagnostic> diagnostics)
+        ICollection<PlanDiagnostic> diagnostics)
     {
         foreach (AuthoredStageModelSpec authored in authoredStages)
         {
@@ -261,14 +261,14 @@ internal static class ArchitecturePlanResolver
         }
     }
 
-    private static VideoPlanDiagnostic Error(
+    private static PlanDiagnostic Error(
         string code,
         string message,
         int clipId,
         int? stageId,
         int? rawStageIndex = null) =>
         new(
-            VideoPlanDiagnosticSeverity.Error,
+            PlanDiagnosticSeverity.Error,
             code,
             message,
             clipId,

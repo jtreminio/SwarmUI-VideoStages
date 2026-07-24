@@ -25,33 +25,34 @@ internal static class TimelineAudioSegmentPlanProjector
             foreach (AudioTrackClipWindow window in track.Windows)
             {
                 if (!clipWindows.TryGetValue(window.ClipId, out AudioTimelineClipWindow clipWindow)
-                    || clipWindow.TimelineStartSeconds is not double clipStart)
+                    || !clipWindow.IsResolved)
                 {
                     continue;
                 }
+                double clipLocalStart = clipWindow.ClipOffsetAt(window.TimelineStartSeconds);
 
                 AudioSegmentItemPlan item;
-                if (track.Source.Kind == AudioTimelineTrackSourceKind.AceStepFun
+                if (track.Source.Kind == AudioSourceKind.AceStepFun
                     && AudioHandler.TryParseAceStepFunAudioSource(
                         track.Source.Reference,
                         out int aceStepTrack))
                 {
                     item = new(
-                        AudioSegmentSourceKind.AceStepFun,
+                        AudioSourceKind.AceStepFun,
                         aceStepTrack,
-                        window.TimelineStartSeconds - clipStart,
+                        clipLocalStart,
                         window.SourceStartSeconds,
                         window.DurationSeconds,
                         null,
                         track.Volume);
                 }
-                else if (track.Source.Kind == AudioTimelineTrackSourceKind.Upload
+                else if (track.Source.Kind == AudioSourceKind.Upload
                     && track.Source.UploadedMedia is not null)
                 {
                     item = new(
-                        AudioSegmentSourceKind.Upload,
+                        AudioSourceKind.Upload,
                         null,
-                        window.TimelineStartSeconds - clipStart,
+                        clipLocalStart,
                         window.SourceStartSeconds,
                         window.DurationSeconds,
                         track.Source.UploadedMedia,

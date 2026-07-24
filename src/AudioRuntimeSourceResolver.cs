@@ -33,7 +33,7 @@ internal sealed class AudioRuntimeSourceResolver(
         {
             switch (clip.Audio.Base.Kind)
             {
-                case AudioBaseSourceKind.AceStepFun:
+                case AudioSourceKind.AceStepFun:
                 {
                     int track = clip.Audio.Base.AceStepFunTrack
                         ?? throw new SwarmUserErrorException(
@@ -45,7 +45,7 @@ internal sealed class AudioRuntimeSourceResolver(
                             + "but that track is not present in the workflow.");
                     break;
                 }
-                case AudioBaseSourceKind.ControlNet:
+                case AudioSourceKind.ControlNet:
                 {
                     int sourceIndex = ResolveControlNetSourceIndex(
                         clip,
@@ -97,7 +97,7 @@ internal sealed class AudioRuntimeSourceResolver(
         Dictionary<int, WGNodeData> sources = [];
         foreach (ClipPlan clip in plan.Clips)
         {
-            if (clip.Audio.Base.Kind != AudioBaseSourceKind.Upload)
+            if (clip.Audio.Base.Kind != AudioSourceKind.Upload)
             {
                 continue;
             }

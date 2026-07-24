@@ -27,7 +27,7 @@ internal interface IArchitectureStagePayloadSource
 
 internal sealed record ArchitectureClipCompilation(
     IArchitectureClipPayload Payload,
-    IReadOnlyList<VideoPlanDiagnostic> Diagnostics);
+    IReadOnlyList<PlanDiagnostic> Diagnostics);
 
 /// <summary>One architecture session executes clips from only its own architecture.</summary>
 internal interface IVideoGenerationSession : IDisposable
@@ -75,7 +75,7 @@ internal interface IArchitectureBoundaryAssembler
 
     INodeOutput MergeOverlaps(
         WorkflowBridge bridge,
-        IReadOnlyList<WGNodeData> clips,
+        IReadOnlyList<DecodedClipArtifact> clips,
         IReadOnlyList<INodeOutput> videoOutputs,
         BoundaryOverlapPlan plan);
 }

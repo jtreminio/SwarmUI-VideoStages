@@ -199,9 +199,9 @@ internal sealed class LtxStageLatentAudioFactory(
 
     internal static bool ShouldMatchStageLengthToAudio(AudioPlan audio) =>
         audio.Length.Owner == AudioLengthOwner.Audio
-        && audio.Base.Kind is AudioBaseSourceKind.Upload
-            or AudioBaseSourceKind.AceStepFun
-            or AudioBaseSourceKind.ControlNet;
+        && audio.Base.Kind is AudioSourceKind.Upload
+            or AudioSourceKind.AceStepFun
+            or AudioSourceKind.ControlNet;
 
     /// <summary>
     /// The clip's configured timeline resolution wins over the incoming media's size: e.g. with a

@@ -4,6 +4,7 @@ using SwarmUI.Media;
 using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -28,11 +29,8 @@ internal sealed class VideoStagesCoordinator(
         // transform. Unsupported model families fail above.
         RootRuntimeSession rootSession = RootRuntimeSession.Capture(g, planContext);
 
-        bool refineSourceVideo = TryInstallRefineSourceVideo(
-            planContext.Plan.Clips.Count > 0);
-        RootExecutionPolicy rootPolicy = new(
-            planContext.Plan.Root,
-            RootExecutionFacts.FromPlan(planContext.Plan, refineSourceVideo));
+        InstallRefineSourceVideo(planContext.Plan.Root);
+        RootExecutionPolicy rootPolicy = new(planContext.Plan);
         AudioRuntimeSources preparedAudioSources = new AudioRuntimeSourceResolver(
             g,
             new AudioHandler(g)).Resolve(planContext.Plan);
@@ -69,25 +67,38 @@ internal sealed class VideoStagesCoordinator(
             publication));
     }
 
-    private bool TryInstallRefineSourceVideo(bool hasClips)
+    private void InstallRefineSourceVideo(RootPlan root)
     {
-        if (!g.UserInput.TryGet(VideoStagesExtension.RefineSourceVideo, out Image refineSource)
-            || refineSource is null
-            || !hasClips)
+        bool hasVideoRefineSource =
+            g.UserInput.TryGet(VideoStagesExtension.RefineSourceVideo, out Image refineSource)
+            && refineSource is not null
+            && refineSource.Type?.MetaType == MediaMetaType.Video;
+        if (!RefineSourceInstallPolicy.RequiresInstall(root, hasVideoRefineSource))
         {
-            return false;
+            return;
         }
-        if (refineSource.Type?.MetaType != MediaMetaType.Video)
-        {
-            Logs.Warning(
-                "VideoStages: 'Refine Source Video' was set but its media type is not video. "
-                + "Ignoring and falling back to the normal pipeline.");
-            return false;
-        }
-
-        WGNodeData loadedVideo = g.LoadImage(refineSource, "${vsrefinesource}", resize: false);
-        g.CurrentMedia = loadedVideo;
-        return true;
+        g.CurrentMedia = g.LoadImage(refineSource, "${vsrefinesource}", resize: false);
     }
+}
 
+/// <summary>
+/// The plan already decided whether this timeline is a global refine, so runtime installation
+/// either succeeds or fails the generation. It cannot quietly fall back to the normal pipeline
+/// against a root plan already committed to refine semantics.
+/// </summary>
+internal static class RefineSourceInstallPolicy
+{
+    internal static bool RequiresInstall(RootPlan root, bool hasVideoRefineSource)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        if (root.HostKind != HostRootKind.GlobalRefineSource)
+        {
+            return false;
+        }
+        return hasVideoRefineSource
+            ? true
+            : throw new SwarmUserErrorException(
+                "VideoStages: this timeline was planned as a global refine of 'Refine Source "
+                + "Video', but that parameter no longer holds a video.");
+    }
 }

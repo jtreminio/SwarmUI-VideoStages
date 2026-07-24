@@ -37,16 +37,16 @@ public class AudioPlanCompilerComponentTests
         AudioBaseSourcePlan baseSource = AudioBaseSourcePlanCompiler.Compile(clip).Plan;
         AudioPlanComponentResult<AudioSegmentPlan> component = AudioSegmentPlanCompiler.Compile(
             [
-                new(AudioSegmentSourceKind.Upload, null, 3, 1, 2,
+                new(AudioSourceKind.Upload, null, 3, 1, 2,
                     new("data:audio/wav;base64,VEhSRUU=", "clip.wav")),
-                new(AudioSegmentSourceKind.AceStepFun, 2, 1, 0.5, 1, null),
+                new(AudioSourceKind.AceStepFun, 2, 1, 0.5, 1, null),
             ],
             baseSource);
 
         Assert.Empty(AudioPlanCompiler.Compile(clip).Segments.Items);
         Assert.Equal([1, 3], component.Plan.Items.Select(item => item.StartSeconds));
-        Assert.Equal(AudioSegmentSourceKind.AceStepFun, component.Plan.Items[0].SourceKind);
-        Assert.Equal(AudioSegmentSourceKind.Upload, component.Plan.Items[1].SourceKind);
+        Assert.Equal(AudioSourceKind.AceStepFun, component.Plan.Items[0].SourceKind);
+        Assert.Equal(AudioSourceKind.Upload, component.Plan.Items[1].SourceKind);
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class AudioPlanCompilerComponentTests
 
         Assert.Equal(
         [
-            "audio.source.unknown_defaults_to_native",
+            "audio.source.unknown",
             "audio.length.controlnet_overrides_audio",
         ],
             plan.Diagnostics.Select(diagnostic => diagnostic.Code));
@@ -87,8 +87,8 @@ public class AudioPlanCompilerComponentTests
         ],
             AudioSegmentPlanCompiler.Compile(
                 [
-                    new(AudioSegmentSourceKind.Upload, null, -1, 0, 1, null),
-                    new(AudioSegmentSourceKind.Upload, null, 0, 0, 1, null),
+                    new(AudioSourceKind.Upload, null, -1, 0, 1, null),
+                    new(AudioSourceKind.Upload, null, 0, 0, 1, null),
                 ],
                 AudioBaseSourcePlanCompiler.Compile(clip).Plan)
                 .Diagnostics.Select(diagnostic => diagnostic.Code));

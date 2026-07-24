@@ -1,6 +1,7 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Execution;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 using Xunit;
@@ -109,28 +110,20 @@ public class BoundaryOverlapPlannerTests
     [Fact]
     public void ValidateRuntime_ExplicitlyCutsWhenArtifactLengthsCannotHonorCompiledWindow()
     {
-        WorkflowGenerator generator = new()
-        {
-            Workflow = [],
-            UserInput = new(null),
-            Features = [],
-        };
         BoundaryPlan compiled = Boundary(
             0,
             BoundaryExecutionMode.Continue,
             overlap: 8,
             continuityWindow: 9);
-        WGNodeData Clip(int id) => new(
-            new JArray($"{id}", 0),
-            generator,
-            WGNodeData.DT_VIDEO,
-            T2IModelClassSorter.CompatLtxv2)
-        {
-            Width = 512,
-            Height = 512,
-            Frames = 5,
-            FPS = new JValue(24),
-        };
+        static DecodedClipArtifact Clip(int id) => new(
+            new DecodedOutputHandle($"{id}", 0, DecodedMediaKind.Video),
+            Audio: null,
+            Width: 512,
+            Height: 512,
+            FramesPerSecond: 24,
+            Frames: 5,
+            new("test-arch"),
+            id);
 
         BoundaryBudgetResolution resolution =
             BoundaryOverlapPlanner.ValidateRuntime([Clip(1), Clip(2)], [compiled]);

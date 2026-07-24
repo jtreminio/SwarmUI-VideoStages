@@ -1,32 +1,56 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using SwarmUI.Utils;
 
 namespace VideoStages;
 
 internal static class MetadataSanitizer
 {
+    /// <summary>
+    /// Published instead of a document the sanitizer could not walk. Returning the original would
+    /// publish exactly the base64 uploads this class exists to remove.
+    /// </summary>
+    internal const string Unsanitizable =
+        "{\"error\":\"VideoStages document could not be sanitized; omitted from metadata\"}";
+
     public static string StripUploadDataFromJsonParameter(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
         {
             return raw;
         }
+        JObject root;
         try
         {
-            if (JToken.Parse(raw) is not JObject root)
-            {
-                return raw;
-            }
+            root = JToken.Parse(raw) as JObject;
+        }
+        catch (Exception ex)
+        {
+            return Refuse($"it is not valid JSON ({ex.Message})");
+        }
+        if (root is null)
+        {
+            return Refuse("its root is not a Video Stages document object");
+        }
+        try
+        {
             foreach (UploadContainerPath path in UploadContainers.AllPaths)
             {
                 Walk(root, path, stepIndex: 0);
             }
             return root.ToString(Formatting.None);
         }
-        catch
+        catch (Exception ex)
         {
-            return raw;
+            return Refuse($"walking its upload containers failed ({ex.Message})");
         }
+    }
+
+    private static string Refuse(string reason)
+    {
+        Logs.Warning(
+            $"VideoStages: the Video Stages document was left out of output metadata because {reason}.");
+        return Unsanitizable;
     }
 
     private static void Walk(JObject parent, UploadContainerPath path, int stepIndex)

@@ -116,7 +116,7 @@ public class RuntimeArtifactTests
             Vae: null,
             Origin: ArtifactOrigin.StageOutput);
 
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
             () => DecodedClipArtifact.FromRuntime(artifact, Clip()));
 
         Assert.Contains("did not produce decoded video media", error.Message);
@@ -152,7 +152,7 @@ public class RuntimeArtifactTests
             Vae: null,
             Origin: ArtifactOrigin.StageOutput);
 
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
             () => DecodedClipArtifact.FromRuntime(artifact, Clip()));
 
         Assert.Contains("did not produce decoded attached audio", error.Message);

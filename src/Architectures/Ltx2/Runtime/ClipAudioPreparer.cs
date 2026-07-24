@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -40,7 +41,7 @@ internal sealed class ClipAudioPreparer(
         // Native audio is the model-generated/default track, not an authored full-clip bed.
         // Boundary carry replaces its opening with preserved context and lets LTX generate the rest.
         bool carryStartsGeneratedAudio = boundaryAudioCarry is not null
-            && context.PlannedClip.Audio.Base.Kind == AudioBaseSourceKind.Native;
+            && context.PlannedClip.Audio.Base.Kind == AudioSourceKind.Native;
         WGNodeData baseAudio = carryStartsGeneratedAudio
             ? null
             : selectedBaseAudio;
@@ -122,7 +123,7 @@ internal sealed class ClipAudioPreparer(
         }
 
         bool rootInjection = context.RootPolicy.UsesStageHandoff
-            && context.PlannedClip.Audio.Length.RootHandoffInjectionMatchesAudioLength;
+            && context.PlannedClip.RequireLtx2Payload().AudioInjection.RootHandoffMatchesAudioLength;
         if (rootInjection && baseAudio is not null)
         {
             _ = audioInjector.TryInject(combinedAudio);
@@ -134,7 +135,7 @@ internal sealed class ClipAudioPreparer(
         {
             _ = audioInjector.TryInject(
                 combinedAudio,
-                context.PlannedClip.Audio.Length.NonHandoffInjectionMatchesAudioLength);
+                context.PlannedClip.RequireLtx2Payload().AudioInjection.NonHandoffMatchesAudioLength);
         }
     }
 

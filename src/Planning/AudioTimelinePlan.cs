@@ -6,17 +6,8 @@ namespace VideoStages.Planning;
 /// Source identity for a timeline-wide audio track. This is deliberately metadata only: resolving
 /// an upload or an AceStepFun decode remains a graph-execution concern.
 /// </summary>
-internal enum AudioTimelineTrackSourceKind
-{
-    Upload,
-    AceStepFun,
-    Native,
-    ControlNet,
-    External
-}
-
 internal sealed record AudioTimelineTrackSource(
-    AudioTimelineTrackSourceKind Kind,
+    AudioSourceKind Kind,
     string Reference,
     AudioMediaIdentityPlan UploadedMedia = null);
 
@@ -50,29 +41,26 @@ internal sealed record AudioTrackSpec(
     ImmutableArray<AudioTrackSpanSpec> Spans,
     double Volume = 1);
 
-internal enum AudioTimelineDiagnosticSeverity
-{
-    Info,
-    Warning,
-    Error
-}
-
-/// <summary>Stable, graph-independent validation result for timeline audio authoring.</summary>
-internal sealed record AudioTimelineDiagnostic(
-    AudioTimelineDiagnosticSeverity Severity,
-    string Code,
-    string Message,
-    string TrackId = null,
-    int? SpanIndex = null,
-    int? ClipId = null);
-
 /// <summary>
-/// One final timeline clip interval.
+/// One final timeline clip interval, and the one owner of clip-time to timeline-time arithmetic.
+/// Every planner that converts between an offset inside a clip and an absolute timeline second
+/// goes through here so the two coordinate systems cannot drift apart.
 /// </summary>
 internal sealed record AudioTimelineClipWindow(
     int ClipId,
     double? TimelineStartSeconds,
-    double? DurationSeconds);
+    double? DurationSeconds)
+{
+    internal bool IsResolved => TimelineStartSeconds.HasValue && DurationSeconds.HasValue;
+
+    /// <summary>The absolute timeline second at an offset inside this clip, clamped to the clip.</summary>
+    internal double TimelineTimeAt(double clipOffsetSeconds) =>
+        TimelineStartSeconds.Value + Math.Clamp(clipOffsetSeconds, 0, DurationSeconds.Value);
+
+    /// <summary>The offset inside this clip for an absolute timeline second.</summary>
+    internal double ClipOffsetAt(double timelineSeconds) =>
+        timelineSeconds - TimelineStartSeconds.Value;
+}
 
 /// <summary>
 /// A track/span projected onto one final clip. Source time advances with the final, trimmed timeline
@@ -100,7 +88,7 @@ internal sealed record AudioTimelineTrackPlan(
 internal sealed record AudioTimelinePlan(
     ImmutableArray<AudioTimelineClipWindow> ClipWindows,
     ImmutableArray<AudioTimelineTrackPlan> Tracks,
-    ImmutableArray<AudioTimelineDiagnostic> Diagnostics)
+    ImmutableArray<PlanDiagnostic> Diagnostics)
 {
     public static AudioTimelinePlan Empty { get; } = new([], [], []);
 }

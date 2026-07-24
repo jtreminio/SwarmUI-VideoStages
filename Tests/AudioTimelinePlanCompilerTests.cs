@@ -35,7 +35,7 @@ public class AudioTimelinePlanCompilerTests
 
     private static AudioTrackSpec Track(string id, params AudioTrackSpanSpec[] spans) => new(
         id,
-        new AudioTimelineTrackSource(AudioTimelineTrackSourceKind.External, $"{id}.wav"),
+        new AudioTimelineTrackSource(AudioSourceKind.External, $"{id}.wav"),
         [.. spans]);
 
     private static AudioTimelineTrackPlan Track(AudioTimelinePlan plan, string id) =>
@@ -148,7 +148,7 @@ public class AudioTimelinePlanCompilerTests
         Assert.Equal(2, Track(timeline, "voice").Windows.Length);
         Assert.Contains(timeline.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.timeline.overlapping_tracks"
-                && diagnostic.Severity == AudioTimelineDiagnosticSeverity.Info);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Info);
     }
 
     [Fact]
@@ -244,6 +244,6 @@ public class AudioTimelinePlanCompilerTests
         Assert.Equal(0, Assert.Single(retained.Windows).SourceStartSeconds);
         Assert.Contains(timeline.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.timeline.track.duplicate_id"
-                && diagnostic.Severity == AudioTimelineDiagnosticSeverity.Error);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
     }
 }

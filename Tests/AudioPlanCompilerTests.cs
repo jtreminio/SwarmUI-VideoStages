@@ -22,7 +22,7 @@ public class AudioPlanCompilerTests
         new(data, "clip.wav");
 
     private static AudioBaseSourcePlan Base(bool hasConfiguredTrack) => new(
-        AudioBaseSourceKind.Upload,
+        AudioSourceKind.Upload,
         Constants.AudioSourceUpload,
         AceStepFunTrack: null,
         hasConfiguredTrack,
@@ -49,13 +49,13 @@ public class AudioPlanCompilerTests
             Stages: stages ?? [Stage(0)]);
 
     [Theory]
-    [InlineData(Constants.AudioSourceNative, (int)AudioBaseSourceKind.Native)]
-    [InlineData(Constants.AudioSourceUpload, (int)AudioBaseSourceKind.Upload)]
-    [InlineData(Constants.AudioSourceControlNet, (int)AudioBaseSourceKind.ControlNet)]
-    [InlineData("audio7", (int)AudioBaseSourceKind.AceStepFun)]
+    [InlineData(Constants.AudioSourceNative, (int)AudioSourceKind.Native)]
+    [InlineData(Constants.AudioSourceUpload, (int)AudioSourceKind.Upload)]
+    [InlineData(Constants.AudioSourceControlNet, (int)AudioSourceKind.ControlNet)]
+    [InlineData("audio7", (int)AudioSourceKind.AceStepFun)]
     public void Compile_maps_lockable_base_source_kinds(string source, int expectedValue)
     {
-        AudioBaseSourceKind expected = (AudioBaseSourceKind)expectedValue;
+        AudioSourceKind expected = (AudioSourceKind)expectedValue;
         AudioPlan plan = AudioPlanCompiler.Compile(Clip(
             source: source,
             uploadedAudio: source == Constants.AudioSourceUpload ? Upload() : null));
@@ -63,7 +63,7 @@ public class AudioPlanCompilerTests
         Assert.Equal(expected, plan.Base.Kind);
         Assert.Equal(source, plan.Base.RawSource);
         Assert.True(plan.Base.HasConfiguredTrack);
-        if (expected == AudioBaseSourceKind.Upload)
+        if (expected == AudioSourceKind.Upload)
         {
             Assert.Equal("data:audio/wav;base64,QUJD", plan.Base.UploadedMedia.Data);
             Assert.Equal("clip.wav", plan.Base.UploadedMedia.FileName);
@@ -120,16 +120,22 @@ public class AudioPlanCompilerTests
     [Fact]
     public void Compile_keeps_existing_route_dependent_native_length_matching_explicit()
     {
-        AudioPlan native = AudioPlanCompiler.Compile(Clip());
-        AudioPlan upload = AudioPlanCompiler.Compile(Clip(
+        ClipSpec nativeClip = Clip();
+        ClipSpec uploadClip = Clip(
             source: Constants.AudioSourceUpload,
-            uploadedAudio: Upload()));
+            uploadedAudio: Upload());
 
-        Assert.Equal(AudioLengthOwner.Timeline, native.Length.Owner);
-        Assert.True(native.Length.NonHandoffInjectionMatchesAudioLength);
-        Assert.False(native.Length.RootHandoffInjectionMatchesAudioLength);
-        Assert.False(upload.Length.NonHandoffInjectionMatchesAudioLength);
-        Assert.False(upload.Length.RootHandoffInjectionMatchesAudioLength);
+        Assert.Equal(
+            AudioLengthOwner.Timeline,
+            AudioPlanCompiler.Compile(nativeClip).Length.Owner);
+        // The route-dependent injection matching is LTX runtime behaviour, so it lives on the LTX
+        // plan rather than on the architecture-neutral audio plan.
+        Ltx2AudioInjectionPlan native = Ltx2AudioPlanCompiler.Compile(nativeClip).Injection;
+        Ltx2AudioInjectionPlan upload = Ltx2AudioPlanCompiler.Compile(uploadClip).Injection;
+        Assert.True(native.NonHandoffMatchesAudioLength);
+        Assert.False(native.RootHandoffMatchesAudioLength);
+        Assert.False(upload.NonHandoffMatchesAudioLength);
+        Assert.False(upload.RootHandoffMatchesAudioLength);
     }
 
     [Fact]
@@ -147,17 +153,17 @@ public class AudioPlanCompilerTests
     {
         AudioSegmentPlan plan = AudioSegmentPlanCompiler.Compile(
             [
-                new(AudioSegmentSourceKind.Upload, null, 4, 0, 1,
+                new(AudioSourceKind.Upload, null, 4, 0, 1,
                     new("data:audio/wav;base64,QUJD", "clip.wav"), 0.4),
-                new(AudioSegmentSourceKind.AceStepFun, 3, 1, 0.5, 2, null, 0.7),
+                new(AudioSourceKind.AceStepFun, 3, 1, 0.5, 2, null, 0.7),
             ],
             Base(hasConfiguredTrack: true)).Plan;
 
         Assert.Equal([1, 4], plan.Items.Select(item => item.StartSeconds));
-        Assert.Equal(AudioSegmentSourceKind.AceStepFun, plan.Items[0].SourceKind);
+        Assert.Equal(AudioSourceKind.AceStepFun, plan.Items[0].SourceKind);
         Assert.Equal(3, plan.Items[0].AceStepFunTrack);
         Assert.Equal(0.7, plan.Items[0].Volume);
-        Assert.Equal(AudioSegmentSourceKind.Upload, plan.Items[1].SourceKind);
+        Assert.Equal(AudioSourceKind.Upload, plan.Items[1].SourceKind);
         Assert.Equal(0.4, plan.Items[1].Volume);
         Assert.Equal("data:audio/wav;base64,QUJD", plan.Items[1].UploadedMedia.Data);
         Assert.Equal("clip.wav", plan.Items[1].UploadedMedia.FileName);
@@ -167,7 +173,7 @@ public class AudioPlanCompilerTests
     public void Compile_segments_without_a_base_use_preserve_windows()
     {
         AudioPlanComponentResult<AudioSegmentPlan> result = AudioSegmentPlanCompiler.Compile(
-            [new(AudioSegmentSourceKind.Upload, null, 1, 0, 2,
+            [new(AudioSourceKind.Upload, null, 1, 0, 2,
                 new("data:audio/wav;base64,QUJD", "clip.wav"))],
             Base(hasConfiguredTrack: false));
 
@@ -192,11 +198,13 @@ public class AudioPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_unknown_source_keeps_backend_native_fallback_visible()
+    public void Compile_unknown_source_blocks_the_plan_instead_of_falling_back()
     {
         AudioPlan plan = AudioPlanCompiler.Compile(Clip(source: "not-an-audio-source"));
 
-        Assert.Equal(AudioBaseSourceKind.Native, plan.Base.Kind);
-        Assert.Contains(plan.Diagnostics, d => d.Code == "audio.source.unknown_defaults_to_native");
+        Assert.Equal(AudioSourceKind.Unknown, plan.Base.Kind);
+        PlanDiagnostic unknown = Assert.Single(
+            plan.Diagnostics.Where(d => d.Code == AudioBaseSourcePlanCompiler.UnknownSourceCode));
+        Assert.Equal(PlanDiagnosticSeverity.Error, unknown.Severity);
     }
 }

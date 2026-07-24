@@ -41,7 +41,7 @@ public class AudioSegmentCombinerTests
         double LengthSeconds,
         double Volume = 1) =>
         new(
-            AudioSegmentSourceKind.Upload,
+            AudioSourceKind.Upload,
             AceStepFunTrack: null,
             StartSeconds,
             TrimStartSeconds,
@@ -55,7 +55,7 @@ public class AudioSegmentCombinerTests
         double TrimStartSeconds,
         double LengthSeconds) =>
         new(
-            AudioSegmentSourceKind.AceStepFun,
+            AudioSourceKind.AceStepFun,
             track,
             StartSeconds,
             TrimStartSeconds,
@@ -66,7 +66,7 @@ public class AudioSegmentCombinerTests
         AudioSegmentPlanCompiler.Compile(
             segments,
             new AudioBaseSourcePlan(
-                AudioBaseSourceKind.Native,
+                AudioSourceKind.Native,
                 Constants.AudioSourceNative,
                 AceStepFunTrack: null,
                 HasConfiguredTrack: true,
@@ -240,7 +240,7 @@ public class AudioSegmentCombinerTests
 
         AudioSegmentPlan segmentPlan = new(
             [new AudioSegmentItemPlan(
-                AudioSegmentSourceKind.AceStepFun,
+                AudioSourceKind.AceStepFun,
                 AceStepFunTrack: 2,
                 StartSeconds: 2.0,
                 TrimStartSeconds: 0.0,

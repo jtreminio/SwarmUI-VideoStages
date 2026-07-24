@@ -12,7 +12,7 @@ internal static class AudioLengthPlanCompiler
         ClipSpec clip,
         AudioBaseSourcePlan baseSource)
     {
-        ImmutableArray<AudioPlanDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<AudioPlanDiagnostic>();
+        ImmutableArray<PlanDiagnostic>.Builder diagnostics = ImmutableArray.CreateBuilder<PlanDiagnostic>();
         AudioLengthOwner owner;
         if (clip.ClipLengthFromControlNet)
         {
@@ -20,6 +20,7 @@ internal static class AudioLengthPlanCompiler
             if (clip.ClipLengthFromAudio)
             {
                 diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
                     ControlNetOverridesAudioLength,
                     "ControlNet owns clip length when both ControlNet and audio length are requested."));
             }
@@ -30,6 +31,7 @@ internal static class AudioLengthPlanCompiler
             if (!baseSource.HasConfiguredTrack)
             {
                 diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
                     AudioLengthWithoutTrack,
                     "Audio owns clip length, but the selected audio source does not provide a locked track."));
             }
@@ -39,19 +41,6 @@ internal static class AudioLengthPlanCompiler
             owner = AudioLengthOwner.Timeline;
         }
 
-        // Preserve the existing compatibility behavior while separating it from the user-facing
-        // duration owner above. The coordinator's non-handoff injection matches a native source to
-        // video length even without the checkbox; the root-handoff path only does so for an external
-        // source with the checkbox. The executor can retire this asymmetry deliberately later, but
-        // it must not rediscover it from graph state today.
-        bool external = baseSource.Kind is AudioBaseSourceKind.Upload
-            or AudioBaseSourceKind.AceStepFun
-            or AudioBaseSourceKind.ControlNet;
-        return new(
-            new(
-                owner,
-                external ? clip.ClipLengthFromAudio : true,
-                external && clip.ClipLengthFromAudio),
-            diagnostics.ToImmutable());
+        return new(new(owner), diagnostics.ToImmutable());
     }
 }

@@ -232,7 +232,7 @@ public class PlanningCompilerComponentTests
         Assert.Contains(
             compilation.Diagnostics,
             diagnostic => diagnostic.Code == expectedCode
-                && diagnostic.Severity == VideoPlanDiagnosticSeverity.Error);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
     }
 
     [Fact]
@@ -267,7 +267,7 @@ public class PlanningCompilerComponentTests
         Assert.Contains(
             plan.Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.drive-source-unsupported"
-                && diagnostic.Severity == VideoPlanDiagnosticSeverity.Error);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
     }
 
     [Fact]
@@ -286,6 +286,7 @@ public class PlanningCompilerComponentTests
                 IsMultiClip: false,
                 TotalStageCount: 2,
                 FirstStageOrdinal: 0,
+                EntryMode: ArchitectureEntryMode.SourceVideo,
                 ArchitecturePayload: Ltx2ClipPlanCompiler.Compile(
                     clip,
                     new(640, 360, 30)).Payload));
@@ -367,7 +368,7 @@ public class PlanningCompilerComponentTests
     private static VideoExecutionPlan CompileFromComponents(VideoStagesSpec spec, RootEnvironment environment)
     {
         ArchitecturePlanningResult architecture = TestPlanCompiler.ResolveLtx(spec);
-        List<VideoPlanDiagnostic> diagnostics = [];
+        List<PlanDiagnostic> diagnostics = [];
         List<ClipSpec> clips = [];
         HashSet<int> seenClipIds = [];
         foreach (ClipSpec clip in (spec.Clips ?? []).Where(clip =>
@@ -375,8 +376,8 @@ public class PlanningCompilerComponentTests
         {
             if (!seenClipIds.Add(clip.Id))
             {
-                diagnostics.Add(new VideoPlanDiagnostic(
-                    VideoPlanDiagnosticSeverity.Error,
+                diagnostics.Add(new PlanDiagnostic(
+                    PlanDiagnosticSeverity.Error,
                     "duplicate-clip-id",
                     $"Clip id {clip.Id} is duplicated; only its first occurrence is planned.",
                     clip.Id));
@@ -386,8 +387,8 @@ public class PlanningCompilerComponentTests
         }
         if (clips.Count != (spec.Clips?.Count ?? 0))
         {
-            diagnostics.Insert(0, new VideoPlanDiagnostic(
-                VideoPlanDiagnosticSeverity.Warning,
+            diagnostics.Insert(0, new PlanDiagnostic(
+                PlanDiagnosticSeverity.Warning,
                 "inactive-clips-ignored",
                 "Clips without a source video or active stages were ignored by the execution plan."));
         }
@@ -414,11 +415,16 @@ public class PlanningCompilerComponentTests
                 clips.Count > 1,
                 totalStages,
                 firstStageOrdinal,
+                clips[i].SourceVideo is not null
+                    ? ArchitectureEntryMode.SourceVideo
+                    : spec.IsTextToVideo
+                        ? ArchitectureEntryMode.TextToVideo
+                        : ArchitectureEntryMode.ImageToVideo,
                 assignment,
                 payload)));
             diagnostics.AddRange(plans[^1].Audio.Diagnostics.Select(audioDiagnostic =>
-                new VideoPlanDiagnostic(
-                    VideoPlanDiagnosticSeverity.Warning,
+                new PlanDiagnostic(
+                    PlanDiagnosticSeverity.Warning,
                     audioDiagnostic.Code,
                     audioDiagnostic.Message,
                     plans[^1].ClipId)));
@@ -432,8 +438,8 @@ public class PlanningCompilerComponentTests
             boundaries.Boundaries);
         if (boundaryBudget.Degraded)
         {
-            diagnostics.Add(new VideoPlanDiagnostic(
-                VideoPlanDiagnosticSeverity.Warning,
+            diagnostics.Add(new PlanDiagnostic(
+                PlanDiagnosticSeverity.Warning,
                 "boundary-frame-budget-reconciled",
                 $"VideoStages: {boundaryBudget.Reason}."));
         }
@@ -450,12 +456,12 @@ public class PlanningCompilerComponentTests
             Array.AsReadOnly(boundaryBudget.Boundaries.ToArray()),
             Array.AsReadOnly(diagnostics.ToArray()));
         AudioTimelinePlan audioTimeline = AudioTimelinePlanCompiler.Compile(plan);
-        diagnostics.AddRange(audioTimeline.Diagnostics.Select(diagnostic => new VideoPlanDiagnostic(
+        diagnostics.AddRange(audioTimeline.Diagnostics.Select(diagnostic => new PlanDiagnostic(
             diagnostic.Severity switch
             {
-                AudioTimelineDiagnosticSeverity.Info => VideoPlanDiagnosticSeverity.Info,
-                AudioTimelineDiagnosticSeverity.Warning => VideoPlanDiagnosticSeverity.Warning,
-                _ => VideoPlanDiagnosticSeverity.Error,
+                PlanDiagnosticSeverity.Info => PlanDiagnosticSeverity.Info,
+                PlanDiagnosticSeverity.Warning => PlanDiagnosticSeverity.Warning,
+                _ => PlanDiagnosticSeverity.Error,
             },
             diagnostic.Code,
             diagnostic.Message,

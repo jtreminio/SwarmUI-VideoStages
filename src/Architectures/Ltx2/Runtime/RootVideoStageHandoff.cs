@@ -8,12 +8,8 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, StageRefStore s
 {
     private const string PreCoreNodeIdsKey = "videostages.pre-core-node-ids";
 
-    public RootExecutionPolicy CreatePolicy(RootExecutionFacts facts = null)
-    {
-        VideoExecutionPlan plan = g.RequireVideoExecutionPlanContext().Plan;
-        facts ??= RootExecutionFacts.FromPlan(plan, hasInstalledRefineSource: false);
-        return new RootExecutionPolicy(plan.Root, facts);
-    }
+    public RootExecutionPolicy CreatePolicy() =>
+        new(g.RequireVideoExecutionPlanContext().Plan);
 
     public bool ShouldHandoffRootStage()
     {

@@ -16,7 +16,7 @@ internal static class ClipAudioTrackSpecPlanner
                 tracks.Add(new(
                     $"clip-{clip.ClipId}-base",
                     new(
-                        MapBaseSourceKind(clip.Audio.Base.Kind),
+                        clip.Audio.Base.Kind,
                         clip.Audio.Base.UploadedMedia?.FileName ?? clip.Audio.Base.RawSource,
                         clip.Audio.Base.UploadedMedia),
                     [new AudioTrackSpanSpec(FirstClipId: clip.ClipId, LastClipId: clip.ClipId)]));
@@ -24,13 +24,4 @@ internal static class ClipAudioTrackSpecPlanner
         }
         return tracks.ToImmutable();
     }
-
-    private static AudioTimelineTrackSourceKind MapBaseSourceKind(AudioBaseSourceKind kind) => kind switch
-    {
-        AudioBaseSourceKind.Upload => AudioTimelineTrackSourceKind.Upload,
-        AudioBaseSourceKind.AceStepFun => AudioTimelineTrackSourceKind.AceStepFun,
-        AudioBaseSourceKind.ControlNet => AudioTimelineTrackSourceKind.ControlNet,
-        AudioBaseSourceKind.Native => AudioTimelineTrackSourceKind.Native,
-        _ => AudioTimelineTrackSourceKind.External,
-    };
 }

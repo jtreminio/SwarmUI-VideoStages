@@ -14,7 +14,7 @@ internal sealed record VideoExecutionPlan(
     RootPlan Root,
     IReadOnlyList<ClipPlan> Clips,
     IReadOnlyList<BoundaryPlan> Boundaries,
-    IReadOnlyList<VideoPlanDiagnostic> Diagnostics)
+    IReadOnlyList<PlanDiagnostic> Diagnostics)
 {
     /// <summary>Whether the author explicitly configured both timeline dimensions.</summary>
     public bool HasConfiguredResolution { get; init; } = true;
@@ -107,6 +107,12 @@ internal sealed record ClipPlan(
     /// <summary>The one architecture established for this clip before graph mutation begins.</summary>
     public VideoArchitectureDescriptor Architecture { get; init; }
 
+    /// <summary>
+    /// How this clip enters the timeline. Resolved once during compilation so plan validators do
+    /// not each re-derive it from root disposition and sourcing.
+    /// </summary>
+    public ArchitectureEntryMode EntryMode { get; init; }
+
     public IArchitectureClipPayload ArchitecturePayload { get; init; }
 }
 
@@ -189,19 +195,4 @@ internal enum BoundaryFallback
     UnknownBoundaryKind,
     InsufficientFrameBudget,
     ArchitectureRuleUnsupported,
-}
-
-internal sealed record VideoPlanDiagnostic(
-    VideoPlanDiagnosticSeverity Severity,
-    string Code,
-    string Message,
-    int? ClipId = null,
-    int? StageId = null,
-    int? RawStageIndex = null);
-
-internal enum VideoPlanDiagnosticSeverity
-{
-    Info,
-    Warning,
-    Error,
 }

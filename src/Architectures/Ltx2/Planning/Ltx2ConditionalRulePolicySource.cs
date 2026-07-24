@@ -51,6 +51,19 @@ internal static class Ltx2ConditionalRulePolicySource
                 ConditionalRuleFeature.Hdr,
                 2));
 
+    /// <summary>
+    /// Every threshold below is read back out of the published rule, so the catalog value and the
+    /// value the evaluator enforces are the same number by construction.
+    /// </summary>
+    internal static int AudioReuseMinimumActiveStages { get; } = AudioReuseRequiresThreeStages
+        .Require<MinimumActiveStagesRuleConstraints>().MinimumActiveStages;
+
+    internal static IReadOnlyList<ArchitectureEntryMode> RetakeEntryModes { get; } =
+        RetakeRequiresSource.Require<RequiredEntryModesRuleConstraints>().RequiresAnyEntryMode;
+
+    internal static int HdrMinimumTimelineClips { get; } = HdrRequiresUniformTimeline
+        .Require<UniformTimelineFeatureRuleConstraints>().MinimumTimelineClips;
+
     internal static IReadOnlyList<RuleDecision> PublishedRules { get; } =
     [
         AudioReuseRequiresThreeStages,
@@ -60,12 +73,12 @@ internal static class Ltx2ConditionalRulePolicySource
         HdrRequiresUniformTimeline,
     ];
 
-    internal static IReadOnlyList<VideoPlanDiagnostic> Validate(
+    internal static IReadOnlyList<PlanDiagnostic> Validate(
         IReadOnlyList<ClipPlan> clips,
         IReadOnlyList<ClipPlan> timelineClips,
         RootPlan root)
     {
-        List<VideoPlanDiagnostic> diagnostics = [];
+        List<PlanDiagnostic> diagnostics = [];
         foreach (ClipPlan clip in clips)
         {
             if (clip.ArchitecturePayload is Ltx2ClipPayload ltxClip
@@ -74,7 +87,7 @@ internal static class Ltx2ConditionalRulePolicySource
             {
                 diagnostics.Add(Diagnostic(
                     AudioReuseRequiresThreeStages,
-                    VideoPlanDiagnosticSeverity.Warning,
+                    PlanDiagnosticSeverity.Warning,
                     clip.ClipId));
             }
             if (clip.Audio.Length.Owner is AudioLengthOwner.Audio or AudioLengthOwner.ControlNet
@@ -99,15 +112,14 @@ internal static class Ltx2ConditionalRulePolicySource
                         stage.StageId));
                 }
                 if (payload.Retake is not null
-                    && !clip.IsSourced
-                    && root.HostKind != HostRootKind.GlobalRefineSource)
+                    && !RetakeEntryModes.Contains(clip.EntryMode))
                 {
                     diagnostics.Add(Error(RetakeRequiresSource, clip.ClipId, stage.StageId));
                 }
             }
         }
 
-        if (timelineClips.Count > 1)
+        if (timelineClips.Count >= HdrMinimumTimelineClips)
         {
             bool[] hdrClips = [.. timelineClips.Select(clip =>
                 clip.Architecture.Id == Ltx2ArchitectureModule.ArchitectureId
@@ -120,15 +132,15 @@ internal static class Ltx2ConditionalRulePolicySource
         return diagnostics.AsReadOnly();
     }
 
-    private static VideoPlanDiagnostic Error(
+    private static PlanDiagnostic Error(
         RuleDecision rule,
         int? clipId = null,
         int? stageId = null) =>
-        Diagnostic(rule, VideoPlanDiagnosticSeverity.Error, clipId, stageId);
+        Diagnostic(rule, PlanDiagnosticSeverity.Error, clipId, stageId);
 
-    private static VideoPlanDiagnostic Diagnostic(
+    private static PlanDiagnostic Diagnostic(
         RuleDecision rule,
-        VideoPlanDiagnosticSeverity severity,
+        PlanDiagnosticSeverity severity,
         int? clipId = null,
         int? stageId = null) =>
         new(

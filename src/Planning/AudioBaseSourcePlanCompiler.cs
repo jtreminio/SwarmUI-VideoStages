@@ -5,40 +5,34 @@ namespace VideoStages.Planning;
 /// <summary>Compiles only the configured lockable base audio source.</summary>
 internal static class AudioBaseSourcePlanCompiler
 {
-    private const string UnknownSourceDefaultsToNative = "audio.source.unknown_defaults_to_native";
+    internal const string UnknownSourceCode = "audio.source.unknown";
 
     internal static AudioPlanComponentResult<AudioBaseSourcePlan> Compile(ClipSpec clip)
     {
-        string raw = (clip.AudioSource ?? Constants.AudioSourceNative).Trim();
-        if (raw.Length == 0 || StringUtils.Equals(raw, Constants.AudioSourceNative))
+        AudioSourceSelection selection = AudioSourceParser.Parse(clip.AudioSource);
+        // An unrecognised source is the one blocking outcome: quietly generating with native audio
+        // would publish something the author never asked for.
+        if (selection.Kind == AudioSourceKind.Unknown)
         {
-            return Result(new(AudioBaseSourceKind.Native, raw, null, HasConfiguredTrack: true, null));
+            return new(
+                new(selection.Kind, selection.Raw, null, HasConfiguredTrack: false, null),
+                [new(
+                    PlanDiagnosticSeverity.Error,
+                    UnknownSourceCode,
+                    $"Audio source '{selection.Raw}' is not a supported audio source.",
+                    clip.Id)]);
         }
-        if (StringUtils.Equals(raw, Constants.AudioSourceUpload))
-        {
-            return Result(new(
-                AudioBaseSourceKind.Upload,
-                raw,
-                null,
-                HasConfiguredTrack: !string.IsNullOrWhiteSpace(clip.UploadedAudio?.Data),
-                AudioMediaIdentityCompiler.Compile(clip.UploadedAudio)));
-        }
-        if (StringUtils.Equals(raw, Constants.AudioSourceControlNet))
-        {
-            return Result(new(AudioBaseSourceKind.ControlNet, raw, null, HasConfiguredTrack: true, null));
-        }
-        if (AudioHandler.TryParseAceStepFunAudioSource(raw, out int track))
-        {
-            return Result(new(AudioBaseSourceKind.AceStepFun, raw, track, HasConfiguredTrack: true, null));
-        }
-
-        return new(
-            new(AudioBaseSourceKind.Native, raw, null, HasConfiguredTrack: true, null),
-            [new(
-                UnknownSourceDefaultsToNative,
-                $"Audio source '{raw}' is not a supported external source, so it follows the native-audio path.")]);
+        return Result(new(
+            selection.Kind,
+            selection.Raw,
+            selection.AceStepFunTrack,
+            HasConfiguredTrack: selection.Kind != AudioSourceKind.Upload
+                || !string.IsNullOrWhiteSpace(clip.UploadedAudio?.Data),
+            selection.Kind == AudioSourceKind.Upload
+                ? AudioMediaIdentityPlan.From(clip.UploadedAudio)
+                : null));
     }
 
     private static AudioPlanComponentResult<AudioBaseSourcePlan> Result(AudioBaseSourcePlan plan) =>
-        new(plan, ImmutableArray<AudioPlanDiagnostic>.Empty);
+        new(plan, ImmutableArray<PlanDiagnostic>.Empty);
 }

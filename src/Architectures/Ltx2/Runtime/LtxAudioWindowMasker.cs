@@ -23,8 +23,6 @@ namespace VideoStages.Architectures.Ltx2;
 /// </summary>
 internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
 {
-    private const int AudioWindowIdBase = 52400;
-
     /// <summary>A single audio-latent noise window, in seconds along the clip timeline.</summary>
     internal readonly record struct AudioMaskWindow(double StartTime, double EndTime)
     {
@@ -98,7 +96,7 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
                 // doc), so it must write the window itself over a frozen (0.0) base.
                 MaskInitValueVideo: 0.0,
                 MaskInitValueAudio: 0.0),
-            g.GetStableDynamicID(AudioWindowIdBase, stageFrame.SectionId));
+            StableNodeIds.Id(g, StableNodeIds.AudioWindowMask, stageFrame.Stage.StageId));
         mask.AvLatentInput.ConnectFromPath(bridge, mediaPath);
         mask.Model.ConnectFromPath(bridge, genInfo.Model.Path);
         mask.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);

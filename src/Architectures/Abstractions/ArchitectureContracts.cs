@@ -39,15 +39,6 @@ internal enum ArchitectureEntryMode
     RefineVideo,
 }
 
-internal enum ArchitectureAudioSourceKind
-{
-    Disabled,
-    Native,
-    Upload,
-    ControlNet,
-    AceStepFun,
-}
-
 [Flags]
 internal enum ArchitectureCapability
 {
@@ -197,6 +188,16 @@ internal sealed record RuleDecision(
         RuleScope scope,
         RuleConstraints constraints = null) =>
         new(RuleSupport.Conditional, code, reason, scope, Constraints: constraints);
+
+    /// <summary>
+    /// The published constraints, typed. Evaluators read their thresholds from here so a rule's
+    /// numbers exist once instead of being restated as literals next to the check.
+    /// </summary>
+    public TConstraints Require<TConstraints>()
+        where TConstraints : RuleConstraints =>
+        Constraints as TConstraints
+        ?? throw new InvalidOperationException(
+            $"Rule '{Code}' does not publish {typeof(TConstraints).Name}.");
 }
 
 internal sealed record ArchitectureCapabilityDescriptor(
@@ -280,14 +281,22 @@ internal sealed record VideoModelProfileDescriptor(
     ModelProfileId Id,
     string DisplayName,
     ModelProfileCapability Capabilities,
-    IReadOnlyList<RuleDecision> Rules);
+    IReadOnlyList<RuleDecision> Rules)
+{
+    /// <summary>
+    /// The frame-count grid this profile generates on. Authored durations snap to it, and boundary
+    /// windows step on it. Architecture-neutral code reads it from here instead of hardcoding a
+    /// model family's number.
+    /// </summary>
+    public int FrameGrid { get; init; } = 1;
+}
 
 internal sealed record VideoArchitectureDescriptor(
     ArchitectureId Id,
     string DisplayName,
     ModelProfileId DefaultProfileId,
     IReadOnlyList<ArchitectureEntryMode> EntryModes,
-    IReadOnlyList<ArchitectureAudioSourceKind> AudioSourceKinds,
+    IReadOnlyList<AudioSourceKind> AudioSourceKinds,
     IReadOnlyList<VideoModelProfileDescriptor> Profiles,
     ArchitectureCapabilityDescriptor Capabilities,
     IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> BoundaryRules)
@@ -326,7 +335,7 @@ internal sealed record ArchitectureClipCompileContext(
 
 internal interface IArchitecturePlanValidator
 {
-    IReadOnlyList<VideoPlanDiagnostic> ValidatePlan(
+    IReadOnlyList<PlanDiagnostic> ValidatePlan(
         IReadOnlyList<ClipPlan> architectureClips,
         IReadOnlyList<ClipPlan> timelineClips,
         RootPlan root);

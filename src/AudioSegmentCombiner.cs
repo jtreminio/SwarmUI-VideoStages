@@ -56,7 +56,7 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
         List<(AudioSegmentItemPlan Plan, JArray Path)> loaded = [];
         foreach (AudioSegmentItemPlan segment in segmentPlan.Items)
         {
-            if (segment.SourceKind == AudioSegmentSourceKind.AceStepFun)
+            if (segment.SourceKind == AudioSourceKind.AceStepFun)
             {
                 detectBridge ??= WorkflowBridge.Create(g.Workflow);
                 WGNodeData ace = segment.AceStepFunTrack is int track

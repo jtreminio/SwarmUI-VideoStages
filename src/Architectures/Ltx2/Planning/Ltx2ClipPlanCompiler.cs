@@ -6,7 +6,7 @@ namespace VideoStages.Architectures.Ltx2.Planning;
 /// <summary>Compiles all LTX-owned settings before the common clip plan is assembled.</summary>
 internal sealed record Ltx2ClipPlanCompilation(
     Ltx2ClipPayload Payload,
-    IReadOnlyList<VideoPlanDiagnostic> Diagnostics);
+    IReadOnlyList<PlanDiagnostic> Diagnostics);
 
 internal static class Ltx2ClipPlanCompiler
 {
@@ -18,12 +18,8 @@ internal static class Ltx2ClipPlanCompiler
         PromptRelayPlan relay = PromptRelayPlanCompiler.Compile(
             clip,
             context.FramesPerSecond);
-        List<VideoPlanDiagnostic> diagnostics = [
-            .. audio.Diagnostics.Select(diagnostic => new VideoPlanDiagnostic(
-                VideoPlanDiagnosticSeverity.Warning,
-                diagnostic.Code,
-                diagnostic.Message,
-                clip.Id)),
+        List<PlanDiagnostic> diagnostics = [
+            .. audio.Diagnostics.Select(diagnostic => diagnostic with { ClipId = clip.Id }),
             .. IcLoraPlanCompiler.ValidateClip(clip, context),
         ];
         Dictionary<int, Ltx2StagePayload> stages = [];
@@ -53,6 +49,7 @@ internal static class Ltx2ClipPlanCompiler
                 clip.Id,
                 stages,
                 audio.Reuse,
+                audio.Injection,
                 audio.ControlNetSourceIndex),
             diagnostics.AsReadOnly());
     }

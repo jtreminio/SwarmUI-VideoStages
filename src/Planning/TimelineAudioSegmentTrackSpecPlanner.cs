@@ -7,13 +7,10 @@ internal static class TimelineAudioSegmentTrackSpecPlanner
 {
     internal static ImmutableArray<AudioTrackSpec> Compile(
         IReadOnlyList<TimelineAudioSegmentSpec> segments,
-        VideoExecutionPlan videoPlan)
+        ImmutableArray<AudioTimelineClipWindow> windows)
     {
         IReadOnlyDictionary<int, AudioTimelineClipWindow> clipWindows =
-            AudioTimelineClipWindowPlanner
-                .Compile(videoPlan)
-                .ClipWindows
-                .ToDictionary(window => window.ClipId);
+            windows.ToDictionary(window => window.ClipId);
         ImmutableArray<AudioTrackSpec>.Builder tracks =
             ImmutableArray.CreateBuilder<AudioTrackSpec>();
         foreach (TimelineAudioSegmentSpec segment in segments ?? [])
@@ -28,14 +25,14 @@ internal static class TimelineAudioSegmentTrackSpecPlanner
                 out _))
             {
                 source = new(
-                    AudioTimelineTrackSourceKind.AceStepFun,
+                    AudioSourceKind.AceStepFun,
                     segment.AceStepFunSource);
             }
             else if (!string.IsNullOrWhiteSpace(segment.Source?.Data))
             {
-                AudioMediaIdentityPlan upload = AudioMediaIdentityCompiler.Compile(segment.Source);
+                AudioMediaIdentityPlan upload = AudioMediaIdentityPlan.From(segment.Source);
                 source = new(
-                    AudioTimelineTrackSourceKind.Upload,
+                    AudioSourceKind.Upload,
                     upload.FileName,
                     upload);
             }
@@ -82,20 +79,14 @@ internal static class TimelineAudioSegmentTrackSpecPlanner
             || !clipWindows.TryGetValue(
                 segment.LastClipId.Value,
                 out AudioTimelineClipWindow last)
-            || first.TimelineStartSeconds is not double firstStart
-            || first.DurationSeconds is not double firstDuration
-            || last.TimelineStartSeconds is not double lastStart
-            || last.DurationSeconds is not double lastDuration)
+            || !first.IsResolved
+            || !last.IsResolved)
         {
             return (segment.TimelineStartSeconds, segment.LengthSeconds);
         }
 
-        double start = firstStart + Math.Min(
-            segment.FirstClipOffsetSeconds.Value,
-            firstDuration);
-        double end = lastStart + Math.Min(
-            segment.LastClipOffsetSeconds.Value,
-            lastDuration);
+        double start = first.TimelineTimeAt(segment.FirstClipOffsetSeconds.Value);
+        double end = last.TimelineTimeAt(segment.LastClipOffsetSeconds.Value);
         return (start, end - start);
     }
 }

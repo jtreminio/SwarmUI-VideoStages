@@ -6,7 +6,7 @@ namespace VideoStages.Architectures.Ltx2.Planning;
 /// <summary>LTX boundary behavior and its public catalog projection.</summary>
 internal sealed class Ltx2BoundaryPolicy : IArchitectureBoundaryPolicy
 {
-    internal const int DefaultFrames = 8;
+    internal const int DefaultFrames = Ltx2ArchitectureModule.FrameGrid;
     internal const int MaxFrames = 48;
 
     internal static Ltx2BoundaryPolicy Instance { get; } = new();
@@ -30,7 +30,7 @@ internal sealed class Ltx2BoundaryPolicy : IArchitectureBoundaryPolicy
                 RuleSupport.Conditional,
                 "ltx2.boundary.continue",
                 "Continue requires adjacent LTX clips and a compatible generated target.",
-                FrameStep: 8,
+                FrameStep: Ltx2ArchitectureModule.FrameGrid,
                 MinFrames: DefaultFrames,
                 MaxFrames: MaxFrames,
                 DefaultFrames: DefaultFrames,
@@ -42,7 +42,7 @@ internal sealed class Ltx2BoundaryPolicy : IArchitectureBoundaryPolicy
                 RuleSupport.Conditional,
                 "ltx2.boundary.crossfade",
                 "Crossfade currently uses the LTX-owned decoded transition path.",
-                FrameStep: 8,
+                FrameStep: Ltx2ArchitectureModule.FrameGrid,
                 MinFrames: DefaultFrames,
                 MaxFrames: MaxFrames,
                 DefaultFrames: DefaultFrames,

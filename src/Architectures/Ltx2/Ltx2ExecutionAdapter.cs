@@ -47,7 +47,11 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         Pipeline pipeline = BuildPipeline();
         AudioTimelineExecutor audioTimelineExecutor =
             new(generator, pipeline.AudioInjector);
-        StageRunner stageRunner = new(generator, pipeline.StageOrchestrator);
+        StageRunner stageRunner = new(
+            generator,
+            pipeline.StageExecutor,
+            pipeline.GuideMediaHelper,
+            pipeline.ClipRefResolver);
         StageSequenceRootSetup rootSetup = new(
             generator,
             pipeline.StageRefStore,
@@ -89,11 +93,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             generator,
             guideMediaHelper,
             base2Edit);
-        LtxStageOrchestrator stageOrchestrator = new(
-            generator,
-            stageExecutor,
-            guideMediaHelper,
-            clipRefResolver);
         return new(
             stageRefStore,
             handoff,
@@ -101,7 +100,9 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             base2Edit,
             audioInjector,
             audioMaskResizer,
-            stageOrchestrator);
+            stageExecutor,
+            guideMediaHelper,
+            clipRefResolver);
     }
 
     private readonly record struct Pipeline(
@@ -111,5 +112,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         Base2EditPublishedStageRefs Base2Edit,
         LtxAudioInjector AudioInjector,
         LtxAudioMaskResizer AudioMaskResizer,
-        LtxStageOrchestrator StageOrchestrator);
+        LtxStageExecutor StageExecutor,
+        StageGuideMediaHelper GuideMediaHelper,
+        LtxClipRefResolver ClipRefResolver);
 }

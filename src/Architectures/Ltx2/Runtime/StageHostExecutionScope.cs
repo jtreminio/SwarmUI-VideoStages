@@ -13,8 +13,6 @@ namespace VideoStages.Architectures.Ltx2;
 /// </summary>
 internal sealed class StageHostExecutionScope : IDisposable
 {
-    private const int IntermediateStageSaveId = 52100;
-
     private readonly WorkflowGenerator _generator;
     private readonly VideoExecutionPlan _plan;
     private readonly HashSet<int> _sectionIds = [];
@@ -105,7 +103,7 @@ internal sealed class StageHostExecutionScope : IDisposable
         _generator.CurrentMedia.SaveOutput(
             _generator.CurrentVae,
             _generator.CurrentAudioVae,
-            _generator.GetStableDynamicID(IntermediateStageSaveId, stage.StageId));
+            StableNodeIds.Id(_generator, StableNodeIds.IntermediateStageSave, stage.StageId));
     }
 
     public void Dispose()

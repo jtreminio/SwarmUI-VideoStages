@@ -15,8 +15,8 @@ internal static class NoneArchitecture
         ProfileId,
         [ArchitectureEntryMode.SourceVideo],
         [
-            ArchitectureAudioSourceKind.Disabled,
-            ArchitectureAudioSourceKind.Upload,
+            AudioSourceKind.Disabled,
+            AudioSourceKind.Upload,
         ],
         [
             new(

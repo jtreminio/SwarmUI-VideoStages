@@ -19,6 +19,7 @@ internal sealed class TimelineAssembler(
 
 internal sealed class TimelineAssemblySession
 {
+    private readonly WorkflowGenerator _generator;
     private readonly MultiClipParallelMerger _merger;
     private readonly GlobalVideoFrameTrimmer _outputTrimmer;
     private readonly VideoExecutionPlan _plan;
@@ -29,6 +30,7 @@ internal sealed class TimelineAssemblySession
         MultiClipParallelMerger merger,
         VideoExecutionPlan plan)
     {
+        _generator = generator;
         _merger = merger;
         _outputTrimmer = new GlobalVideoFrameTrimmer(generator);
         _plan = plan;
@@ -105,17 +107,28 @@ internal sealed class TimelineAssemblySession
     }
 
     /// <summary>
-    /// A sourced-only one-clip timeline has no stage finalizer, so timeline assembly owns its
-    /// one terminal trim explicitly.
+    /// Installs the one clip's decoded artifact as the timeline output, so publication reads what
+    /// the clip actually returned rather than whatever ambient media survived execution. A
+    /// sourced-only clip additionally has no stage finalizer, so assembly owns its terminal trim.
     /// </summary>
-    public void FinalizeUnstagedSingleClip()
+    public void FinalizeSingleClip(DecodedClipArtifact clipOutput)
     {
-        if (_plan.Clips.Count != 1 || _plan.Clips[0].Stages.Count != 0)
+        ArgumentNullException.ThrowIfNull(clipOutput);
+        if (_plan.Clips.Count != 1)
         {
             throw new InvalidOperationException(
-                "Only an unstaged single-clip timeline can use sourced-only finalization.");
+                "Only a single-clip timeline can use single-clip finalization.");
         }
-        _outputTrimmer.Apply();
+        if (clipOutput.HasVideo != true)
+        {
+            throw new SwarmUserErrorException(
+                "VideoStages: timeline assembly received an invalid clip video artifact.");
+        }
+        _generator.CurrentMedia = clipOutput.ToHostMedia(_generator);
+        if (_plan.Clips[0].Stages.Count == 0)
+        {
+            _outputTrimmer.Apply();
+        }
     }
 
     private int BoundaryIndex(int fromClipId) =>

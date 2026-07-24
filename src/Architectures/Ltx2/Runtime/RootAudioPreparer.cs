@@ -1,4 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -21,7 +22,7 @@ internal sealed class RootAudioPreparer(
             _ = audioInjector.TryInject(sources.NativeAudio);
             return;
         }
-        if (rootPolicy.UsesStageHandoff || rootPolicy.Facts.FirstClipIsSourced)
+        if (rootPolicy.UsesStageHandoff || rootPolicy.FirstClipIsSourced)
         {
             return;
         }
@@ -39,6 +40,6 @@ internal sealed class RootAudioPreparer(
             suppressNative: false);
         _ = audioInjector.TryInject(
             audio,
-            first.Audio.Length.NonHandoffInjectionMatchesAudioLength);
+            first.RequireLtx2Payload().AudioInjection.NonHandoffMatchesAudioLength);
     }
 }

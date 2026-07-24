@@ -15,7 +15,7 @@ public class RootExecutionPolicyTests
                 CanHandoffHostCore: true,
                 HasGlobalRefineSource: true),
             GeneratedClip(0));
-        RootExecutionPolicy policy = For(plan, hasInstalledRefineSource: true);
+        RootExecutionPolicy policy = For(plan);
         ClipPlan clip = Assert.Single(plan.Clips);
         StagePlan stage = Assert.Single(clip.Stages);
 
@@ -86,17 +86,13 @@ public class RootExecutionPolicyTests
         RootExecutionPolicy policy = For(plan);
         ClipPlan clip = Assert.Single(plan.Clips);
 
-        Assert.True(policy.Facts.FirstClipIsSourced);
+        Assert.True(policy.FirstClipIsSourced);
         Assert.False(policy.UsesStageHandoff);
         Assert.False(policy.ConformsSurvivingRootMedia);
         Assert.False(policy.ReplacesTextToVideoRootStage(null, clip));
     }
 
-    private static RootExecutionPolicy For(
-        VideoExecutionPlan plan,
-        bool hasInstalledRefineSource = false) => new(
-        plan.Root,
-        RootExecutionFacts.FromPlan(plan, hasInstalledRefineSource));
+    private static RootExecutionPolicy For(VideoExecutionPlan plan) => new(plan);
 
     private static VideoExecutionPlan Compile(
         bool isTextToVideo,

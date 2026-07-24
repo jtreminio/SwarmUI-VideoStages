@@ -11,6 +11,9 @@ internal sealed class Ltx2ArchitectureModule :
 {
     internal static ArchitectureId ArchitectureId { get; } = new("ltx2");
 
+    /// <summary>The one declaration of the LTX frame grid; every other use reads it from here.</summary>
+    internal const int FrameGrid = 8;
+
     internal static Ltx2ArchitectureModule Instance { get; } = new();
 
     public VideoArchitectureDescriptor Descriptor { get; } = new(
@@ -24,10 +27,10 @@ internal sealed class Ltx2ArchitectureModule :
             ArchitectureEntryMode.RefineVideo,
         ],
         [
-            ArchitectureAudioSourceKind.Native,
-            ArchitectureAudioSourceKind.Upload,
-            ArchitectureAudioSourceKind.ControlNet,
-            ArchitectureAudioSourceKind.AceStepFun,
+            AudioSourceKind.Native,
+            AudioSourceKind.Upload,
+            AudioSourceKind.ControlNet,
+            AudioSourceKind.AceStepFun,
         ],
         [
             Profile("ltx-2.3", "LTX Video 2.3"),
@@ -92,7 +95,7 @@ internal sealed class Ltx2ArchitectureModule :
         return new(compilation.Payload, compilation.Diagnostics);
     }
 
-    public IReadOnlyList<VideoPlanDiagnostic> ValidatePlan(
+    public IReadOnlyList<PlanDiagnostic> ValidatePlan(
         IReadOnlyList<ClipPlan> architectureClips,
         IReadOnlyList<ClipPlan> timelineClips,
         RootPlan root) =>
@@ -107,13 +110,17 @@ internal sealed class Ltx2ArchitectureModule :
                 | ModelProfileCapability.DimensionRules
                 | ModelProfileCapability.FrameRules
                 | ModelProfileCapability.NormalLora,
-            []);
+            [])
+        {
+            FrameGrid = FrameGrid,
+        };
 }
 
 internal sealed record Ltx2ClipPayload(
     int ClipId,
     IReadOnlyDictionary<int, Ltx2StagePayload> Stages,
     AudioReusePlan AudioReuse,
+    Ltx2AudioInjectionPlan AudioInjection,
     int? ControlNetSourceIndex) :
     IArchitectureClipPayload,
     IArchitectureStagePayloadSource,

@@ -42,7 +42,7 @@ public sealed class AudioHandler(WorkflowGenerator g)
         HashSet<int> savedTracks = [];
         foreach (ClipPlan clip in clips)
         {
-            if (clip.Audio.Base.Kind != AudioBaseSourceKind.AceStepFun
+            if (clip.Audio.Base.Kind != AudioSourceKind.AceStepFun
                 || clip.Audio.Base.AceStepFunTrack is not int trackIndex)
             {
                 continue;

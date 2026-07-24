@@ -41,7 +41,7 @@ public class ArchitectureFoundationTests
             ArchitecturePlanResolver.Resolve(Spec(clip), registry);
 
         Assert.Equal(new ArchitectureId("ltx2"), result.Clips[0].Architecture.Id);
-        VideoPlanDiagnostic diagnostic = Assert.Single(
+        PlanDiagnostic diagnostic = Assert.Single(
             result.Diagnostics,
             item => item.Code == "architecture-mixed-authored-stage-clip");
         Assert.Contains("(skipped)", diagnostic.Message);
@@ -82,7 +82,7 @@ public class ArchitectureFoundationTests
         ArchitecturePlanningResult result =
             ArchitecturePlanResolver.Resolve(Spec(inactive), new FakeRegistry());
 
-        VideoPlanDiagnostic diagnostic = Assert.Single(
+        PlanDiagnostic diagnostic = Assert.Single(
             result.Diagnostics,
             item => item.Code == "architecture-authored-stage-profile-mismatch");
         Assert.Contains("stage 3", diagnostic.Message);
@@ -108,7 +108,7 @@ public class ArchitectureFoundationTests
             ArchitecturePlanResolver.Resolve(Spec(sourced), new FakeRegistry());
 
         Assert.Equal(NoneArchitecture.Id, result.Clips[0].Architecture.Id);
-        VideoPlanDiagnostic diagnostic = Assert.Single(
+        PlanDiagnostic diagnostic = Assert.Single(
             result.Diagnostics,
             item => item.Code == "architecture-mixed-authored-stage-clip");
         Assert.Equal(4, diagnostic.RawStageIndex);
@@ -258,7 +258,7 @@ public class ArchitectureFoundationTests
         Assert.Contains(
             plan.Diagnostics,
             item => item.Code == "boundary-cross-architecture-non-cut"
-                && item.Severity == VideoPlanDiagnosticSeverity.Error);
+                && item.Severity == PlanDiagnosticSeverity.Error);
     }
 
     [Fact]
@@ -858,9 +858,7 @@ public class ArchitectureFoundationTests
             null,
             new Dictionary<int, SwarmUI.Builtin_ComfyUIBackend.WGNodeData>(),
             new Dictionary<int, SwarmUI.Builtin_ComfyUIBackend.WGNodeData>());
-        RootExecutionPolicy policy = new(
-            plan.Root,
-            RootExecutionFacts.FromPlan(plan, hasInstalledRefineSource: false));
+        RootExecutionPolicy policy = new(plan);
         runtimes.PrepareTimeline(new(plan, audio, policy));
         using ArchitectureRuntimeDispatcher dispatcher = runtimes.CreateDispatcher(new(
             plan,
@@ -1327,7 +1325,7 @@ public class ArchitectureFoundationTests
         Descriptor("fake", "fake-profile") with
         {
             EntryModes = entryModes ?? [ArchitectureEntryMode.ImageToVideo],
-            AudioSourceKinds = [ArchitectureAudioSourceKind.Native],
+            AudioSourceKinds = [AudioSourceKind.Native],
             Profiles =
             [
                 new(
@@ -1493,7 +1491,7 @@ public class ArchitectureFoundationTests
                 ArchitectureEntryMode.TextToVideo,
                 ArchitectureEntryMode.ImageToVideo,
             ],
-            [ArchitectureAudioSourceKind.Native],
+            [AudioSourceKind.Native],
             [new(
                 new(profile),
                 profile,

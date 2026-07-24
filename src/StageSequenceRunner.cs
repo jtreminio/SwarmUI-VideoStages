@@ -53,11 +53,8 @@ internal sealed class StageSequenceRunner(
                 PreviousTimelineClipOutput = clipIndex > 0 ? previousClipOutput : null,
             };
             DecodedClipArtifact output = runtimeDispatcher.Execute(runtimeContext);
-            if (parallelMultiClip)
-            {
-                clipOutputs.Add(output);
-                previousClipOutput = output;
-            }
+            clipOutputs.Add(output);
+            previousClipOutput = output;
             previousClip = plannedClip;
         }
 
@@ -65,10 +62,9 @@ internal sealed class StageSequenceRunner(
         {
             assembly.Assemble(clipOutputs);
         }
-        else if (plannedClips[0].Stages.Count == 0)
+        else
         {
-            assembly.FinalizeUnstagedSingleClip();
+            assembly.FinalizeSingleClip(clipOutputs[0]);
         }
     }
-
 }

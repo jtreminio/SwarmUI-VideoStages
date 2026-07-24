@@ -11,8 +11,6 @@ namespace VideoStages.Architectures.Ltx2;
 /// </summary>
 internal static class LtxAudioPreserveWindowBuilder
 {
-    private const int AudioInjectionIdBase = 52300;
-
     internal static WGNodeData TryBuild(
         WorkflowGenerator g,
         WGNodeData audio,
@@ -58,7 +56,7 @@ internal static class LtxAudioPreserveWindowBuilder
             GapMaskValue: 1.0);
         node.Samples.TryConnectFromPath(bridge, encodedAudioPath);
         node.AudioVae.ConnectFromPath(bridge, g.CurrentAudioVae.Path);
-        bridge.AddNode(node, g.GetStableDynamicID(AudioInjectionIdBase + 400, stableIdSlot));
+        bridge.AddNode(node, StableNodeIds.Id(g, StableNodeIds.AudioInjection, 400 + stableIdSlot));
         return node;
     }
 

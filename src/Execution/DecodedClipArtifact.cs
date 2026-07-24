@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
@@ -63,26 +64,47 @@ internal sealed record DecodedClipArtifact(
         }
     }
 
+    /// <summary>
+    /// Projects this neutral artifact back into the host's media shape. This is the only place a
+    /// decoded clip becomes host state, so publication never has to read ambient media instead.
+    /// </summary>
+    internal WGNodeData ToHostMedia(WorkflowGenerator g)
+    {
+        ValidateDecoded();
+        WGNodeData media = new(Video.ToPath(), g, WGNodeData.DT_VIDEO, null)
+        {
+            Width = Width,
+            Height = Height,
+            Frames = Frames,
+            FPS = FramesPerSecond,
+        };
+        if (Audio is not null)
+        {
+            media.AttachedAudio = new(Audio.ToPath(), g, WGNodeData.DT_AUDIO, null);
+        }
+        return media;
+    }
+
     internal static DecodedClipArtifact FromRuntime(RuntimeArtifact artifact, ClipPlan clip)
     {
         ArgumentNullException.ThrowIfNull(artifact);
         ArgumentNullException.ThrowIfNull(clip);
         if (!artifact.HasMedia)
         {
-            throw new InvalidOperationException(
-                $"Clip {clip.ClipId} did not produce decoded video media.");
+            throw new SwarmUserErrorException(
+                $"VideoStages: clip {clip.ClipId} did not produce decoded video media.");
         }
         if (artifact.Media.DataType != WGNodeData.DT_VIDEO)
         {
-            throw new InvalidOperationException(
-                $"Clip {clip.ClipId} did not produce decoded video media; "
+            throw new SwarmUserErrorException(
+                $"VideoStages: clip {clip.ClipId} did not produce decoded video media; "
                 + $"received '{artifact.Media.DataType ?? "unknown"}'.");
         }
         if (artifact.Media.AttachedAudio is MediaRef attachedAudio
             && attachedAudio.DataType != WGNodeData.DT_AUDIO)
         {
-            throw new InvalidOperationException(
-                $"Clip {clip.ClipId} did not produce decoded attached audio; "
+            throw new SwarmUserErrorException(
+                $"VideoStages: clip {clip.ClipId} did not produce decoded attached audio; "
                 + $"received '{attachedAudio.DataType ?? "unknown"}'.");
         }
         if (artifact.Media.Width is not > 0
@@ -91,8 +113,8 @@ internal sealed record DecodedClipArtifact(
             || artifact.Media.FPS?.Type != JTokenType.Integer
             || artifact.Media.FPS.Value<int>() <= 0)
         {
-            throw new InvalidOperationException(
-                $"Clip {clip.ClipId} decoded media is missing literal dimensions, fps, or frames.");
+            throw new SwarmUserErrorException(
+                $"VideoStages: clip {clip.ClipId} decoded media is missing literal dimensions, fps, or frames.");
         }
         DecodedClipArtifact decoded = new(
             DecodedOutputHandle.From(artifact.Media.Output, DecodedMediaKind.Video),

@@ -41,11 +41,9 @@ internal static class VideoStagesContext
                 "VideoStages has no executable clips in the active timeline.");
         }
 
-        VideoPlanDiagnostic[] errors = [
-            .. context.Plan.Diagnostics.Where(
-                diagnostic => diagnostic.Severity == VideoPlanDiagnosticSeverity.Error)
-        ];
-        if (errors.Length > 0)
+        IReadOnlyList<PlanDiagnostic> errors =
+            PlanDiagnosticReporter.Errors(context.Plan.Diagnostics);
+        if (errors.Count > 0)
         {
             throw new SwarmUserErrorException(
                 "VideoStages could not create a valid architecture execution plan: "
@@ -84,12 +82,30 @@ internal static class VideoStagesContext
             spec,
             rootEnvironment,
             architecturePlanning);
+        // Compilation happens once per workflow generator, so this is the one place a plan's
+        // non-blocking diagnostics can reach the user without repeating on every phase lookup.
+        PlanDiagnosticReporter.Report(plan.Diagnostics);
         return new PlanCacheEntry(new VideoExecutionPlanContext(plan));
     }
 
-    private static bool HasVideoRefineSource(WorkflowGenerator g) =>
-        g.UserInput.TryGet(VideoStagesExtension.RefineSourceVideo, out Image source)
-        && source?.Type?.MetaType == SwarmUI.Media.MediaMetaType.Video;
+    private static bool HasVideoRefineSource(WorkflowGenerator g)
+    {
+        if (!g.UserInput.TryGet(VideoStagesExtension.RefineSourceVideo, out Image source)
+            || source is null)
+        {
+            return false;
+        }
+        if (source.Type?.MetaType == SwarmUI.Media.MediaMetaType.Video)
+        {
+            return true;
+        }
+        // Planning declines global-refine semantics here, so this is the only point at which the
+        // user can be told why their configured refine source did nothing.
+        Logs.Warning(
+            "VideoStages: 'Refine Source Video' was set but its media type is not video. "
+            + "Ignoring and falling back to the normal pipeline.");
+        return false;
+    }
 
     private sealed record PlanCacheEntry(VideoExecutionPlanContext? Context);
 }

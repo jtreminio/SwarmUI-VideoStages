@@ -32,12 +32,12 @@ internal static class VideoExecutionPlanCompiler
         ArgumentNullException.ThrowIfNull(rootEnvironment);
         ArgumentNullException.ThrowIfNull(architecturePlanning);
 
-        List<VideoPlanDiagnostic> diagnostics = [.. architecturePlanning.Diagnostics];
+        List<PlanDiagnostic> diagnostics = [.. architecturePlanning.Diagnostics];
         IReadOnlyList<ClipSpec> executableClips = (spec.Clips ?? []).Where(IsExecutableClip).ToArray();
         if (executableClips.Count != (spec.Clips?.Count ?? 0))
         {
-            diagnostics.Add(new VideoPlanDiagnostic(
-                VideoPlanDiagnosticSeverity.Warning,
+            diagnostics.Add(new PlanDiagnostic(
+                PlanDiagnosticSeverity.Warning,
                 "inactive-clips-ignored",
                 "Clips without a source video or active stages were ignored by the execution plan."));
         }
@@ -47,8 +47,8 @@ internal static class VideoExecutionPlanCompiler
         {
             if (!seenClipIds.Add(clip.Id))
             {
-                diagnostics.Add(new VideoPlanDiagnostic(
-                    VideoPlanDiagnosticSeverity.Error,
+                diagnostics.Add(new PlanDiagnostic(
+                    PlanDiagnosticSeverity.Error,
                     "duplicate-clip-id",
                     $"Clip id {clip.Id} is duplicated; only its first occurrence is planned.",
                     clip.Id));
@@ -65,23 +65,20 @@ internal static class VideoExecutionPlanCompiler
         {
             ClipArchitectureAssignment assignment =
                 architecturePlanning.Clips.GetValueOrDefault(activeClips[i].Id);
+            ArchitectureEntryMode entryMode = ResolveEntryMode(spec, rootEnvironment, activeClips[i]);
             IArchitectureClipPayload architecturePayload = null;
             if (assignment is not null)
             {
-                IReadOnlyList<VideoPlanDiagnostic> capabilityDiagnostics =
+                IReadOnlyList<PlanDiagnostic> capabilityDiagnostics =
                     ArchitectureCapabilityValidator.Validate(
                         activeClips[i],
                         assignment.Architecture,
-                        ResolveEntryMode(spec, rootEnvironment, activeClips[i]),
+                        entryMode,
                         assignment.StageModels);
                 diagnostics.AddRange(capabilityDiagnostics);
                 if (!capabilityDiagnostics.Any(diagnostic =>
-                    diagnostic.Severity == VideoPlanDiagnosticSeverity.Error))
+                    diagnostic.Severity == PlanDiagnosticSeverity.Error))
                 {
-                    ArchitectureEntryMode entryMode = ResolveEntryMode(
-                        spec,
-                        rootEnvironment,
-                        activeClips[i]);
                     ArchitectureClipCompilation architectureCompilation =
                         assignment.Module.ValidateAndCompileClip(
                             activeClips[i],
@@ -94,7 +91,7 @@ internal static class VideoExecutionPlanCompiler
                                 HasPreviousClipOutput: i > 0));
                     diagnostics.AddRange(architectureCompilation.Diagnostics);
                     if (!architectureCompilation.Diagnostics.Any(diagnostic =>
-                        diagnostic.Severity == VideoPlanDiagnosticSeverity.Error))
+                        diagnostic.Severity == PlanDiagnosticSeverity.Error))
                     {
                         architecturePayload = architectureCompilation.Payload;
                     }
@@ -111,6 +108,7 @@ internal static class VideoExecutionPlanCompiler
                     activeClips.Count > 1,
                     totalStageCount,
                     firstStageOrdinal,
+                    entryMode,
                     assignment,
                     architecturePayload)));
             firstStageOrdinal += activeClips[i].Stages?.Count ?? 0;
@@ -123,10 +121,10 @@ internal static class VideoExecutionPlanCompiler
         IReadOnlyList<BoundaryPlan> resolvedBoundaries = boundaryBudget.Boundaries;
         if (boundaryBudget.Degraded)
         {
-            diagnostics.Add(new VideoPlanDiagnostic(
-                VideoPlanDiagnosticSeverity.Warning,
+            diagnostics.Add(new PlanDiagnostic(
+                PlanDiagnosticSeverity.Warning,
                 "boundary-frame-budget-reconciled",
-                $"VideoStages: {boundaryBudget.Reason}."));
+                $"{boundaryBudget.Reason}."));
         }
         IVideoArchitectureModule[] modules = [
             .. activeClips
@@ -157,29 +155,22 @@ internal static class VideoExecutionPlanCompiler
             Array.AsReadOnly(clips.ToArray()),
             Array.AsReadOnly(resolvedBoundaries.ToArray()),
             Array.AsReadOnly(diagnostics.ToArray()));
-        ImmutableArray<AudioTrackSpec> authoredAudioTracks =
-            TimelineAudioSegmentTrackSpecPlanner.Compile(
-                spec.TimelineAudioSegments,
-                plan);
-        AudioTimelinePlan audioTimeline = AudioTimelinePlanCompiler.Compile(
+        AudioTimelineCompilation audio = AudioTimelinePlanCompiler.Compile(
             plan,
-            authoredAudioTracks);
+            spec.TimelineAudioSegments);
+        AudioTimelinePlan audioTimeline = audio.Plan;
         IReadOnlyList<ClipPlan> clipsWithTimelineAudio =
             TimelineAudioSegmentPlanProjector.Apply(
                 plan.Clips,
                 audioTimeline,
-                authoredAudioTracks.Select(track => track.TrackId).ToHashSet(
+                audio.AuthoredTracks.Select(track => track.TrackId).ToHashSet(
                     StringComparer.Ordinal));
         // Audio diagnostics are collected only once the timeline projection has run, because the
         // projected segments are what a clip's audio plan finally owns.
         foreach (ClipPlan clipPlan in clipsWithTimelineAudio)
         {
             diagnostics.AddRange(clipPlan.Audio.Diagnostics.Select(audioDiagnostic =>
-                new VideoPlanDiagnostic(
-                    VideoPlanDiagnosticSeverity.Warning,
-                    audioDiagnostic.Code,
-                    audioDiagnostic.Message,
-                    clipPlan.ClipId)));
+                audioDiagnostic with { ClipId = audioDiagnostic.ClipId ?? clipPlan.ClipId }));
             VideoArchitectureDescriptor descriptor = architecturePlanning.Clips
                 .GetValueOrDefault(clipPlan.ClipId)?.Architecture;
             if (descriptor is not null)
@@ -190,7 +181,7 @@ internal static class VideoExecutionPlanCompiler
                         descriptor));
             }
         }
-        diagnostics.AddRange(audioTimeline.Diagnostics.Select(MapAudioTimelineDiagnostic));
+        diagnostics.AddRange(audioTimeline.Diagnostics);
         return plan with
         {
             HasConfiguredResolution = spec.HasConfiguredResolution,
@@ -199,19 +190,6 @@ internal static class VideoExecutionPlanCompiler
             AudioTimeline = audioTimeline,
         };
     }
-
-    private static VideoPlanDiagnostic MapAudioTimelineDiagnostic(
-        AudioTimelineDiagnostic diagnostic) =>
-        new(
-            diagnostic.Severity switch
-            {
-                AudioTimelineDiagnosticSeverity.Info => VideoPlanDiagnosticSeverity.Info,
-                AudioTimelineDiagnosticSeverity.Warning => VideoPlanDiagnosticSeverity.Warning,
-                _ => VideoPlanDiagnosticSeverity.Error,
-            },
-            diagnostic.Code,
-            diagnostic.Message,
-            diagnostic.ClipId);
 
     private static bool IsExecutableClip(ClipSpec clip) =>
         clip is not null && (clip.SourceVideo is not null || clip.Stages is { Count: > 0 });
@@ -222,7 +200,9 @@ internal static class VideoExecutionPlanCompiler
         ClipSpec clip) =>
         clip.SourceVideo is not null
             ? ArchitectureEntryMode.SourceVideo
-            : rootEnvironment.HostKind == HostRootKind.GlobalRefineSource
+            // The environment always reports the host kind; global refine arrives as its own flag
+            // and only RootPlanCompiler promotes it to a root kind.
+            : rootEnvironment.HasGlobalRefineSource
                 ? ArchitectureEntryMode.RefineVideo
                 : spec.IsTextToVideo
                     ? ArchitectureEntryMode.TextToVideo

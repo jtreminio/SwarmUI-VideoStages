@@ -11,8 +11,8 @@ internal static class BoundaryPlanCompiler
         IReadOnlyList<ClipPlan> plannedClips = null)
     {
         ImmutableArray<BoundaryPlan>.Builder boundaries = ImmutableArray.CreateBuilder<BoundaryPlan>();
-        ImmutableArray<VideoPlanDiagnostic>.Builder diagnostics =
-            ImmutableArray.CreateBuilder<VideoPlanDiagnostic>();
+        ImmutableArray<PlanDiagnostic>.Builder diagnostics =
+            ImmutableArray.CreateBuilder<PlanDiagnostic>();
         for (int i = 0; i < clips.Count - 1; i++)
         {
             ClipSpec from = clips[i];
@@ -42,8 +42,8 @@ internal static class BoundaryPlanCompiler
             {
                 effective = BoundaryExecutionMode.Cut;
                 fallback = BoundaryFallback.ArchitectureRuleUnsupported;
-                diagnostics.Add(new VideoPlanDiagnostic(
-                    VideoPlanDiagnosticSeverity.Error,
+                diagnostics.Add(new PlanDiagnostic(
+                    PlanDiagnosticSeverity.Error,
                     "boundary-cross-architecture-non-cut",
                     $"Clip {from.Id} boundary '{from.BoundaryOut}' is invalid between "
                         + $"architecture '{plannedFrom.Architecture.Id}' and "
@@ -56,8 +56,8 @@ internal static class BoundaryPlanCompiler
             {
                 effective = BoundaryExecutionMode.Cut;
                 fallback = BoundaryFallback.ArchitectureRuleUnsupported;
-                diagnostics.Add(new VideoPlanDiagnostic(
-                    VideoPlanDiagnosticSeverity.Error,
+                diagnostics.Add(new PlanDiagnostic(
+                    PlanDiagnosticSeverity.Error,
                     rule.Code,
                     rule.Reason,
                     from.Id));
@@ -80,8 +80,8 @@ internal static class BoundaryPlanCompiler
                 || (plannedTo is null && to.Stages is { Count: > 0 });
             if (fallback != BoundaryFallback.None)
             {
-                diagnostics.Add(new VideoPlanDiagnostic(
-                    VideoPlanDiagnosticSeverity.Warning,
+                diagnostics.Add(new PlanDiagnostic(
+                    PlanDiagnosticSeverity.Warning,
                     $"boundary-{fallback.ToString().ToLowerInvariant()}",
                     $"Clip {from.Id} boundary '{from.BoundaryOut}' falls back to a cut: {DescribeFallback(fallback)}",
                     from.Id));
@@ -90,8 +90,8 @@ internal static class BoundaryPlanCompiler
                 && effective != BoundaryExecutionMode.Cut
                 && !targetHasGenerationStage)
             {
-                diagnostics.Add(new VideoPlanDiagnostic(
-                    VideoPlanDiagnosticSeverity.Warning,
+                diagnostics.Add(new PlanDiagnostic(
+                    PlanDiagnosticSeverity.Warning,
                     "boundary-audio-carry-target-has-no-stage",
                     $"Clip {from.Id} cannot carry audio across its '{from.BoundaryOut}' boundary "
                         + "because the next clip has no generation stage to consume it.",
@@ -158,4 +158,4 @@ internal static class BoundaryPlanCompiler
 
 internal sealed record BoundaryPlanningResult(
     ImmutableArray<BoundaryPlan> Boundaries,
-    ImmutableArray<VideoPlanDiagnostic> Diagnostics);
+    ImmutableArray<PlanDiagnostic> Diagnostics);

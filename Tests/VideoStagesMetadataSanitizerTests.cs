@@ -142,10 +142,11 @@ public class MetadataSanitizerTests
     }
 
     [Fact]
-    public void StripUploadData_BareClipArrayRoot_IsLeftUnchanged()
+    public void StripUploadData_BareClipArrayRoot_IsRefusedRatherThanPublished()
     {
-        // The document envelope is always a versioned root object; a bare clip array is not a
-        // Video Stages document, so the sanitizer leaves it alone.
+        // The document envelope is always a versioned root object. The sanitizer cannot walk any
+        // other shape, so it refuses to publish it rather than emitting the base64 it exists to
+        // strip.
         string raw = new JArray
         {
             new JObject
@@ -157,13 +158,28 @@ public class MetadataSanitizerTests
                 }
             }
         }.ToString();
-        Assert.Equal(raw, MetadataSanitizer.StripUploadDataFromJsonParameter(raw));
+
+        string sanitized = MetadataSanitizer.StripUploadDataFromJsonParameter(raw);
+
+        Assert.Equal(MetadataSanitizer.Unsanitizable, sanitized);
+        Assert.DoesNotContain("QUJD", sanitized);
     }
 
     [Fact]
-    public void StripUploadData_InvalidJson_ReturnsOriginal()
+    public void StripUploadData_InvalidJson_IsRefusedRatherThanPublished()
     {
-        string raw = "{not json";
-        Assert.Equal(raw, MetadataSanitizer.StripUploadDataFromJsonParameter(raw));
+        string raw = "{not json \"data\": \"data:audio/wav;base64,QUJD\"";
+
+        string sanitized = MetadataSanitizer.StripUploadDataFromJsonParameter(raw);
+
+        Assert.Equal(MetadataSanitizer.Unsanitizable, sanitized);
+        Assert.DoesNotContain("QUJD", sanitized);
+    }
+
+    [Fact]
+    public void StripUploadData_BlankInput_IsPassedThrough()
+    {
+        Assert.Equal("", MetadataSanitizer.StripUploadDataFromJsonParameter(""));
+        Assert.Null(MetadataSanitizer.StripUploadDataFromJsonParameter(null));
     }
 }

@@ -118,7 +118,7 @@ public class VideoExecutionPlanCompilerTests
         Assert.Empty(compiled.Stages[1].RequireLtx2Payload().IcLoras);
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.reuse.requires_three_stages"
-            && diagnostic.Severity == VideoPlanDiagnosticSeverity.Warning
+            && diagnostic.Severity == PlanDiagnosticSeverity.Warning
             && diagnostic.ClipId == clip.Id);
     }
 
@@ -347,7 +347,7 @@ public class VideoExecutionPlanCompilerTests
 
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "prompt-relay-dynamic-length-unsupported"
-            && diagnostic.Severity == VideoPlanDiagnosticSeverity.Error
+            && diagnostic.Severity == PlanDiagnosticSeverity.Error
             && diagnostic.ClipId == clip.Id);
     }
 
@@ -365,7 +365,7 @@ public class VideoExecutionPlanCompilerTests
 
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "retake-frame-references-unsupported"
-            && diagnostic.Severity == VideoPlanDiagnosticSeverity.Error);
+            && diagnostic.Severity == PlanDiagnosticSeverity.Error);
     }
 
     [Fact]
@@ -389,7 +389,7 @@ public class VideoExecutionPlanCompilerTests
 
         Assert.Contains(mixed.Diagnostics, diagnostic =>
             diagnostic.Code == "mixed-hdr-timeline-unsupported"
-            && diagnostic.Severity == VideoPlanDiagnosticSeverity.Error);
+            && diagnostic.Severity == PlanDiagnosticSeverity.Error);
         Assert.DoesNotContain(
             allHdr.Diagnostics,
             diagnostic => diagnostic.Code == "mixed-hdr-timeline-unsupported");
@@ -407,7 +407,7 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(4, plan.Clips[0].ClipId);
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "duplicate-clip-id"
-                && diagnostic.Severity == VideoPlanDiagnosticSeverity.Error);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
     }
 
     [Fact]
@@ -430,7 +430,7 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(0, boundary.ContinuityWindowFrames);
         Assert.Contains(plan.Diagnostics, d =>
             d.Code == "boundary-cross-architecture-non-cut"
-            && d.Severity == VideoPlanDiagnosticSeverity.Error);
+            && d.Severity == PlanDiagnosticSeverity.Error);
     }
 
     [Fact]
@@ -533,7 +533,7 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal([10d, 10.5d, 12.5d], projected.Select(item => item.TrimStartSeconds));
         Assert.All(projected, item =>
         {
-            Assert.Equal(AudioSegmentSourceKind.Upload, item.SourceKind);
+            Assert.Equal(AudioSourceKind.Upload, item.SourceKind);
             Assert.Equal("dialogue.wav", item.UploadedMedia.FileName);
             Assert.Equal(0.75, item.Volume);
         });

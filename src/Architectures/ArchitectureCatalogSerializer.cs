@@ -312,13 +312,13 @@ internal static class ArchitectureCatalogSerializer
         _ => throw new ArgumentOutOfRangeException(nameof(effect)),
     };
 
-    private static string SerializeAudioSourceKind(ArchitectureAudioSourceKind kind) => kind switch
+    private static string SerializeAudioSourceKind(AudioSourceKind kind) => kind switch
     {
-        ArchitectureAudioSourceKind.Disabled => "Disabled",
-        ArchitectureAudioSourceKind.Native => "Native",
-        ArchitectureAudioSourceKind.Upload => "Upload",
-        ArchitectureAudioSourceKind.ControlNet => "ControlNet",
-        ArchitectureAudioSourceKind.AceStepFun => "AceStepFun",
+        AudioSourceKind.Disabled => "Disabled",
+        AudioSourceKind.Native => "Native",
+        AudioSourceKind.Upload => "Upload",
+        AudioSourceKind.ControlNet => "ControlNet",
+        AudioSourceKind.AceStepFun => "AceStepFun",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

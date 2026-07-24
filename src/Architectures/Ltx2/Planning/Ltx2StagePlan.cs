@@ -33,6 +33,17 @@ internal static class Ltx2StagePlanExtensions
         }
         return payload;
     }
+
+    internal static Ltx2ClipPayload RequireLtx2Payload(this ClipPlan clip)
+    {
+        ArgumentNullException.ThrowIfNull(clip);
+        if (clip.ArchitecturePayload is not Ltx2ClipPayload payload)
+        {
+            throw new InvalidOperationException(
+                $"Clip {clip.ClipId} has no LTX architecture payload.");
+        }
+        return payload;
+    }
 }
 
 internal sealed record StageCorePlan(

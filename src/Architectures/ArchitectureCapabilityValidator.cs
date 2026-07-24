@@ -6,20 +6,20 @@ namespace VideoStages.Architectures;
 /// <summary>Rejects architecture-owned settings before an architecture module receives a clip.</summary>
 internal static class ArchitectureCapabilityValidator
 {
-    internal static IReadOnlyList<VideoPlanDiagnostic> Validate(
+    internal static IReadOnlyList<PlanDiagnostic> Validate(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,
         ArchitectureEntryMode entryMode,
         IReadOnlyDictionary<int, ResolvedVideoModel> stageModels)
     {
-        List<VideoPlanDiagnostic> diagnostics = [];
+        List<PlanDiagnostic> diagnostics = [];
         bool hasActiveStages = clip.Stages is { Count: > 0 };
         void Require(bool configured, bool supported, string option)
         {
             if (configured && !supported)
             {
                 diagnostics.Add(new(
-                    VideoPlanDiagnosticSeverity.Error,
+                    PlanDiagnosticSeverity.Error,
                     "architecture-capability-unsupported",
                     $"Clip {clip.Id} configures '{option}', which architecture "
                         + $"'{descriptor.Id}' does not support.",
@@ -121,14 +121,14 @@ internal static class ArchitectureCapabilityValidator
     /// projected onto each clip's plan after clip compilation, so the capability can only be
     /// checked against that projection.
     /// </summary>
-    internal static IReadOnlyList<VideoPlanDiagnostic> ValidateProjectedAudioSegments(
+    internal static IReadOnlyList<PlanDiagnostic> ValidateProjectedAudioSegments(
         ClipPlan clip,
         VideoArchitectureDescriptor descriptor) =>
         clip.Audio.Segments.Items.IsEmpty
             || Has(descriptor.Capabilities.Clip, ClipCapability.AudioSegments)
             ? []
             : [new(
-                VideoPlanDiagnosticSeverity.Error,
+                PlanDiagnosticSeverity.Error,
                 "architecture-capability-unsupported",
                 $"Clip {clip.ClipId} configures 'audio segments', which architecture "
                     + $"'{descriptor.Id}' does not support.",
@@ -137,57 +137,35 @@ internal static class ArchitectureCapabilityValidator
     private static void ValidateAudioSourceKind(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,
-        ICollection<VideoPlanDiagnostic> diagnostics)
+        ICollection<PlanDiagnostic> diagnostics)
     {
-        ArchitectureAudioSourceKind? kind = ResolveAudioSourceKind(
-            clip.AudioSource,
-            descriptor);
-        if (kind is null)
+        AudioSourceKind kind = AudioSourceParser.Parse(clip.AudioSource).Kind;
+        if (kind == AudioSourceKind.Unknown)
         {
-            diagnostics.Add(Unsupported(
-                clip,
-                descriptor,
-                $"unknown audio source kind '{clip.AudioSource}'"));
+            // AudioBaseSourcePlanCompiler owns the unknown-source error for every clip, whether or
+            // not an architecture was resolved, so re-reporting it here would only duplicate it.
             return;
         }
-        if (descriptor.AudioSourceKinds.Contains(kind.Value))
+        if (kind == AudioSourceKind.Native
+            && !descriptor.AudioSourceKinds.Contains(AudioSourceKind.Native))
+        {
+            kind = AudioSourceKind.Disabled;
+        }
+        if (descriptor.AudioSourceKinds.Contains(kind))
         {
             return;
         }
         diagnostics.Add(Unsupported(
             clip,
             descriptor,
-            $"audio source kind '{kind.Value}'"));
-    }
-
-    private static ArchitectureAudioSourceKind? ResolveAudioSourceKind(
-        string raw,
-        VideoArchitectureDescriptor descriptor)
-    {
-        if (StringUtils.Equals(raw, Constants.AudioSourceNative))
-        {
-            return descriptor.AudioSourceKinds.Contains(ArchitectureAudioSourceKind.Native)
-                ? ArchitectureAudioSourceKind.Native
-                : ArchitectureAudioSourceKind.Disabled;
-        }
-        if (StringUtils.Equals(raw, Constants.AudioSourceUpload))
-        {
-            return ArchitectureAudioSourceKind.Upload;
-        }
-        if (StringUtils.Equals(raw, Constants.AudioSourceControlNet))
-        {
-            return ArchitectureAudioSourceKind.ControlNet;
-        }
-        return AudioHandler.TryParseAceStepFunAudioSource(raw, out _)
-            ? ArchitectureAudioSourceKind.AceStepFun
-            : null;
+            $"audio source kind '{kind}'"));
     }
 
     private static void ValidateStages(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,
         IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
-        ICollection<VideoPlanDiagnostic> diagnostics)
+        ICollection<PlanDiagnostic> diagnostics)
     {
         IReadOnlyList<StageSpec> stages = clip.Stages ?? [];
         for (int stageIndex = 0; stageIndex < stages.Count; stageIndex++)
@@ -296,7 +274,7 @@ internal static class ArchitectureCapabilityValidator
         StageSpec stage,
         ResolvedVideoModel resolved,
         VideoModelProfileDescriptor profile,
-        ICollection<VideoPlanDiagnostic> diagnostics)
+        ICollection<PlanDiagnostic> diagnostics)
     {
         if (configured
             && (profile is null || !Has(profile.Capabilities, capability)))
@@ -309,13 +287,13 @@ internal static class ArchitectureCapabilityValidator
         }
     }
 
-    private static VideoPlanDiagnostic Unsupported(
+    private static PlanDiagnostic Unsupported(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,
         string option,
         int? stageId = null) =>
         new(
-            VideoPlanDiagnosticSeverity.Error,
+            PlanDiagnosticSeverity.Error,
             "architecture-capability-unsupported",
             $"Clip {clip.Id} configures '{option}', which architecture "
                 + $"'{descriptor.Id}' does not support.",

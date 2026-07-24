@@ -1,3 +1,4 @@
+using VideoStages.Execution;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Planning;
 
@@ -128,7 +129,7 @@ internal static class BoundaryOverlapPlanner
     /// degrade to cuts.
     /// </summary>
     internal static BoundaryBudgetResolution ValidateRuntime(
-        IReadOnlyList<WGNodeData> clips,
+        IReadOnlyList<DecodedClipArtifact> clips,
         IReadOnlyList<BoundaryPlan> boundaries)
     {
         ArgumentNullException.ThrowIfNull(clips);
@@ -138,7 +139,7 @@ internal static class BoundaryOverlapPlanner
             return new(source, Degraded: false, Reason: null);
         }
 
-        WGNodeData first = clips.FirstOrDefault();
+        DecodedClipArtifact first = clips.FirstOrDefault();
         if (first is null
             || clips.Count != source.Count + 1
             || clips.Any(clip => !IsCompatibleRuntimeClip(clip, first)))
@@ -211,14 +212,15 @@ internal static class BoundaryOverlapPlanner
             _ => 0,
         };
 
-    private static bool IsCompatibleRuntimeClip(WGNodeData clip, WGNodeData first)
-    {
-        bool uniform = clip?.Width is int width && width > 0 && width == first.Width
-            && clip.Height is int height && height > 0 && height == first.Height
-            && SameFps(clip, first);
-        return clip?.Frames is > 0
-            && uniform;
-    }
+    private static bool IsCompatibleRuntimeClip(DecodedClipArtifact clip, DecodedClipArtifact first) =>
+        clip is not null
+        && clip.Frames > 0
+        && clip.Width > 0
+        && clip.Width == first.Width
+        && clip.Height > 0
+        && clip.Height == first.Height
+        && clip.FramesPerSecond > 0
+        && clip.FramesPerSecond == first.FramesPerSecond;
 
     private static bool SameEffectiveWindows(
         IReadOnlyList<BoundaryPlan> expected,
@@ -238,16 +240,5 @@ internal static class BoundaryOverlapPlanner
             }
         }
         return true;
-    }
-
-    private static bool SameFps(WGNodeData left, WGNodeData right)
-    {
-        int? leftFps = left.GetRawFPS();
-        int? rightFps = right.GetRawFPS();
-        return leftFps is int leftValue
-            && leftValue > 0
-            && rightFps is int rightValue
-            && rightValue > 0
-            && leftValue == rightValue;
     }
 }

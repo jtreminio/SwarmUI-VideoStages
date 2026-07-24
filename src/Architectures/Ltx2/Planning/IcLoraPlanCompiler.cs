@@ -10,7 +10,7 @@ namespace VideoStages.Architectures.Ltx2.Planning;
 /// </summary>
 internal static class IcLoraPlanCompiler
 {
-    internal static IReadOnlyList<VideoPlanDiagnostic> ValidateClip(ClipSpec clip) =>
+    internal static IReadOnlyList<PlanDiagnostic> ValidateClip(ClipSpec clip) =>
         ValidateClip(
             clip,
             new(
@@ -21,11 +21,11 @@ internal static class IcLoraPlanCompiler
                     ? ArchitectureEntryMode.ImageToVideo
                     : ArchitectureEntryMode.SourceVideo));
 
-    internal static IReadOnlyList<VideoPlanDiagnostic> ValidateClip(
+    internal static IReadOnlyList<PlanDiagnostic> ValidateClip(
         ClipSpec clip,
         ArchitectureClipCompileContext context)
     {
-        List<VideoPlanDiagnostic> diagnostics = [];
+        List<PlanDiagnostic> diagnostics = [];
         HashSet<int> authoredStageIndices = clip.AuthoredStages is { Count: > 0 }
             ? [.. clip.AuthoredStages.Select(stage => stage.RawIndex)]
             : [.. (clip.Stages ?? []).Select(stage => stage.ClipStageRawIndex)];
@@ -128,7 +128,7 @@ internal static class IcLoraPlanCompiler
             if (stage.IsPassthrough && applicable.Count > 0)
             {
                 diagnostics.Add(new(
-                    VideoPlanDiagnosticSeverity.Error,
+                    PlanDiagnosticSeverity.Error,
                     "ltx2.ic-lora.passthrough-stage",
                     $"Clip {clip.Id} stage {stage.ClipStageRawIndex} is passthrough, so applicable "
                         + $"IC-LoRAs ({string.Join(", ", applicable)}) cannot run; target a generating stage.",
@@ -137,7 +137,7 @@ internal static class IcLoraPlanCompiler
             if (audioEntries.Count > 1)
             {
                 diagnostics.Add(new(
-                    VideoPlanDiagnosticSeverity.Error,
+                    PlanDiagnosticSeverity.Error,
                     "ltx2.ic-lora.audio-drive-overlap",
                     $"Clip {clip.Id} stage {stage.ClipStageRawIndex} has overlapping audio-consuming "
                         + $"IC-LoRAs ({string.Join(", ", audioEntries)}); use one speaker drive per stage.",
@@ -315,7 +315,7 @@ internal static class IcLoraPlanCompiler
         IcLoraDriveMediaContract contract,
         IcLoraDriveMediaPlan driveMedia,
         IcLoraMediaInputPlan input,
-        ICollection<VideoPlanDiagnostic> diagnostics)
+        ICollection<PlanDiagnostic> diagnostics)
     {
         if (contract.DriveData == IcLoraDriveData.None)
         {
@@ -380,7 +380,7 @@ internal static class IcLoraPlanCompiler
         ClipSpec clip,
         IcLoraSpec entry,
         int entryIndex,
-        ICollection<VideoPlanDiagnostic> diagnostics)
+        ICollection<PlanDiagnostic> diagnostics)
     {
         if (entry.DriveMediaKinds is null)
         {
@@ -519,7 +519,7 @@ internal static class IcLoraPlanCompiler
         ClipSpec clip,
         IcLoraSpec entry,
         int index,
-        ICollection<VideoPlanDiagnostic> diagnostics)
+        ICollection<PlanDiagnostic> diagnostics)
     {
         if (!StringUtils.Equals(entry.Lora, IcLoraWeights.AutoModelToken))
         {
@@ -543,13 +543,13 @@ internal static class IcLoraPlanCompiler
         }
     }
 
-    private static VideoPlanDiagnostic Error(
+    private static PlanDiagnostic Error(
         ClipSpec clip,
         int entryIndex,
         string code,
         string detail) =>
         new(
-            VideoPlanDiagnosticSeverity.Error,
+            PlanDiagnosticSeverity.Error,
             code,
             $"Clip {clip.Id} IC-LoRA {entryIndex} {detail}.",
             clip.Id);

@@ -36,7 +36,7 @@ public class AudioTimelinePlanningComponentsTests
 
     private static AudioTrackSpec Track(string id, params AudioTrackSpanSpec[] spans) => new(
         id,
-        new AudioTimelineTrackSource(AudioTimelineTrackSourceKind.External, $"{id}.wav"),
+        new AudioTimelineTrackSource(AudioSourceKind.External, $"{id}.wav"),
         [.. spans]);
 
     [Fact]
@@ -46,7 +46,7 @@ public class AudioTimelinePlanningComponentsTests
             Clip(0, frames: 49, boundary: Constants.BoundaryOutContinue, overlap: 8),
             Clip(1, frames: 49));
 
-        AudioTimelineClipWindowPlanningResult result = AudioTimelineClipWindowPlanner.Compile(video);
+        AudioTimelinePlan result = AudioTimelinePlanCompiler.Compile(video);
 
         Assert.Equal(40d / Fps, result.ClipWindows[0].DurationSeconds!.Value, 8);
         Assert.Equal(40d / Fps, result.ClipWindows[1].TimelineStartSeconds!.Value, 8);
@@ -129,7 +129,7 @@ public class AudioTimelinePlanningComponentsTests
     [Fact]
     public void Validation_planner_reports_partition_errors_before_cross_track_overlap_information()
     {
-        AudioTimelineTrackSource source = new(AudioTimelineTrackSourceKind.External, "source.wav");
+        AudioTimelineTrackSource source = new(AudioSourceKind.External, "source.wav");
         ImmutableArray<AudioTimelineTrackPlan> tracks =
         [
             new("first", source,
@@ -141,7 +141,7 @@ public class AudioTimelinePlanningComponentsTests
             [new("second", 0, 0, 0.5, 1, 0)]),
         ];
 
-        ImmutableArray<AudioTimelineDiagnostic> diagnostics = AudioTimelineValidationPlanner.Validate(tracks);
+        ImmutableArray<PlanDiagnostic> diagnostics = AudioTimelineValidationPlanner.Validate(tracks);
 
         Assert.Equal(
             ["audio.timeline.span.non_partitioning_projection", "audio.timeline.overlapping_tracks"],
@@ -172,32 +172,28 @@ public class AudioTimelinePlanningComponentsTests
 
     [Theory]
     [MemberData(nameof(FacadeParityCases))]
-    public void Facade_matches_component_composition_for_audio_timeline_contract(
+    public void Compiler_is_deterministic_and_projects_each_clip_window_once(
         string _,
         object videoInput,
         object tracksInput)
     {
         VideoExecutionPlan video = Assert.IsType<VideoExecutionPlan>(videoInput);
         ImmutableArray<AudioTrackSpec> tracks = Assert.IsType<ImmutableArray<AudioTrackSpec>>(tracksInput);
-        AudioTimelinePlan expected = Compose(video, tracks);
+
         AudioTimelinePlan actual = AudioTimelinePlanCompiler.Compile(video, tracks);
 
-        Assert.Equal(Serialize(expected), Serialize(actual));
-    }
-
-    private static AudioTimelinePlan Compose(VideoExecutionPlan video, ImmutableArray<AudioTrackSpec> tracks)
-    {
-        AudioTimelineClipWindowPlanningResult clipWindowPlan = AudioTimelineClipWindowPlanner.Compile(video);
-        AudioTimelineTrackProjectionResult trackPlan = AudioTimelineTrackSpanProjector.Project(
-            ClipAudioTrackSpecPlanner.Compile(video).AddRange(tracks),
-            clipWindowPlan.ClipWindows,
-            clipWindowPlan.ClipIndices);
-        return new(
-            clipWindowPlan.ClipWindows,
-            trackPlan.Tracks,
-            clipWindowPlan.Diagnostics
-                .AddRange(trackPlan.Diagnostics)
-                .AddRange(AudioTimelineValidationPlanner.Validate(trackPlan.Tracks)));
+        Assert.Equal(
+            Serialize(AudioTimelinePlanCompiler.Compile(video, tracks)),
+            Serialize(actual));
+        Assert.Equal(
+            video.Clips.Select(clip => clip.ClipId),
+            actual.ClipWindows.Select(window => window.ClipId));
+        // The clip-window pass used to run twice per plan; every window diagnostic must be unique.
+        Assert.All(
+            actual.Diagnostics
+                .Where(diagnostic => diagnostic.Code.StartsWith("audio.timeline.clip"))
+                .GroupBy(diagnostic => (diagnostic.Code, diagnostic.ClipId)),
+            group => Assert.Single(group));
     }
 
     private static string Serialize(AudioTimelinePlan plan) =>

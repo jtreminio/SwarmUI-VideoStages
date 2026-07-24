@@ -19,12 +19,18 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
     {
         int trimStartFrames = g.UserInput.Get(T2IParamTypes.TrimVideoStartFrames, 0);
         int trimEndFrames = g.UserInput.Get(T2IParamTypes.TrimVideoEndFrames, 0);
-        if ((trimStartFrames == 0 && trimEndFrames == 0)
-            || g.CurrentMedia?.Path is not JArray { Count: 2 } currentPath)
+        if (trimStartFrames == 0 && trimEndFrames == 0)
         {
             return;
         }
-
+        // A requested trim is never dropped: an unusable output is the same failure as the
+        // non-video output rejected below, and silently publishing untrimmed video hides it.
+        if (g.CurrentMedia?.Path is not JArray { Count: 2 } currentPath)
+        {
+            throw new SwarmUserErrorException(
+                "VideoStages: the final output uses global frame trim, but the timeline produced "
+                + "no decoded output to trim.");
+        }
         if (g.CurrentMedia.DataType != WGNodeData.DT_VIDEO)
         {
             throw new SwarmUserErrorException(

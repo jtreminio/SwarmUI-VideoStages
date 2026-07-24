@@ -59,9 +59,7 @@ public class ArchitectureRuntimeOwnershipTests
         RecordingFactory future = new(new("future-arch"));
         ArchitectureRuntimeSessionFactoryRegistry registry = new([sourced, future]);
         AudioRuntimeSources audio = EmptyAudio();
-        RootExecutionPolicy policy = new(
-            plan.Root,
-            RootExecutionFacts.FromPlan(plan, hasInstalledRefineSource: false));
+        RootExecutionPolicy policy = new(plan);
 
         registry.PrepareTimeline(new(plan, audio, policy));
 
@@ -181,7 +179,7 @@ public class ArchitectureRuntimeOwnershipTests
             id,
             profileId,
             [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo],
-            [ArchitectureAudioSourceKind.Native],
+            [AudioSourceKind.Native],
             [new(profileId, profileId.Value, ModelProfileCapability.None, [])],
             new(
                 ArchitectureCapability.GeneratedEntry | ArchitectureCapability.SourcedEntry,

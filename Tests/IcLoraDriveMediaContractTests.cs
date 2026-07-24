@@ -100,7 +100,7 @@ public class IcLoraDriveMediaContractTests
                 DriveMediaKinds: ["image"]),
         ]);
 
-        IReadOnlyList<VideoPlanDiagnostic> diagnostics =
+        IReadOnlyList<PlanDiagnostic> diagnostics =
             IcLoraPlanCompiler.ValidateClip(clip);
 
         Assert.Equal(
@@ -133,7 +133,7 @@ public class IcLoraDriveMediaContractTests
             24,
             (ArchitectureEntryMode)entryMode);
 
-        IReadOnlyList<VideoPlanDiagnostic> diagnostics =
+        IReadOnlyList<PlanDiagnostic> diagnostics =
             IcLoraPlanCompiler.ValidateClip(clip, context);
 
         Assert.Equal(
