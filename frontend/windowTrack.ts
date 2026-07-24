@@ -1,6 +1,6 @@
 /**
- * Shared gesture lifecycle for the three "window on a clip lane" tracks
- * (retake, audio segments, relay prompt windows). Each track was originally a
+ * Shared gesture lifecycle for every "span on a lane" track (retake, relay
+ * prompt windows, timeline-wide audio segments). Each track was originally a
  * near-verbatim copy of the same move / edge-resize / drag-to-create-with-
  * ghost / tap-create / shift-click-delete machinery; this factory owns that
  * skeleton once, and the tracks supply a config of selectors plus PURE
@@ -10,9 +10,14 @@
  * preview and the commit, so a preview can never show a position the commit
  * would reject (the old prompt-track preview/commit clamp drift).
  *
- * Press-time state: previews compute against the CLIP SNAPSHOT taken at
- * press (no model reads per mousemove); commits re-read the live model and
- * are guarded by the carrier stale-token, so both see identical values.
+ * Press-time state: previews compute against the LANE SNAPSHOT taken at press
+ * (no model reads per mousemove); commits re-read the live model through the
+ * scope and are guarded by the carrier stale-token, so both see identical
+ * values.
+ *
+ * The owning entity is a `scope`, not a clip: clip-lane tracks use
+ * `clipWindowTrackScope`, and the audio track owns whole `AudioTrack`s keyed by
+ * `data-track-idx` against the total timeline duration.
  */
 
 import { clamp } from "./constants";
@@ -114,13 +119,69 @@ export const resizeSpanEdge = (
     return { start, length: end - start };
 };
 
-export interface WindowTrackConfig {
+/** The entity a lane's spans belong to, plus that lane's own duration. */
+export interface WindowTrackLane<TOwner> {
+    owner: TOwner;
+    ownerIdx: number;
+    duration: number;
+}
+
+/**
+ * A lane press targeted by a create gesture. `owner` is null when the gesture
+ * would materialise it (a new audio track).
+ */
+export interface WindowTrackCreateLane<TOwner> {
+    owner: TOwner | null;
+    ownerIdx: number;
+    duration: number;
+}
+
+/** A lane inside a write transaction; the scope persists what `mutate` changes. */
+export interface WindowTrackTxn<TOwner> extends WindowTrackLane<TOwner> {
+    /**
+     * Drop the owning entity itself (the audio track behind its last span);
+     * returns how many owners remain. Absent for scopes whose owners outlive
+     * their spans.
+     */
+    removeOwner?(): number;
+}
+
+/**
+ * Resolves which entity a lane's spans belong to and owns the read/write path
+ * to it. This is the whole of a track's domain scope: everything else in the
+ * config is DOM selectors and pure geometry.
+ */
+export interface WindowTrackScope<TOwner> {
+    /** Live lane for press-time previews and guards. */
+    read(ownerIdx: number): WindowTrackLane<TOwner> | null;
+    /** Lane press → the entity a create targets, plus the lane duration. */
+    resolveLane(lane: HTMLElement): WindowTrackCreateLane<TOwner> | null;
+    /**
+     * Runs `mutate` against a writable copy and persists it when `mutate`
+     * returns true. With `create`, the entity is materialised when missing.
+     */
+    write(
+        ownerIdx: number,
+        create: boolean,
+        mutate: (txn: WindowTrackTxn<TOwner>) => boolean,
+    ): boolean;
+}
+
+/** Snap candidates for a lane: `primary` wins over `fallback` when both are in range. */
+export interface WindowTrackSnapTargets {
+    primary: number[];
+    fallback: number[];
+}
+
+export interface WindowTrackConfig<TOwner = Clip> {
     routeId: string;
     priority: number;
-    origin: UpdateOrigin;
-    /** The draggable span element; carries data-clip-idx. */
+    scope: WindowTrackScope<TOwner>;
+    /** The draggable span element; carries the owner-index attribute. */
     spanSelector: string;
-    /** Per-item index attribute on the span; null = one span per clip (index 0). */
+    /** Owner-index attribute on the span and lane; defaults to data-clip-idx. */
+    ownerIdxAttr?: string;
+    /** Per-item index attribute on the span; null = one span per owner (index 0). */
     itemIdxAttr: string | null;
     edgeSelector: string;
     /** Attribute on the grip holding "left" (anything else = right). */
@@ -129,7 +190,7 @@ export interface WindowTrackConfig {
     laneSelector: string;
     draggingClass: string;
     ghostClass: string;
-    /** Preview/ghost positioning: % of the clip lane, or px at the live pps. */
+    /** Preview/ghost positioning: % of the lane, or px at the live pps. */
     unit: "pct" | "px";
     /** Install an Enter/Space select handler on the span. */
     keyboardSelect: boolean;
@@ -144,34 +205,43 @@ export interface WindowTrackConfig {
      * tracks use this to reopen/reveal a manually closed sidebar section.
      */
     revealOnActivate?: boolean;
-    readSpan(clip: Clip, itemIdx: number): PressSpan | null;
+    readSpan(lane: WindowTrackLane<TOwner>, itemIdx: number): PressSpan | null;
     /** Existing unsupported persisted spans remain selectable/removable only. */
-    canEdit?(clip: Clip): boolean;
+    canEdit?(lane: WindowTrackLane<TOwner>): boolean;
     /** Lane-press guard (retake: only when the clip has none yet). */
-    canCreate?(clip: Clip): boolean;
+    canCreate?(lane: WindowTrackCreateLane<TOwner>): boolean;
+    /**
+     * Snap candidates for this lane. Defaults to the lane's own walls; the
+     * audio track supplies adjacent-track edges and clip boundaries instead.
+     */
+    snapTargets?(ownerIdx: number, duration: number): WindowTrackSnapTargets;
     /** Pure clamped start for a move; drives both preview and commit. */
     moveTargetStart(
-        clip: Clip,
+        lane: WindowTrackLane<TOwner>,
         itemIdx: number,
         press: PressSpan,
         desiredStart: number,
     ): number;
     writeMove(
-        clip: Clip,
+        txn: WindowTrackTxn<TOwner>,
         itemIdx: number,
         press: PressSpan,
         start: number,
     ): void;
     /** Pure clamped geometry for an edge resize; drives preview and commit. */
     resizeTarget(
-        clip: Clip,
+        lane: WindowTrackLane<TOwner>,
         itemIdx: number,
         edge: "left" | "right",
         press: PressSpan,
         deltaSec: number,
     ): SpanGeom;
+    /**
+     * Persist an edge resize. A track whose span carries a source trim (audio)
+     * advances it here from `press.trim` and the committed geometry.
+     */
     writeResize(
-        clip: Clip,
+        txn: WindowTrackTxn<TOwner>,
         itemIdx: number,
         edge: "left" | "right",
         press: PressSpan,
@@ -179,17 +249,22 @@ export interface WindowTrackConfig {
     ): void;
     /**
      * Place a new span from a lane gesture (endSec null = plain tap). Mutates
-     * the clip and returns the selection to adopt, or null to reject.
+     * the owner and returns the selection to adopt, or null to reject.
      */
     createSpan(
-        clip: Clip,
-        clipIdx: number,
+        txn: WindowTrackTxn<TOwner>,
         startSec: number,
         endSec: number | null,
     ): TimelineSelection | null;
-    /** Shift-click delete; true when something was removed. */
-    deleteItem(clip: Clip, itemIdx: number): boolean;
-    selectionFor(clipIdx: number, itemIdx: number): TimelineSelection;
+    /**
+     * Shift-click delete; mutates and returns the selection to adopt (see
+     * `selectionAfterRemoval`), or null when nothing was removed.
+     */
+    deleteItem(
+        txn: WindowTrackTxn<TOwner>,
+        itemIdx: number,
+    ): TimelineSelection | null;
+    selectionFor(ownerIdx: number, itemIdx: number): TimelineSelection;
     /** Body-click fallthrough for presses outside any span (prompt's MAJOR row). */
     onClickFallthrough?(event: MouseEvent, target: Element): void;
 }
@@ -199,44 +274,86 @@ export interface WindowTrack {
     dispose(): void;
 }
 
-interface MoveState {
-    clipIdx: number;
+/**
+ * The clip-lane scope: spans belong to a `Clip` resolved from `data-clip-idx`,
+ * and the lane is the clip's own duration.
+ */
+export const clipWindowTrackScope = (
+    origin: UpdateOrigin,
+): WindowTrackScope<Clip> => {
+    const laneFor = (
+        clip: Clip | undefined,
+        ownerIdx: number,
+    ): WindowTrackLane<Clip> | null =>
+        clip ? { owner: clip, ownerIdx, duration: clipDurationOf(clip) } : null;
+    return {
+        read: (ownerIdx) => laneFor(getClips()[ownerIdx], ownerIdx),
+        resolveLane: (lane) => {
+            const ownerIdx = parseIntAttr(lane, "data-clip-idx");
+            return ownerIdx === null
+                ? null
+                : laneFor(getClips()[ownerIdx], ownerIdx);
+        },
+        write: (ownerIdx, _create, mutate) => {
+            const clips = getClips();
+            const lane = laneFor(clips[ownerIdx], ownerIdx);
+            if (!lane || !mutate(lane)) {
+                return false;
+            }
+            saveClips(clips, { origin });
+            return true;
+        },
+    };
+};
+
+interface MoveState<TOwner> {
+    lane: WindowTrackLane<TOwner>;
     itemIdx: number;
     el: HTMLElement;
     press: PressSpan;
-    clipAtPress: Clip;
-    clipDuration: number;
     originalLeft: string;
     sourceJson: string;
 }
 
-interface ResizeState extends MoveState {
+interface ResizeState<TOwner> extends MoveState<TOwner> {
     edge: "left" | "right";
     originalWidth: string;
 }
 
 interface CreateState {
-    clipIdx: number;
-    lane: HTMLElement;
+    ownerIdx: number;
+    duration: number;
+    laneEl: HTMLElement;
     laneLeft: number;
     startSec: number;
-    clipDuration: number;
     ghost: HTMLElement | null;
     sourceJson: string;
 }
 
-export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
+export const createWindowTrack = <TOwner = Clip>(
+    config: WindowTrackConfig<TOwner>,
+): WindowTrack => {
     let boundBody: HTMLElement | null = null;
     let unregister: (() => void) | null = null;
+    const ownerAttr = config.ownerIdxAttr ?? "data-clip-idx";
+
+    const snapTargets = (
+        ownerIdx: number,
+        duration: number,
+    ): WindowTrackSnapTargets =>
+        config.snapTargets?.(ownerIdx, duration) ?? {
+            primary: [],
+            fallback: [0, duration],
+        };
 
     const spanStyle = (
         start: number,
         length: number,
-        clipDur: number,
+        laneDuration: number,
         pps: number,
     ): { left: string; width: string } => {
         const pct = config.unit === "pct";
-        const geometry = spanGeometry(start, length, clipDur, {
+        const geometry = spanGeometry(start, length, laneDuration, {
             unit: pct ? "percent" : "px",
             pxPerSecond: pps,
             minWidth: pct ? undefined : 2,
@@ -249,43 +366,45 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
     };
 
     const moveTarget = (
-        clip: Clip,
+        lane: WindowTrackLane<TOwner>,
         itemIdx: number,
         press: PressSpan,
         desiredStart: number,
         pps: number,
     ): number => {
-        const raw = config.moveTargetStart(clip, itemIdx, press, desiredStart);
+        const raw = config.moveTargetStart(lane, itemIdx, press, desiredStart);
         if (!getTimelineAuthoringSettings().snap) {
             return raw;
         }
+        const targets = snapTargets(lane.ownerIdx, lane.duration);
         const snapped = snapMovedStart(
             raw,
             press.length,
-            [],
-            [0, clipDurationOf(clip)],
+            targets.primary,
+            targets.fallback,
             SNAP_THRESHOLD_PX / pps,
         );
-        return config.moveTargetStart(clip, itemIdx, press, snapped);
+        return config.moveTargetStart(lane, itemIdx, press, snapped);
     };
 
     const resizeTarget = (
-        clip: Clip,
+        lane: WindowTrackLane<TOwner>,
         itemIdx: number,
         edge: "left" | "right",
         press: PressSpan,
         deltaSec: number,
         pps: number,
     ): SpanGeom => {
-        const raw = config.resizeTarget(clip, itemIdx, edge, press, deltaSec);
+        const raw = config.resizeTarget(lane, itemIdx, edge, press, deltaSec);
         if (!getTimelineAuthoringSettings().snap) {
             return raw;
         }
+        const targets = snapTargets(lane.ownerIdx, lane.duration);
         const rawEdge = edge === "left" ? raw.start : raw.start + raw.length;
         const snappedEdge = snapPoint(
             rawEdge,
-            [],
-            [0, clipDurationOf(clip)],
+            targets.primary,
+            targets.fallback,
             SNAP_THRESHOLD_PX / pps,
         );
         if (snappedEdge === rawEdge) {
@@ -294,7 +413,7 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
         const pressEdge =
             edge === "left" ? press.start : press.start + press.length;
         return config.resizeTarget(
-            clip,
+            lane,
             itemIdx,
             edge,
             press,
@@ -302,111 +421,126 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
         );
     };
 
-    const commitMove = (state: MoveState, dxPx: number, pps: number): void => {
-        if (isStaleToken(state.sourceJson)) {
-            return;
-        }
-        const clips = getClips();
-        const clip = clips[state.clipIdx];
-        if (
-            !clip ||
-            (config.canEdit && !config.canEdit(clip)) ||
-            !config.readSpan(clip, state.itemIdx)
-        ) {
-            return;
-        }
-        const start = moveTarget(
-            clip,
-            state.itemIdx,
-            state.press,
-            state.press.start + dxPx / pps,
-            pps,
-        );
-        config.writeMove(clip, state.itemIdx, state.press, start);
-        saveClips(clips, { origin: config.origin });
-        // The dragged span becomes the selection — after the save, so a dock
-        // focus-restore can't re-point the selection elsewhere.
-        setSelection(config.selectionFor(state.clipIdx, state.itemIdx));
-    };
-
-    const commitResize = (
-        state: ResizeState,
-        dxPx: number,
-        pps: number,
+    /** Re-reads the live owner, re-checks the edit guard, then persists. */
+    const commitEdit = (
+        state: MoveState<TOwner>,
+        write: (txn: WindowTrackTxn<TOwner>) => void,
     ): void => {
         if (isStaleToken(state.sourceJson)) {
             return;
         }
-        const clips = getClips();
-        const clip = clips[state.clipIdx];
-        if (
-            !clip ||
-            (config.canEdit && !config.canEdit(clip)) ||
-            !config.readSpan(clip, state.itemIdx)
-        ) {
-            return;
+        const saved = config.scope.write(state.lane.ownerIdx, false, (txn) => {
+            if (
+                (config.canEdit && !config.canEdit(txn)) ||
+                !config.readSpan(txn, state.itemIdx)
+            ) {
+                return false;
+            }
+            write(txn);
+            return true;
+        });
+        if (saved) {
+            // The dragged span becomes the selection — after the save, so a
+            // dock focus-restore can't re-point the selection elsewhere.
+            setSelection(
+                config.selectionFor(state.lane.ownerIdx, state.itemIdx),
+            );
         }
-        const geom = resizeTarget(
-            clip,
-            state.itemIdx,
-            state.edge,
-            state.press,
-            dxPx / pps,
-            pps,
-        );
-        config.writeResize(clip, state.itemIdx, state.edge, state.press, geom);
-        saveClips(clips, { origin: config.origin });
-        // See commitMove: select the resized span, after the save.
-        setSelection(config.selectionFor(state.clipIdx, state.itemIdx));
+    };
+
+    const commitMove = (
+        state: MoveState<TOwner>,
+        dxPx: number,
+        pps: number,
+    ): void => {
+        commitEdit(state, (txn) => {
+            config.writeMove(
+                txn,
+                state.itemIdx,
+                state.press,
+                moveTarget(
+                    txn,
+                    state.itemIdx,
+                    state.press,
+                    state.press.start + dxPx / pps,
+                    pps,
+                ),
+            );
+        });
+    };
+
+    const commitResize = (
+        state: ResizeState<TOwner>,
+        dxPx: number,
+        pps: number,
+    ): void => {
+        commitEdit(state, (txn) => {
+            config.writeResize(
+                txn,
+                state.itemIdx,
+                state.edge,
+                state.press,
+                resizeTarget(
+                    txn,
+                    state.itemIdx,
+                    state.edge,
+                    state.press,
+                    dxPx / pps,
+                    pps,
+                ),
+            );
+        });
     };
 
     const commitCreate = (state: CreateState, endSec: number | null): void => {
         if (isStaleToken(state.sourceJson)) {
             return;
         }
-        const clips = getClips();
-        const clip = clips[state.clipIdx];
-        if (!clip || (config.canCreate && !config.canCreate(clip))) {
-            return;
+        const created: { selection: TimelineSelection | null } = {
+            selection: null,
+        };
+        const saved = config.scope.write(state.ownerIdx, true, (txn) => {
+            if (config.canCreate && !config.canCreate(txn)) {
+                return false;
+            }
+            created.selection = config.createSpan(txn, state.startSec, endSec);
+            return created.selection !== null;
+        });
+        if (saved && created.selection) {
+            // Open the new span in the dock — after the save, so the rebuilt
+            // panel already contains its row.
+            setSelection(created.selection);
         }
-        const selection = config.createSpan(
-            clip,
-            state.clipIdx,
-            state.startSec,
-            endSec,
+    };
+
+    const timeAtX = (
+        lane: { ownerIdx: number; duration: number },
+        laneLeft: number,
+        clientX: number,
+        pps: number,
+    ): number => {
+        const raw = clamp((clientX - laneLeft) / pps, 0, lane.duration);
+        if (!getTimelineAuthoringSettings().snap) {
+            return raw;
+        }
+        const targets = snapTargets(lane.ownerIdx, lane.duration);
+        return snapPoint(
+            raw,
+            targets.primary,
+            targets.fallback,
+            SNAP_THRESHOLD_PX / pps,
         );
-        if (!selection) {
-            return;
-        }
-        saveClips(clips, { origin: config.origin });
-        // Open the new span in the dock — after the save, so the rebuilt
-        // panel already contains its row.
-        setSelection(selection);
     };
 
     const laneTimeAt = (
         state: CreateState,
         clientX: number,
         pps: number,
-    ): number => {
-        const raw = clamp(
-            (clientX - state.laneLeft) / pps,
-            0,
-            state.clipDuration,
-        );
-        return getTimelineAuthoringSettings().snap
-            ? snapPoint(
-                  raw,
-                  [],
-                  [0, state.clipDuration],
-                  SNAP_THRESHOLD_PX / pps,
-              )
-            : raw;
-    };
+    ): number => timeAtX(state, state.laneLeft, clientX, pps);
 
     const moveSession = (
         body: HTMLElement,
-        state: MoveState,
+        state: MoveState<TOwner>,
     ): GestureSession => {
         const restore = (): void => {
             state.el.style.left = state.originalLeft;
@@ -417,7 +551,7 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
                 body.classList.add(config.draggingClass);
                 const pps = livePxPerSecond(body);
                 const start = moveTarget(
-                    state.clipAtPress,
+                    state.lane,
                     state.itemIdx,
                     state.press,
                     state.press.start + ctx.dx / pps,
@@ -426,7 +560,7 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
                 state.el.style.left = spanStyle(
                     start,
                     state.press.length,
-                    state.clipDuration,
+                    state.lane.duration,
                     pps,
                 ).left;
             },
@@ -444,7 +578,7 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
 
     const resizeSession = (
         body: HTMLElement,
-        state: ResizeState,
+        state: ResizeState<TOwner>,
     ): GestureSession => {
         const restore = (): void => {
             state.el.style.left = state.originalLeft;
@@ -456,7 +590,7 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
                 body.classList.add(config.draggingClass);
                 const pps = livePxPerSecond(body);
                 const geom = resizeTarget(
-                    state.clipAtPress,
+                    state.lane,
                     state.itemIdx,
                     state.edge,
                     state.press,
@@ -466,7 +600,7 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
                 const style = spanStyle(
                     geom.start,
                     geom.length,
-                    state.clipDuration,
+                    state.lane.duration,
                     pps,
                 );
                 if (state.edge === "left") {
@@ -508,10 +642,10 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
                 if (!state.ghost) {
                     const ghost = document.createElement("div");
                     ghost.className = config.ghostClass;
-                    state.lane.appendChild(ghost);
+                    state.laneEl.appendChild(ghost);
                     state.ghost = ghost;
                 }
-                const ghostStyle = spanStyle(a, b - a, state.clipDuration, pps);
+                const ghostStyle = spanStyle(a, b - a, state.duration, pps);
                 state.ghost.style.left = ghostStyle.left;
                 state.ghost.style.width = ghostStyle.width;
             },
@@ -537,6 +671,24 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
     const itemIdxOf = (span: Element): number | null =>
         config.itemIdxAttr ? parseIntAttr(span, config.itemIdxAttr) : 0;
 
+    /** The live lane + press geometry behind a span element, or null. */
+    const spanAt = (
+        span: Element,
+    ): {
+        lane: WindowTrackLane<TOwner>;
+        itemIdx: number;
+        press: PressSpan;
+    } | null => {
+        const ownerIdx = parseIntAttr(span, ownerAttr);
+        const itemIdx = itemIdxOf(span);
+        if (ownerIdx === null || itemIdx === null) {
+            return null;
+        }
+        const lane = config.scope.read(ownerIdx);
+        const press = lane ? config.readSpan(lane, itemIdx) : null;
+        return lane && press ? { lane, itemIdx, press } : null;
+    };
+
     const onPress = (
         me: MouseEvent,
         body: HTMLElement,
@@ -552,27 +704,19 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
                 me.preventDefault();
                 return claimOnly();
             }
-            const clipIdx = parseIntAttr(span, "data-clip-idx");
-            const itemIdx = itemIdxOf(span);
-            if (clipIdx === null || itemIdx === null) {
+            const found = spanAt(span);
+            if (!found) {
                 return null;
             }
-            const clip = getClips()[clipIdx];
-            const press = clip ? config.readSpan(clip, itemIdx) : null;
-            if (!clip || !press) {
-                return null;
-            }
-            if (config.canEdit && !config.canEdit(clip)) {
+            if (config.canEdit && !config.canEdit(found.lane)) {
                 me.preventDefault();
                 return claimOnly();
             }
-            const base: MoveState = {
-                clipIdx,
-                itemIdx,
+            const base: MoveState<TOwner> = {
+                lane: found.lane,
+                itemIdx: found.itemIdx,
                 el: span,
-                press,
-                clipAtPress: clip,
-                clipDuration: clipDurationOf(clip),
+                press: found.press,
                 originalLeft: span.style.left,
                 sourceJson: readStateToken(),
             };
@@ -590,44 +734,38 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
             }
             return moveSession(body, base);
         }
-        const lane = me.target.closest(config.laneSelector);
-        if (lane instanceof HTMLElement) {
-            const clipIdx = parseIntAttr(lane, "data-clip-idx");
-            if (clipIdx === null) {
+        const laneEl = me.target.closest(config.laneSelector);
+        if (laneEl instanceof HTMLElement) {
+            const lane = config.scope.resolveLane(laneEl);
+            if (!lane || (config.canCreate && !config.canCreate(lane))) {
                 return null;
             }
-            const clip = getClips()[clipIdx];
-            if (!clip || (config.canCreate && !config.canCreate(clip))) {
-                return null;
-            }
-            const rect = lane.getBoundingClientRect();
-            const pps = livePxPerSecond(body);
-            const clipDuration = clipDurationOf(clip);
-            const rawStart = clamp(
-                (me.clientX - rect.left) / pps,
-                0,
-                clipDuration,
-            );
-            const startSec = getTimelineAuthoringSettings().snap
-                ? snapPoint(
-                      rawStart,
-                      [],
-                      [0, clipDuration],
-                      SNAP_THRESHOLD_PX / pps,
-                  )
-                : rawStart;
+            const rect = laneEl.getBoundingClientRect();
             me.preventDefault();
             return createSession(body, {
-                clipIdx,
-                lane,
+                ownerIdx: lane.ownerIdx,
+                duration: lane.duration,
+                laneEl,
                 laneLeft: rect.left,
-                startSec,
-                clipDuration,
+                startSec: timeAtX(
+                    lane,
+                    rect.left,
+                    me.clientX,
+                    livePxPerSecond(body),
+                ),
                 ghost: null,
                 sourceJson: readStateToken(),
             });
         }
         return null;
+    };
+
+    const activate = (selection: TimelineSelection): void => {
+        if (config.revealOnActivate) {
+            activateSelection(selection);
+        } else {
+            setSelection(selection);
+        }
     };
 
     const onBodyClick = (event: Event): void => {
@@ -644,28 +782,28 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
             // sits on (clip region select, audio row select).
             event.stopImmediatePropagation();
         }
-        const clipIdx = parseIntAttr(span, "data-clip-idx");
-        const itemIdx = itemIdxOf(span);
-        if (clipIdx === null || itemIdx === null) {
-            return;
-        }
-        const clips = getClips();
-        const clip = clips[clipIdx];
-        if (!clip || !config.readSpan(clip, itemIdx)) {
+        const found = spanAt(span);
+        if (!found) {
             return;
         }
         if ((event as MouseEvent).shiftKey) {
-            if (config.deleteItem(clip, itemIdx)) {
-                saveClips(clips, { origin: config.origin });
+            const removed: { selection: TimelineSelection | null } = {
+                selection: null,
+            };
+            const saved = config.scope.write(
+                found.lane.ownerIdx,
+                false,
+                (txn) => {
+                    removed.selection = config.deleteItem(txn, found.itemIdx);
+                    return removed.selection !== null;
+                },
+            );
+            if (saved && removed.selection) {
+                setSelection(removed.selection);
             }
             return;
         }
-        const selection = config.selectionFor(clipIdx, itemIdx);
-        if (config.revealOnActivate) {
-            activateSelection(selection);
-        } else {
-            setSelection(selection);
-        }
+        activate(config.selectionFor(found.lane.ownerIdx, found.itemIdx));
     };
 
     const onBodyKeyDown = (event: Event): void => {
@@ -684,21 +822,11 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
         if (config.isolateClicks) {
             ke.stopImmediatePropagation();
         }
-        const clipIdx = parseIntAttr(span, "data-clip-idx");
-        const itemIdx = itemIdxOf(span);
-        if (clipIdx === null || itemIdx === null) {
+        const found = spanAt(span);
+        if (!found) {
             return;
         }
-        const clip = getClips()[clipIdx];
-        if (!clip || !config.readSpan(clip, itemIdx)) {
-            return;
-        }
-        const selection = config.selectionFor(clipIdx, itemIdx);
-        if (config.revealOnActivate) {
-            activateSelection(selection);
-        } else {
-            setSelection(selection);
-        }
+        activate(config.selectionFor(found.lane.ownerIdx, found.itemIdx));
     };
 
     const attach = (body: HTMLElement, router: GestureRouter): void => {

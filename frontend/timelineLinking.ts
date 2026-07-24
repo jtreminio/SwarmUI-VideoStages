@@ -1,9 +1,15 @@
 import { reconcileArchitectureIncomingIcLoraDrives } from "./architectures/behaviorRegistry";
+import { applyClipSkip } from "./detailStrip/selectionDomainOperations";
 import { documentFps } from "./documentQueries";
 import type { GestureRouter, GestureSession } from "./gestureRouter";
 import { getClips, getState, saveClips } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
-import { getSelectedClipIndex, getSelection, setSelection } from "./selection";
+import {
+    getSelectedClipIndex,
+    getSelection,
+    selectionAfterRemoval,
+    setSelection,
+} from "./selection";
 import { getRootGeneratedEntryMode, readStateToken } from "./swarmInputs";
 import { applyClipDurationResize, pxToDuration } from "./timelineEdit";
 import {
@@ -13,6 +19,7 @@ import {
     isNoOpMove,
     moveItem,
 } from "./timelineReorder";
+import { applySelectionHighlight } from "./timelineSelectionView";
 import {
     commitClipMutation,
     livePxPerSecond,
@@ -25,7 +32,6 @@ const REGION_RESIZE_SELECTOR = ".vst-region-resize";
 const CLIP_SHIFT_SELECTOR =
     ".vst-region[data-clip-idx], .vst-audio-clip[data-clip-idx]";
 
-const REGION_SELECTED_CLASS = "vst-region-selected";
 const DRAGGING_CLASS = "vst-dragging";
 const RESIZING_CLASS = "vst-resizing";
 const DROP_INDICATOR_CLASS = "vst-drop-indicator";
@@ -98,19 +104,6 @@ export const createTimelineLinking = (): TimelineLinking => {
     const findRegion = (body: HTMLElement, idx: number): HTMLElement | null =>
         body.querySelector<HTMLElement>(`.vst-region[data-clip-idx="${idx}"]`);
 
-    const markSelection = (body: HTMLElement): void => {
-        for (const region of body.querySelectorAll(
-            `.${REGION_SELECTED_CLASS}`,
-        )) {
-            region.classList.remove(REGION_SELECTED_CLASS);
-        }
-        const idx = selectedClip();
-        if (idx === null) {
-            return;
-        }
-        findRegion(body, idx)?.classList.add(REGION_SELECTED_CLASS);
-    };
-
     const onRegionClick = (body: HTMLElement, event: Event): void => {
         const target = event.target;
         if (!(target instanceof Element)) {
@@ -140,7 +133,7 @@ export const createTimelineLinking = (): TimelineLinking => {
             return;
         }
         selectClip(idx, 0);
-        markSelection(body);
+        applySelectionHighlight(body);
     };
 
     const readRegions = (
@@ -186,15 +179,9 @@ export const createTimelineLinking = (): TimelineLinking => {
 
     const applySkip = (idx: number): void => {
         const clips = getClips();
-        if (idx < 0 || idx >= clips.length) {
-            return;
+        if (applyClipSkip(clips, idx, getRootGeneratedEntryMode())) {
+            saveClips(clips, { origin: "linking" });
         }
-        clips[idx].skipped = !clips[idx].skipped;
-        reconcileArchitectureIncomingIcLoraDrives(
-            clips,
-            getRootGeneratedEntryMode(),
-        );
-        saveClips(clips, { origin: "linking" });
     };
 
     const applyDelete = (idx: number): void => {
@@ -207,15 +194,25 @@ export const createTimelineLinking = (): TimelineLinking => {
             clips,
             getRootGeneratedEntryMode(),
         );
-        const sel = getSelection();
-        if (sel.kind === "clip") {
-            if (sel.clipIdx === idx) {
-                setSelection({ kind: "none" });
-            } else if (sel.clipIdx > idx) {
-                setSelection({ ...sel, clipIdx: sel.clipIdx - 1 });
-            }
-        }
         saveClips(clips, { origin: "linking" });
+        // Deleting the selected clip reselects its neighbour; a selection
+        // after the removed clip just shifts down with it.
+        const sel = getSelection();
+        if (sel.kind !== "clip") {
+            return;
+        }
+        if (sel.clipIdx === idx) {
+            setSelection(
+                selectionAfterRemoval(
+                    idx,
+                    clips.length,
+                    (index) => ({ kind: "clip", clipIdx: index, stageIdx: 0 }),
+                    { kind: "none" },
+                ),
+            );
+        } else if (sel.clipIdx > idx) {
+            setSelection({ ...sel, clipIdx: sel.clipIdx - 1 });
+        }
     };
 
     interface ResizeState {
@@ -334,7 +331,7 @@ export const createTimelineLinking = (): TimelineLinking => {
                 const from = state.sourceIdx;
                 if (isNoOpMove(from, gap)) {
                     selectClip(from, stageForClip(from));
-                    markSelection(body);
+                    applySelectionHighlight(body);
                     return;
                 }
                 commitClipMutation(state.sourceJson, "linking", (clips) => {
@@ -424,7 +421,7 @@ export const createTimelineLinking = (): TimelineLinking => {
         if (idx !== null && resolveSelectedIndex(idx, clipCount) === null) {
             setSelection({ kind: "none" });
         }
-        markSelection(body);
+        applySelectionHighlight(body);
     };
 
     const dispose = (): void => {

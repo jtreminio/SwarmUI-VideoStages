@@ -60,6 +60,8 @@ const context = (
     addStage: jest.fn(),
     deleteStage: jest.fn(),
     selectStage: jest.fn(),
+    toggleClipSkip: jest.fn(),
+    toggleStageSkip: jest.fn(),
     getBoundBody: () => null,
     getDockEl: () => null,
     getSettingsMode: () => null,

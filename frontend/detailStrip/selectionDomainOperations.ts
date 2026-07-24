@@ -6,6 +6,7 @@ import { buildArchitectureRetargetPlan } from "../architectures/catalog";
 import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity";
 import type { CapabilityViewResolver } from "../architectures/policy";
 import { reconcileSourcedClipIdentity } from "../architectures/policy";
+import type { ArchitectureModelCatalog } from "../architectures/types";
 import {
     clamp,
     PROMPT_WINDOW_DEFAULT_DURATION,
@@ -24,7 +25,7 @@ import {
 } from "../normalization";
 import { dispatchDocumentCommand, getTimelineStore } from "../persistence";
 import { getDefaultStageModel, getRootDefaults } from "../rootDefaults";
-import { setSelection } from "../selection";
+import { selectionAfterRemoval, setSelection } from "../selection";
 import type { Clip, TimelineSelection } from "../types";
 import { roundToTenth } from "../utils";
 
@@ -32,6 +33,45 @@ export type StructuralCommit = (
     apply: (clips: Clip[]) => TimelineSelection | "render" | null,
     options?: { rebuildAfterSelect?: boolean },
 ) => void;
+
+/**
+ * Flips a clip's skip flag and reconciles the IC-LoRA drives that depend on
+ * which clips still execute. The one clip-skip mutation: the detail strip and
+ * the timeline's region button both apply it, they only differ in how they
+ * persist the clips array.
+ */
+export const applyClipSkip = (
+    clips: Clip[],
+    clipIdx: number,
+    generatedEntryMode: "text-to-video" | "image-to-video",
+): boolean => {
+    const clip = clips[clipIdx];
+    if (!clip) {
+        return false;
+    }
+    clip.skipped = !clip.skipped;
+    reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
+    return true;
+};
+
+/** The stage-level counterpart; a skipped stage can change the clip's identity. */
+export const applyStageSkip = (
+    clips: Clip[],
+    clipIdx: number,
+    stageIdx: number,
+    catalog: ArchitectureModelCatalog,
+    generatedEntryMode: "text-to-video" | "image-to-video",
+): boolean => {
+    const clip = clips[clipIdx];
+    const stage = clip?.stages[stageIdx];
+    if (!clip || !stage) {
+        return false;
+    }
+    stage.skipped = !stage.skipped;
+    reconcileSourcedClipIdentity(clip, catalog);
+    reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
+    return true;
+};
 
 export interface DetailSelectionDomainOperations {
     addRefEntry(clipIdx: number): void;
@@ -43,6 +83,8 @@ export interface DetailSelectionDomainOperations {
     addStage(clipIdx: number): void;
     deleteStage(clipIdx: number, stageIdx: number): void;
     selectStage(clipIdx: number, stageIdx: number): void;
+    toggleClipSkip(clipIdx: number): void;
+    toggleStageSkip(clipIdx: number, stageIdx: number): void;
 }
 
 export const createDetailSelectionDomainOperations = (
@@ -61,12 +103,14 @@ export const createDetailSelectionDomainOperations = (
         structuralCommit(
             (clips) => {
                 const remaining = remove(clips);
-                if (remaining === null) {
-                    return null;
-                }
-                return remaining > 0
-                    ? neighbour(Math.min(index, remaining - 1))
-                    : fallback;
+                return remaining === null
+                    ? null
+                    : selectionAfterRemoval(
+                          index,
+                          remaining,
+                          neighbour,
+                          fallback,
+                      );
             },
             // Deleting the last inactive item, or the first of several items,
             // can leave the selected numeric index unchanged. A normal
@@ -378,6 +422,28 @@ export const createDetailSelectionDomainOperations = (
         );
     };
 
+    const toggleClipSkip = (clipIdx: number): void => {
+        structuralCommit((clips) =>
+            applyClipSkip(clips, clipIdx, getGeneratedEntryMode())
+                ? "render"
+                : null,
+        );
+    };
+
+    const toggleStageSkip = (clipIdx: number, stageIdx: number): void => {
+        structuralCommit((clips) =>
+            applyStageSkip(
+                clips,
+                clipIdx,
+                stageIdx,
+                getCapabilities().catalog,
+                getGeneratedEntryMode(),
+            )
+                ? "render"
+                : null,
+        );
+    };
+
     return {
         addRefEntry,
         deleteRefEntry,
@@ -388,5 +454,7 @@ export const createDetailSelectionDomainOperations = (
         addStage,
         deleteStage,
         selectStage,
+        toggleClipSkip,
+        toggleStageSkip,
     };
 };

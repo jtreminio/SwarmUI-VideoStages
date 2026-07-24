@@ -107,6 +107,8 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         addStage: selectionOperations.addStage,
         deleteStage: selectionOperations.deleteStage,
         selectStage: selectionOperations.selectStage,
+        toggleClipSkip: selectionOperations.toggleClipSkip,
+        toggleStageSkip: selectionOperations.toggleStageSkip,
         getBoundBody: () => boundBody,
         getDockEl: () => dockEl,
         getSettingsMode: () => settingsMode,

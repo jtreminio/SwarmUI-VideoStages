@@ -1,6 +1,5 @@
-import { reconcileArchitectureIncomingIcLoraDrives } from "../architectures/behaviorRegistry";
-import { reconcileSourcedClipIdentity } from "../architectures/policy";
 import { buildRepeatingEditor } from "../detailWidgets";
+import { skipGlyph, skipTitle } from "../skipVocabulary";
 import { stageChipLabel, stageChipTitle } from "../timelineDetail";
 import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
@@ -45,31 +44,14 @@ export const buildStageRail = (
                     : "Add a source video before removing the only generation stage"
                 : `Delete stage ${stageChipLabel(index)}`,
             headerAction: {
-                label: "⏭︎",
-                title: stage.skipped
-                    ? `Re-enable stage ${stageChipLabel(index)}`
-                    : `Skip stage ${stageChipLabel(index)}`,
+                label: skipGlyph(stage.skipped === true),
+                title: skipTitle(
+                    `stage ${stageChipLabel(index)}`,
+                    stage.skipped === true,
+                ),
                 className: "vst-detail-skip-stage",
                 active: stage.skipped,
-                onClick: () => {
-                    context.commit((clips) => {
-                        const targetClip = clips[clipIdx];
-                        const target = targetClip?.stages[index];
-                        if (!targetClip || !target) {
-                            return;
-                        }
-                        target.skipped = !target.skipped;
-                        reconcileSourcedClipIdentity(
-                            targetClip,
-                            context.capabilities().catalog,
-                        );
-                        reconcileArchitectureIncomingIcLoraDrives(
-                            clips,
-                            context.generatedEntryMode(),
-                        );
-                    });
-                    context.render();
-                },
+                onClick: () => context.toggleStageSkip(clipIdx, index),
             },
         })),
         editorForItem: editorForStage,

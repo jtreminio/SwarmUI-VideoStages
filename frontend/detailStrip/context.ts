@@ -44,6 +44,8 @@ export interface DetailStripContext {
     addStage(clipIdx: number): void;
     deleteStage(clipIdx: number, stageIdx: number): void;
     selectStage(clipIdx: number, stageIdx: number): void;
+    toggleClipSkip(clipIdx: number): void;
+    toggleStageSkip(clipIdx: number, stageIdx: number): void;
 
     getBoundBody(): HTMLElement | null;
     getDockEl(): HTMLElement | null;

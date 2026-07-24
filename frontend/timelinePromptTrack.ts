@@ -8,11 +8,12 @@ import type { GestureRouter } from "./gestureRouter";
 import { freeIntervalAt } from "./intervals";
 import { getClips } from "./persistence";
 import { otherSpans } from "./promptWindowEdits";
-import { setSelection } from "./selection";
+import { selectionAfterRemoval, setSelection } from "./selection";
 import { clipDurationOf, parseIntAttr } from "./trackDomUtils";
 import type { Clip, PromptWindow } from "./types";
 import { roundToTenth } from "./utils";
 import {
+    clipWindowTrackScope,
     createDefaultOrDraggedSpan,
     createWindowTrack,
     type PressSpan,
@@ -53,7 +54,7 @@ export const createTimelinePromptTrack = (
     createWindowTrack({
         routeId: "prompt-track",
         priority: 20,
-        origin: "prompt-track",
+        scope: clipWindowTrackScope("prompt-track"),
         spanSelector: ".vst-minor-seg[data-clip-idx]",
         itemIdxAttr: "data-window-idx",
         edgeSelector: "[data-vst-minor-edge]",
@@ -64,25 +65,27 @@ export const createTimelinePromptTrack = (
         unit: "px",
         keyboardSelect: false,
         isolateClicks: false,
-        readSpan: (clip, windowIdx): PressSpan | null => {
-            const window = clip.promptWindows?.[windowIdx];
+        readSpan: ({ owner }, windowIdx): PressSpan | null => {
+            const window = owner.promptWindows?.[windowIdx];
             return window
                 ? { start: window.start, length: window.duration, trim: 0 }
                 : null;
         },
-        canEdit: (clip) =>
-            getCapabilities?.().forClip(clip).decision("promptRelay")
+        canEdit: ({ owner }) =>
+            getCapabilities?.().forClip(owner).decision("promptRelay")
                 .supported ?? true,
-        canCreate: (clip) =>
-            getCapabilities?.().forClip(clip).decision("promptRelay")
-                .supported ?? true,
-        moveTargetStart: (clip, windowIdx, press, desiredStart) => {
+        canCreate: ({ owner }) =>
+            owner !== null &&
+            (getCapabilities?.().forClip(owner).decision("promptRelay")
+                .supported ??
+                true),
+        moveTargetStart: ({ owner: clip }, windowIdx, press, desiredStart) => {
             const clipDur = clipDurationOf(clip);
             const [lo, hi] = wallsFor(clip, windowIdx, press);
             const dur = Math.min(press.length, clipDur);
             return clamp(desiredStart, lo, Math.max(lo, hi - dur));
         },
-        writeMove: (clip, windowIdx, press, start) => {
+        writeMove: ({ owner: clip }, windowIdx, press, start) => {
             const window = clip.promptWindows?.[windowIdx];
             if (!window) {
                 return;
@@ -98,7 +101,13 @@ export const createTimelinePromptTrack = (
                 ),
             );
         },
-        resizeTarget: (clip, windowIdx, edge, press, deltaSec): SpanGeom => {
+        resizeTarget: (
+            { owner: clip },
+            windowIdx,
+            edge,
+            press,
+            deltaSec,
+        ): SpanGeom => {
             const clipDur = clipDurationOf(clip);
             const spans = otherSpans(
                 clip.promptWindows ?? [],
@@ -121,7 +130,7 @@ export const createTimelinePromptTrack = (
                 hi,
             );
         },
-        writeResize: (clip, windowIdx, _edge, _press, geom) => {
+        writeResize: ({ owner: clip }, windowIdx, _edge, _press, geom) => {
             const window = clip.promptWindows?.[windowIdx];
             if (!window) {
                 return;
@@ -129,7 +138,7 @@ export const createTimelinePromptTrack = (
             window.start = roundToTenth(geom.start);
             window.duration = roundToTenth(geom.length);
         },
-        createSpan: (clip, clipIdx, startSec, endSec) => {
+        createSpan: ({ owner: clip, ownerIdx: clipIdx }, startSec, endSec) => {
             const clipDur = clipDurationOf(clip);
             const spans = otherSpans(clip.promptWindows ?? [], -1, clipDur);
             const [lo, hi] = freeIntervalAt(spans, clipDur, startSec);
@@ -159,12 +168,21 @@ export const createTimelinePromptTrack = (
                 ? { kind: "prompt-minor", clipIdx, windowIdx: newIdx }
                 : null;
         },
-        deleteItem: (clip, windowIdx) => {
+        deleteItem: ({ owner: clip, ownerIdx: clipIdx }, windowIdx) => {
             if (!clip.promptWindows?.[windowIdx]) {
-                return false;
+                return null;
             }
             clip.promptWindows.splice(windowIdx, 1);
-            return true;
+            return selectionAfterRemoval(
+                windowIdx,
+                clip.promptWindows.length,
+                (index) => ({
+                    kind: "prompt-minor",
+                    clipIdx,
+                    windowIdx: index,
+                }),
+                { kind: "prompt-major", clipIdx },
+            );
         },
         selectionFor: (clipIdx, windowIdx) => ({
             kind: "prompt-minor",

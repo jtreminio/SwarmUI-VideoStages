@@ -4,22 +4,24 @@ const SELECTED = "vst-selected";
 const REGION_SELECTED = "vst-region-selected";
 
 /**
- * Reflects the shared selection onto the track DOM. Clips keep the existing
- * `.vst-region-selected` treatment (owned jointly with timelineLinking); every
- * other selection kind gets `.vst-selected` on its own mark/segment so the user
- * can see which element the detail strip is bound to.
+ * Reflects the shared selection onto the track DOM, and is the ONLY owner of
+ * both highlight classes. Clip-scoped selections get `.vst-region-selected` on
+ * the clip region; every other selection kind gets `.vst-selected` on its own
+ * mark/segment so the user can see which element the detail strip is bound to.
+ *
+ * Sole ownership is load-bearing: a stage chip stops click propagation, so a
+ * second owner reacting to region clicks would leave the previously selected
+ * region highlighted and the newly selected one bare.
  */
 export const applySelectionHighlight = (body: HTMLElement): void => {
     const sel = getSelection();
     for (const el of body.querySelectorAll(`.${SELECTED}`)) {
         el.classList.remove(SELECTED);
     }
-    if (sel.kind !== "clip" && sel.kind !== "ic-lora") {
-        for (const el of body.querySelectorAll(`.${REGION_SELECTED}`)) {
-            el.classList.remove(REGION_SELECTED);
-        }
+    for (const el of body.querySelectorAll(`.${REGION_SELECTED}`)) {
+        el.classList.remove(REGION_SELECTED);
     }
-    if (sel.kind === "ic-lora") {
+    if (sel.kind === "clip" || sel.kind === "ic-lora") {
         body.querySelector(
             `.vst-region[data-clip-idx="${sel.clipIdx}"]`,
         )?.classList.add(REGION_SELECTED);

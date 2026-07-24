@@ -25,7 +25,7 @@ import {
 } from "../detailWidgets";
 import type { ClipTimelineWindow } from "../documentQueries";
 import { createEntityId } from "../identity";
-import { setSelection } from "../selection";
+import { selectionAfterRemoval, setSelection } from "../selection";
 import type {
     AudioTrack,
     AudioTrackSpan,
@@ -372,14 +372,13 @@ export const buildAudioTracksPanel = (
                 ctx.commitState((next) => {
                     next.audioTracks?.splice(trackIndex, 1);
                 });
-                const remaining = tracks.length - 1;
                 setSelection(
-                    remaining > 0
-                        ? {
-                              kind: "audio-track",
-                              trackIdx: Math.min(trackIndex, remaining - 1),
-                          }
-                        : { kind: "none" },
+                    selectionAfterRemoval(
+                        trackIndex,
+                        tracks.length - 1,
+                        (index) => ({ kind: "audio-track", trackIdx: index }),
+                        { kind: "none" },
+                    ),
                 );
                 ctx.render();
             },

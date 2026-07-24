@@ -101,6 +101,20 @@ export const subscribeSelection = (
     };
 };
 
+/**
+ * The one delete-then-reselect convention: keep the nearest surviving sibling
+ * (the same slot, or the new last one), else fall back to the owning entity.
+ * Every removal path routes through this — the detail strip's `commitRemoval`,
+ * the timeline's clip delete, and the tracks' shift-click deletes.
+ */
+export const selectionAfterRemoval = (
+    index: number,
+    remaining: number,
+    neighbour: (index: number) => TimelineSelection,
+    fallback: TimelineSelection,
+): TimelineSelection =>
+    remaining > 0 ? neighbour(Math.min(index, remaining - 1)) : fallback;
+
 export const resetSelectionForTests = (): void => {
     selection = NO_SELECTION;
     selectionSubscribers.clear();

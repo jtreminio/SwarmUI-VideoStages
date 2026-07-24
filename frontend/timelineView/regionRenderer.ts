@@ -1,6 +1,7 @@
 import type { CapabilityViewResolver } from "../architectures/policy";
 import { clipHueCss } from "../clipColor";
 import { mediaPreviewSrc } from "../constants";
+import { skipGlyph, skipTitle } from "../skipVocabulary";
 import {
     escapeHtml,
     formatTimeLabel,
@@ -243,11 +244,11 @@ const renderRegions = (
             const duration = escapeHtml(
                 formatTimeLabel(layout.durationSeconds, unit, fps),
             );
-            const skipTitle = layout.skipped ? "Unskip clip" : "Skip clip";
-            const skipGlyph = layout.skipped ? "⟲" : "⊘";
+            const skipLabel = skipTitle("clip", layout.skipped);
+            const skipMark = skipGlyph(layout.skipped);
             const controls =
                 `<div class="vst-region-controls">` +
-                `<button type="button" class="vst-region-btn${layout.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipTitle}" aria-label="${skipTitle}">${skipGlyph}</button>` +
+                `<button type="button" class="vst-region-btn${layout.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipLabel}" aria-label="${skipLabel}">${skipMark}</button>` +
                 `</div>`;
             const resizeGrip = lengthDerived(clip)
                 ? ""

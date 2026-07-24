@@ -189,6 +189,71 @@ describe("timeline-wide audio segment gestures", () => {
         expect(saved.audioTracks?.[1].spans[0].timelineStartSeconds).toBe(2);
     });
 
+    it("shift+click deletes the whole track behind the last segment", () => {
+        const body = setupGlobal();
+        const segment = el(body, '.vst-audio-seg[data-track-idx="0"]');
+
+        segment.dispatchEvent(mouse("click", 2 * PPS, true));
+
+        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        expect(saved.audioTracks).toHaveLength(0);
+        expect(getSelection()).toEqual({ kind: "none" });
+    });
+
+    it("deleting one of several tracks selects the surviving neighbour", () => {
+        const state = rootState() as unknown as VideoStagesConfig;
+        state.audioTracks?.push({
+            id: "track-lower",
+            volume: 1,
+            source: { kind: "Upload", reference: "", uploadedAudio: null },
+            spans: [
+                {
+                    id: "span-lower",
+                    timelineStartSeconds: 1,
+                    timelineLengthSeconds: 2,
+                    sourceStartSeconds: 0,
+                },
+            ],
+        });
+        mountVideoStagesData(state);
+        mountPromptBox("");
+        const body = makeBody();
+        body.innerHTML =
+            `<div class="vst-audio-seg" data-track-idx="0"></div>` +
+            `<div class="vst-audio-seg" data-track-idx="1"></div>`;
+        track = createTimelineAudioSegmentTrack();
+        router = createGestureRouter();
+        router.attach(body);
+        track.attach(body, router);
+
+        el(body, '.vst-audio-seg[data-track-idx="1"]').dispatchEvent(
+            mouse("click", 10, true),
+        );
+
+        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        expect(saved.audioTracks).toHaveLength(1);
+        expect(saved.audioTracks?.[0].id).toBe("track-global");
+        expect(getSelection()).toEqual({ kind: "audio-track", trackIdx: 0 });
+    });
+
+    it("left resize stops at the untrimmed start of the source", () => {
+        const body = setupGlobal();
+        const left = el(body, '[data-vst-audio-seg-edge="left"]');
+
+        // The segment starts at 2s with a 1s trim, so its source began at 1s.
+        left.dispatchEvent(mouse("mousedown", 2 * PPS));
+        document.dispatchEvent(mouse("mousemove", 0));
+        document.dispatchEvent(mouse("mouseup", 0));
+
+        const span = (saveSpy.mock.calls[0][0] as VideoStagesConfig)
+            .audioTracks?.[0].spans[0];
+        expect(span).toMatchObject({
+            timelineStartSeconds: 1,
+            timelineLengthSeconds: 4,
+            sourceStartSeconds: 0,
+        });
+    });
+
     it("falls back to clip edges and bypasses snapping when disabled", () => {
         let body = setupGlobal();
         let segment = el(body, '.vst-audio-seg[data-track-idx="0"]');

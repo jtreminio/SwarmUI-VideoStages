@@ -6,10 +6,9 @@ import {
     RETAKE_STRENGTH_DEFAULT,
 } from "./constants";
 import type { GestureRouter } from "./gestureRouter";
-import { clipDurationOf } from "./trackDomUtils";
-import type { Clip } from "./types";
 import { roundToTenth } from "./utils";
 import {
+    clipWindowTrackScope,
     createDefaultOrDraggedSpan,
     createWindowTrack,
     type PressSpan,
@@ -33,7 +32,7 @@ export const createTimelineRetakeTrack = (
     createWindowTrack({
         routeId: "retake",
         priority: 50,
-        origin: "retake-track",
+        scope: clipWindowTrackScope("retake-track"),
         spanSelector: ".vst-retake[data-clip-idx]",
         itemIdxAttr: null,
         edgeSelector: "[data-vst-retake-edge]",
@@ -47,86 +46,93 @@ export const createTimelineRetakeTrack = (
         // The retake sits inside the clip region; its clicks must not bubble
         // into the region's clip-select handler.
         isolateClicks: true,
-        readSpan: (clip: Clip): PressSpan | null =>
-            clip.retake
+        readSpan: ({ owner }): PressSpan | null =>
+            owner.retake
                 ? {
-                      start: clip.retake.startSeconds,
-                      length: clip.retake.lengthSeconds,
+                      start: owner.retake.startSeconds,
+                      length: owner.retake.lengthSeconds,
                       trim: 0,
                   }
                 : null,
-        canEdit: (clip) =>
-            getCapabilities?.().forClip(clip).decision("retake").supported ??
+        canEdit: ({ owner }) =>
+            getCapabilities?.().forClip(owner).decision("retake").supported ??
             true,
-        canCreate: (clip) =>
-            !clip.retake &&
-            (getCapabilities?.().forClip(clip).decision("retake").supported ??
+        canCreate: ({ owner }) =>
+            owner !== null &&
+            !owner.retake &&
+            (getCapabilities?.().forClip(owner).decision("retake").supported ??
                 true),
-        moveTargetStart: (clip, _itemIdx, press, desiredStart) => {
-            const clipDur = clipDurationOf(clip);
-            const length = Math.min(press.length, clipDur);
-            return clamp(desiredStart, 0, Math.max(0, clipDur - length));
+        moveTargetStart: ({ duration }, _itemIdx, press, desiredStart) => {
+            const length = Math.min(press.length, duration);
+            return clamp(desiredStart, 0, Math.max(0, duration - length));
         },
-        writeMove: (clip, _itemIdx, press, start) => {
-            if (!clip.retake) {
+        writeMove: ({ owner, duration }, _itemIdx, press, start) => {
+            if (!owner.retake) {
                 return;
             }
-            const clipDur = clipDurationOf(clip);
-            const length = Math.min(press.length, clipDur);
-            clip.retake.startSeconds = roundToTenth(start);
-            clip.retake.lengthSeconds = roundToTenth(
-                Math.min(length, clipDur - clip.retake.startSeconds),
+            const length = Math.min(press.length, duration);
+            owner.retake.startSeconds = roundToTenth(start);
+            owner.retake.lengthSeconds = roundToTenth(
+                Math.min(length, duration - owner.retake.startSeconds),
             );
         },
-        resizeTarget: (clip, _itemIdx, edge, press, deltaSec): SpanGeom =>
+        resizeTarget: (
+            { duration },
+            _itemIdx,
+            edge,
+            press,
+            deltaSec,
+        ): SpanGeom =>
             resizeSpanEdge(
                 edge,
                 press,
                 deltaSec,
                 RETAKE_MIN_DURATION,
                 0,
-                clipDurationOf(clip),
+                duration,
             ),
-        writeResize: (clip, _itemIdx, _edge, _press, geom) => {
-            if (!clip.retake) {
+        writeResize: ({ owner }, _itemIdx, _edge, _press, geom) => {
+            if (!owner.retake) {
                 return;
             }
-            clip.retake.startSeconds = roundToTenth(geom.start);
-            clip.retake.lengthSeconds = roundToTenth(geom.length);
+            owner.retake.startSeconds = roundToTenth(geom.start);
+            owner.retake.lengthSeconds = roundToTenth(geom.length);
         },
         // A plain tap places a default-length window at the pressed time; a
         // drag sizes it.
-        createSpan: (clip, clipIdx, startSec, endSec) => {
+        createSpan: ({ owner, ownerIdx, duration }, startSec, endSec) => {
             // The add hook and press-time canCreate guard normally make this
             // impossible. Re-check at commit time so a concurrent retake
             // cannot be overwritten between press and release.
-            if (clip.retake) {
+            if (owner.retake) {
                 return null;
             }
             const geom = createDefaultOrDraggedSpan(
                 startSec,
                 endSec,
                 0,
-                clipDurationOf(clip),
+                duration,
                 RETAKE_MIN_DURATION,
                 RETAKE_DEFAULT_DURATION,
             );
             if (!geom) {
                 return null;
             }
-            clip.retake = {
+            owner.retake = {
                 startSeconds: roundToTenth(geom.start),
                 lengthSeconds: roundToTenth(geom.length),
                 strength: RETAKE_STRENGTH_DEFAULT,
             };
-            return { kind: "retake", clipIdx };
+            return { kind: "retake", clipIdx: ownerIdx };
         },
-        deleteItem: (clip) => {
-            if (!clip.retake) {
-                return false;
+        // The clip owns at most one retake, so its removal always falls back
+        // to the clip itself.
+        deleteItem: ({ owner, ownerIdx }) => {
+            if (!owner.retake) {
+                return null;
             }
-            clip.retake = null;
-            return true;
+            owner.retake = null;
+            return { kind: "clip", clipIdx: ownerIdx, stageIdx: 0 };
         },
         selectionFor: (clipIdx) => ({ kind: "retake", clipIdx }),
     });

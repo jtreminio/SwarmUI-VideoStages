@@ -1,4 +1,3 @@
-import { reconcileArchitectureIncomingIcLoraDrives } from "../architectures/behaviorRegistry";
 import { CLIP_DURATION_MAX, CLIP_DURATION_MIN } from "../constants";
 import {
     buildField,
@@ -6,6 +5,7 @@ import {
     type SectionHeaderAction,
 } from "../detailWidgets";
 import { getRootDefaults } from "../rootDefaults";
+import { skipGlyph, skipTitle } from "../skipVocabulary";
 import { applyClipDurationResize } from "../timelineEdit";
 import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
@@ -63,21 +63,9 @@ export const buildClipSkipAction = (
     clip: Clip,
     clipIdx: number,
 ): SectionHeaderAction => ({
-    label: "⏭︎",
-    title: clip.skipped ? "Re-enable clip" : "Skip clip",
+    label: skipGlyph(clip.skipped === true),
+    title: skipTitle("clip", clip.skipped === true),
     className: "vst-detail-skip-clip",
     active: clip.skipped === true,
-    onClick: () => {
-        context.commit((clips) => {
-            const target = clips[clipIdx];
-            if (target) {
-                target.skipped = !target.skipped;
-                reconcileArchitectureIncomingIcLoraDrives(
-                    clips,
-                    context.generatedEntryMode(),
-                );
-            }
-        });
-        context.render();
-    },
+    onClick: () => context.toggleClipSkip(clipIdx),
 });
