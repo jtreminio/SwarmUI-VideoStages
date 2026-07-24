@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
@@ -20,46 +21,45 @@ internal static class Fixtures
         string scheduler = "normal") =>
         new()
         {
-            ["Control"] = control,
-            ["Upscale"] = upscale,
-            ["UpscaleMethod"] = upscaleMethod,
-            ["Model"] = model,
-            ["Steps"] = steps,
-            ["CfgScale"] = cfgScale,
-            ["Sampler"] = sampler,
-            ["Scheduler"] = scheduler,
-            ["ImageReference"] = imageReference
+            ["control"] = control,
+            ["upscale"] = upscale,
+            ["upscaleMethod"] = upscaleMethod,
+            ["model"] = model,
+            ["steps"] = steps,
+            ["cfgScale"] = cfgScale,
+            ["sampler"] = sampler,
+            ["scheduler"] = scheduler,
+            ["imageReference"] = imageReference
         };
 
     public static JObject MakeClip(params JObject[] stages) =>
         new()
         {
-            ["Name"] = "Clip 0",
-            ["Stages"] = new JArray(stages)
+            ["stages"] = new JArray(stages)
         };
 
     public static JObject MakeClipWithRefs(IEnumerable<JObject> refs = null, params JObject[] stages) =>
         new()
         {
-            ["Name"] = "Clip 0",
-            ["Refs"] = new JArray(refs ?? []),
-            ["Stages"] = new JArray(stages)
+            ["refs"] = new JArray(refs ?? []),
+            ["stages"] = new JArray(stages)
         };
 
     public static JObject MakeRef(string source, int frame = 1, bool fromEnd = false) =>
         new()
         {
-            ["Source"] = source,
-            ["Frame"] = frame,
-            ["FromEnd"] = fromEnd
+            ["source"] = source,
+            ["frame"] = frame,
+            ["fromEnd"] = fromEnd
         };
 
     public static JObject MakeRootConfig(int width, int height, params JObject[] clips) =>
         new()
         {
-            ["Width"] = width,
-            ["Height"] = height,
-            ["Clips"] = new JArray(clips)
+            ["schemaVersion"] = VideoStagesJsonReader.SupportedSchemaVersion,
+            ["width"] = width,
+            ["height"] = height,
+            ["clips"] = new JArray(clips)
         };
 
     public static JObject MakeRootConfig(int width, int height, IEnumerable<JObject> clips) =>
@@ -69,7 +69,15 @@ internal static class Fixtures
         MakeRootConfig(512, 512, clips);
 
     public static string JsonSingleClipStages(params JObject[] stages) =>
-        new JArray(MakeClip(stages)).ToString();
+        MakeDocument(MakeClip(stages)).ToString();
+
+    /// <summary>The authoring document envelope the frontend codec emits around a clip list.</summary>
+    public static JObject MakeDocument(params JObject[] clips) =>
+        new()
+        {
+            ["schemaVersion"] = VideoStagesJsonReader.SupportedSchemaVersion,
+            ["clips"] = new JArray(clips)
+        };
 
     public static T2IParamInput BuildInput(T2IModel baseModel, string stagesJson, string prompt = "unit test prompt")
     {
@@ -90,8 +98,39 @@ internal static class Fixtures
         _ = WorkflowTestHarness.VideoStagesSteps();
         // Config JSON now rides the hidden "Video Stages Data" param, not an inline
         // <videostages>{json} prompt carrier (that carrier was removed).
-        input.Set(VideoStagesExtension.Data, json ?? "");
+        input.Set(VideoStagesExtension.Data, StampDocumentEnvelope(json));
         input.Set(VideoStagesExtension.Enabled, true);
+    }
+
+    /// <summary>Tests author the document body (a clip array or a root object); this stamps the
+    /// current schema version so every test exercises the exact envelope the frontend emits.</summary>
+    private static string StampDocumentEnvelope(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return "";
+        }
+        JToken token;
+        try
+        {
+            token = JToken.Parse(json);
+        }
+        catch (JsonReaderException)
+        {
+            return json;
+        }
+        JObject document = token switch
+        {
+            JArray clips => new JObject { ["clips"] = clips },
+            JObject obj => obj,
+            _ => null,
+        };
+        if (document is null)
+        {
+            return json;
+        }
+        document["schemaVersion"] ??= VideoStagesJsonReader.SupportedSchemaVersion;
+        return document.ToString();
     }
 
     public static T2IParamInput BuildNativeInput(

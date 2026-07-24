@@ -27,22 +27,22 @@ internal static class VideoStageResourceParser
     public static IReadOnlyList<LoraRef> ParseLoras(JObject obj)
     {
         List<LoraRef> loras = [];
-        foreach (JObject entry in VideoStagesJsonReader.GetObjectArray(obj, "Loras"))
+        foreach (JObject entry in VideoStagesJsonReader.GetObjectArray(obj, "loras"))
         {
-            string name = VideoStagesJsonReader.GetString(entry, "Name");
+            string name = VideoStagesJsonReader.GetString(entry, "name");
             if (string.IsNullOrWhiteSpace(name))
             {
                 continue;
             }
 
             double weight = SanitizeWeight(
-                VideoStagesJsonReader.GetOptionalDouble(entry, "Weight", 1.0, "Lora"), 1.0);
+                VideoStagesJsonReader.GetOptionalDouble(entry, "weight", 1.0, "lora"), 1.0);
             double? textEncoderWeight = null;
-            if (VideoStagesJsonReader.HasProperty(entry, "TextEncoderWeight"))
+            if (VideoStagesJsonReader.HasProperty(entry, "textEncoderWeight"))
             {
                 textEncoderWeight = SanitizeWeight(
                     VideoStagesJsonReader.GetOptionalDouble(
-                        entry, "TextEncoderWeight", weight, "Lora"),
+                        entry, "textEncoderWeight", weight, "lora"),
                     weight);
             }
             loras.Add(new LoraRef(name.Trim(), weight, textEncoderWeight));
@@ -56,7 +56,7 @@ internal static class VideoStageResourceParser
         foreach (JObject entry in VideoStagesJsonReader.GetObjectArray(
             clipObject, UploadContainers.IcLorasCollection))
         {
-            string lora = NormalizeLoraName(VideoStagesJsonReader.GetString(entry, "Lora"));
+            string lora = NormalizeLoraName(VideoStagesJsonReader.GetString(entry, "lora"));
             if (lora.Length == 0)
             {
                 continue;
@@ -65,19 +65,19 @@ internal static class VideoStageResourceParser
             UploadedMediaSpec driveMedia = VideoStagesJsonReader.GetEmbeddedUpload(
                 entry,
                 UploadContainers.IcLoraDriveMedia);
-            string driveSource = VideoStagesJsonReader.GetString(entry, "DriveSource")?.Trim();
-            string rawDriveData = VideoStagesJsonReader.GetString(entry, "DriveData");
+            string driveSource = VideoStagesJsonReader.GetString(entry, "driveSource")?.Trim();
+            string rawDriveData = VideoStagesJsonReader.GetString(entry, "driveData");
             entries.Add(new IcLoraSpec(
                 Lora: lora,
-                Preset: VideoStagesJsonReader.GetString(entry, "Preset")?.Trim(),
+                Preset: VideoStagesJsonReader.GetString(entry, "preset")?.Trim(),
                 Stage: Math.Max(-1, (int)VideoStagesJsonReader.GetOptionalDouble(
-                    entry, "Stage", -1, "Clip IcLora")),
+                    entry, "stage", -1, "Clip IcLora")),
                 DriveSource: driveSource,
                 Strength: Math.Clamp(VideoStagesJsonReader.GetOptionalDouble(
-                    entry, "Strength", 1, "Clip IcLora"), 0, 5),
+                    entry, "strength", 1, "Clip IcLora"), 0, 5),
                 AttentionStrength: Math.Clamp(VideoStagesJsonReader.GetOptionalDouble(
-                    entry, "AttentionStrength", 1, "Clip IcLora"), 0, 1),
-                ControlType: VideoStagesJsonReader.GetString(entry, "ControlType")?.Trim(),
+                    entry, "attentionStrength", 1, "Clip IcLora"), 0, 1),
+                ControlType: VideoStagesJsonReader.GetString(entry, "controlType")?.Trim(),
                 DriveMedia: driveMedia,
                 DriveData: ParseDriveData(rawDriveData),
                 DriveMediaKinds: ParseDriveMediaKinds(entry)));
@@ -109,9 +109,7 @@ internal static class VideoStageResourceParser
 
     private static IReadOnlyList<string> ParseDriveMediaKinds(JObject entry)
     {
-        JToken token = entry.GetValue(
-            "DriveMediaKinds",
-            StringComparison.OrdinalIgnoreCase);
+        JToken token = VideoStagesJsonReader.GetToken(entry, "driveMediaKinds");
         if (token is null || token.Type == JTokenType.Null)
         {
             return null;
@@ -130,7 +128,7 @@ internal static class VideoStageResourceParser
 
     private static ImageRefSpec ParseImageReference(JObject obj, int clipIndex, int refIndex)
     {
-        string source = VideoStagesJsonReader.GetString(obj, "Source");
+        string source = VideoStagesJsonReader.GetString(obj, "source");
         if (string.IsNullOrWhiteSpace(source))
         {
             Logs.Warning(
@@ -139,22 +137,22 @@ internal static class VideoStageResourceParser
         }
 
         int frame = 1;
-        string rawFrame = VideoStagesJsonReader.GetString(obj, "Frame");
+        string rawFrame = VideoStagesJsonReader.GetString(obj, "frame");
         if (!string.IsNullOrWhiteSpace(rawFrame) && int.TryParse(rawFrame.Trim(), out int parsedFrame))
         {
             frame = Math.Max(1, parsedFrame);
         }
 
         bool fromEnd = false;
-        string rawFromEnd = VideoStagesJsonReader.GetString(obj, "FromEnd");
+        string rawFromEnd = VideoStagesJsonReader.GetString(obj, "fromEnd");
         if (!string.IsNullOrWhiteSpace(rawFromEnd)
             && bool.TryParse(rawFromEnd.Trim(), out bool parsedFromEnd))
         {
             fromEnd = parsedFromEnd;
         }
 
-        string uploadFileName = VideoStagesJsonReader.GetString(obj, "UploadFileName");
-        string data = VideoStagesJsonReader.GetString(obj, "Data");
+        string uploadFileName = VideoStagesJsonReader.GetString(obj, "uploadFileName");
+        string data = VideoStagesJsonReader.GetString(obj, "data");
         UploadedMediaSpec embeddedImage = VideoStagesJsonReader.GetEmbeddedUpload(
             obj, UploadContainers.RefImage);
         if (embeddedImage is not null)

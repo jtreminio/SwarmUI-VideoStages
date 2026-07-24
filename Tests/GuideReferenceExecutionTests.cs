@@ -121,7 +121,7 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         JObject sourced = MakeSourcedClip(models);
-        ((JObject)((JArray)sourced["Stages"])[0])["ImageReference"] = "Generated";
+        ((JObject)((JArray)sourced["stages"])[0])["imageReference"] = "Generated";
 
         (JObject workflow, WorkflowGenerator generator) =
             GenerateSourcedFlow(models, sourced);

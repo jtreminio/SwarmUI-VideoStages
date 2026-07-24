@@ -30,14 +30,14 @@ public partial class StageFlowTests
         JObject clip = MakeClip(stages);
         JObject retake = new()
         {
-            ["StartSeconds"] = startSeconds,
-            ["LengthSeconds"] = lengthSeconds
+            ["startSeconds"] = startSeconds,
+            ["lengthSeconds"] = lengthSeconds
         };
         if (strength is not null)
         {
-            retake["Strength"] = strength.Value;
+            retake["strength"] = strength.Value;
         }
-        clip["Retake"] = retake;
+        clip["retake"] = retake;
         return new JArray(clip).ToString();
     }
 
@@ -168,12 +168,12 @@ public partial class StageFlowTests
         // Duration 4.0s @ 24fps aligns UP to 97 frames (4.042s). A retake ending exactly at the
         // authored 4.0s must still regenerate through the aligned tail — no frozen suffix block.
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-        clip["Duration"] = 4.0;
-        clip["Retake"] = new JObject
+        clip["duration"] = 4.0;
+        clip["retake"] = new JObject
         {
-            ["StartSeconds"] = 2.0,
-            ["LengthSeconds"] = 2.0,
-            ["Strength"] = 0.9
+            ["startSeconds"] = 2.0,
+            ["lengthSeconds"] = 2.0,
+            ["strength"] = 0.9
         };
         string stagesJson = new JArray(clip).ToString();
 

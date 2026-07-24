@@ -61,21 +61,21 @@ public sealed class LtxIcLoraTests
     {
         JObject entry = new()
         {
-            ["Lora"] = lora,
-            ["DriveSource"] = source,
-            ["DriveData"] = $"{driveData ?? (driveMediaData is null
+            ["lora"] = lora,
+            ["driveSource"] = source,
+            ["driveData"] = $"{driveData ?? (driveMediaData is null
                 ? IcLoraDriveData.None
                 : IcLoraDriveData.Visual)}",
-            ["Strength"] = strength,
-            ["AttentionStrength"] = attentionStrength,
-            ["ControlType"] = controlType,
+            ["strength"] = strength,
+            ["attentionStrength"] = attentionStrength,
+            ["controlType"] = controlType,
         };
         if (driveMediaData is not null)
         {
-            entry["DriveMedia"] = new JObject
+            entry["driveMedia"] = new JObject
             {
-                ["Data"] = driveMediaData,
-                ["FileName"] = driveMediaFileName,
+                ["data"] = driveMediaData,
+                ["fileName"] = driveMediaFileName,
             };
         }
         return entry;
@@ -102,9 +102,9 @@ public sealed class LtxIcLoraTests
 
         JObject entry = MakeIcLora(
             IcLoraWeights.AutoModelToken, driveMediaData: "data:video/mp4;base64,QUJD");
-        entry["Preset"] = "deblur";
+        entry["preset"] = "deblur";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -124,7 +124,7 @@ public sealed class LtxIcLoraTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(MakeIcLora(IcLoraWeights.AutoModelToken));
+        clip["icLoras"] = new JArray(MakeIcLora(IcLoraWeights.AutoModelToken));
 
         T2IParamInput input = BuildNativeInput(
             models.BaseModel, models.VideoModel, new JArray(clip).ToString());
@@ -140,9 +140,9 @@ public sealed class LtxIcLoraTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject entry = MakeIcLora(IcLoraWeights.AutoModelToken);
-        entry["Preset"] = "deblur";
+        entry["preset"] = "deblur";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         T2IParamInput input = BuildNativeInput(
             models.BaseModel, models.VideoModel, new JArray(clip).ToString());
@@ -158,9 +158,9 @@ public sealed class LtxIcLoraTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject entry = MakeIcLora(IcLoraWeights.AutoModelToken);
-        entry["Preset"] = "unit-test-never-downloaded";
+        entry["preset"] = "unit-test-never-downloaded";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         T2IParamInput input = BuildNativeInput(
             models.BaseModel, models.VideoModel, new JArray(clip).ToString());
@@ -177,11 +177,11 @@ public sealed class LtxIcLoraTests
         RegisterLora("UnitTest_IcLoraA");
 
         JObject entry = MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD");
-        entry["Stage"] = 1;
+        entry["stage"] = 1;
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
             MakeStage(models.VideoModel.Name, "Generated", upscale: 2, steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -199,9 +199,9 @@ public sealed class LtxIcLoraTests
         RegisterLora("UnitTest_IcLoraA");
 
         JObject entry = MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD");
-        entry["Stage"] = 0;
+        entry["stage"] = 0;
         JObject secondClip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        secondClip["IcLoras"] = new JArray(entry);
+        secondClip["icLoras"] = new JArray(entry);
         string stagesJson = new JArray(
             MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10)),
             secondClip).ToString();
@@ -224,11 +224,11 @@ public sealed class LtxIcLoraTests
         RegisterLora("UnitTest_IcLoraA");
 
         JObject entry = MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD");
-        entry["Stage"] = 1;
+        entry["stage"] = 1;
         JObject skipped = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
-        skipped["Skipped"] = true;
+        skipped["skipped"] = true;
         JObject clip = MakeClip(skipped, MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -246,7 +246,7 @@ public sealed class LtxIcLoraTests
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
             MakeStage(models.VideoModel.Name, "Generated", upscale: 2, steps: 10));
-        clip["IcLoras"] = new JArray(
+        clip["icLoras"] = new JArray(
             MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
@@ -264,13 +264,13 @@ public sealed class LtxIcLoraTests
         RegisterLora("UnitTest_IcLoraA");
 
         JObject entry = MakeIcLora("UnitTest_IcLoraA");
-        entry["Stage"] = 1;
-        entry["DriveSource"] = Constants.IcLoraSourceIncoming;
-        entry["DriveData"] = $"{IcLoraDriveData.Visual}";
+        entry["stage"] = 1;
+        entry["driveSource"] = Constants.IcLoraSourceIncoming;
+        entry["driveData"] = $"{IcLoraDriveData.Visual}";
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
             MakeStage(models.VideoModel.Name, "Generated", upscale: 2, steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -297,14 +297,14 @@ public sealed class LtxIcLoraTests
         RegisterLora("UnitTest_IcLoraA");
 
         JObject entry = MakeIcLora("UnitTest_IcLoraA");
-        entry["Stage"] = 1;
-        entry["DriveSource"] = Constants.IcLoraSourceIncoming;
-        entry["DriveData"] = $"{IcLoraDriveData.Visual}";
+        entry["stage"] = 1;
+        entry["driveSource"] = Constants.IcLoraSourceIncoming;
+        entry["driveData"] = $"{IcLoraDriveData.Visual}";
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
             MakeStage(models.VideoModel.Name, "Generated",
                 upscale: 2, upscaleMethod: "latent-bislerp", steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -324,10 +324,10 @@ public sealed class LtxIcLoraTests
         RegisterLora("UnitTest_IcLoraA");
 
         JObject entry = MakeIcLora("UnitTest_IcLoraA");
-        entry["DriveSource"] = Constants.IcLoraSourceIncoming;
-        entry["DriveData"] = $"{IcLoraDriveData.Visual}";
+        entry["driveSource"] = Constants.IcLoraSourceIncoming;
+        entry["driveData"] = $"{IcLoraDriveData.Visual}";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         T2IParamInput input = BuildNativeInput(
             models.BaseModel, models.VideoModel, new JArray(clip).ToString());
@@ -348,7 +348,7 @@ public sealed class LtxIcLoraTests
         RegisterLora("UnitTest_IcLoraA");
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(
+        clip["icLoras"] = new JArray(
             MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
@@ -373,9 +373,9 @@ public sealed class LtxIcLoraTests
         RegisterLora("UnitTest_IcLoraB");
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
-        stage["ControlNetStrength"] = 0.7;
+        stage["controlNetStrength"] = 0.7;
         JObject clip = MakeClip(stage);
-        clip["IcLoras"] = new JArray(
+        clip["icLoras"] = new JArray(
             MakeIcLora("UnitTest_IcLoraA", strength: 1.2, driveMediaData: "data:video/mp4;base64,QUJD"),
             MakeIcLora("UnitTest_IcLoraB", strength: 0.9, driveMediaData: "data:video/mp4;base64,REVG"));
 
@@ -416,7 +416,7 @@ public sealed class LtxIcLoraTests
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject clip = MakeClip(stage);
-        clip["IcLoras"] = new JArray(
+        clip["icLoras"] = new JArray(
             MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
@@ -443,7 +443,7 @@ public sealed class LtxIcLoraTests
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject clip = MakeClip(stage);
-        clip["IcLoras"] = new JArray(
+        clip["icLoras"] = new JArray(
             MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD"),
             MakeIcLora("UnitTest_IcLoraB", attentionStrength: 0.65, driveMediaData: "data:video/mp4;base64,REVG"));
 
@@ -467,7 +467,7 @@ public sealed class LtxIcLoraTests
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject clip = MakeClip(stage);
-        clip["IcLoras"] = new JArray(
+        clip["icLoras"] = new JArray(
             MakeIcLora(
                 "UnitTest_IcLoraA",
                 controlType: Constants.IcLoraControlCanny,
@@ -494,7 +494,7 @@ public sealed class LtxIcLoraTests
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject clip = MakeClip(stage);
-        clip["IcLoras"] = new JArray(
+        clip["icLoras"] = new JArray(
             MakeIcLora(
                 "UnitTest_IcLoraA",
                 controlType: Constants.IcLoraControlDepth,
@@ -527,7 +527,7 @@ public sealed class LtxIcLoraTests
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject clip = MakeClip(stage);
-        clip["IcLoras"] = new JArray(
+        clip["icLoras"] = new JArray(
             MakeIcLora(
                 "UnitTest_IcLoraA",
                 controlType: Constants.IcLoraControlNormal,
@@ -555,7 +555,7 @@ public sealed class LtxIcLoraTests
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject clip = MakeClip(stage);
-        clip["IcLoras"] = new JArray(
+        clip["icLoras"] = new JArray(
             MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:image/png;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
@@ -579,7 +579,7 @@ public sealed class LtxIcLoraTests
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject clip = MakeClip(stage);
-        clip["IcLoras"] = new JArray(MakeIcLora("UnitTest_IcLoraA"));
+        clip["icLoras"] = new JArray(MakeIcLora("UnitTest_IcLoraA"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -598,7 +598,7 @@ public sealed class LtxIcLoraTests
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject clip = MakeClip(stage);
-        clip["IcLoras"] = new JArray(
+        clip["icLoras"] = new JArray(
             MakeIcLora("UnitTest_MissingLora", driveMediaData: "data:video/mp4;base64,QUJD"),
             MakeIcLora("UnitTest_IcLoraB", driveMediaData: "data:video/mp4;base64,REVG"));
 
@@ -621,7 +621,7 @@ public sealed class LtxIcLoraTests
         JObject stageA = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject stageB = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 10);
         JObject clip = MakeClip(stageA, stageB);
-        clip["IcLoras"] = new JArray(
+        clip["icLoras"] = new JArray(
             MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
@@ -642,7 +642,7 @@ public sealed class LtxIcLoraTests
         RegisterLora("UnitTest_IcLoraA");
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(
+        clip["icLoras"] = new JArray(
             MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:image/png;base64,QUJD"));
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
@@ -665,9 +665,9 @@ public sealed class LtxIcLoraTests
         RegisterLora("UnitTest_IcLoraHdr");
 
         JObject entry = MakeIcLora("UnitTest_IcLoraHdr");
-        entry["Preset"] = "hdr";
+        entry["preset"] = "hdr";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -690,9 +690,9 @@ public sealed class LtxIcLoraTests
         RegisterLora("UnitTest_IcLoraHdr");
 
         JObject entry = MakeIcLora("UnitTest_IcLoraHdr");
-        entry["Preset"] = "hdr";
+        entry["preset"] = "hdr";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         (JObject _, WorkflowBridge bridge) = Generate(
             clip,
@@ -745,10 +745,10 @@ public sealed class LtxIcLoraTests
         JObject entry = MakeIcLora(
             "UnitTest_IcLoraLipDub",
             driveMediaData: "data:video/mp4;base64,QUJD");
-        entry["Preset"] = "custom-audio";
-        entry["DriveData"] = $"{IcLoraDriveData.Audio}";
+        entry["preset"] = "custom-audio";
+        entry["driveData"] = $"{IcLoraDriveData.Audio}";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -820,10 +820,10 @@ public sealed class LtxIcLoraTests
             "UnitTest_IcLoraLipDub",
             driveMediaData: "data:audio/wav;base64,QUJD",
             driveMediaFileName: "voice.wav");
-        entry["Preset"] = "lipdub";
-        entry["DriveData"] = $"{IcLoraDriveData.Audio}";
+        entry["preset"] = "lipdub";
+        entry["driveData"] = $"{IcLoraDriveData.Audio}";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -858,13 +858,13 @@ public sealed class LtxIcLoraTests
             "UnitTest_IcLoraLipDub",
             driveMediaData: "data:audio/wav;base64,QUJD",
             driveMediaFileName: "voice.wav");
-        entry["Preset"] = "lipdub";
-        entry["DriveData"] = $"{IcLoraDriveData.Audio}";
-        entry["Stage"] = 1;
+        entry["preset"] = "lipdub";
+        entry["driveData"] = $"{IcLoraDriveData.Audio}";
+        entry["stage"] = 1;
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
             MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -886,12 +886,12 @@ public sealed class LtxIcLoraTests
             "UnitTest_IcLoraLipDub",
             driveMediaData: "data:audio/wav;base64,QUJD",
             driveMediaFileName: "voice.wav");
-        entry["Preset"] = "lipdub";
-        entry["DriveData"] = $"{IcLoraDriveData.Audio}";
+        entry["preset"] = "lipdub";
+        entry["driveData"] = $"{IcLoraDriveData.Audio}";
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
             MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -913,16 +913,16 @@ public sealed class LtxIcLoraTests
             "UnitTest_IcLoraLipDub",
             driveMediaData: "data:audio/wav;base64,RFJJVkU=",
             driveMediaFileName: "speaker.wav");
-        entry["Preset"] = "lipdub";
-        entry["DriveData"] = $"{IcLoraDriveData.Audio}";
+        entry["preset"] = "lipdub";
+        entry["driveData"] = $"{IcLoraDriveData.Audio}";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["AudioSource"] = Constants.AudioSourceUpload;
-        clip["UploadedAudio"] = new JObject
+        clip["audioSource"] = Constants.AudioSourceUpload;
+        clip["uploadedAudio"] = new JObject
         {
-            ["Data"] = "data:audio/wav;base64,QkFTRQ==",
-            ["FileName"] = "base.wav",
+            ["data"] = "data:audio/wav;base64,QkFTRQ==",
+            ["fileName"] = "base.wav",
         };
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -952,17 +952,17 @@ public sealed class LtxIcLoraTests
             "UnitTest_IcLoraLipDub",
             driveMediaData: "data:audio/wav;base64,QUJD",
             driveMediaFileName: "speaker.wav");
-        lipDub["Preset"] = "lipdub";
-        lipDub["DriveData"] = $"{IcLoraDriveData.Audio}";
+        lipDub["preset"] = "lipdub";
+        lipDub["driveData"] = $"{IcLoraDriveData.Audio}";
         JObject visual = MakeIcLora(
             "UnitTest_IcLoraVisual",
             driveMediaData: "data:image/png;base64,QUJD",
             driveMediaFileName: "guide.png");
-        visual["Preset"] = "ingredients";
+        visual["preset"] = "ingredients";
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
             MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(lipDub, visual);
+        clip["icLoras"] = new JArray(lipDub, visual);
 
         (JObject workflow, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
@@ -990,10 +990,10 @@ public sealed class LtxIcLoraTests
         JObject entry = MakeIcLora(
             "UnitTest_IcLoraLipDub",
             driveMediaData: driveMediaData);
-        entry["Preset"] = "lipdub";
-        entry["DriveData"] = $"{IcLoraDriveData.Audio}";
+        entry["preset"] = "lipdub";
+        entry["driveData"] = $"{IcLoraDriveData.Audio}";
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(entry);
+        clip["icLoras"] = new JArray(entry);
 
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,

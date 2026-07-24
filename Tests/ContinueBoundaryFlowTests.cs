@@ -23,15 +23,15 @@ public partial class StageFlowTests
     {
         JObject firstClip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-        firstClip["BoundaryOut"] = "continue";
+        firstClip["boundaryOut"] = "continue";
 
         secondClip ??= MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
 
         // The continue-window resolution reads spec frame counts, which come from Duration (0.6s at the
         // harness's 24 fps aligns to 17); without one the window degrades to the conservative 1 frame.
-        firstClip["Duration"] = 0.6;
-        secondClip["Duration"] ??= 0.6;
+        firstClip["duration"] = 0.6;
+        secondClip["duration"] ??= 0.6;
 
         return MakeRootConfig(512, 512, firstClip, secondClip).ToString();
     }
@@ -84,12 +84,12 @@ public partial class StageFlowTests
 
         JObject firstClip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-        firstClip["BoundaryOut"] = boundary;
-        firstClip["BoundaryOutCarryAudio"] = true;
-        firstClip["Duration"] = 0.6;
+        firstClip["boundaryOut"] = boundary;
+        firstClip["boundaryOutCarryAudio"] = true;
+        firstClip["duration"] = 0.6;
         JObject secondClip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-        secondClip["Duration"] = 0.6;
+        secondClip["duration"] = 0.6;
 
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
@@ -157,12 +157,12 @@ public partial class StageFlowTests
 
         JObject firstClip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-        firstClip["BoundaryOut"] = Constants.BoundaryOutContinue;
-        firstClip["BoundaryOutCarryAudio"] = true;
-        firstClip["Duration"] = 5.0;
+        firstClip["boundaryOut"] = Constants.BoundaryOutContinue;
+        firstClip["boundaryOutCarryAudio"] = true;
+        firstClip["duration"] = 5.0;
         JObject secondClip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-        secondClip["Duration"] = 5.0;
+        secondClip["duration"] = 5.0;
 
         T2IParamInput input = BuildInput(
             models.BaseModel,

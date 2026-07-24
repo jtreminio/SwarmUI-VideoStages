@@ -160,11 +160,11 @@ public partial class StageFlowTests
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
             MakeStage(models.VideoModel.Name, "PreviousStage", steps: 8));
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_ControlNetLora",
-            ["DriveSource"] = Constants.ControlNetSourceOne,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_ControlNetLora",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -213,11 +213,11 @@ public partial class StageFlowTests
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10),
             MakeStage(models.VideoModel.Name, "PreviousStage", steps: 8));
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_ControlNetLora",
-            ["DriveSource"] = Constants.ControlNetSourceOne,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_ControlNetLora",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);

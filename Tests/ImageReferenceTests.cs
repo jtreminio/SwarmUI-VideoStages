@@ -15,15 +15,15 @@ public class ImageReferenceTests
     private static JObject MakeStage(string model, string imageReference = null) =>
         new()
         {
-            ["Control"] = 1.0,
-            ["Upscale"] = 1.0,
-            ["UpscaleMethod"] = "pixel-lanczos",
-            ["Model"] = model,
-            ["Steps"] = 12,
-            ["CfgScale"] = 5.0,
-            ["Sampler"] = "euler",
-            ["Scheduler"] = "normal",
-            ["ImageReference"] = imageReference
+            ["control"] = 1.0,
+            ["upscale"] = 1.0,
+            ["upscaleMethod"] = "pixel-lanczos",
+            ["model"] = model,
+            ["steps"] = 12,
+            ["cfgScale"] = 5.0,
+            ["sampler"] = "euler",
+            ["scheduler"] = "normal",
+            ["imageReference"] = imageReference
         };
 
     private static T2IParamInput BuildInput(string stagesJson)
@@ -124,10 +124,10 @@ public class ImageReferenceTests
     public void Missing_later_stage_image_reference_defaults_to_previous_stage()
     {
         JObject firstStage = MakeStage("UnitTest_Video.safetensors");
-        firstStage.Remove("ImageReference");
+        firstStage.Remove("imageReference");
 
         JObject secondStage = MakeStage("UnitTest_Video.safetensors");
-        secondStage.Remove("ImageReference");
+        secondStage.Remove("imageReference");
 
         List<StageSpec> stages = ParseStages(JsonSingleClipStages(firstStage, secondStage));
 
@@ -166,8 +166,8 @@ public class ImageReferenceTests
     public void First_stage_json_upscale_fields_are_normalized_to_defaults_when_non_trivial()
     {
         JObject stage = MakeStage("UnitTest_Video.safetensors");
-        stage["Upscale"] = 2.5;
-        stage["UpscaleMethod"] = "model-unit-test-upscaler";
+        stage["upscale"] = 2.5;
+        stage["upscaleMethod"] = "model-unit-test-upscaler";
 
         List<StageSpec> stages = ParseStages(JsonSingleClipStages(stage));
 
@@ -180,7 +180,7 @@ public class ImageReferenceTests
     public void First_stage_json_control_is_enforced_to_one_when_non_trivial()
     {
         JObject stage = MakeStage("UnitTest_Video.safetensors");
-        stage["Control"] = 0.35;
+        stage["control"] = 0.35;
 
         List<StageSpec> stages = ParseStages(JsonSingleClipStages(stage));
 
@@ -193,7 +193,7 @@ public class ImageReferenceTests
     {
         JObject first = MakeStage("UnitTest_Video.safetensors");
         JObject second = MakeStage("UnitTest_Video.safetensors", "PreviousStage");
-        second["Upscale"] = "1.0000000001";
+        second["upscale"] = "1.0000000001";
 
         List<StageSpec> stages = ParseStages(JsonSingleClipStages(first, second));
 
@@ -207,9 +207,9 @@ public class ImageReferenceTests
     {
         JObject first = MakeStage("UnitTest_Video.safetensors");
         JObject second = MakeStage("UnitTest_Video.safetensors", "PreviousStage");
-        second["Control"] = 0.129;
-        second["Upscale"] = 1.239;
-        second["CfgScale"] = 6.29;
+        second["control"] = 0.129;
+        second["upscale"] = 1.239;
+        second["cfgScale"] = 6.29;
 
         List<StageSpec> stages = ParseStages(JsonSingleClipStages(first, second));
 
@@ -223,11 +223,11 @@ public class ImageReferenceTests
     public void Second_stage_json_preserves_upscale_fields()
     {
         JObject first = MakeStage("UnitTest_Video.safetensors");
-        first["Upscale"] = 2.5;
-        first["UpscaleMethod"] = "model-unit-test-upscaler";
+        first["upscale"] = 2.5;
+        first["upscaleMethod"] = "model-unit-test-upscaler";
         JObject second = MakeStage("UnitTest_Video.safetensors");
-        second["Upscale"] = 2.0;
-        second["UpscaleMethod"] = "pixel-bicubic";
+        second["upscale"] = 2.0;
+        second["upscaleMethod"] = "pixel-bicubic";
 
         List<StageSpec> stages = ParseStages(JsonSingleClipStages(first, second));
 
@@ -247,7 +247,7 @@ public class ImageReferenceTests
         T2IParamInput input = BuildInput(JsonSingleClipStages(
             new JObject
             {
-                ["Model"] = "UnitTest_Video.safetensors"
+                ["model"] = "UnitTest_Video.safetensors"
             }));
         input.Set(T2IParamTypes.RefinerUpscale, 1.5);
         input.Set(ComfyUIBackendExtension.RefinerUpscaleMethod, "model-unit-test-upscaler");

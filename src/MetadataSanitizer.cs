@@ -14,12 +14,7 @@ internal static class MetadataSanitizer
         try
         {
             JToken root = JToken.Parse(raw);
-            JArray clips = root switch
-            {
-                JArray array => array,
-                JObject obj => GetProperty(obj, "Clips") as JArray,
-                _ => null,
-            };
+            JArray clips = root is JObject obj ? GetProperty(obj, "clips") as JArray : null;
             if (clips is null)
             {
                 return raw;
@@ -68,10 +63,10 @@ internal static class MetadataSanitizer
         {
             return;
         }
-        JsonUtil.RemoveAll(upload, "Data");
+        upload.Remove("data");
         if (!upload.HasValues)
         {
-            JsonUtil.RemoveAll(parent, containerKey);
+            parent.Remove(containerKey);
         }
     }
 

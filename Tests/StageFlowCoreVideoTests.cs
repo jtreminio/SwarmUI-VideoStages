@@ -314,13 +314,13 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "unused-before-length-validation.safetensors",
-            ["DriveSource"] = Constants.ControlNetSourceOne,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "unused-before-length-validation.safetensors",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
-        clip["ClipLengthFromControlNet"] = true;
+        clip["clipLengthFromControlNet"] = true;
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
@@ -361,13 +361,13 @@ public partial class StageFlowTests
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_ControlNetLora",
-            ["DriveSource"] = Constants.ControlNetSourceOne,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_ControlNetLora",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
-        clip["ClipLengthFromControlNet"] = true;
+        clip["clipLengthFromControlNet"] = true;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
@@ -434,18 +434,18 @@ public partial class StageFlowTests
             upscaleMethod: "latentmodel-ltx-2.3-spatial-upscaler-x1.5-1.0.safetensors",
             steps: 8,
             cfgScale: 1);
-        stageA["ControlNetStrength"] = 1.0;
+        stageA["controlNetStrength"] = 1.0;
         stageA["refStrengths"] = new JArray(1.0);
-        stageB["ControlNetStrength"] = 0.6;
+        stageB["controlNetStrength"] = 0.6;
         stageB["refStrengths"] = new JArray(0.8);
         JObject clip = MakeClipWithRefs([MakeRef("Base", frame: 1)], stageA, stageB);
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_ControlNetLora",
-            ["DriveSource"] = Constants.ControlNetSourceOne,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_ControlNetLora",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
-        clip["ClipLengthFromControlNet"] = true;
+        clip["clipLengthFromControlNet"] = true;
         T2IParamInput input = BuildInput(models.BaseModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
@@ -483,11 +483,11 @@ public partial class StageFlowTests
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_ControlNetLora",
-            ["DriveSource"] = Constants.ControlNetSourceOne,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_ControlNetLora",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -547,13 +547,13 @@ public partial class StageFlowTests
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_ControlNetLora",
-            ["DriveSource"] = Constants.ControlNetSourceOne,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_ControlNetLora",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
-        clip["ClipLengthFromControlNet"] = true;
+        clip["clipLengthFromControlNet"] = true;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
@@ -611,11 +611,11 @@ public partial class StageFlowTests
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_ControlNetLora",
-            ["DriveSource"] = Constants.ControlNetSourceOne,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_ControlNetLora",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -654,14 +654,14 @@ public partial class StageFlowTests
 
         JObject stageA = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject stageB = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 10);
-        stageA["ControlNetStrength"] = 0.7;
-        stageB["ControlNetStrength"] = 0.3;
+        stageA["controlNetStrength"] = 0.7;
+        stageB["controlNetStrength"] = 0.3;
         JObject clip = MakeClip(stageA, stageB);
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_ControlNetLora",
-            ["DriveSource"] = Constants.ControlNetSourceOne,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_ControlNetLora",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -703,13 +703,13 @@ public partial class StageFlowTests
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
-        stage["ControlNetStrength"] = 0.0;
+        stage["controlNetStrength"] = 0.0;
         JObject clip = MakeClip(stage);
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_ControlNetLora",
-            ["DriveSource"] = Constants.ControlNetSourceOne,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_ControlNetLora",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -734,9 +734,9 @@ public partial class StageFlowTests
         JObject stage0 = MakeStage(models.VideoModel.Name, "Generated", steps: 8);
         JObject stage1 = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 8);
         JObject stage2 = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 8);
-        stage0.Remove("ImageReference");
-        stage1.Remove("ImageReference");
-        stage2.Remove("ImageReference");
+        stage0.Remove("imageReference");
+        stage1.Remove("imageReference");
+        stage2.Remove("imageReference");
         string stagesJson = MakeRootConfig(
             width: 1024,
             height: 1024,
@@ -870,10 +870,10 @@ public partial class StageFlowTests
 
         string stagesJson = new JObject
         {
-            ["FPS"] = 30,
-            ["Width"] = 512,
-            ["Height"] = 512,
-            ["Clips"] = new JArray(
+            ["fps"] = 30,
+            ["width"] = 512,
+            ["height"] = 512,
+            ["clips"] = new JArray(
                 MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10)))
         }.ToString();
 
@@ -897,14 +897,13 @@ public partial class StageFlowTests
 
         string stagesJson = new JObject
         {
-            ["Width"] = 1280,
-            ["Height"] = 1024,
-            ["Clips"] = new JArray(
+            ["width"] = 1280,
+            ["height"] = 1024,
+            ["clips"] = new JArray(
                 new JObject
                 {
-                    ["Name"] = "Clip 0",
-                    ["Duration"] = 30.0,
-                    ["Stages"] = new JArray(
+                    ["duration"] = 30.0,
+                    ["stages"] = new JArray(
                         MakeStage(models.VideoModel.Name, "Generated", steps: 8))
                 })
         }.ToString();
@@ -1205,8 +1204,8 @@ public partial class StageFlowTests
             upscaleMethod: "pixel-lanczos",
             steps: 8);
         JObject clip = MakeClipWithRefs(stages: [stage0, stage1]);
-        clip["AudioSource"] = "audio0";
-        clip["ClipLengthFromAudio"] = true;
+        clip["audioSource"] = "audio0";
+        clip["clipLengthFromAudio"] = true;
         string stagesJson = MakeRootConfig(width: 512, height: 512, clip).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -1246,8 +1245,8 @@ public partial class StageFlowTests
                 upscale: 1.5,
                 upscaleMethod: "pixel-lanczos",
                 steps: 8));
-        clip["AudioSource"] = "audio0";
-        clip["ClipLengthFromAudio"] = true;
+        clip["audioSource"] = "audio0";
+        clip["clipLengthFromAudio"] = true;
         string stagesJson = new JArray(clip).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -1453,12 +1452,12 @@ public partial class StageFlowTests
 
         string stagesJson = new JObject
         {
-            ["FPS"] = 24,
-            ["Clips"] = new JArray(
+            ["fps"] = 24,
+            ["clips"] = new JArray(
                 new JObject
                 {
-                    ["Duration"] = 10.0,
-                    ["Stages"] = new JArray(
+                    ["duration"] = 10.0,
+                    ["stages"] = new JArray(
                         MakeStage(models.VideoModel.Name, "Generated", steps: 8))
                 })
         }.ToString();

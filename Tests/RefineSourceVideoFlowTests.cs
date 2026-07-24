@@ -200,8 +200,8 @@ public partial class StageFlowTests
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: stage0Steps),
             MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: stage1Steps));
-        clip["AudioSource"] = "audio0";
-        clip["ClipLengthFromAudio"] = true;
+        clip["audioSource"] = "audio0";
+        clip["clipLengthFromAudio"] = true;
         string stagesJson = new JArray(clip).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);

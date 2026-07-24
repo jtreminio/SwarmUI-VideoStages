@@ -20,7 +20,7 @@ internal static class TimelineAudioSegmentSpecParser
         Dictionary<string, int> clipIds = [];
         for (int clipIndex = 0; clipIndex < clips.Count; clipIndex++)
         {
-            string clipId = VideoStagesJsonReader.GetString(clips[clipIndex], "Id")?.Trim();
+            string clipId = VideoStagesJsonReader.GetString(clips[clipIndex], "id")?.Trim();
             if (!string.IsNullOrWhiteSpace(clipId))
             {
                 clipIds.TryAdd(clipId, clipIndex);
@@ -30,17 +30,17 @@ internal static class TimelineAudioSegmentSpecParser
         for (int trackIndex = 0; trackIndex < tracks.Count; trackIndex++)
         {
             JObject track = tracks[trackIndex];
-            JObject sourceObject = VideoStagesJsonReader.GetObject(track, "Source");
+            JObject sourceObject = VideoStagesJsonReader.GetObject(track, "source");
             if (sourceObject is null)
             {
                 continue;
             }
 
-            string kind = VideoStagesJsonReader.GetString(sourceObject, "Kind")?.Trim();
-            string reference = VideoStagesJsonReader.GetString(sourceObject, "Reference")?.Trim();
+            string kind = VideoStagesJsonReader.GetString(sourceObject, "kind")?.Trim();
+            string reference = VideoStagesJsonReader.GetString(sourceObject, "reference")?.Trim();
             UploadedMediaSpec upload = VideoStagesJsonReader.GetEmbeddedUpload(
                 sourceObject,
-                "UploadedAudio");
+                "uploadedAudio");
             string aceStepSource =
                 string.Equals(kind, "AceStepFun", StringComparison.OrdinalIgnoreCase)
                 && AudioHandler.TryParseAceStepFunAudioSource(reference, out _)
@@ -53,33 +53,33 @@ internal static class TimelineAudioSegmentSpecParser
 
             double rawVolume = VideoStagesJsonReader.GetOptionalDouble(
                 track,
-                "Volume",
+                "volume",
                 1,
                 $"Audio track {trackIndex}");
             double volume = double.IsFinite(rawVolume)
                 ? Math.Clamp(rawVolume, MinVolume, MaxVolume)
                 : 1;
-            string rawTrackId = VideoStagesJsonReader.GetString(track, "Id")?.Trim();
+            string rawTrackId = VideoStagesJsonReader.GetString(track, "id")?.Trim();
             string trackId = string.IsNullOrWhiteSpace(rawTrackId)
                 ? $"timeline-audio-{trackIndex}"
                 : rawTrackId;
-            List<JObject> spans = VideoStagesJsonReader.GetObjectArray(track, "Spans");
+            List<JObject> spans = VideoStagesJsonReader.GetObjectArray(track, "spans");
             for (int spanIndex = 0; spanIndex < spans.Count; spanIndex++)
             {
                 JObject span = spans[spanIndex];
                 double start = VideoStagesJsonReader.GetOptionalDouble(
                     span,
-                    "TimelineStartSeconds",
+                    "timelineStartSeconds",
                     double.NaN,
                     $"Audio track {trackIndex} span {spanIndex}");
                 double length = VideoStagesJsonReader.GetOptionalDouble(
                     span,
-                    "TimelineLengthSeconds",
+                    "timelineLengthSeconds",
                     double.NaN,
                     $"Audio track {trackIndex} span {spanIndex}");
                 double sourceStart = VideoStagesJsonReader.GetOptionalDouble(
                     span,
-                    "SourceStartSeconds",
+                    "sourceStartSeconds",
                     0,
                     $"Audio track {trackIndex} span {spanIndex}");
                 if (!double.IsFinite(start)
@@ -92,22 +92,22 @@ internal static class TimelineAudioSegmentSpecParser
                     continue;
                 }
 
-                JObject projection = VideoStagesJsonReader.GetObject(span, "Projection");
+                JObject projection = VideoStagesJsonReader.GetObject(span, "projection");
                 int? firstClipId = ResolveClipId(
                     projection,
-                    "FirstClipId",
+                    "firstClipId",
                     clipIds);
                 int? lastClipId = ResolveClipId(
                     projection,
-                    "LastClipId",
+                    "lastClipId",
                     clipIds);
                 double? firstOffset = ReadOptionalNonNegative(
                     projection,
-                    "ClipStartOffsetSeconds",
+                    "clipStartOffsetSeconds",
                     $"Audio track {trackIndex} span {spanIndex} projection");
                 double? lastOffset = ReadOptionalNonNegative(
                     projection,
-                    "ClipEndOffsetSeconds",
+                    "clipEndOffsetSeconds",
                     $"Audio track {trackIndex} span {spanIndex} projection");
                 bool completeProjection =
                     firstClipId.HasValue

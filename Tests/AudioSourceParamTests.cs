@@ -11,26 +11,25 @@ public class AudioSourceParamTests
 {
     private static JObject MakeStage() => new()
     {
-        ["Model"] = "unit-model",
-        ["Steps"] = 8,
-        ["CfgScale"] = 1,
-        ["Sampler"] = "euler",
-        ["Scheduler"] = "normal",
-        ["Control"] = 1,
-        ["Upscale"] = 1,
-        ["UpscaleMethod"] = "pixel-lanczos",
+        ["model"] = "unit-model",
+        ["steps"] = 8,
+        ["cfgScale"] = 1,
+        ["sampler"] = "euler",
+        ["scheduler"] = "normal",
+        ["control"] = 1,
+        ["upscale"] = 1,
+        ["upscaleMethod"] = "pixel-lanczos",
     };
 
     private static string BuildConfigJson(string audioSource) => JsonConvert.SerializeObject(new JObject
     {
-        ["Width"] = 1024,
-        ["Height"] = 576,
-        ["Clips"] = new JArray(
+        ["width"] = 1024,
+        ["height"] = 576,
+        ["clips"] = new JArray(
             new JObject
             {
-                ["Name"] = "Clip 0",
-                ["AudioSource"] = audioSource,
-                ["Stages"] = new JArray(MakeStage())
+                ["audioSource"] = audioSource,
+                ["stages"] = new JArray(MakeStage())
             })
     });
 

@@ -34,6 +34,19 @@ Single-clip/multi-clip and single-stage/multi-stage combinations use the same
 coordinator. Options decorate a clip or stage; they do not create parallel
 execution engines.
 
+## The authoring document contract
+
+The timeline rides one hidden `Video Stages Data` param holding a single JSON
+object: a `schemaVersion` (currently 5, rejected outright when it differs), the
+optional root `width`/`height`, `clips`, and `audioTracks`. Keys are camelCase
+end to end — the backend readers name exactly the keys
+`frontend/persistence/documentCodec.ts` emits, and nothing relies on lenient key
+matching. `Tests/fixtures/authoring-document.json` is the shared pin: the jest
+half asserts the codec emits exactly that payload, and the xUnit half parses it
+while recording every key lookup, so a reader whose key the frontend never emits
+(or a frontend key nothing reads) fails the suite instead of silently dropping
+data.
+
 ## Identity and lock
 
 `ArchitectureId` identifies a video family such as `ltx2`, `wan`, or `none`.

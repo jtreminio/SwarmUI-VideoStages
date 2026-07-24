@@ -17,20 +17,20 @@ internal static class VideoClipSpecParser
     {
         string location = $"Clip {clipIndex}";
         double duration = VideoStagesJsonReader.GetOptionalDouble(
-            clipObject, "Duration", 0, location);
+            clipObject, "duration", 0, location);
         string audioSource = NormalizeAudioSource(
-            VideoStagesJsonReader.GetString(clipObject, "AudioSource"));
+            VideoStagesJsonReader.GetString(clipObject, "audioSource"));
         bool saveAudioTrack = VideoStagesJsonReader.GetOptionalBool(
-            clipObject, "SaveAudioTrack", false);
+            clipObject, "saveAudioTrack", false);
         bool clipLengthFromAudio = VideoStagesJsonReader.GetOptionalBool(
-            clipObject, "ClipLengthFromAudio", false);
+            clipObject, "clipLengthFromAudio", false);
         bool clipLengthFromControlNet = VideoStagesJsonReader.GetOptionalBool(
-            clipObject, "ClipLengthFromControlNet", false);
+            clipObject, "clipLengthFromControlNet", false);
         bool reuseAudio = VideoStagesJsonReader.GetOptionalBool(
-            clipObject, "ReuseAudio", false);
+            clipObject, "reuseAudio", false);
 
         IReadOnlyList<IcLoraSpec> icLoras = VideoStageResourceParser.ParseIcLoras(clipObject);
-        List<JObject> rawStages = VideoStagesJsonReader.GetObjectArray(clipObject, "Stages");
+        List<JObject> rawStages = VideoStagesJsonReader.GetObjectArray(clipObject, "stages");
 
         IReadOnlyList<ImageRefSpec> references =
             VideoStageResourceParser.ParseImageReferences(clipObject, clipIndex);
@@ -61,33 +61,33 @@ internal static class VideoClipSpecParser
             Loras: VideoStageResourceParser.ParseLoras(clipObject),
             PromptWindows: SortWindows(context.Tags.ClipWindows.GetValueOrDefault(clipIndex)),
             BoundaryOut: BoundaryPolicy.NormalizeAuthoredMode(
-                VideoStagesJsonReader.GetString(clipObject, "BoundaryOut")),
+                VideoStagesJsonReader.GetString(clipObject, "boundaryOut")),
             BoundaryOutOverlap: Math.Max(
                 0,
                 VideoStagesJsonReader.GetOptionalInt(
                     clipObject,
-                    "BoundaryOutOverlap",
+                    "boundaryOutOverlap",
                     0,
                     location)),
             SourceVideo: sourceVideo,
             BoundaryOutCarryAudio: VideoStagesJsonReader.GetOptionalBool(
                 clipObject,
-                "BoundaryOutCarryAudio",
+                "boundaryOutCarryAudio",
                 false))
         {
             AuthoredArchitectureId = VideoStagesJsonReader.GetString(
                 clipObject,
-                "Architecture")?.Trim().ToLowerInvariant(),
+                "architecture")?.Trim().ToLowerInvariant(),
             AuthoredModelProfileId = VideoStagesJsonReader.GetString(
                 clipObject,
-                "ModelProfileId")?.Trim().ToLowerInvariant(),
+                "modelProfileId")?.Trim().ToLowerInvariant(),
             // Prompt-tag overrides have already been applied to rawStages by the top-level parser,
             // so architecture resolution observes exactly the authored state generation would use.
             AuthoredStages = [.. rawStages.Select((stage, rawIndex) => new AuthoredStageModelSpec(
                 rawIndex,
-                VideoStagesJsonReader.GetString(stage, "Model"),
-                VideoStagesJsonReader.GetString(stage, "ModelProfileId")?.Trim().ToLowerInvariant(),
-                VideoStagesJsonReader.GetOptionalBool(stage, "Skipped", false)))],
+                VideoStagesJsonReader.GetString(stage, "model"),
+                VideoStagesJsonReader.GetString(stage, "modelProfileId")?.Trim().ToLowerInvariant(),
+                VideoStagesJsonReader.GetOptionalBool(stage, "skipped", false)))],
         };
     }
 
@@ -102,7 +102,7 @@ internal static class VideoClipSpecParser
         for (int stageIndex = 0; stageIndex < rawStages.Count; stageIndex++)
         {
             JObject stage = rawStages[stageIndex];
-            if (VideoStagesJsonReader.GetOptionalBool(stage, "Skipped", false))
+            if (VideoStagesJsonReader.GetOptionalBool(stage, "skipped", false))
             {
                 continue;
             }

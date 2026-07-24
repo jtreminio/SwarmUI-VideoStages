@@ -27,13 +27,13 @@ public partial class StageFlowTests
     {
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-        ((JObject)((JArray)clip["Stages"])[0]).Remove("ImageReference");
-        clip["Duration"] = SourcedClipDuration;
-        clip["SourceVideo"] = new JObject
+        ((JObject)((JArray)clip["stages"])[0]).Remove("imageReference");
+        clip["duration"] = SourcedClipDuration;
+        clip["sourceVideo"] = new JObject
         {
-            ["Data"] = "data:video/mp4;base64," + Convert.ToBase64String([0x11, 0x22, 0x33]),
-            ["FileName"] = "footage.mp4",
-            ["StartSeconds"] = SourcedStartSeconds
+            ["data"] = "data:video/mp4;base64," + Convert.ToBase64String([0x11, 0x22, 0x33]),
+            ["fileName"] = "footage.mp4",
+            ["startSeconds"] = SourcedStartSeconds
         };
         return clip;
     }
@@ -42,7 +42,7 @@ public partial class StageFlowTests
     {
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-        clip["Duration"] = SourcedClipDuration;
+        clip["duration"] = SourcedClipDuration;
         return clip;
     }
 
@@ -138,16 +138,16 @@ public partial class StageFlowTests
         loraHandler.Models[lipDub.Name] = lipDub;
 
         JObject sourced = MakeSourcedClip(models);
-        sourced["IcLoras"] = new JArray(new JObject
+        sourced["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = lipDub.Name,
-            ["Preset"] = "lipdub",
-            ["DriveSource"] = Constants.IcLoraSourceUpload,
-            ["DriveData"] = $"{IcLoraDriveData.Audio}",
-            ["DriveMedia"] = new JObject
+            ["lora"] = lipDub.Name,
+            ["preset"] = "lipdub",
+            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveData"] = $"{IcLoraDriveData.Audio}",
+            ["driveMedia"] = new JObject
             {
-                ["Data"] = "data:video/mp4;base64,RFJJVkU=",
-                ["FileName"] = "target-voice.mp4",
+                ["data"] = "data:video/mp4;base64,RFJJVkU=",
+                ["fileName"] = "target-voice.mp4",
             },
         });
 
@@ -199,12 +199,12 @@ public partial class StageFlowTests
         loraHandler.Models[icLora.Name] = icLora;
 
         JObject sourced = MakeSourcedClip(models);
-        sourced["IcLoras"] = new JArray(new JObject
+        sourced["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = icLora.Name,
-            ["Preset"] = "custom-audio",
-            ["DriveSource"] = Constants.IcLoraSourceIncoming,
-            ["DriveData"] = $"{IcLoraDriveData.Audio}",
+            ["lora"] = icLora.Name,
+            ["preset"] = "custom-audio",
+            ["driveSource"] = Constants.IcLoraSourceIncoming,
+            ["driveData"] = $"{IcLoraDriveData.Audio}",
         });
 
         (JObject workflow, WorkflowGenerator _generator) =
@@ -238,14 +238,14 @@ public partial class StageFlowTests
         loraHandler.Models[icLora.Name] = icLora;
 
         JObject first = MakeSourcedClip(models);
-        first["BoundaryOut"] = Constants.BoundaryOutCut;
+        first["boundaryOut"] = Constants.BoundaryOutCut;
         JObject second = MakeGeneratedClip(models);
-        second["IcLoras"] = new JArray(new JObject
+        second["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = icLora.Name,
-            ["Preset"] = "custom-audio",
-            ["DriveSource"] = Constants.IcLoraSourceIncoming,
-            ["DriveData"] = $"{IcLoraDriveData.Audio}",
+            ["lora"] = icLora.Name,
+            ["preset"] = "custom-audio",
+            ["driveSource"] = Constants.IcLoraSourceIncoming,
+            ["driveData"] = $"{IcLoraDriveData.Audio}",
         });
 
         (JObject workflow, WorkflowGenerator _generator) =
@@ -280,14 +280,14 @@ public partial class StageFlowTests
         loraHandler.Models[icLora.Name] = icLora;
 
         JObject sourced = MakeSourcedClip(models);
-        ((JArray)sourced["Stages"]).Add(
+        ((JArray)sourced["stages"]).Add(
             MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: 12));
-        sourced["IcLoras"] = new JArray(new JObject
+        sourced["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = icLora.Name,
-            ["Preset"] = "custom-audio",
-            ["DriveSource"] = Constants.IcLoraSourceIncoming,
-            ["DriveData"] = $"{IcLoraDriveData.Audio}",
+            ["lora"] = icLora.Name,
+            ["preset"] = "custom-audio",
+            ["driveSource"] = Constants.IcLoraSourceIncoming,
+            ["driveData"] = $"{IcLoraDriveData.Audio}",
         });
 
         (JObject workflow, WorkflowGenerator _generator) =
@@ -313,7 +313,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject sourced = MakeSourcedClip(models);
-        ((JArray)sourced["Stages"]).Add(
+        ((JArray)sourced["stages"]).Add(
             MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: 12));
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -352,15 +352,15 @@ public partial class StageFlowTests
         // Passthrough stage 0 (Control 0) + a ×2 refine stage. The IC-LoRA explicitly targets the
         // refine stage and consumes the media entering that stage.
         JObject sourced = MakeSourcedClip(models);
-        ((JArray)sourced["Stages"])[0]["Control"] = 0.0;
-        ((JArray)sourced["Stages"]).Add(
+        ((JArray)sourced["stages"])[0]["control"] = 0.0;
+        ((JArray)sourced["stages"]).Add(
             MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, upscale: 2.0, steps: 12));
-        sourced["IcLoras"] = new JArray(new JObject
+        sourced["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_IcLoraUpscaler",
-            ["DriveSource"] = Constants.IcLoraSourceIncoming,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
-            ["Stage"] = 1,
+            ["lora"] = "UnitTest_IcLoraUpscaler",
+            ["driveSource"] = Constants.IcLoraSourceIncoming,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
+            ["stage"] = 1,
         });
         // Paired with a generated lead clip: the cross-clip merge owns the final save, so the run
         // does not take the lone-sourced-clip root-save retarget path.
@@ -403,11 +403,11 @@ public partial class StageFlowTests
         // Paired with a generated lead clip so the merge owns the save (the lone-sourced retarget
         // path is covered by Lone_sourced_clip_with_ic_lora_guide_saves_decoded_audio_not_a_latent).
         JObject sourced = MakeSourcedClip(models);
-        sourced["IcLoras"] = new JArray(new JObject
+        sourced["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_IcLoraDrive",
-            ["DriveSource"] = Constants.IcLoraSourceIncoming,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_IcLoraDrive",
+            ["driveSource"] = Constants.IcLoraSourceIncoming,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
             models, MakeGeneratedClip(models), sourced);
@@ -454,12 +454,12 @@ public partial class StageFlowTests
         // On a sourced clip, stage 0's Incoming media IS the footage, so that
         // explicit drive source is legal at Stage 0 and emits a guide.
         JObject sourced = MakeSourcedClip(models);
-        sourced["IcLoras"] = new JArray(new JObject
+        sourced["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_IcLoraDrive",
-            ["DriveSource"] = Constants.IcLoraSourceIncoming,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
-            ["Stage"] = 0,
+            ["lora"] = "UnitTest_IcLoraDrive",
+            ["driveSource"] = Constants.IcLoraSourceIncoming,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
+            ["stage"] = 0,
         });
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
             models, MakeGeneratedClip(models), sourced);
@@ -491,11 +491,11 @@ public partial class StageFlowTests
         // into a clean separate node; the fixed AttachDecodedLtxAudioFromCurrentVideo adds an
         // explicit LTXVAudioVAEDecode so the save's audio is decoded AUDIO, not a raw latent.
         JObject sourced = MakeSourcedClip(models);
-        sourced["IcLoras"] = new JArray(new JObject
+        sourced["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_IcLoraDrive",
-            ["DriveSource"] = Constants.IcLoraSourceIncoming,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_IcLoraDrive",
+            ["driveSource"] = Constants.IcLoraSourceIncoming,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -526,8 +526,8 @@ public partial class StageFlowTests
 
         JObject sourced = MakeSourcedClip(models);
         // Passthrough stage 0 (Control 0): the ×2 pixel refine is the only sampling stage.
-        ((JArray)sourced["Stages"])[0]["Control"] = 0.0;
-        ((JArray)sourced["Stages"]).Add(
+        ((JArray)sourced["stages"])[0]["control"] = 0.0;
+        ((JArray)sourced["stages"]).Add(
             MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, upscale: 2.0, steps: 12));
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -554,10 +554,10 @@ public partial class StageFlowTests
 
         JObject sourced = MakeSourcedClip(models);
         // Passthrough stage 0 (Control 0): stage 1 is the refine stage that owns the conform scale.
-        ((JArray)sourced["Stages"])[0]["Control"] = 0.0;
-        ((JArray)sourced["Stages"]).Add(
+        ((JArray)sourced["stages"])[0]["control"] = 0.0;
+        ((JArray)sourced["stages"]).Add(
             MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, upscale: 2.0, steps: 12));
-        ((JArray)sourced["Stages"]).Add(
+        ((JArray)sourced["stages"]).Add(
             MakeStage(models.VideoModel.Name, "Stage0", control: 0.5, upscale: 2.0, steps: 12));
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -582,11 +582,11 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject sourced = MakeSourcedClip(models);
-        sourced["Retake"] = new JObject
+        sourced["retake"] = new JObject
         {
-            ["StartSeconds"] = 0.2,
-            ["LengthSeconds"] = 0.2,
-            ["Strength"] = 1.0
+            ["startSeconds"] = 0.2,
+            ["lengthSeconds"] = 0.2,
+            ["strength"] = 1.0
         };
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -612,7 +612,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject sourced = MakeSourcedClip(models);
-        sourced["BoundaryOut"] = "continue";
+        sourced["boundaryOut"] = "continue";
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
             models, sourced, MakeGeneratedClip(models));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -651,7 +651,7 @@ public partial class StageFlowTests
         // consumes the PRE-conform root output, so the merge retarget must still catch it — a
         // missed retarget ships the unrelated root generation as a second output video.
         JObject sourced = MakeSourcedClip(models);
-        sourced["BoundaryOut"] = boundaryOut;
+        sourced["boundaryOut"] = boundaryOut;
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
             models, sourced, MakeGeneratedClip(models));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -684,7 +684,7 @@ public partial class StageFlowTests
         // rather than the already-decoded priority-11 fixture used by most sourced-clip tests.
         // Clip 0 owns uploaded footage while clip 1 owns the generated root handoff.
         JObject sourced = MakeSourcedClip(models);
-        sourced["BoundaryOut"] = Constants.BoundaryOutCut;
+        sourced["boundaryOut"] = Constants.BoundaryOutCut;
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
@@ -725,8 +725,8 @@ public partial class StageFlowTests
         // clip without altering the footage — no sampler for clip 0, just the conform chain
         // feeding the merge.
         JObject sourced = MakeSourcedClip(models);
-        ((JArray)sourced["Stages"])[0]["Control"] = 0.0;
-        sourced["BoundaryOut"] = "continue";
+        ((JArray)sourced["stages"])[0]["control"] = 0.0;
+        sourced["boundaryOut"] = "continue";
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
             models, sourced, MakeGeneratedClip(models));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -755,7 +755,7 @@ public partial class StageFlowTests
         // at the same dims as the sourced clip. Left at core dims, the merge degrades to a hard cut
         // that repeats the continuity overlap frames.
         JObject sourced = MakeSourcedClip(models);
-        sourced["BoundaryOut"] = "continue";
+        sourced["boundaryOut"] = "continue";
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
@@ -781,7 +781,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject generated = MakeGeneratedClip(models);
-        generated["BoundaryOut"] = "continue";
+        generated["boundaryOut"] = "continue";
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
             models, generated, MakeSourcedClip(models));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -807,7 +807,7 @@ public partial class StageFlowTests
 
         // Passthrough stage 0 (Control 0): the conformed footage IS the output, no sampling at all.
         JObject sourced = MakeSourcedClip(models);
-        ((JArray)sourced["Stages"])[0]["Control"] = 0.0;
+        ((JArray)sourced["stages"])[0]["control"] = 0.0;
         (JObject workflow, WorkflowGenerator g) = GenerateSourcedFlow(models, sourced);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -917,19 +917,19 @@ public partial class StageFlowTests
         JObject sourced = MakeSourcedClip(models);
         // Payload parity with the real dangling-sampler report: continue boundary, per-stage loras,
         // an implicit-drive IC-LoRA (Upload/no-media on a sourced clip), and a ×2 pixel refine stage.
-        sourced["BoundaryOut"] = "continue";
-        sourced["BoundaryOutOverlap"] = 40;
-        JArray stageLoras = new(new JObject { ["Name"] = "UnitTest_StageLora", ["Weight"] = 1.0 });
-        ((JArray)sourced["Stages"])[0]["Loras"] = stageLoras;
+        sourced["boundaryOut"] = "continue";
+        sourced["boundaryOutOverlap"] = 40;
+        JArray stageLoras = new(new JObject { ["name"] = "UnitTest_StageLora", ["weight"] = 1.0 });
+        ((JArray)sourced["stages"])[0]["loras"] = stageLoras;
         JObject refineStage = MakeStage(
             models.VideoModel.Name, "PreviousStage", control: 0.5, upscale: 2.0, steps: 12);
-        refineStage["Loras"] = stageLoras.DeepClone();
-        ((JArray)sourced["Stages"]).Add(refineStage);
-        sourced["IcLoras"] = new JArray(new JObject
+        refineStage["loras"] = stageLoras.DeepClone();
+        ((JArray)sourced["stages"]).Add(refineStage);
+        sourced["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_StageLora",
-            ["DriveSource"] = Constants.IcLoraSourceIncoming,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_StageLora",
+            ["driveSource"] = Constants.IcLoraSourceIncoming,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildTextToVideoInput(
             models.VideoModel, MakeRootConfig(512, 512, sourced).ToString());
@@ -1045,7 +1045,7 @@ public partial class StageFlowTests
         // wired in as the generated clip's audio init, pinning the whole unrelated root sampler
         // (a third SwarmKSampler) alive in the graph.
         JObject sourced = MakeSourcedClip(models);
-        sourced["BoundaryOut"] = "continue";
+        sourced["boundaryOut"] = "continue";
         T2IParamInput input = BuildTextToVideoInput(
             models.VideoModel,
             MakeRootConfig(512, 512, sourced, MakeGeneratedClip(models)).ToString());
@@ -1115,8 +1115,8 @@ public partial class StageFlowTests
         JObject sourced = MakeSourcedClip(models);
         // Stage 0 refines its own footage with a ×2 pixel upscale: the conformed footage is scaled
         // to the final 1024×1024 dims before stage 0's sampler (start_at_step 5) encodes it.
-        ((JArray)sourced["Stages"])[0]["Upscale"] = 2.0;
-        ((JArray)sourced["Stages"])[0]["UpscaleMethod"] = "pixel-lanczos";
+        ((JArray)sourced["stages"])[0]["upscale"] = 2.0;
+        ((JArray)sourced["stages"])[0]["upscaleMethod"] = "pixel-lanczos";
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -1153,15 +1153,15 @@ public partial class StageFlowTests
         // after its sampler — a guide that reaches a sampler the host built natively would leave
         // the guide frames in the output.
         JObject clip = MakeGeneratedClip(models);
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_IcLoraDrive",
-            ["DriveSource"] = Constants.IcLoraSourceUpload,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
-            ["DriveMedia"] = new JObject
+            ["lora"] = "UnitTest_IcLoraDrive",
+            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
+            ["driveMedia"] = new JObject
             {
-                ["Data"] = "data:video/mp4;base64,QUJD",
-                ["FileName"] = "drive.mp4",
+                ["data"] = "data:video/mp4;base64,QUJD",
+                ["fileName"] = "drive.mp4",
             },
         });
         T2IParamInput input = BuildTextToVideoInput(
@@ -1191,7 +1191,7 @@ public partial class StageFlowTests
         // No explicit stage ImageReference (the fixture default would set ImageRefWasExplicit and
         // mask the implicit-ref path this test guards).
         JObject sourced = MakeSourcedClip(models);
-        ((JObject)((JArray)sourced["Stages"])[0]).Remove("ImageReference");
+        ((JObject)((JArray)sourced["stages"])[0]).Remove("imageReference");
         (JObject workflow, WorkflowGenerator g) = GenerateSourcedFlow(models, sourced);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -1213,7 +1213,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject sourced = MakeSourcedClip(models);
-        sourced.Remove("Duration");
+        sourced.Remove("duration");
         (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 

@@ -51,19 +51,19 @@ internal static class VideoStageSpecParser
     {
         string location = $"Clip {clipIndex} stage {stageIndex}";
         string model = VideoStagesJsonReader.GetOptionalString(
-            stage, "Model", null, location, allowEmpty: false);
+            stage, "model", null, location, allowEmpty: false);
         if (string.IsNullOrWhiteSpace(model))
         {
             throw new SwarmUserErrorException(
-                $"VideoStages: Clip {clipIndex} stage {stageIndex} is missing required field 'Model'.");
+                $"VideoStages: Clip {clipIndex} stage {stageIndex} is missing required field 'model'.");
         }
 
         double control = NormalizeControl(VideoStagesJsonReader.GetOptionalDouble(
-            stage, "Control", defaults.Control, location));
+            stage, "control", defaults.Control, location));
         double upscale = NormalizeUpscale(VideoStagesJsonReader.GetOptionalDouble(
-            stage, "Upscale", defaults.Upscale, location));
+            stage, "upscale", defaults.Upscale, location));
         string upscaleMethod = VideoStagesJsonReader.GetOptionalString(
-            stage, "UpscaleMethod", defaults.UpscaleMethod, location, allowEmpty: false);
+            stage, "upscaleMethod", defaults.UpscaleMethod, location, allowEmpty: false);
 
         bool isRefineSkipped = refineMode && clipIndex == 0 && stageIndex < refineSkipStages;
         bool isGenerationFirstStage = stageIndex == 0 && !sourcedClip;
@@ -72,7 +72,7 @@ internal static class VideoStageSpecParser
             if (isGenerationFirstStage && ShouldWarnFirstStageUpscaleIgnored(stage, upscale))
             {
                 Logs.Warning(
-                    "VideoStages: The first stage in each clip (stage index 0) includes 'Upscale' / 'UpscaleMethod', "
+                    "VideoStages: The first stage in each clip (stage index 0) includes 'upscale' / 'upscaleMethod', "
                     + "which are ignored for that stage only.");
             }
             control = isRefineSkipped ? 0.0 : FirstStageControl;
@@ -91,34 +91,34 @@ internal static class VideoStageSpecParser
             UpscaleMethod: upscaleMethod,
             Model: model,
             Steps: Math.Max(1, VideoStagesJsonReader.GetOptionalInt(
-                stage, "Steps", defaults.Steps, location)),
+                stage, "steps", defaults.Steps, location)),
             CfgScale: NormalizeCfgScale(VideoStagesJsonReader.GetOptionalDouble(
-                stage, "CfgScale", defaults.CfgScale, location)),
+                stage, "cfgScale", defaults.CfgScale, location)),
             Sampler: VideoStagesJsonReader.GetOptionalString(
-                stage, "Sampler", defaults.Sampler, location, allowEmpty: false),
+                stage, "sampler", defaults.Sampler, location, allowEmpty: false),
             Scheduler: VideoStagesJsonReader.GetOptionalString(
-                stage, "Scheduler", defaults.Scheduler, location, allowEmpty: false),
+                stage, "scheduler", defaults.Scheduler, location, allowEmpty: false),
             ImageReference: NormalizeImageReference(
-                VideoStagesJsonReader.GetString(stage, "ImageReference"),
+                VideoStagesJsonReader.GetString(stage, "imageReference"),
                 clipIndex,
                 stageIndex,
                 isTextToVideoRootWorkflow),
             ControlNetStrength: ParseControlNetStrength(stage, location),
             IcLoraStrengths: ParseIcLoraStrengths(stage),
             ImageRefStrengths: ParseRefStrengths(stage, clipRefCount),
-            ImageRefWasExplicit: VideoStagesJsonReader.HasProperty(stage, "ImageReference"),
+            ImageRefWasExplicit: VideoStagesJsonReader.HasProperty(stage, "imageReference"),
             Loras: VideoStageResourceParser.ParseLoras(stage));
     }
 
     private static double? ParseControlNetStrength(JObject stage, string location)
     {
-        if (!VideoStagesJsonReader.HasProperty(stage, "ControlNetStrength"))
+        if (!VideoStagesJsonReader.HasProperty(stage, "controlNetStrength"))
         {
             return null;
         }
         double value = VideoStagesJsonReader.GetOptionalDouble(
             stage,
-            "ControlNetStrength",
+            "controlNetStrength",
             Constants.DefaultStageControlNetStrength,
             location);
         return ClampUnitOrDefault(value, Constants.DefaultStageControlNetStrength);
@@ -126,7 +126,7 @@ internal static class VideoStageSpecParser
 
     private static IReadOnlyList<double> ParseIcLoraStrengths(JObject stage)
     {
-        if (JsonUtil.Get(stage, "IcLoraStrengths") is not JArray array)
+        if (VideoStagesJsonReader.GetArray(stage, "icLoraStrengths") is not JArray array)
         {
             return [];
         }
@@ -162,7 +162,7 @@ internal static class VideoStageSpecParser
         }
 
         List<double> strengths = [];
-        if (JsonUtil.Get(stage, "refStrengths") is JArray array)
+        if (VideoStagesJsonReader.GetArray(stage, "refStrengths") is JArray array)
         {
             foreach (JToken entry in array)
             {
@@ -259,8 +259,8 @@ internal static class VideoStageSpecParser
 
     private static bool ShouldWarnFirstStageUpscaleIgnored(JObject stage, double upscale)
     {
-        if (!VideoStagesJsonReader.HasProperty(stage, "Upscale")
-            && !VideoStagesJsonReader.HasProperty(stage, "UpscaleMethod"))
+        if (!VideoStagesJsonReader.HasProperty(stage, "upscale")
+            && !VideoStagesJsonReader.HasProperty(stage, "upscaleMethod"))
         {
             return false;
         }

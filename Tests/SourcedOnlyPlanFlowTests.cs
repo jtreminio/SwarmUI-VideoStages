@@ -18,7 +18,7 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         JObject sourced = MakeSourcedClip(models);
-        sourced["Stages"] = new JArray();
+        sourced["stages"] = new JArray();
 
         (JObject workflow, WorkflowGenerator generator) = GenerateSourcedFlow(models, sourced);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -36,26 +36,26 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         JObject sourced = MakeSourcedClip(models);
-        sourced["Stages"] = new JArray();
+        sourced["stages"] = new JArray();
         JObject root = MakeRootConfig(512, 512, sourced);
-        root["AudioTracks"] = new JArray(new JObject
+        root["audioTracks"] = new JArray(new JObject
         {
-            ["Id"] = "track-overlay",
-            ["Source"] = new JObject
+            ["id"] = "track-overlay",
+            ["source"] = new JObject
             {
-                ["Kind"] = "Upload",
-                ["Reference"] = "overlay.wav",
-                ["UploadedAudio"] = new JObject
+                ["kind"] = "Upload",
+                ["reference"] = "overlay.wav",
+                ["uploadedAudio"] = new JObject
                 {
-                    ["Data"] = "data:audio/wav;base64,QUJD",
-                    ["FileName"] = "overlay.wav",
+                    ["data"] = "data:audio/wav;base64,QUJD",
+                    ["fileName"] = "overlay.wav",
                 },
             },
-            ["Spans"] = new JArray(new JObject
+            ["spans"] = new JArray(new JObject
             {
-                ["TimelineStartSeconds"] = 0.1,
-                ["TimelineLengthSeconds"] = 0.2,
-                ["SourceStartSeconds"] = 0.0,
+                ["timelineStartSeconds"] = 0.1,
+                ["timelineLengthSeconds"] = 0.2,
+                ["sourceStartSeconds"] = 0.0,
             }),
         });
 
@@ -75,7 +75,7 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         JObject sourced = MakeSourcedClip(models);
-        sourced["Stages"] = new JArray();
+        sourced["stages"] = new JArray();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
@@ -112,9 +112,9 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         JObject first = MakeSourcedClip(models);
-        first["Stages"] = new JArray();
+        first["stages"] = new JArray();
         JObject second = MakeSourcedClip(models);
-        second["Stages"] = new JArray();
+        second["stages"] = new JArray();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,

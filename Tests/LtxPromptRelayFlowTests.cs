@@ -14,7 +14,7 @@ public partial class StageFlowTests
     private static string ClipWithDurationJson(double duration, params JObject[] stages)
     {
         JObject clip = MakeClip(stages);
-        clip["Duration"] = duration;
+        clip["duration"] = duration;
         return new JArray(clip).ToString();
     }
 

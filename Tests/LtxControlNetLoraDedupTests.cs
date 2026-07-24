@@ -105,14 +105,14 @@ public sealed class LtxControlNetLoraDedupTests
 
         JObject stageA = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject stageB = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 10);
-        stageA["ControlNetStrength"] = 0.7;
-        stageB["ControlNetStrength"] = 0.3;
+        stageA["controlNetStrength"] = 0.7;
+        stageB["controlNetStrength"] = 0.3;
         JObject clip = MakeClip(stageA, stageB);
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_ControlNetLora",
-            ["DriveSource"] = Constants.ControlNetSourceOne,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_ControlNetLora",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
@@ -179,17 +179,17 @@ public sealed class LtxControlNetLoraDedupTests
 
         JObject stageA = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         JObject stageB = MakeStage(models.VideoModel.Name, "PreviousStage", steps: 10);
-        stageA["ControlNetStrength"] = 0.7;
-        stageB["ControlNetStrength"] = 0.3;
+        stageA["controlNetStrength"] = 0.7;
+        stageB["controlNetStrength"] = 0.3;
         // Per-stage scoped LoRAs now come from the Video Stages JSON (folds in the old <videoclip[0,s]><lora:…>).
-        stageA["Loras"] = new JArray(new JObject { ["Name"] = "UnitTest_ScopedStageLora", ["Weight"] = 1.0 });
-        stageB["Loras"] = new JArray(new JObject { ["Name"] = "UnitTest_ScopedStageLora", ["Weight"] = 0.4 });
+        stageA["loras"] = new JArray(new JObject { ["name"] = "UnitTest_ScopedStageLora", ["weight"] = 1.0 });
+        stageB["loras"] = new JArray(new JObject { ["name"] = "UnitTest_ScopedStageLora", ["weight"] = 0.4 });
         JObject clip = MakeClip(stageA, stageB);
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "UnitTest_ControlNetLora",
-            ["DriveSource"] = Constants.ControlNetSourceOne,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "UnitTest_ControlNetLora",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         string stagesJson = new JArray(clip).ToString();
 

@@ -55,7 +55,7 @@ internal static class VideoStagesSpecParser
         for (int clipIndex = 0; clipIndex < document.Entries.Count; clipIndex++)
         {
             JObject clipObject = document.Entries[clipIndex];
-            if (VideoStagesJsonReader.GetOptionalBool(clipObject, "Skipped", false))
+            if (VideoStagesJsonReader.GetOptionalBool(clipObject, "skipped", false))
             {
                 continue;
             }
@@ -102,10 +102,10 @@ internal static class VideoStagesSpecParser
     {
         for (int index = 0; index < entries.Count; index++)
         {
-            if (!VideoStagesJsonReader.HasProperty(entries[index], "Stages"))
+            if (!VideoStagesJsonReader.HasProperty(entries[index], "stages"))
             {
                 throw new SwarmUserErrorException(
-                    $"VideoStages: Entry {index} is not a clip object (must have a 'Stages' array).");
+                    $"VideoStages: Entry {index} is not a clip object (must have a 'stages' array).");
             }
         }
     }

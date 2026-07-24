@@ -20,14 +20,14 @@ public class VideoStagesSpecParserClipsTests
     {
         return new JObject
         {
-            ["Model"] = model,
-            ["Steps"] = steps,
-            ["CfgScale"] = cfg,
-            ["Sampler"] = "euler",
-            ["Scheduler"] = "normal",
-            ["Control"] = 1,
-            ["Upscale"] = 1,
-            ["UpscaleMethod"] = "pixel-lanczos",
+            ["model"] = model,
+            ["steps"] = steps,
+            ["cfgScale"] = cfg,
+            ["sampler"] = "euler",
+            ["scheduler"] = "normal",
+            ["control"] = 1,
+            ["upscale"] = 1,
+            ["upscaleMethod"] = "pixel-lanczos",
         };
     }
 
@@ -46,23 +46,23 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject clip = new()
         {
-            ["Skipped"] = skipped,
-            ["Duration"] = duration,
-            ["AudioSource"] = audioSource,
-            ["SaveAudioTrack"] = saveAudioTrack,
-            ["ClipLengthFromAudio"] = clipLengthFromAudio,
-            ["ClipLengthFromControlNet"] = clipLengthFromControlNet,
-            ["ReuseAudio"] = reuseAudio,
-            ["Refs"] = new JArray(refs ?? []),
-            ["Stages"] = new JArray(stages),
+            ["skipped"] = skipped,
+            ["duration"] = duration,
+            ["audioSource"] = audioSource,
+            ["saveAudioTrack"] = saveAudioTrack,
+            ["clipLengthFromAudio"] = clipLengthFromAudio,
+            ["clipLengthFromControlNet"] = clipLengthFromControlNet,
+            ["reuseAudio"] = reuseAudio,
+            ["refs"] = new JArray(refs ?? []),
+            ["stages"] = new JArray(stages),
         };
         if (icLoras is not null)
         {
-            clip["IcLoras"] = icLoras;
+            clip["icLoras"] = icLoras;
         }
         if (uploadedAudio is not null)
         {
-            clip["UploadedAudio"] = uploadedAudio;
+            clip["uploadedAudio"] = uploadedAudio;
         }
         return clip;
     }
@@ -73,8 +73,8 @@ public class VideoStagesSpecParserClipsTests
     {
         return new JObject
         {
-            ["Data"] = data,
-            ["FileName"] = fileName,
+            ["data"] = data,
+            ["fileName"] = fileName,
         };
     }
 
@@ -304,14 +304,14 @@ public class VideoStagesSpecParserClipsTests
                 duration: 4.0,
                 icLoras: new JArray(new JObject
                 {
-                    ["Lora"] = "clip-lora",
-                    ["Preset"] = "deblur",
-                    ["Stage"] = 0,
-                    ["DriveSource"] = Constants.ControlNetSourceTwo,
-                    ["DriveData"] = nameof(IcLoraDriveData.Visual),
-                    ["Strength"] = 0.7,
-                    ["AttentionStrength"] = 0.4,
-                    ["ControlType"] = Constants.IcLoraControlCanny,
+                    ["lora"] = "clip-lora",
+                    ["preset"] = "deblur",
+                    ["stage"] = 0,
+                    ["driveSource"] = Constants.ControlNetSourceTwo,
+                    ["driveData"] = nameof(IcLoraDriveData.Visual),
+                    ["strength"] = 0.7,
+                    ["attentionStrength"] = 0.4,
+                    ["controlType"] = Constants.IcLoraControlCanny,
                 }),
                 saveAudioTrack: true,
                 clipLengthFromAudio: true,
@@ -360,16 +360,16 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject icLora = new()
         {
-            ["Lora"] = "lipdub.safetensors",
-            ["Preset"] = "lipdub",
-            ["DriveSource"] = Constants.IcLoraSourceUpload,
-            ["DriveData"] = nameof(IcLoraDriveData.Audio),
-            ["DriveMediaKinds"] = new JArray("audio", "video"),
-            ["ControlType"] = Constants.IcLoraControlNone,
-            ["DriveMedia"] = new JObject
+            ["lora"] = "lipdub.safetensors",
+            ["preset"] = "lipdub",
+            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveData"] = nameof(IcLoraDriveData.Audio),
+            ["driveMediaKinds"] = new JArray("audio", "video"),
+            ["controlType"] = Constants.IcLoraControlNone,
+            ["driveMedia"] = new JObject
             {
-                ["Data"] = "data:audio/wav;base64,QUJD",
-                ["FileName"] = "target-voice.wav",
+                ["data"] = "data:audio/wav;base64,QUJD",
+                ["fileName"] = "target-voice.wav",
             },
         };
         string json = JsonConvert.SerializeObject(new JArray(
@@ -395,13 +395,13 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject entry = new()
         {
-            ["Lora"] = "lipdub.safetensors",
-            ["Preset"] = "lipdub",
-            ["DriveSource"] = Constants.IcLoraSourceUpload,
-            ["DriveMedia"] = new JObject
+            ["lora"] = "lipdub.safetensors",
+            ["preset"] = "lipdub",
+            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveMedia"] = new JObject
             {
-                ["Data"] = "data:audio/wav;base64,QUJD",
-                ["FileName"] = "voice.wav",
+                ["data"] = "data:audio/wav;base64,QUJD",
+                ["fileName"] = "voice.wav",
             },
         };
         string json = JsonConvert.SerializeObject(new JArray(
@@ -421,9 +421,9 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject entry = new()
         {
-            ["Lora"] = "adapter.safetensors",
-            ["DriveSource"] = Constants.IcLoraSourceUpload,
-            ["DriveData"] = "future-stream",
+            ["lora"] = "adapter.safetensors",
+            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveData"] = "future-stream",
         };
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
@@ -441,10 +441,10 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject entry = new()
         {
-            ["Lora"] = "adapter.safetensors",
-            ["DriveSource"] = Constants.IcLoraSourceUpload,
-            ["DriveData"] = nameof(IcLoraDriveData.Visual),
-            ["DriveMediaKinds"] = "image",
+            ["lora"] = "adapter.safetensors",
+            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveData"] = nameof(IcLoraDriveData.Visual),
+            ["driveMediaKinds"] = "image",
         };
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
@@ -548,8 +548,8 @@ public class VideoStagesSpecParserClipsTests
                 audioSource: Constants.AudioSourceUpload,
                 uploadedAudio: new JObject
                 {
-                    ["Data"] = "inputs/_comfy1/clip_part02.wav",
-                    ["FileName"] = "clip_part02.wav",
+                    ["data"] = "inputs/_comfy1/clip_part02.wav",
+                    ["fileName"] = "clip_part02.wav",
                 })));
         WorkflowGenerator parser = BuildParser(json);
 
@@ -588,11 +588,11 @@ public class VideoStagesSpecParserClipsTests
     public void ParseConfig_EnforcesStageZeroControlPerClip()
     {
         JObject clipZeroStageZero = MakeStage("model-a");
-        clipZeroStageZero["Control"] = 0.25;
+        clipZeroStageZero["control"] = 0.25;
         JObject clipZeroStageOne = MakeStage("model-b");
-        clipZeroStageOne["Control"] = 0.35;
+        clipZeroStageOne["control"] = 0.35;
         JObject clipOneStageZero = MakeStage("model-c");
-        clipOneStageZero["Control"] = 0.45;
+        clipOneStageZero["control"] = 0.45;
 
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [clipZeroStageZero, clipZeroStageOne]),
@@ -612,7 +612,7 @@ public class VideoStagesSpecParserClipsTests
     public void ParseConfig_SkipsSkippedClipsAndStages()
     {
         JObject skippedStage = MakeStage("model-skip");
-        skippedStage["Skipped"] = true;
+        skippedStage["skipped"] = true;
 
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip( stages: [MakeStage("model-a"), skippedStage]),
@@ -732,7 +732,7 @@ public class VideoStagesSpecParserClipsTests
                     stages: [MakeStage("model-a")],
                     duration: 4.0)
             ]);
-        config["FPS"] = 32;
+        config["fps"] = 32;
         string json = JsonConvert.SerializeObject(config);
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.VideoFPS, 24);
@@ -750,7 +750,7 @@ public class VideoStagesSpecParserClipsTests
     public void ParseClips_StagesMissingModel_ThrowsUserError()
     {
         JObject brokenStage = MakeStage("");
-        brokenStage["Model"] = "";
+        brokenStage["model"] = "";
 
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip( stages: [brokenStage, MakeStage("model-a")])
@@ -760,7 +760,7 @@ public class VideoStagesSpecParserClipsTests
         SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(
             () => VideoStagesSpecParser.Parse(parser));
         Assert.Contains("Clip 0 stage 0", ex.Message);
-        Assert.Contains("'Model'", ex.Message);
+        Assert.Contains("'model'", ex.Message);
     }
 
     [Fact]
@@ -771,9 +771,9 @@ public class VideoStagesSpecParserClipsTests
                 stages: [MakeStage("model-a")],
                 icLoras: new JArray(new JObject
                 {
-                    ["Lora"] = "clip-lora",
-                    ["Stage"] = 2,
-                    ["DriveSource"] = Constants.IcLoraSourceUpload,
+                    ["lora"] = "clip-lora",
+                    ["stage"] = 2,
+                    ["driveSource"] = Constants.IcLoraSourceUpload,
                 }))
         ));
         WorkflowGenerator parser = BuildParser(json);
@@ -788,14 +788,14 @@ public class VideoStagesSpecParserClipsTests
     {
         string json = JsonConvert.SerializeObject(new JArray(new JObject
         {
-            ["Model"] = "model-a"
+            ["model"] = "model-a"
         }));
         WorkflowGenerator parser = BuildParser(json);
 
         SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(
             () => VideoStagesSpecParser.Parse(parser));
         Assert.Contains("Entry 0 is not a clip object", ex.Message);
-        Assert.Contains("'Stages' array", ex.Message);
+        Assert.Contains("'stages' array", ex.Message);
     }
 
     [Fact]
@@ -818,7 +818,7 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void ParseClips_RefWithMissingSource_IsSkipped()
     {
-        JObject brokenRef = new() { ["Frame"] = 4 };
+        JObject brokenRef = new() { ["frame"] = 4 };
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
                 stages: [MakeStage("model-a")],
@@ -889,8 +889,8 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject uploadRef = new()
         {
-            ["Source"] = "Upload",
-            ["UploadFileName"] = "ref.png",
+            ["source"] = "Upload",
+            ["uploadFileName"] = "ref.png",
         };
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
@@ -910,11 +910,11 @@ public class VideoStagesSpecParserClipsTests
         const string imageData = "data:image/png;base64,QUJDREVG";
         JObject uploadRef = new()
         {
-            ["Source"] = "Upload",
-            ["UploadedImage"] = new JObject
+            ["source"] = "Upload",
+            ["uploadedImage"] = new JObject
             {
-                ["Data"] = imageData,
-                ["FileName"] = "guide.png",
+                ["data"] = imageData,
+                ["fileName"] = "guide.png",
             },
         };
         string json = JsonConvert.SerializeObject(new JArray(
@@ -936,12 +936,12 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject uploadRef = new()
         {
-            ["Source"] = "Upload",
-            ["Data"] = "data:image/png;base64,T1BQ",
-            ["UploadedImage"] = new JObject
+            ["source"] = "Upload",
+            ["data"] = "data:image/png;base64,T1BQ",
+            ["uploadedImage"] = new JObject
             {
-                ["Data"] = "data:image/png;base64,TkVTVA==",
-                ["FileName"] = "nested.png",
+                ["data"] = "data:image/png;base64,TkVTVA==",
+                ["fileName"] = "nested.png",
             },
         };
         string json = JsonConvert.SerializeObject(new JArray(
@@ -980,7 +980,7 @@ public class VideoStagesSpecParserClipsTests
     public void ParseConfig_FlattenedStagesIncludeControlNetStrength()
     {
         JObject stage = MakeStage("model-a");
-        stage["ControlNetStrength"] = 0.35;
+        stage["controlNetStrength"] = 0.35;
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [stage])));
 
@@ -994,7 +994,7 @@ public class VideoStagesSpecParserClipsTests
     public void ParseConfig_FlattenedStagesIncludePerIcLoraStrengths()
     {
         JObject stage = MakeStage("model-a");
-        stage["IcLoraStrengths"] = new JArray(0.25, 0.75);
+        stage["icLoraStrengths"] = new JArray(0.25, 0.75);
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [stage])));
 
@@ -1067,10 +1067,10 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject root = new()
         {
-            ["Width"] = 1280,
-            ["Height"] = 720,
-            ["FPS"] = 0,
-            ["Clips"] = new JArray(MakeClip(stages: [MakeStage("model-a")])),
+            ["width"] = 1280,
+            ["height"] = 720,
+            ["fps"] = 0,
+            ["clips"] = new JArray(MakeClip(stages: [MakeStage("model-a")])),
         };
         string json = JsonConvert.SerializeObject(root);
         T2IParamInput input = BuildInputWithJson(json);
@@ -1106,7 +1106,7 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject root = new()
         {
-            ["Clips"] = new JArray(MakeClip(stages: [MakeStage("model-a")])),
+            ["clips"] = new JArray(MakeClip(stages: [MakeStage("model-a")])),
         };
         string json = JsonConvert.SerializeObject(root);
         WorkflowGenerator parser = BuildParser(json);
@@ -1136,15 +1136,15 @@ public class VideoStagesSpecParserClipsTests
     public void ParseStage_SourcedClipStage0_KeepsAuthoredControlAndUpscale()
     {
         JObject stage0 = MakeStage("model-a");
-        stage0["Control"] = 0.3;
-        stage0["Upscale"] = 2.0;
-        stage0["UpscaleMethod"] = "pixel-catmull";
+        stage0["control"] = 0.3;
+        stage0["upscale"] = 2.0;
+        stage0["upscaleMethod"] = "pixel-catmull";
         JObject clip = MakeClip(stages: [stage0], duration: 3.0);
-        clip["SourceVideo"] = new JObject
+        clip["sourceVideo"] = new JObject
         {
-            ["Data"] = "data:video/mp4;base64,QUJD",
-            ["FileName"] = "footage.mp4",
-            ["StartSeconds"] = 0.0,
+            ["data"] = "data:video/mp4;base64,QUJD",
+            ["fileName"] = "footage.mp4",
+            ["startSeconds"] = 0.0,
         };
         string json = JsonConvert.SerializeObject(new JArray(clip));
         WorkflowGenerator parser = BuildParser(json);
@@ -1197,10 +1197,10 @@ public class VideoStagesSpecParserClipsTests
     public void ParseStage_RefineSkipStagesTwo_ZeroesFirstTwoStagesOfClipZero()
     {
         JObject stage1 = MakeStage("model-b");
-        stage1["Control"] = 0.4;
-        stage1["Upscale"] = 1.5;
+        stage1["control"] = 0.4;
+        stage1["upscale"] = 1.5;
         JObject stage2 = MakeStage("model-c");
-        stage2["Control"] = 0.6;
+        stage2["control"] = 0.6;
 
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [MakeStage("model-a"), stage1, stage2])));
@@ -1223,11 +1223,11 @@ public class VideoStagesSpecParserClipsTests
     public void ParseStage_Upscale_SnapsToQuarterSteps()
     {
         JObject stage1 = MakeStage("model-b");
-        stage1["Upscale"] = 1.3;
+        stage1["upscale"] = 1.3;
         JObject stage2 = MakeStage("model-c");
-        stage2["Upscale"] = 1.1;
+        stage2["upscale"] = 1.1;
         JObject stage3 = MakeStage("model-d");
-        stage3["Upscale"] = 0.3;
+        stage3["upscale"] = 0.3;
 
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [MakeStage("model-a"), stage1, stage2, stage3])));
@@ -1283,7 +1283,7 @@ public class VideoStagesSpecParserClipsTests
     public void ParseClips_BoundaryOut_NormalizesWithUnknownFallingBackToCut(string raw, string expected)
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
-        clip["BoundaryOut"] = raw;
+        clip["boundaryOut"] = raw;
         string json = JsonConvert.SerializeObject(new JArray(clip));
         WorkflowGenerator parser = BuildParser(json);
 
@@ -1309,8 +1309,8 @@ public class VideoStagesSpecParserClipsTests
     public void ParseClips_BoundaryOutCarryAudio_PreservesAuthoredOptIn()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
-        clip["BoundaryOut"] = Constants.BoundaryOutCrossfade;
-        clip["BoundaryOutCarryAudio"] = true;
+        clip["boundaryOut"] = Constants.BoundaryOutCrossfade;
+        clip["boundaryOutCarryAudio"] = true;
         string json = JsonConvert.SerializeObject(new JArray(clip));
         WorkflowGenerator parser = BuildParser(json);
 
@@ -1333,12 +1333,12 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject retake = new()
         {
-            ["StartSeconds"] = startSeconds,
-            ["LengthSeconds"] = lengthSeconds,
+            ["startSeconds"] = startSeconds,
+            ["lengthSeconds"] = lengthSeconds,
         };
         if (strength is not null)
         {
-            retake["Strength"] = strength.Value;
+            retake["strength"] = strength.Value;
         }
         return retake;
     }
@@ -1348,7 +1348,7 @@ public class VideoStagesSpecParserClipsTests
     {
         // Mid-clip window (ends at 2.5s of a 3.0s clip): plain seconds→frames conversion.
         JObject clip = MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")]);
-        clip["Retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 1.5, strength: 0.6);
+        clip["retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 1.5, strength: 0.6);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
@@ -1367,7 +1367,7 @@ public class VideoStagesSpecParserClipsTests
         // The 3.0s clip aligns UP to 73 frames (8n+1). A retake ending at the authored 3.0s must
         // extend through that aligned tail instead of stopping at frame 72.
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
-        clip["Retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 2.0);
+        clip["retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 2.0);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
@@ -1383,7 +1383,7 @@ public class VideoStagesSpecParserClipsTests
     public void ParseClips_Retake_DefaultsStrengthToOneWhenAbsent()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
-        clip["Retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 1.0);
+        clip["retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 1.0);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
@@ -1399,7 +1399,7 @@ public class VideoStagesSpecParserClipsTests
     public void ParseClips_Retake_ClampsStrengthToUnitRange()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
-        clip["Retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 1.0, strength: 5.0);
+        clip["retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 1.0, strength: 5.0);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
@@ -1411,7 +1411,7 @@ public class VideoStagesSpecParserClipsTests
     public void ParseClips_Retake_NullWhenNotRefineMode()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
-        clip["Retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 2.0);
+        clip["retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 2.0);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         // BuildParser does NOT set a refine-source video, so retake never activates.
@@ -1427,7 +1427,7 @@ public class VideoStagesSpecParserClipsTests
     public void ParseClips_Retake_NullWhenInvalidWindow(double startSeconds, double lengthSeconds)
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
-        clip["Retake"] = MakeRetake(startSeconds, lengthSeconds);
+        clip["retake"] = MakeRetake(startSeconds, lengthSeconds);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
@@ -1440,7 +1440,7 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         // 0.01s at 24 fps => round(0.24) = 0 frames => disabled.
-        clip["Retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 0.01);
+        clip["retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 0.01);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
@@ -1464,35 +1464,35 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject root = new()
         {
-            ["Clips"] = new JArray(MakeClip([MakeStage("ltx-2")], duration: 4)),
-            ["AudioTracks"] = new JArray(
+            ["clips"] = new JArray(MakeClip([MakeStage("ltx-2")], duration: 4)),
+            ["audioTracks"] = new JArray(
                 new JObject
                 {
-                    ["Id"] = "track-dialogue",
-                    ["Volume"] = 0.75,
-                    ["Source"] = new JObject
+                    ["id"] = "track-dialogue",
+                    ["volume"] = 0.75,
+                    ["source"] = new JObject
                     {
-                        ["Kind"] = "Upload",
-                        ["Reference"] = "dialogue.wav",
-                        ["UploadedAudio"] = MakeUploadedAudio(fileName: "dialogue.wav"),
+                        ["kind"] = "Upload",
+                        ["reference"] = "dialogue.wav",
+                        ["uploadedAudio"] = MakeUploadedAudio(fileName: "dialogue.wav"),
                     },
-                    ["Spans"] = new JArray(
+                    ["spans"] = new JArray(
                         new JObject
                         {
-                            ["TimelineStartSeconds"] = 1.5,
-                            ["TimelineLengthSeconds"] = 2.5,
-                            ["SourceStartSeconds"] = 4,
-                            ["Projection"] = new JObject
+                            ["timelineStartSeconds"] = 1.5,
+                            ["timelineLengthSeconds"] = 2.5,
+                            ["sourceStartSeconds"] = 4,
+                            ["projection"] = new JObject
                             {
-                                ["FirstClipId"] = "clip-a",
-                                ["LastClipId"] = "clip-a",
-                                ["ClipStartOffsetSeconds"] = 1.5,
-                                ["ClipEndOffsetSeconds"] = 4,
+                                ["firstClipId"] = "clip-a",
+                                ["lastClipId"] = "clip-a",
+                                ["clipStartOffsetSeconds"] = 1.5,
+                                ["clipEndOffsetSeconds"] = 4,
                             },
                         }),
                 }),
         };
-        ((JObject)((JArray)root["Clips"])[0])["Id"] = "clip-a";
+        ((JObject)((JArray)root["clips"])[0])["id"] = "clip-a";
 
         VideoStagesSpec parsed = VideoStagesSpecParser.Parse(
             BuildParser(root.ToString(Formatting.None)));

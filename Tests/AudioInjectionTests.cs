@@ -33,28 +33,27 @@ public class AudioInjectionTests
     // Local override of Fixtures.MakeStage: pins Steps=10 and ImageReference="Generated" for audio-injection tests.
     private static JObject MakeStage(string model) => new()
     {
-        ["Control"] = 1.0,
-        ["Upscale"] = 1.0,
-        ["UpscaleMethod"] = "pixel-lanczos",
-        ["Model"] = model,
-        ["Steps"] = 10,
-        ["CfgScale"] = 4.5,
-        ["Sampler"] = "euler",
-        ["Scheduler"] = "normal",
-        ["ImageReference"] = "Generated"
+        ["control"] = 1.0,
+        ["upscale"] = 1.0,
+        ["upscaleMethod"] = "pixel-lanczos",
+        ["model"] = model,
+        ["steps"] = 10,
+        ["cfgScale"] = 4.5,
+        ["sampler"] = "euler",
+        ["scheduler"] = "normal",
+        ["imageReference"] = "Generated"
     };
 
     private static JObject MakeClipConfig(string audioSource, params JObject[] stages) => new()
     {
-        ["Name"] = "Clip 0",
-        ["AudioSource"] = audioSource,
-        ["Stages"] = new JArray(stages)
+        ["audioSource"] = audioSource,
+        ["stages"] = new JArray(stages)
     };
 
     private static JObject MakeClipConfigWithUpload(JObject uploadedAudio, params JObject[] stages)
     {
         JObject clip = MakeClipConfig(Constants.AudioSourceUpload, stages);
-        clip["UploadedAudio"] = uploadedAudio;
+        clip["uploadedAudio"] = uploadedAudio;
         return clip;
     }
 
@@ -62,8 +61,8 @@ public class AudioInjectionTests
         string data = "data:audio/wav;base64,QUJD",
         string fileName = "clip.wav") => new()
     {
-        ["Data"] = data,
-        ["FileName"] = fileName
+        ["data"] = data,
+        ["fileName"] = fileName
     };
 
     /// <summary>A root timeline audio lane; planning projects it onto every clip it overlaps.</summary>
@@ -71,18 +70,18 @@ public class AudioInjectionTests
         double timelineStartSeconds,
         double timelineLengthSeconds) => new()
     {
-        ["Id"] = "track-seg",
-        ["Source"] = new JObject
+        ["id"] = "track-seg",
+        ["source"] = new JObject
         {
-            ["Kind"] = "Upload",
-            ["Reference"] = "seg.wav",
-            ["UploadedAudio"] = MakeUploadedAudio(fileName: "seg.wav"),
+            ["kind"] = "Upload",
+            ["reference"] = "seg.wav",
+            ["uploadedAudio"] = MakeUploadedAudio(fileName: "seg.wav"),
         },
-        ["Spans"] = new JArray(new JObject
+        ["spans"] = new JArray(new JObject
         {
-            ["TimelineStartSeconds"] = timelineStartSeconds,
-            ["TimelineLengthSeconds"] = timelineLengthSeconds,
-            ["SourceStartSeconds"] = 0.0,
+            ["timelineStartSeconds"] = timelineStartSeconds,
+            ["timelineLengthSeconds"] = timelineLengthSeconds,
+            ["sourceStartSeconds"] = 0.0,
         }),
     };
 
@@ -326,9 +325,9 @@ public class AudioInjectionTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject clip = MakeClipConfig(Constants.AudioSourceUpload, MakeStage(models.VideoModel.Name));
-        clip["Duration"] = 10.0;
+        clip["duration"] = 10.0;
         JObject root = MakeRootConfig(clip);
-        root["AudioTracks"] = new JArray(MakeAudioTrack(1.0, 2.0));
+        root["audioTracks"] = new JArray(MakeAudioTrack(1.0, 2.0));
         string stagesJson = root.ToString();
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
 
@@ -359,25 +358,25 @@ public class AudioInjectionTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject clip = MakeClipConfig(Constants.AudioSourceUpload, MakeStage(models.VideoModel.Name));
-        clip["Duration"] = 10.0;
+        clip["duration"] = 10.0;
         JObject root = MakeRootConfig(clip);
-        root["AudioTracks"] = new JArray(
+        root["audioTracks"] = new JArray(
             new JObject
             {
-                ["Id"] = "timeline-segment",
-                ["Volume"] = 0.5,
-                ["Source"] = new JObject
+                ["id"] = "timeline-segment",
+                ["volume"] = 0.5,
+                ["source"] = new JObject
                 {
-                    ["Kind"] = "Upload",
-                    ["Reference"] = "timeline.wav",
-                    ["UploadedAudio"] = MakeUploadedAudio(fileName: "timeline.wav"),
+                    ["kind"] = "Upload",
+                    ["reference"] = "timeline.wav",
+                    ["uploadedAudio"] = MakeUploadedAudio(fileName: "timeline.wav"),
                 },
-                ["Spans"] = new JArray(
+                ["spans"] = new JArray(
                     new JObject
                     {
-                        ["TimelineStartSeconds"] = 1.0,
-                        ["TimelineLengthSeconds"] = 2.0,
-                        ["SourceStartSeconds"] = 0.5,
+                        ["timelineStartSeconds"] = 1.0,
+                        ["timelineLengthSeconds"] = 2.0,
+                        ["sourceStartSeconds"] = 0.5,
                     }),
             });
         T2IParamInput input = BuildNativeInput(
@@ -416,32 +415,31 @@ public class AudioInjectionTests
         JObject firstClip = MakeClipConfig(
             Constants.AudioSourceNative,
             MakeStage(models.VideoModel.Name));
-        firstClip["Duration"] = 5.0;
-        firstClip["BoundaryOut"] = Constants.BoundaryOutContinue;
+        firstClip["duration"] = 5.0;
+        firstClip["boundaryOut"] = Constants.BoundaryOutContinue;
         JObject secondClip = MakeClipConfig(
             Constants.AudioSourceNative,
             MakeStage(models.VideoModel.Name));
-        secondClip["Name"] = "Clip 1";
-        secondClip["Duration"] = 5.0;
+        secondClip["duration"] = 5.0;
 
         JObject root = MakeRootConfig(firstClip, secondClip);
-        root["AudioTracks"] = new JArray(
+        root["audioTracks"] = new JArray(
             new JObject
             {
-                ["Id"] = "cross-clip-segment",
-                ["Volume"] = 2.0,
-                ["Source"] = new JObject
+                ["id"] = "cross-clip-segment",
+                ["volume"] = 2.0,
+                ["source"] = new JObject
                 {
-                    ["Kind"] = "Upload",
-                    ["Reference"] = "timeline.wav",
-                    ["UploadedAudio"] = MakeUploadedAudio(fileName: "timeline.wav"),
+                    ["kind"] = "Upload",
+                    ["reference"] = "timeline.wav",
+                    ["uploadedAudio"] = MakeUploadedAudio(fileName: "timeline.wav"),
                 },
-                ["Spans"] = new JArray(
+                ["spans"] = new JArray(
                     new JObject
                     {
-                        ["TimelineStartSeconds"] = 4.0,
-                        ["TimelineLengthSeconds"] = 2.0,
-                        ["SourceStartSeconds"] = 0.0,
+                        ["timelineStartSeconds"] = 4.0,
+                        ["timelineLengthSeconds"] = 2.0,
+                        ["sourceStartSeconds"] = 0.0,
                     }),
             });
         T2IParamInput input = BuildInput(models.BaseModel, root.ToString());
@@ -489,7 +487,7 @@ public class AudioInjectionTests
         // root audio lane stays pending and never reaches the clip; nothing conditions generation.
         JObject clip = MakeClipConfig(Constants.AudioSourceUpload, MakeStage(models.VideoModel.Name));
         JObject root = MakeRootConfig(clip);
-        root["AudioTracks"] = new JArray(MakeAudioTrack(1.0, 2.0));
+        root["audioTracks"] = new JArray(MakeAudioTrack(1.0, 2.0));
         string stagesJson = root.ToString();
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
 
@@ -538,11 +536,11 @@ public class AudioInjectionTests
         JObject clip = MakeClipConfig(
             Constants.AudioSourceControlNet,
             MakeStage(models.VideoModel.Name));
-        clip["IcLoras"] = new JArray(new JObject
+        clip["icLoras"] = new JArray(new JObject
         {
-            ["Lora"] = "unused-control",
-            ["DriveSource"] = Constants.ControlNetSourceOne,
-            ["DriveData"] = $"{IcLoraDriveData.Visual}",
+            ["lora"] = "unused-control",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
@@ -751,7 +749,7 @@ public class AudioInjectionTests
         JObject clip = MakeClipConfigWithUpload(
             MakeUploadedAudio(),
             MakeStage(models.VideoModel.Name));
-        clip["ClipLengthFromAudio"] = true;
+        clip["clipLengthFromAudio"] = true;
         string stagesJson = MakeRootConfig(clip).ToString();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
@@ -936,9 +934,9 @@ public class AudioInjectionTests
 
         string stagesJson = new JObject
         {
-            ["Width"] = 384,
-            ["Height"] = 640,
-            ["Clips"] = new JArray(
+            ["width"] = 384,
+            ["height"] = 640,
+            ["clips"] = new JArray(
                 MakeClip(MakeStage(models.VideoModel.Name)))
         }.ToString();
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);

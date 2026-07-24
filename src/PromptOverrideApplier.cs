@@ -12,31 +12,31 @@ internal static class PromptOverrideApplier
     private static readonly Dictionary<string, (string Canonical, OverrideKind Kind)> ClipFields =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            ["duration"] = ("Duration", OverrideKind.Double),
-            ["audiosource"] = ("AudioSource", OverrideKind.String),
-            ["saveaudiotrack"] = ("SaveAudioTrack", OverrideKind.Bool),
-            ["cliplengthfromaudio"] = ("ClipLengthFromAudio", OverrideKind.Bool),
-            ["cliplengthfromcontrolnet"] = ("ClipLengthFromControlNet", OverrideKind.Bool),
-            ["reuseaudio"] = ("ReuseAudio", OverrideKind.Bool),
-            ["boundaryout"] = ("BoundaryOut", OverrideKind.String),
-            ["boundaryoutoverlap"] = ("BoundaryOutOverlap", OverrideKind.Int),
-            ["skipped"] = ("Skipped", OverrideKind.Bool),
+            ["duration"] = ("duration", OverrideKind.Double),
+            ["audiosource"] = ("audioSource", OverrideKind.String),
+            ["saveaudiotrack"] = ("saveAudioTrack", OverrideKind.Bool),
+            ["cliplengthfromaudio"] = ("clipLengthFromAudio", OverrideKind.Bool),
+            ["cliplengthfromcontrolnet"] = ("clipLengthFromControlNet", OverrideKind.Bool),
+            ["reuseaudio"] = ("reuseAudio", OverrideKind.Bool),
+            ["boundaryout"] = ("boundaryOut", OverrideKind.String),
+            ["boundaryoutoverlap"] = ("boundaryOutOverlap", OverrideKind.Int),
+            ["skipped"] = ("skipped", OverrideKind.Bool),
         };
 
     private static readonly Dictionary<string, (string Canonical, OverrideKind Kind)> StageFields =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            ["model"] = ("Model", OverrideKind.String),
-            ["steps"] = ("Steps", OverrideKind.Int),
-            ["cfgscale"] = ("CfgScale", OverrideKind.Double),
-            ["control"] = ("Control", OverrideKind.Double),
-            ["upscale"] = ("Upscale", OverrideKind.Double),
-            ["upscalemethod"] = ("UpscaleMethod", OverrideKind.String),
-            ["sampler"] = ("Sampler", OverrideKind.String),
-            ["scheduler"] = ("Scheduler", OverrideKind.String),
-            ["imagereference"] = ("ImageReference", OverrideKind.String),
-            ["controlnetstrength"] = ("ControlNetStrength", OverrideKind.Double),
-            ["skipped"] = ("Skipped", OverrideKind.Bool),
+            ["model"] = ("model", OverrideKind.String),
+            ["steps"] = ("steps", OverrideKind.Int),
+            ["cfgscale"] = ("cfgScale", OverrideKind.Double),
+            ["control"] = ("control", OverrideKind.Double),
+            ["upscale"] = ("upscale", OverrideKind.Double),
+            ["upscalemethod"] = ("upscaleMethod", OverrideKind.String),
+            ["sampler"] = ("sampler", OverrideKind.String),
+            ["scheduler"] = ("scheduler", OverrideKind.String),
+            ["imagereference"] = ("imageReference", OverrideKind.String),
+            ["controlnetstrength"] = ("controlNetStrength", OverrideKind.Double),
+            ["skipped"] = ("skipped", OverrideKind.Bool),
         };
 
     public static (int? Width, int? Height, int? FPS) ApplyTopLevel(
@@ -124,13 +124,12 @@ internal static class PromptOverrideApplier
                 Logs.Warning($"VideoStages: ignoring {location} override '{spec.Canonical}' with invalid value '{value}'.");
                 return;
         }
-        JsonUtil.RemoveAll(target, spec.Canonical);
         target[spec.Canonical] = parsedToken;
     }
 
     private static JObject GetStage(JObject clip, int stageIndex)
     {
-        if (JsonUtil.Get(clip, "Stages") is not JArray array)
+        if (JsonUtil.Get(clip, "stages") is not JArray array)
         {
             return null;
         }

@@ -162,14 +162,13 @@ public class VideoExecutionPlanContextTests
 
     private static string SourcedOnlyConfig() => MakeRootConfig(new JObject
     {
-        ["Name"] = "Sourced only",
-        ["Duration"] = 0.6,
-        ["Stages"] = new JArray(),
-        ["SourceVideo"] = new JObject
+        ["duration"] = 0.6,
+        ["stages"] = new JArray(),
+        ["sourceVideo"] = new JObject
         {
-            ["Data"] = "data:video/mp4;base64,QUJD",
-            ["FileName"] = "source.mp4",
-            ["StartSeconds"] = 0
+            ["data"] = "data:video/mp4;base64,QUJD",
+            ["fileName"] = "source.mp4",
+            ["startSeconds"] = 0
         }
     }).ToString();
 

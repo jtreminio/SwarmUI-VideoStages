@@ -200,7 +200,9 @@ and editor sections live behind the LTX authoring adapter.
 
 ## Completion rules
 
-- The current schema is v3 only; no v2/unversioned/PascalCase migration path.
+- The current schema is v5 only; no older/unversioned/PascalCase migration path.
+- The emitted document is pinned by `Tests/fixtures/authoring-document.json`,
+  asserted from both jest and the C# suite.
 - Every clip/stage model choice is catalog-resolved.
 - Every option panel and timeline creation gesture uses capability views.
 - Unsupported persisted values survive with actionable diagnostics.
