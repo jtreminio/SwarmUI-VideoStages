@@ -12,7 +12,7 @@ import {
 } from "../__test_helpers__/dom";
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
 import {
-    __resetArchitectureCatalogForTests,
+    invalidateArchitectureCatalog,
     loadAuthoritativeArchitectureCatalog,
 } from "../architectures/catalog";
 import { createCapabilityViewResolver } from "../architectures/policy";
@@ -81,7 +81,7 @@ const modelOptions = (column: HTMLElement): HTMLOptionElement[] => {
 
 afterEach(() => {
     jest.restoreAllMocks();
-    __resetArchitectureCatalogForTests();
+    invalidateArchitectureCatalog();
     setVideoStagesHostBridgeForTests(null);
     __resetPersistenceForTests();
     document.body.innerHTML = "";

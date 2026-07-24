@@ -1,4 +1,5 @@
 import { clipHasActiveHdr } from "./architectures/behaviorRegistry";
+import { architectureDescriptor } from "./architectures/catalog";
 import {
     CONDITIONAL_RULE_CODES,
     conditionalRule,
@@ -58,8 +59,9 @@ export const deriveAuthoringDiagnostics = (
         .filter(({ clip }) => isExecutableClip(clip));
 
     for (const { clip, clipIdx } of executable) {
-        const descriptor = context.catalog?.architectures.find(
-            (entry) => entry.id === clip.architecture,
+        const descriptor = architectureDescriptor(
+            context.catalog,
+            clip.architecture,
         );
         const rule = (code: Parameters<typeof conditionalRule>[1]) =>
             descriptor ? conditionalRule(descriptor.rules, code) : null;

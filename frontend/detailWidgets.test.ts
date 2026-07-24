@@ -268,6 +268,29 @@ describe("native detail groups", () => {
         ).toBe(false);
     });
 
+    it("puts each item's title on its header", () => {
+        const section = buildRepeatingEditor({
+            key: "item-title-test",
+            label: "References",
+            items: [
+                { label: "R0", title: "Edit reference image 0" },
+                { label: "R1" },
+            ],
+            add: {
+                title: "Add reference",
+                className: "test-add",
+                onClick: () => {},
+            },
+            remove: { title: "Delete reference", className: "test-remove" },
+        }).section;
+
+        const headers = section.querySelectorAll<HTMLElement>(
+            ".vst-detail-repeating-group-header",
+        );
+        expect(headers[0].title).toBe("Edit reference image 0");
+        expect(headers[1].title).toBe("");
+    });
+
     it("keeps selected repeater editors open when Auto-collapse is disabled", () => {
         setTimelineAuthoringSetting("autoCollapse", false);
         const host = document.createElement("div");

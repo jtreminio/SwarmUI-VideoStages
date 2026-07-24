@@ -1,12 +1,39 @@
 import { buildNumber } from "../detailWidgets";
-import { getClips, getState, saveClips, saveState } from "../persistence";
+import type { DocumentCommand } from "../documentCommands";
+import {
+    dispatchDocumentCommand,
+    getClips,
+    getState,
+    getTimelineStore,
+    saveClips,
+    saveState,
+} from "../persistence";
 import { setSelection } from "../selection";
-import { isVideoStagesEnabled, readStateToken } from "../swarmInputs";
+import { isVideoStagesEnabled } from "../swarmInputs";
 import type { Clip, TimelineSelection, VideoStagesConfig } from "../types";
 import type { ClampedNumberOpts } from "./context";
 import type { DetailFocusSession } from "./focusSession";
 
-type StructuralOutcome = TimelineSelection | "render" | null;
+/**
+ * A structural edit authored as a named command instead of a whole-document
+ * save. The queue owns the dispatch so staleness and selection stay in one
+ * place.
+ */
+export interface StructuralCommand {
+    command: DocumentCommand;
+    selection: TimelineSelection | "render" | null;
+}
+
+type StructuralOutcome =
+    | TimelineSelection
+    | "render"
+    | null
+    | StructuralCommand;
+
+const asCommand = (outcome: StructuralOutcome): StructuralCommand | null =>
+    typeof outcome === "object" && outcome !== null && "command" in outcome
+        ? outcome
+        : null;
 
 interface PendingEntry {
     kind: "clips" | "state";
@@ -43,15 +70,16 @@ export const createDetailDraftQueue = (options: {
     render: () => void;
     setSelectionSilently: (selection: TimelineSelection) => void;
 }): DetailDraftQueue => {
-    let sourceToken = "";
+    let sourceRevision = -1;
     let pendingTimer: ReturnType<typeof setTimeout> | null = null;
     let flushing = false;
     const pending = new Map<string, PendingEntry>();
 
     const markCurrentSource = (): void => {
-        sourceToken = readStateToken();
+        sourceRevision = getTimelineStore().revision();
     };
-    const isStale = (): boolean => readStateToken() !== sourceToken;
+    const isStale = (): boolean =>
+        getTimelineStore().revision() !== sourceRevision;
 
     const writeBackClamped = (
         entries: [string, PendingEntry][],
@@ -191,23 +219,42 @@ export const createDetailDraftQueue = (options: {
             options.render();
             return;
         }
+        const snapshot = getTimelineStore().getSnapshot();
         const clips = getClips();
         const outcome = apply(clips);
         if (outcome === null) {
             return;
         }
-        saveClips(clips, { origin: "detail-strip" });
+        const commanded = asCommand(outcome);
+        if (commanded) {
+            const result = dispatchDocumentCommand(commanded.command, {
+                origin: "detail-strip",
+                expectedRevision: snapshot.revision,
+            });
+            if (!result.applied) {
+                options.render();
+                return;
+            }
+        } else {
+            saveClips(clips, { origin: "detail-strip" });
+        }
         markCurrentSource();
-        if (outcome === "render") {
+        const selection: TimelineSelection | "render" | null = commanded
+            ? commanded.selection
+            : (outcome as TimelineSelection | "render");
+        if (selection === null) {
+            return;
+        }
+        if (selection === "render") {
             options.render();
             return;
         }
         if (structuralOptions?.rebuildAfterSelect) {
-            options.setSelectionSilently(outcome);
+            options.setSelectionSilently(selection);
             options.render();
             return;
         }
-        setSelection(outcome);
+        setSelection(selection);
     };
 
     return {

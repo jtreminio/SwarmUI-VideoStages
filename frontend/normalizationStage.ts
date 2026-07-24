@@ -15,11 +15,15 @@ import {
 } from "./icLoraAuthoring";
 import { normalizeUploadedMedia } from "./normalizationMedia";
 import {
+    clampedNumber,
     normalizeOptionalEntityId,
+    numberOr,
     readProp,
     resolveRootPreferredUpscaleMethod,
     snapToStep,
     snapValueToStep,
+    textOr,
+    trimmedText,
 } from "./normalizationShared";
 import { framesForClip } from "./renderUtils";
 import {
@@ -30,7 +34,7 @@ import {
     type Stage,
     type StageLora,
 } from "./types";
-import { isRecord, toNumber } from "./utils";
+import { isRecord } from "./utils";
 
 export const normalizeStageRefStrengthValue = (value: unknown): number =>
     snapValueToStep(
@@ -93,8 +97,7 @@ export const readRawStageString = (
     if (value == null) {
         return undefined;
     }
-    const stringValue = `${value}`.trim();
-    return stringValue.length > 0 ? stringValue : undefined;
+    return trimmedText(value) || undefined;
 };
 
 export const normalizeStageLoras = (raw: unknown): StageLora[] => {
@@ -106,13 +109,14 @@ export const normalizeStageLoras = (raw: unknown): StageLora[] => {
         if (!isRecord(entry)) {
             continue;
         }
-        const name = `${readRawStageProp(entry, "name") ?? ""}`.trim();
+        const name = trimmedText(readRawStageProp(entry, "name"));
         if (!name) {
             continue;
         }
-        const weightRaw = readRawStageProp(entry, "weight");
-        const weight = toNumber(`${weightRaw ?? 1}`, 1);
-        out.push({ name, weight: Number.isFinite(weight) ? weight : 1 });
+        out.push({
+            name,
+            weight: numberOr(readRawStageProp(entry, "weight"), 1),
+        });
     }
     return out;
 };
@@ -259,25 +263,22 @@ export const normalizeStage = (
     } else {
         firstStageUpscale = {
             upscale: snapToStep(
-                clamp(
-                    toNumber(
-                        `${readRawStageProp(rawStage, "upscale") ?? fallback.upscale}`,
-                        fallback.upscale,
-                    ),
+                clampedNumber(
+                    readRawStageProp(rawStage, "upscale"),
+                    fallback.upscale,
                     defaults.upscaleMin,
                     defaults.upscaleMax,
                 ),
                 defaults.upscaleStep,
             ),
-            upscaleMethod:
-                `${readRawStageString(rawStage, "upscaleMethod") ?? fallback.upscaleMethod}` ||
+            upscaleMethod: textOr(
+                readRawStageString(rawStage, "upscaleMethod"),
                 fallback.upscaleMethod,
-        };
-        control = clamp(
-            toNumber(
-                `${readRawStageProp(rawStage, "control") ?? fallback.control}`,
-                fallback.control,
             ),
+        };
+        control = clampedNumber(
+            readRawStageProp(rawStage, "control"),
+            fallback.control,
             defaults.controlMin,
             defaults.controlMax,
         );
@@ -301,36 +302,31 @@ export const normalizeStage = (
         ),
         upscale: firstStageUpscale.upscale,
         upscaleMethod: firstStageUpscale.upscaleMethod,
-        model: `${rawStage.model ?? fallback.model}` || fallback.model,
+        model: textOr(rawStage.model, fallback.model),
         modelProfileId: "unsupported",
         steps: Math.max(
             1,
             Math.round(
-                clamp(
-                    toNumber(
-                        `${rawStage.steps ?? fallback.steps}`,
-                        fallback.steps,
-                    ),
+                clampedNumber(
+                    rawStage.steps,
+                    fallback.steps,
                     defaults.stepsMin,
                     defaults.stepsMax,
                 ),
             ),
         ),
-        cfgScale: clamp(
-            toNumber(
-                `${rawStage.cfgScale ?? fallback.cfgScale}`,
-                fallback.cfgScale,
-            ),
+        cfgScale: clampedNumber(
+            rawStage.cfgScale,
+            fallback.cfgScale,
             defaults.cfgScaleMin,
             defaults.cfgScaleMax,
         ),
-        sampler: `${rawStage.sampler ?? fallback.sampler}` || fallback.sampler,
-        scheduler:
-            `${rawStage.scheduler ?? fallback.scheduler}` || fallback.scheduler,
+        sampler: textOr(rawStage.sampler, fallback.sampler),
+        scheduler: textOr(rawStage.scheduler, fallback.scheduler),
         loras: normalizeStageLoras(readRawStageProp(rawStage, "loras")),
     };
     stage.modelProfileId =
-        `${readRawStageProp(rawStage, "modelProfileId") ?? ""}`.trim() ||
+        trimmedText(readRawStageProp(rawStage, "modelProfileId")) ||
         modelProfileForModel(defaults.modelCatalog, stage.model) ||
         fallback.modelProfileId;
 
@@ -350,23 +346,18 @@ export const normalizeRef = (
     frameMax: number,
 ): RefImage => {
     const fallback = buildDefaultRef();
-    const source = `${rawRef.source ?? fallback.source}` || fallback.source;
+    const source = textOr(rawRef.source, fallback.source);
     return {
         id: normalizeOptionalEntityId(rawRef.id),
         source,
-        uploadFileName:
-            rawRef.uploadFileName == null || rawRef.uploadFileName === ""
-                ? null
-                : `${rawRef.uploadFileName}`,
+        uploadFileName: textOr(rawRef.uploadFileName, "") || null,
         uploadedImage: normalizeUploadedMedia(rawRef.uploadedImage),
         frame: Math.max(
             REF_FRAME_MIN,
             Math.round(
-                clamp(
-                    toNumber(
-                        `${rawRef.frame ?? fallback.frame}`,
-                        fallback.frame,
-                    ),
+                clampedNumber(
+                    rawRef.frame,
+                    fallback.frame,
                     REF_FRAME_MIN,
                     frameMax,
                 ),

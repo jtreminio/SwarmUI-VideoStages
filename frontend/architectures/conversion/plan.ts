@@ -5,6 +5,7 @@ import {
 } from "../../icLoraAuthoring";
 import type { Clip } from "../../types";
 import { isArchitectureHdrFeature } from "../behaviorRegistry";
+import { architectureDescriptor, modelCatalogEntry } from "../catalogQueries";
 import { architectureFeatureSupport } from "../policy/clipStageViews";
 import type { AuthoringFeature } from "../policy/types";
 import type {
@@ -54,9 +55,7 @@ export const resolveArchitectureRetarget = (
     if (!catalog) {
         return null;
     }
-    const model = catalog.entries.find(
-        (entry) => entry.value === requested.model,
-    );
+    const model = modelCatalogEntry(catalog, requested.model);
     if (
         !model?.architectureId ||
         !model.modelProfileId ||
@@ -65,9 +64,7 @@ export const resolveArchitectureRetarget = (
     ) {
         return null;
     }
-    const descriptor = catalog.architectures.find(
-        (entry) => entry.id === model.architectureId,
-    );
+    const descriptor = architectureDescriptor(catalog, model.architectureId);
     const profile = descriptor?.profiles.find(
         (entry) => entry.id === model.modelProfileId,
     );

@@ -562,7 +562,32 @@ describe("normalization", () => {
         expect(clip.clipLengthFromControlNet).toBe(false);
     });
 
-    it("normalizeClip ignores ControlNet length when ControlNet LoRA is blank", () => {
+    it("normalizeClip preserves a length flag its current source cannot honor", () => {
+        const clip = normalizeClip(
+            {
+                audioSource: "Native",
+                clipLengthFromAudio: true,
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.clipLengthFromAudio).toBe(true);
+    });
+
+    it("normalizeClip preserves ControlNet length without a slot-sourced IC-LoRA", () => {
+        const clip = normalizeClip(
+            {
+                audioSource: "Native",
+                clipLengthFromControlNet: true,
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.icLoras).toEqual([]);
+        expect(clip.clipLengthFromControlNet).toBe(true);
+    });
+
+    it("normalizeClip drops ControlNet length when audio length wins", () => {
         const clip = normalizeClip(
             {
                 audioSource: "Upload",

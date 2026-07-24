@@ -67,6 +67,14 @@ model/profile identity. Named retarget and conversion commands resolve their
 targets through the catalog, and whole-document diffs are accepted only when
 identity changes can be re-derived from structural or source edits.
 
+Structural edits (add/remove/move a ref, prompt window, stage, retake, or a
+skip toggle) dispatch named commands; `saveState`/`saveClips` remain the debounced
+path for value edits and are translated into the same commands by
+`documentDiff`. One descriptor table (`documentCommands/listEntities.ts`)
+describes every ID-addressed list — its collection, command field names, and
+patchable keys — and both the reducer and the diff consume it, so a new
+canonical field cannot be classified in one place and forgotten in the other.
+
 ## Catalog and capability views
 
 The backend catalog retains architecture/profile identities, scoped capability

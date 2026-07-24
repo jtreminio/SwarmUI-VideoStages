@@ -1,6 +1,5 @@
 import {
     CLIP_DURATION_MIN,
-    clamp,
     normalizeUploadFileName,
     RETAKE_MIN_DURATION,
     RETAKE_STRENGTH_DEFAULT,
@@ -8,23 +7,28 @@ import {
     RETAKE_STRENGTH_MIN,
 } from "./constants";
 import {
+    clampedNumber,
     clampWindowInDuration,
+    nonNegativeNumber,
     normalizeOptionalEntityId,
+    numberOr,
+    text,
+    trimmedText,
 } from "./normalizationShared";
 import type { PromptWindow, Retake, SourceVideo, UploadedMedia } from "./types";
-import { isRecord, roundToTenth, toNumber } from "./utils";
+import { isRecord, roundToTenth } from "./utils";
 
 const normalizePromptWindow = (
     raw: Record<string, unknown>,
 ): PromptWindow | null => {
-    const duration = toNumber(`${raw.duration ?? 0}`, 0);
+    const duration = numberOr(raw.duration, 0);
     if (!(duration > 0)) {
         return null;
     }
-    const start = Math.max(0, toNumber(`${raw.start ?? 0}`, 0));
+    const start = nonNegativeNumber(raw.start);
     return {
         id: normalizeOptionalEntityId(raw.id),
-        prompt: `${raw.prompt ?? ""}`,
+        prompt: text(raw.prompt),
         start,
         duration,
     };
@@ -50,8 +54,8 @@ export const normalizeRetake = (
     if (!isRecord(value)) {
         return null;
     }
-    const startRaw = Math.max(0, toNumber(`${value.startSeconds ?? 0}`, 0));
-    const lengthRaw = toNumber(`${value.lengthSeconds ?? 0}`, 0);
+    const startRaw = nonNegativeNumber(value.startSeconds);
+    const lengthRaw = numberOr(value.lengthSeconds, 0);
     const window = clampWindowInDuration(
         startRaw,
         lengthRaw,
@@ -65,8 +69,9 @@ export const normalizeRetake = (
     const strength =
         strengthRaw == null
             ? RETAKE_STRENGTH_DEFAULT
-            : clamp(
-                  toNumber(`${strengthRaw}`, RETAKE_STRENGTH_DEFAULT),
+            : clampedNumber(
+                  strengthRaw,
+                  RETAKE_STRENGTH_DEFAULT,
                   RETAKE_STRENGTH_MIN,
                   RETAKE_STRENGTH_MAX,
               );
@@ -88,15 +93,13 @@ export const normalizeSourceVideo = (value: unknown): SourceVideo | null => {
     if (!isRecord(value)) {
         return null;
     }
-    const data = `${value.data ?? ""}`.trim();
+    const data = trimmedText(value.data);
     if (!data) {
         return null;
     }
-    const nonNegative = (raw: unknown): number =>
-        Math.max(0, toNumber(`${raw ?? 0}`, 0));
-    const durationSeconds = nonNegative(value.durationSeconds);
-    let startSeconds = nonNegative(value.startSeconds);
-    let lengthSeconds = nonNegative(value.lengthSeconds);
+    const durationSeconds = nonNegativeNumber(value.durationSeconds);
+    let startSeconds = nonNegativeNumber(value.startSeconds);
+    let lengthSeconds = nonNegativeNumber(value.lengthSeconds);
     if (durationSeconds > 0) {
         startSeconds = Math.min(
             startSeconds,
@@ -113,9 +116,9 @@ export const normalizeSourceVideo = (value: unknown): SourceVideo | null => {
     return {
         data,
         fileName: normalizeUploadFileName(
-            value.fileName == null ? null : `${value.fileName}`,
+            value.fileName == null ? null : text(value.fileName),
         ),
-        fps: nonNegative(value.fps),
+        fps: nonNegativeNumber(value.fps),
         durationSeconds: roundToTenth(durationSeconds),
         startSeconds: roundToTenth(startSeconds),
         lengthSeconds: roundToTenth(lengthSeconds),
@@ -128,14 +131,14 @@ export const normalizeUploadedMedia = (
     if (!isRecord(value)) {
         return null;
     }
-    const data = `${value.data ?? ""}`.trim();
+    const data = trimmedText(value.data);
     if (!data) {
         return null;
     }
     return {
         data,
         fileName: normalizeUploadFileName(
-            value.fileName == null ? null : `${value.fileName}`,
+            value.fileName == null ? null : text(value.fileName),
         ),
     };
 };

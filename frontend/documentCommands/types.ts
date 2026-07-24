@@ -12,6 +12,16 @@ import type {
     CanonicalStage,
     CanonicalVideoStagesConfig,
 } from "../types";
+import type {
+    AudioSpanPatch,
+    AudioTrackPatch,
+    ClipPatch,
+    PromptWindowPatch,
+    RefPatch,
+    RetakePatch,
+    RootSettingsPatch,
+    StagePatch,
+} from "./listEntities";
 
 export type CommandFailure =
     | "missing-target"
@@ -26,33 +36,6 @@ export interface DocumentCommandResult {
     applied: boolean;
     failure?: CommandFailure;
 }
-
-type RootSettingsPatch = Partial<
-    Pick<
-        CanonicalVideoStagesConfig,
-        "schemaVersion" | "width" | "height" | "fps" | "dimsExplicit"
-    >
->;
-type ClipPatch = Partial<
-    Omit<
-        CanonicalClip,
-        | "id"
-        | "architecture"
-        | "modelProfileId"
-        | "promptWindows"
-        | "retake"
-        | "refs"
-        | "stages"
-    >
->;
-type StagePatch = Partial<
-    Omit<CanonicalStage, "id" | "model" | "modelProfileId">
->;
-type RefPatch = Partial<Omit<CanonicalRefImage, "id">>;
-type PromptWindowPatch = Partial<Omit<CanonicalPromptWindow, "id">>;
-type RetakePatch = Partial<Omit<CanonicalRetake, "id">>;
-type AudioTrackPatch = Partial<Omit<CanonicalAudioTrack, "id" | "spans">>;
-type AudioSpanPatch = Partial<Omit<CanonicalAudioTrackSpan, "id">>;
 
 export type DocumentCommand =
     | { type: "batch"; commands: readonly DocumentCommand[] }

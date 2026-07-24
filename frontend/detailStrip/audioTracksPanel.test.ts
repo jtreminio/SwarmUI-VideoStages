@@ -10,6 +10,7 @@ import { getSelection, resetSelectionForTests } from "../selection";
 import type { TimelineSelection, VideoStagesConfig } from "../types";
 import { buildAudioTracksPanel } from "./audioTracksPanel";
 import type { DetailStripContext } from "./context";
+import { revealRepeaterKey } from "./renderShell";
 
 const config = (): VideoStagesConfig => ({
     schemaVersion: 4,
@@ -72,6 +73,25 @@ describe("timeline-wide audio segments panel", () => {
             render,
         } as DetailStripContext;
         render();
+    });
+
+    it("reveals a span selection through the key its own panel emits", () => {
+        const section = buildAudioTracksPanel(ctx, state, {
+            kind: "audio-track-span",
+            trackIdx: 0,
+            spanIdx: 0,
+        });
+
+        expect(revealRepeaterKey({ kind: "audio-track", trackIdx: 0 })).toBe(
+            section.dataset.vstRepeaterKey,
+        );
+        expect(
+            revealRepeaterKey({
+                kind: "audio-track-span",
+                trackIdx: 0,
+                spanIdx: 0,
+            }),
+        ).toBe(section.dataset.vstRepeaterKey);
     });
 
     it("adds one executable timeline lane and edits its source/window", () => {

@@ -8,9 +8,9 @@ import {
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
 import { isRootTextToVideoModel } from "../swarmInputs";
 import {
-    __resetArchitectureCatalogForTests,
     ARCHITECTURE_CATALOG_API,
     buildArchitectureModelCatalog,
+    invalidateArchitectureCatalog,
     loadAuthoritativeArchitectureCatalog,
     parseVideoArchitectureCatalog,
 } from "./catalog";
@@ -48,7 +48,7 @@ const dto = {
 };
 
 afterEach(() => {
-    __resetArchitectureCatalogForTests();
+    invalidateArchitectureCatalog();
     setVideoStagesHostBridgeForTests(null);
     document.body.innerHTML = "";
 });
@@ -248,6 +248,41 @@ describe("architecture catalog", () => {
         expect(ARCHITECTURE_CATALOG_API).toBe(
             "VideoStagesGetArchitectureCatalog",
         );
+    });
+
+    it("re-requests the catalog after an invalidation so new models resolve", async () => {
+        const newModel = {
+            modelName: "ltx-brand-new.safetensors",
+            architectureId: "ltx2",
+            modelProfileId: "ltx-2.3",
+            compatId: "ltxv2",
+        };
+        const requestJson = jest
+            .fn<VideoStagesHostBridge["requestJson"]>()
+            .mockResolvedValueOnce(dto)
+            .mockResolvedValue({ ...dto, models: [...dto.models, newModel] });
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson,
+        });
+
+        await loadAuthoritativeArchitectureCatalog();
+        expect(
+            buildArchitectureModelCatalog([newModel.modelName], ["Brand New"])
+                .entries[0].architectureId,
+        ).toBeNull();
+
+        invalidateArchitectureCatalog();
+        await loadAuthoritativeArchitectureCatalog();
+
+        expect(requestJson).toHaveBeenCalledTimes(2);
+        expect(
+            buildArchitectureModelCatalog([newModel.modelName], ["Brand New"])
+                .entries[0],
+        ).toMatchObject({
+            architectureId: "ltx2",
+            modelProfileId: "ltx-2.3",
+        });
     });
 
     it("uses backend model profiles even when compat ids are identical", async () => {

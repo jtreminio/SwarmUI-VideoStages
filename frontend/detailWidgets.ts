@@ -809,6 +809,9 @@ export const buildRepeatingEditor = (
         if (item.focusKey) {
             header.dataset.vstFocusKey = item.focusKey;
         }
+        if (item.title) {
+            header.title = item.title;
+        }
         const labelWrap = document.createElement("span");
         labelWrap.className = "header-label-wrap";
         const symbol = document.createElement("span");

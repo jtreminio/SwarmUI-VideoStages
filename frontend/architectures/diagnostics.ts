@@ -1,8 +1,12 @@
-import { audioSourceKind } from "../audioSource";
+import { audioSourceKind, canUseClipLengthFromAudio } from "../audioSource";
 import { activeStageCount, isExecutableClip } from "../clipSemantics";
 import type { Clip } from "../types";
-import { isArchitectureHdrFeature } from "./behaviorRegistry";
+import {
+    hasArchitectureSlotSourcedIcLora,
+    isArchitectureHdrFeature,
+} from "./behaviorRegistry";
 import { architectureSupportsClipStart } from "./conversion/entryModePolicy";
+import { NONE_ARCHITECTURE_ID } from "./none/definition";
 import { createBoundaryCapabilityViews } from "./policy/boundaryPolicy";
 import {
     architectureFeatureSupport,
@@ -119,6 +123,32 @@ const persistedCapabilityIssues = (
         "audio-source",
         `Audio source '${sourceKind}'`,
     );
+    // Normalization preserves both length flags as authored, so the clip's own
+    // state is what makes an authored flag unusable here.
+    if (
+        clip.clipLengthFromAudio &&
+        !canUseClipLengthFromAudio(clip.audioSource)
+    ) {
+        diagnostics.push(
+            issue(
+                "architecture.unusable.clip-length-from-audio",
+                `Clip length from audio is persisted on Clip ${clipIdx}, but audio source '${sourceKind}' cannot supply a length. Turn it off or pick a source that can.`,
+                clipIdx,
+            ),
+        );
+    }
+    if (
+        clip.clipLengthFromControlNet &&
+        !hasArchitectureSlotSourcedIcLora(clip.architecture, clip.icLoras)
+    ) {
+        diagnostics.push(
+            issue(
+                "architecture.unusable.clip-length-from-control-net",
+                `Clip length from the control signal is persisted on Clip ${clipIdx}, but no IC-LoRA supplies one. Turn it off or add a slot-sourced IC-LoRA.`,
+                clipIdx,
+            ),
+        );
+    }
     return diagnostics;
 };
 
@@ -148,8 +178,8 @@ export const deriveArchitectureDiagnostics = (
             activeStageCount(clip) === 0 && clip.sourceVideo !== null;
         if (sourceOnly) {
             if (
-                clip.architecture !== "none" ||
-                clip.modelProfileId !== "none"
+                clip.architecture !== NONE_ARCHITECTURE_ID ||
+                clip.modelProfileId !== NONE_ARCHITECTURE_ID
             ) {
                 diagnostics.push(
                     issue(

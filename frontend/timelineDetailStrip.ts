@@ -83,7 +83,6 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
     const selectionOperations = createDetailSelectionOperations(
         draftQueue.structuralCommit,
         () => createCapabilityViewResolver(getRootDefaults().modelCatalog),
-        render,
         getRootGeneratedEntryMode,
     );
 

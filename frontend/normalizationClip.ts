@@ -1,7 +1,4 @@
-import {
-    hasArchitectureSlotSourcedIcLora,
-    normalizeArchitectureIcLoras,
-} from "./architectures/behaviorRegistry";
+import { normalizeArchitectureIcLoras } from "./architectures/behaviorRegistry";
 import {
     type BoundaryOverlapConstraints,
     boundaryOverlapConstraints,
@@ -11,8 +8,10 @@ import {
     architectureForModel,
     modelProfileForModel,
 } from "./architectures/catalog";
+import { architectureDescriptor } from "./architectures/catalogQueries";
 import { normalizeClipArchitecture } from "./architectures/identity";
-import { AUDIO_SOURCE_NATIVE, canUseClipLengthFromAudio } from "./audioSource";
+import { NONE_ARCHITECTURE_ID } from "./architectures/none/definition";
+import { AUDIO_SOURCE_NATIVE } from "./audioSource";
 import { normalizeStoredHue, UNASSIGNED_HUE } from "./clipColor";
 import {
     CLIP_DURATION_MIN,
@@ -26,7 +25,12 @@ import {
     normalizeSourceVideo,
     normalizeUploadedMedia,
 } from "./normalizationMedia";
-import { normalizeOptionalEntityId } from "./normalizationShared";
+import {
+    normalizeOptionalEntityId,
+    numberOr,
+    text,
+    trimmedText,
+} from "./normalizationShared";
 import {
     buildDefaultRef,
     buildDefaultStage,
@@ -38,10 +42,10 @@ import {
 } from "./normalizationStage";
 import { snapDurationToFps } from "./renderUtils";
 import type { BoundaryOut, Clip, RootDefaults, Stage } from "./types";
-import { isRecord, toNumber } from "./utils";
+import { isRecord } from "./utils";
 
 export const normalizeBoundaryOut = (value: unknown): BoundaryOut => {
-    const raw = `${value ?? ""}`.trim().toLowerCase();
+    const raw = trimmedText(value).toLowerCase();
     return raw === "continue" || raw === "crossfade" ? raw : "cut";
 };
 
@@ -83,18 +87,19 @@ export const buildDefaultClip = (
         ),
     };
     const architecture =
-        (previousClip?.architecture !== "none"
+        (previousClip?.architecture !== NONE_ARCHITECTURE_ID
             ? previousClip?.architecture
             : null) ??
         architectureForModel(defaults.modelCatalog, firstStage.model) ??
         "unsupported";
-    const continueRule = defaults.modelCatalog.architectures.find(
-        (entry) => entry.id === architecture,
+    const continueRule = architectureDescriptor(
+        defaults.modelCatalog,
+        architecture,
     )?.boundaryRules.continue;
     return {
         architecture,
         modelProfileId:
-            (previousClip?.architecture !== "none"
+            (previousClip?.architecture !== NONE_ARCHITECTURE_ID
                 ? previousClip?.modelProfileId
                 : null) ??
             modelProfileForModel(defaults.modelCatalog, firstStage.model) ??
@@ -134,7 +139,7 @@ export const normalizeClip = (
     effectiveFps?: number,
 ): Clip => {
     const defaults = getRootDefaults();
-    const rawAudioSource = `${rawClip.audioSource ?? AUDIO_SOURCE_NATIVE}`;
+    const rawAudioSource = text(rawClip.audioSource, AUDIO_SOURCE_NATIVE);
     const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
     const sourceVideo = normalizeSourceVideo(rawClip.sourceVideo);
     const fps = Math.max(
@@ -148,7 +153,7 @@ export const normalizeClip = (
     // A sourced clip's duration IS its used source range.
     const rawDuration =
         sourceVideo?.lengthSeconds ??
-        toNumber(`${rawClip.duration}`, defaults.frames / fps);
+        numberOr(rawClip.duration, defaults.frames / fps);
     const duration = snapDurationToFps(
         Math.max(CLIP_DURATION_MIN, rawDuration),
         fps,
@@ -180,8 +185,8 @@ export const normalizeClip = (
     }
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const stageZero = stages[0] ?? null;
-    const persistedArchitecture = `${rawClip.architecture ?? ""}`.trim();
-    const persistedProfile = `${rawClip.modelProfileId ?? ""}`.trim();
+    const persistedArchitecture = trimmedText(rawClip.architecture);
+    const persistedProfile = trimmedText(rawClip.modelProfileId);
     const isSourceOnly =
         sourceVideo !== null && stages.every((stage) => stage.skipped);
     const architecture = isSourceOnly
@@ -192,16 +197,18 @@ export const normalizeClip = (
               defaults.modelCatalog,
           );
     const modelProfileId = isSourceOnly
-        ? persistedProfile || (architecture === "none" ? "none" : "unsupported")
+        ? persistedProfile ||
+          (architecture === NONE_ARCHITECTURE_ID
+              ? NONE_ARCHITECTURE_ID
+              : "unsupported")
         : persistedProfile || stageZero?.modelProfileId || "unsupported";
     const icLoras = normalizeArchitectureIcLoras(
         architecture,
         rawClip,
         stagesRaw.length,
         sourceVideo !== null,
-        !defaults.modelCatalog.architectures.some(
-            (entry) => entry.id === architecture,
-        ) || architecture === "none",
+        architectureDescriptor(defaults.modelCatalog, architecture) === null ||
+            architecture === NONE_ARCHITECTURE_ID,
     );
     for (const stage of stages) {
         stage.icLoraStrengths = normalizeStageIcLoraStrengths(
@@ -210,15 +217,16 @@ export const normalizeClip = (
             stage.controlNetStrength,
         );
     }
-    const clipLengthFromAudio =
-        canUseClipLengthFromAudio(audioSource) && !!rawClip.clipLengthFromAudio;
+    // Preserved exactly as authored: a source that cannot supply a length is
+    // reported by architecture diagnostics, never silently erased here. Only
+    // the mutual exclusion between the two flags is enforced.
+    const clipLengthFromAudio = !!rawClip.clipLengthFromAudio;
     const clipLengthFromControlNet =
-        hasArchitectureSlotSourcedIcLora(architecture, icLoras) &&
-        !clipLengthFromAudio &&
-        !!rawClip.clipLengthFromControlNet;
+        !clipLengthFromAudio && !!rawClip.clipLengthFromControlNet;
     const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
-    const boundaryRule = defaults.modelCatalog.architectures.find(
-        (entry) => entry.id === architecture,
+    const boundaryRule = architectureDescriptor(
+        defaults.modelCatalog,
+        architecture,
     )?.boundaryRules[boundaryOut];
     return {
         id: normalizeOptionalEntityId(rawClip.id),
@@ -240,7 +248,7 @@ export const normalizeClip = (
         clipLengthFromControlNet,
         reuseAudio: !!rawClip.reuseAudio,
         uploadedAudio: normalizeUploadedMedia(rawClip.uploadedAudio),
-        prompt: `${rawClip.prompt ?? ""}`,
+        prompt: text(rawClip.prompt),
         promptWindows: normalizePromptWindows(rawClip),
         retake: normalizeRetake(rawClip.retake, duration),
         sourceVideo,

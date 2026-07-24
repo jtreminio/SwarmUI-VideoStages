@@ -3,6 +3,7 @@ import { buildRepeatingEditor } from "../detailWidgets";
 import { removeIcLoraStrengthAt } from "../normalizationStage";
 import { setSelection } from "../selection";
 import type { Clip, RootDefaults } from "../types";
+import { LTX2_ARCHITECTURE_ID } from "./ltx2/definition";
 import { buildIcLorasSection as buildLtx2IcLorasSection } from "./ltx2/icLoraPanel";
 
 /** DOM-only architecture authoring panel slots used by the detail strip. */
@@ -17,8 +18,13 @@ interface ArchitectureAuthoringPanel {
     ): HTMLElement;
 }
 
+/**
+ * The DOM half of an architecture registration. It stays out of `modules.ts`
+ * because panel modules import the persistence layer, which resolves the
+ * catalog through the architecture registry.
+ */
 const panels = new Map<string, ArchitectureAuthoringPanel>([
-    ["ltx2", { buildIcLorasSection: buildLtx2IcLorasSection }],
+    [LTX2_ARCHITECTURE_ID, { buildIcLorasSection: buildLtx2IcLorasSection }],
 ]);
 
 const persistedIcLoraRemovalPanel = (

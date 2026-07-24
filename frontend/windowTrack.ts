@@ -29,13 +29,13 @@ import {
 import { getClips, saveClips } from "./persistence";
 import { activateSelection, setSelection } from "./selection";
 import type { UpdateOrigin } from "./store";
-import { readStateToken } from "./swarmInputs";
 import { getTimelineAuthoringSettings } from "./timelineAuthoringSettings";
 import { SNAP_THRESHOLD_PX, snapMovedStart, snapPoint } from "./timelineSnap";
 import {
     clipDurationOf,
+    currentRevision,
     isActivateKey,
-    isStaleToken,
+    isStaleRevision,
     livePxPerSecond,
     parseIntAttr,
     spanGeometry,
@@ -312,7 +312,7 @@ interface MoveState<TOwner> {
     el: HTMLElement;
     press: PressSpan;
     originalLeft: string;
-    sourceJson: string;
+    sourceRevision: number;
 }
 
 interface ResizeState<TOwner> extends MoveState<TOwner> {
@@ -327,7 +327,7 @@ interface CreateState {
     laneLeft: number;
     startSec: number;
     ghost: HTMLElement | null;
-    sourceJson: string;
+    sourceRevision: number;
 }
 
 export const createWindowTrack = <TOwner = Clip>(
@@ -426,7 +426,7 @@ export const createWindowTrack = <TOwner = Clip>(
         state: MoveState<TOwner>,
         write: (txn: WindowTrackTxn<TOwner>) => void,
     ): void => {
-        if (isStaleToken(state.sourceJson)) {
+        if (isStaleRevision(state.sourceRevision)) {
             return;
         }
         const saved = config.scope.write(state.lane.ownerIdx, false, (txn) => {
@@ -493,7 +493,7 @@ export const createWindowTrack = <TOwner = Clip>(
     };
 
     const commitCreate = (state: CreateState, endSec: number | null): void => {
-        if (isStaleToken(state.sourceJson)) {
+        if (isStaleRevision(state.sourceRevision)) {
             return;
         }
         const created: { selection: TimelineSelection | null } = {
@@ -718,7 +718,7 @@ export const createWindowTrack = <TOwner = Clip>(
                 el: span,
                 press: found.press,
                 originalLeft: span.style.left,
-                sourceJson: readStateToken(),
+                sourceRevision: currentRevision(),
             };
             me.preventDefault();
             const edgeEl = me.target.closest(config.edgeSelector);
@@ -754,7 +754,7 @@ export const createWindowTrack = <TOwner = Clip>(
                     livePxPerSecond(body),
                 ),
                 ghost: null,
-                sourceJson: readStateToken(),
+                sourceRevision: currentRevision(),
             });
         }
         return null;

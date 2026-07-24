@@ -14,8 +14,8 @@ import {
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
 import {
-    __resetArchitectureCatalogForTests,
     ARCHITECTURE_CATALOG_API,
+    invalidateArchitectureCatalog,
 } from "./architectures/catalog";
 import {
     setVideoStagesHostBridgeForTests,
@@ -122,7 +122,7 @@ describe("videoStagesTimeline", () => {
                 modelClass: { compatClass: { id: "ltxv2" } },
             }),
         };
-        __resetArchitectureCatalogForTests();
+        invalidateArchitectureCatalog();
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson: async () => null,
@@ -140,7 +140,7 @@ describe("videoStagesTimeline", () => {
     afterEach(() => {
         timeline?.dispose();
         timeline = null;
-        __resetArchitectureCatalogForTests();
+        invalidateArchitectureCatalog();
         setVideoStagesHostBridgeForTests(null);
         jest.useRealTimers();
         resetSelectionForTests();
@@ -422,7 +422,7 @@ describe("videoStagesTimeline", () => {
     it("adds the first clip after the backend catalog resolves even when the video-model dropdown is absent", async () => {
         document.getElementById("input_videomodel")?.remove();
         mountState(JSON.stringify({ schemaVersion: 5, clips: [] }));
-        __resetArchitectureCatalogForTests();
+        invalidateArchitectureCatalog();
 
         const architecture = testArchitectureCatalog().architectures[0];
         const dto = {

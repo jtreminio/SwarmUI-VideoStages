@@ -4,6 +4,7 @@ import {
 } from "../architectures/behaviorRegistry";
 import { buildArchitectureRetargetPlan } from "../architectures/catalog";
 import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity";
+import { NONE_ARCHITECTURE_ID } from "../architectures/none/definition";
 import type { CapabilityViewResolver } from "../architectures/policy";
 import { reconcileSourcedClipIdentity } from "../architectures/policy";
 import type { ArchitectureModelCatalog } from "../architectures/types";
@@ -14,25 +15,45 @@ import {
     RETAKE_DEFAULT_DURATION,
     RETAKE_MIN_DURATION,
     RETAKE_STRENGTH_DEFAULT,
+    STAGE_REF_STRENGTH_DEFAULT,
 } from "../constants";
+import type { DocumentCommand } from "../documentCommands";
 import { IC_LORA_STAGE_ALL } from "../icLoraAuthoring";
 import { createEntityId } from "../identity";
-import {
-    appendRefToClip,
-    buildDefaultRef,
-    buildDefaultStage,
-    removeRefAt,
-} from "../normalization";
-import { dispatchDocumentCommand, getTimelineStore } from "../persistence";
+import { buildDefaultRef, buildDefaultStage } from "../normalization";
 import { getDefaultStageModel, getRootDefaults } from "../rootDefaults";
 import { selectionAfterRemoval, setSelection } from "../selection";
 import type { Clip, TimelineSelection } from "../types";
 import { roundToTenth } from "../utils";
+import type { StructuralCommand } from "./draftQueue";
 
 export type StructuralCommit = (
-    apply: (clips: Clip[]) => TimelineSelection | "render" | null,
+    apply: (
+        clips: Clip[],
+    ) => TimelineSelection | "render" | null | StructuralCommand,
     options?: { rebuildAfterSelect?: boolean },
 ) => void;
+
+/**
+ * Each stage mirrors the clip's ref list in `refStrengths`, so a ref add or
+ * delete carries the matching per-stage patches in the same named batch.
+ */
+const refStrengthPatches = (
+    clip: Clip,
+    next: (strengths: number[]) => number[],
+): DocumentCommand[] =>
+    clip.stages.flatMap((stage) =>
+        stage.id
+            ? [
+                  {
+                      type: "stage.patch" as const,
+                      clipId: clip.id as string,
+                      stageId: stage.id,
+                      patch: { refStrengths: next(stage.refStrengths) },
+                  },
+              ]
+            : [],
+    );
 
 /**
  * Flips a clip's skip flag and reconciles the IC-LoRA drives that depend on
@@ -90,27 +111,32 @@ export interface DetailSelectionDomainOperations {
 export const createDetailSelectionDomainOperations = (
     structuralCommit: StructuralCommit,
     getCapabilities: () => CapabilityViewResolver,
-    renderAfterExternalCommand: () => void = () => {},
     getGeneratedEntryMode: () => "text-to-video" | "image-to-video" = () =>
         "text-to-video",
 ): DetailSelectionDomainOperations => {
     const commitRemoval = (
-        remove: (clips: Clip[]) => number | null,
+        build: (clips: Clip[]) => {
+            command: DocumentCommand;
+            remaining: number;
+        } | null,
         index: number,
         neighbour: (index: number) => TimelineSelection,
         fallback: TimelineSelection,
     ): void =>
         structuralCommit(
             (clips) => {
-                const remaining = remove(clips);
-                return remaining === null
+                const removal = build(clips);
+                return removal === null
                     ? null
-                    : selectionAfterRemoval(
-                          index,
-                          remaining,
-                          neighbour,
-                          fallback,
-                      );
+                    : {
+                          command: removal.command,
+                          selection: selectionAfterRemoval(
+                              index,
+                              removal.remaining,
+                              neighbour,
+                              fallback,
+                          ),
+                      };
             },
             // Deleting the last inactive item, or the first of several items,
             // can leave the selected numeric index unchanged. A normal
@@ -123,9 +149,28 @@ export const createDetailSelectionDomainOperations = (
         commitRemoval(
             (clips) => {
                 const clip = clips[clipIdx];
-                return clip && removeRefAt(clip, refIdx)
-                    ? clip.refs.length
-                    : null;
+                const ref = clip?.refs[refIdx];
+                if (!clip?.id || !ref?.id) {
+                    return null;
+                }
+                return {
+                    command: {
+                        type: "batch",
+                        commands: [
+                            {
+                                type: "ref.remove",
+                                clipId: clip.id,
+                                refId: ref.id,
+                            },
+                            ...refStrengthPatches(clip, (strengths) =>
+                                strengths.filter(
+                                    (_, index) => index !== refIdx,
+                                ),
+                            ),
+                        ],
+                    },
+                    remaining: clip.refs.length - 1,
+                };
             },
             refIdx,
             (index) => ({ kind: "ref", clipIdx, refIdx: index }),
@@ -137,17 +182,35 @@ export const createDetailSelectionDomainOperations = (
         structuralCommit((clips) => {
             const clip = clips[clipIdx];
             if (
-                !clip ||
+                !clip?.id ||
                 !getCapabilities().forClip(clip).decision("frameReferences")
                     .supported
             ) {
                 return null;
             }
-            appendRefToClip(clip, buildDefaultRef());
             return {
-                kind: "ref",
-                clipIdx,
-                refIdx: clip.refs.length - 1,
+                command: {
+                    type: "batch",
+                    commands: [
+                        {
+                            type: "ref.add",
+                            clipId: clip.id,
+                            ref: {
+                                ...buildDefaultRef(),
+                                id: createEntityId("ref"),
+                            },
+                        },
+                        ...refStrengthPatches(clip, (strengths) => [
+                            ...strengths,
+                            STAGE_REF_STRENGTH_DEFAULT,
+                        ]),
+                    ],
+                },
+                selection: {
+                    kind: "ref",
+                    clipIdx,
+                    refIdx: clip.refs.length,
+                },
             };
         });
     };
@@ -157,16 +220,16 @@ export const createDetailSelectionDomainOperations = (
             (clips) => {
                 const clip = clips[clipIdx];
                 if (
-                    !clip ||
+                    !clip?.id ||
                     !getCapabilities().forClip(clip).decision("promptRelay")
                         .supported
                 ) {
                     return null;
                 }
                 const clipDuration = Math.max(0, clip.duration || 0);
-                const windows = [...(clip.promptWindows ?? [])].sort(
-                    (a, b) => a.start - b.start,
-                );
+                // Windows are persisted through the prompt carrier in start
+                // order, so the existing array is already sorted.
+                const windows = clip.promptWindows ?? [];
                 let start = 0;
                 let end = clipDuration;
                 for (const window of windows) {
@@ -193,18 +256,30 @@ export const createDetailSelectionDomainOperations = (
                     return null;
                 }
                 const window = {
+                    id: createEntityId("prompt_window"),
                     prompt: "",
                     start: roundToTenth(start),
                     duration: roundToTenth(
                         Math.min(PROMPT_WINDOW_DEFAULT_DURATION, end - start),
                     ),
                 };
-                clip.promptWindows.push(window);
-                clip.promptWindows.sort((a, b) => a.start - b.start);
+                const insertAt = windows.findIndex(
+                    (candidate) => candidate.start > window.start,
+                );
+                const beforeWindowId =
+                    insertAt < 0 ? null : (windows[insertAt].id ?? null);
                 return {
-                    kind: "prompt-minor",
-                    clipIdx,
-                    windowIdx: clip.promptWindows.indexOf(window),
+                    command: {
+                        type: "prompt-window.add",
+                        clipId: clip.id,
+                        window,
+                        beforeWindowId,
+                    },
+                    selection: {
+                        kind: "prompt-minor",
+                        clipIdx,
+                        windowIdx: insertAt < 0 ? windows.length : insertAt,
+                    },
                 };
             },
             // A newly sorted leading window can reuse the currently selected
@@ -216,12 +291,19 @@ export const createDetailSelectionDomainOperations = (
     const deleteWindowEntry = (clipIdx: number, windowIdx: number): void => {
         commitRemoval(
             (clips) => {
-                const windows = clips[clipIdx]?.promptWindows;
-                if (!windows || windowIdx < 0 || windowIdx >= windows.length) {
+                const clip = clips[clipIdx];
+                const window = clip?.promptWindows?.[windowIdx];
+                if (!clip?.id || !window?.id) {
                     return null;
                 }
-                windows.splice(windowIdx, 1);
-                return windows.length;
+                return {
+                    command: {
+                        type: "prompt-window.remove",
+                        clipId: clip.id,
+                        windowId: window.id,
+                    },
+                    remaining: clip.promptWindows.length - 1,
+                };
             },
             windowIdx,
             (index) => ({
@@ -238,7 +320,7 @@ export const createDetailSelectionDomainOperations = (
             (clips) => {
                 const clip = clips[clipIdx];
                 if (
-                    !clip ||
+                    !clip?.id ||
                     clip.retake ||
                     !getCapabilities().forClip(clip).decision("retake")
                         .supported
@@ -246,18 +328,25 @@ export const createDetailSelectionDomainOperations = (
                     return null;
                 }
                 const clipDuration = Math.max(0, clip.duration || 0);
-                clip.retake = {
-                    startSeconds: 0,
-                    lengthSeconds: Math.max(
-                        RETAKE_MIN_DURATION,
-                        Math.min(
-                            RETAKE_DEFAULT_DURATION,
-                            clipDuration || RETAKE_DEFAULT_DURATION,
-                        ),
-                    ),
-                    strength: RETAKE_STRENGTH_DEFAULT,
+                return {
+                    command: {
+                        type: "retake.add",
+                        clipId: clip.id,
+                        retake: {
+                            id: createEntityId("retake"),
+                            startSeconds: 0,
+                            lengthSeconds: Math.max(
+                                RETAKE_MIN_DURATION,
+                                Math.min(
+                                    RETAKE_DEFAULT_DURATION,
+                                    clipDuration || RETAKE_DEFAULT_DURATION,
+                                ),
+                            ),
+                            strength: RETAKE_STRENGTH_DEFAULT,
+                        },
+                    },
+                    selection: { kind: "retake", clipIdx },
                 };
-                return { kind: "retake", clipIdx };
             },
             { rebuildAfterSelect: true },
         );
@@ -267,16 +356,22 @@ export const createDetailSelectionDomainOperations = (
         structuralCommit(
             (clips) => {
                 const clip = clips[clipIdx];
-                if (!clip?.retake) {
+                if (!clip?.id || !clip.retake?.id) {
                     return null;
                 }
                 const keepRetakeSelected = getCapabilities()
                     .forClip(clip)
                     .decision("retake").supported;
-                clip.retake = null;
-                return keepRetakeSelected
-                    ? { kind: "retake", clipIdx }
-                    : { kind: "clip", clipIdx, stageIdx: 0 };
+                return {
+                    command: {
+                        type: "retake.remove",
+                        clipId: clip.id,
+                        retakeId: clip.retake.id,
+                    },
+                    selection: keepRetakeSelected
+                        ? { kind: "retake", clipIdx }
+                        : { kind: "clip", clipIdx, stageIdx: 0 },
+                };
             },
             { rebuildAfterSelect: true },
         );
@@ -303,7 +398,7 @@ export const createDetailSelectionDomainOperations = (
                 const last = clip.stages[clip.stages.length - 1] ?? null;
                 const defaults = getRootDefaults();
                 const lockedArchitecture =
-                    clip.architecture === "none"
+                    clip.architecture === NONE_ARCHITECTURE_ID
                         ? undefined
                         : clip.architecture;
                 const stage = buildDefaultStage(
@@ -313,52 +408,39 @@ export const createDetailSelectionDomainOperations = (
                     last,
                     clip.refs.length,
                 );
-                if (clip.architecture === "none" && clip.stages.length === 0) {
+                if (
+                    clip.architecture === NONE_ARCHITECTURE_ID &&
+                    clip.stages.length === 0
+                ) {
                     const target = buildArchitectureRetargetPlan(
                         defaults.modelCatalog,
                         stage.model,
                     );
-                    const snapshot = getTimelineStore().getSnapshot();
-                    const clipId = snapshot.state.clips[clipIdx]?.id;
-                    if (!target || !clipId) {
+                    if (!target || !clip.id) {
                         return null;
                     }
-                    const canonicalStage = {
-                        ...stage,
-                        id: createEntityId("stage"),
-                        modelProfileId: target.modelProfileId,
-                    };
-                    const result = dispatchDocumentCommand(
-                        {
+                    return {
+                        command: {
                             type: "batch",
                             commands: [
                                 {
                                     type: "clip.convert-architecture",
-                                    clipId,
+                                    clipId: clip.id,
                                     target,
                                 },
                                 {
                                     type: "stage.add",
-                                    clipId,
-                                    stage: canonicalStage,
+                                    clipId: clip.id,
+                                    stage: {
+                                        ...stage,
+                                        id: createEntityId("stage"),
+                                        modelProfileId: target.modelProfileId,
+                                    },
                                 },
                             ],
                         },
-                        {
-                            expectedRevision: snapshot.revision,
-                            origin: "detail-strip",
-                        },
-                    );
-                    if (result.applied) {
-                        setSelection({
-                            kind: "clip",
-                            clipIdx,
-                            stageIdx: 0,
-                        });
-                        renderAfterExternalCommand();
-                    }
-                    // The named batch already performed the one carrier write.
-                    return null;
+                        selection: { kind: "clip", clipIdx, stageIdx: 0 },
+                    };
                 }
                 clip.stages.push(stage);
                 if (
@@ -422,25 +504,94 @@ export const createDetailSelectionDomainOperations = (
         );
     };
 
+    /**
+     * Runs one of the shared skip mutations on a working copy and turns it
+     * into the named skip command plus whatever IC-LoRA drive reconciliation
+     * it forced on the other clips.
+     */
+    const commitSkip = (
+        clips: Clip[],
+        mutate: (clips: Clip[]) => boolean,
+        skipCommand: (clips: Clip[]) => DocumentCommand | null,
+    ): StructuralCommand | null => {
+        const beforeDrives = clips.map((clip) => JSON.stringify(clip.icLoras));
+        if (!mutate(clips)) {
+            return null;
+        }
+        const skip = skipCommand(clips);
+        if (!skip) {
+            return null;
+        }
+        return {
+            command: {
+                type: "batch",
+                commands: [
+                    skip,
+                    ...clips.flatMap((clip, index) =>
+                        clip.id &&
+                        JSON.stringify(clip.icLoras) !== beforeDrives[index]
+                            ? [
+                                  {
+                                      type: "clip.patch" as const,
+                                      clipId: clip.id,
+                                      patch: { icLoras: clip.icLoras },
+                                  },
+                              ]
+                            : [],
+                    ),
+                ],
+            },
+            selection: "render",
+        };
+    };
+
     const toggleClipSkip = (clipIdx: number): void => {
         structuralCommit((clips) =>
-            applyClipSkip(clips, clipIdx, getGeneratedEntryMode())
-                ? "render"
-                : null,
+            commitSkip(
+                clips,
+                (working) =>
+                    applyClipSkip(working, clipIdx, getGeneratedEntryMode()),
+                (working) => {
+                    const clip = working[clipIdx];
+                    return clip.id
+                        ? {
+                              type: "clip.patch",
+                              clipId: clip.id,
+                              patch: { skipped: clip.skipped },
+                          }
+                        : null;
+                },
+            ),
         );
     };
 
     const toggleStageSkip = (clipIdx: number, stageIdx: number): void => {
         structuralCommit((clips) =>
-            applyStageSkip(
+            commitSkip(
                 clips,
-                clipIdx,
-                stageIdx,
-                getCapabilities().catalog,
-                getGeneratedEntryMode(),
-            )
-                ? "render"
-                : null,
+                (working) =>
+                    applyStageSkip(
+                        working,
+                        clipIdx,
+                        stageIdx,
+                        getCapabilities().catalog,
+                        getGeneratedEntryMode(),
+                    ),
+                (working) => {
+                    const clip = working[clipIdx];
+                    const stage = clip.stages[stageIdx];
+                    // The reducer re-derives the clip's identity from the
+                    // surviving active stages, exactly as applyStageSkip did.
+                    return clip.id && stage.id
+                        ? {
+                              type: "stage.patch",
+                              clipId: clip.id,
+                              stageId: stage.id,
+                              patch: { skipped: stage.skipped },
+                          }
+                        : null;
+                },
+            ),
         );
     };
 

@@ -5,15 +5,17 @@
 
 export {
     architectureCatalogView,
+    architectureDescriptor,
     architectureForModel,
     buildArchitectureRetargetPlan,
+    modelCatalogEntry,
     modelProfileForModel,
     supportedArchitectureCatalog,
 } from "./catalogQueries";
 export {
-    __resetArchitectureCatalogForTests,
     ARCHITECTURE_CATALOG_API,
     buildArchitectureModelCatalog,
+    invalidateArchitectureCatalog,
     loadAuthoritativeArchitectureCatalog,
 } from "./catalogRepository";
 export { parseVideoArchitectureCatalog } from "./catalogWire";

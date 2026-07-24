@@ -22,14 +22,12 @@ export interface DetailSelectionOperations
 export const createDetailSelectionOperations = (
     structuralCommit: StructuralCommit,
     getCapabilities: () => CapabilityViewResolver,
-    renderAfterExternalCommand: () => void = () => {},
     getGeneratedEntryMode: () => "text-to-video" | "image-to-video" = () =>
         "text-to-video",
 ): DetailSelectionOperations => {
     const domain = createDetailSelectionDomainOperations(
         structuralCommit,
         getCapabilities,
-        renderAfterExternalCommand,
         getGeneratedEntryMode,
     );
     const handleActivation = (target: Element, shiftKey: boolean): void => {

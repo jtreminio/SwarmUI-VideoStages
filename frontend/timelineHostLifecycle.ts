@@ -14,6 +14,8 @@ export interface TimelineHostLifecycle {
 
 export const createTimelineHostLifecycle = (options: {
     refresh: () => void;
+    /** Re-requests the backend catalog after the host may have installed models. */
+    refreshCatalog: () => void;
     syncFromCarrier: () => void;
     flushPending: () => void;
     undo: () => boolean;
@@ -79,6 +81,10 @@ export const createTimelineHostLifecycle = (options: {
         if (!paramRefreshCleanup) {
             paramRefreshCleanup =
                 getVideoStagesHostBridge().addParamRefreshHook(() => {
+                    // A host model refresh can install models the cached
+                    // catalog has never seen; without this they resolve to a
+                    // null architecture until the page reloads.
+                    options.refreshCatalog();
                     setTimeout(options.refresh, 0);
                 });
         }

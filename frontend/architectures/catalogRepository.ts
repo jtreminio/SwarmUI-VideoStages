@@ -43,7 +43,12 @@ export const loadAuthoritativeArchitectureCatalog =
         return catalogRequest;
     };
 
-export const __resetArchitectureCatalogForTests = (): void => {
+/**
+ * Drops the process-lifetime catalog cache. The host installs models while the
+ * page lives, so a model refresh must be able to force a re-request instead of
+ * resolving new models to a null architecture until reload.
+ */
+export const invalidateArchitectureCatalog = (): void => {
     authoritativeCatalog = null;
     catalogRequest = null;
 };

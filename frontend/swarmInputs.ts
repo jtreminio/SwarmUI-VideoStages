@@ -1,4 +1,5 @@
 import {
+    architectureDescriptor,
     architectureForModel,
     buildArchitectureModelCatalog,
 } from "./architectures/catalog";
@@ -111,9 +112,7 @@ export const isRootTextToVideoModel = (): boolean => {
     }
     const catalog = buildArchitectureModelCatalog([modelName], [modelName]);
     const architectureId = architectureForModel(catalog, modelName);
-    const architecture = catalog.architectures.find(
-        (entry) => entry.id === architectureId,
-    );
+    const architecture = architectureDescriptor(catalog, architectureId);
     return (
         architecture?.capabilities.entryModes.includes("text-to-video") ?? false
     );

@@ -12,14 +12,22 @@ import {
 import { createCapabilityViewResolver } from "../architectures/policy";
 import {
     __resetPersistenceForTests,
+    dispatchDocumentCommand,
     getClips,
     getTimelineStore,
     saveClips,
 } from "../persistence";
-import { getSelection } from "../selection";
+import { getSelection, setSelection } from "../selection";
 import { createTimelineHistory } from "../timelineHistory";
 import type { Clip, TimelineSelection } from "../types";
+import type { StructuralCommand } from "./draftQueue";
 import { createDetailSelectionOperations } from "./selectionOperations";
+
+type StructuralOutcome =
+    | TimelineSelection
+    | "render"
+    | null
+    | StructuralCommand;
 
 describe("detail structural stage operations", () => {
     it("allows a sourced clip to remove its final stage and become source-only", () => {
@@ -35,9 +43,9 @@ describe("detail structural stage operations", () => {
                 },
             }),
         ];
-        let selection: TimelineSelection | "render" | null = null;
+        let selection: StructuralOutcome = null;
         const structuralCommit = jest.fn(
-            (apply: (value: Clip[]) => TimelineSelection | "render" | null) => {
+            (apply: (value: Clip[]) => StructuralOutcome) => {
                 selection = apply(clips);
             },
         );
@@ -69,7 +77,7 @@ describe("detail structural stage operations", () => {
                 (feature) => feature !== "multi-stage",
             );
         const structuralCommit = jest.fn(
-            (apply: (value: Clip[]) => TimelineSelection | "render" | null) => {
+            (apply: (value: Clip[]) => StructuralOutcome) => {
                 apply(clips);
             },
         );
@@ -96,9 +104,9 @@ describe("detail structural stage operations", () => {
                 stages: [],
             }),
         ];
-        let selection: TimelineSelection | "render" | null = null;
+        let selection: StructuralOutcome = null;
         const structuralCommit = jest.fn(
-            (apply: (value: Clip[]) => TimelineSelection | "render" | null) => {
+            (apply: (value: Clip[]) => StructuralOutcome) => {
                 selection = apply(clips);
             },
         );
@@ -164,17 +172,30 @@ describe("detail structural stage operations", () => {
             history.capture();
         });
         const revisionBefore = getTimelineStore().getSnapshot().revision;
+        // Stands in for the draft queue: a named command dispatches, anything
+        // else falls back to the whole-document save path.
         const structuralCommit = (
-            apply: (value: Clip[]) => TimelineSelection | "render" | null,
+            apply: (value: Clip[]) => StructuralOutcome,
         ): void => {
             const clips = getClips();
             const outcome = apply(clips);
-            if (outcome !== null) {
-                saveClips(clips, {
+            if (outcome === null) {
+                return;
+            }
+            if (typeof outcome === "object" && "command" in outcome) {
+                const result = dispatchDocumentCommand(outcome.command, {
                     origin: "detail-strip",
                     notifyDomChange: false,
                 });
+                if (result.applied && outcome.selection !== null) {
+                    setSelection(outcome.selection as TimelineSelection);
+                }
+                return;
             }
+            saveClips(clips, {
+                origin: "detail-strip",
+                notifyDomChange: false,
+            });
         };
         const operations = createDetailSelectionOperations(
             structuralCommit,

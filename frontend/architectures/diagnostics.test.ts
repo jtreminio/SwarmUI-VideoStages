@@ -52,6 +52,29 @@ describe("architecture diagnostics", () => {
         expect(clip).toEqual(before);
     });
 
+    it("reports preserved length flags the clip's own state cannot honor", () => {
+        const clip = minimalClip({
+            audioSource: "Native",
+            clipLengthFromAudio: true,
+            clipLengthFromControlNet: true,
+            stages: [minimalStage({ model: "ltx" })],
+        });
+        const before = structuredClone(clip);
+
+        const codes = deriveArchitectureDiagnostics(
+            [clip],
+            combinedCatalog(),
+        ).map(({ code }) => code);
+
+        expect(codes).toEqual(
+            expect.arrayContaining([
+                "architecture.unusable.clip-length-from-audio",
+                "architecture.unusable.clip-length-from-control-net",
+            ]),
+        );
+        expect(clip).toEqual(before);
+    });
+
     it("reports persisted unsupported settings without stripping them", () => {
         const models = combinedCatalog();
         const fake = models.architectures.find(

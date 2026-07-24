@@ -1,4 +1,8 @@
 import {
+    architectureDescriptor,
+    modelCatalogEntry,
+} from "./architectures/catalogQueries";
+import {
     deriveClipArchitectureIdentity,
     reconcileClipArchitectureIdentity,
 } from "./architectures/clipIdentity";
@@ -6,16 +10,14 @@ import { planArchitectureConversion } from "./architectures/conversion/plan";
 import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
 import type { ArchitectureModelCatalog } from "./architectures/types";
 import type { CommandFailure, DocumentCommand } from "./documentCommands";
-import type {
-    CanonicalAudioTrack,
-    CanonicalAudioTrackSpan,
-    CanonicalClip,
-    CanonicalPromptWindow,
-    CanonicalRefImage,
-    CanonicalRetake,
-    CanonicalStage,
-    CanonicalVideoStagesConfig,
-} from "./types";
+import {
+    LIST_ENTITIES,
+    type ListEntityDescriptor,
+    OWNER_ID_FIELD,
+    RETAKE_PATCH_KEYS,
+    ROOT_PATCH_KEYS,
+} from "./documentCommands/listEntities";
+import type { CanonicalClip, CanonicalVideoStagesConfig } from "./types";
 
 export type DocumentBatchCommand = Extract<DocumentCommand, { type: "batch" }>;
 export type DocumentDiffFailure = Extract<
@@ -44,141 +46,6 @@ interface CommandPhases {
 export interface DocumentDiffContext {
     architectureCatalog: ArchitectureModelCatalog | null;
 }
-
-interface EntityListCallbacks<T extends { id: string }> {
-    remove(id: string): DocumentCommand;
-    add(entity: T, beforeId: string | null): DocumentCommand;
-    move(id: string, beforeId: string | null): DocumentCommand;
-    patch(before: T, after: T): void;
-}
-
-const ROOT_PATCH_KEYS = [
-    "schemaVersion",
-    "width",
-    "height",
-    "fps",
-    "dimsExplicit",
-] as const satisfies readonly (keyof CanonicalVideoStagesConfig)[];
-
-const CLIP_PATCH_KEYS = [
-    "skipped",
-    "hue",
-    "boundaryOut",
-    "boundaryOutCarryAudio",
-    "boundaryOutOverlap",
-    "duration",
-    "audioSource",
-    "icLoras",
-    "saveAudioTrack",
-    "clipLengthFromAudio",
-    "clipLengthFromControlNet",
-    "reuseAudio",
-    "uploadedAudio",
-    "prompt",
-    "sourceVideo",
-] as const satisfies readonly (keyof CanonicalClip)[];
-
-const STAGE_PATCH_KEYS = [
-    "skipped",
-    "control",
-    "controlNetStrength",
-    "icLoraStrengths",
-    "refStrengths",
-    "upscale",
-    "upscaleMethod",
-    "steps",
-    "cfgScale",
-    "sampler",
-    "scheduler",
-    "loras",
-] as const satisfies readonly (keyof CanonicalStage)[];
-
-const REF_PATCH_KEYS = [
-    "source",
-    "uploadFileName",
-    "uploadedImage",
-    "frame",
-    "fromEnd",
-] as const satisfies readonly (keyof CanonicalRefImage)[];
-
-const PROMPT_WINDOW_PATCH_KEYS = [
-    "prompt",
-    "start",
-    "duration",
-] as const satisfies readonly (keyof CanonicalPromptWindow)[];
-
-const RETAKE_PATCH_KEYS = [
-    "startSeconds",
-    "lengthSeconds",
-    "strength",
-] as const satisfies readonly (keyof CanonicalRetake)[];
-
-const AUDIO_TRACK_PATCH_KEYS = [
-    "source",
-    "volume",
-] as const satisfies readonly (keyof CanonicalAudioTrack)[];
-
-const AUDIO_SPAN_PATCH_KEYS = [
-    "timelineStartSeconds",
-    "timelineLengthSeconds",
-    "sourceStartSeconds",
-] as const satisfies readonly (keyof CanonicalAudioTrackSpan)[];
-
-type AssertClassified<T, U extends keyof T> = [Exclude<keyof T, U>] extends [
-    never,
-]
-    ? true
-    : Exclude<keyof T, U>;
-
-const _rootKeysExhaustive: AssertClassified<
-    CanonicalVideoStagesConfig,
-    (typeof ROOT_PATCH_KEYS)[number] | "clips" | "audioTracks"
-> = true;
-const _clipKeysExhaustive: AssertClassified<
-    CanonicalClip,
-    | "id"
-    | "architecture"
-    | "modelProfileId"
-    | (typeof CLIP_PATCH_KEYS)[number]
-    | "promptWindows"
-    | "retake"
-    | "refs"
-    | "stages"
-> = true;
-const _stageKeysExhaustive: AssertClassified<
-    CanonicalStage,
-    "id" | "model" | "modelProfileId" | (typeof STAGE_PATCH_KEYS)[number]
-> = true;
-const _refKeysExhaustive: AssertClassified<
-    CanonicalRefImage,
-    "id" | (typeof REF_PATCH_KEYS)[number]
-> = true;
-const _promptWindowKeysExhaustive: AssertClassified<
-    CanonicalPromptWindow,
-    "id" | (typeof PROMPT_WINDOW_PATCH_KEYS)[number]
-> = true;
-const _retakeKeysExhaustive: AssertClassified<
-    CanonicalRetake,
-    "id" | (typeof RETAKE_PATCH_KEYS)[number]
-> = true;
-const _audioTrackKeysExhaustive: AssertClassified<
-    CanonicalAudioTrack,
-    "id" | "spans" | (typeof AUDIO_TRACK_PATCH_KEYS)[number]
-> = true;
-const _audioSpanKeysExhaustive: AssertClassified<
-    CanonicalAudioTrackSpan,
-    "id" | (typeof AUDIO_SPAN_PATCH_KEYS)[number]
-> = true;
-void [
-    _rootKeysExhaustive,
-    _clipKeysExhaustive,
-    _stageKeysExhaustive,
-    _refKeysExhaustive,
-    _promptWindowKeysExhaustive,
-    _retakeKeysExhaustive,
-    _audioTrackKeysExhaustive,
-    _audioSpanKeysExhaustive,
-];
 
 const clone = <T>(value: T): T => structuredClone(value);
 
@@ -280,19 +147,66 @@ const moveBeforeId = (
     insertBeforeId(ids, id, beforeId);
 };
 
-const diffEntityList = <T extends { id: string }>(
-    before: readonly T[],
-    after: readonly T[],
+const listCommand = <TOwner, TEntity extends { id: string }>(
+    descriptor: ListEntityDescriptor<TOwner, TEntity>,
+    ownerId: string | null,
+    suffix: "add" | "remove" | "move" | "patch",
+    fields: Record<string, unknown>,
+): DocumentCommand => {
+    const ownerField = OWNER_ID_FIELD[descriptor.owner];
+    return {
+        type: `${descriptor.prefix}.${suffix}`,
+        ...(ownerField === null ? {} : { [ownerField]: ownerId }),
+        ...fields,
+    } as unknown as DocumentCommand;
+};
+
+const emitPatch = <TOwner, TEntity extends { id: string }>(
+    descriptor: ListEntityDescriptor<TOwner, TEntity>,
+    ownerId: string | null,
+    previous: TEntity,
+    next: TEntity,
     phases: CommandPhases,
-    callbacks: EntityListCallbacks<T>,
 ): void => {
+    const patch = changedPatch(previous, next, descriptor.patchKeys);
+    if (hasPatch(patch)) {
+        phases.patches.push(
+            listCommand(descriptor, ownerId, "patch", {
+                [descriptor.idField]: next.id,
+                patch,
+            }),
+        );
+    }
+};
+
+/**
+ * Turns one owner's before/after collection into remove/add/move/patch
+ * commands, phased so the batch stays applicable in order.
+ */
+const diffList = <TOwner, TEntity extends { id: string }>(
+    descriptor: ListEntityDescriptor<TOwner, TEntity>,
+    ownerId: string | null,
+    beforeOwner: TOwner,
+    afterOwner: TOwner,
+    phases: CommandPhases,
+    patchEntity: (previous: TEntity, next: TEntity) => void = (
+        previous,
+        next,
+    ) => emitPatch(descriptor, ownerId, previous, next, phases),
+): void => {
+    const before = descriptor.collection(beforeOwner);
+    const after = descriptor.collection(afterOwner);
     const beforeById = new Map(before.map((entity) => [entity.id, entity]));
     const afterIds = new Set(after.map((entity) => entity.id));
     const currentIds = before.map((entity) => entity.id);
 
     for (const entity of before) {
         if (!afterIds.has(entity.id)) {
-            phases.removes.push(callbacks.remove(entity.id));
+            phases.removes.push(
+                listCommand(descriptor, ownerId, "remove", {
+                    [descriptor.idField]: entity.id,
+                }),
+            );
             currentIds.splice(currentIds.indexOf(entity.id), 1);
         }
     }
@@ -303,7 +217,12 @@ const diffEntityList = <T extends { id: string }>(
             continue;
         }
         const beforeId = after[index + 1]?.id ?? null;
-        phases.adds.push(callbacks.add(clone(entity), beforeId));
+        phases.adds.push(
+            listCommand(descriptor, ownerId, "add", {
+                [descriptor.entityField]: clone(entity),
+                [descriptor.beforeIdField]: beforeId,
+            }),
+        );
         insertBeforeId(currentIds, entity.id, beforeId);
     }
 
@@ -313,14 +232,19 @@ const diffEntityList = <T extends { id: string }>(
             continue;
         }
         const beforeId = currentIds[index] ?? null;
-        phases.moves.push(callbacks.move(targetId, beforeId));
+        phases.moves.push(
+            listCommand(descriptor, ownerId, "move", {
+                [descriptor.idField]: targetId,
+                [descriptor.beforeIdField]: beforeId,
+            }),
+        );
         moveBeforeId(currentIds, targetId, beforeId);
     }
 
     for (const entity of after) {
         const previous = beforeById.get(entity.id);
         if (previous) {
-            callbacks.patch(previous, entity);
+            patchEntity(previous, entity);
         }
     }
 };
@@ -330,25 +254,13 @@ const diffStages = (
     after: CanonicalClip,
     phases: CommandPhases,
 ): void =>
-    diffEntityList(before.stages, after.stages, phases, {
-        remove: (stageId) => ({
-            type: "stage.remove",
-            clipId: before.id,
-            stageId,
-        }),
-        add: (stage, beforeStageId) => ({
-            type: "stage.add",
-            clipId: after.id,
-            stage,
-            beforeStageId,
-        }),
-        move: (stageId, beforeStageId) => ({
-            type: "stage.move",
-            clipId: after.id,
-            stageId,
-            beforeStageId,
-        }),
-        patch: (previous, next) => {
+    diffList(
+        LIST_ENTITIES.stage,
+        after.id,
+        before,
+        after,
+        phases,
+        (previous, next) => {
             if (
                 previous.model !== next.model ||
                 previous.modelProfileId !== next.modelProfileId
@@ -364,93 +276,9 @@ const diffStages = (
                     },
                 });
             }
-            const patch = changedPatch(previous, next, STAGE_PATCH_KEYS);
-            if (hasPatch(patch)) {
-                phases.patches.push({
-                    type: "stage.patch",
-                    clipId: after.id,
-                    stageId: next.id,
-                    patch,
-                });
-            }
+            emitPatch(LIST_ENTITIES.stage, after.id, previous, next, phases);
         },
-    });
-
-const diffRefs = (
-    before: CanonicalClip,
-    after: CanonicalClip,
-    phases: CommandPhases,
-): void =>
-    diffEntityList(before.refs, after.refs, phases, {
-        remove: (refId) => ({
-            type: "ref.remove",
-            clipId: before.id,
-            refId,
-        }),
-        add: (ref, beforeRefId) => ({
-            type: "ref.add",
-            clipId: after.id,
-            ref,
-            beforeRefId,
-        }),
-        move: (refId, beforeRefId) => ({
-            type: "ref.move",
-            clipId: after.id,
-            refId,
-            beforeRefId,
-        }),
-        patch: (previous, next) => {
-            const patch = changedPatch(previous, next, REF_PATCH_KEYS);
-            if (hasPatch(patch)) {
-                phases.patches.push({
-                    type: "ref.patch",
-                    clipId: after.id,
-                    refId: next.id,
-                    patch,
-                });
-            }
-        },
-    });
-
-const diffPromptWindows = (
-    before: CanonicalClip,
-    after: CanonicalClip,
-    phases: CommandPhases,
-): void =>
-    diffEntityList(before.promptWindows, after.promptWindows, phases, {
-        remove: (windowId) => ({
-            type: "prompt-window.remove",
-            clipId: before.id,
-            windowId,
-        }),
-        add: (window, beforeWindowId) => ({
-            type: "prompt-window.add",
-            clipId: after.id,
-            window,
-            beforeWindowId,
-        }),
-        move: (windowId, beforeWindowId) => ({
-            type: "prompt-window.move",
-            clipId: after.id,
-            windowId,
-            beforeWindowId,
-        }),
-        patch: (previous, next) => {
-            const patch = changedPatch(
-                previous,
-                next,
-                PROMPT_WINDOW_PATCH_KEYS,
-            );
-            if (hasPatch(patch)) {
-                phases.patches.push({
-                    type: "prompt-window.patch",
-                    clipId: after.id,
-                    windowId: next.id,
-                    patch,
-                });
-            }
-        },
-    });
+    );
 
 const diffRetake = (
     before: CanonicalClip,
@@ -494,46 +322,133 @@ const diffClipChildren = (
     phases: CommandPhases,
 ): void => {
     diffStages(before, after, phases);
-    diffRefs(before, after, phases);
-    diffPromptWindows(before, after, phases);
+    diffList(LIST_ENTITIES.ref, after.id, before, after, phases);
+    diffList(LIST_ENTITIES.promptWindow, after.id, before, after, phases);
     diffRetake(before, after, phases);
 };
 
-const diffSpans = (
-    before: CanonicalAudioTrack,
-    after: CanonicalAudioTrack,
+/**
+ * Re-derives the architecture conversion a whole-document save implies, and
+ * returns the baseline the rest of the clip diff must be taken against: the
+ * converted clip when Stage 0 changed architecture, otherwise `previous`.
+ */
+const clipDiffBase = (
+    previous: CanonicalClip,
+    next: CanonicalClip,
     phases: CommandPhases,
-): void =>
-    diffEntityList(before.spans, after.spans, phases, {
-        remove: (spanId) => ({
-            type: "audio-span.remove",
-            trackId: before.id,
-            spanId,
-        }),
-        add: (span, beforeSpanId) => ({
-            type: "audio-span.add",
-            trackId: after.id,
-            span,
-            beforeSpanId,
-        }),
-        move: (spanId, beforeSpanId) => ({
-            type: "audio-span.move",
-            trackId: after.id,
-            spanId,
-            beforeSpanId,
-        }),
-        patch: (previous, next) => {
-            const patch = changedPatch(previous, next, AUDIO_SPAN_PATCH_KEYS);
-            if (hasPatch(patch)) {
-                phases.patches.push({
-                    type: "audio-span.patch",
-                    trackId: after.id,
-                    spanId: next.id,
-                    patch,
-                });
-            }
-        },
+    context: DocumentDiffContext,
+): CanonicalClip => {
+    const changesEffectiveIdentity =
+        previous.architecture !== next.architecture ||
+        previous.modelProfileId !== next.modelProfileId;
+    const previousIdentity = deriveClipArchitectureIdentity(
+        previous,
+        context.architectureCatalog,
+    );
+    const nextIdentity = deriveClipArchitectureIdentity(
+        next,
+        context.architectureCatalog,
+    );
+    if (changesEffectiveIdentity) {
+        if (
+            !nextIdentity ||
+            nextIdentity.architectureId !== next.architecture ||
+            nextIdentity.modelProfileId !== next.modelProfileId
+        ) {
+            throw new DocumentDiffError("architecture-invariant");
+        }
+    }
+    const changesAuthoredArchitecture =
+        previousIdentity?.authoredArchitectureId !== null &&
+        previousIdentity?.authoredArchitectureId !== undefined &&
+        nextIdentity?.authoredArchitectureId !== null &&
+        nextIdentity?.authoredArchitectureId !== undefined &&
+        previousIdentity.authoredArchitectureId !==
+            nextIdentity.authoredArchitectureId;
+    if (
+        changesEffectiveIdentity &&
+        !changesAuthoredArchitecture &&
+        (previousIdentity?.authoredArchitectureId == null ||
+            nextIdentity?.authoredArchitectureId == null ||
+            previousIdentity.authoredArchitectureId !==
+                nextIdentity.authoredArchitectureId)
+    ) {
+        // Source/skipped transitions may toggle only the effective identity
+        // while retaining the same authored Stage 0. Empty clips have no
+        // authoritative model target to convert from.
+        throw new DocumentDiffError("architecture-invariant");
+    }
+    if (!changesAuthoredArchitecture) {
+        return previous;
+    }
+
+    const catalog = context.architectureCatalog;
+    const sourceArchitectureId = previousIdentity?.authoredArchitectureId;
+    const targetStage = next.stages[0];
+    const targetEntry = modelCatalogEntry(catalog, targetStage?.model);
+    const targetDescriptor = architectureDescriptor(
+        catalog,
+        targetEntry?.architectureId,
+    );
+    if (
+        !catalog ||
+        !sourceArchitectureId ||
+        !targetStage ||
+        !targetEntry?.architectureId ||
+        !targetEntry.modelProfileId ||
+        !targetDescriptor ||
+        targetEntry.architectureId !== nextIdentity?.authoredArchitectureId ||
+        targetEntry.modelProfileId !== targetStage.modelProfileId
+    ) {
+        throw new DocumentDiffError("architecture-invariant");
+    }
+    const target = {
+        architectureId: targetEntry.architectureId,
+        modelProfileId: targetEntry.modelProfileId,
+        model: targetEntry.value,
+        capabilities: clone(targetDescriptor.capabilities),
+    };
+    const requestedForCleanup = clone(next);
+    requestedForCleanup.architecture = sourceArchitectureId;
+    const requestedPlan = planArchitectureConversion(
+        requestedForCleanup,
+        target,
+        catalog,
+    );
+    const baselinePlan = planArchitectureConversion(previous, target, catalog);
+    if (!requestedPlan || !baselinePlan) {
+        throw new DocumentDiffError("architecture-invariant");
+    }
+
+    // The requested whole-document state must already reflect all destructive
+    // cleanup. Restore only valid per-stage models, which conversion
+    // intentionally seeds from Stage 0.
+    const cleanedRequested = requestedPlan.clip as CanonicalClip;
+    if (cleanedRequested.stages.length === next.stages.length) {
+        for (let index = 0; index < next.stages.length; index++) {
+            cleanedRequested.stages[index].model = next.stages[index].model;
+            cleanedRequested.stages[index].modelProfileId =
+                next.stages[index].modelProfileId;
+        }
+    }
+    if (
+        !reconcileClipArchitectureIdentity(cleanedRequested, catalog) ||
+        !deepEqual(cleanedRequested, next)
+    ) {
+        throw new DocumentDiffError("architecture-invariant");
+    }
+
+    const convertedBase = baselinePlan.clip as CanonicalClip;
+    if (!reconcileClipArchitectureIdentity(convertedBase, catalog)) {
+        throw new DocumentDiffError("architecture-invariant");
+    }
+    phases.conversions.push({
+        type: "clip.convert-architecture",
+        clipId: next.id,
+        target,
     });
+    return convertedBase;
+};
 
 const diffClips = (
     before: CanonicalVideoStagesConfig,
@@ -541,183 +456,35 @@ const diffClips = (
     phases: CommandPhases,
     context: DocumentDiffContext,
 ): void =>
-    diffEntityList(before.clips, after.clips, phases, {
-        remove: (clipId) => ({ type: "clip.remove", clipId }),
-        add: (clip, beforeClipId) => ({
-            type: "clip.add",
-            clip,
-            beforeClipId,
-        }),
-        move: (clipId, beforeClipId) => ({
-            type: "clip.move",
-            clipId,
-            beforeClipId,
-        }),
-        patch: (previous, next) => {
-            const changesEffectiveIdentity =
-                previous.architecture !== next.architecture ||
-                previous.modelProfileId !== next.modelProfileId;
-            const previousIdentity = deriveClipArchitectureIdentity(
-                previous,
-                context.architectureCatalog,
-            );
-            const nextIdentity = deriveClipArchitectureIdentity(
-                next,
-                context.architectureCatalog,
-            );
-            if (changesEffectiveIdentity) {
-                if (
-                    !nextIdentity ||
-                    nextIdentity.architectureId !== next.architecture ||
-                    nextIdentity.modelProfileId !== next.modelProfileId
-                ) {
-                    throw new DocumentDiffError("architecture-invariant");
-                }
-            }
-            const changesAuthoredArchitecture =
-                previousIdentity?.authoredArchitectureId !== null &&
-                previousIdentity?.authoredArchitectureId !== undefined &&
-                nextIdentity?.authoredArchitectureId !== null &&
-                nextIdentity?.authoredArchitectureId !== undefined &&
-                previousIdentity.authoredArchitectureId !==
-                    nextIdentity.authoredArchitectureId;
-            if (
-                changesEffectiveIdentity &&
-                !changesAuthoredArchitecture &&
-                (previousIdentity?.authoredArchitectureId == null ||
-                    nextIdentity?.authoredArchitectureId == null ||
-                    previousIdentity.authoredArchitectureId !==
-                        nextIdentity.authoredArchitectureId)
-            ) {
-                // Source/skipped transitions may toggle only the effective
-                // identity while retaining the same authored Stage 0. Empty
-                // clips have no authoritative model target to convert from.
-                throw new DocumentDiffError("architecture-invariant");
-            }
-            let diffBase = previous;
-            if (changesAuthoredArchitecture) {
-                const catalog = context.architectureCatalog;
-                const sourceArchitectureId =
-                    previousIdentity?.authoredArchitectureId;
-                const targetStage = next.stages[0];
-                const targetEntry = catalog?.entries.find(
-                    (entry) => entry.value === targetStage?.model,
-                );
-                const targetDescriptor = catalog?.architectures.find(
-                    (entry) => entry.id === targetEntry?.architectureId,
-                );
-                if (
-                    !catalog ||
-                    !sourceArchitectureId ||
-                    !targetStage ||
-                    !targetEntry?.architectureId ||
-                    !targetEntry.modelProfileId ||
-                    !targetDescriptor ||
-                    targetEntry.architectureId !==
-                        nextIdentity?.authoredArchitectureId ||
-                    targetEntry.modelProfileId !== targetStage.modelProfileId
-                ) {
-                    throw new DocumentDiffError("architecture-invariant");
-                }
-                const target = {
-                    architectureId: targetEntry.architectureId,
-                    modelProfileId: targetEntry.modelProfileId,
-                    model: targetEntry.value,
-                    capabilities: clone(targetDescriptor.capabilities),
-                };
-                const requestedForCleanup = clone(next);
-                requestedForCleanup.architecture = sourceArchitectureId;
-                const requestedPlan = planArchitectureConversion(
-                    requestedForCleanup,
-                    target,
-                    catalog,
-                );
-                const baselinePlan = planArchitectureConversion(
-                    previous,
-                    target,
-                    catalog,
-                );
-                if (!requestedPlan || !baselinePlan) {
-                    throw new DocumentDiffError("architecture-invariant");
-                }
-
-                // The requested whole-document state must already reflect all
-                // destructive cleanup. Restore only valid per-stage models,
-                // which conversion intentionally seeds from Stage 0.
-                const cleanedRequested = requestedPlan.clip as CanonicalClip;
-                if (cleanedRequested.stages.length === next.stages.length) {
-                    for (let index = 0; index < next.stages.length; index++) {
-                        cleanedRequested.stages[index].model =
-                            next.stages[index].model;
-                        cleanedRequested.stages[index].modelProfileId =
-                            next.stages[index].modelProfileId;
-                    }
-                }
-                if (
-                    !reconcileClipArchitectureIdentity(
-                        cleanedRequested,
-                        catalog,
-                    ) ||
-                    !deepEqual(cleanedRequested, next)
-                ) {
-                    throw new DocumentDiffError("architecture-invariant");
-                }
-
-                const convertedBase = baselinePlan.clip as CanonicalClip;
-                if (
-                    !reconcileClipArchitectureIdentity(convertedBase, catalog)
-                ) {
-                    throw new DocumentDiffError("architecture-invariant");
-                }
-                phases.conversions.push({
-                    type: "clip.convert-architecture",
-                    clipId: next.id,
-                    target,
-                });
-                diffBase = convertedBase;
-            }
-
-            const patch = changedPatch(diffBase, next, CLIP_PATCH_KEYS);
-            if (hasPatch(patch)) {
-                phases.patches.push({
-                    type: "clip.patch",
-                    clipId: next.id,
-                    patch,
-                });
-            }
+    diffList(
+        LIST_ENTITIES.clip,
+        null,
+        before,
+        after,
+        phases,
+        (previous, next) => {
+            const diffBase = clipDiffBase(previous, next, phases, context);
+            emitPatch(LIST_ENTITIES.clip, null, diffBase, next, phases);
             diffClipChildren(diffBase, next, phases);
         },
-    });
+    );
 
 const diffAudioTracks = (
     before: CanonicalVideoStagesConfig,
     after: CanonicalVideoStagesConfig,
     phases: CommandPhases,
 ): void =>
-    diffEntityList(before.audioTracks, after.audioTracks, phases, {
-        remove: (trackId) => ({ type: "audio-track.remove", trackId }),
-        add: (track, beforeTrackId) => ({
-            type: "audio-track.add",
-            track,
-            beforeTrackId,
-        }),
-        move: (trackId, beforeTrackId) => ({
-            type: "audio-track.move",
-            trackId,
-            beforeTrackId,
-        }),
-        patch: (previous, next) => {
-            const patch = changedPatch(previous, next, AUDIO_TRACK_PATCH_KEYS);
-            if (hasPatch(patch)) {
-                phases.patches.push({
-                    type: "audio-track.patch",
-                    trackId: next.id,
-                    patch,
-                });
-            }
-            diffSpans(previous, next, phases);
+    diffList(
+        LIST_ENTITIES.audioTrack,
+        null,
+        before,
+        after,
+        phases,
+        (previous, next) => {
+            emitPatch(LIST_ENTITIES.audioTrack, null, previous, next, phases);
+            diffList(LIST_ENTITIES.audioSpan, next.id, previous, next, phases);
         },
-    });
+    );
 
 /**
  * Produces one atomic, stable-ID batch that transforms `before` into `after`.

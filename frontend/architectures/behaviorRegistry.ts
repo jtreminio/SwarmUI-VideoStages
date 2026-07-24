@@ -1,9 +1,7 @@
 import type { Clip, IcLora } from "../types";
-import {
-    type GeneratedEntryMode,
-    reconcileIncomingIcLoraDrives,
-} from "./ltx2/icLoraDriveAvailability";
-import * as ltx2IcLoraBehavior from "./ltx2/icLoraNormalization";
+import { ltx2Behavior } from "./ltx2/behavior";
+import type { GeneratedEntryMode } from "./ltx2/icLoraDriveAvailability";
+import { VIDEO_ARCHITECTURE_MODULES } from "./modules";
 
 /** Pure architecture-owned authoring behavior with no DOM dependencies. */
 export interface ArchitectureBehavior {
@@ -22,17 +20,11 @@ export interface ArchitectureBehavior {
     isHdrFeature(entry: IcLora): boolean;
 }
 
-const ltx2Behavior: ArchitectureBehavior = {
-    normalizeIcLoras: ltx2IcLoraBehavior.normalizeIcLoras,
-    canonicalizeIcLoraFields: ltx2IcLoraBehavior.canonicalizeIcLoraFields,
-    reconcileIncomingIcLoraDrives,
-    hasSlotSourcedIcLora: ltx2IcLoraBehavior.hasSlotSourcedIcLora,
-    isHdrFeature: ltx2IcLoraBehavior.isHdrFeature,
-};
-
-const behaviors = new Map<string, ArchitectureBehavior>([
-    ["ltx2", ltx2Behavior],
-]);
+const behaviors = new Map<string, ArchitectureBehavior>(
+    VIDEO_ARCHITECTURE_MODULES.flatMap((module) =>
+        module.behavior ? [[module.definition.id, module.behavior]] : [],
+    ),
+);
 
 export const architectureBehavior = (
     architectureId: string,

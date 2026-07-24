@@ -220,6 +220,9 @@ const savedClips = (
     spy: jest.SpiedFunction<typeof persistence.saveClips>,
 ): Clip[] => spy.mock.calls[spy.mock.calls.length - 1][0] as Clip[];
 
+/** The committed document, for structural edits that dispatch a named command. */
+const committedClips = (): Clip[] => persistence.getClips();
+
 const retakeFieldByLabel = (label: string): HTMLElement =>
     fieldByLabel(label, ".vst-detail-retake-col");
 
@@ -1021,7 +1024,7 @@ describe("createTimelineDetailStrip", () => {
             )
             ?.click();
 
-        expect(savedClips(saveSpy)[0].icLoras[0].driveSource).toBe("Upload");
+        expect(committedClips()[0].icLoras[0].driveSource).toBe("Upload");
         expect(
             fieldByLabel("Drive Media").querySelector<HTMLInputElement>(
                 'input[type="file"]',
@@ -1050,7 +1053,7 @@ describe("createTimelineDetailStrip", () => {
             .querySelector<HTMLButtonElement>(".vst-detail-skip-clip")
             ?.click();
 
-        expect(savedClips(saveSpy)[1].icLoras[0].driveSource).toBe("Upload");
+        expect(committedClips()[1].icLoras[0].driveSource).toBe("Upload");
     });
 
     it("uses the nearest executable earlier clip for Incoming availability", () => {
@@ -1418,8 +1421,7 @@ describe("createTimelineDetailStrip", () => {
                 .querySelector<HTMLElement>(".vst-detail-fields")
                 ?.classList.contains("vst-stage-fields-muted"),
         ).toBe(true);
-        expect(saveSpy).toHaveBeenCalled();
-        expect(savedClips(saveSpy)[0].stages[1].skipped).toBe(true);
+        expect(committedClips()[0].stages[1].skipped).toBe(true);
     });
 
     describe("sourced clip stage 0 refine params", () => {
@@ -1526,7 +1528,7 @@ describe("createTimelineDetailStrip", () => {
         addBtn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
         expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
-        const retake = savedClips(saveSpy)[0].retake;
+        const retake = committedClips()[0].retake;
         expect(retake).not.toBeNull();
         expect(retake?.startSeconds).toBe(0);
         expect(retake?.lengthSeconds).toBe(3); // min(default 3, clip 4)
@@ -1656,7 +1658,7 @@ describe("createTimelineDetailStrip", () => {
         beforeDelete
             ?.querySelector<HTMLElement>(".vst-detail-delete-retake")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        expect(savedClips(saveSpy)[0].retake).toBeNull();
+        expect(committedClips()[0].retake).toBeNull();
         expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
         expect(
             detail()
@@ -1975,7 +1977,7 @@ describe("createTimelineDetailStrip", () => {
         document
             .querySelector<HTMLButtonElement>(".vst-detail-add-ref")
             ?.click();
-        expect(savedClips(saveSpy)[0].refs).toHaveLength(1);
+        expect(committedClips()[0].refs).toHaveLength(1);
         expect(getSelection()).toEqual({
             kind: "ref",
             clipIdx: 0,
@@ -2032,7 +2034,7 @@ describe("createTimelineDetailStrip", () => {
         document
             .querySelector<HTMLElement>(".vst-detail-delete-ref")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        expect(savedClips(saveSpy)[0].refs).toHaveLength(1);
+        expect(committedClips()[0].refs).toHaveLength(1);
         expect(getSelection()).toEqual({ kind: "ref", clipIdx: 0, refIdx: 0 });
         expect(detailBody()?.scrollTop).toBe(140);
         expect(refRow(0).dataset.vstRefIndex).toBe("0");
@@ -2093,7 +2095,7 @@ describe("createTimelineDetailStrip", () => {
         document
             .querySelector<HTMLElement>(".vst-detail-delete-ref")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        expect(savedClips(saveSpy)[0].refs).toHaveLength(0);
+        expect(committedClips()[0].refs).toHaveLength(0);
         expect(getSelection()).toEqual({
             kind: "clip",
             clipIdx: 0,
@@ -2346,7 +2348,7 @@ describe("createTimelineDetailStrip", () => {
         document
             .querySelector<HTMLButtonElement>(".vst-detail-add-relay")
             ?.click();
-        expect(savedClips(saveSpy)[0].promptWindows).toHaveLength(1);
+        expect(committedClips()[0].promptWindows).toHaveLength(1);
         expect(getSelection()).toEqual({
             kind: "prompt-minor",
             clipIdx: 0,
@@ -2550,8 +2552,8 @@ describe("createTimelineDetailStrip", () => {
                 '.vst-relay-tab[aria-pressed="true"] .vst-detail-delete-relay',
             )
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        expect(savedClips(saveSpy)[0].promptWindows).toHaveLength(1);
-        expect(savedClips(saveSpy)[0].promptWindows[0].prompt).toBe("keep");
+        expect(committedClips()[0].promptWindows).toHaveLength(1);
+        expect(committedClips()[0].promptWindows[0].prompt).toBe("keep");
         expect(getSelection()).toEqual({
             kind: "prompt-minor",
             clipIdx: 0,
@@ -3589,7 +3591,7 @@ describe("createTimelineDetailStrip", () => {
             expect(skip?.getAttribute("aria-pressed")).toBe("false");
             skip?.click();
 
-            expect(savedClips(saveSpy)[0].skipped).toBe(true);
+            expect(committedClips()[0].skipped).toBe(true);
             expect(
                 detailBody()?.querySelector(".vst-detail-clip"),
             ).not.toBeNull();

@@ -2,30 +2,22 @@ import {
     AUDIO_SEGMENT_VOLUME_DEFAULT,
     AUDIO_SEGMENT_VOLUME_MAX,
     AUDIO_SEGMENT_VOLUME_MIN,
-    clamp,
 } from "./constants";
 import { normalizeUploadedMedia } from "./normalizationMedia";
-import { normalizeOptionalEntityId } from "./normalizationShared";
+import {
+    clampedNumber,
+    normalizeOptionalEntityId,
+    optionalNonNegativeNumber,
+    optionalPositiveNumber,
+    trimmedText,
+} from "./normalizationShared";
 import type { AudioTrack, AudioTrackSourceKind, AudioTrackSpan } from "./types";
-import { isRecord, toNumber } from "./utils";
-
-const normalizeOptionalNonNegative = (value: unknown): number | null => {
-    if (value == null || `${value}`.trim() === "") {
-        return null;
-    }
-    const number = toNumber(`${value}`, Number.NaN);
-    return Number.isFinite(number) && number >= 0 ? number : null;
-};
-
-const normalizeOptionalPositive = (value: unknown): number | null => {
-    const number = normalizeOptionalNonNegative(value);
-    return number !== null && number > 0 ? number : null;
-};
+import { isRecord } from "./utils";
 
 const normalizeAudioTrackSourceKind = (
     value: unknown,
 ): AudioTrackSourceKind => {
-    const compact = `${value ?? ""}`.trim().toLowerCase();
+    const compact = trimmedText(value).toLowerCase();
     switch (compact) {
         case "upload":
             return "Upload";
@@ -47,13 +39,13 @@ export const normalizeAudioTrackSpan = (
         return null;
     }
     const sourceStart =
-        normalizeOptionalNonNegative(value.sourceStartSeconds) ?? 0;
+        optionalNonNegativeNumber(value.sourceStartSeconds) ?? 0;
     return {
         id: normalizeOptionalEntityId(value.id),
-        timelineStartSeconds: normalizeOptionalNonNegative(
+        timelineStartSeconds: optionalNonNegativeNumber(
             value.timelineStartSeconds,
         ),
-        timelineLengthSeconds: normalizeOptionalPositive(
+        timelineLengthSeconds: optionalPositiveNumber(
             value.timelineLengthSeconds,
         ),
         sourceStartSeconds: sourceStart,
@@ -75,11 +67,9 @@ export const normalizeAudioTracks = (value: unknown): AudioTrack[] => {
         const volume =
             rawTrack.volume === undefined
                 ? undefined
-                : clamp(
-                      toNumber(
-                          `${rawTrack.volume}`,
-                          AUDIO_SEGMENT_VOLUME_DEFAULT,
-                      ),
+                : clampedNumber(
+                      rawTrack.volume,
+                      AUDIO_SEGMENT_VOLUME_DEFAULT,
                       AUDIO_SEGMENT_VOLUME_MIN,
                       AUDIO_SEGMENT_VOLUME_MAX,
                   );
@@ -87,7 +77,7 @@ export const normalizeAudioTracks = (value: unknown): AudioTrack[] => {
             id: normalizeOptionalEntityId(rawTrack.id),
             source: {
                 kind: normalizeAudioTrackSourceKind(source.kind),
-                reference: `${source.reference ?? ""}`.trim(),
+                reference: trimmedText(source.reference),
                 uploadedAudio: normalizeUploadedMedia(source.uploadedAudio),
             },
             spans: Array.isArray(rawSpans)

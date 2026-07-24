@@ -1,11 +1,30 @@
 import { videoArchitectureRegistry } from "./registry";
 import type {
+    ArchitectureCatalogEntryDto,
     ArchitectureCatalogView,
     ArchitectureModelCatalog,
+    ArchitectureModelEntry,
     ArchitectureRegistry,
     ArchitectureRetargetPlan,
     VideoArchitectureId,
 } from "./types";
+
+/** The catalog's descriptor for one architecture id. */
+export const architectureDescriptor = (
+    catalog: ArchitectureModelCatalog | null | undefined,
+    architectureId: string | null | undefined,
+): ArchitectureCatalogEntryDto | null =>
+    (architectureId
+        ? catalog?.architectures.find((entry) => entry.id === architectureId)
+        : null) ?? null;
+
+/** The catalog entry for one model value. */
+export const modelCatalogEntry = (
+    catalog: ArchitectureModelCatalog | null | undefined,
+    model: string | null | undefined,
+): ArchitectureModelEntry | null =>
+    (model ? catalog?.entries.find((entry) => entry.value === model) : null) ??
+    null;
 
 export const architectureCatalogView = (
     catalog: ArchitectureModelCatalog,
@@ -13,9 +32,7 @@ export const architectureCatalogView = (
     registry: ArchitectureRegistry = videoArchitectureRegistry,
 ): ArchitectureCatalogView => {
     const definition = registry.get(architectureId);
-    const catalogArchitecture = catalog.architectures.find(
-        (entry) => entry.id === architectureId,
-    );
+    const catalogArchitecture = architectureDescriptor(catalog, architectureId);
     const entries = catalog.entries.filter(
         (entry) => entry.architectureId === architectureId,
     );
@@ -40,30 +57,21 @@ export const architectureForModel = (
     catalog: ArchitectureModelCatalog,
     model: string,
 ): VideoArchitectureId | null =>
-    catalog.entries.find((entry) => entry.value === model)?.architectureId ??
-    null;
+    modelCatalogEntry(catalog, model)?.architectureId ?? null;
 
 export const modelProfileForModel = (
     catalog: ArchitectureModelCatalog,
     model: string,
-): string | null =>
-    catalog.entries.find((entry) => entry.value === model)?.modelProfileId ??
-    null;
+): string | null => modelCatalogEntry(catalog, model)?.modelProfileId ?? null;
 
 export const buildArchitectureRetargetPlan = (
     catalog: ArchitectureModelCatalog,
     model: string,
     registry: ArchitectureRegistry = videoArchitectureRegistry,
 ): ArchitectureRetargetPlan | null => {
-    const entry = catalog.entries.find(
-        (candidate) => candidate.value === model,
-    );
+    const entry = modelCatalogEntry(catalog, model);
     const architectureId = entry?.architectureId ?? null;
-    const descriptor = architectureId
-        ? catalog.architectures.find(
-              (candidate) => candidate.id === architectureId,
-          )
-        : null;
+    const descriptor = architectureDescriptor(catalog, architectureId);
     const fallback = architectureId ? registry.get(architectureId) : null;
     const profileId = entry?.modelProfileId ?? null;
     const capabilities = descriptor?.capabilities ?? fallback?.capabilities;

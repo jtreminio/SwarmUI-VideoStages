@@ -1,5 +1,6 @@
 import {
     architectureForModel,
+    invalidateArchitectureCatalog,
     loadAuthoritativeArchitectureCatalog,
 } from "./architectures/catalog";
 import { currentCapabilityViewResolver } from "./architectures/currentPolicy";
@@ -102,6 +103,10 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     });
     const hostLifecycle = createTimelineHostLifecycle({
         refresh: () => refresh(),
+        refreshCatalog: () => {
+            invalidateArchitectureCatalog();
+            void adoptArchitectureCatalog();
+        },
         syncFromCarrier: () => getTimelineStore().syncFromCarrier(),
         flushPending: () => detailStrip.flushPending(),
         undo: () => history.undo(),
@@ -272,6 +277,16 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
 
     const refresh = (): void => renderAll();
 
+    /** Adopts a freshly loaded backend catalog: reparse, then repaint. */
+    const adoptArchitectureCatalog = (): Promise<void> =>
+        loadAuthoritativeArchitectureCatalog().then((catalog) => {
+            if (!catalog) {
+                return;
+            }
+            getTimelineStore().invalidate();
+            refresh();
+        });
+
     const init = (): void => {
         viewport.load();
         injectTimelineTab();
@@ -318,13 +333,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         history.syncBaseline();
         hostLifecycle.bind();
         refresh();
-        void loadAuthoritativeArchitectureCatalog().then((catalog) => {
-            if (!catalog) {
-                return;
-            }
-            getTimelineStore().invalidate();
-            refresh();
-        });
+        void adoptArchitectureCatalog();
     };
 
     const dispose = (): void => {

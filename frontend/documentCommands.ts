@@ -9,14 +9,15 @@ import {
     clone,
     failure,
     findClip,
-    findTrack,
     hasOwn,
     invalidNewEntity,
-    moveBefore,
-    patchById,
-    removeById,
     success,
 } from "./documentCommands/helpers";
+import { LIST_ENTITIES } from "./documentCommands/listEntities";
+import {
+    applyListCommand,
+    type ListOperation,
+} from "./documentCommands/listReducer";
 import type {
     CommandFailure,
     DocumentCommand,
@@ -32,6 +33,21 @@ export type {
     DocumentCommandContext,
     DocumentCommandResult,
 } from "./documentCommands/types";
+
+const list = (
+    document: CanonicalVideoStagesConfig,
+    entity: keyof typeof LIST_ENTITIES,
+    operation: ListOperation,
+    command: object,
+    context: DocumentCommandContext,
+): DocumentCommandResult =>
+    applyListCommand(
+        document,
+        LIST_ENTITIES[entity],
+        operation,
+        command,
+        context,
+    );
 
 const assertNever = (command: never): never => {
     throw new Error(`Unhandled document command: ${JSON.stringify(command)}`);
@@ -86,24 +102,10 @@ export const reduceDocumentCommand = (
             }
             return success(document);
         }
-        case "clip.remove": {
-            if (!removeById(document.clips, command.clipId)) {
-                return failure(document, "missing-target");
-            }
-            return success(document);
-        }
-        case "clip.move": {
-            if (
-                !moveBefore(
-                    document.clips,
-                    command.clipId,
-                    command.beforeClipId,
-                )
-            ) {
-                return failure(document, "missing-target");
-            }
-            return success(document);
-        }
+        case "clip.remove":
+            return list(document, "clip", "remove", command, context);
+        case "clip.move":
+            return list(document, "clip", "move", command, context);
         case "clip.patch": {
             if (
                 hasOwn(command.patch, "architecture") ||
@@ -159,32 +161,8 @@ export const reduceDocumentCommand = (
             forceCrossArchitectureCutsForConversion(document.clips);
             return success(document);
         }
-        case "stage.add": {
-            const clip = findClip(document, command.clipId);
-            if (!clip) return failure(document, "missing-target");
-            const invalid = invalidNewEntity(document, command.stage);
-            if (invalid) return invalid;
-            const candidate = clone(clip);
-            if (
-                !addBefore(
-                    candidate.stages,
-                    clone(command.stage),
-                    command.beforeStageId,
-                )
-            ) {
-                return failure(clone(source), "missing-target");
-            }
-            if (
-                !reconcileClipArchitectureIdentity(
-                    candidate,
-                    context.architectureCatalog,
-                )
-            ) {
-                return failure(document, "architecture-invariant");
-            }
-            document.clips[document.clips.indexOf(clip)] = candidate;
-            return success(document);
-        }
+        case "stage.add":
+            return list(document, "stage", "add", command, context);
         case "stage.retarget-model": {
             const clip = findClip(document, command.clipId);
             const stage = clip?.stages.find(
@@ -220,149 +198,28 @@ export const reduceDocumentCommand = (
             document.clips[document.clips.indexOf(clip)] = candidate;
             return success(document);
         }
-        case "stage.remove": {
-            const clip = findClip(document, command.clipId);
-            if (!clip) {
-                return failure(document, "missing-target");
-            }
-            const candidate = clone(clip);
-            if (!removeById(candidate.stages, command.stageId)) {
-                return failure(document, "missing-target");
-            }
-            if (
-                !reconcileClipArchitectureIdentity(
-                    candidate,
-                    context.architectureCatalog,
-                )
-            ) {
-                return failure(document, "architecture-invariant");
-            }
-            document.clips[document.clips.indexOf(clip)] = candidate;
-            return success(document);
-        }
-        case "stage.move": {
-            const clip = findClip(document, command.clipId);
-            if (!clip) {
-                return failure(document, "missing-target");
-            }
-            const candidate = clone(clip);
-            if (
-                !moveBefore(
-                    candidate.stages,
-                    command.stageId,
-                    command.beforeStageId,
-                )
-            ) {
-                return failure(document, "missing-target");
-            }
-            if (
-                !reconcileClipArchitectureIdentity(
-                    candidate,
-                    context.architectureCatalog,
-                )
-            ) {
-                return failure(document, "architecture-invariant");
-            }
-            document.clips[document.clips.indexOf(clip)] = candidate;
-            return success(document);
-        }
-        case "stage.patch": {
-            const clip = findClip(document, command.clipId);
-            if (
-                hasOwn(command.patch, "model") ||
-                hasOwn(command.patch, "modelProfileId")
-            ) {
-                return failure(document, "architecture-invariant");
-            }
-            if (!clip) {
-                return failure(document, "missing-target");
-            }
-            const candidate = clone(clip);
-            if (!patchById(candidate.stages, command.stageId, command.patch)) {
-                return failure(document, "missing-target");
-            }
-            if (
-                !reconcileClipArchitectureIdentity(
-                    candidate,
-                    context.architectureCatalog,
-                )
-            ) {
-                return failure(document, "architecture-invariant");
-            }
-            document.clips[document.clips.indexOf(clip)] = candidate;
-            return success(document);
-        }
-        case "ref.add": {
-            const clip = findClip(document, command.clipId);
-            if (!clip) return failure(document, "missing-target");
-            const invalid = invalidNewEntity(document, command.ref);
-            if (invalid) return invalid;
-            if (
-                !addBefore(clip.refs, clone(command.ref), command.beforeRefId)
-            ) {
-                return failure(clone(source), "missing-target");
-            }
-            return success(document);
-        }
-        case "ref.remove": {
-            const clip = findClip(document, command.clipId);
-            return clip && removeById(clip.refs, command.refId)
-                ? success(document)
-                : failure(document, "missing-target");
-        }
-        case "ref.move": {
-            const clip = findClip(document, command.clipId);
-            return clip &&
-                moveBefore(clip.refs, command.refId, command.beforeRefId)
-                ? success(document)
-                : failure(document, "missing-target");
-        }
-        case "ref.patch": {
-            const clip = findClip(document, command.clipId);
-            return clip && patchById(clip.refs, command.refId, command.patch)
-                ? success(document)
-                : failure(document, "missing-target");
-        }
-        case "prompt-window.add": {
-            const clip = findClip(document, command.clipId);
-            if (!clip) return failure(document, "missing-target");
-            const invalid = invalidNewEntity(document, command.window);
-            if (invalid) return invalid;
-            if (
-                !addBefore(
-                    clip.promptWindows,
-                    clone(command.window),
-                    command.beforeWindowId,
-                )
-            ) {
-                return failure(clone(source), "missing-target");
-            }
-            return success(document);
-        }
-        case "prompt-window.remove": {
-            const clip = findClip(document, command.clipId);
-            return clip && removeById(clip.promptWindows, command.windowId)
-                ? success(document)
-                : failure(document, "missing-target");
-        }
-        case "prompt-window.move": {
-            const clip = findClip(document, command.clipId);
-            return clip &&
-                moveBefore(
-                    clip.promptWindows,
-                    command.windowId,
-                    command.beforeWindowId,
-                )
-                ? success(document)
-                : failure(document, "missing-target");
-        }
-        case "prompt-window.patch": {
-            const clip = findClip(document, command.clipId);
-            return clip &&
-                patchById(clip.promptWindows, command.windowId, command.patch)
-                ? success(document)
-                : failure(document, "missing-target");
-        }
+        case "stage.remove":
+            return list(document, "stage", "remove", command, context);
+        case "stage.move":
+            return list(document, "stage", "move", command, context);
+        case "stage.patch":
+            return list(document, "stage", "patch", command, context);
+        case "ref.add":
+            return list(document, "ref", "add", command, context);
+        case "ref.remove":
+            return list(document, "ref", "remove", command, context);
+        case "ref.move":
+            return list(document, "ref", "move", command, context);
+        case "ref.patch":
+            return list(document, "ref", "patch", command, context);
+        case "prompt-window.add":
+            return list(document, "promptWindow", "add", command, context);
+        case "prompt-window.remove":
+            return list(document, "promptWindow", "remove", command, context);
+        case "prompt-window.move":
+            return list(document, "promptWindow", "move", command, context);
+        case "prompt-window.patch":
+            return list(document, "promptWindow", "patch", command, context);
         case "retake.add": {
             const clip = findClip(document, command.clipId);
             if (!clip) return failure(document, "missing-target");
@@ -392,76 +249,22 @@ export const reduceDocumentCommand = (
             });
             return success(document);
         }
-        case "audio-track.add": {
-            const invalid = invalidNewEntity(document, command.track);
-            if (invalid) return invalid;
-            if (
-                !addBefore(
-                    document.audioTracks,
-                    clone(command.track),
-                    command.beforeTrackId,
-                )
-            ) {
-                return failure(clone(source), "missing-target");
-            }
-            return success(document);
-        }
+        case "audio-track.add":
+            return list(document, "audioTrack", "add", command, context);
         case "audio-track.remove":
-            return removeById(document.audioTracks, command.trackId)
-                ? success(document)
-                : failure(document, "missing-target");
+            return list(document, "audioTrack", "remove", command, context);
         case "audio-track.move":
-            return moveBefore(
-                document.audioTracks,
-                command.trackId,
-                command.beforeTrackId,
-            )
-                ? success(document)
-                : failure(document, "missing-target");
+            return list(document, "audioTrack", "move", command, context);
         case "audio-track.patch":
-            return patchById(
-                document.audioTracks,
-                command.trackId,
-                command.patch,
-            )
-                ? success(document)
-                : failure(document, "missing-target");
-        case "audio-span.add": {
-            const track = findTrack(document, command.trackId);
-            if (!track) return failure(document, "missing-target");
-            const invalid = invalidNewEntity(document, command.span);
-            if (invalid) return invalid;
-            if (
-                !addBefore(
-                    track.spans,
-                    clone(command.span),
-                    command.beforeSpanId,
-                )
-            ) {
-                return failure(clone(source), "missing-target");
-            }
-            return success(document);
-        }
-        case "audio-span.remove": {
-            const track = findTrack(document, command.trackId);
-            return track && removeById(track.spans, command.spanId)
-                ? success(document)
-                : failure(document, "missing-target");
-        }
-        case "audio-span.move": {
-            const track = findTrack(document, command.trackId);
-            return track &&
-                moveBefore(track.spans, command.spanId, command.beforeSpanId)
-                ? success(document)
-                : failure(document, "missing-target");
-        }
-        case "audio-span.patch": {
-            const track = findTrack(document, command.trackId);
-            return track &&
-                patchById(track.spans, command.spanId, command.patch)
-                ? success(document)
-                : failure(document, "missing-target");
-        }
+            return list(document, "audioTrack", "patch", command, context);
+        case "audio-span.add":
+            return list(document, "audioSpan", "add", command, context);
+        case "audio-span.remove":
+            return list(document, "audioSpan", "remove", command, context);
+        case "audio-span.move":
+            return list(document, "audioSpan", "move", command, context);
+        case "audio-span.patch":
+            return list(document, "audioSpan", "patch", command, context);
         default:
             return assertNever(command);
     }

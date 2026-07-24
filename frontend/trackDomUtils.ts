@@ -3,9 +3,8 @@
  */
 
 import { clamp } from "./constants";
-import { getClips, saveClips } from "./persistence";
+import { getClips, getTimelineStore, saveClips } from "./persistence";
 import type { UpdateOrigin } from "./store";
-import { readStateToken } from "./swarmInputs";
 import { DEFAULT_PX_PER_SECOND } from "./timelineView/layout";
 import type { Clip } from "./types";
 
@@ -103,12 +102,15 @@ export const spanGeometry = (
 export const keyframeLeftPercent = (time: number, duration: number): number =>
     spanGeometry(time, 0, duration).left;
 
+/** The document revision a gesture started from, for its stale guard. */
+export const currentRevision = (): number => getTimelineStore().revision();
+
 /**
- * True when the carriers changed since `sourceToken` was captured (the
+ * True when the document moved on since `sourceRevision` was captured (the
  * gesture-commit stale guard: never write over someone else's newer state).
  */
-export const isStaleToken = (sourceToken: string): boolean =>
-    readStateToken() !== sourceToken;
+export const isStaleRevision = (sourceRevision: number): boolean =>
+    currentRevision() !== sourceRevision;
 
 /**
  * The clip-track gesture-commit skeleton: bail when the carriers changed since
@@ -117,11 +119,11 @@ export const isStaleToken = (sourceToken: string): boolean =>
  * selection change belongs inside `mutate`; returns true when a save happened.
  */
 export const commitClipMutation = (
-    sourceToken: string,
+    sourceRevision: number,
     origin: UpdateOrigin,
     mutate: (clips: Clip[]) => Clip[] | null,
 ): boolean => {
-    if (isStaleToken(sourceToken)) {
+    if (isStaleRevision(sourceRevision)) {
         return false;
     }
     const next = mutate(getClips());

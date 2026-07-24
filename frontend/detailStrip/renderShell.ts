@@ -6,6 +6,29 @@ import { buildDetailHeader, buildDetailPanelBody } from "./panelRouter";
 
 const DETAIL_CLASS = "vst-detail";
 
+/**
+ * The `data-vst-repeater-key` of the repeating section that owns a selection,
+ * so the render can scroll it into view. Must match the key its panel builds
+ * with; audio-track spans are edited inside their own track's repeater item.
+ */
+export const revealRepeaterKey = (
+    selection: TimelineSelection,
+): string | null => {
+    switch (selection.kind) {
+        case "ref":
+            return "references";
+        case "audio-track":
+        case "audio-track-span":
+            return "audio-tracks";
+        case "prompt-minor":
+            return "relay-prompts";
+        case "ic-lora":
+            return "ic-loras";
+        default:
+            return null;
+    }
+};
+
 export const renderDetailShell = (options: {
     detail: HTMLElement;
     context: DetailStripContext;
@@ -42,18 +65,7 @@ export const renderDetailShell = (options: {
     }
 
     if (options.revealSelection) {
-        const key =
-            options.selection.kind === "ref"
-                ? "references"
-                : options.selection.kind === "audio-track"
-                  ? "audio-tracks"
-                  : options.selection.kind === "audio-track-span"
-                    ? "audio-track-spans"
-                    : options.selection.kind === "prompt-minor"
-                      ? "relay-prompts"
-                      : options.selection.kind === "ic-lora"
-                        ? "ic-loras"
-                        : null;
+        const key = revealRepeaterKey(options.selection);
         const target =
             options.selection.kind === "retake"
                 ? options.detail.querySelector<HTMLElement>(

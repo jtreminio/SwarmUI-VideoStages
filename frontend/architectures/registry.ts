@@ -1,5 +1,4 @@
-import { ltx2Architecture } from "./ltx2/definition";
-import { noneArchitecture } from "./none/definition";
+import { VIDEO_ARCHITECTURE_MODULES } from "./modules";
 import type {
     ArchitectureRegistry,
     VideoArchitectureDefinition,
@@ -31,11 +30,6 @@ export const createArchitectureRegistry = (
     };
 };
 
-/**
- * Production intentionally registers only supported architectures. WAN is not
- * registered, so it cannot leak into the catalog or authoring UI.
- */
-export const videoArchitectureRegistry = createArchitectureRegistry([
-    ltx2Architecture,
-    noneArchitecture,
-]);
+export const videoArchitectureRegistry = createArchitectureRegistry(
+    VIDEO_ARCHITECTURE_MODULES.map((module) => module.definition),
+);

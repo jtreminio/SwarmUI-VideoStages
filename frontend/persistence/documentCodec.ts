@@ -5,6 +5,7 @@ import {
     ensureClipEntityIdentities,
 } from "../identity";
 import { normalizeAudioTracks, normalizeClip } from "../normalization";
+import { optionalNonNegativeNumber } from "../normalizationShared";
 import { getDefaultStageModel, getRootDefaults } from "../rootDefaults";
 import type { StoredClip } from "../storageTypes";
 import {
@@ -14,7 +15,7 @@ import {
     CURRENT_AUTHORING_SCHEMA_VERSION,
     type VideoStagesConfig,
 } from "../types";
-import { isRecord, toNumber } from "../utils";
+import { isRecord } from "../utils";
 
 export type InheritedDims = Pick<VideoStagesConfig, "width" | "height" | "fps">;
 export type RootDims = Pick<
@@ -29,9 +30,8 @@ export interface DecodedStoredDocument {
 }
 
 const toIntOrNull = (value: unknown): number | null => {
-    if (value == null || value === "") return null;
-    const num = toNumber(`${value}`, Number.NaN);
-    return Number.isFinite(num) ? Math.round(num) : null;
+    const num = optionalNonNegativeNumber(value);
+    return num === null ? null : Math.round(num);
 };
 
 export const resolveRootDims = (

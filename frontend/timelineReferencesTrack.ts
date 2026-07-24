@@ -15,13 +15,13 @@ import {
 import { getClips, getState } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
 import { activateSelection, setSelection } from "./selection";
-import { readStateToken } from "./swarmInputs";
 import { getTimelineAuthoringSettings } from "./timelineAuthoringSettings";
 import { keyframeTimeSeconds } from "./timelineDetail";
 import { pxToFrame } from "./timelineEdit";
 import { SNAP_THRESHOLD_PX, snapPoint } from "./timelineSnap";
 import {
     commitClipMutation,
+    currentRevision,
     isActivateKey,
     keyframeLeftPercent,
     parseIntAttr,
@@ -50,7 +50,7 @@ interface RefDragState {
     fps: number;
     frameMax: number;
     fromEnd: boolean;
-    sourceJson: string;
+    sourceRevision: number;
 }
 
 export const createTimelineReferencesTrack = (
@@ -90,12 +90,12 @@ export const createTimelineReferencesTrack = (
     const addRefAtFrame = (
         clipIdx: number,
         frame: number,
-        sourceJson: string,
+        sourceRevision: number,
     ): void => {
         const fps = documentFps(getState());
         let newRefIdx = -1;
         const saved = commitClipMutation(
-            sourceJson,
+            sourceRevision,
             "references-track",
             (clips) => {
                 const clip = clips[clipIdx];
@@ -125,9 +125,9 @@ export const createTimelineReferencesTrack = (
     const deleteRef = (
         clipIdx: number,
         refIdx: number,
-        sourceJson: string,
+        sourceRevision: number,
     ): void => {
-        commitClipMutation(sourceJson, "references-track", (clips) => {
+        commitClipMutation(sourceRevision, "references-track", (clips) => {
             const clip = clips[clipIdx];
             return clip && removeRefAt(clip, refIdx) ? clips : null;
         });
@@ -191,7 +191,7 @@ export const createTimelineReferencesTrack = (
             body.classList.remove(DRAGGING_CLASS);
             const newFrame = dragFrameAt(state, ctx.event.clientX);
             const saved = commitClipMutation(
-                state.sourceJson,
+                state.sourceRevision,
                 "references-track",
                 (clips) => {
                     const ref = clips[state.clipIdx]?.refs?.[state.refIdx];
@@ -267,7 +267,7 @@ export const createTimelineReferencesTrack = (
             fps,
             frameMax: getReferenceFrameMax(getRootDefaults, clip, fps),
             fromEnd: ref.fromEnd === true,
-            sourceJson: readStateToken(),
+            sourceRevision: currentRevision(),
         });
     };
 
@@ -285,7 +285,7 @@ export const createTimelineReferencesTrack = (
             const refIdx = parseIntAttr(thumb, "data-ref-idx");
             if (clipIdx !== null && refIdx !== null) {
                 if ((event as MouseEvent).shiftKey) {
-                    deleteRef(clipIdx, refIdx, readStateToken());
+                    deleteRef(clipIdx, refIdx, currentRevision());
                 } else {
                     selectRef(clipIdx, refIdx);
                 }
@@ -315,7 +315,7 @@ export const createTimelineReferencesTrack = (
             documentFps(getState()),
             false,
         );
-        addRefAtFrame(clipIdx, frame, readStateToken());
+        addRefAtFrame(clipIdx, frame, currentRevision());
     };
 
     const onBodyKeyDown = (event: Event): void => {

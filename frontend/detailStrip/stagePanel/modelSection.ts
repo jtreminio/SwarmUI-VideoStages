@@ -1,5 +1,6 @@
 import {
     architectureCatalogView,
+    architectureDescriptor,
     buildArchitectureRetargetPlan,
 } from "../../architectures/catalog";
 import { architectureSupportsClipStart } from "../../architectures/conversion/entryModePolicy";
@@ -29,11 +30,10 @@ export const appendStageModelSection = ({
         stageIdx === 0
             ? {
                   values: defaults.modelCatalog.entries.flatMap((entry) => {
-                      const architecture =
-                          defaults.modelCatalog.architectures.find(
-                              (candidate) =>
-                                  candidate.id === entry.architectureId,
-                          );
+                      const architecture = architectureDescriptor(
+                          defaults.modelCatalog,
+                          entry.architectureId,
+                      );
                       return architecture &&
                           architectureSupportsClipStart(
                               architecture.capabilities,
@@ -45,11 +45,10 @@ export const appendStageModelSection = ({
                   }),
                   labels: defaults.modelCatalog.entries.flatMap(
                       (entry): string[] => {
-                          const architecture =
-                              defaults.modelCatalog.architectures.find(
-                                  (candidate) =>
-                                      candidate.id === entry.architectureId,
-                              );
+                          const architecture = architectureDescriptor(
+                              defaults.modelCatalog,
+                              entry.architectureId,
+                          );
                           return architecture &&
                               architectureSupportsClipStart(
                                   architecture.capabilities,
@@ -99,12 +98,14 @@ export const appendStageModelSection = ({
                     return;
                 }
                 const fromLabel =
-                    defaults.modelCatalog.architectures.find(
-                        (entry) => entry.id === clip.architecture,
+                    architectureDescriptor(
+                        defaults.modelCatalog,
+                        clip.architecture,
                     )?.label ?? clip.architecture;
                 const toLabel =
-                    defaults.modelCatalog.architectures.find(
-                        (entry) => entry.id === plan.architectureId,
+                    architectureDescriptor(
+                        defaults.modelCatalog,
+                        plan.architectureId,
                     )?.label ?? plan.architectureId;
                 const confirmedAndApplied = confirmArchitectureConversion(
                     architectureConversionMessage(

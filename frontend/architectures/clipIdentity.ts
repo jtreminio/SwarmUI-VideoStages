@@ -1,4 +1,6 @@
 import type { Clip } from "../types";
+import { architectureDescriptor, modelCatalogEntry } from "./catalogQueries";
+import { NONE_ARCHITECTURE_ID } from "./none/definition";
 import type { ArchitectureModelCatalog } from "./types";
 
 export interface StageModelIdentity {
@@ -18,18 +20,12 @@ export const modelIdentityFromCatalog = (
     model: string,
 ): StageModelIdentity | null => {
     if (!catalog) return null;
-    const entry = catalog.entries.find(
-        (candidate) => candidate.value === model,
-    );
+    const entry = modelCatalogEntry(catalog, model);
     if (
         !entry?.architectureId ||
         !entry.modelProfileId ||
-        !catalog.architectures.some(
-            (architecture) =>
-                architecture.id === entry.architectureId &&
-                architecture.profiles.some(
-                    (profile) => profile.id === entry.modelProfileId,
-                ),
+        !architectureDescriptor(catalog, entry.architectureId)?.profiles.some(
+            (profile) => profile.id === entry.modelProfileId,
         )
     ) {
         return null;
@@ -72,9 +68,7 @@ export const deriveClipArchitectureIdentity = (
         return null;
     }
     const descriptor = authored
-        ? catalog.architectures.find(
-              (candidate) => candidate.id === authored.architectureId,
-          )
+        ? architectureDescriptor(catalog, authored.architectureId)
         : null;
     if (
         clip.stages.length > 1 &&
@@ -92,8 +86,8 @@ export const deriveClipArchitectureIdentity = (
         clip.stages.every((stage) => stage.skipped)
     ) {
         return {
-            architectureId: "none",
-            modelProfileId: "none",
+            architectureId: NONE_ARCHITECTURE_ID,
+            modelProfileId: NONE_ARCHITECTURE_ID,
             ...authoredIdentity,
         };
     }
@@ -104,10 +98,13 @@ export const deriveClipArchitectureIdentity = (
             ...authoredIdentity,
         };
     }
-    if (clip.architecture === "none" && clip.modelProfileId === "none") {
+    if (
+        clip.architecture === NONE_ARCHITECTURE_ID &&
+        clip.modelProfileId === NONE_ARCHITECTURE_ID
+    ) {
         return {
-            architectureId: "none",
-            modelProfileId: "none",
+            architectureId: NONE_ARCHITECTURE_ID,
+            modelProfileId: NONE_ARCHITECTURE_ID,
             ...authoredIdentity,
         };
     }

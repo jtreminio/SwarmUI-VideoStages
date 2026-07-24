@@ -7,6 +7,7 @@ import {
     conditionalRule,
     evaluateConditionalRule,
 } from "../conditionalRules";
+import { NONE_ARCHITECTURE_ID } from "../none/definition";
 import type {
     ArchitectureCapabilities,
     ArchitectureCatalogEntryDto,
@@ -161,7 +162,7 @@ export const createClipStageCapabilityViews = (
         const descriptor = architectureById.get(clip.architecture);
         const label =
             descriptor?.label ??
-            (clip.architecture === "none"
+            (clip.architecture === NONE_ARCHITECTURE_ID
                 ? "source-only clips"
                 : `unknown architecture '${clip.architecture}'`);
         const decision = (feature: AuthoringFeature): CapabilityDecision => {

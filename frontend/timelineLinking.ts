@@ -10,7 +10,7 @@ import {
     selectionAfterRemoval,
     setSelection,
 } from "./selection";
-import { getRootGeneratedEntryMode, readStateToken } from "./swarmInputs";
+import { getRootGeneratedEntryMode } from "./swarmInputs";
 import { applyClipDurationResize, pxToDuration } from "./timelineEdit";
 import {
     computeDropIndex,
@@ -22,6 +22,7 @@ import {
 import { applySelectionHighlight } from "./timelineSelectionView";
 import {
     commitClipMutation,
+    currentRevision,
     livePxPerSecond,
     parseIntAttr,
 } from "./trackDomUtils";
@@ -220,7 +221,7 @@ export const createTimelineLinking = (): TimelineLinking => {
         el: HTMLElement;
         startLeftPx: number;
         originalWidthPx: number;
-        sourceJson: string;
+        sourceRevision: number;
     }
 
     const resizeSession = (
@@ -247,7 +248,7 @@ export const createTimelineLinking = (): TimelineLinking => {
             onCommit: (ctx) => {
                 const width = ctx.event.clientX - state.startLeftPx;
                 const committed = commitClipMutation(
-                    state.sourceJson,
+                    state.sourceRevision,
                     "linking",
                     (clips) => {
                         const clip = clips[state.idx];
@@ -295,7 +296,7 @@ export const createTimelineLinking = (): TimelineLinking => {
 
     interface DragState {
         sourceIdx: number;
-        sourceJson: string;
+        sourceRevision: number;
     }
 
     const dragSession = (
@@ -334,7 +335,7 @@ export const createTimelineLinking = (): TimelineLinking => {
                     applySelectionHighlight(body);
                     return;
                 }
-                commitClipMutation(state.sourceJson, "linking", (clips) => {
+                commitClipMutation(state.sourceRevision, "linking", (clips) => {
                     if (from < 0 || from >= clips.length) {
                         return null;
                     }
@@ -382,7 +383,7 @@ export const createTimelineLinking = (): TimelineLinking => {
                 el: region,
                 startLeftPx: rect.left,
                 originalWidthPx: rect.width,
-                sourceJson: readStateToken(),
+                sourceRevision: currentRevision(),
             });
         }
         const target = me.target.closest(REGION_SELECTOR);
@@ -392,7 +393,7 @@ export const createTimelineLinking = (): TimelineLinking => {
         }
         return dragSession(body, {
             sourceIdx: idx,
-            sourceJson: readStateToken(),
+            sourceRevision: currentRevision(),
         });
     };
 
