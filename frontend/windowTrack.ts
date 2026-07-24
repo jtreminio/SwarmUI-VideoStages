@@ -25,6 +25,8 @@ import { getClips, saveClips } from "./persistence";
 import { activateSelection, setSelection } from "./selection";
 import type { UpdateOrigin } from "./store";
 import { readStateToken } from "./swarmInputs";
+import { getTimelineAuthoringSettings } from "./timelineAuthoringSettings";
+import { SNAP_THRESHOLD_PX, snapMovedStart, snapPoint } from "./timelineSnap";
 import {
     clipDurationOf,
     isActivateKey,
@@ -242,6 +244,60 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
             ? `${widthPct(length, clipDur)}%`
             : `${Math.max(2, length * pps)}px`;
 
+    const moveTarget = (
+        clip: Clip,
+        itemIdx: number,
+        press: PressSpan,
+        desiredStart: number,
+        pps: number,
+    ): number => {
+        const raw = config.moveTargetStart(clip, itemIdx, press, desiredStart);
+        if (!getTimelineAuthoringSettings().snap) {
+            return raw;
+        }
+        const snapped = snapMovedStart(
+            raw,
+            press.length,
+            [],
+            [0, clipDurationOf(clip)],
+            SNAP_THRESHOLD_PX / pps,
+        );
+        return config.moveTargetStart(clip, itemIdx, press, snapped);
+    };
+
+    const resizeTarget = (
+        clip: Clip,
+        itemIdx: number,
+        edge: "left" | "right",
+        press: PressSpan,
+        deltaSec: number,
+        pps: number,
+    ): SpanGeom => {
+        const raw = config.resizeTarget(clip, itemIdx, edge, press, deltaSec);
+        if (!getTimelineAuthoringSettings().snap) {
+            return raw;
+        }
+        const rawEdge = edge === "left" ? raw.start : raw.start + raw.length;
+        const snappedEdge = snapPoint(
+            rawEdge,
+            [],
+            [0, clipDurationOf(clip)],
+            SNAP_THRESHOLD_PX / pps,
+        );
+        if (snappedEdge === rawEdge) {
+            return raw;
+        }
+        const pressEdge =
+            edge === "left" ? press.start : press.start + press.length;
+        return config.resizeTarget(
+            clip,
+            itemIdx,
+            edge,
+            press,
+            snappedEdge - pressEdge,
+        );
+    };
+
     const commitMove = (state: MoveState, dxPx: number, pps: number): void => {
         if (isStaleToken(state.sourceJson)) {
             return;
@@ -255,11 +311,12 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
         ) {
             return;
         }
-        const start = config.moveTargetStart(
+        const start = moveTarget(
             clip,
             state.itemIdx,
             state.press,
             state.press.start + dxPx / pps,
+            pps,
         );
         config.writeMove(clip, state.itemIdx, state.press, start);
         saveClips(clips, { origin: config.origin });
@@ -285,12 +342,13 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
         ) {
             return;
         }
-        const geom = config.resizeTarget(
+        const geom = resizeTarget(
             clip,
             state.itemIdx,
             state.edge,
             state.press,
             dxPx / pps,
+            pps,
         );
         config.writeResize(clip, state.itemIdx, state.edge, state.press, geom);
         saveClips(clips, { origin: config.origin });
@@ -326,7 +384,21 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
         state: CreateState,
         clientX: number,
         pps: number,
-    ): number => clamp((clientX - state.laneLeft) / pps, 0, state.clipDuration);
+    ): number => {
+        const raw = clamp(
+            (clientX - state.laneLeft) / pps,
+            0,
+            state.clipDuration,
+        );
+        return getTimelineAuthoringSettings().snap
+            ? snapPoint(
+                  raw,
+                  [],
+                  [0, state.clipDuration],
+                  SNAP_THRESHOLD_PX / pps,
+              )
+            : raw;
+    };
 
     const moveSession = (
         body: HTMLElement,
@@ -340,11 +412,12 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
             onMove: (ctx) => {
                 body.classList.add(config.draggingClass);
                 const pps = livePxPerSecond(body);
-                const start = config.moveTargetStart(
+                const start = moveTarget(
                     state.clipAtPress,
                     state.itemIdx,
                     state.press,
                     state.press.start + ctx.dx / pps,
+                    pps,
                 );
                 state.el.style.left = leftStyle(start, state.clipDuration, pps);
             },
@@ -373,12 +446,13 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
             onMove: (ctx) => {
                 body.classList.add(config.draggingClass);
                 const pps = livePxPerSecond(body);
-                const geom = config.resizeTarget(
+                const geom = resizeTarget(
                     state.clipAtPress,
                     state.itemIdx,
                     state.edge,
                     state.press,
                     ctx.dx / pps,
+                    pps,
                 );
                 if (state.edge === "left") {
                     state.el.style.left = leftStyle(
@@ -525,11 +599,19 @@ export const createWindowTrack = (config: WindowTrackConfig): WindowTrack => {
             const rect = lane.getBoundingClientRect();
             const pps = livePxPerSecond(body);
             const clipDuration = clipDurationOf(clip);
-            const startSec = clamp(
+            const rawStart = clamp(
                 (me.clientX - rect.left) / pps,
                 0,
                 clipDuration,
             );
+            const startSec = getTimelineAuthoringSettings().snap
+                ? snapPoint(
+                      rawStart,
+                      [],
+                      [0, clipDuration],
+                      SNAP_THRESHOLD_PX / pps,
+                  )
+                : rawStart;
             me.preventDefault();
             return createSession(body, {
                 clipIdx,

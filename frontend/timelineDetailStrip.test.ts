@@ -232,7 +232,6 @@ const savedClips = (
 describe("createTimelineDetailStrip", () => {
     let strip: TimelineDetailStrip | null = null;
     let saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
-    let collapsed = false;
 
     beforeEach(() => {
         modelGlobals.modelsHelpers = {
@@ -243,7 +242,7 @@ describe("createTimelineDetailStrip", () => {
         resetSelectionForTests();
         persistence.__resetPersistenceForTests();
         resetIcLoraAutoDownloads();
-        collapsed = false;
+        localStorage.clear();
         // Spy but call through, so persistence actually updates and the
         // strip's `getClips()` reflects each live-apply write.
         saveSpy = jest.spyOn(persistence, "saveClips");
@@ -279,12 +278,7 @@ describe("createTimelineDetailStrip", () => {
         const body = makeBody();
         renderTimeline(body, persistence.getClips());
         refreshSpy = jest.fn();
-        strip = createTimelineDetailStrip({
-            isCollapsed: () => collapsed,
-            setCollapsed: (value) => {
-                collapsed = value;
-            },
-        });
+        strip = createTimelineDetailStrip();
         // Every save commits through the store, whose notification is what
         // drives the orchestrator's timeline repaint in prod. refreshSpy
         // observes those notifications — the "timeline was repainted" signal.
@@ -1901,26 +1895,38 @@ describe("createTimelineDetailStrip", () => {
         expect(savedClips(saveSpy)[0].stages).toHaveLength(1);
     });
 
-    it("collapses and expands via the header chevron and persists the flag", () => {
+    it("replaces Clear/collapse with a gear modal and persists its toggles", () => {
         setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(detailBody()).not.toBeNull();
+        expect(detail()?.querySelector(".vst-detail-clear")).toBeNull();
+        expect(detail()?.querySelector(".vst-detail-collapse")).toBeNull();
+        const gear = detail()?.querySelector<HTMLButtonElement>(
+            ".vst-detail-settings-button",
+        );
+        expect(gear?.getAttribute("aria-label")).toBe("Timeline settings");
+        gear?.click();
 
-        detail()
-            ?.querySelector<HTMLElement>(".vst-detail-collapse")
-            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        expect(collapsed).toBe(true);
-        expect(detail()?.classList.contains("vst-detail-collapsed")).toBe(true);
-        expect(detailBody()).toBeNull();
-
-        // Selecting something new while collapsed auto-expands.
-        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        // (same selection is deduped; force a change to trigger expand)
-        setSelection({ kind: "none" });
-        collapsed = true;
-        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(collapsed).toBe(false);
-        expect(detailBody()).not.toBeNull();
+        const modal = document.querySelector<HTMLElement>(
+            ".vst-timeline-settings-modal",
+        );
+        expect(modal?.getAttribute("role")).toBe("dialog");
+        const checks = modal?.querySelectorAll<HTMLInputElement>(
+            'input[type="checkbox"]',
+        );
+        expect(checks).toHaveLength(2);
+        expect(checks?.[0].checked).toBe(true);
+        expect(checks?.[1].checked).toBe(true);
+        if (checks?.[0]) {
+            checks[0].checked = false;
+            checks[0].dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        expect(
+            JSON.parse(
+                localStorage.getItem(
+                    "videostages.timeline.authoringSettings",
+                ) ?? "{}",
+            ),
+        ).toMatchObject({ snap: false, autoCollapse: true });
     });
 
     it("clamps the selection to none after its clip is removed", () => {
@@ -3532,16 +3538,6 @@ describe("createTimelineDetailStrip", () => {
         expect(refreshSpy).toHaveBeenCalled();
     });
 
-    it("auto-expands the strip when a selection arrives while collapsed", () => {
-        setup([{ duration: 4, stages: [{}] }]);
-        collapsed = true;
-        strip?.render();
-        expect(detailBody()).toBeNull();
-        setSelection({ kind: "audio", clipIdx: 0 });
-        expect(collapsed).toBe(false);
-        expect(detailBody()).not.toBeNull();
-    });
-
     it("persists both fields when two debounced sliders change within one window", () => {
         setup([{ duration: 4, stages: [{ steps: 8 }] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
@@ -3966,6 +3962,55 @@ describe("createTimelineDetailStrip", () => {
             document.removeEventListener("click", hostDelegatedToggle);
         });
 
+        it("keeps other sections open when Auto-collapse is disabled", () => {
+            setup([{ duration: 4, stages: [{}] }]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            detail()
+                ?.querySelector<HTMLButtonElement>(
+                    ".vst-detail-settings-button",
+                )
+                ?.click();
+            const autoCollapse = Array.from(
+                document.querySelectorAll<HTMLInputElement>(
+                    ".vst-timeline-settings-modal input[type='checkbox']",
+                ),
+            ).find((input) => input.dataset.name === "Auto-collapse");
+            if (!autoCollapse) {
+                throw new Error("Auto-collapse setting missing");
+            }
+            autoCollapse.checked = false;
+            autoCollapse.dispatchEvent(new Event("change", { bubbles: true }));
+            document
+                .querySelector<HTMLButtonElement>(
+                    ".vst-timeline-settings-modal .modal-header button",
+                )
+                ?.click();
+
+            const stages = detailBody()?.querySelector<HTMLElement>(
+                '[data-vst-repeater-key="stages"]',
+            );
+            const source = detailBody()?.querySelector<HTMLElement>(
+                '[data-vst-accordion-key="source-video"]',
+            );
+            source
+                ?.querySelector<HTMLElement>(":scope > .input-group-header")
+                ?.click();
+            expect(source?.classList.contains("input-group-open")).toBe(true);
+            expect(stages?.classList.contains("input-group-open")).toBe(true);
+
+            renderStrip();
+            expect(
+                detailBody()
+                    ?.querySelector('[data-vst-repeater-key="stages"]')
+                    ?.classList.contains("input-group-open"),
+            ).toBe(true);
+            expect(
+                detailBody()
+                    ?.querySelector('[data-vst-accordion-key="source-video"]')
+                    ?.classList.contains("input-group-open"),
+            ).toBe(true);
+        });
+
         it("places every info popover button before its field or section label", () => {
             setup([{ duration: 4, stages: [{}, {}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
@@ -4007,21 +4052,6 @@ describe("createTimelineDetailStrip", () => {
             expect(
                 detailBody()?.classList.contains("vst-detail-clip-skipped"),
             ).toBe(true);
-        });
-
-        it("width-collapses the dock via the header chevron", () => {
-            setup([{ duration: 4, stages: [{}] }]);
-            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-            expect(detail()?.classList.contains("vst-detail-collapsed")).toBe(
-                false,
-            );
-            detail()
-                ?.querySelector<HTMLElement>(".vst-detail-collapse")
-                ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-            expect(detail()?.classList.contains("vst-detail-collapsed")).toBe(
-                true,
-            );
-            expect(detailBody()).toBeNull();
         });
     });
 
@@ -4246,7 +4276,7 @@ describe("createTimelineDetailStrip", () => {
                     ".vst-detail-prompt",
                 );
             const sibling = document.querySelector<HTMLElement>(
-                ".vst-detail-collapse",
+                ".vst-detail-settings-button",
             );
             if (!editor || !sibling) {
                 throw new Error("dock nodes missing");

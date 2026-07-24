@@ -87,6 +87,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
 
     beforeEach(() => {
         resetSelectionForTests();
+        localStorage.clear();
         saveSpy = jest
             .spyOn(persistence, "saveClips")
             .mockImplementation(() => {});
@@ -274,6 +275,14 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         expect(saveSpy).toHaveBeenCalledTimes(1);
         // Half-way across a 5s clip @24fps → frame 60.
         expect(savedClips(saveSpy)[0].refs[0].frame).toBe(60);
+    });
+
+    it("snaps a dragged reference to the nearest clip edge", () => {
+        const body = setup([{ duration: 5, refs: [{ frame: 1 }] }]);
+        stubLaneRect(body, 0, 0, 120);
+        dragThumb(markEl(body, 0, 0), 0, 116);
+
+        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(121);
     });
 
     it("uses the stored 16fps timeline when dragging a ref", () => {

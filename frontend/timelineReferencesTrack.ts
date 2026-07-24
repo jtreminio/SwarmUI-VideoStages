@@ -16,8 +16,10 @@ import { getClips, getState } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
 import { activateSelection, setSelection } from "./selection";
 import { readStateToken } from "./swarmInputs";
+import { getTimelineAuthoringSettings } from "./timelineAuthoringSettings";
 import { keyframeLeftPercent, keyframeTimeSeconds } from "./timelineDetail";
 import { pxToFrame } from "./timelineEdit";
+import { SNAP_THRESHOLD_PX, snapPoint } from "./timelineSnap";
 import {
     commitClipMutation,
     isActivateKey,
@@ -45,6 +47,7 @@ interface RefDragState {
     originalLabel: string;
     durationSeconds: number;
     fps: number;
+    frameMax: number;
     fromEnd: boolean;
     sourceJson: string;
 }
@@ -131,12 +134,27 @@ export const createTimelineReferencesTrack = (
 
     const dragFrameAt = (state: RefDragState, clientX: number): number => {
         const rect = state.lane.getBoundingClientRect();
-        return pxToFrame(
+        const frame = pxToFrame(
             clientX - rect.left,
             rect.width,
             state.durationSeconds,
             state.fps,
             state.fromEnd,
+        );
+        if (!getTimelineAuthoringSettings().snap || rect.width <= 0) {
+            return frame;
+        }
+        const thresholdFrames = Math.max(
+            1,
+            (SNAP_THRESHOLD_PX / rect.width) * state.frameMax,
+        );
+        return Math.round(
+            snapPoint(
+                frame,
+                [],
+                [REF_FRAME_MIN, state.frameMax],
+                thresholdFrames,
+            ),
         );
     };
 
@@ -231,6 +249,7 @@ export const createTimelineReferencesTrack = (
             return claimOnly();
         }
         const arrow = findArrow(clipIdx, refIdx);
+        const fps = documentFps(getState());
         me.preventDefault();
         return dragSession(body, {
             clipIdx,
@@ -244,7 +263,8 @@ export const createTimelineReferencesTrack = (
                 mark.querySelector<HTMLElement>(".vst-refs-ph")?.textContent ??
                 "",
             durationSeconds: clip.duration,
-            fps: documentFps(getState()),
+            fps,
+            frameMax: getReferenceFrameMax(getRootDefaults, clip, fps),
             fromEnd: ref.fromEnd === true,
             sourceJson: readStateToken(),
         });

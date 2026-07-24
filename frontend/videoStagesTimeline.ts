@@ -66,10 +66,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         timelineBody,
         scrollElement: scrollEl,
     });
-    const detailStrip = createTimelineDetailStrip({
-        isCollapsed: viewport.stripCollapsed,
-        setCollapsed: viewport.setStripCollapsed,
-    });
+    const detailStrip = createTimelineDetailStrip();
     const capabilities = currentCapabilityViewResolver;
     const linking = createTimelineLinking();
     const gestures = createGestureRouter();
@@ -82,9 +79,8 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     let addClipInFlight = false;
 
     // Open the timeline settings panel (docked in the detail strip) from the
-    // topbar dims/fps chip: select "nothing" and force the strip open.
+    // topbar dims/fps chip.
     const openSettings = (): void => {
-        viewport.setStripCollapsed(false);
         setSelection({ kind: "none" });
         detailStrip.render();
     };

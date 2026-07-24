@@ -9,6 +9,7 @@ import { buildBoundaryBody } from "./boundaryPanel";
 import { buildClipBody } from "./clipPanel";
 import type { DetailStripContext } from "./context";
 import { buildPromptMajorBody, buildPromptMinorBody } from "./promptPanels";
+import { openTimelineAuthoringSettingsModal } from "./settingsModal";
 import { buildSettingsBody } from "./settingsPanel";
 
 export const clampDetailSelection = (
@@ -158,11 +159,6 @@ export const detailBreadcrumb = (
 export const buildDetailHeader = (
     selection: TimelineSelection,
     clips: Clip[],
-    collapsed: boolean,
-    actions: {
-        clearSelection: () => void;
-        toggleCollapsed: () => void;
-    },
 ): HTMLElement => {
     const header = document.createElement("div");
     header.className = "vst-detail-head";
@@ -170,23 +166,14 @@ export const buildDetailHeader = (
     breadcrumb.className = "vst-detail-crumb";
     breadcrumb.textContent = detailBreadcrumb(selection, clips);
 
-    const clear = document.createElement("button");
-    clear.type = "button";
-    clear.className = "basic-button small-button vst-detail-clear";
-    clear.textContent = "Clear";
-    clear.title = "Clear selection (show timeline settings)";
-    clear.setAttribute("aria-label", clear.title);
-    clear.hidden = selection.kind === "none";
-    clear.addEventListener("click", actions.clearSelection);
-
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "basic-button small-button vst-detail-collapse";
-    toggle.textContent = collapsed ? "▸" : "▾";
-    toggle.title = collapsed ? "Expand detail strip" : "Collapse detail strip";
-    toggle.setAttribute("aria-label", toggle.title);
-    toggle.addEventListener("click", actions.toggleCollapsed);
-    header.append(breadcrumb, clear, toggle);
+    const settings = document.createElement("button");
+    settings.type = "button";
+    settings.className = "basic-button small-button vst-detail-settings-button";
+    settings.textContent = "⚙";
+    settings.title = "Timeline settings";
+    settings.setAttribute("aria-label", settings.title);
+    settings.addEventListener("click", openTimelineAuthoringSettingsModal);
+    header.append(breadcrumb, settings);
     return header;
 };
 

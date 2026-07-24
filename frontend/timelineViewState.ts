@@ -5,10 +5,9 @@ const VIEW_STATE_KEY = "videostages.timeline.viewState";
 export interface StoredViewState {
     pxPerSecond?: number;
     unit?: TimelineUnit;
-    stripCollapsed?: boolean;
 }
 
-/** Reads the persisted view state (zoom / unit / strip collapse), else null. */
+/** Reads the persisted timeline zoom/unit state, else null. */
 export const loadViewState = (): StoredViewState | null => {
     try {
         const raw = localStorage.getItem(VIEW_STATE_KEY);
@@ -18,7 +17,6 @@ export const loadViewState = (): StoredViewState | null => {
         const parsed = JSON.parse(raw) as {
             pxPerSecond?: unknown;
             unit?: unknown;
-            stripCollapsed?: unknown;
         };
         const state: StoredViewState = {};
         if (typeof parsed.pxPerSecond === "number") {
@@ -26,9 +24,6 @@ export const loadViewState = (): StoredViewState | null => {
         }
         if (parsed.unit === "frames" || parsed.unit === "seconds") {
             state.unit = parsed.unit;
-        }
-        if (typeof parsed.stripCollapsed === "boolean") {
-            state.stripCollapsed = parsed.stripCollapsed;
         }
         return state;
     } catch {

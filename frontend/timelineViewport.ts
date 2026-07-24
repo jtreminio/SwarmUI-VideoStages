@@ -14,8 +14,6 @@ export interface TimelineViewport {
     load(): void;
     unit(): TimelineUnit;
     pxPerSecond(): number;
-    stripCollapsed(): boolean;
-    setStripCollapsed(collapsed: boolean): void;
     toggleUnit(): void;
     zoomIn(): void;
     zoomOut(): void;
@@ -38,14 +36,12 @@ export const createTimelineViewport = (options: {
 }): TimelineViewport => {
     let currentUnit: TimelineUnit = "seconds";
     let currentPxPerSecond = DEFAULT_PX_PER_SECOND;
-    let collapsed = false;
     let lastRenderedPxPerSecond = 0;
 
     const save = (): void => {
         saveViewState({
             pxPerSecond: currentPxPerSecond,
             unit: currentUnit,
-            stripCollapsed: collapsed,
         });
     };
 
@@ -56,9 +52,6 @@ export const createTimelineViewport = (options: {
             currentPxPerSecond = clampPxPerSecond(stored.pxPerSecond);
         }
         if (stored.unit) currentUnit = stored.unit;
-        if (stored.stripCollapsed !== undefined) {
-            collapsed = stored.stripCollapsed;
-        }
     };
 
     const setZoom = (value: number): void => {
@@ -118,11 +111,6 @@ export const createTimelineViewport = (options: {
         load,
         unit: () => currentUnit,
         pxPerSecond: () => currentPxPerSecond,
-        stripCollapsed: () => collapsed,
-        setStripCollapsed: (value) => {
-            collapsed = value;
-            save();
-        },
         toggleUnit: () => {
             currentUnit = currentUnit === "seconds" ? "frames" : "seconds";
             save();

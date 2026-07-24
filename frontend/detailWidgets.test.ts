@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import {
     buildCheckbox,
     buildField,
@@ -182,6 +182,8 @@ describe("buildMediaPickRow", () => {
 });
 
 describe("native detail groups", () => {
+    beforeEach(() => localStorage.clear());
+
     it("builds an always-open input group without accordion behavior", () => {
         const content = document.createElement("div");
         content.textContent = "Permanent fields";

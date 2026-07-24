@@ -15,6 +15,7 @@ import {
     setSelection,
     subscribeSelection,
 } from "./selection";
+import { setTimelineAuthoringSetting } from "./timelineAuthoringSettings";
 import {
     createTimelineRetakeTrack,
     type TimelineRetakeTrack,
@@ -133,6 +134,7 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
 
     beforeEach(() => {
         resetSelectionForTests();
+        localStorage.clear();
         saveSpy = jest
             .spyOn(persistence, "saveClips")
             .mockImplementation(() => {});
@@ -204,6 +206,29 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
         const retake = savedRetake(saveSpy);
         expect(retake?.startSeconds).toBeCloseTo(7, 5);
         expect(retake?.lengthSeconds).toBeCloseTo(3, 5);
+    });
+
+    it("snaps a moved window edge to the clip edge, unless Snap is off", () => {
+        let body = setup([{ duration: 10, retake: RETAKE }]);
+        let overlay = el(body, ".vst-retake[data-clip-idx='0']");
+        overlay.dispatchEvent(mouse("mousedown", 100));
+        document.dispatchEvent(mouse("mousemove", 100 + 4.9 * PPS));
+        document.dispatchEvent(mouse("mouseup", 100 + 4.9 * PPS));
+        expect(savedRetake(saveSpy)?.startSeconds).toBe(7);
+
+        track?.dispose();
+        router?.dispose();
+        track = null;
+        router = null;
+        document.body.innerHTML = "";
+        saveSpy.mockClear();
+        setTimelineAuthoringSetting("snap", false);
+        body = setup([{ duration: 10, retake: RETAKE }]);
+        overlay = el(body, ".vst-retake[data-clip-idx='0']");
+        overlay.dispatchEvent(mouse("mousedown", 100));
+        document.dispatchEvent(mouse("mousemove", 100 + 4.9 * PPS));
+        document.dispatchEvent(mouse("mouseup", 100 + 4.9 * PPS));
+        expect(savedRetake(saveSpy)?.startSeconds).toBe(6.9);
     });
 
     it("resizing the right edge changes length and keeps start", () => {

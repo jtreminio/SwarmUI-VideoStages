@@ -7,6 +7,7 @@ import {
     renderHostSlider,
     showHostPopover,
 } from "./host/swarmUiAdapters";
+import { getTimelineAuthoringSettings } from "./timelineAuthoringSettings";
 
 let sliderSeq = 0;
 let helpSeq = 0;
@@ -544,6 +545,12 @@ export interface StaticSectionSpec {
     headerAction?: SectionHeaderAction;
 }
 
+const rememberedAccordionSections = new Set<string>();
+
+export const resetRememberedAccordionSections = (): void => {
+    rememberedAccordionSections.clear();
+};
+
 /**
  * Native SwarmUI input group that is always open. It keeps the same header and
  * content structure as an accordion group, but deliberately omits the
@@ -589,9 +596,9 @@ export const buildStaticSection = (
 
 /**
  * Native SwarmUI sidebar group with a wired shrinkable header. Sibling
- * VideoStages sections form a progressive accordion: opening one closes the
- * others in the same panel. Geometry and field chrome are left to the host
- * `.input-group` styles.
+ * VideoStages sections form a progressive accordion while Auto-collapse is
+ * enabled; otherwise their open state survives panel rebuilds. Geometry and
+ * field chrome are left to the host `.input-group` styles.
  */
 export const buildAccordionSection = (
     spec: AccordionSectionSpec,
@@ -600,9 +607,16 @@ export const buildAccordionSection = (
     heading: HTMLElement;
     content: HTMLElement;
 } => {
+    const autoCollapse = getTimelineAuthoringSettings().autoCollapse;
+    const open =
+        spec.open === true ||
+        (!autoCollapse && rememberedAccordionSections.has(spec.key));
+    if (!autoCollapse && open) {
+        rememberedAccordionSections.add(spec.key);
+    }
     const section = document.createElement("div");
     section.className =
-        `input-group vst-detail-section ${spec.open ? "input-group-open" : "input-group-closed"} ${spec.className ?? ""}`.trim();
+        `input-group vst-detail-section ${open ? "input-group-open" : "input-group-closed"} ${spec.className ?? ""}`.trim();
     section.dataset.vstAccordionKey = spec.key;
 
     const header = document.createElement("span");
@@ -610,13 +624,13 @@ export const buildAccordionSection = (
         "input-group-header input-group-shrinkable vst-detail-section-header";
     header.tabIndex = 0;
     header.setAttribute("role", "button");
-    header.setAttribute("aria-expanded", `${spec.open === true}`);
+    header.setAttribute("aria-expanded", `${open}`);
 
     const labelWrap = document.createElement("span");
     labelWrap.className = "header-label-wrap";
     const symbol = document.createElement("span");
     symbol.className = "auto-symbol";
-    symbol.textContent = spec.open ? "⮟" : "⮞";
+    symbol.textContent = open ? "⮟" : "⮞";
     const heading = document.createElement("span");
     heading.className = "header-label";
     heading.textContent = spec.label;
@@ -633,17 +647,38 @@ export const buildAccordionSection = (
 
     const content = document.createElement("div");
     content.className = "input-group-content vst-detail-section-content";
-    content.hidden = spec.open !== true;
+    content.hidden = !open;
     appendSectionContent(content, spec.content, spec.flattenContent === true);
 
     const toggle = (event: Event): void => {
         event.preventDefault();
         event.stopPropagation();
         const opening = content.hidden === true;
-        if (opening) {
+        const collapseSiblings = getTimelineAuthoringSettings().autoCollapse;
+        if (opening && collapseSiblings) {
             closeSiblingAccordionSections(section);
+        } else if (opening) {
+            for (const sibling of Array.from(
+                section.parentElement?.children ?? [],
+            )) {
+                if (
+                    sibling instanceof HTMLElement &&
+                    sibling !== section &&
+                    sibling.classList.contains("input-group-open")
+                ) {
+                    const key = sibling.dataset.vstAccordionKey;
+                    if (key) {
+                        rememberedAccordionSections.add(key);
+                    }
+                }
+            }
         }
         setAccordionOpen(section, opening);
+        if (opening && !collapseSiblings) {
+            rememberedAccordionSections.add(spec.key);
+        } else {
+            rememberedAccordionSections.delete(spec.key);
+        }
     };
     header.addEventListener("click", toggle);
     header.addEventListener("keydown", (event) => {

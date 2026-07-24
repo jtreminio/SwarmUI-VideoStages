@@ -6107,6 +6107,92 @@
     };
   };
 
+  // frontend/timelineAuthoringSettings.ts
+  var SETTINGS_KEY = "videostages.timeline.authoringSettings";
+  var DEFAULT_SETTINGS = {
+    snap: true,
+    autoCollapse: true
+  };
+  var getTimelineAuthoringSettings = () => {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) {
+        return { ...DEFAULT_SETTINGS };
+      }
+      const parsed = JSON.parse(raw);
+      return {
+        snap: typeof parsed.snap === "boolean" ? parsed.snap : DEFAULT_SETTINGS.snap,
+        autoCollapse: typeof parsed.autoCollapse === "boolean" ? parsed.autoCollapse : DEFAULT_SETTINGS.autoCollapse
+      };
+    } catch {
+      return { ...DEFAULT_SETTINGS };
+    }
+  };
+  var setTimelineAuthoringSetting = (key, value) => {
+    const next = {
+      ...getTimelineAuthoringSettings(),
+      [key]: value
+    };
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+    } catch {
+    }
+  };
+
+  // frontend/timelineSnap.ts
+  var SNAP_THRESHOLD_PX = 8;
+  var nearestTarget = (value, targets, threshold) => {
+    let nearest = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const target of targets) {
+      const distance = Math.abs(value - target);
+      if (distance <= threshold && distance < nearestDistance) {
+        nearest = target;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
+  };
+  var snapPoint = (value, primaryTargets, fallbackTargets, threshold) => nearestTarget(value, primaryTargets, threshold) ?? nearestTarget(value, fallbackTargets, threshold) ?? value;
+  var snapMovedStart = (start, length, primaryTargets, fallbackTargets, threshold) => {
+    const primaryStart = nearestTarget(start, primaryTargets, threshold);
+    const primaryEnd = nearestTarget(start + length, primaryTargets, threshold);
+    if (primaryStart !== null || primaryEnd !== null) {
+      if (primaryStart === null) {
+        return primaryEnd - length;
+      }
+      if (primaryEnd === null) {
+        return primaryStart;
+      }
+      return Math.abs(primaryStart - start) <= Math.abs(primaryEnd - (start + length)) ? primaryStart : primaryEnd - length;
+    }
+    const fallbackStart = nearestTarget(start, fallbackTargets, threshold);
+    const fallbackEnd = nearestTarget(
+      start + length,
+      fallbackTargets,
+      threshold
+    );
+    if (fallbackStart === null && fallbackEnd === null) {
+      return start;
+    }
+    if (fallbackStart === null) {
+      return fallbackEnd - length;
+    }
+    if (fallbackEnd === null) {
+      return fallbackStart;
+    }
+    return Math.abs(fallbackStart - start) <= Math.abs(fallbackEnd - (start + length)) ? fallbackStart : fallbackEnd - length;
+  };
+  var timelineClipEdges = (clips) => {
+    const edges = [0];
+    let cursor = 0;
+    for (const clip of clips) {
+      cursor += Math.max(0, clip.duration || 0);
+      edges.push(cursor);
+    }
+    return edges;
+  };
+
   // frontend/timelineDetail.ts
   var DEFAULT_FPS = 24;
   var safeFps = (fps) => typeof fps === "number" && Number.isFinite(fps) && fps > 0 ? fps : DEFAULT_FPS;
@@ -7226,6 +7312,44 @@
     let unregister = null;
     const leftStyle = (start, clipDur, pps) => config.unit === "pct" ? `${leftPct(start, clipDur)}%` : `${start * pps}px`;
     const widthStyle = (length, clipDur, pps) => config.unit === "pct" ? `${widthPct(length, clipDur)}%` : `${Math.max(2, length * pps)}px`;
+    const moveTarget = (clip, itemIdx, press, desiredStart, pps) => {
+      const raw = config.moveTargetStart(clip, itemIdx, press, desiredStart);
+      if (!getTimelineAuthoringSettings().snap) {
+        return raw;
+      }
+      const snapped = snapMovedStart(
+        raw,
+        press.length,
+        [],
+        [0, clipDurationOf(clip)],
+        SNAP_THRESHOLD_PX / pps
+      );
+      return config.moveTargetStart(clip, itemIdx, press, snapped);
+    };
+    const resizeTarget = (clip, itemIdx, edge, press, deltaSec, pps) => {
+      const raw = config.resizeTarget(clip, itemIdx, edge, press, deltaSec);
+      if (!getTimelineAuthoringSettings().snap) {
+        return raw;
+      }
+      const rawEdge = edge === "left" ? raw.start : raw.start + raw.length;
+      const snappedEdge = snapPoint(
+        rawEdge,
+        [],
+        [0, clipDurationOf(clip)],
+        SNAP_THRESHOLD_PX / pps
+      );
+      if (snappedEdge === rawEdge) {
+        return raw;
+      }
+      const pressEdge = edge === "left" ? press.start : press.start + press.length;
+      return config.resizeTarget(
+        clip,
+        itemIdx,
+        edge,
+        press,
+        snappedEdge - pressEdge
+      );
+    };
     const commitMove = (state, dxPx, pps) => {
       if (isStaleToken(state.sourceJson)) {
         return;
@@ -7235,11 +7359,12 @@
       if (!clip || config.canEdit && !config.canEdit(clip) || !config.readSpan(clip, state.itemIdx)) {
         return;
       }
-      const start = config.moveTargetStart(
+      const start = moveTarget(
         clip,
         state.itemIdx,
         state.press,
-        state.press.start + dxPx / pps
+        state.press.start + dxPx / pps,
+        pps
       );
       config.writeMove(clip, state.itemIdx, state.press, start);
       saveClips(clips, { origin: config.origin });
@@ -7254,12 +7379,13 @@
       if (!clip || config.canEdit && !config.canEdit(clip) || !config.readSpan(clip, state.itemIdx)) {
         return;
       }
-      const geom = config.resizeTarget(
+      const geom = resizeTarget(
         clip,
         state.itemIdx,
         state.edge,
         state.press,
-        dxPx / pps
+        dxPx / pps,
+        pps
       );
       config.writeResize(clip, state.itemIdx, state.edge, state.press, geom);
       saveClips(clips, { origin: config.origin });
@@ -7286,7 +7412,19 @@
       saveClips(clips, { origin: config.origin });
       setSelection(selection2);
     };
-    const laneTimeAt = (state, clientX, pps) => clamp((clientX - state.laneLeft) / pps, 0, state.clipDuration);
+    const laneTimeAt = (state, clientX, pps) => {
+      const raw = clamp(
+        (clientX - state.laneLeft) / pps,
+        0,
+        state.clipDuration
+      );
+      return getTimelineAuthoringSettings().snap ? snapPoint(
+        raw,
+        [],
+        [0, state.clipDuration],
+        SNAP_THRESHOLD_PX / pps
+      ) : raw;
+    };
     const moveSession = (body, state) => {
       const restore = () => {
         state.el.style.left = state.originalLeft;
@@ -7296,11 +7434,12 @@
         onMove: (ctx) => {
           body.classList.add(config.draggingClass);
           const pps = livePxPerSecond(body);
-          const start = config.moveTargetStart(
+          const start = moveTarget(
             state.clipAtPress,
             state.itemIdx,
             state.press,
-            state.press.start + ctx.dx / pps
+            state.press.start + ctx.dx / pps,
+            pps
           );
           state.el.style.left = leftStyle(start, state.clipDuration, pps);
         },
@@ -7325,12 +7464,13 @@
         onMove: (ctx) => {
           body.classList.add(config.draggingClass);
           const pps = livePxPerSecond(body);
-          const geom = config.resizeTarget(
+          const geom = resizeTarget(
             state.clipAtPress,
             state.itemIdx,
             state.edge,
             state.press,
-            ctx.dx / pps
+            ctx.dx / pps,
+            pps
           );
           if (state.edge === "left") {
             state.el.style.left = leftStyle(
@@ -7462,11 +7602,17 @@
         const rect = lane.getBoundingClientRect();
         const pps = livePxPerSecond(body);
         const clipDuration = clipDurationOf(clip);
-        const startSec = clamp(
+        const rawStart = clamp(
           (me.clientX - rect.left) / pps,
           0,
           clipDuration
         );
+        const startSec = getTimelineAuthoringSettings().snap ? snapPoint(
+          rawStart,
+          [],
+          [0, clipDuration],
+          SNAP_THRESHOLD_PX / pps
+        ) : rawStart;
         me.preventDefault();
         return createSession(body, {
           clipIdx,
@@ -7710,6 +7856,39 @@
       trim: span.sourceStartSeconds
     };
   };
+  var audioSnapTargets = (state, trackIdx) => {
+    const above = trackIdx > 0 ? trackAndSpan(state, trackIdx - 1) : null;
+    const aboveGeometry = above ? spanGeometry(above.span) : null;
+    return {
+      primary: aboveGeometry ? [aboveGeometry.start, aboveGeometry.start + aboveGeometry.length] : [],
+      fallback: timelineClipEdges(state.clips)
+    };
+  };
+  var snapAudioPoint = (state, trackIdx, value, pps) => {
+    if (!getTimelineAuthoringSettings().snap) {
+      return value;
+    }
+    const targets = audioSnapTargets(state, trackIdx);
+    return snapPoint(
+      value,
+      targets.primary,
+      targets.fallback,
+      SNAP_THRESHOLD_PX / pps
+    );
+  };
+  var snapAudioMovedStart = (state, trackIdx, start, length, pps) => {
+    if (!getTimelineAuthoringSettings().snap) {
+      return start;
+    }
+    const targets = audioSnapTargets(state, trackIdx);
+    return snapMovedStart(
+      start,
+      length,
+      targets.primary,
+      targets.fallback,
+      SNAP_THRESHOLD_PX / pps
+    );
+  };
   var pct = (seconds, total) => `${total > 0 ? seconds / total * 100 : 0}%`;
   var createGlobalTimelineAudioSegmentTrack = () => {
     let body = null;
@@ -7762,55 +7941,87 @@
           element.style.left = originalLeft;
           element.style.width = originalWidth;
         };
+        const rightLength = (delta, pps2) => {
+          const rawLength = clamp(
+            press.length + delta,
+            AUDIO_SEGMENT_MIN_LENGTH,
+            total2 - press.start
+          );
+          const snappedEnd = snapAudioPoint(
+            state2,
+            trackIdx,
+            press.start + rawLength,
+            pps2
+          );
+          return clamp(
+            snappedEnd - press.start,
+            AUDIO_SEGMENT_MIN_LENGTH,
+            total2 - press.start
+          );
+        };
+        const leftStart = (delta, pps2) => {
+          const end = press.start + press.length;
+          const lo = Math.max(0, press.start - press.trim);
+          const rawStart = clamp(
+            press.start + delta,
+            lo,
+            end - AUDIO_SEGMENT_MIN_LENGTH
+          );
+          return clamp(
+            snapAudioPoint(state2, trackIdx, rawStart, pps2),
+            lo,
+            end - AUDIO_SEGMENT_MIN_LENGTH
+          );
+        };
+        const movedStart = (delta, pps2) => {
+          const rawStart = clamp(
+            press.start + delta,
+            0,
+            Math.max(0, total2 - press.length)
+          );
+          return clamp(
+            snapAudioMovedStart(
+              state2,
+              trackIdx,
+              rawStart,
+              press.length,
+              pps2
+            ),
+            0,
+            Math.max(0, total2 - press.length)
+          );
+        };
         return {
           threshold: DRAG_THRESHOLD_PX2,
           onMove: (ctx) => {
             boundBody.classList.add("vst-audio-seg-dragging");
-            const delta = ctx.dx / livePxPerSecond(boundBody);
+            const pps2 = livePxPerSecond(boundBody);
+            const delta = ctx.dx / pps2;
             if (edge === "right") {
-              const length = clamp(
-                press.length + delta,
-                AUDIO_SEGMENT_MIN_LENGTH,
-                total2 - press.start
-              );
+              const length = rightLength(delta, pps2);
               element.style.width = pct(length, total2);
             } else if (edge === "left") {
               const end = press.start + press.length;
-              const start = clamp(
-                press.start + delta,
-                Math.max(0, press.start - press.trim),
-                end - AUDIO_SEGMENT_MIN_LENGTH
-              );
+              const start = leftStart(delta, pps2);
               element.style.left = pct(start, total2);
               element.style.width = pct(end - start, total2);
             } else {
-              const start = clamp(
-                press.start + delta,
-                0,
-                Math.max(0, total2 - press.length)
-              );
+              const start = movedStart(delta, pps2);
               element.style.left = pct(start, total2);
             }
           },
           onCommit: (ctx) => {
             boundBody.classList.remove("vst-audio-seg-dragging");
-            const delta = ctx.dx / livePxPerSecond(boundBody);
+            const pps2 = livePxPerSecond(boundBody);
+            const delta = ctx.dx / pps2;
             commit(sourceToken2, trackIdx, (_state, _track, span) => {
               if (edge === "right") {
                 span.timelineLengthSeconds = roundToTenth(
-                  clamp(
-                    press.length + delta,
-                    AUDIO_SEGMENT_MIN_LENGTH,
-                    total2 - press.start
-                  )
+                  rightLength(delta, pps2)
                 );
               } else if (edge === "left") {
                 const end = press.start + press.length;
-                const start = clamp(
-                  press.start + delta,
-                  Math.max(0, press.start - press.trim),
-                  end - AUDIO_SEGMENT_MIN_LENGTH
-                );
+                const start = leftStart(delta, pps2);
                 span.timelineStartSeconds = roundToTenth(start);
                 span.timelineLengthSeconds = roundToTenth(
                   end - start
@@ -7820,11 +8031,7 @@
                 );
               } else {
                 span.timelineStartSeconds = roundToTenth(
-                  clamp(
-                    press.start + delta,
-                    0,
-                    Math.max(0, total2 - press.length)
-                  )
+                  movedStart(delta, pps2)
                 );
               }
             });
@@ -7849,7 +8056,13 @@
       }
       const rect = lane.getBoundingClientRect();
       const pps = livePxPerSecond(boundBody);
-      const startAtPress = clamp((event.clientX - rect.left) / pps, 0, total);
+      const trackIdxAtPress = state.audioTracks?.length ?? 0;
+      const startAtPress = snapAudioPoint(
+        state,
+        trackIdxAtPress,
+        clamp((event.clientX - rect.left) / pps, 0, total),
+        pps
+      );
       const sourceToken = readStateToken();
       let ghost = null;
       event.preventDefault();
@@ -7857,7 +8070,15 @@
         ghost?.remove();
         ghost = null;
       };
-      const timeAt = (clientX) => clamp((clientX - rect.left) / livePxPerSecond(boundBody), 0, total);
+      const timeAt = (clientX) => {
+        const livePps = livePxPerSecond(boundBody);
+        return snapAudioPoint(
+          state,
+          trackIdxAtPress,
+          clamp((clientX - rect.left) / livePps, 0, total),
+          livePps
+        );
+      };
       const create = (endAt) => {
         if (isStaleToken(sourceToken)) {
           return;
@@ -8449,6 +8670,10 @@
     });
     target.appendChild(action);
   };
+  var rememberedAccordionSections = /* @__PURE__ */ new Set();
+  var resetRememberedAccordionSections = () => {
+    rememberedAccordionSections.clear();
+  };
   var buildStaticSection = (spec) => {
     const section = document.createElement("div");
     section.className = `input-group input-group-open vst-detail-section vst-detail-static-section ${spec.className ?? ""}`.trim();
@@ -8477,19 +8702,24 @@
     return { section, heading, content };
   };
   var buildAccordionSection = (spec) => {
+    const autoCollapse = getTimelineAuthoringSettings().autoCollapse;
+    const open = spec.open === true || !autoCollapse && rememberedAccordionSections.has(spec.key);
+    if (!autoCollapse && open) {
+      rememberedAccordionSections.add(spec.key);
+    }
     const section = document.createElement("div");
-    section.className = `input-group vst-detail-section ${spec.open ? "input-group-open" : "input-group-closed"} ${spec.className ?? ""}`.trim();
+    section.className = `input-group vst-detail-section ${open ? "input-group-open" : "input-group-closed"} ${spec.className ?? ""}`.trim();
     section.dataset.vstAccordionKey = spec.key;
     const header = document.createElement("span");
     header.className = "input-group-header input-group-shrinkable vst-detail-section-header";
     header.tabIndex = 0;
     header.setAttribute("role", "button");
-    header.setAttribute("aria-expanded", `${spec.open === true}`);
+    header.setAttribute("aria-expanded", `${open}`);
     const labelWrap = document.createElement("span");
     labelWrap.className = "header-label-wrap";
     const symbol = document.createElement("span");
     symbol.className = "auto-symbol";
-    symbol.textContent = spec.open ? "⮟" : "⮞";
+    symbol.textContent = open ? "⮟" : "⮞";
     const heading = document.createElement("span");
     heading.className = "header-label";
     heading.textContent = spec.label;
@@ -8505,16 +8735,33 @@
     header.appendChild(labelWrap);
     const content = document.createElement("div");
     content.className = "input-group-content vst-detail-section-content";
-    content.hidden = spec.open !== true;
+    content.hidden = !open;
     appendSectionContent(content, spec.content, spec.flattenContent === true);
     const toggle = (event) => {
       event.preventDefault();
       event.stopPropagation();
       const opening = content.hidden === true;
-      if (opening) {
+      const collapseSiblings = getTimelineAuthoringSettings().autoCollapse;
+      if (opening && collapseSiblings) {
         closeSiblingAccordionSections(section);
+      } else if (opening) {
+        for (const sibling of Array.from(
+          section.parentElement?.children ?? []
+        )) {
+          if (sibling instanceof HTMLElement && sibling !== section && sibling.classList.contains("input-group-open")) {
+            const key = sibling.dataset.vstAccordionKey;
+            if (key) {
+              rememberedAccordionSections.add(key);
+            }
+          }
+        }
       }
       setAccordionOpen(section, opening);
+      if (opening && !collapseSiblings) {
+        rememberedAccordionSections.add(spec.key);
+      } else {
+        rememberedAccordionSections.delete(spec.key);
+      }
     };
     header.addEventListener("click", toggle);
     header.addEventListener("keydown", (event) => {
@@ -12496,6 +12743,93 @@ The conversion is one undoable change.`;
   var buildPromptMajorBody = (ctx, selection2, clips) => buildPromptBody(ctx, selection2, clips);
   var buildPromptMinorBody = (ctx, selection2, clips) => buildPromptBody(ctx, selection2, clips);
 
+  // frontend/detailStrip/settingsModal.ts
+  var MODAL_CLASS = "vst-timeline-settings-modal";
+  var BACKDROP_CLASS = "vst-timeline-settings-backdrop";
+  var currentCleanup = null;
+  var closeTimelineAuthoringSettingsModal = () => {
+    currentCleanup?.();
+    currentCleanup = null;
+    document.querySelector(`.${MODAL_CLASS}`)?.remove();
+    document.querySelector(`.${BACKDROP_CLASS}`)?.remove();
+  };
+  var openTimelineAuthoringSettingsModal = () => {
+    closeTimelineAuthoringSettingsModal();
+    const settings = getTimelineAuthoringSettings();
+    const backdrop = document.createElement("div");
+    backdrop.className = `modal-backdrop fade show ${BACKDROP_CLASS}`;
+    const modal = document.createElement("div");
+    modal.className = `modal fade show ${MODAL_CLASS}`;
+    modal.style.display = "block";
+    modal.tabIndex = -1;
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "vst_timeline_settings_title");
+    const dialog = document.createElement("div");
+    dialog.className = "modal-dialog modal-dialog-centered";
+    dialog.setAttribute("role", "document");
+    const content = document.createElement("div");
+    content.className = "modal-content";
+    const header = document.createElement("div");
+    header.className = "modal-header";
+    const title = document.createElement("h5");
+    title.className = "modal-title";
+    title.id = "vst_timeline_settings_title";
+    title.textContent = "Timeline Settings";
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "basic-button small-button";
+    close.textContent = "×";
+    close.title = "Close timeline settings";
+    close.setAttribute("aria-label", close.title);
+    header.append(title, close);
+    const body = document.createElement("div");
+    body.className = "modal-body";
+    body.append(
+      buildCheckbox(
+        "Snap",
+        settings.snap,
+        (value) => setTimelineAuthoringSetting("snap", value)
+      ),
+      buildCheckbox("Auto-collapse", settings.autoCollapse, (value) => {
+        setTimelineAuthoringSetting("autoCollapse", value);
+        if (value) {
+          resetRememberedAccordionSections();
+        }
+      })
+    );
+    content.append(header, body);
+    dialog.appendChild(content);
+    modal.appendChild(dialog);
+    const dismiss = () => {
+      currentCleanup?.();
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        dismiss();
+      }
+    };
+    const cleanup = () => {
+      document.removeEventListener("keydown", onKeyDown);
+      modal.remove();
+      backdrop.remove();
+      if (currentCleanup === cleanup) {
+        currentCleanup = null;
+      }
+    };
+    currentCleanup = cleanup;
+    close.addEventListener("click", dismiss);
+    backdrop.addEventListener("click", dismiss);
+    modal.addEventListener("mousedown", (event) => {
+      if (event.target === modal) {
+        dismiss();
+      }
+    });
+    document.addEventListener("keydown", onKeyDown);
+    document.body.append(backdrop, modal);
+    close.focus();
+  };
+
   // frontend/detailStrip/settingsPanel.ts
   var SETTINGS_INHERIT = "inherit";
   var SETTINGS_CUSTOM = "custom";
@@ -12758,28 +13092,20 @@ The conversion is one undoable change.`;
         return "Timeline settings";
     }
   };
-  var buildDetailHeader = (selection2, clips, collapsed, actions) => {
+  var buildDetailHeader = (selection2, clips) => {
     const header = document.createElement("div");
     header.className = "vst-detail-head";
     const breadcrumb = document.createElement("span");
     breadcrumb.className = "vst-detail-crumb";
     breadcrumb.textContent = detailBreadcrumb(selection2, clips);
-    const clear = document.createElement("button");
-    clear.type = "button";
-    clear.className = "basic-button small-button vst-detail-clear";
-    clear.textContent = "Clear";
-    clear.title = "Clear selection (show timeline settings)";
-    clear.setAttribute("aria-label", clear.title);
-    clear.hidden = selection2.kind === "none";
-    clear.addEventListener("click", actions.clearSelection);
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "basic-button small-button vst-detail-collapse";
-    toggle.textContent = collapsed ? "▸" : "▾";
-    toggle.title = collapsed ? "Expand detail strip" : "Collapse detail strip";
-    toggle.setAttribute("aria-label", toggle.title);
-    toggle.addEventListener("click", actions.toggleCollapsed);
-    header.append(breadcrumb, clear, toggle);
+    const settings = document.createElement("button");
+    settings.type = "button";
+    settings.className = "basic-button small-button vst-detail-settings-button";
+    settings.textContent = "⚙";
+    settings.title = "Timeline settings";
+    settings.setAttribute("aria-label", settings.title);
+    settings.addEventListener("click", openTimelineAuthoringSettingsModal);
+    header.append(breadcrumb, settings);
     return header;
   };
   var buildDetailPanelBody = (context, selection2, clips) => {
@@ -12826,7 +13152,7 @@ The conversion is one undoable change.`;
         breadcrumb.textContent = detailBreadcrumb(rendered, clips);
       }
     };
-    const targetedReselect = (_selection, _dock, _collapsed, _clips) => {
+    const targetedReselect = (_selection, _dock, _clips) => {
       return false;
     };
     return {
@@ -12852,29 +13178,24 @@ The conversion is one undoable change.`;
     const previousBody = options.detail.querySelector(".vst-detail-body");
     const savedScroll = previousBody?.scrollTop ?? 0;
     options.focus.capture();
-    options.detail.className = `${DETAIL_CLASS}${options.collapsed ? " vst-detail-collapsed" : ""}`;
+    options.detail.className = DETAIL_CLASS;
     options.detail.innerHTML = "";
     options.detail.appendChild(
-      buildDetailHeader(options.selection, options.clips, options.collapsed, {
-        clearSelection: options.clearSelection,
-        toggleCollapsed: options.toggleCollapsed
-      })
+      buildDetailHeader(options.selection, options.clips)
     );
-    if (!options.collapsed) {
-      const body = buildDetailPanelBody(
-        options.context,
-        options.selection,
-        options.clips
-      );
-      options.detail.appendChild(body);
-      getVideoStagesHostBridge().enableSliders(body);
-    }
+    const body = buildDetailPanelBody(
+      options.context,
+      options.selection,
+      options.clips
+    );
+    options.detail.appendChild(body);
+    getVideoStagesHostBridge().enableSliders(body);
     options.focus.restore(options.detail);
     const newBody = options.detail.querySelector(".vst-detail-body");
     if (newBody && savedScroll > 0) {
       newBody.scrollTop = savedScroll;
     }
-    if (options.revealSelection && !options.collapsed) {
+    if (options.revealSelection) {
       const key = options.selection.kind === "ref" ? "references" : options.selection.kind === "audio-segment" ? "audio-segments" : options.selection.kind === "audio-track" ? "audio-tracks" : options.selection.kind === "audio-track-span" ? "audio-track-spans" : options.selection.kind === "prompt-minor" ? "relay-prompts" : options.selection.kind === "ic-lora" ? "ic-loras" : null;
       const target = options.selection.kind === "retake" ? options.detail.querySelector(
         '[data-vst-accordion-key="retake"]'
@@ -12885,9 +13206,7 @@ The conversion is one undoable change.`;
         target.scrollIntoView({ block: "nearest" });
       }
     }
-    if (!options.collapsed) {
-      options.focus.autoFocusSelection(options.detail, options.selection);
-    }
+    options.focus.autoFocusSelection(options.detail, options.selection);
   };
 
   // frontend/detailStrip/selectionDomainOperations.ts
@@ -13291,7 +13610,7 @@ The conversion is one undoable change.`;
 
   // frontend/timelineDetailStrip.ts
   var DETAIL_CLASS2 = "vst-detail";
-  var createTimelineDetailStrip = (options) => {
+  var createTimelineDetailStrip = () => {
     let boundBody = null;
     let dockEl = null;
     let unsubscribe = null;
@@ -13373,7 +13692,7 @@ The conversion is one undoable change.`;
         return;
       }
       const renderedSelection = panelSelection.getRendered();
-      if (meta?.origin === "detail-strip" && meta.hint === "value-only" && renderedSelection && !options.isCollapsed() && isRenderedSelection(panelSelection, getSelection())) {
+      if (meta?.origin === "detail-strip" && meta.hint === "value-only" && renderedSelection && isRenderedSelection(panelSelection, getSelection())) {
         draftQueue.markCurrentSource();
         syncValueDerivedUi(renderedSelection);
         return;
@@ -13390,7 +13709,6 @@ The conversion is one undoable change.`;
           setSelection(selection2);
           return;
         }
-        const collapsed = options.isCollapsed();
         const revealSelection = revealSelectionOnNextRender;
         revealSelectionOnNextRender = false;
         renderDetailShell({
@@ -13399,14 +13717,7 @@ The conversion is one undoable change.`;
           focus,
           clips,
           selection: selection2,
-          previousSelection: renderedSelection,
-          revealSelection,
-          collapsed,
-          clearSelection: () => setSelection({ kind: "none" }),
-          toggleCollapsed: () => {
-            options.setCollapsed(!options.isCollapsed());
-            render();
-          }
+          revealSelection
         });
         panelSelection.setRendered(selection2);
       } finally {
@@ -13417,25 +13728,18 @@ The conversion is one undoable change.`;
       if (suppressSelectionRender) {
         return;
       }
-      if (panelSelection.targetedReselect(
-        selection2,
-        dockEl,
-        options.isCollapsed(),
-        getClips()
-      )) {
+      if (panelSelection.targetedReselect(selection2, dockEl, getClips())) {
         return;
       }
       focus.beginSelectionSession();
       settingsMode = null;
       const active = document.activeElement;
       revealSelectionOnNextRender = !(active instanceof HTMLElement && dockEl?.contains(active));
-      if (selection2.kind !== "none" && options.isCollapsed()) {
-        options.setCollapsed(false);
-      }
       render();
     };
     const dispose = () => {
       draftQueue.dispose();
+      closeTimelineAuthoringSettingsModal();
       focus.reset();
       document.removeEventListener(
         "pointerdown",
@@ -14223,12 +14527,27 @@ The conversion is one undoable change.`;
     };
     const dragFrameAt = (state, clientX) => {
       const rect = state.lane.getBoundingClientRect();
-      return pxToFrame(
+      const frame = pxToFrame(
         clientX - rect.left,
         rect.width,
         state.durationSeconds,
         state.fps,
         state.fromEnd
+      );
+      if (!getTimelineAuthoringSettings().snap || rect.width <= 0) {
+        return frame;
+      }
+      const thresholdFrames = Math.max(
+        1,
+        SNAP_THRESHOLD_PX / rect.width * state.frameMax
+      );
+      return Math.round(
+        snapPoint(
+          frame,
+          [],
+          [REF_FRAME_MIN, state.frameMax],
+          thresholdFrames
+        )
       );
     };
     const restoreDragPreview = (state) => {
@@ -14308,6 +14627,7 @@ The conversion is one undoable change.`;
         return claimOnly();
       }
       const arrow = findArrow(clipIdx, refIdx);
+      const fps = documentFps(getState());
       me.preventDefault();
       return dragSession(body, {
         clipIdx,
@@ -14319,7 +14639,8 @@ The conversion is one undoable change.`;
         arrowOriginalLeft: arrow?.style.left ?? "",
         originalLabel: mark.querySelector(".vst-refs-ph")?.textContent ?? "",
         durationSeconds: clip.duration,
-        fps: documentFps(getState()),
+        fps,
+        frameMax: getReferenceFrameMax(getRootDefaults, clip, fps),
         fromEnd: ref.fromEnd === true,
         sourceJson: readStateToken()
       });
@@ -14575,9 +14896,6 @@ The conversion is one undoable change.`;
       if (parsed.unit === "frames" || parsed.unit === "seconds") {
         state.unit = parsed.unit;
       }
-      if (typeof parsed.stripCollapsed === "boolean") {
-        state.stripCollapsed = parsed.stripCollapsed;
-      }
       return state;
     } catch {
       return null;
@@ -14594,13 +14912,11 @@ The conversion is one undoable change.`;
   var createTimelineViewport = (options) => {
     let currentUnit = "seconds";
     let currentPxPerSecond = DEFAULT_PX_PER_SECOND;
-    let collapsed = false;
     let lastRenderedPxPerSecond = 0;
     const save = () => {
       saveViewState({
         pxPerSecond: currentPxPerSecond,
-        unit: currentUnit,
-        stripCollapsed: collapsed
+        unit: currentUnit
       });
     };
     const load = () => {
@@ -14610,9 +14926,6 @@ The conversion is one undoable change.`;
         currentPxPerSecond = clampPxPerSecond(stored.pxPerSecond);
       }
       if (stored.unit) currentUnit = stored.unit;
-      if (stored.stripCollapsed !== void 0) {
-        collapsed = stored.stripCollapsed;
-      }
     };
     const setZoom = (value) => {
       currentPxPerSecond = clampPxPerSecond(value);
@@ -14664,11 +14977,6 @@ The conversion is one undoable change.`;
       load,
       unit: () => currentUnit,
       pxPerSecond: () => currentPxPerSecond,
-      stripCollapsed: () => collapsed,
-      setStripCollapsed: (value) => {
-        collapsed = value;
-        save();
-      },
       toggleUnit: () => {
         currentUnit = currentUnit === "seconds" ? "frames" : "seconds";
         save();
@@ -14707,10 +15015,7 @@ The conversion is one undoable change.`;
       timelineBody,
       scrollElement: scrollEl
     });
-    const detailStrip = createTimelineDetailStrip({
-      isCollapsed: viewport.stripCollapsed,
-      setCollapsed: viewport.setStripCollapsed
-    });
+    const detailStrip = createTimelineDetailStrip();
     const capabilities = currentCapabilityViewResolver;
     const linking = createTimelineLinking();
     const gestures = createGestureRouter();
@@ -14722,7 +15027,6 @@ The conversion is one undoable change.`;
     const referencesTrack = createTimelineReferencesTrack(capabilities);
     let addClipInFlight = false;
     const openSettings = () => {
-      viewport.setStripCollapsed(false);
       setSelection({ kind: "none" });
       detailStrip.render();
     };

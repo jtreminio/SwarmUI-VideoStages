@@ -1,0 +1,83 @@
+import type { Clip } from "./types";
+
+export const SNAP_THRESHOLD_PX = 8;
+
+const nearestTarget = (
+    value: number,
+    targets: readonly number[],
+    threshold: number,
+): number | null => {
+    let nearest: number | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const target of targets) {
+        const distance = Math.abs(value - target);
+        if (distance <= threshold && distance < nearestDistance) {
+            nearest = target;
+            nearestDistance = distance;
+        }
+    }
+    return nearest;
+};
+
+export const snapPoint = (
+    value: number,
+    primaryTargets: readonly number[],
+    fallbackTargets: readonly number[],
+    threshold: number,
+): number =>
+    nearestTarget(value, primaryTargets, threshold) ??
+    nearestTarget(value, fallbackTargets, threshold) ??
+    value;
+
+export const snapMovedStart = (
+    start: number,
+    length: number,
+    primaryTargets: readonly number[],
+    fallbackTargets: readonly number[],
+    threshold: number,
+): number => {
+    const primaryStart = nearestTarget(start, primaryTargets, threshold);
+    const primaryEnd = nearestTarget(start + length, primaryTargets, threshold);
+    if (primaryStart !== null || primaryEnd !== null) {
+        if (primaryStart === null) {
+            return (primaryEnd as number) - length;
+        }
+        if (primaryEnd === null) {
+            return primaryStart;
+        }
+        return Math.abs(primaryStart - start) <=
+            Math.abs(primaryEnd - (start + length))
+            ? primaryStart
+            : primaryEnd - length;
+    }
+
+    const fallbackStart = nearestTarget(start, fallbackTargets, threshold);
+    const fallbackEnd = nearestTarget(
+        start + length,
+        fallbackTargets,
+        threshold,
+    );
+    if (fallbackStart === null && fallbackEnd === null) {
+        return start;
+    }
+    if (fallbackStart === null) {
+        return (fallbackEnd as number) - length;
+    }
+    if (fallbackEnd === null) {
+        return fallbackStart;
+    }
+    return Math.abs(fallbackStart - start) <=
+        Math.abs(fallbackEnd - (start + length))
+        ? fallbackStart
+        : fallbackEnd - length;
+};
+
+export const timelineClipEdges = (clips: readonly Clip[]): number[] => {
+    const edges = [0];
+    let cursor = 0;
+    for (const clip of clips) {
+        cursor += Math.max(0, clip.duration || 0);
+        edges.push(cursor);
+    }
+    return edges;
+};

@@ -12,39 +12,28 @@ export const renderDetailShell = (options: {
     focus: DetailFocusSession;
     clips: Clip[];
     selection: TimelineSelection;
-    previousSelection: TimelineSelection | null;
     revealSelection: boolean;
-    collapsed: boolean;
-    clearSelection: () => void;
-    toggleCollapsed: () => void;
 }): void => {
     const previousBody =
         options.detail.querySelector<HTMLElement>(".vst-detail-body");
     const savedScroll = previousBody?.scrollTop ?? 0;
     options.focus.capture();
-    options.detail.className = `${DETAIL_CLASS}${
-        options.collapsed ? " vst-detail-collapsed" : ""
-    }`;
+    options.detail.className = DETAIL_CLASS;
     options.detail.innerHTML = "";
     options.detail.appendChild(
-        buildDetailHeader(options.selection, options.clips, options.collapsed, {
-            clearSelection: options.clearSelection,
-            toggleCollapsed: options.toggleCollapsed,
-        }),
+        buildDetailHeader(options.selection, options.clips),
     );
-    if (!options.collapsed) {
-        const body = buildDetailPanelBody(
-            options.context,
-            options.selection,
-            options.clips,
-        );
-        options.detail.appendChild(body);
-        // SwarmUI renders the paired number/range controls but wires their
-        // bidirectional synchronization separately after they enter the DOM.
-        // Initialize every detail body so sliders added to any panel work
-        // without requiring a selection-kind allowlist here.
-        getVideoStagesHostBridge().enableSliders(body);
-    }
+    const body = buildDetailPanelBody(
+        options.context,
+        options.selection,
+        options.clips,
+    );
+    options.detail.appendChild(body);
+    // SwarmUI renders the paired number/range controls but wires their
+    // bidirectional synchronization separately after they enter the DOM.
+    // Initialize every detail body so sliders added to any panel work
+    // without requiring a selection-kind allowlist here.
+    getVideoStagesHostBridge().enableSliders(body);
     options.focus.restore(options.detail);
     const newBody =
         options.detail.querySelector<HTMLElement>(".vst-detail-body");
@@ -52,7 +41,7 @@ export const renderDetailShell = (options: {
         newBody.scrollTop = savedScroll;
     }
 
-    if (options.revealSelection && !options.collapsed) {
+    if (options.revealSelection) {
         const key =
             options.selection.kind === "ref"
                 ? "references"
@@ -81,7 +70,5 @@ export const renderDetailShell = (options: {
             target.scrollIntoView({ block: "nearest" });
         }
     }
-    if (!options.collapsed) {
-        options.focus.autoFocusSelection(options.detail, options.selection);
-    }
+    options.focus.autoFocusSelection(options.detail, options.selection);
 };

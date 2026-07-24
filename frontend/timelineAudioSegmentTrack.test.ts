@@ -14,6 +14,7 @@ import {
     createTimelineAudioSegmentTrack,
     type TimelineAudioSegmentTrack,
 } from "./timelineAudioSegmentTrack";
+import { setTimelineAuthoringSetting } from "./timelineAuthoringSettings";
 import type { AudioSegment, Clip, VideoStagesConfig } from "./types";
 
 const PPS = 44;
@@ -139,6 +140,7 @@ describe("createTimelineAudioSegmentTrack (DOM gestures)", () => {
 
     beforeEach(() => {
         resetSelectionForTests();
+        localStorage.clear();
         saveSpy = jest
             .spyOn(persistence, "saveClips")
             .mockImplementation(() => {});
@@ -502,6 +504,7 @@ describe("timeline-wide audio segment gestures", () => {
 
     beforeEach(() => {
         resetSelectionForTests();
+        localStorage.clear();
         saveSpy = jest
             .spyOn(persistence, "saveState")
             .mockImplementation(() => {});
@@ -532,6 +535,78 @@ describe("timeline-wide audio segment gestures", () => {
             sourceStartSeconds: 1,
         });
         expect(getSelection()).toEqual({ kind: "audio-track", trackIdx: 0 });
+    });
+
+    it("snaps to the segment immediately above before clip edges", () => {
+        const state = rootState() as unknown as VideoStagesConfig;
+        state.audioTracks?.push({
+            id: "track-lower",
+            volume: 1,
+            source: {
+                kind: "Upload",
+                reference: "",
+                uploadedAudio: null,
+            },
+            spans: [
+                {
+                    id: "span-lower",
+                    firstClipId: null,
+                    lastClipId: null,
+                    timelineStartSeconds: 1,
+                    timelineLengthSeconds: 2,
+                    sourceStartSeconds: 0,
+                    clipStartOffsetSeconds: null,
+                    clipLengthSeconds: null,
+                },
+            ],
+        });
+        mountVideoStagesData(state);
+        mountPromptBox("");
+        const body = makeBody();
+        body.innerHTML =
+            `<div class="vst-audio-seg" data-vst-audio-seg data-track-idx="0"></div>` +
+            `<div class="vst-audio-seg" data-vst-audio-seg data-track-idx="1"></div>`;
+        track = createTimelineAudioSegmentTrack();
+        router = createGestureRouter();
+        router.attach(body);
+        track.attach(body, router);
+
+        const lower = el(body, '.vst-audio-seg[data-track-idx="1"]');
+        lower.dispatchEvent(mouse("mousedown", 1 * PPS));
+        document.dispatchEvent(mouse("mousemove", 2.1 * PPS));
+        document.dispatchEvent(mouse("mouseup", 2.1 * PPS));
+
+        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        expect(saved.audioTracks?.[1].spans[0].timelineStartSeconds).toBe(2);
+    });
+
+    it("falls back to clip edges and bypasses snapping when disabled", () => {
+        let body = setupGlobal();
+        let segment = el(body, '.vst-audio-seg[data-track-idx="0"]');
+        segment.dispatchEvent(mouse("mousedown", 2 * PPS));
+        document.dispatchEvent(mouse("mousemove", 3.1 * PPS));
+        document.dispatchEvent(mouse("mouseup", 3.1 * PPS));
+        expect(
+            (saveSpy.mock.calls[0][0] as VideoStagesConfig).audioTracks?.[0]
+                .spans[0].timelineStartSeconds,
+        ).toBe(3);
+
+        track?.dispose();
+        router?.dispose();
+        track = null;
+        router = null;
+        document.body.innerHTML = "";
+        saveSpy.mockClear();
+        setTimelineAuthoringSetting("snap", false);
+        body = setupGlobal();
+        segment = el(body, '.vst-audio-seg[data-track-idx="0"]');
+        segment.dispatchEvent(mouse("mousedown", 2 * PPS));
+        document.dispatchEvent(mouse("mousemove", 3.1 * PPS));
+        document.dispatchEvent(mouse("mouseup", 3.1 * PPS));
+        expect(
+            (saveSpy.mock.calls[0][0] as VideoStagesConfig).audioTracks?.[0]
+                .spans[0].timelineStartSeconds,
+        ).toBe(3.1);
     });
 
     it("left resize advances the source trim while keeping the end fixed", () => {

@@ -10,7 +10,6 @@ export interface PanelSelectionSession {
     targetedReselect(
         selection: TimelineSelection,
         dock: HTMLElement | null,
-        collapsed: boolean,
         clips: Clip[],
     ): boolean;
 }
@@ -31,7 +30,6 @@ export const createPanelSelectionSession = (): PanelSelectionSession => {
     const targetedReselect = (
         _selection: TimelineSelection,
         _dock: HTMLElement | null,
-        _collapsed: boolean,
         _clips: Clip[],
     ): boolean => {
         // Active-only repeaters bind their editor controls to one concrete

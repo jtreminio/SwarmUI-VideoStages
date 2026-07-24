@@ -11,6 +11,7 @@ import {
 } from "./detailStrip/panelSelectionSession";
 import { renderDetailShell } from "./detailStrip/renderShell";
 import { createDetailSelectionOperations } from "./detailStrip/selectionOperations";
+import { closeTimelineAuthoringSettingsModal } from "./detailStrip/settingsModal";
 import { getClips } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
 import {
@@ -36,14 +37,7 @@ export interface TimelineDetailStrip {
     dispose(): void;
 }
 
-export interface TimelineDetailStripOptions {
-    isCollapsed: () => boolean;
-    setCollapsed: (collapsed: boolean) => void;
-}
-
-export const createTimelineDetailStrip = (
-    options: TimelineDetailStripOptions,
-): TimelineDetailStrip => {
+export const createTimelineDetailStrip = (): TimelineDetailStrip => {
     let boundBody: HTMLElement | null = null;
     let dockEl: HTMLElement | null = null;
     let unsubscribe: (() => void) | null = null;
@@ -133,7 +127,6 @@ export const createTimelineDetailStrip = (
             meta?.origin === "detail-strip" &&
             meta.hint === "value-only" &&
             renderedSelection &&
-            !options.isCollapsed() &&
             isRenderedSelection(panelSelection, getSelection())
         ) {
             draftQueue.markCurrentSource();
@@ -156,7 +149,6 @@ export const createTimelineDetailStrip = (
                 return;
             }
 
-            const collapsed = options.isCollapsed();
             const revealSelection = revealSelectionOnNextRender;
             revealSelectionOnNextRender = false;
             renderDetailShell({
@@ -165,14 +157,7 @@ export const createTimelineDetailStrip = (
                 focus,
                 clips,
                 selection,
-                previousSelection: renderedSelection,
                 revealSelection,
-                collapsed,
-                clearSelection: () => setSelection({ kind: "none" }),
-                toggleCollapsed: () => {
-                    options.setCollapsed(!options.isCollapsed());
-                    render();
-                },
             });
             panelSelection.setRendered(selection);
         } finally {
@@ -184,14 +169,7 @@ export const createTimelineDetailStrip = (
         if (suppressSelectionRender) {
             return;
         }
-        if (
-            panelSelection.targetedReselect(
-                selection,
-                dockEl,
-                options.isCollapsed(),
-                getClips(),
-            )
-        ) {
+        if (panelSelection.targetedReselect(selection, dockEl, getClips())) {
             return;
         }
         focus.beginSelectionSession();
@@ -200,14 +178,12 @@ export const createTimelineDetailStrip = (
         revealSelectionOnNextRender = !(
             active instanceof HTMLElement && dockEl?.contains(active)
         );
-        if (selection.kind !== "none" && options.isCollapsed()) {
-            options.setCollapsed(false);
-        }
         render();
     };
 
     const dispose = (): void => {
         draftQueue.dispose();
+        closeTimelineAuthoringSettingsModal();
         focus.reset();
         document.removeEventListener(
             "pointerdown",

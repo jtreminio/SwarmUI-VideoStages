@@ -1602,10 +1602,6 @@
     --vst-font-xs: 0.92em;
     --vst-font-sm: 0.97em;
 }
-/* Collapse is now a WIDTH collapse: the dock shrinks to a thin rail. */
-.vst-detail-collapsed {
-    flex-basis: 28px;
-}
 .vst-detail-head {
     flex: none;
     display: flex;
@@ -1628,34 +1624,18 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.vst-detail-clear {
-    flex: none;
-}
-.vst-detail-collapse {
+.vst-detail-settings-button {
     flex: none;
     padding: 0 6px;
     line-height: 1.2;
 }
-/* Collapsed rail: stack the head vertically, expand chevron on top, the
-   breadcrumb rotated into a vertical label. */
-.vst-detail-collapsed .vst-detail-head {
+.vst-timeline-settings-modal .modal-dialog {
+    max-width: 320px;
+}
+.vst-timeline-settings-modal .modal-body {
+    display: flex;
     flex-direction: column;
-    height: 100%;
-    padding: 8px 0;
-    gap: 10px;
-    justify-content: flex-start;
-}
-.vst-detail-collapsed .vst-detail-collapse {
-    order: -1;
-}
-.vst-detail-collapsed .vst-detail-clear {
-    display: none;
-}
-.vst-detail-collapsed .vst-detail-crumb {
-    writing-mode: vertical-rl;
-    transform: rotate(180deg);
-    text-align: right;
-    max-height: calc(100% - 40px);
+    gap: 8px;
 }
 .vst-detail-body {
     flex: 1 1 auto;

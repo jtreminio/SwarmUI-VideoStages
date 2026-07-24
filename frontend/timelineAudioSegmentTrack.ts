@@ -14,6 +14,13 @@ import { createEntityId } from "./identity";
 import { getState, saveState } from "./persistence";
 import { setSelection } from "./selection";
 import { readStateToken } from "./swarmInputs";
+import { getTimelineAuthoringSettings } from "./timelineAuthoringSettings";
+import {
+    SNAP_THRESHOLD_PX,
+    snapMovedStart,
+    snapPoint,
+    timelineClipEdges,
+} from "./timelineSnap";
 import {
     clipDurationOf,
     isActivateKey,
@@ -211,6 +218,58 @@ const spanGeometry = (
     };
 };
 
+const audioSnapTargets = (
+    state: VideoStagesConfig,
+    trackIdx: number,
+): { primary: number[]; fallback: number[] } => {
+    const above = trackIdx > 0 ? trackAndSpan(state, trackIdx - 1) : null;
+    const aboveGeometry = above ? spanGeometry(above.span) : null;
+    return {
+        primary: aboveGeometry
+            ? [aboveGeometry.start, aboveGeometry.start + aboveGeometry.length]
+            : [],
+        fallback: timelineClipEdges(state.clips),
+    };
+};
+
+const snapAudioPoint = (
+    state: VideoStagesConfig,
+    trackIdx: number,
+    value: number,
+    pps: number,
+): number => {
+    if (!getTimelineAuthoringSettings().snap) {
+        return value;
+    }
+    const targets = audioSnapTargets(state, trackIdx);
+    return snapPoint(
+        value,
+        targets.primary,
+        targets.fallback,
+        SNAP_THRESHOLD_PX / pps,
+    );
+};
+
+const snapAudioMovedStart = (
+    state: VideoStagesConfig,
+    trackIdx: number,
+    start: number,
+    length: number,
+    pps: number,
+): number => {
+    if (!getTimelineAuthoringSettings().snap) {
+        return start;
+    }
+    const targets = audioSnapTargets(state, trackIdx);
+    return snapMovedStart(
+        start,
+        length,
+        targets.primary,
+        targets.fallback,
+        SNAP_THRESHOLD_PX / pps,
+    );
+};
+
 const pct = (seconds: number, total: number): string =>
     `${total > 0 ? (seconds / total) * 100 : 0}%`;
 
@@ -284,55 +343,87 @@ const createGlobalTimelineAudioSegmentTrack = (): TimelineAudioSegmentTrack => {
                 element.style.left = originalLeft;
                 element.style.width = originalWidth;
             };
+            const rightLength = (delta: number, pps: number): number => {
+                const rawLength = clamp(
+                    press.length + delta,
+                    AUDIO_SEGMENT_MIN_LENGTH,
+                    total - press.start,
+                );
+                const snappedEnd = snapAudioPoint(
+                    state,
+                    trackIdx,
+                    press.start + rawLength,
+                    pps,
+                );
+                return clamp(
+                    snappedEnd - press.start,
+                    AUDIO_SEGMENT_MIN_LENGTH,
+                    total - press.start,
+                );
+            };
+            const leftStart = (delta: number, pps: number): number => {
+                const end = press.start + press.length;
+                const lo = Math.max(0, press.start - press.trim);
+                const rawStart = clamp(
+                    press.start + delta,
+                    lo,
+                    end - AUDIO_SEGMENT_MIN_LENGTH,
+                );
+                return clamp(
+                    snapAudioPoint(state, trackIdx, rawStart, pps),
+                    lo,
+                    end - AUDIO_SEGMENT_MIN_LENGTH,
+                );
+            };
+            const movedStart = (delta: number, pps: number): number => {
+                const rawStart = clamp(
+                    press.start + delta,
+                    0,
+                    Math.max(0, total - press.length),
+                );
+                return clamp(
+                    snapAudioMovedStart(
+                        state,
+                        trackIdx,
+                        rawStart,
+                        press.length,
+                        pps,
+                    ),
+                    0,
+                    Math.max(0, total - press.length),
+                );
+            };
             return {
                 threshold: DRAG_THRESHOLD_PX,
                 onMove: (ctx) => {
                     boundBody.classList.add("vst-audio-seg-dragging");
-                    const delta = ctx.dx / livePxPerSecond(boundBody);
+                    const pps = livePxPerSecond(boundBody);
+                    const delta = ctx.dx / pps;
                     if (edge === "right") {
-                        const length = clamp(
-                            press.length + delta,
-                            AUDIO_SEGMENT_MIN_LENGTH,
-                            total - press.start,
-                        );
+                        const length = rightLength(delta, pps);
                         element.style.width = pct(length, total);
                     } else if (edge === "left") {
                         const end = press.start + press.length;
-                        const start = clamp(
-                            press.start + delta,
-                            Math.max(0, press.start - press.trim),
-                            end - AUDIO_SEGMENT_MIN_LENGTH,
-                        );
+                        const start = leftStart(delta, pps);
                         element.style.left = pct(start, total);
                         element.style.width = pct(end - start, total);
                     } else {
-                        const start = clamp(
-                            press.start + delta,
-                            0,
-                            Math.max(0, total - press.length),
-                        );
+                        const start = movedStart(delta, pps);
                         element.style.left = pct(start, total);
                     }
                 },
                 onCommit: (ctx) => {
                     boundBody.classList.remove("vst-audio-seg-dragging");
-                    const delta = ctx.dx / livePxPerSecond(boundBody);
+                    const pps = livePxPerSecond(boundBody);
+                    const delta = ctx.dx / pps;
                     commit(sourceToken, trackIdx, (_state, _track, span) => {
                         if (edge === "right") {
                             span.timelineLengthSeconds = roundToTenth(
-                                clamp(
-                                    press.length + delta,
-                                    AUDIO_SEGMENT_MIN_LENGTH,
-                                    total - press.start,
-                                ),
+                                rightLength(delta, pps),
                             );
                         } else if (edge === "left") {
                             const end = press.start + press.length;
-                            const start = clamp(
-                                press.start + delta,
-                                Math.max(0, press.start - press.trim),
-                                end - AUDIO_SEGMENT_MIN_LENGTH,
-                            );
+                            const start = leftStart(delta, pps);
                             span.timelineStartSeconds = roundToTenth(start);
                             span.timelineLengthSeconds = roundToTenth(
                                 end - start,
@@ -342,11 +433,7 @@ const createGlobalTimelineAudioSegmentTrack = (): TimelineAudioSegmentTrack => {
                             );
                         } else {
                             span.timelineStartSeconds = roundToTenth(
-                                clamp(
-                                    press.start + delta,
-                                    0,
-                                    Math.max(0, total - press.length),
-                                ),
+                                movedStart(delta, pps),
                             );
                         }
                     });
@@ -372,7 +459,13 @@ const createGlobalTimelineAudioSegmentTrack = (): TimelineAudioSegmentTrack => {
         }
         const rect = lane.getBoundingClientRect();
         const pps = livePxPerSecond(boundBody);
-        const startAtPress = clamp((event.clientX - rect.left) / pps, 0, total);
+        const trackIdxAtPress = state.audioTracks?.length ?? 0;
+        const startAtPress = snapAudioPoint(
+            state,
+            trackIdxAtPress,
+            clamp((event.clientX - rect.left) / pps, 0, total),
+            pps,
+        );
         const sourceToken = readStateToken();
         let ghost: HTMLElement | null = null;
         event.preventDefault();
@@ -381,8 +474,15 @@ const createGlobalTimelineAudioSegmentTrack = (): TimelineAudioSegmentTrack => {
             ghost?.remove();
             ghost = null;
         };
-        const timeAt = (clientX: number): number =>
-            clamp((clientX - rect.left) / livePxPerSecond(boundBody), 0, total);
+        const timeAt = (clientX: number): number => {
+            const livePps = livePxPerSecond(boundBody);
+            return snapAudioPoint(
+                state,
+                trackIdxAtPress,
+                clamp((clientX - rect.left) / livePps, 0, total),
+                livePps,
+            );
+        };
         const create = (endAt: number | null): void => {
             if (isStaleToken(sourceToken)) {
                 return;
