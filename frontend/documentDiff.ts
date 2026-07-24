@@ -124,6 +124,7 @@ const RETAKE_PATCH_KEYS = [
 
 const AUDIO_TRACK_PATCH_KEYS = [
     "source",
+    "volume",
 ] as const satisfies readonly (keyof CanonicalAudioTrack)[];
 
 const AUDIO_SPAN_PATCH_KEYS = [

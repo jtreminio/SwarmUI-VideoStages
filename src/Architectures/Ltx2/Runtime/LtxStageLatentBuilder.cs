@@ -63,7 +63,11 @@ internal sealed class LtxStageLatentBuilder
         if (postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true)
         {
             WGNodeData nativeVideoLatent = postVideoChain.CreateStageInputVideoLatent();
-            return latentAudioFactory.EnsureHasAudio(nativeVideoLatent, genInfo, sourceMedia);
+            return latentAudioFactory.EnsureHasAudio(
+                nativeVideoLatent,
+                genInfo,
+                stageFrame,
+                sourceMedia);
         }
 
         if (!genInfo.Frames.HasValue && controlNetLengthFrames is null)
@@ -101,7 +105,11 @@ internal sealed class LtxStageLatentBuilder
                 genInfo,
                 payload.Retake,
                 retakeActive);
-            return latentAudioFactory.EnsureHasAudio(reusedLatent, genInfo, sourceMedia);
+            return latentAudioFactory.EnsureHasAudio(
+                reusedLatent,
+                genInfo,
+                stageFrame,
+                sourceMedia);
         }
 
         WGNodeData sourceSnapshot = sourceMedia;
@@ -148,7 +156,11 @@ internal sealed class LtxStageLatentBuilder
             genInfo,
             payload.Retake,
             retakeActive);
-        return latentAudioFactory.EnsureHasAudio(encodedLatent, genInfo, sourceMedia);
+        return latentAudioFactory.EnsureHasAudio(
+            encodedLatent,
+            genInfo,
+            stageFrame,
+            sourceMedia);
     }
 
     private string AddImageFromBatch(JArray imagePath, int batchIndex, JToken length)

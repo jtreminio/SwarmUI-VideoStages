@@ -6,8 +6,10 @@ import {
 import { normalizeAudioTracks, normalizeClip } from "../normalization";
 import { getDefaultStageModel, getRootDefaults } from "../rootDefaults";
 import type { StoredClip } from "../storageTypes";
+import { migrateClipAudioSegmentsToTimeline } from "../timelineAudioMigration";
 import {
     type CanonicalClip,
+    type CanonicalVideoStagesConfig,
     type Clip,
     CURRENT_AUTHORING_SCHEMA_VERSION,
     type VideoStagesConfig,
@@ -156,8 +158,76 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
     );
 };
 
+const timelinePointProjection = (
+    clips: CanonicalClip[],
+    seconds: number,
+    edge: "start" | "end",
+): { clipId: string; offsetSeconds: number } | null => {
+    if (!Number.isFinite(seconds) || seconds < 0 || clips.length === 0) {
+        return null;
+    }
+    let cursor = 0;
+    for (let index = 0; index < clips.length; index++) {
+        const clip = clips[index];
+        const duration = Math.max(0, clip.duration || 0);
+        const clipEnd = cursor + duration;
+        const isLast = index === clips.length - 1;
+        const ownsPoint =
+            edge === "start"
+                ? seconds < clipEnd || isLast
+                : seconds <= clipEnd || isLast;
+        if (ownsPoint) {
+            return {
+                clipId: clip.id,
+                offsetSeconds: Math.max(
+                    0,
+                    Math.min(duration, seconds - cursor),
+                ),
+            };
+        }
+        cursor = clipEnd;
+    }
+    return null;
+};
+
+/**
+ * Absolute authoring seconds position the block in the browser. These derived
+ * clip anchors let the backend preserve the exact visible seam when compiled
+ * LTX frame alignment makes a clip's runtime duration differ by one frame.
+ */
+const timelineSpanProjection = (
+    clips: CanonicalClip[],
+    span: CanonicalVideoStagesConfig["audioTracks"][number]["spans"][number],
+): Record<string, unknown> | null => {
+    if (
+        span.timelineStartSeconds === null ||
+        span.timelineLengthSeconds === null
+    ) {
+        return null;
+    }
+    const start = timelinePointProjection(
+        clips,
+        span.timelineStartSeconds,
+        "start",
+    );
+    const end = timelinePointProjection(
+        clips,
+        span.timelineStartSeconds + span.timelineLengthSeconds,
+        "end",
+    );
+    return start && end
+        ? {
+              firstClipId: start.clipId,
+              lastClipId: end.clipId,
+              clipStartOffsetSeconds: start.offsetSeconds,
+              clipEndOffsetSeconds: end.offsetSeconds,
+          }
+        : null;
+};
+
 export const serializeStateForStorage = (state: VideoStagesConfig): string => {
     ensureAuthoringDocumentIdentity(state);
+    const canonical = state as CanonicalVideoStagesConfig;
     const out: Record<string, unknown> = {
         schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
     };
@@ -166,8 +236,9 @@ export const serializeStateForStorage = (state: VideoStagesConfig): string => {
         out.height = Math.round(state.height);
     }
     out.clips = serializeClipsForStorage(state.clips);
-    out.audioTracks = state.audioTracks.map((track) => ({
+    out.audioTracks = canonical.audioTracks.map((track) => ({
         id: track.id,
+        ...(track.volume === undefined ? {} : { volume: track.volume }),
         source: {
             kind: track.source.kind,
             reference: track.source.reference,
@@ -182,6 +253,7 @@ export const serializeStateForStorage = (state: VideoStagesConfig): string => {
             sourceStartSeconds: span.sourceStartSeconds,
             clipStartOffsetSeconds: span.clipStartOffsetSeconds,
             clipLengthSeconds: span.clipLengthSeconds,
+            projection: timelineSpanProjection(canonical.clips, span),
         })),
     }));
     return JSON.stringify(out);
@@ -311,7 +383,10 @@ const hasValidStoredCollections = (
     );
 };
 
-/** Strict v3 decode. Older or malformed roots are rejected, not migrated. */
+/**
+ * Strict current decode with one deliberate v3→v4 migration: v3's clip-local
+ * overlays become root timeline lanes. Older schemas remain rejected.
+ */
 export const decodeStoredDocument = (
     serialized: string,
     inherited: InheritedDims,
@@ -320,7 +395,8 @@ export const decodeStoredDocument = (
         const parsed: unknown = JSON.parse(serialized);
         if (
             !isRecord(parsed) ||
-            parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION ||
+            (parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION &&
+                parsed.schemaVersion !== 3) ||
             !hasValidStoredCollections(parsed)
         ) {
             return null;
@@ -329,17 +405,22 @@ export const decodeStoredDocument = (
             width: parsed.width,
             height: parsed.height,
         });
+        const clips = parsed.clips.map((entry) =>
+            normalizeClip(
+                entry,
+                getRootDefaults,
+                getDefaultStageModel,
+                dims.fps,
+            ),
+        );
+        const audioTracks = normalizeAudioTracks(parsed.audioTracks);
         return {
             dims,
-            clips: parsed.clips.map((entry) =>
-                normalizeClip(
-                    entry,
-                    getRootDefaults,
-                    getDefaultStageModel,
-                    dims.fps,
-                ),
-            ),
-            audioTracks: normalizeAudioTracks(parsed.audioTracks),
+            clips,
+            audioTracks:
+                parsed.schemaVersion === 3
+                    ? migrateClipAudioSegmentsToTimeline(clips, audioTracks)
+                    : audioTracks,
         };
     } catch {
         return null;

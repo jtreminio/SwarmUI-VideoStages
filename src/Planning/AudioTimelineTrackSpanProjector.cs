@@ -60,7 +60,13 @@ internal static class AudioTimelineTrackSpanProjector
             {
                 ProjectSpan(trackId, spanIndex, spans[spanIndex], clipWindows, clipIndices, diagnostics, windows, pending);
             }
-            projectedTracks.Add(new(trackId, track.Source, spans, windows.ToImmutable(), pending.ToImmutable()));
+            projectedTracks.Add(new(
+                trackId,
+                track.Source,
+                spans,
+                windows.ToImmutable(),
+                pending.ToImmutable(),
+                track.Volume));
         }
         return new(projectedTracks.ToImmutable(), diagnostics.ToImmutable());
     }

@@ -91,6 +91,17 @@ export const normalizeAudioTracks = (value: unknown): AudioTrack[] => {
         const rawSource = rawTrack.source;
         const source = isRecord(rawSource) ? rawSource : {};
         const rawSpans = rawTrack.spans;
+        const volume =
+            rawTrack.volume === undefined
+                ? undefined
+                : clamp(
+                      toNumber(
+                          `${rawTrack.volume}`,
+                          AUDIO_SEGMENT_VOLUME_DEFAULT,
+                      ),
+                      AUDIO_SEGMENT_VOLUME_MIN,
+                      AUDIO_SEGMENT_VOLUME_MAX,
+                  );
         tracks.push({
             id: normalizeOptionalEntityId(rawTrack.id),
             source: {
@@ -103,6 +114,7 @@ export const normalizeAudioTracks = (value: unknown): AudioTrack[] => {
                       .map(normalizeAudioTrackSpan)
                       .filter((span): span is AudioTrackSpan => span !== null)
                 : [],
+            ...(volume === undefined ? {} : { volume }),
         });
     }
     return tracks;

@@ -36,6 +36,10 @@ export const applySelectionHighlight = (body: HTMLElement): void => {
         case "audio-segment":
             selector = `.vst-audio-seg[data-clip-idx="${sel.clipIdx}"][data-seg-idx="${sel.segIdx}"]`;
             break;
+        case "audio-track":
+        case "audio-track-span":
+            selector = `.vst-audio-seg[data-track-idx="${sel.trackIdx}"]`;
+            break;
         case "prompt-major":
             selector = `.vst-major-seg[data-clip-idx="${sel.clipIdx}"]`;
             break;

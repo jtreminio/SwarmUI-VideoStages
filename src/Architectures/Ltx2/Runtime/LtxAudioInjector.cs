@@ -63,7 +63,12 @@ internal sealed class LtxAudioInjector(
         WGNodeData encodedAudio = adjustedAudio.EncodeToLatent(g.CurrentAudioVae);
         bridge = WorkflowBridge.Create(g.Workflow);
         NodeOutput<LatentType> maskedLatent = preserveWindows is { Count: > 0 }
-            ? CreateWindowedAudioMaskNode(bridge, encodedAudio.Path, preserveWindows, stableIdSlot: 0).Latent
+            ? LtxAudioPreserveWindowBuilder.AddMask(
+                g,
+                bridge,
+                encodedAudio.Path,
+                preserveWindows,
+                stableIdSlot: 0).Latent
             : CreateAudioMaskNode(bridge, encodedAudio.Path).LATENT;
         ReplaceAudioLatentConnections(bridge, concatIds, maskedLatent);
         RemoveUnusedSourceNodes(bridge, removableSourceIds);
@@ -89,15 +94,11 @@ internal sealed class LtxAudioInjector(
         {
             return null;
         }
-        WGNodeData encodedAudio = audio.EncodeToLatent(g.CurrentAudioVae);
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        SwarmSetAudioMaskWindowsNode mask = CreateWindowedAudioMaskNode(
-            bridge, encodedAudio.Path, preserveWindows, stableIdSlot);
-        return new WGNodeData(
-            WorkflowBridge.ToPath(mask.Latent),
+        return LtxAudioPreserveWindowBuilder.TryBuild(
             g,
-            WGNodeData.DT_LATENT_AUDIO,
-            g.CurrentAudioVae.Compat);
+            audio,
+            preserveWindows,
+            stableIdSlot);
     }
 
     private static (List<string> ConcatIds, HashSet<string> RemovableSourceIds)
@@ -174,31 +175,6 @@ internal sealed class LtxAudioInjector(
         bridge.AddNode(setMask, g.GetStableDynamicID(AudioInjectionIdBase + 300, 0));
         return setMask;
     }
-
-    /// <summary>Windowed variant of <see cref="CreateAudioMaskNode"/>: preserve only the given
-    /// seconds-windows of the encoded audio; the model regenerates the gaps.</summary>
-    private SwarmSetAudioMaskWindowsNode CreateWindowedAudioMaskNode(
-        WorkflowBridge bridge,
-        JArray encodedAudioPath,
-        IReadOnlyList<(double Start, double End)> preserveWindows,
-        int stableIdSlot)
-    {
-        JArray windowsJson = new(preserveWindows.Select(window => new JObject
-        {
-            ["start"] = RoundWindowSeconds(window.Start),
-            ["end"] = RoundWindowSeconds(window.End),
-        }));
-        SwarmSetAudioMaskWindowsNode node = new SwarmSetAudioMaskWindowsNode().With(
-            Windows: windowsJson.ToString(Newtonsoft.Json.Formatting.None),
-            GapMaskValue: 1.0);
-        node.Samples.TryConnectFromPath(bridge, encodedAudioPath);
-        node.AudioVae.ConnectFromPath(bridge, g.CurrentAudioVae.Path);
-        bridge.AddNode(node, g.GetStableDynamicID(AudioInjectionIdBase + 400, stableIdSlot));
-        return node;
-    }
-
-    private static double RoundWindowSeconds(double value) =>
-        Math.Round(value, 2, MidpointRounding.AwayFromZero);
 
     private static void ReplaceAudioLatentConnections(
         WorkflowBridge bridge,

@@ -12,8 +12,10 @@ import {
     buildMediaPickRow,
     buildOptionSelect,
 } from "../detailWidgets";
+import { getState } from "../persistence";
 import type { Clip, TimelineSelection } from "../types";
 import { buildAudioSegmentSection } from "./audioSegmentPanel";
+import { buildAudioTracksPanel } from "./audioTracksPanel";
 import {
     buildCapabilityNotice,
     disableCapabilityControls,
@@ -222,17 +224,24 @@ export const buildAudioBody = (
         }).section,
     );
 
-    const segments = buildAudioSegmentSection(
-        ctx,
-        clipIdx,
-        sel.kind === "audio-segment" ? sel.segIdx : null,
-        clips,
-        sel.kind === "audio-segment",
-    );
-    if (!segmentDecision.supported && (clip.audioSegments?.length ?? 0) > 0) {
-        segments.appendChild(buildCapabilityNotice(segmentDecision));
+    if (sel.kind === "audio-segment" || (clip.audioSegments?.length ?? 0) > 0) {
+        const segments = buildAudioSegmentSection(
+            ctx,
+            clipIdx,
+            sel.kind === "audio-segment" ? sel.segIdx : null,
+            clips,
+            sel.kind === "audio-segment",
+        );
+        if (
+            !segmentDecision.supported &&
+            (clip.audioSegments?.length ?? 0) > 0
+        ) {
+            segments.appendChild(buildCapabilityNotice(segmentDecision));
+        }
+        body.appendChild(segments);
+    } else {
+        body.appendChild(buildAudioTracksPanel(ctx, getState()));
     }
-    body.appendChild(segments);
 
     return body;
 };

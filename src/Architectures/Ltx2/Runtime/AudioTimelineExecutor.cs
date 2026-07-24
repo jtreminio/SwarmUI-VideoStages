@@ -31,8 +31,9 @@ internal sealed class AudioTimelineExecutor
 
     public void PrepareClipAudio(
         ClipAudioExecutionContext context,
+        ClipContext clipContext,
         LtxBoundaryAudioCarry boundaryAudioCarry = null) =>
-        _clipAudio.Prepare(context, boundaryAudioCarry);
+        _clipAudio.Prepare(context, clipContext, boundaryAudioCarry);
 
     public void ApplyControlNetClipLength(ClipPlan plannedClip) =>
         _controlNetLength.Apply(plannedClip);

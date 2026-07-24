@@ -252,6 +252,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 onUndo: () => history.undo(),
                 onRedo: () => history.redo(),
                 globalPrompt,
+                audioTracks: state.audioTracks,
                 diagnostics: deriveAuthoringDiagnostics(clips, {
                     catalog: architectureCatalog,
                     generatedEntryMode: getRootGeneratedEntryMode(),

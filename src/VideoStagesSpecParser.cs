@@ -89,7 +89,10 @@ internal static class VideoStagesSpecParser
             fps,
             isTextToVideo,
             clips,
-            hasConfiguredResolution);
+            hasConfiguredResolution,
+            TimelineAudioSegmentSpecParser.Parse(
+                document.AudioTracks,
+                document.Entries));
     }
 
     private static PromptParser.VideoStageTagData ParseTags(WorkflowGenerator g) =>

@@ -337,13 +337,7 @@ describe("createTimelineDetailStrip", () => {
                 'input[data-vst-focus-key="settings-fps"]',
             )?.disabled,
         ).toBe(false);
-        expect(
-            detail()?.querySelector(".vst-audio-tracks-panel"),
-        ).not.toBeNull();
-        expect(
-            detail()?.querySelector(".vst-audio-tracks-planned-warning")
-                ?.textContent,
-        ).toBe("Planned — runtime mixer not yet connected");
+        expect(detail()?.querySelector(".vst-audio-tracks-panel")).toBeNull();
     });
 
     it("renders the clip/stage columns when a stage chip is clicked", () => {
@@ -2208,23 +2202,22 @@ describe("createTimelineDetailStrip", () => {
         setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "audio", clipIdx: 0 });
         const addBtn = document.querySelector<HTMLElement>(
-            ".vst-detail-add-segment",
+            ".vst-audio-track-add",
         );
         expect(addBtn).not.toBeNull();
         expect(addBtn?.textContent).toBe("+ Add Audio Segment");
         addBtn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
         expect(getSelection()).toEqual({
-            kind: "audio-segment",
-            clipIdx: 0,
-            segIdx: 0,
+            kind: "audio-track",
+            trackIdx: 0,
         });
-        const segments = savedClips(saveSpy)[0].audioSegments;
+        const segments = persistence.getState().audioTracks ?? [];
         expect(segments).toHaveLength(1);
-        expect(segments[0].startSeconds).toBe(0);
-        expect(segments[0].lengthSeconds).toBe(2); // min(default 2, clip 4)
+        expect(segments[0].spans[0].timelineStartSeconds).toBe(0);
+        expect(segments[0].spans[0].timelineLengthSeconds).toBe(2);
         expect(segments[0].volume).toBe(1);
-        expect(segments[0].source).toBeNull();
+        expect(segments[0].source.uploadedAudio).toBeNull();
     });
 
     it("+ Add segment appends a default-length segment on its own lane (overlap allowed)", () => {

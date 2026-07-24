@@ -10,7 +10,8 @@ internal sealed record VideoStagesJsonDocument(
     int? Width,
     int? Height,
     int? Fps,
-    List<JObject> Entries);
+    List<JObject> Entries,
+    List<JObject> AudioTracks);
 
 /// <summary>
 /// Owns case-insensitive JSON value access, invariant scalar conversion, and parse diagnostics for
@@ -23,7 +24,7 @@ internal static class VideoStagesJsonReader
         string json = VideoStagesPromptSection.IsActive(g) ? VideoStagesPromptSection.GetDataJson(g) : null;
         if (string.IsNullOrWhiteSpace(json))
         {
-            return new VideoStagesJsonDocument(null, null, null, []);
+            return new VideoStagesJsonDocument(null, null, null, [], []);
         }
 
         try
@@ -31,7 +32,7 @@ internal static class VideoStagesJsonReader
             JToken token = JToken.Parse(json);
             if (token is JArray array)
             {
-                return new VideoStagesJsonDocument(null, null, null, [.. array.OfType<JObject>()]);
+                return new VideoStagesJsonDocument(null, null, null, [.. array.OfType<JObject>()], []);
             }
             if (token is JObject obj)
             {
@@ -39,9 +40,10 @@ internal static class VideoStagesJsonReader
                     GetOptionalNullableInt(obj, "Width"),
                     GetOptionalNullableInt(obj, "Height"),
                     GetOptionalNullableInt(obj, "FPS"),
-                    GetObjectArray(obj, "Clips"));
+                    GetObjectArray(obj, "Clips"),
+                    GetObjectArray(obj, "AudioTracks"));
             }
-            return new VideoStagesJsonDocument(null, null, null, []);
+            return new VideoStagesJsonDocument(null, null, null, [], []);
         }
         catch (JsonException ex)
         {

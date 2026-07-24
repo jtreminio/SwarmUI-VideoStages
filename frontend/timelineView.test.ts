@@ -997,6 +997,63 @@ describe("track-head lane tags", () => {
     });
 });
 
+describe("timeline-wide audio segment lanes", () => {
+    it("renders one global lane whose window crosses clip seams", () => {
+        const clips = [
+            minimalClip({ duration: 3 }),
+            minimalClip({ duration: 4 }),
+        ];
+        renderTimeline(document.body, clips, {
+            pxPerSecond: 100,
+            audioTracks: [
+                {
+                    id: "track-score",
+                    volume: 0.75,
+                    source: {
+                        kind: "Upload",
+                        reference: "score.wav",
+                        uploadedAudio: null,
+                    },
+                    spans: [
+                        {
+                            id: "span-score",
+                            firstClipId: null,
+                            lastClipId: null,
+                            timelineStartSeconds: 2,
+                            timelineLengthSeconds: 4,
+                            sourceStartSeconds: 1,
+                            clipStartOffsetSeconds: null,
+                            clipLengthSeconds: null,
+                        },
+                    ],
+                },
+            ],
+        });
+
+        const lane = document.querySelector<HTMLElement>(
+            '.vst-audio-seg-lane[data-track-idx="0"]',
+        );
+        const segment = lane?.querySelector<HTMLElement>(
+            '.vst-audio-seg[data-track-idx="0"]',
+        );
+        expect(lane?.style.left).toBe("0px");
+        expect(lane?.style.width).toBe("700px");
+        expect(segment?.hasAttribute("data-clip-idx")).toBe(false);
+        expect(Number.parseFloat(segment?.style.left ?? "")).toBeCloseTo(
+            (2 / 7) * 100,
+            5,
+        );
+        expect(Number.parseFloat(segment?.style.width ?? "")).toBeCloseTo(
+            (4 / 7) * 100,
+            5,
+        );
+        expect(document.querySelectorAll(".vst-audio-seg-lane")).toHaveLength(
+            2,
+        );
+        expect(document.body.innerHTML).toContain(">S0<");
+    });
+});
+
 describe("authoring diagnostics", () => {
     it("renders backend-aligned messages above the timeline", () => {
         renderTimeline(document.body, [minimalClip()], {

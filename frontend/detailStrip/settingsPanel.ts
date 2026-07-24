@@ -23,7 +23,6 @@ import { getVideoStagesHostBridge } from "../host";
 import { getState } from "../persistence";
 import { getRootDefaults } from "../rootDefaults";
 import type { TimelineSelection } from "../types";
-import { buildAudioTracksPanel } from "./audioTracksPanel";
 import type { DetailStripContext } from "./context";
 
 const SETTINGS_INHERIT = "inherit";
@@ -65,7 +64,7 @@ const scheduleCoreFpsWrite = (value: number): void => {
 
 export const buildSettingsBody = (
     ctx: DetailStripContext,
-    selection: Extract<
+    _selection: Extract<
         TimelineSelection,
         { kind: "none" | "audio-track" | "audio-track-span" }
     > = { kind: "none" },
@@ -210,6 +209,5 @@ export const buildSettingsBody = (
                 "updates both.",
         ),
     );
-    body.appendChild(buildAudioTracksPanel(ctx, state, selection));
     return wrapForm("timeline-settings", "Timeline", body);
 };

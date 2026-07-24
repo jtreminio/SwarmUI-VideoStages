@@ -17,7 +17,8 @@ internal static class ClipAudioTrackSpecPlanner
                     $"clip-{clip.ClipId}-base",
                     new(
                         MapBaseSourceKind(clip.Audio.Base.Kind),
-                        clip.Audio.Base.UploadedMedia?.FileName ?? clip.Audio.Base.RawSource),
+                        clip.Audio.Base.UploadedMedia?.FileName ?? clip.Audio.Base.RawSource,
+                        clip.Audio.Base.UploadedMedia),
                     [new AudioTrackSpanSpec(FirstClipId: clip.ClipId, LastClipId: clip.ClipId)]));
             }
 
@@ -33,13 +34,15 @@ internal static class ClipAudioTrackSpecPlanner
                         segment.SourceKind == AudioSegmentSourceKind.AceStepFun
                             ? $"audio{segment.AceStepFunTrack}"
                             : segment.UploadedMedia?.FileName
-                                ?? $"clip-{clip.ClipId}-segment-{segmentIndex}"),
+                                ?? $"clip-{clip.ClipId}-segment-{segmentIndex}",
+                        segment.UploadedMedia),
                     [new AudioTrackSpanSpec(
                         FirstClipId: clip.ClipId,
                         LastClipId: clip.ClipId,
                         SourceStartSeconds: segment.TrimStartSeconds,
                         ClipStartOffsetSeconds: segment.StartSeconds,
-                        ClipLengthSeconds: segment.LengthSeconds)]));
+                        ClipLengthSeconds: segment.LengthSeconds)],
+                    segment.Volume));
             }
         }
         return tracks.ToImmutable();

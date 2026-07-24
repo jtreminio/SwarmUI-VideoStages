@@ -710,6 +710,14 @@
       const rawSource = rawTrack.source;
       const source = isRecord(rawSource) ? rawSource : {};
       const rawSpans = rawTrack.spans;
+      const volume = rawTrack.volume === void 0 ? void 0 : clamp(
+        toNumber(
+          `${rawTrack.volume}`,
+          AUDIO_SEGMENT_VOLUME_DEFAULT
+        ),
+        AUDIO_SEGMENT_VOLUME_MIN,
+        AUDIO_SEGMENT_VOLUME_MAX
+      );
       tracks.push({
         id: normalizeOptionalEntityId(rawTrack.id),
         source: {
@@ -717,7 +725,8 @@
           reference: `${source.reference ?? ""}`.trim(),
           uploadedAudio: normalizeUploadedMedia(source.uploadedAudio)
         },
-        spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter((span) => span !== null) : []
+        spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter((span) => span !== null) : [],
+        ...volume === void 0 ? {} : { volume }
       });
     }
     return tracks;
@@ -1929,7 +1938,7 @@
   };
 
   // frontend/types.ts
-  var CURRENT_AUTHORING_SCHEMA_VERSION = 3;
+  var CURRENT_AUTHORING_SCHEMA_VERSION = 4;
   var REF_SOURCE_BASE = "Base";
   var REF_SOURCE_REFINER = "Refiner";
   var REF_SOURCE_UPLOAD = "Upload";
@@ -2874,6 +2883,51 @@
     };
   };
 
+  // frontend/timelineAudioMigration.ts
+  var migrateClipAudioSegmentsToTimeline = (clips, existingTracks) => {
+    const tracks = [...existingTracks];
+    let clipStart = 0;
+    for (const clip of clips) {
+      for (const segment of clip.audioSegments ?? []) {
+        const source = typeof segment.source === "string" && isAceStepFunAudioSource(segment.source) ? {
+          kind: "AceStepFun",
+          reference: segment.source,
+          uploadedAudio: null
+        } : {
+          kind: "Upload",
+          reference: typeof segment.source === "object" ? segment.source?.fileName ?? "" : "",
+          uploadedAudio: typeof segment.source === "object" ? segment.source : null
+        };
+        tracks.push({
+          id: createEntityId("audio_track"),
+          source,
+          volume: segment.volume,
+          spans: [
+            {
+              id: segment.id ?? createEntityId("audio_span"),
+              firstClipId: null,
+              lastClipId: null,
+              timelineStartSeconds: roundToTenth(
+                clipStart + segment.startSeconds
+              ),
+              timelineLengthSeconds: roundToTenth(
+                segment.lengthSeconds
+              ),
+              sourceStartSeconds: roundToTenth(
+                segment.trimStartSeconds
+              ),
+              clipStartOffsetSeconds: null,
+              clipLengthSeconds: null
+            }
+          ]
+        });
+      }
+      clip.audioSegments = [];
+      clipStart += Math.max(0, clip.duration || 0);
+    }
+    return tracks;
+  };
+
   // frontend/persistence/documentCodec.ts
   var toIntOrNull = (value) => {
     if (value == null || value === "") return null;
@@ -2986,8 +3040,54 @@
       })
     );
   };
+  var timelinePointProjection = (clips, seconds, edge) => {
+    if (!Number.isFinite(seconds) || seconds < 0 || clips.length === 0) {
+      return null;
+    }
+    let cursor = 0;
+    for (let index = 0; index < clips.length; index++) {
+      const clip = clips[index];
+      const duration = Math.max(0, clip.duration || 0);
+      const clipEnd = cursor + duration;
+      const isLast = index === clips.length - 1;
+      const ownsPoint = edge === "start" ? seconds < clipEnd || isLast : seconds <= clipEnd || isLast;
+      if (ownsPoint) {
+        return {
+          clipId: clip.id,
+          offsetSeconds: Math.max(
+            0,
+            Math.min(duration, seconds - cursor)
+          )
+        };
+      }
+      cursor = clipEnd;
+    }
+    return null;
+  };
+  var timelineSpanProjection = (clips, span) => {
+    if (span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
+      return null;
+    }
+    const start = timelinePointProjection(
+      clips,
+      span.timelineStartSeconds,
+      "start"
+    );
+    const end = timelinePointProjection(
+      clips,
+      span.timelineStartSeconds + span.timelineLengthSeconds,
+      "end"
+    );
+    return start && end ? {
+      firstClipId: start.clipId,
+      lastClipId: end.clipId,
+      clipStartOffsetSeconds: start.offsetSeconds,
+      clipEndOffsetSeconds: end.offsetSeconds
+    } : null;
+  };
   var serializeStateForStorage = (state) => {
     ensureAuthoringDocumentIdentity(state);
+    const canonical = state;
     const out = {
       schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION
     };
@@ -2996,8 +3096,9 @@
       out.height = Math.round(state.height);
     }
     out.clips = serializeClipsForStorage(state.clips);
-    out.audioTracks = state.audioTracks.map((track) => ({
+    out.audioTracks = canonical.audioTracks.map((track) => ({
       id: track.id,
+      ...track.volume === void 0 ? {} : { volume: track.volume },
       source: {
         kind: track.source.kind,
         reference: track.source.reference,
@@ -3011,7 +3112,8 @@
         timelineLengthSeconds: span.timelineLengthSeconds,
         sourceStartSeconds: span.sourceStartSeconds,
         clipStartOffsetSeconds: span.clipStartOffsetSeconds,
-        clipLengthSeconds: span.clipLengthSeconds
+        clipLengthSeconds: span.clipLengthSeconds,
+        projection: timelineSpanProjection(canonical.clips, span)
       }))
     }));
     return JSON.stringify(out);
@@ -3090,24 +3192,26 @@
   var decodeStoredDocument = (serialized, inherited) => {
     try {
       const parsed = JSON.parse(serialized);
-      if (!isRecord(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION || !hasValidStoredCollections(parsed)) {
+      if (!isRecord(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION && parsed.schemaVersion !== 3 || !hasValidStoredCollections(parsed)) {
         return null;
       }
       const dims = resolveRootDims(inherited, {
         width: parsed.width,
         height: parsed.height
       });
+      const clips = parsed.clips.map(
+        (entry) => normalizeClip(
+          entry,
+          getRootDefaults,
+          getDefaultStageModel,
+          dims.fps
+        )
+      );
+      const audioTracks = normalizeAudioTracks(parsed.audioTracks);
       return {
         dims,
-        clips: parsed.clips.map(
-          (entry) => normalizeClip(
-            entry,
-            getRootDefaults,
-            getDefaultStageModel,
-            dims.fps
-          )
-        ),
-        audioTracks: normalizeAudioTracks(parsed.audioTracks)
+        clips,
+        audioTracks: parsed.schemaVersion === 3 ? migrateClipAudioSegmentsToTimeline(clips, audioTracks) : audioTracks
       };
     } catch {
       return null;
@@ -3775,7 +3879,8 @@
     "strength"
   ];
   var AUDIO_TRACK_PATCH_KEYS = [
-    "source"
+    "source",
+    "volume"
   ];
   var AUDIO_SPAN_PATCH_KEYS = [
     "firstClipId",
@@ -6770,8 +6875,47 @@
     lanes.push(blankLane(segments.length));
     return lanes.join("");
   };
-  var renderAudioTrackRow = (clips, layouts, capabilities) => {
-    const segments = layouts.map((layout) => {
+  var renderTimelineAudioSegmentBlock = (track, trackIdx, totalSeconds) => {
+    const span = track.spans[0];
+    if (!span || span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
+      return "";
+    }
+    const start = clamp(span.timelineStartSeconds, 0, totalSeconds);
+    const end = clamp(
+      span.timelineStartSeconds + span.timelineLengthSeconds,
+      start,
+      totalSeconds
+    );
+    const labelText = track.source.reference || track.source.uploadedAudio?.fileName || "audio segment";
+    const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
+    const waveform = audioSegmentWaveBarHeights(trackIdx, trackIdx, 40).map((height) => `<span style="height:${height}%"></span>`).join("");
+    return renderWindowSpan({
+      className: "vst-audio-seg",
+      extraClassName: `vst-audio-seg-tone-${trackIdx % 5}`,
+      dataAttrs: `data-vst-audio-seg data-track-idx="${trackIdx}"`,
+      edgeAttr: "data-vst-audio-seg-edge",
+      labelClass: "vst-audio-label",
+      label: labelText,
+      title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
+      ariaLabel: `Edit timeline audio segment ${trackIdx}`,
+      startSeconds: start,
+      lengthSeconds: end - start,
+      durationSeconds: totalSeconds,
+      decoration: `<span class="vst-audio-seg-wave" aria-hidden="true">${waveform}</span>`
+    });
+  };
+  var renderTimelineAudioSegmentLanes = (tracks, totalSeconds, totalWidthPx) => {
+    const place = (laneIdx) => `left:0;width:${totalWidthPx}px;--vst-audio-lane-idx:${laneIdx}`;
+    const lanes = tracks.map(
+      (track, trackIdx) => `<div class="vst-audio-seg-lane" data-track-idx="${trackIdx}" style="${place(trackIdx)}">` + renderTimelineAudioSegmentBlock(track, trackIdx, totalSeconds) + `</div>`
+    );
+    lanes.push(
+      `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add style="${place(tracks.length)}" title="Click or drag to add a timeline-wide audio segment"></div>`
+    );
+    return lanes.join("");
+  };
+  var renderAudioTrackRow = (clips, layouts, capabilities, audioTracks, pxPerSecond = 1) => {
+    const baseSegments = layouts.map((layout) => {
       const clip = clips[layout.index];
       if (!clip) {
         return "";
@@ -6779,7 +6923,6 @@
       const badge = audioSourceBadge(clip.audioSource ?? "");
       const clipCapabilities = capabilities?.forClip(clip);
       const clipAudioSupported = clipCapabilities?.decision("clipAudio").supported ?? true;
-      const segmentsSupported = clipCapabilities?.decision("audioSegments").supported ?? true;
       const persistedAudio = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.reuseAudio || clip.clipLengthFromAudio || clip.saveAudioTrack;
       const native = badge.label === "Native";
       const width = clipInnerWidth(layout.widthPx);
@@ -6794,28 +6937,49 @@
       const bars = waveBarHeights(layout.index, barCount).map((height) => `<span style="height:${height}%"></span>`).join("");
       const hint = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : "";
       const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
-      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${clipAudioSupported || persistedAudio ? ' data-vst-audio="clip"' : ""} data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(clipAudioSupported ? title : "Clip audio is unsupported; click persisted audio to remove it")}" aria-label="Edit audio for clip ${layout.index}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>` + renderAudioSegmentLanes(
+      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${clipAudioSupported || persistedAudio ? ' data-vst-audio="clip"' : ""} data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(clipAudioSupported ? title : "Clip audio is unsupported; click persisted audio to remove it")}" aria-label="Edit audio for clip ${layout.index}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>`;
+    }).join("");
+    const totalSeconds = layouts.reduce(
+      (sum, layout) => sum + layout.durationSeconds,
+      0
+    );
+    const totalWidthPx = totalSeconds * pxPerSecond;
+    const overlaySegments = audioTracks === void 0 ? layouts.map((layout) => {
+      const clip = clips[layout.index];
+      if (!clip) {
+        return "";
+      }
+      const canCreate = capabilities?.forClip(clip).decision("audioSegments").supported ?? true;
+      return renderAudioSegmentLanes(
         clip,
         layout.index,
         clip.duration || 0,
         layout.startPx,
-        width,
-        segmentsSupported
+        clipInnerWidth(layout.widthPx),
+        canCreate
       );
-    }).join("");
-    const laneCount = Math.max(
+    }).join("") : renderTimelineAudioSegmentLanes(
+      audioTracks,
+      totalSeconds,
+      totalWidthPx
+    );
+    const laneCount = audioTracks === void 0 ? Math.max(
       1,
       ...clips.map((clip) => (clip.audioSegments?.length ?? 0) + 1)
-    );
+    ) : Math.max(1, audioTracks.length + 1);
     const laneTags = [headTag("src", "Clip", { active: true })];
     for (let i = 0; i < laneCount; i++) {
       const blank = i === laneCount - 1;
       laneTags.push(
-        headTag("seg", blank ? "+" : `S${i + 1}`, {
-          active: !blank,
-          muted: blank,
-          style: `--vst-audio-lane-idx:${i}`
-        })
+        headTag(
+          "seg",
+          blank ? "+" : `S${audioTracks === void 0 ? i + 1 : i}`,
+          {
+            active: !blank,
+            muted: blank,
+            style: `--vst-audio-lane-idx:${i}`
+          }
+        )
       );
     }
     return `<div class="vst-track-row vst-track-audio" style="--vst-audio-lane-count:${laneCount}">` + renderTrackHead(
@@ -6823,7 +6987,7 @@
       "♪",
       "Audio",
       laneTags.join("")
-    ) + `<div class="vst-track-cell vst-audio-cell">${segments}</div></div>`;
+    ) + `<div class="vst-track-cell vst-audio-cell">${baseSegments}${overlaySegments}</div></div>`;
   };
   var REF_EDGE_ALIGN_FRAMES = 3;
   var renderReferencesTrackRow = (clips, layouts, fps, unit, capabilities) => {
@@ -6944,9 +7108,15 @@
       unit,
       options?.capabilities
     );
-    const audioRow = renderAudioTrackRow(clips, layouts, options?.capabilities);
+    const renderedAudioRow = renderAudioTrackRow(
+      clips,
+      layouts,
+      options?.capabilities,
+      options?.audioTracks,
+      pxPerSecond
+    );
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
-    body.innerHTML = `${header}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, pxPerSecond, fps, unit)}</div></div>` + promptRow + videoRow + referencesRow + audioRow + `</div></div>`;
+    body.innerHTML = `${header}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, pxPerSecond, fps, unit)}</div></div>` + promptRow + videoRow + referencesRow + renderedAudioRow + `</div></div>`;
     applyBackgroundImages(body);
     wireTimelineToolbar(body, options);
     wireTimelineZoomWheel(body, options);
@@ -7407,7 +7577,7 @@
 
   // frontend/timelineAudioSegmentTrack.ts
   var segmentOf = (clip, segIdx) => clip.audioSegments?.[segIdx];
-  var createTimelineAudioSegmentTrack = (getCapabilities) => createWindowTrack({
+  var createLegacyTimelineAudioSegmentTrack = (getCapabilities) => createWindowTrack({
     routeId: "audio-segment",
     priority: 40,
     origin: "audio-segment-track",
@@ -7523,6 +7693,332 @@
       segIdx
     })
   });
+  var DRAG_THRESHOLD_PX2 = 4;
+  var timelineDuration = (state) => state.clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
+  var trackAndSpan = (state, trackIdx) => {
+    const track = state.audioTracks?.[trackIdx];
+    const span = track?.spans[0];
+    return track && span ? { track, span } : null;
+  };
+  var spanGeometry = (span) => {
+    if (span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
+      return null;
+    }
+    return {
+      start: span.timelineStartSeconds,
+      length: span.timelineLengthSeconds,
+      trim: span.sourceStartSeconds
+    };
+  };
+  var pct = (seconds, total) => `${total > 0 ? seconds / total * 100 : 0}%`;
+  var createGlobalTimelineAudioSegmentTrack = () => {
+    let body = null;
+    let unregister = null;
+    let unbindClick = null;
+    const commit = (sourceToken, trackIdx, mutate) => {
+      if (isStaleToken(sourceToken)) {
+        return false;
+      }
+      const state = structuredClone(getState());
+      const found = trackAndSpan(state, trackIdx);
+      if (!found) {
+        return false;
+      }
+      mutate(state, found.track, found.span);
+      saveState(state, { origin: "audio-segment-track" });
+      setSelection({ kind: "audio-track", trackIdx });
+      return true;
+    };
+    const onPress = (event, boundBody) => {
+      if (!(event.target instanceof Element)) {
+        return null;
+      }
+      const element = event.target.closest(".vst-audio-seg[data-track-idx]");
+      if (element instanceof HTMLElement) {
+        const trackIdx = parseIntAttr(element, "data-track-idx");
+        if (trackIdx === null) {
+          return null;
+        }
+        if (event.shiftKey) {
+          event.preventDefault();
+          return claimOnly();
+        }
+        const state2 = getState();
+        const found = trackAndSpan(state2, trackIdx);
+        const press = found ? spanGeometry(found.span) : null;
+        const total2 = timelineDuration(state2);
+        if (!press || total2 <= 0) {
+          return null;
+        }
+        const originalLeft = element.style.left;
+        const originalWidth = element.style.width;
+        const sourceToken2 = readStateToken();
+        const edgeElement = event.target.closest(
+          "[data-vst-audio-seg-edge]"
+        );
+        const edge = edgeElement?.getAttribute("data-vst-audio-seg-edge") === "left" ? "left" : edgeElement ? "right" : null;
+        event.preventDefault();
+        const restore = () => {
+          element.style.left = originalLeft;
+          element.style.width = originalWidth;
+        };
+        return {
+          threshold: DRAG_THRESHOLD_PX2,
+          onMove: (ctx) => {
+            boundBody.classList.add("vst-audio-seg-dragging");
+            const delta = ctx.dx / livePxPerSecond(boundBody);
+            if (edge === "right") {
+              const length = clamp(
+                press.length + delta,
+                AUDIO_SEGMENT_MIN_LENGTH,
+                total2 - press.start
+              );
+              element.style.width = pct(length, total2);
+            } else if (edge === "left") {
+              const end = press.start + press.length;
+              const start = clamp(
+                press.start + delta,
+                Math.max(0, press.start - press.trim),
+                end - AUDIO_SEGMENT_MIN_LENGTH
+              );
+              element.style.left = pct(start, total2);
+              element.style.width = pct(end - start, total2);
+            } else {
+              const start = clamp(
+                press.start + delta,
+                0,
+                Math.max(0, total2 - press.length)
+              );
+              element.style.left = pct(start, total2);
+            }
+          },
+          onCommit: (ctx) => {
+            boundBody.classList.remove("vst-audio-seg-dragging");
+            const delta = ctx.dx / livePxPerSecond(boundBody);
+            commit(sourceToken2, trackIdx, (_state, _track, span) => {
+              if (edge === "right") {
+                span.timelineLengthSeconds = roundToTenth(
+                  clamp(
+                    press.length + delta,
+                    AUDIO_SEGMENT_MIN_LENGTH,
+                    total2 - press.start
+                  )
+                );
+              } else if (edge === "left") {
+                const end = press.start + press.length;
+                const start = clamp(
+                  press.start + delta,
+                  Math.max(0, press.start - press.trim),
+                  end - AUDIO_SEGMENT_MIN_LENGTH
+                );
+                span.timelineStartSeconds = roundToTenth(start);
+                span.timelineLengthSeconds = roundToTenth(
+                  end - start
+                );
+                span.sourceStartSeconds = roundToTenth(
+                  press.trim + (start - press.start)
+                );
+              } else {
+                span.timelineStartSeconds = roundToTenth(
+                  clamp(
+                    press.start + delta,
+                    0,
+                    Math.max(0, total2 - press.length)
+                  )
+                );
+              }
+            });
+          },
+          onTap: restore,
+          onCancel: () => {
+            restore();
+            boundBody.classList.remove("vst-audio-seg-dragging");
+          }
+        };
+      }
+      const lane = event.target.closest(
+        ".vst-audio-seg-lane[data-vst-audio-seg-add]:not([data-clip-idx])"
+      );
+      if (!(lane instanceof HTMLElement)) {
+        return null;
+      }
+      const state = getState();
+      const total = timelineDuration(state);
+      if (total < AUDIO_SEGMENT_MIN_LENGTH) {
+        return null;
+      }
+      const rect = lane.getBoundingClientRect();
+      const pps = livePxPerSecond(boundBody);
+      const startAtPress = clamp((event.clientX - rect.left) / pps, 0, total);
+      const sourceToken = readStateToken();
+      let ghost = null;
+      event.preventDefault();
+      const removeGhost = () => {
+        ghost?.remove();
+        ghost = null;
+      };
+      const timeAt = (clientX) => clamp((clientX - rect.left) / livePxPerSecond(boundBody), 0, total);
+      const create = (endAt) => {
+        if (isStaleToken(sourceToken)) {
+          return;
+        }
+        const geometry = createDefaultOrDraggedSpan(
+          startAtPress,
+          endAt,
+          0,
+          total,
+          AUDIO_SEGMENT_MIN_LENGTH,
+          AUDIO_SEGMENT_DEFAULT_LENGTH
+        );
+        if (!geometry) {
+          return;
+        }
+        const next = structuredClone(getState());
+        next.audioTracks ??= [];
+        const trackIdx = next.audioTracks.length;
+        next.audioTracks.push({
+          id: createEntityId("audio_track"),
+          source: {
+            kind: "Upload",
+            reference: "",
+            uploadedAudio: null
+          },
+          volume: AUDIO_SEGMENT_VOLUME_DEFAULT,
+          spans: [
+            {
+              id: createEntityId("audio_span"),
+              firstClipId: null,
+              lastClipId: null,
+              timelineStartSeconds: roundToTenth(geometry.start),
+              timelineLengthSeconds: roundToTenth(geometry.length),
+              sourceStartSeconds: 0,
+              clipStartOffsetSeconds: null,
+              clipLengthSeconds: null
+            }
+          ]
+        });
+        saveState(next, { origin: "audio-segment-track" });
+        setSelection({ kind: "audio-track", trackIdx });
+      };
+      return {
+        threshold: DRAG_THRESHOLD_PX2,
+        suppressTapClick: true,
+        onMove: (ctx) => {
+          boundBody.classList.add("vst-audio-seg-dragging");
+          const now = timeAt(ctx.event.clientX);
+          const start = Math.min(startAtPress, now);
+          const end = Math.max(startAtPress, now);
+          if (!ghost) {
+            ghost = document.createElement("div");
+            ghost.className = "vst-audio-seg-ghost";
+            lane.appendChild(ghost);
+          }
+          ghost.style.left = pct(start, total);
+          ghost.style.width = pct(end - start, total);
+        },
+        onCommit: (ctx) => {
+          boundBody.classList.remove("vst-audio-seg-dragging");
+          removeGhost();
+          create(timeAt(ctx.event.clientX));
+        },
+        onTap: () => {
+          removeGhost();
+          create(null);
+        },
+        onCancel: () => {
+          removeGhost();
+          boundBody.classList.remove("vst-audio-seg-dragging");
+        }
+      };
+    };
+    const onClick = (event) => {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+      const span = event.target.closest(".vst-audio-seg[data-track-idx]");
+      if (!(span instanceof HTMLElement)) {
+        return;
+      }
+      event.stopImmediatePropagation();
+      const trackIdx = parseIntAttr(span, "data-track-idx");
+      if (trackIdx === null || !trackAndSpan(getState(), trackIdx)) {
+        return;
+      }
+      if (event.shiftKey) {
+        const next = structuredClone(getState());
+        next.audioTracks?.splice(trackIdx, 1);
+        saveState(next, { origin: "audio-segment-track" });
+        const count = next.audioTracks?.length ?? 0;
+        setSelection(
+          count > 0 ? {
+            kind: "audio-track",
+            trackIdx: Math.min(trackIdx, count - 1)
+          } : { kind: "none" }
+        );
+        return;
+      }
+      setSelection({ kind: "audio-track", trackIdx });
+    };
+    const onKeyDown = (event) => {
+      const keyboard = event;
+      if (!isActivateKey(keyboard) || !(keyboard.target instanceof Element)) {
+        return;
+      }
+      const span = keyboard.target.closest(".vst-audio-seg[data-track-idx]");
+      if (!(span instanceof HTMLElement)) {
+        return;
+      }
+      const trackIdx = parseIntAttr(span, "data-track-idx");
+      if (trackIdx === null) {
+        return;
+      }
+      keyboard.preventDefault();
+      keyboard.stopImmediatePropagation();
+      setSelection({ kind: "audio-track", trackIdx });
+    };
+    return {
+      attach: (nextBody, router) => {
+        if (body === nextBody) {
+          return;
+        }
+        unbindClick?.();
+        unregister?.();
+        body = nextBody;
+        unregister = router.register({
+          id: "timeline-audio-segment",
+          priority: 40,
+          onPress
+        });
+        nextBody.addEventListener("click", onClick);
+        nextBody.addEventListener("keydown", onKeyDown);
+        unbindClick = () => {
+          nextBody.removeEventListener("click", onClick);
+          nextBody.removeEventListener("keydown", onKeyDown);
+        };
+      },
+      dispose: () => {
+        unbindClick?.();
+        unregister?.();
+        unbindClick = null;
+        unregister = null;
+        body = null;
+      }
+    };
+  };
+  var createTimelineAudioSegmentTrack = (getCapabilities) => {
+    const legacy = createLegacyTimelineAudioSegmentTrack(getCapabilities);
+    const global = createGlobalTimelineAudioSegmentTrack();
+    return {
+      attach: (body, router) => {
+        legacy.attach(body, router);
+        global.attach(body, router);
+      },
+      dispose: () => {
+        legacy.dispose();
+        global.dispose();
+      }
+    };
+  };
 
   // frontend/timelineAudioTrack.ts
   var CLIP_SELECTOR = '.vst-audio-clip[data-vst-audio="clip"]';
@@ -8817,6 +9313,317 @@
     return built.section;
   };
 
+  // frontend/detailStrip/audioTracksPanel.ts
+  var timelineDuration2 = (state) => state.clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
+  var primarySpan = (track) => track.spans[0] ?? null;
+  var commitTrack = (ctx, trackId, mutate, debounceKey) => {
+    const apply = (state) => {
+      const track = state.audioTracks?.find((entry) => entry.id === trackId);
+      const span = track ? primarySpan(track) : null;
+      if (track && span) {
+        mutate(track, span);
+      }
+    };
+    if (debounceKey) {
+      ctx.debouncedCommitState(debounceKey, apply);
+    } else {
+      ctx.commitState(apply);
+    }
+  };
+  var buildTrackEditor = (ctx, state, track, trackIndex) => {
+    const trackId = track.id;
+    const span = primarySpan(track);
+    const fields = document.createElement("div");
+    fields.className = "vst-detail-col vst-detail-instance-fields vst-audio-track";
+    fields.dataset.vstAudioTrackId = trackId;
+    if (!span) {
+      const note = document.createElement("p");
+      note.className = "vst-detail-note";
+      note.textContent = "This audio segment has no timeline window.";
+      fields.appendChild(note);
+      return fields;
+    }
+    const total = Math.max(AUDIO_SEGMENT_MIN_LENGTH, timelineDuration2(state));
+    const clamped = () => clampStartLength(
+      span.timelineStartSeconds ?? 0,
+      span.timelineLengthSeconds ?? AUDIO_SEGMENT_DEFAULT_LENGTH,
+      total,
+      AUDIO_SEGMENT_MIN_LENGTH
+    );
+    const aceReference = track.source.kind === "AceStepFun" ? track.source.reference : "";
+    const sourceSelect = buildOptionSelect(
+      buildSegmentAudioSourceOptions(aceReference),
+      aceReference || AUDIO_SOURCE_UPLOAD,
+      (value) => {
+        commitTrack(ctx, trackId, (next) => {
+          if (isAceStepFunAudioSource(value)) {
+            next.source.kind = "AceStepFun";
+            next.source.reference = value;
+            next.source.uploadedAudio = null;
+          } else {
+            next.source.kind = "Upload";
+            next.source.reference = next.source.uploadedAudio?.fileName ?? "";
+          }
+        });
+        ctx.render();
+      }
+    );
+    fields.appendChild(
+      buildField(
+        "Source",
+        sourceSelect,
+        void 0,
+        "Where this timeline-wide overlay comes from. It is cut at clip boundaries during generation and mixed additively."
+      )
+    );
+    if (!aceReference) {
+      fields.appendChild(
+        buildMediaPickRow(
+          "Audio Upload",
+          "audio/*",
+          ["audio"],
+          track.source.uploadedAudio?.fileName,
+          (data, fileName) => {
+            commitTrack(ctx, trackId, (next) => {
+              next.source.kind = "Upload";
+              next.source.reference = fileName ?? "";
+              next.source.uploadedAudio = { data, fileName };
+            });
+            ctx.render();
+          },
+          () => {
+            commitTrack(ctx, trackId, (next) => {
+              next.source.reference = "";
+              next.source.uploadedAudio = null;
+            });
+            ctx.render();
+          }
+        )
+      );
+    }
+    const volume = track.volume ?? AUDIO_SEGMENT_VOLUME_DEFAULT;
+    const volumeSlider = buildSlider(
+      "Volume",
+      volume,
+      AUDIO_SEGMENT_VOLUME_MIN,
+      AUDIO_SEGMENT_VOLUME_MAX,
+      AUDIO_SEGMENT_VOLUME_SLIDER_STEP,
+      (value) => {
+        commitTrack(
+          ctx,
+          trackId,
+          (next) => {
+            next.volume = Math.min(
+              AUDIO_SEGMENT_VOLUME_MAX,
+              Math.max(AUDIO_SEGMENT_VOLUME_MIN, value)
+            );
+          },
+          `audio-track-${trackId}-volume`
+        );
+      },
+      {
+        sliderMin: AUDIO_SEGMENT_VOLUME_SLIDER_MIN,
+        sliderMax: AUDIO_SEGMENT_VOLUME_SLIDER_MAX,
+        numberStep: "any"
+      }
+    );
+    volumeSlider.querySelector("input.auto-slider-number")?.setAttribute("data-vst-focus-key", `audio-track-${trackId}-volume`);
+    fields.appendChild(volumeSlider);
+    const geometry = clamped();
+    const startInput = buildNumber(
+      geometry.start,
+      0,
+      Math.max(0, total - AUDIO_SEGMENT_MIN_LENGTH),
+      AUDIO_SEGMENT_STEP,
+      (value) => {
+        commitTrack(
+          ctx,
+          trackId,
+          (_next, nextSpan) => {
+            const next = clampStartLength(
+              value,
+              nextSpan.timelineLengthSeconds ?? AUDIO_SEGMENT_DEFAULT_LENGTH,
+              total,
+              AUDIO_SEGMENT_MIN_LENGTH
+            );
+            nextSpan.timelineStartSeconds = next.start;
+            nextSpan.timelineLengthSeconds = next.length;
+          },
+          `audio-track-${trackId}-start`
+        );
+      }
+    );
+    startInput.setAttribute(
+      "data-vst-focus-key",
+      `audio-track-${trackId}-start`
+    );
+    fields.appendChild(
+      buildField(
+        "Timeline start (s)",
+        startInput,
+        void 0,
+        "Seconds from the beginning of the complete multi-clip timeline."
+      )
+    );
+    const trimInput = buildNumber(
+      span.sourceStartSeconds,
+      0,
+      Number.MAX_SAFE_INTEGER,
+      AUDIO_SEGMENT_STEP,
+      (value) => {
+        commitTrack(
+          ctx,
+          trackId,
+          (_next, nextSpan) => {
+            nextSpan.sourceStartSeconds = Math.max(0, value);
+          },
+          `audio-track-${trackId}-trim`
+        );
+      }
+    );
+    trimInput.setAttribute("data-vst-focus-key", `audio-track-${trackId}-trim`);
+    fields.appendChild(
+      buildField(
+        "Trim start (s)",
+        trimInput,
+        void 0,
+        "Skip this many seconds from the source before playback begins."
+      )
+    );
+    const lengthInput = buildNumber(
+      geometry.length,
+      AUDIO_SEGMENT_MIN_LENGTH,
+      total,
+      AUDIO_SEGMENT_STEP,
+      (value) => {
+        commitTrack(
+          ctx,
+          trackId,
+          (_next, nextSpan) => {
+            const next = clampStartLength(
+              nextSpan.timelineStartSeconds ?? 0,
+              value,
+              total,
+              AUDIO_SEGMENT_MIN_LENGTH
+            );
+            nextSpan.timelineStartSeconds = next.start;
+            nextSpan.timelineLengthSeconds = next.length;
+          },
+          `audio-track-${trackId}-length`
+        );
+      }
+    );
+    lengthInput.setAttribute(
+      "data-vst-focus-key",
+      `audio-track-${trackId}-length`
+    );
+    fields.appendChild(
+      buildField(
+        "Length (s)",
+        lengthInput,
+        void 0,
+        "How long this segment plays across the complete timeline."
+      )
+    );
+    fields.dataset.vstTrackIndex = `${trackIndex}`;
+    return fields;
+  };
+  var addAudioTrack = (ctx, state) => {
+    const total = Math.max(AUDIO_SEGMENT_MIN_LENGTH, timelineDuration2(state));
+    const nextIndex = state.audioTracks?.length ?? 0;
+    ctx.commitState((next) => {
+      next.audioTracks ??= [];
+      next.audioTracks.push({
+        id: createEntityId("audio_track"),
+        source: {
+          kind: "Upload",
+          reference: "",
+          uploadedAudio: null
+        },
+        volume: AUDIO_SEGMENT_VOLUME_DEFAULT,
+        spans: [
+          {
+            id: createEntityId("audio_span"),
+            firstClipId: null,
+            lastClipId: null,
+            timelineStartSeconds: 0,
+            timelineLengthSeconds: Math.min(
+              AUDIO_SEGMENT_DEFAULT_LENGTH,
+              total
+            ),
+            sourceStartSeconds: 0,
+            clipStartOffsetSeconds: null,
+            clipLengthSeconds: null
+          }
+        ]
+      });
+    });
+    return nextIndex;
+  };
+  var buildAudioTracksPanel = (ctx, state, selection2 = { kind: "none" }) => {
+    const tracks = state.audioTracks ?? [];
+    const selectedTrackIndex = selection2.kind === "audio-track" || selection2.kind === "audio-track-span" ? selection2.trackIdx : null;
+    const activeTrackIndex = selectedTrackIndex !== null && selectedTrackIndex >= 0 && selectedTrackIndex < tracks.length ? selectedTrackIndex : tracks.length > 0 ? 0 : null;
+    const built = buildRepeatingEditor({
+      key: "audio-tracks",
+      label: "Audio Segments",
+      sectionClass: "vst-audio-tracks-panel",
+      open: selectedTrackIndex !== null,
+      items: tracks.map((_, trackIndex) => ({
+        label: `S${trackIndex}`,
+        focusKey: `audio-track-tab-${trackIndex}`,
+        title: `Edit audio segment ${trackIndex}`,
+        active: trackIndex === activeTrackIndex,
+        className: "vst-audio-track-tab",
+        onSelect: () => setSelection({ kind: "audio-track", trackIdx: trackIndex }),
+        onDelete: () => {
+          ctx.commitState((next) => {
+            next.audioTracks?.splice(trackIndex, 1);
+          });
+          const remaining = tracks.length - 1;
+          setSelection(
+            remaining > 0 ? {
+              kind: "audio-track",
+              trackIdx: Math.min(trackIndex, remaining - 1)
+            } : { kind: "none" }
+          );
+          ctx.render();
+        }
+      })),
+      add: {
+        title: "Add a timeline-wide audio segment",
+        label: "+ Add Audio Segment",
+        className: "vst-audio-track-add",
+        onClick: () => {
+          const trackIdx = addAudioTrack(ctx, state);
+          setSelection({ kind: "audio-track", trackIdx });
+          ctx.render();
+        }
+      },
+      remove: {
+        title: activeTrackIndex === null ? "No audio segment to delete" : `Delete audio segment ${activeTrackIndex}`,
+        className: "vst-audio-track-delete"
+      },
+      editor: activeTrackIndex === null ? void 0 : buildTrackEditor(
+        ctx,
+        state,
+        tracks[activeTrackIndex],
+        activeTrackIndex
+      )
+    });
+    const note = document.createElement("p");
+    note.className = "vst-detail-note";
+    note.textContent = tracks.length === 0 ? "No overlay segments." : "Timeline-wide overlays are cut per clip during generation; overlapping segments mix together.";
+    built.content.insertBefore(note, built.content.firstChild);
+    return built.section;
+  };
+  var buildTimelineAudioSegmentsBody = (ctx, state, selection2) => {
+    const body = document.createElement("div");
+    body.className = "vst-detail-body vst-detail-audio-body";
+    body.appendChild(buildAudioTracksPanel(ctx, state, selection2));
+    return body;
+  };
+
   // frontend/detailStrip/audioPanel.ts
   var buildAudioBody = (ctx, sel, clips) => {
     const { clipIdx } = sel;
@@ -8985,17 +9792,21 @@
         flattenContent: true
       }).section
     );
-    const segments = buildAudioSegmentSection(
-      ctx,
-      clipIdx,
-      sel.kind === "audio-segment" ? sel.segIdx : null,
-      clips,
-      sel.kind === "audio-segment"
-    );
-    if (!segmentDecision.supported && (clip.audioSegments?.length ?? 0) > 0) {
-      segments.appendChild(buildCapabilityNotice(segmentDecision));
+    if (sel.kind === "audio-segment" || (clip.audioSegments?.length ?? 0) > 0) {
+      const segments = buildAudioSegmentSection(
+        ctx,
+        clipIdx,
+        sel.kind === "audio-segment" ? sel.segIdx : null,
+        clips,
+        sel.kind === "audio-segment"
+      );
+      if (!segmentDecision.supported && (clip.audioSegments?.length ?? 0) > 0) {
+        segments.appendChild(buildCapabilityNotice(segmentDecision));
+      }
+      body.appendChild(segments);
+    } else {
+      body.appendChild(buildAudioTracksPanel(ctx, getState()));
     }
-    body.appendChild(segments);
     return body;
   };
 
@@ -11626,367 +12437,6 @@ The conversion is one undoable change.`;
   var buildPromptMajorBody = (ctx, selection2, clips) => buildPromptBody(ctx, selection2, clips);
   var buildPromptMinorBody = (ctx, selection2, clips) => buildPromptBody(ctx, selection2, clips);
 
-  // frontend/detailStrip/audioTracksPanel.ts
-  var SOURCE_KINDS = [
-    "Upload",
-    "AceStepFun",
-    "Native",
-    "ControlNet",
-    "External"
-  ];
-  var commitTrack = (ctx, trackId, mutate) => {
-    ctx.commitState((state) => {
-      const track = state.audioTracks?.find((entry) => entry.id === trackId);
-      if (track) {
-        mutate(track);
-      }
-    });
-  };
-  var commitSpan = (ctx, trackId, spanId, mutate) => commitTrack(ctx, trackId, (track) => {
-    const span = track.spans.find((entry) => entry.id === spanId);
-    if (span) {
-      mutate(span);
-    }
-  });
-  var buildTextInput = (value, focusKey, onInput) => {
-    const input2 = document.createElement("input");
-    input2.type = "text";
-    input2.className = "auto-text vst-audio-track-reference";
-    input2.value = value;
-    input2.setAttribute("data-vst-focus-key", focusKey);
-    input2.addEventListener("input", () => onInput(input2.value));
-    return input2;
-  };
-  var buildOptionalNumber = (value, focusKey, onChange) => {
-    const input2 = document.createElement("input");
-    input2.type = "number";
-    input2.className = "auto-number vst-audio-track-number";
-    input2.min = "0";
-    input2.step = "0.1";
-    input2.value = value === null ? "" : `${value}`;
-    input2.placeholder = "Optional";
-    input2.setAttribute("data-vst-focus-key", focusKey);
-    input2.addEventListener("change", () => {
-      const raw = input2.value.trim();
-      if (!raw) {
-        onChange(null);
-        return;
-      }
-      const parsed = Number.parseFloat(raw);
-      if (Number.isFinite(parsed) && parsed >= 0) {
-        onChange(parsed);
-      }
-    });
-    return input2;
-  };
-  var buildRequiredNumber = (value, focusKey, onChange) => {
-    const input2 = buildOptionalNumber(value, focusKey, (next) => {
-      if (next !== null) {
-        onChange(next);
-      }
-    });
-    input2.placeholder = "";
-    return input2;
-  };
-  var clipOptions = (state, selectedId, openLabel) => {
-    const options = [
-      { value: "", label: openLabel },
-      ...state.clips.map((clip, index) => ({
-        value: clip.id,
-        label: `Clip ${index}`
-      }))
-    ];
-    if (selectedId && !state.clips.some((clip) => clip.id === selectedId)) {
-      options.push({
-        value: selectedId,
-        label: `Missing clip (${selectedId})`
-      });
-    }
-    return options;
-  };
-  var buildSpanEditor = (ctx, state, track, span) => {
-    const trackId = track.id;
-    const spanId = span.id;
-    const fields = document.createElement("div");
-    fields.className = "vst-detail-col vst-detail-instance-fields vst-audio-track-span";
-    fields.dataset.vstAudioSpanId = spanId;
-    fields.append(
-      buildField(
-        "First clip (inclusive)",
-        buildOptionSelect(
-          clipOptions(state, span.firstClipId, "Timeline start (open)"),
-          span.firstClipId ?? "",
-          (value) => commitSpan(ctx, trackId, spanId, (next) => {
-            next.firstClipId = value || null;
-          })
-        ),
-        "Leave open to begin at the timeline start. If both clip endpoints are open, provide a complete timeline start and length."
-      ),
-      buildField(
-        "Last clip (inclusive)",
-        buildOptionSelect(
-          clipOptions(state, span.lastClipId, "Timeline end (open)"),
-          span.lastClipId ?? "",
-          (value) => commitSpan(ctx, trackId, spanId, (next) => {
-            next.lastClipId = value || null;
-          })
-        ),
-        "Leave open to continue through the timeline end. The span may cover one clip or a multi-clip range."
-      ),
-      buildField(
-        "Timeline start (s)",
-        buildOptionalNumber(
-          span.timelineStartSeconds,
-          `audio-span-${spanId}-timeline-start`,
-          (value) => commitSpan(ctx, trackId, spanId, (next) => {
-            next.timelineStartSeconds = value;
-          })
-        )
-      ),
-      buildField(
-        "Timeline length (s)",
-        buildOptionalNumber(
-          span.timelineLengthSeconds,
-          `audio-span-${spanId}-timeline-length`,
-          (value) => commitSpan(ctx, trackId, spanId, (next) => {
-            next.timelineLengthSeconds = value;
-          })
-        ),
-        "Start and length are optional but validated together."
-      ),
-      buildField(
-        "Source start (s)",
-        buildRequiredNumber(
-          span.sourceStartSeconds,
-          `audio-span-${spanId}-source-start`,
-          (value) => commitSpan(ctx, trackId, spanId, (next) => {
-            next.sourceStartSeconds = value;
-          })
-        )
-      ),
-      buildField(
-        "Clip start offset (s)",
-        buildOptionalNumber(
-          span.clipStartOffsetSeconds,
-          `audio-span-${spanId}-clip-start`,
-          (value) => commitSpan(ctx, trackId, spanId, (next) => {
-            next.clipStartOffsetSeconds = value;
-          })
-        )
-      ),
-      buildField(
-        "Clip length (s)",
-        buildOptionalNumber(
-          span.clipLengthSeconds,
-          `audio-span-${spanId}-clip-length`,
-          (value) => commitSpan(ctx, trackId, spanId, (next) => {
-            next.clipLengthSeconds = value;
-          })
-        ),
-        "Clip offset and length are optional but must be set together, with the same first and last clip."
-      )
-    );
-    return fields;
-  };
-  var buildTrackEditor = (ctx, state, track, trackIndex, selectedSpanIndex) => {
-    const trackId = track.id;
-    const fields = document.createElement("div");
-    fields.className = "vst-detail-col vst-detail-instance-fields vst-audio-track";
-    fields.dataset.vstAudioTrackId = trackId;
-    fields.append(
-      buildField(
-        "Source kind",
-        buildOptionSelect(
-          SOURCE_KINDS.map((kind) => ({
-            value: kind,
-            label: kind
-          })),
-          track.source.kind,
-          (value) => commitTrack(ctx, trackId, (next) => {
-            next.source.kind = value;
-          })
-        )
-      ),
-      buildField(
-        "Source reference",
-        buildTextInput(
-          track.source.reference,
-          `audio-track-${trackId}-reference`,
-          (value) => commitTrack(ctx, trackId, (next) => {
-            next.source.reference = value;
-          })
-        ),
-        "Metadata only until the runtime mixer is connected. For Upload, enter a file name or other durable reference; this editor does not upload or mix the file yet."
-      )
-    );
-    if (track.source.uploadedAudio) {
-      const metadata = document.createElement("span");
-      metadata.className = "vst-audio-track-upload-metadata";
-      metadata.textContent = track.source.uploadedAudio.fileName?.trim() || "Embedded audio";
-      fields.append(
-        buildField(
-          "Stored upload metadata",
-          metadata,
-          "Preserved for compatibility; planned tracks do not execute it yet."
-        )
-      );
-    }
-    const activeSpanIndex = track.spans.length === 0 ? null : Math.max(
-      0,
-      Math.min(selectedSpanIndex ?? 0, track.spans.length - 1)
-    );
-    const spans = buildRepeatingEditor({
-      key: "audio-track-spans",
-      label: "Spans",
-      sectionClass: "vst-audio-track-spans",
-      open: selectedSpanIndex !== null,
-      items: track.spans.map((_, spanIndex) => ({
-        label: `S${spanIndex + 1}`,
-        focusKey: `audio-track-${trackIndex}-span-tab-${spanIndex}`,
-        title: `Edit span ${spanIndex + 1}`,
-        active: spanIndex === activeSpanIndex,
-        className: "vst-audio-track-span-tab",
-        onSelect: () => setSelection({
-          kind: "audio-track-span",
-          trackIdx: trackIndex,
-          spanIdx: spanIndex
-        }),
-        onDelete: () => {
-          commitTrack(ctx, trackId, (next) => {
-            next.spans.splice(spanIndex, 1);
-          });
-          if (track.spans.length) {
-            setSelection({
-              kind: "audio-track-span",
-              trackIdx: trackIndex,
-              spanIdx: Math.min(spanIndex, track.spans.length - 1)
-            });
-          } else {
-            setSelection({ kind: "audio-track", trackIdx: trackIndex });
-          }
-          ctx.render();
-        }
-      })),
-      add: {
-        title: "Add a span to this audio track",
-        label: "+ Add Span",
-        className: "vst-audio-track-add-span",
-        onClick: () => {
-          const ownerId = state.clips[0]?.id ?? null;
-          commitTrack(ctx, trackId, (next) => {
-            next.spans.push({
-              id: createEntityId("audio_span"),
-              firstClipId: ownerId,
-              lastClipId: ownerId,
-              timelineStartSeconds: null,
-              timelineLengthSeconds: null,
-              sourceStartSeconds: 0,
-              clipStartOffsetSeconds: null,
-              clipLengthSeconds: null
-            });
-          });
-          setSelection({
-            kind: "audio-track-span",
-            trackIdx: trackIndex,
-            spanIdx: track.spans.length - 1
-          });
-          ctx.render();
-        }
-      },
-      remove: {
-        title: activeSpanIndex === null ? "No span to delete" : `Delete span ${activeSpanIndex + 1}`,
-        className: "vst-audio-track-delete-span"
-      },
-      editor: activeSpanIndex === null ? void 0 : buildSpanEditor(
-        ctx,
-        state,
-        track,
-        track.spans[activeSpanIndex]
-      )
-    });
-    fields.appendChild(spans.section);
-    return fields;
-  };
-  var buildAudioTracksPanel = (ctx, state, selection2 = { kind: "none" }) => {
-    const tracks = state.audioTracks ?? [];
-    const activeTrackIndex = tracks.length === 0 ? null : Math.max(
-      0,
-      Math.min(
-        selection2.kind === "audio-track" || selection2.kind === "audio-track-span" ? selection2.trackIdx : 0,
-        tracks.length - 1
-      )
-    );
-    const selectedSpanIndex = selection2.kind === "audio-track-span" && selection2.trackIdx === activeTrackIndex ? selection2.spanIdx : null;
-    const built = buildRepeatingEditor({
-      key: "audio-tracks",
-      label: "Planned multi-clip audio",
-      sectionClass: "vst-audio-tracks-panel",
-      open: selection2.kind === "audio-track" || selection2.kind === "audio-track-span",
-      items: tracks.map((_, trackIndex) => ({
-        label: `T${trackIndex + 1}`,
-        focusKey: `audio-track-tab-${trackIndex}`,
-        title: `Edit audio track ${trackIndex + 1}`,
-        active: trackIndex === activeTrackIndex,
-        className: "vst-audio-track-tab",
-        onSelect: () => setSelection({ kind: "audio-track", trackIdx: trackIndex }),
-        onDelete: () => {
-          ctx.commitState((next) => {
-            next.audioTracks?.splice(trackIndex, 1);
-          });
-          if (tracks.length) {
-            setSelection({
-              kind: "audio-track",
-              trackIdx: Math.min(trackIndex, tracks.length - 1)
-            });
-          } else {
-            setSelection({ kind: "none" });
-          }
-          ctx.render();
-        }
-      })),
-      add: {
-        title: "Add a planned multi-clip audio track",
-        label: "+ Add Audio Track",
-        className: "vst-audio-track-add",
-        onClick: () => {
-          ctx.commitState((next) => {
-            next.audioTracks ??= [];
-            next.audioTracks.push({
-              id: createEntityId("audio_track"),
-              source: {
-                kind: "External",
-                reference: "",
-                uploadedAudio: null
-              },
-              spans: []
-            });
-          });
-          setSelection({
-            kind: "audio-track",
-            trackIdx: tracks.length - 1
-          });
-          ctx.render();
-        }
-      },
-      remove: {
-        title: activeTrackIndex === null ? "No audio track to delete" : `Delete audio track ${activeTrackIndex + 1}`,
-        className: "vst-audio-track-delete"
-      },
-      editor: activeTrackIndex === null ? void 0 : buildTrackEditor(
-        ctx,
-        state,
-        tracks[activeTrackIndex],
-        activeTrackIndex,
-        selectedSpanIndex
-      )
-    });
-    const warning = document.createElement("div");
-    warning.className = "vst-audio-tracks-planned-warning";
-    warning.textContent = "Planned — runtime mixer not yet connected";
-    built.heading.after(warning);
-    return built.section;
-  };
-
   // frontend/detailStrip/settingsPanel.ts
   var SETTINGS_INHERIT = "inherit";
   var SETTINGS_CUSTOM = "custom";
@@ -12013,7 +12463,7 @@ The conversion is one undoable change.`;
       bridge2.notifyChanged(core);
     }, FPS_WRITE_DEBOUNCE_MS);
   };
-  var buildSettingsBody = (ctx, selection2 = { kind: "none" }) => {
+  var buildSettingsBody = (ctx, _selection = { kind: "none" }) => {
     const state = getState();
     const defaults = getRootDefaults();
     const core = {
@@ -12133,7 +12583,6 @@ The conversion is one undoable change.`;
         "Frames per second for the whole timeline. This is the same value as the core Video FPS parameter — editing either updates both."
       )
     );
-    body.appendChild(buildAudioTracksPanel(ctx, state, selection2));
     return wrapForm("timeline-settings", "Timeline", body);
   };
 
@@ -12219,9 +12668,9 @@ The conversion is one undoable change.`;
         return `Audio segment · Clip ${selection2.clipIdx} · ${start}–${end} s`;
       }
       case "audio-track":
-        return `Audio track ${selection2.trackIdx + 1}`;
+        return `Audio segment S${selection2.trackIdx}`;
       case "audio-track-span":
-        return `Audio track ${selection2.trackIdx + 1} · Span ${selection2.spanIdx + 1}`;
+        return `Audio segment S${selection2.trackIdx}`;
       case "boundary":
         return `Boundary · Clip ${selection2.leftClipIdx} → ${selection2.leftClipIdx + 1}`;
       case "prompt-major":
@@ -12288,7 +12737,11 @@ The conversion is one undoable change.`;
         return buildAudioBody(context, selection2, clips);
       case "audio-track":
       case "audio-track-span":
-        return buildSettingsBody(context, selection2);
+        return buildTimelineAudioSegmentsBody(
+          context,
+          getState(),
+          selection2
+        );
       case "prompt-major":
         return buildPromptMajorBody(context, selection2, clips);
       case "prompt-minor":
@@ -13192,7 +13645,7 @@ The conversion is one undoable change.`;
   var DRAGGING_CLASS = "vst-dragging";
   var RESIZING_CLASS = "vst-resizing";
   var DROP_INDICATOR_CLASS = "vst-drop-indicator";
-  var DRAG_THRESHOLD_PX2 = 5;
+  var DRAG_THRESHOLD_PX3 = 5;
   var MIN_RESIZE_WIDTH_PX = 24;
   var REGION_DRAGGING_CLASS = "vst-region-dragging";
   var resolveSelectedIndex = (selectedIndex, clipCount) => {
@@ -13340,7 +13793,7 @@ The conversion is one undoable change.`;
         body.classList.remove(RESIZING_CLASS);
       };
       return {
-        threshold: DRAG_THRESHOLD_PX2,
+        threshold: DRAG_THRESHOLD_PX3,
         suppressEscapeClick: true,
         onMove: (ctx) => {
           const width = Math.max(
@@ -13398,7 +13851,7 @@ The conversion is one undoable change.`;
         body.classList.remove(DRAGGING_CLASS);
       };
       return {
-        threshold: DRAG_THRESHOLD_PX2,
+        threshold: DRAG_THRESHOLD_PX3,
         axis: "xy",
         suppressEscapeClick: true,
         onMove: (ctx) => {
@@ -13659,7 +14112,7 @@ The conversion is one undoable change.`;
   var THUMB_SELECTOR = '.vst-refs-mark[data-vst-ref="thumb"]';
   var LANE_SELECTOR = ".vst-refs-lane[data-vst-ref-add]";
   var DRAGGING_CLASS2 = "vst-refs-dragging";
-  var DRAG_THRESHOLD_PX3 = 5;
+  var DRAG_THRESHOLD_PX4 = 5;
   var createTimelineReferencesTrack = (getCapabilities) => {
     let boundBody = null;
     let unregister = null;
@@ -13733,7 +14186,7 @@ The conversion is one undoable change.`;
       }
     };
     const dragSession = (body, state) => ({
-      threshold: DRAG_THRESHOLD_PX3,
+      threshold: DRAG_THRESHOLD_PX4,
       suppressEscapeClick: true,
       onMove: (ctx) => {
         body.classList.add(DRAGGING_CLASS2);
@@ -14025,6 +14478,10 @@ The conversion is one undoable change.`;
         break;
       case "audio-segment":
         selector = `.vst-audio-seg[data-clip-idx="${sel.clipIdx}"][data-seg-idx="${sel.segIdx}"]`;
+        break;
+      case "audio-track":
+      case "audio-track-span":
+        selector = `.vst-audio-seg[data-track-idx="${sel.trackIdx}"]`;
         break;
       case "prompt-major":
         selector = `.vst-major-seg[data-clip-idx="${sel.clipIdx}"]`;
@@ -14344,6 +14801,7 @@ The conversion is one undoable change.`;
           onUndo: () => history.undo(),
           onRedo: () => history.redo(),
           globalPrompt,
+          audioTracks: state.audioTracks,
           diagnostics: deriveAuthoringDiagnostics(clips, {
             catalog: architectureCatalog,
             generatedEntryMode: getRootGeneratedEntryMode()

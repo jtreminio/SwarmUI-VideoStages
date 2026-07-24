@@ -167,7 +167,13 @@ export const renderTimeline = (
         unit,
         options?.capabilities,
     );
-    const audioRow = renderAudioTrackRow(clips, layouts, options?.capabilities);
+    const renderedAudioRow = renderAudioTrackRow(
+        clips,
+        layouts,
+        options?.capabilities,
+        options?.audioTracks,
+        pxPerSecond,
+    );
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
     body.innerHTML =
         `${header}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px">` +
@@ -178,7 +184,7 @@ export const renderTimeline = (
         promptRow +
         videoRow +
         referencesRow +
-        audioRow +
+        renderedAudioRow +
         `</div></div>`;
     applyBackgroundImages(body);
     wireTimelineToolbar(body, options);

@@ -1552,4 +1552,55 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal(1.0, only.StartSeconds);
         Assert.Equal(2.0, only.LengthSeconds);
     }
+
+    [Fact]
+    public void Parse_RootTimelineAudioSegments_PreservesExecutableSourceWindowAndVolume()
+    {
+        JObject root = new()
+        {
+            ["Clips"] = new JArray(MakeClip([MakeStage("ltx-2")], duration: 4)),
+            ["AudioTracks"] = new JArray(
+                new JObject
+                {
+                    ["Id"] = "track-dialogue",
+                    ["Volume"] = 0.75,
+                    ["Source"] = new JObject
+                    {
+                        ["Kind"] = "Upload",
+                        ["Reference"] = "dialogue.wav",
+                        ["UploadedAudio"] = MakeUploadedAudio(fileName: "dialogue.wav"),
+                    },
+                    ["Spans"] = new JArray(
+                        new JObject
+                        {
+                            ["TimelineStartSeconds"] = 1.5,
+                            ["TimelineLengthSeconds"] = 2.5,
+                            ["SourceStartSeconds"] = 4,
+                            ["Projection"] = new JObject
+                            {
+                                ["FirstClipId"] = "clip-a",
+                                ["LastClipId"] = "clip-a",
+                                ["ClipStartOffsetSeconds"] = 1.5,
+                                ["ClipEndOffsetSeconds"] = 4,
+                            },
+                        }),
+                }),
+        };
+        ((JObject)((JArray)root["Clips"])[0])["Id"] = "clip-a";
+
+        VideoStagesSpec parsed = VideoStagesSpecParser.Parse(
+            BuildParser(root.ToString(Formatting.None)));
+        TimelineAudioSegmentSpec segment = Assert.Single(parsed.TimelineAudioSegments);
+
+        Assert.Equal("track-dialogue", segment.Id);
+        Assert.Equal("dialogue.wav", segment.Source.FileName);
+        Assert.Equal(1.5, segment.TimelineStartSeconds);
+        Assert.Equal(2.5, segment.LengthSeconds);
+        Assert.Equal(4, segment.SourceStartSeconds);
+        Assert.Equal(0.75, segment.Volume);
+        Assert.Equal(0, segment.FirstClipId);
+        Assert.Equal(0, segment.LastClipId);
+        Assert.Equal(1.5, segment.FirstClipOffsetSeconds);
+        Assert.Equal(4, segment.LastClipOffsetSeconds);
+    }
 }

@@ -1,20 +1,21 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import { beforeEach, describe, expect, it } from "@jest/globals";
 import { minimalClip } from "../__test_helpers__/clipFixtures";
 import { normalizeAudioTracks } from "../normalization";
 import { serializeStateForStorage } from "../persistence";
-import type { VideoStagesConfig } from "../types";
+import { getSelection, resetSelectionForTests } from "../selection";
+import type { TimelineSelection, VideoStagesConfig } from "../types";
 import { buildAudioTracksPanel } from "./audioTracksPanel";
 import type { DetailStripContext } from "./context";
 
 const config = (): VideoStagesConfig => ({
+    schemaVersion: 4,
     width: 1280,
     height: 720,
     fps: 24,
     dimsExplicit: false,
     clips: [
-        minimalClip({ id: "clip-a" }),
-        minimalClip({ id: "clip-b" }),
-        minimalClip({ id: "clip-c" }),
+        minimalClip({ id: "clip-a", duration: 3 }),
+        minimalClip({ id: "clip-b", duration: 4 }),
     ],
     audioTracks: [],
 });
@@ -38,199 +39,113 @@ const fieldControl = <T extends HTMLElement>(
     return control;
 };
 
-describe("planned multi-clip audio tracks panel", () => {
+describe("timeline-wide audio segments panel", () => {
     let state: VideoStagesConfig;
     let host: HTMLElement;
     let ctx: DetailStripContext;
-    let renderSpy: jest.Mock;
+
+    const render = (): void => {
+        const selected = getSelection();
+        const selection: Extract<
+            TimelineSelection,
+            { kind: "none" | "audio-track" | "audio-track-span" }
+        > =
+            selected.kind === "audio-track" ||
+            selected.kind === "audio-track-span"
+                ? selected
+                : { kind: "none" };
+        host.replaceChildren(buildAudioTracksPanel(ctx, state, selection));
+    };
 
     beforeEach(() => {
-        document.body.innerHTML = "";
+        resetSelectionForTests();
         state = config();
         host = document.createElement("div");
-        document.body.appendChild(host);
-        renderSpy = jest.fn();
-        const render = (): void => {
-            renderSpy();
-            host.replaceChildren(buildAudioTracksPanel(ctx, state));
-        };
+        document.body.replaceChildren(host);
         ctx = {
             commitState: (mutate) => mutate(state),
+            debouncedCommitState: (_key, mutate) => mutate(state),
             render,
         } as DetailStripContext;
         render();
     });
 
-    it("adds, edits, spans, and deletes tracks through stable entity IDs", () => {
-        expect(
-            host.querySelector(".vst-audio-tracks-planned-warning")
-                ?.textContent,
-        ).toBe("Planned — runtime mixer not yet connected");
-
+    it("adds one executable timeline lane and edits its source/window", () => {
         host.querySelector<HTMLButtonElement>(".vst-audio-track-add")?.click();
+
         expect(state.audioTracks).toHaveLength(1);
-        const trackId = state.audioTracks?.[0].id;
-        expect(trackId).toMatch(/^audio_track_/);
-
-        const trackRow = host.querySelector<HTMLElement>(".vst-audio-track");
-        if (!trackRow) {
-            throw new Error("track row missing");
-        }
-        const kind = fieldControl<HTMLSelectElement>(
-            trackRow,
-            "Source kind",
-            "select",
-        );
-        kind.value = "AceStepFun";
-        kind.dispatchEvent(new Event("change", { bubbles: true }));
-        const reference = fieldControl<HTMLInputElement>(
-            trackRow,
-            "Source reference",
-            "input",
-        );
-        reference.value = "audio2";
-        reference.dispatchEvent(new Event("input", { bubbles: true }));
-
-        trackRow
-            .querySelector<HTMLButtonElement>(".vst-audio-track-add-span")
-            ?.click();
-        expect(state.audioTracks?.[0].spans).toHaveLength(1);
-        const spanId = state.audioTracks?.[0].spans[0].id;
-        expect(spanId).toMatch(/^audio_span_/);
-
-        const spanRow = host.querySelector<HTMLElement>(
-            ".vst-audio-track-span",
-        );
-        if (!spanRow) {
-            throw new Error("span row missing");
-        }
-        const first = fieldControl<HTMLSelectElement>(
-            spanRow,
-            "First clip (inclusive)",
-            "select",
-        );
-        first.value = "clip-a";
-        first.dispatchEvent(new Event("change", { bubbles: true }));
-        const last = fieldControl<HTMLSelectElement>(
-            spanRow,
-            "Last clip (inclusive)",
-            "select",
-        );
-        last.value = "clip-c";
-        last.dispatchEvent(new Event("change", { bubbles: true }));
-
-        for (const [label, value] of [
-            ["Timeline start (s)", "0.5"],
-            ["Timeline length (s)", "4"],
-            ["Source start (s)", "2"],
-            ["Clip start offset (s)", "0.25"],
-            ["Clip length (s)", "1.5"],
-        ] as const) {
-            const input = fieldControl<HTMLInputElement>(
-                spanRow,
-                label,
-                "input",
-            );
-            input.value = value;
-            input.dispatchEvent(new Event("change", { bubbles: true }));
-        }
-
+        expect(getSelection()).toEqual({ kind: "audio-track", trackIdx: 0 });
         expect(state.audioTracks?.[0]).toMatchObject({
-            id: trackId,
-            source: { kind: "AceStepFun", reference: "audio2" },
+            volume: 1,
+            source: { kind: "Upload", uploadedAudio: null },
             spans: [
                 {
-                    id: spanId,
-                    firstClipId: "clip-a",
-                    lastClipId: "clip-c",
-                    timelineStartSeconds: 0.5,
-                    timelineLengthSeconds: 4,
-                    sourceStartSeconds: 2,
-                    clipStartOffsetSeconds: 0.25,
-                    clipLengthSeconds: 1.5,
+                    firstClipId: null,
+                    lastClipId: null,
+                    timelineStartSeconds: 0,
+                    timelineLengthSeconds: 2,
+                    sourceStartSeconds: 0,
                 },
             ],
         });
+        expect(host.textContent).not.toContain("Planned");
+        expect(
+            host.querySelector(".vst-audio-track-tab")?.textContent,
+        ).toContain("S0");
 
-        host.querySelector<HTMLButtonElement>(
-            ".vst-audio-track-delete-span",
-        )?.click();
-        expect(state.audioTracks?.[0].spans).toEqual([]);
-        host.querySelector<HTMLButtonElement>(
-            ".vst-audio-track-delete",
-        )?.click();
-        expect(state.audioTracks).toEqual([]);
-        expect(renderSpy).toHaveBeenCalledTimes(5);
+        expect(
+            fieldControl<HTMLSelectElement>(host, "Source", "select").value,
+        ).toBe("Upload");
+
+        const start = fieldControl<HTMLInputElement>(
+            host,
+            "Timeline start (s)",
+            "input",
+        );
+        start.value = "2.5";
+        start.dispatchEvent(new Event("input", { bubbles: true }));
+        const trim = fieldControl<HTMLInputElement>(
+            host,
+            "Trim start (s)",
+            "input",
+        );
+        trim.value = "1";
+        trim.dispatchEvent(new Event("input", { bubbles: true }));
+        const length = fieldControl<HTMLInputElement>(
+            host,
+            "Length (s)",
+            "input",
+        );
+        length.value = "3";
+        length.dispatchEvent(new Event("input", { bubbles: true }));
+
+        expect(state.audioTracks?.[0].spans[0]).toMatchObject({
+            timelineStartSeconds: 2.5,
+            timelineLengthSeconds: 3,
+            sourceStartSeconds: 1,
+        });
     });
 
-    it("labels missing endpoints as open timeline bounds", () => {
-        host.querySelector<HTMLButtonElement>(".vst-audio-track-add")?.click();
-        host.querySelector<HTMLButtonElement>(
-            ".vst-audio-track-add-span",
-        )?.click();
-        const spanRow = host.querySelector<HTMLElement>(
-            ".vst-audio-track-span",
-        ) as HTMLElement;
-
-        const first = fieldControl<HTMLSelectElement>(
-            spanRow,
-            "First clip (inclusive)",
-            "select",
-        );
-        const last = fieldControl<HTMLSelectElement>(
-            spanRow,
-            "Last clip (inclusive)",
-            "select",
-        );
-        expect(first.options[0].textContent).toBe("Timeline start (open)");
-        expect(last.options[0].textContent).toBe("Timeline end (open)");
-    });
-
-    it("shows preserved upload metadata while explaining planned-only behavior", () => {
+    it("renders an uploaded source and deletes the whole segment lane", () => {
         state.audioTracks = [
             {
                 id: "track-upload",
+                volume: 0.5,
                 source: {
                     kind: "Upload",
-                    reference: "",
+                    reference: "score.wav",
                     uploadedAudio: {
                         data: "data:audio/wav;base64,AA==",
                         fileName: "score.wav",
                     },
                 },
-                spans: [],
-            },
-        ];
-        ctx.render();
-
-        expect(
-            fieldControl<HTMLElement>(
-                host,
-                "Stored upload metadata",
-                ".vst-audio-track-upload-metadata",
-            ).textContent,
-        ).toBe("score.wav");
-        expect(host.textContent).toContain(
-            "Planned — runtime mixer not yet connected",
-        );
-    });
-
-    it("keeps stale clip references visible and intact while other fields change", () => {
-        state.audioTracks = [
-            {
-                id: "track-pending",
-                source: {
-                    kind: "External",
-                    reference: "",
-                    uploadedAudio: null,
-                },
                 spans: [
                     {
-                        id: "span-pending",
-                        firstClipId: "missing-clip",
-                        lastClipId: "clip-b",
+                        id: "span-upload",
+                        firstClipId: null,
+                        lastClipId: null,
                         timelineStartSeconds: 1,
-                        timelineLengthSeconds: null,
+                        timelineLengthSeconds: 5,
                         sourceStartSeconds: 0,
                         clipStartOffsetSeconds: null,
                         clipLengthSeconds: null,
@@ -238,40 +153,20 @@ describe("planned multi-clip audio tracks panel", () => {
                 ],
             },
         ];
-        ctx.render();
+        render();
+        expect(host.textContent).toContain("score.wav");
 
-        const spanRow = host.querySelector<HTMLElement>(
-            ".vst-audio-track-span",
-        ) as HTMLElement;
-        const first = fieldControl<HTMLSelectElement>(
-            spanRow,
-            "First clip (inclusive)",
-            "select",
-        );
-        expect(first.value).toBe("missing-clip");
-        expect(first.selectedOptions[0].textContent).toContain("Missing clip");
-
-        const reference = fieldControl<HTMLInputElement>(
-            host,
-            "Source reference",
-            "input",
-        );
-        reference.value = "pending.wav";
-        reference.dispatchEvent(new Event("input", { bubbles: true }));
-
-        expect(state.audioTracks[0].spans[0]).toMatchObject({
-            id: "span-pending",
-            firstClipId: "missing-clip",
-            lastClipId: "clip-b",
-            timelineStartSeconds: 1,
-            timelineLengthSeconds: null,
-        });
+        host.querySelector<HTMLButtonElement>(
+            ".vst-audio-track-delete",
+        )?.click();
+        expect(state.audioTracks).toEqual([]);
     });
 
-    it("round-trips panel-authored multi-clip spans through the root codec", () => {
+    it("round-trips volume and the timeline window through the root codec", () => {
         state.audioTracks = [
             {
                 id: "track-score",
+                volume: 0.75,
                 source: {
                     kind: "AceStepFun",
                     reference: "audio1",
@@ -280,10 +175,10 @@ describe("planned multi-clip audio tracks panel", () => {
                 spans: [
                     {
                         id: "span-score",
-                        firstClipId: "clip-a",
-                        lastClipId: "clip-c",
-                        timelineStartSeconds: 0,
-                        timelineLengthSeconds: 3.5,
+                        firstClipId: null,
+                        lastClipId: null,
+                        timelineStartSeconds: 2,
+                        timelineLengthSeconds: 4.5,
                         sourceStartSeconds: 1,
                         clipStartOffsetSeconds: null,
                         clipLengthSeconds: null,
@@ -293,10 +188,47 @@ describe("planned multi-clip audio tracks panel", () => {
         ];
 
         const raw = JSON.parse(serializeStateForStorage(state)) as {
-            audioTracks: unknown;
+            audioTracks: Array<{
+                spans: Array<{ projection: Record<string, unknown> }>;
+            }>;
         };
         expect(normalizeAudioTracks(raw.audioTracks)).toEqual(
             state.audioTracks,
         );
+        expect(raw.audioTracks[0].spans[0].projection).toEqual({
+            firstClipId: "clip-a",
+            lastClipId: "clip-b",
+            clipStartOffsetSeconds: 2,
+            clipEndOffsetSeconds: 3.5,
+        });
+    });
+
+    it("uses native Swarm slider wiring for volume", () => {
+        state.audioTracks = [
+            {
+                id: "track-volume",
+                volume: 1,
+                source: {
+                    kind: "AceStepFun",
+                    reference: "audio0",
+                    uploadedAudio: null,
+                },
+                spans: [
+                    {
+                        id: "span-volume",
+                        firstClipId: null,
+                        lastClipId: null,
+                        timelineStartSeconds: 0,
+                        timelineLengthSeconds: 2,
+                        sourceStartSeconds: 0,
+                        clipStartOffsetSeconds: null,
+                        clipLengthSeconds: null,
+                    },
+                ],
+            },
+        ];
+        render();
+        expect(host.querySelector("input.auto-slider-range")).not.toBeNull();
+        expect(host.querySelector("input.auto-slider-number")).not.toBeNull();
     });
 });

@@ -34,12 +34,38 @@ internal sealed class ClipContext
     /// </summary>
     public WGNodeData IcLoraEntryIncomingMedia { get; set; }
     public Ltx2ClipAudioReuseState AudioReuse { get; } = new();
+    public LtxPendingAudioConditioningState PendingAudioConditioning { get; } = new();
 
     // Set when the previous clip's outgoing boundary is "continue": the previous clip's final rendered
     // frame, used as this clip's first-frame guide so generation picks up where the prior clip ended.
     public WGNodeData ContinuityFrame { get; set; }
 
     public bool IsFirstStage(StagePlan stage) => stage?.ClipStageIndex == 0;
+}
+
+internal sealed class LtxPendingAudioConditioningState
+{
+    private IReadOnlyList<(double Start, double End)> _preserveWindows = [];
+
+    public WGNodeData Audio { get; private set; }
+    public IReadOnlyList<(double Start, double End)> PreserveWindows => _preserveWindows;
+    public bool IsPending => Audio is not null && _preserveWindows.Count > 0;
+
+    public void Defer(
+        WGNodeData audio,
+        IReadOnlyList<(double Start, double End)> preserveWindows)
+    {
+        Audio = audio;
+        _preserveWindows = preserveWindows is { Count: > 0 }
+            ? [.. preserveWindows]
+            : [];
+    }
+
+    public void Clear()
+    {
+        Audio = null;
+        _preserveWindows = [];
+    }
 }
 
 internal sealed class ClipDimensionState

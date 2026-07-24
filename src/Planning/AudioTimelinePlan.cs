@@ -17,7 +17,8 @@ internal enum AudioTimelineTrackSourceKind
 
 internal sealed record AudioTimelineTrackSource(
     AudioTimelineTrackSourceKind Kind,
-    string Reference);
+    string Reference,
+    AudioMediaIdentityPlan UploadedMedia = null);
 
 /// <summary>
 /// One requested interval of a track. A span may be bounded by clip ids, a timeline seconds window,
@@ -46,7 +47,8 @@ internal sealed record AudioTrackSpanSpec(
 internal sealed record AudioTrackSpec(
     string TrackId,
     AudioTimelineTrackSource Source,
-    ImmutableArray<AudioTrackSpanSpec> Spans);
+    ImmutableArray<AudioTrackSpanSpec> Spans,
+    double Volume = 1);
 
 internal enum AudioTimelineSpanOwnership
 {
@@ -109,7 +111,8 @@ internal sealed record AudioTimelineTrackPlan(
     AudioTimelineTrackSource Source,
     ImmutableArray<AudioTrackSpanSpec> AuthoredSpans,
     ImmutableArray<AudioTrackClipWindow> Windows,
-    ImmutableArray<PendingAudioTrackSpan> PendingSpans);
+    ImmutableArray<PendingAudioTrackSpan> PendingSpans,
+    double Volume = 1);
 
 /// <summary>
 /// Timeline-wide audio policy. The clip-local <see cref="AudioPlan"/> remains on every

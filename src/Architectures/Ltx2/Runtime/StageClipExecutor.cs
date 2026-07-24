@@ -57,7 +57,7 @@ internal sealed class StageClipExecutor(
             g.CurrentMedia = sourcedMedia;
         }
 
-        PrepareClipAudio(context, sourcedMedia, boundaryAudioCarry);
+        PrepareClipAudio(context, clipContext, sourcedMedia, boundaryAudioCarry);
         if (plannedClip.Stages.Count == 0)
         {
             return CaptureStageInputArtifact(ArtifactOrigin.SourceVideo);
@@ -163,6 +163,7 @@ internal sealed class StageClipExecutor(
 
     private void PrepareClipAudio(
         StageClipExecutionContext context,
+        ClipContext clipContext,
         WGNodeData sourcedMedia,
         LtxBoundaryAudioCarry boundaryAudioCarry)
     {
@@ -180,6 +181,7 @@ internal sealed class StageClipExecutor(
             IsFirstClip: context.ClipIndex == 0,
             clipAudioSources,
             context.RootPolicy),
+            clipContext,
             boundaryAudioCarry);
     }
 

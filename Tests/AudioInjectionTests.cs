@@ -182,6 +182,10 @@ public class AudioInjectionTests
             .Concat([SeedRootLtxVideoChainStep(), SeedNativeAudioStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildDeferredAudioVaeSteps() =>
+        WorkflowTestHarness.Template_BaseOnlyImage()
+            .Concat(WorkflowTestHarness.VideoStagesSteps());
+
     [Fact]
     public void Injector_sets_empty_video_length_from_audio_length_frames_before_cleanup_sensitive_stages_run()
     {
@@ -331,6 +335,133 @@ public class AudioInjectionTests
         IReadOnlyList<(ComfyNode Node, INodeInput Input)> maskConsumers =
             bridge.Graph.FindInputsConnectedTo(maskNode.Latent);
         Assert.Contains(maskConsumers, c => c.Input.Name == "audio_latent" && c.Node is LTXVConcatAVLatentNode);
+    }
+
+    [Fact]
+    public void Timeline_wide_segment_reaches_the_real_ltx_audio_graph()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject clip = MakeClipConfig(Constants.AudioSourceUpload, MakeStage(models.VideoModel.Name));
+        clip["Duration"] = 10.0;
+        JObject root = MakeRootConfig(clip);
+        root["AudioTracks"] = new JArray(
+            new JObject
+            {
+                ["Id"] = "timeline-segment",
+                ["Volume"] = 0.5,
+                ["Source"] = new JObject
+                {
+                    ["Kind"] = "Upload",
+                    ["Reference"] = "timeline.wav",
+                    ["UploadedAudio"] = MakeUploadedAudio(fileName: "timeline.wav"),
+                },
+                ["Spans"] = new JArray(
+                    new JObject
+                    {
+                        ["TimelineStartSeconds"] = 1.0,
+                        ["TimelineLengthSeconds"] = 2.0,
+                        ["SourceStartSeconds"] = 0.5,
+                    }),
+            });
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            root.ToString());
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmSetAudioMaskWindowsNode maskNode = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>());
+        JObject window = Assert.IsType<JObject>(
+            Assert.Single(JArray.Parse(maskNode.Windows.LiteralAsString())));
+        Assert.Equal(1.0, (double)window["start"]);
+        Assert.Equal(3.0, (double)window["end"]);
+        TrimAudioDurationNode trim = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.Equal(0.5, trim.StartIndex.LiteralAsDouble());
+        Assert.Equal(2.0, trim.Duration.LiteralAsDouble());
+        AudioAdjustVolumeNode volume = Assert.Single(
+            bridge.Graph.NodesOfType<AudioAdjustVolumeNode>());
+        Assert.Equal(-6, volume.Volume.LiteralAsInt());
+        Assert.Contains(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>(),
+            concat => ReferenceEquals(concat.AudioLatent.Connection, maskNode.Latent));
+    }
+
+    [Fact]
+    public void Timeline_segment_crossing_first_clip_is_window_masked_after_stage_audio_vae_loads()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject firstClip = MakeClipConfig(
+            Constants.AudioSourceNative,
+            MakeStage(models.VideoModel.Name));
+        firstClip["Duration"] = 5.0;
+        firstClip["BoundaryOut"] = Constants.BoundaryOutContinue;
+        JObject secondClip = MakeClipConfig(
+            Constants.AudioSourceNative,
+            MakeStage(models.VideoModel.Name));
+        secondClip["Name"] = "Clip 1";
+        secondClip["Duration"] = 5.0;
+
+        JObject root = MakeRootConfig(firstClip, secondClip);
+        root["AudioTracks"] = new JArray(
+            new JObject
+            {
+                ["Id"] = "cross-clip-segment",
+                ["Volume"] = 2.0,
+                ["Source"] = new JObject
+                {
+                    ["Kind"] = "Upload",
+                    ["Reference"] = "timeline.wav",
+                    ["UploadedAudio"] = MakeUploadedAudio(fileName: "timeline.wav"),
+                },
+                ["Spans"] = new JArray(
+                    new JObject
+                    {
+                        ["TimelineStartSeconds"] = 4.0,
+                        ["TimelineLengthSeconds"] = 2.0,
+                        ["SourceStartSeconds"] = 0.0,
+                    }),
+            });
+        T2IParamInput input = BuildInput(models.BaseModel, root.ToString());
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildDeferredAudioVaeSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        List<SwarmSetAudioMaskWindowsNode> masks =
+            [.. bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>()];
+        Assert.Equal(2, masks.Count);
+        Assert.Empty(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+        Assert.Contains(masks, mask =>
+            JArray.Parse(mask.Windows.LiteralAsString())
+                .Any(window => window.Value<double>("start") == 4.0));
+        Assert.Contains(masks, mask =>
+            JArray.Parse(mask.Windows.LiteralAsString())
+                .Any(window => window.Value<double>("start") == 0.0));
+
+        List<LTXVConcatAVLatentNode> conditionedInputs =
+        [
+            .. bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>()
+                .Where(concat => masks.Any(mask =>
+                    ReferenceEquals(concat.AudioLatent.Connection, mask.Latent)))
+        ];
+        Assert.Equal(2, conditionedInputs.Count);
+        Assert.Equal(
+            2,
+            conditionedInputs
+                .SelectMany(concat => bridge.Graph.FindInputsConnectedTo(concat.Latent))
+                .Count(consumer => consumer.Node is SwarmKSamplerNode
+                    && consumer.Input.Name == "latent_image"));
     }
 
     [Fact]

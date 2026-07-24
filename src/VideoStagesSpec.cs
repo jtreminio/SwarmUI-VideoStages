@@ -152,6 +152,25 @@ public sealed record AudioSegmentSpec(
     double Volume = 1
 );
 
+/// <summary>
+/// One root-authored audio segment positioned on the final multi-clip timeline. Planning projects
+/// this interval onto every clip it intersects, advancing <see cref="SourceStartSeconds"/> at each
+/// seam so every clip receives the correct source slice.
+/// </summary>
+public sealed record TimelineAudioSegmentSpec(
+    string Id,
+    UploadedMediaSpec Source,
+    string AceStepFunSource,
+    double TimelineStartSeconds,
+    double SourceStartSeconds,
+    double LengthSeconds,
+    double Volume = 1,
+    int? FirstClipId = null,
+    int? LastClipId = null,
+    double? FirstClipOffsetSeconds = null,
+    double? LastClipOffsetSeconds = null
+);
+
 public sealed record PromptWindowSpec(
     string Prompt,
     double Start,
@@ -213,5 +232,6 @@ public sealed record VideoStagesSpec(
     int FPS,
     bool IsTextToVideo,
     IReadOnlyList<ClipSpec> Clips,
-    bool HasConfiguredResolution = true
+    bool HasConfiguredResolution = true,
+    IReadOnlyList<TimelineAudioSegmentSpec> TimelineAudioSegments = null
 );

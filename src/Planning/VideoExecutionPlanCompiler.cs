@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace VideoStages.Planning;
 
 using VideoStages.Architectures;
@@ -161,11 +163,24 @@ internal static class VideoExecutionPlanCompiler
             Array.AsReadOnly(clips.ToArray()),
             Array.AsReadOnly(resolvedBoundaries.ToArray()),
             Array.AsReadOnly(diagnostics.ToArray()));
-        AudioTimelinePlan audioTimeline = AudioTimelinePlanCompiler.Compile(plan);
+        ImmutableArray<AudioTrackSpec> authoredAudioTracks =
+            TimelineAudioSegmentTrackSpecPlanner.Compile(
+                spec.TimelineAudioSegments,
+                plan);
+        AudioTimelinePlan audioTimeline = AudioTimelinePlanCompiler.Compile(
+            plan,
+            authoredAudioTracks);
+        IReadOnlyList<ClipPlan> clipsWithTimelineAudio =
+            TimelineAudioSegmentPlanProjector.Apply(
+                plan.Clips,
+                audioTimeline,
+                authoredAudioTracks.Select(track => track.TrackId).ToHashSet(
+                    StringComparer.Ordinal));
         diagnostics.AddRange(audioTimeline.Diagnostics.Select(MapAudioTimelineDiagnostic));
         return plan with
         {
             HasConfiguredResolution = spec.HasConfiguredResolution,
+            Clips = clipsWithTimelineAudio,
             Diagnostics = Array.AsReadOnly(diagnostics.ToArray()),
             AudioTimeline = audioTimeline,
         };

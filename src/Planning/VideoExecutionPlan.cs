@@ -20,9 +20,9 @@ internal sealed record VideoExecutionPlan(
     public bool HasConfiguredResolution { get; init; } = true;
 
     /// <summary>
-    /// Clip-local audio projected onto the timeline. Call
-    /// <see cref="AudioTimelinePlanCompiler"/> when a caller supplies timeline track spans; the per-clip <see cref="ClipPlan.Audio"/> remains
-    /// the existing single-clip plan either way.
+    /// Unified projection of clip base audio, compatibility overlays, and
+    /// root-authored timeline-wide audio segments. The executable per-clip
+    /// slices also live in each <see cref="ClipPlan.Audio"/>.
     /// </summary>
     public AudioTimelinePlan AudioTimeline { get; init; } = AudioTimelinePlan.Empty;
 }

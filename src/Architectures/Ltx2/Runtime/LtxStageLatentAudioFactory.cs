@@ -24,6 +24,10 @@ internal sealed class LtxStageLatentAudioFactory(
         int frames = genInfo.Frames
             ?? sourceMedia?.Frames
             ?? LtxStageRuntimeSettings.DefaultFrameCount;
+        WGNodeData attachedAudio = ApplyPendingAudioConditioning(
+            stageFrame.ClipContext,
+            sourceMedia?.AttachedAudio,
+            out _);
         return CreateEmpty(
             stageFrame.ClipContext.PlannedClip?.Audio
                 ?? throw new InvalidOperationException(
@@ -33,7 +37,7 @@ internal sealed class LtxStageLatentAudioFactory(
             width,
             height,
             frames,
-            sourceMedia?.AttachedAudio,
+            attachedAudio,
             controlNetLengthFrames);
     }
 
@@ -120,10 +124,21 @@ internal sealed class LtxStageLatentAudioFactory(
     internal WGNodeData EnsureHasAudio(
         WGNodeData latent,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        StageFrame stageFrame,
         WGNodeData sourceMedia)
     {
         int fps = runtimeSettings.ResolveFps(genInfo, sourceMedia);
         WGNodeData nativeHandoff = LtxDecodedAudioHandoff.PreferNativeLatent(g, latent);
+        WGNodeData attachedAudio = nativeHandoff.AttachedAudio ?? sourceMedia?.AttachedAudio;
+        WGNodeData conditionedAudio = ApplyPendingAudioConditioning(
+            stageFrame.ClipContext,
+            attachedAudio,
+            out bool applied);
+        if (applied)
+        {
+            nativeHandoff = nativeHandoff.Duplicate();
+            nativeHandoff.AttachedAudio = conditionedAudio;
+        }
         WGNodeData withAudio = nativeHandoff.EnsureHasAudioIfNeeded(
             genInfo.Vae,
             g.CurrentAudioVae);
@@ -131,6 +146,35 @@ internal sealed class LtxStageLatentAudioFactory(
         withAudio.FPS = fps;
 
         return withAudio;
+    }
+
+    private WGNodeData ApplyPendingAudioConditioning(
+        ClipContext clipContext,
+        WGNodeData attachedAudio,
+        out bool applied)
+    {
+        LtxPendingAudioConditioningState pending = clipContext.PendingAudioConditioning;
+        applied = false;
+        WGNodeData pendingAudio = pending.Audio ?? attachedAudio;
+        if (!pending.IsPending
+            || pendingAudio.DataType == WGNodeData.DT_LATENT_AUDIO)
+        {
+            return attachedAudio;
+        }
+
+        WGNodeData conditioned = LtxAudioPreserveWindowBuilder.TryBuild(
+            g,
+            pendingAudio,
+            pending.PreserveWindows,
+            stableIdSlot: clipContext.PlannedClip.ClipId + 1);
+        if (conditioned is null)
+        {
+            return attachedAudio;
+        }
+
+        pending.Clear();
+        applied = true;
+        return conditioned;
     }
 
     internal JArray TryResolveControlNetLengthFrames(ClipPlan clip)

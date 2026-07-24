@@ -4,6 +4,7 @@ import { stageChipLabel } from "../timelineDetail";
 import type { Clip, TimelineSelection } from "../types";
 import { roundToTenth } from "../utils";
 import { buildAudioBody } from "./audioPanel";
+import { buildTimelineAudioSegmentsBody } from "./audioTracksPanel";
 import { buildBoundaryBody } from "./boundaryPanel";
 import { buildClipBody } from "./clipPanel";
 import type { DetailStripContext } from "./context";
@@ -121,9 +122,9 @@ export const detailBreadcrumb = (
             return `Audio segment · Clip ${selection.clipIdx} · ${start}–${end} s`;
         }
         case "audio-track":
-            return `Audio track ${selection.trackIdx + 1}`;
+            return `Audio segment S${selection.trackIdx}`;
         case "audio-track-span":
-            return `Audio track ${selection.trackIdx + 1} · Span ${selection.spanIdx + 1}`;
+            return `Audio segment S${selection.trackIdx}`;
         case "boundary":
             return `Boundary · Clip ${selection.leftClipIdx} → ${selection.leftClipIdx + 1}`;
         case "prompt-major":
@@ -207,7 +208,11 @@ export const buildDetailPanelBody = (
             return buildAudioBody(context, selection, clips);
         case "audio-track":
         case "audio-track-span":
-            return buildSettingsBody(context, selection);
+            return buildTimelineAudioSegmentsBody(
+                context,
+                getState(),
+                selection,
+            );
         case "prompt-major":
             return buildPromptMajorBody(context, selection, clips);
         case "prompt-minor":

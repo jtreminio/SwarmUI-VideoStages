@@ -502,6 +502,111 @@ public class VideoExecutionPlanCompilerTests
             });
     }
 
+    [Fact]
+    public void Compile_TimelineAudioSegment_CutsAtEveryClipAndAdvancesSourceOffset()
+    {
+        VideoStagesSpec spec = Spec(
+            false,
+            GeneratedClip(0, Stage(10)) with { Frames = 48 },
+            GeneratedClip(1, Stage(11)) with { Frames = 48 },
+            GeneratedClip(2, Stage(12)) with { Frames = 48 }) with
+        {
+            TimelineAudioSegments =
+            [
+                new(
+                    "dialogue",
+                    new UploadedMediaSpec("data:audio/wav;base64,QUJD", "dialogue.wav"),
+                    null,
+                    TimelineStartSeconds: 1.5,
+                    SourceStartSeconds: 10,
+                    LengthSeconds: 3,
+                    Volume: 0.75),
+            ],
+        };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+
+        AudioSegmentItemPlan[] projected = plan.Clips
+            .SelectMany(clip => clip.Audio.Segments.Items)
+            .ToArray();
+        Assert.Equal(3, projected.Length);
+        Assert.Equal([1.5d, 0d, 0d], projected.Select(item => item.StartSeconds));
+        Assert.Equal([0.5d, 2d, 0.5d], projected.Select(item => item.LengthSeconds));
+        Assert.Equal([10d, 10.5d, 12.5d], projected.Select(item => item.TrimStartSeconds));
+        Assert.All(projected, item =>
+        {
+            Assert.Equal(AudioSegmentSourceKind.Upload, item.SourceKind);
+            Assert.Equal("dialogue.wav", item.UploadedMedia.FileName);
+            Assert.Equal(0.75, item.Volume);
+        });
+    }
+
+    [Fact]
+    public void Compile_OverlappingTimelineAudioSegments_RemainIndependentPerClip()
+    {
+        VideoStagesSpec spec = Spec(
+            false,
+            GeneratedClip(0, Stage(10)) with { Frames = 48 },
+            GeneratedClip(1, Stage(11)) with { Frames = 48 }) with
+        {
+            TimelineAudioSegments =
+            [
+                new("music", null, "audio0", 0.5, 0, 3, 1),
+                new("voice", null, "audio1", 1, 2, 2.5, 0.5),
+            ],
+        };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+
+        Assert.Equal(2, plan.Clips[0].Audio.Segments.Items.Length);
+        Assert.Equal(2, plan.Clips[1].Audio.Segments.Items.Length);
+        Assert.Equal(
+            [0, 1],
+            plan.Clips[0].Audio.Segments.Items.Select(item => item.AceStepFunTrack));
+        Assert.Equal(
+            [0, 1],
+            plan.Clips[1].Audio.Segments.Items.Select(item => item.AceStepFunTrack));
+        Assert.Contains(plan.AudioTimeline.Diagnostics, diagnostic =>
+            diagnostic.Code == "audio.timeline.overlapping_tracks");
+    }
+
+    [Fact]
+    public void Compile_TimelineAudioSeamAnchor_DoesNotLeakAnAlignedFrameIntoPreviousClip()
+    {
+        VideoStagesSpec spec = Spec(
+            false,
+            GeneratedClip(0, Stage(10)) with { Frames = 49 },
+            GeneratedClip(1, Stage(11)) with { Frames = 49 }) with
+        {
+            TimelineAudioSegments =
+            [
+                new(
+                    "seam",
+                    null,
+                    "audio0",
+                    TimelineStartSeconds: 2,
+                    SourceStartSeconds: 0,
+                    LengthSeconds: 1,
+                    Volume: 1,
+                    FirstClipId: 1,
+                    LastClipId: 1,
+                    FirstClipOffsetSeconds: 0,
+                    LastClipOffsetSeconds: 1),
+            ],
+        };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+
+        Assert.Empty(plan.Clips[0].Audio.Segments.Items);
+        AudioSegmentItemPlan item = Assert.Single(plan.Clips[1].Audio.Segments.Items);
+        Assert.Equal(0, item.StartSeconds);
+        Assert.Equal(1, item.LengthSeconds);
+        Assert.Equal(49d / 24, Assert.Single(
+            plan.AudioTimeline.Tracks.Where(track => track.TrackId == "seam"))
+            .Windows[0]
+            .TimelineStartSeconds);
+    }
+
     private static VideoStagesSpec Spec(bool isTextToVideo, params ClipSpec[] clips) =>
         new(512, 512, 24, isTextToVideo, clips);
 

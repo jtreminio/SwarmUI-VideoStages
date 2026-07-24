@@ -18,9 +18,11 @@ internal sealed class ClipAudioPreparer(
 
     public void Prepare(
         ClipAudioExecutionContext context,
+        ClipContext clipContext,
         LtxBoundaryAudioCarry boundaryAudioCarry = null)
     {
         ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(clipContext);
         if (g.CurrentMedia is null)
         {
             return;
@@ -65,6 +67,7 @@ internal sealed class ClipAudioPreparer(
 
         AttachClipAudio(
             context,
+            clipContext,
             currentMedia,
             baseAudio,
             combinedAudio,
@@ -74,6 +77,7 @@ internal sealed class ClipAudioPreparer(
 
     private void AttachClipAudio(
         ClipAudioExecutionContext context,
+        ClipContext clipContext,
         WGNodeData currentMedia,
         WGNodeData baseAudio,
         WGNodeData combinedAudio,
@@ -107,6 +111,10 @@ internal sealed class ClipAudioPreparer(
         else
         {
             currentMedia.AttachedAudio = combinedAudio;
+            if (hasGenerationStage && overlaysOverNoBase)
+            {
+                clipContext.PendingAudioConditioning.Defer(combinedAudio, preserveWindows);
+            }
         }
         g.CurrentMedia = currentMedia;
 

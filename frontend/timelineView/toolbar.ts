@@ -6,6 +6,7 @@ import {
     formatTimeLabel,
     type TimelineUnit,
 } from "../timelineDetail";
+import type { AudioTrack } from "../types";
 import {
     DEFAULT_PX_PER_SECOND,
     MAX_PX_PER_SECOND,
@@ -34,6 +35,7 @@ export interface RenderTimelineOptions {
     onUndo?: () => void;
     onRedo?: () => void;
     globalPrompt?: string;
+    audioTracks?: AudioTrack[];
     diagnostics?: readonly AuthoringDiagnostic[];
     capabilities?: CapabilityViewResolver;
 }

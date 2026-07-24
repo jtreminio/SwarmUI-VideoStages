@@ -55,13 +55,13 @@ export interface VideoStagesConfig {
     dimsExplicit: boolean;
     clips: Clip[];
     /**
-     * Planned timeline-wide audio authoring. The backend currently ignores
-     * this root field; clip-local audio remains the runtime compatibility path.
+     * Timeline-wide overlay audio. Each logical track is one independently
+     * movable audio segment lane; its timeline window may cross clip seams.
      */
     audioTracks?: AudioTrack[];
 }
 
-export const CURRENT_AUTHORING_SCHEMA_VERSION = 3;
+export const CURRENT_AUTHORING_SCHEMA_VERSION = 4;
 
 export interface UploadedMedia {
     data: string;
@@ -249,7 +249,7 @@ export type AudioTrackSourceKind =
     | "ControlNet"
     | "External";
 
-/** Metadata-only source identity for a planned timeline-wide audio track. */
+/** Source identity for a timeline-wide audio segment. */
 export interface AudioTrackSource {
     kind: AudioTrackSourceKind;
     reference: string;
@@ -274,11 +274,17 @@ export interface AudioTrackSpan {
     clipLengthSeconds: number | null;
 }
 
-/** A logical source with one or more independently addressable spans. */
+/**
+ * A logical timeline-wide audio segment. New authoring creates exactly one
+ * span per track; the array remains for compatibility with the earlier
+ * planned-track schema and is normalized into independent lanes on load.
+ */
 export interface AudioTrack {
     id?: string;
     source: AudioTrackSource;
     spans: AudioTrackSpan[];
+    /** Relative loudness before additive mixing. */
+    volume?: number;
 }
 
 type WithRequiredId<T extends { id?: string }> = Omit<T, "id"> & {
