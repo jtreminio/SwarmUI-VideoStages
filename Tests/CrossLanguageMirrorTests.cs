@@ -5,6 +5,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 using Xunit;
@@ -57,6 +58,22 @@ public class CrossLanguageMirrorTests
             int fps = c.Value<int>("fps");
             int expected = c.Value<int>("expectedFrames");
             Assert.Equal(expected, ClipTimelineSpecParser.CalculateAlignedFrameCount(duration, fps));
+        }
+    }
+
+    /// <summary>
+    /// M5 — LTX pixel→latent frame mapping: <see cref="Ltx2ArchitectureModule.LatentFrameCount"/> vs
+    /// the Comfy node's <c>pixel_to_latent_frames</c>, which asserts the same fixture in pytest.
+    /// </summary>
+    [Fact]
+    public void LatentFrameCount_MatchesSharedFixture()
+    {
+        foreach (JObject c in LoadFixture("latent-frame-cases.json").OfType<JObject>())
+        {
+            Assert.Equal(Ltx2ArchitectureModule.FrameGrid, c.Value<int>("temporalStride"));
+            Assert.Equal(
+                c.Value<int>("expectedLatentFrames"),
+                Ltx2ArchitectureModule.LatentFrameCount(c.Value<int>("pixelFrames")));
         }
     }
 

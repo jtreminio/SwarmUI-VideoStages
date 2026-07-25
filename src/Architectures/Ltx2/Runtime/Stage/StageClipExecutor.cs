@@ -29,8 +29,7 @@ internal sealed class StageClipExecutor(
     StageRunner singleStageRunner,
     AudioTimelineExecutor audioTimelineExecutor,
     StageGuideReferenceState guideReferences,
-    ContinuityGuideBuilder continuityGuideBuilder,
-    LtxBoundaryAudioCarryBuilder boundaryAudioCarryBuilder)
+    BoundaryHandoffResolver boundaryHandoffResolver)
 {
     private readonly SourcedClipInstaller _sourcedClipInstaller = new(g);
 
@@ -119,46 +118,13 @@ internal sealed class StageClipExecutor(
             return null;
         }
 
-        if (context.Assembly.TryGetContinueWindow(
-            context.PreviousClip.ClipId,
-            out int continuityWindow))
-        {
-            if (sourcedMedia is not null)
-            {
-                Logs.Warning(
-                    $"VideoStages: Clip {context.PreviousClip.ClipId} boundary 'continue' flows into "
-                    + $"sourced Clip {context.PlannedClip.ClipId}; treating the boundary as a cut.");
-                context.Assembly.DegradeToCut(
-                    context.PreviousClip.ClipId,
-                    "target clip is sourced footage");
-                return null;
-            }
-
-            clipContext.ContinuityFrame = continuityGuideBuilder.TryBuild(
-                context.PreviousClip,
-                context.PreviousClipOutput,
-                context.PlannedClip,
-                continuityWindow);
-            if (clipContext.ContinuityFrame is null)
-            {
-                context.Assembly.DegradeToCut(
-                    context.PreviousClip.ClipId,
-                    "continuity input could not be built");
-                return null;
-            }
-        }
-
-        if (!context.Assembly.TryGetAudioCarryWindow(
-            context.PreviousClip.ClipId,
-            out int audioWindow))
-        {
-            return null;
-        }
-        return boundaryAudioCarryBuilder.TryBuild(
+        return boundaryHandoffResolver.Resolve(
+            context.Assembly,
             context.PreviousClip,
             context.PreviousClipOutput,
             context.PlannedClip,
-            audioWindow);
+            nextClipIsSourced: sourcedMedia is not null,
+            clipContext);
     }
 
     private void PrepareClipAudio(

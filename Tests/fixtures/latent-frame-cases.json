@@ -1,0 +1,10 @@
+[
+    { "pixelFrames": 1, "temporalStride": 8, "expectedLatentFrames": 1 },
+    { "pixelFrames": 8, "temporalStride": 8, "expectedLatentFrames": 1 },
+    { "pixelFrames": 9, "temporalStride": 8, "expectedLatentFrames": 2 },
+    { "pixelFrames": 17, "temporalStride": 8, "expectedLatentFrames": 3 },
+    { "pixelFrames": 96, "temporalStride": 8, "expectedLatentFrames": 12 },
+    { "pixelFrames": 97, "temporalStride": 8, "expectedLatentFrames": 13 },
+    { "pixelFrames": 121, "temporalStride": 8, "expectedLatentFrames": 16 },
+    { "pixelFrames": 241, "temporalStride": 8, "expectedLatentFrames": 31 }
+]

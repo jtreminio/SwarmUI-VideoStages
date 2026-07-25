@@ -1,3 +1,6 @@
+import json
+import os
+
 import torch
 
 from SwarmVideoStagesNodes.swarm_prompt_relay.prompt_relay import (
@@ -8,30 +11,69 @@ from SwarmVideoStagesNodes.swarm_prompt_relay.prompt_relay import (
     distribute_segment_lengths,
     map_token_indices,
     parse_windows,
+    pixel_to_latent_frames,
 )
 
 
 def test_parse_windows_returns_parallel_prompt_and_seconds_lists() -> None:
-    prompts, seconds = parse_windows(
+    prompts, seconds, latent_frames = parse_windows(
         '[{"prompt": " a red car ", "seconds": 1.5}, {"prompt": "a blue boat", "seconds": 2}]'
     )
     # Surrounding whitespace is stripped; order is preserved; fractional seconds are kept.
     assert prompts == ["a red car", "a blue boat"]
     assert seconds == [1.5, 2.0]
+    # A bare array declares no geometry.
+    assert latent_frames is None
 
 
 def test_parse_windows_keeps_lists_parallel_with_empty_prompt_and_coerces_seconds() -> None:
-    prompts, seconds = parse_windows('[{"seconds": "0.5"}, {"prompt": "x", "seconds": 2}]')
+    prompts, seconds, _ = parse_windows('[{"seconds": "0.5"}, {"prompt": "x", "seconds": 2}]')
     assert prompts == ["", "x"]
     assert seconds == [0.5, 2.0]
 
 
+def test_parse_windows_reads_declared_latent_frames_from_the_object_payload() -> None:
+    prompts, seconds, latent_frames = parse_windows(
+        '{"latentFrames": 13, "windows": [{"prompt": "a", "seconds": 2}, '
+        '{"prompt": "b", "seconds": 2}]}'
+    )
+    assert prompts == ["a", "b"]
+    assert seconds == [2.0, 2.0]
+    assert latent_frames == 13
+
+
+def test_parse_windows_ignores_a_non_positive_or_malformed_latent_frame_count() -> None:
+    assert parse_windows('{"latentFrames": 0, "windows": [{"prompt": "a"}]}')[2] is None
+    assert parse_windows('{"latentFrames": "x", "windows": [{"prompt": "a"}]}')[2] is None
+
+
 def test_parse_windows_blank_or_malformed_yields_empty() -> None:
-    assert parse_windows("") == ([], [])
-    assert parse_windows("   ") == ([], [])
-    assert parse_windows("not json") == ([], [])
-    # A JSON object (not an array) is rejected.
-    assert parse_windows('{"prompt": "x", "seconds": 1}') == ([], [])
+    assert parse_windows("") == ([], [], None)
+    assert parse_windows("   ") == ([], [], None)
+    assert parse_windows("not json") == ([], [], None)
+    # A bare window object (not an array, no windows key) yields nothing.
+    assert parse_windows('{"prompt": "x", "seconds": 1}') == ([], [], None)
+
+
+def test_pixel_to_latent_frames_matches_the_shared_backend_fixture() -> None:
+    fixture = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
+        "Tests", "fixtures", "latent-frame-cases.json",
+    )
+    with open(fixture, encoding="utf-8") as handle:
+        cases = json.load(handle)
+    assert cases
+    for case in cases:
+        assert pixel_to_latent_frames(
+            case["pixelFrames"], case["temporalStride"]
+        ) == case["expectedLatentFrames"], case
+
+
+def test_pixel_to_latent_frames_does_not_round_a_full_clip_short() -> None:
+    # The old round(pixels / stride) estimate gave 12 for a 97-frame LTX clip, dropping a frame.
+    assert pixel_to_latent_frames(97, 8) == 13
+    assert pixel_to_latent_frames(0, 8) == 1
+    assert pixel_to_latent_frames(10, 0) == 10
 
 
 class _FakeTokenizer:

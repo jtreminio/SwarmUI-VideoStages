@@ -3,9 +3,10 @@
 Trimmed port of WhatDreamsCost-ComfyUI/ltx_director.py::_encode_relay. Schedules N
 local prompts across the frame axis of a single LTX generation via an additive
 Gaussian penalty on the text-key cross-attention, plus a global prompt that
-conditions the whole clip. The latent input is optional: when connected it gives
-exact latent geometry, otherwise geometry is derived from the model + segment
-lengths (the attention-time mask closure recovers the true tokens-per-frame).
+conditions the whole clip. Latent geometry comes from the optional latent input
+when connected, else from the latentFrames the windows payload declares, else
+from an estimate over the segment lengths (the attention-time mask closure
+recovers the true tokens-per-frame).
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from .swarm_prompt_relay.prompt_relay import (
     get_tokenizer_wrapper,
     map_token_indices,
     parse_windows,
+    pixel_to_latent_frames,
 )
 
 log = logging.getLogger(__name__)
@@ -62,7 +64,9 @@ class SwarmPromptRelayEncode(io.ComfyNode):
                     tooltip=(
                         'JSON array of window objects [{"prompt": str, "seconds": float}, ...], '
                         "in schedule order. seconds is the window duration; it is converted to "
-                        "frames using the fps input."
+                        'frames using the fps input. Accepts {"latentFrames": int, "windows": '
+                        "[...]} to state the clip's exact latent frame count instead of leaving "
+                        "the node to estimate it."
                     ),
                 ),
                 io.Float.Input(
@@ -107,7 +111,9 @@ class SwarmPromptRelayEncode(io.ComfyNode):
                 )
 
         # Parallel per-window lists; empties are kept so we can fill them from the global below.
-        locals_list, seconds_parsed = parse_windows(windows)
+        # declared_latent_frames is the backend's authoritative latent geometry (absent for
+        # hand-built graphs, which fall back to the estimate).
+        locals_list, seconds_parsed, declared_latent_frames = parse_windows(windows)
 
         # Convert each window's duration (seconds) to a pixel-space frame count via fps. A window
         # that rounds to zero frames is kept as a single frame so it still holds a schedule slot.
@@ -137,11 +143,20 @@ class SwarmPromptRelayEncode(io.ComfyNode):
             tokens_per_frame = samples.shape[3] * samples.shape[4]
             if pixel_lengths:
                 parsed_lengths = convert_to_latent_lengths(pixel_lengths, temporal_stride, latent_frames)
+        elif declared_latent_frames:
+            latent_frames = max(len(locals_list), declared_latent_frames)
+            if pixel_lengths:
+                parsed_lengths = convert_to_latent_lengths(pixel_lengths, temporal_stride, latent_frames)
+            # Fallback; mask closure recovers true tokens-per-frame at attention time.
+            tokens_per_frame = 1
         elif pixel_lengths:
-            estimate = max(len(locals_list), max(1, round(sum(pixel_lengths) / max(1, temporal_stride))))
+            # No supplied geometry: estimate on LTX's own pixel->latent mapping.
+            estimate = max(
+                len(locals_list),
+                pixel_to_latent_frames(sum(pixel_lengths), temporal_stride),
+            )
             parsed_lengths = convert_to_latent_lengths(pixel_lengths, temporal_stride, estimate)
             latent_frames = max(1, sum(parsed_lengths))
-            # Fallback; mask closure recovers true tokens-per-frame at attention time.
             tokens_per_frame = 1
         else:
             latent_frames = max(1, len(locals_list))

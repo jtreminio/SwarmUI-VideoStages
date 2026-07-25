@@ -6,6 +6,7 @@ _convert_to_latent_lengths from ltx_director.py.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 from collections.abc import Callable, Mapping, Sequence
@@ -40,14 +41,28 @@ MaskFn = Callable[
 ]
 
 
-def parse_windows(windows_json: str | None) -> tuple[list[str], list[float]]:
-    """Parse the JSON array of window objects into parallel (prompts, seconds) lists.
+def pixel_to_latent_frames(pixel_frames: int, temporal_stride: int) -> int:
+    """LTX's pixel->latent temporal mapping: the first pixel frame owns a latent frame of its own
+    and every further ``temporal_stride`` pixel frames add one.
 
-    Each element is an object with a ``prompt`` string and a ``seconds`` duration (float), in
-    schedule order (the SwarmUI backend pre-sorts them). Blank / non-array / malformed JSON yields
-    ``([], [])``. Prompts are stripped of surrounding whitespace; empty prompts are kept so the
-    caller can fill them from the global prompt. Non-numeric durations degrade to 0.0. The two lists
-    are always the same length, so downstream duration/prompt counts never disagree.
+    Mirrored in the SwarmUI backend as ``Ltx2ArchitectureModule.LatentFrameCount``; the pair is
+    pinned by ``Tests/fixtures/latent-frame-cases.json``.
+    """
+    stride = max(1, int(temporal_stride))
+    return (max(1, int(pixel_frames)) - 1) // stride + 1
+
+
+def parse_windows(windows_json: str | None) -> tuple[list[str], list[float], int | None]:
+    """Parse the window schedule into parallel (prompts, seconds) lists plus the latent frame count.
+
+    The payload is either a bare JSON array of window objects, or an object
+    ``{"latentFrames": int, "windows": [...]}`` — the SwarmUI backend sends the latter so the node
+    gets exact latent geometry instead of estimating it. Each window is an object with a ``prompt``
+    string and a ``seconds`` duration (float), in schedule order (the backend pre-sorts them).
+    Blank / malformed JSON yields ``([], [], None)``. Prompts are stripped of surrounding
+    whitespace; empty prompts are kept so the caller can fill them from the global prompt.
+    Non-numeric durations degrade to 0.0. The two lists are always the same length, so downstream
+    duration/prompt counts never disagree.
     """
     def parse_item(item: dict[str, Any]) -> tuple[str, float]:
         prompt = str(item.get("prompt", "")).strip()
@@ -57,10 +72,24 @@ def parse_windows(windows_json: str | None) -> tuple[list[str], list[float]]:
             duration = 0.0
         return prompt, max(duration, 0.0)
 
-    pairs = parse_json_windows(windows_json, parse_item)
+    windows_text = windows_json
+    latent_frames: int | None = None
+    try:
+        payload = json.loads((windows_json or "").strip() or "null")
+    except (ValueError, TypeError):
+        payload = None
+    if isinstance(payload, dict):
+        try:
+            declared = int(payload.get("latentFrames", 0))
+        except (TypeError, ValueError):
+            declared = 0
+        latent_frames = declared if declared > 0 else None
+        windows_text = json.dumps(payload.get("windows", []))
+
+    pairs = parse_json_windows(windows_text, parse_item)
     prompts = [prompt for prompt, _ in pairs]
     seconds = [duration for _, duration in pairs]
-    return prompts, seconds
+    return prompts, seconds, latent_frames
 
 
 def build_temporal_cost(

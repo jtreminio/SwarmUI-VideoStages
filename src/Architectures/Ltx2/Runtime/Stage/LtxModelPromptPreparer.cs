@@ -72,13 +72,13 @@ internal sealed class LtxModelPromptPreparer(
         }
 
         int fps = runtimeSettings.ResolveFps(genInfo, sourceMedia);
+        int frameCount = genInfo.Frames
+            ?? sourceMedia?.Frames
+            ?? LtxStageRuntimeSettings.DefaultFrameCount;
         IReadOnlyList<PromptRelaySegmentPlan> segments = promptRelay.Segments;
         PromptRelayMode mode = promptRelay.Mode;
         if (promptRelay.Mode == PromptRelayMode.RequiresRuntimeLength)
         {
-            int frameCount = genInfo.Frames
-                ?? sourceMedia?.Frames
-                ?? LtxStageRuntimeSettings.DefaultFrameCount;
             double clipSeconds = frameCount / (double)Math.Max(1, fps);
             segments = PromptRelayPlanResolver.Tile(promptRelay.AuthoredWindows, clipSeconds);
             mode = segments.Count switch
@@ -104,15 +104,22 @@ internal sealed class LtxModelPromptPreparer(
             return false;
         }
 
-        JArray windowsJson = new(segments.Select(window => new JObject
+        // The node can only estimate latent geometry from the rounded window seconds, and the
+        // estimate is off by a frame on LTX's (n-1)/grid+1 mapping. The plan knows the real frame
+        // count, so send the latent frame total with the schedule.
+        JObject relayPayload = new()
         {
-            ["prompt"] = window.Prompt ?? "",
-            ["seconds"] = Math.Round(window.Seconds, 1),
-        }));
+            ["latentFrames"] = Ltx2ArchitectureModule.LatentFrameCount(frameCount),
+            ["windows"] = new JArray(segments.Select(window => new JObject
+            {
+                ["prompt"] = window.Prompt ?? "",
+                ["seconds"] = Math.Round(window.Seconds, 1),
+            })),
+        };
 
         SwarmPromptRelayEncodeNode relay = bridge.AddNode(new SwarmPromptRelayEncodeNode().With(
             GlobalPrompt: globalPrompt ?? "",
-            Windows: windowsJson.ToString(Newtonsoft.Json.Formatting.None),
+            Windows: relayPayload.ToString(Newtonsoft.Json.Formatting.None),
             Fps: fps,
             Epsilon: PromptRelayEpsilon));
         relay.ModelInput.ConnectFromPath(bridge, modelPath);

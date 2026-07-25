@@ -14,6 +14,15 @@ internal sealed class Ltx2ArchitectureModule :
     /// <summary>The one declaration of the LTX frame grid; every other use reads it from here.</summary>
     internal const int FrameGrid = 8;
 
+    /// <summary>
+    /// LTX's pixel→latent temporal mapping: the first pixel frame owns a latent frame of its own and
+    /// every further <see cref="FrameGrid"/> pixel frames add one. Mirrored in the Comfy node as
+    /// <c>swarm_prompt_relay.prompt_relay.pixel_to_latent_frames</c>; the pair is pinned by
+    /// <c>Tests/fixtures/latent-frame-cases.json</c>.
+    /// </summary>
+    internal static int LatentFrameCount(int pixelFrames) =>
+        (Math.Max(1, pixelFrames) - 1) / FrameGrid + 1;
+
     internal static Ltx2ArchitectureModule Instance { get; } = new();
 
     public VideoArchitectureDescriptor Descriptor { get; } = new(

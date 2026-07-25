@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Architectures.Ltx2;
 using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -11,6 +12,9 @@ namespace VideoStages.Tests;
 
 public partial class StageFlowTests
 {
+    /// <summary>Frames the native harness's seeded LTX chain hands each stage.</summary>
+    private const int NativeHarnessClipFrames = 16;
+
     private static string ClipWithDurationJson(double duration, params JObject[] stages)
     {
         JObject clip = MakeClip(stages);
@@ -52,8 +56,17 @@ public partial class StageFlowTests
         Assert.NotNull(relay.ModelInput.Connection);
         Assert.NotNull(relay.Clip.Connection);
 
+        // The node is told the sampler's real latent geometry instead of deriving it from the
+        // window seconds. This stage renders the harness's 16-frame native media, which is
+        // (16-1)/8+1 = 2 latent frames; the node's own estimate over the tiled ~4s schedule would
+        // have guessed round(97/8) = 12 and scaled the attention schedule onto a bogus grid.
+        JObject relayPayload = JObject.Parse(relay.Windows.LiteralAsString());
+        Assert.Equal(
+            Ltx2ArchitectureModule.LatentFrameCount(NativeHarnessClipFrames),
+            relayPayload.Value<int>("latentFrames"));
+
         // The tiled window list leads with the MINOR prompt, then a blank gap window.
-        JArray windows = JArray.Parse(relay.Windows.LiteralAsString());
+        JArray windows = (JArray)relayPayload["windows"];
         Assert.Equal("a red car", (string)windows[0]["prompt"]);
         Assert.True((double)windows[0]["seconds"] > 0);
         Assert.True(windows.Count >= 2);
