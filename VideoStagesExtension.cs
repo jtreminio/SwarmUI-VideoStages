@@ -45,6 +45,9 @@ public class VideoStagesExtension : Extension
         VideoArchitectureManifest.RegisterProductionHostHandlers();
 
         WorkflowGenerator.AddStep(
+            Runner.PreflightRequest,
+            Constants.WorkflowStepPriority.PreflightRequest);
+        WorkflowGenerator.AddStep(
             Runner.CaptureCoreVideoControlNetPreprocessors,
             Constants.WorkflowStepPriority.ControlNetPreprocessors);
         WorkflowGenerator.AddStep(

@@ -9,21 +9,35 @@ namespace VideoStages;
 //
 // #  Pri    Phase                                         Reads                                          Writes / clears
 // -  -----  --------------------------------------------  ---------------------------------------------  ----------------------------------------------------
-// 1  -5.9   CaptureCoreVideoControlNetPreprocessors       —                                              writes videostages.controlnet.fullimage.{i}
-// 2  -4.2   CaptureBase                                   —                                              architecture reference capture
-// 3   5.9   CaptureRefiner                                —                                              architecture reference capture
-// 4  10.95  CapturePreCoreVideoMedia                      —                                              architecture pre-core capture,
+// 1  -6.0   PreflightRequest                              compiled plan, backend features               — (must stay non-mutating)
+// 2  -5.9   CaptureCoreVideoControlNetPreprocessors       —                                              writes videostages.controlnet.fullimage.{i}
+// 3  -4.2   CaptureBase                                   —                                              architecture reference capture
+// 4   5.9   CaptureRefiner                                —                                              architecture reference capture
+// 5  10.95  CapturePreCoreVideoMedia                      —                                              architecture pre-core capture,
 //                                                                                                                videostages.pre-core-node-ids
-// 5  11.05  DropCoreImageToVideoOutput                    architecture pre-core state,                  clears both above
+// 6  11.05  DropCoreImageToVideoOutput                    architecture pre-core state,                  clears both above
 //                                                         videostages.pre-core-node-ids
-// 6  11.4   ApplyRootAudioMaskDimensionsAfterNativeVideo  —                                              —
-// 7  11.5   RunConfiguredStages                           architecture references,                     executes planned architecture sessions
+// 7  11.4   ApplyRootAudioMaskDimensionsAfterNativeVideo  —                                              —
+// 8  11.5   RunConfiguredStages                           architecture references,                     executes planned architecture sessions
 //                                                         videostages.controlnet.fullimage.{i}
+//
+// Phase 1 is the only place a request may be rejected for a missing dependency: every later phase
+// mutates the host graph, so a failure past it leaves the user with a broken workflow.
 //
 // Non-phase entry point (NOT registered as a workflow step — called from outside the pipeline):
 //   GetRootMediaResizer  architecture-selected sizing for static AltImageToVideo handlers.
 public static class Runner
 {
+    public static void PreflightRequest(WorkflowGenerator g)
+    {
+        if (!RequireSupportedActiveExecution(g))
+        {
+            return;
+        }
+
+        new VideoArchitectureExecutionHost(g).PreflightRequest();
+    }
+
     public static void CaptureCoreVideoControlNetPreprocessors(WorkflowGenerator g)
     {
         if (!RequireSupportedActiveExecution(g))

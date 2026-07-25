@@ -1,5 +1,6 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
@@ -12,6 +13,13 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
     IArchitectureRootMediaResizerProvider
 {
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
+
+    public IReadOnlyList<PlanDiagnostic> PreflightRequest(
+        ArchitectureRequestPreflightContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return Ltx2RequestPreflight.Resolve(generator.Features, context.Plan);
+    }
 
     public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
     {

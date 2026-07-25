@@ -5,6 +5,8 @@ public static class Constants
     public static class WorkflowStepPriority
     {
         public const double CoreImageToVideo = 11;
+        // Must stay below every other VideoStages priority: nothing may mutate before preflight.
+        public const double PreflightRequest = -6;
         public const double ControlNetPreprocessors = -5.9;
         public const double CaptureBase = -4.2;
         public const double CaptureRefiner = 5.89;

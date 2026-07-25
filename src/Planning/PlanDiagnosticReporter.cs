@@ -14,6 +14,23 @@ internal static class PlanDiagnosticReporter
                 diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error)
         ];
 
+    /// <summary>
+    /// Fails the generation closed when any diagnostic is blocking. <paramref name="context"/> names
+    /// the stage of the request that produced them.
+    /// </summary>
+    internal static void ThrowIfBlocking(
+        IEnumerable<PlanDiagnostic> diagnostics,
+        string context)
+    {
+        IReadOnlyList<PlanDiagnostic> errors = Errors(diagnostics);
+        if (errors.Count == 0)
+        {
+            return;
+        }
+        throw new SwarmUserErrorException(
+            $"{context}: {string.Join("; ", errors.Select(error => error.Message))}");
+    }
+
     /// <summary>Renders one diagnostic as the single user-facing line it is worth.</summary>
     internal static string Format(PlanDiagnostic diagnostic)
     {

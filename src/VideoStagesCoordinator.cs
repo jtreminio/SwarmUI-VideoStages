@@ -23,8 +23,6 @@ internal sealed class VideoStagesCoordinator(
         {
             return;
         }
-        runtimeFactories.PreflightTimeline(new(planContext.Plan));
-
         // Every active execution is plan-backed and owns the host root before any coordinator
         // transform. Unsupported model families fail above.
         RootRuntimeSession rootSession = RootRuntimeSession.Capture(g, planContext);

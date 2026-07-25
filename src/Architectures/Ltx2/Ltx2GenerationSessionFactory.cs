@@ -1,5 +1,4 @@
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2.Planning;
 
@@ -25,21 +24,6 @@ internal sealed class Ltx2GenerationSessionFactory(
     public bool HasFinalizationWork(ArchitectureTimelineFinalizationContext context) =>
         context.Plan.Clips.All(clip => clip.Architecture.Id == ArchitectureId)
         && context.Plan.Clips.Any(HdrIcLoraPolicy.IsActive);
-
-    public void PreflightTimeline(ArchitectureTimelinePreflightContext context)
-    {
-        if (!Ltx2HostIntegration.IsAvailable(generator.Features)
-            && context.Plan.Clips
-                .Where(clip => clip.Architecture.Id == ArchitectureId)
-                .Any(clip => clip.Stages.Any(stage =>
-                    !stage.RequireLtx2Payload().IcLoras.IsDefaultOrEmpty)))
-        {
-            throw new SwarmUserErrorException(
-                "VideoStages IC-LoRAs require the ComfyUI-LTXVideo custom nodes. "
-                + $"Install {Ltx2HostIntegration.NodeUrl} "
-                + "or use SwarmUI's LTXVideo feature installer.");
-        }
-    }
 
     public void PrepareTimeline(ArchitectureTimelinePreparationContext context)
     {

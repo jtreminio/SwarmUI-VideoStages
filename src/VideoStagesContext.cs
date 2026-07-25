@@ -41,14 +41,9 @@ internal static class VideoStagesContext
                 "VideoStages has no executable clips in the active timeline.");
         }
 
-        IReadOnlyList<PlanDiagnostic> errors =
-            PlanDiagnosticReporter.Errors(context.Plan.Diagnostics);
-        if (errors.Count > 0)
-        {
-            throw new SwarmUserErrorException(
-                "VideoStages could not create a valid architecture execution plan: "
-                + string.Join("; ", errors.Select(error => error.Message)));
-        }
+        PlanDiagnosticReporter.ThrowIfBlocking(
+            context.Plan.Diagnostics,
+            "VideoStages could not create a valid architecture execution plan");
         return context;
     }
 

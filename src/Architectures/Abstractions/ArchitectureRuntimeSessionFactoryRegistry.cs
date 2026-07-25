@@ -27,15 +27,6 @@ internal sealed class ArchitectureRuntimeSessionFactoryRegistry
         _factories = byId;
     }
 
-    internal void PreflightTimeline(ArchitectureTimelinePreflightContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        foreach (IArchitectureGenerationSessionFactory factory in ActiveFactories(context.Plan))
-        {
-            factory.PreflightTimeline(context);
-        }
-    }
-
     internal void PrepareTimeline(ArchitectureTimelinePreparationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

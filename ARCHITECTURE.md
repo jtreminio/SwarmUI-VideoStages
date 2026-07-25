@@ -134,7 +134,8 @@ An architecture module owns:
 - model recognition and profile resolution;
 - its catalog descriptor and conditional rules;
 - validation and compilation of architecture-specific stage options;
-- creation of its runtime session, plus timeline preflight and preparation;
+- request preflight of its own dependencies, and creation and preparation of its
+  runtime session;
 - latent/VAE/conditioning/stage transitions;
 - non-cut joins it supports;
 - decoding its final clip; and
@@ -275,7 +276,11 @@ is nothing clip-scoped to validate.
 
 ## Runtime invariants
 
-- A plan is fully architecture-resolved before any extension graph mutation.
+- A plan is fully architecture-resolved before any extension graph mutation, and
+  every architecture's dependencies are preflighted in the same window. The
+  first registered workflow phase is request preflight; a request that cannot
+  execute is rejected while the host graph, current media, and node helpers are
+  still untouched.
 - Clip ids are unique within a plan.
 - One runtime session handles only its declared architecture.
 - A session result must match the requested clip and architecture.
@@ -323,8 +328,8 @@ Adding another family should require:
 3. scoped capabilities and rules, including a rule for every boundary mode —
    the registry rejects an incomplete catalog at construction;
 4. an architecture-owned clip compiler and opaque payload;
-5. a runtime-session factory, which also owns timeline preflight, preparation,
-   and optional exclusive finalization;
+5. a runtime provider that answers request preflight for its dependencies, and a
+   runtime-session factory owning preparation and optional exclusive finalization;
 6. same-architecture boundary assembly as soon as any non-cut join is declared
    supported or conditional;
 7. a matching frontend architecture definition and one entry in

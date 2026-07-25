@@ -68,31 +68,27 @@ public class ArchitectureRuntimeOwnershipTests
     }
 
     [Fact]
-    public void Coordinator_preflights_every_runtime_before_loading_refine_source_or_mutating_graph()
+    public void Request_preflight_asks_every_active_architecture_and_fails_closed_without_mutating()
     {
         VideoExecutionPlan plan = MixedSourcedLeadingPlan();
         List<string> calls = [];
-        RecordingFactory sourced = new(new("sourced-arch"), calls);
-        RecordingFactory future = new(
+        RecordingProvider sourced = new(new("sourced-arch"), calls);
+        RecordingProvider future = new(
             new("future-arch"),
             calls,
             preflightError: "future runtime unavailable");
-        ArchitectureRuntimeSessionFactoryRegistry registry = new([sourced, future]);
         WorkflowGenerator generator = Generator(withRefineSource: true);
         JObject before = (JObject)generator.Workflow.DeepClone();
         WGNodeData beforeMedia = generator.CurrentMedia;
-        VideoStagesCoordinator coordinator = new(
-            generator,
-            stageSequenceRunner: null,
-            registry);
+        VideoArchitectureExecutionHost host = new(generator, [sourced, future]);
 
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            coordinator.RunConfiguredStages(new VideoExecutionPlanContext(plan)));
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(() =>
+            host.PreflightRequest(plan));
 
         Assert.Contains("future runtime unavailable", error.Message);
         Assert.Equal(["preflight:sourced-arch", "preflight:future-arch"], calls);
-        Assert.Empty(sourced.RootOwnership);
-        Assert.Empty(future.RootOwnership);
+        Assert.Empty(sourced.HostPhases);
+        Assert.Empty(future.HostPhases);
         Assert.Same(beforeMedia, generator.CurrentMedia);
         Assert.True(JToken.DeepEquals(before, generator.Workflow));
     }
@@ -228,7 +224,9 @@ public class ArchitectureRuntimeOwnershipTests
         IArchitectureStagePayload;
 
     private sealed class RecordingProvider(
-        ArchitectureId architectureId) :
+        ArchitectureId architectureId,
+        ICollection<string> calls = null,
+        string preflightError = null) :
         IArchitectureGenerationSessionFactoryProvider,
         IArchitectureHostPhaseParticipant,
         IArchitectureRootMediaResizerProvider
@@ -239,34 +237,33 @@ public class ArchitectureRuntimeOwnershipTests
 
         internal RecordingResizer Resizer { get; } = new();
 
+        public IReadOnlyList<PlanDiagnostic> PreflightRequest(
+            ArchitectureRequestPreflightContext context)
+        {
+            calls?.Add($"preflight:{architectureId}");
+            return preflightError is null
+                ? []
+                : [new(PlanDiagnosticSeverity.Error, "test.preflight", preflightError)];
+        }
+
         public void ExecuteHostPhase(ArchitectureHostPhaseContext context) =>
             HostPhases.Add(context);
 
         public IArchitectureGenerationSessionFactory CreateFactory() =>
-            new RecordingFactory(architectureId);
+            new RecordingFactory(architectureId, calls);
 
         public IArchitectureRootMediaResizer CreateRootMediaResizer() => Resizer;
     }
 
     private sealed class RecordingFactory(
         ArchitectureId architectureId,
-        ICollection<string> calls = null,
-        string preflightError = null) : IArchitectureGenerationSessionFactory
+        ICollection<string> calls = null) : IArchitectureGenerationSessionFactory
     {
         public ArchitectureId ArchitectureId => architectureId;
 
         public IArchitectureBoundaryAssembler BoundaryAssembler => null;
 
         internal List<bool> RootOwnership { get; } = [];
-
-        public void PreflightTimeline(ArchitectureTimelinePreflightContext context)
-        {
-            calls?.Add($"preflight:{architectureId}");
-            if (preflightError is not null)
-            {
-                throw new InvalidOperationException(preflightError);
-            }
-        }
 
         public void PrepareTimeline(ArchitectureTimelinePreparationContext context)
         {

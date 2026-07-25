@@ -40,6 +40,29 @@ internal sealed class VideoArchitectureExecutionHost
         _providers = byId;
     }
 
+    /// <summary>
+    /// The single request-preflight owner. It runs before the first VideoStages workflow phase, so
+    /// an unsatisfiable request is rejected while the host graph, media and node helpers are still
+    /// exactly as the host left them.
+    /// </summary>
+    internal void PreflightRequest() =>
+        PreflightRequest(_generator.RequireVideoExecutionPlanContext().Plan);
+
+    internal void PreflightRequest(VideoExecutionPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        List<PlanDiagnostic> diagnostics = [];
+        ArchitectureRequestPreflightContext context = new(plan);
+        foreach (IArchitectureGenerationSessionFactoryProvider provider in ActiveProviders(plan))
+        {
+            diagnostics.AddRange(provider.PreflightRequest(context) ?? []);
+        }
+        PlanDiagnosticReporter.Report(diagnostics);
+        PlanDiagnosticReporter.ThrowIfBlocking(
+            diagnostics,
+            "VideoStages cannot run this request");
+    }
+
     internal void DispatchHostPhase(ArchitectureHostPhase phase)
     {
         VideoExecutionPlanContext context = _generator.RequireVideoExecutionPlanContext();

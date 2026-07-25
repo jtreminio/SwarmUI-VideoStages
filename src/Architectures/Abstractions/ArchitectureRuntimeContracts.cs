@@ -88,7 +88,11 @@ internal sealed record ArchitectureTimelinePreparationContext(
     public bool OwnsGeneratedRoot { get; init; }
 }
 
-internal sealed record ArchitectureTimelinePreflightContext(
+/// <summary>
+/// Graph-free request preflight input. Everything an architecture is asked here must be resolvable
+/// from the compiled plan and the host session alone, because no workflow mutation has happened yet.
+/// </summary>
+internal sealed record ArchitectureRequestPreflightContext(
     VideoExecutionPlan Plan);
 
 internal sealed record ArchitectureTimelineSessionContext(
@@ -119,10 +123,6 @@ internal interface IArchitectureGenerationSessionFactory
 
     bool HasFinalizationWork(ArchitectureTimelineFinalizationContext context) => false;
 
-    void PreflightTimeline(ArchitectureTimelinePreflightContext context)
-    {
-    }
-
     void PrepareTimeline(ArchitectureTimelinePreparationContext context);
 
     IVideoGenerationSession CreateSession(ArchitectureTimelineSessionContext context);
@@ -134,6 +134,14 @@ internal interface IArchitectureGenerationSessionFactory
 internal interface IArchitectureGenerationSessionFactoryProvider
 {
     ArchitectureId ArchitectureId { get; }
+
+    /// <summary>
+    /// Reports every dependency this architecture needs to execute the planned clips, before any
+    /// workflow phase has mutated the graph. Returning diagnostics rather than throwing keeps the
+    /// decision about what a diagnostic does with <see cref="Planning.PlanDiagnosticReporter"/>.
+    /// </summary>
+    IReadOnlyList<PlanDiagnostic> PreflightRequest(
+        ArchitectureRequestPreflightContext context) => [];
 
     IArchitectureGenerationSessionFactory CreateFactory();
 }
