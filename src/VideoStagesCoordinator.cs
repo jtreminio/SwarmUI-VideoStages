@@ -1,256 +1,102 @@
 using ComfyTyped.Core;
-using ComfyTyped.Generated;
-using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
-using SwarmUI.Text2Image;
 using SwarmUI.Utils;
-using VideoStages.LTX2;
+using VideoStages.Architectures.Abstractions;
+using VideoStages.Execution;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
 internal sealed class VideoStagesCoordinator(
     WorkflowGenerator g,
-    RootVideoStageHandoff rootVideoStageHandoff,
     StageSequenceRunner stageSequenceRunner,
-    AudioHandler audioHandler,
-    LtxManager ltxManager)
+    ArchitectureRuntimeSessionFactoryRegistry runtimeFactories)
 {
-    private const int FinalStageSaveId = 52200;
+    public void RunConfiguredStages() =>
+        RunConfiguredStages(g.RequireVideoExecutionPlanContext());
 
-    public void RunConfiguredStages()
+    internal void RunConfiguredStages(VideoExecutionPlanContext planContext)
     {
-        VideoStagesSpec spec = g.GetVideoStagesSpec();
-        if (!VideoStagesSpecParser.HasUsableVideoModel(g, spec))
+        ArgumentNullException.ThrowIfNull(planContext);
+        if (planContext.Plan.Clips.Count == 0)
         {
             return;
         }
+        // Every active execution is plan-backed and owns the host root before any coordinator
+        // transform. Unsupported model families fail above.
+        RootRuntimeSession rootSession = RootRuntimeSession.Capture(g, planContext);
 
-        List<ClipSpec> clips = [.. spec.Clips];
-        bool refineSourceVideo = TryInstallRefineSourceVideo(clips);
-        bool rootStageHandoff = !refineSourceVideo && rootVideoStageHandoff.ShouldHandoffRootStage();
-        if (clips.Count == 0)
-        {
-            TryInjectConfiguredAudio(clips);
-            return;
-        }
-        EnsureComfyDependencies(clips);
-
-        ClipAudioMaps clipAudioMaps = BuildClipAudioMaps(clips);
-        if (!rootStageHandoff)
-        {
-            ClipSpec firstClip = clips[0];
-            StageSpec first = firstClip.Stages[0];
-            TryApplyControlNetClipLength(
-                firstClip.ClipLengthFromControlNet,
-                firstClip.ControlNetSource,
-                first.Model);
-            TryInjectResolvedClipAudio(
-                firstClip.Id,
-                firstClip.AudioSource,
-                firstClip.ClipLengthFromAudio,
-                clipAudioMaps);
-        }
+        InstallRefineSourceVideo(planContext.Plan.Root);
+        RootExecutionPolicy rootPolicy = new(planContext.Plan);
+        AudioRuntimeSources preparedAudioSources = new AudioRuntimeSourceResolver(
+            g,
+            new AudioHandler(g)).Resolve(planContext.Plan);
 
         g.LastID = Math.Max(g.LastID, Constants.StagedNodeIdReservationFloor);
+        runtimeFactories.PrepareTimeline(new(
+            planContext.Plan,
+            preparedAudioSources,
+            rootPolicy));
 
         stageSequenceRunner.Run(
-            clips,
-            clipAudioMaps.NativeAudio,
-            clipAudioMaps.ClipAudios,
-            clipAudioMaps.UploadedAudios,
-            rootStageHandoff);
-        EnsureFinalStageOutputSaved();
+            planContext.Plan,
+            preparedAudioSources,
+            rootPolicy);
+        // Publication metadata describes decoded timeline media, not the model family that
+        // happened to produce one clip. VAE ownership remains on RuntimeArtifact for the host save
+        // adapter and never enters DecodedClipArtifact or cross-clip assembly.
+        if (g.CurrentMedia is not null)
+        {
+            g.CurrentMedia.Compat = null;
+            if (g.CurrentMedia.AttachedAudio is not null)
+            {
+                g.CurrentMedia.AttachedAudio.Compat = null;
+            }
+        }
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        RuntimeArtifact finalArtifact = RuntimeArtifact.Capture(
+            g,
+            bridge,
+            ArtifactOrigin.ClipAssembly);
+        OutputPublication publication = rootSession.PublishTimeline(finalArtifact);
+        runtimeFactories.FinalizeTimeline(new(
+            planContext.Plan,
+            publication));
     }
 
-    private bool TryInstallRefineSourceVideo(IReadOnlyList<ClipSpec> clips)
+    private void InstallRefineSourceVideo(RootPlan root)
     {
-        if (!g.UserInput.TryGet(VideoStagesExtension.RefineSourceVideo, out Image refineSource)
-            || refineSource is null
-            || clips.Count == 0)
+        bool hasVideoRefineSource =
+            g.UserInput.TryGet(VideoStagesExtension.RefineSourceVideo, out Image refineSource)
+            && refineSource is not null
+            && refineSource.Type?.MetaType == MediaMetaType.Video;
+        if (!RefineSourceInstallPolicy.RequiresInstall(root, hasVideoRefineSource))
+        {
+            return;
+        }
+        g.CurrentMedia = g.LoadImage(refineSource, "${vsrefinesource}", resize: false);
+    }
+}
+
+/// <summary>
+/// The plan already decided whether this timeline is a global refine, so runtime installation
+/// either succeeds or fails the generation. It cannot quietly fall back to the normal pipeline
+/// against a root plan already committed to refine semantics.
+/// </summary>
+internal static class RefineSourceInstallPolicy
+{
+    internal static bool RequiresInstall(RootPlan root, bool hasVideoRefineSource)
+    {
+        ArgumentNullException.ThrowIfNull(root);
+        if (root.HostKind != HostRootKind.GlobalRefineSource)
         {
             return false;
         }
-        if (refineSource.Type?.MetaType != MediaMetaType.Video)
-        {
-            Logs.Warning(
-                "VideoStages: 'Refine Source Video' was set but its media type is not video. "
-                + "Ignoring and falling back to the normal pipeline.");
-            return false;
-        }
-
-        WGNodeData loadedVideo = g.LoadImage(refineSource, "${vsrefinesource}", resize: false);
-        g.CurrentMedia = loadedVideo;
-        return true;
-    }
-
-    private void EnsureComfyDependencies(IReadOnlyList<ClipSpec> clips)
-    {
-        if (g.Features.Contains(Constants.LtxVideoFeatureFlag)
-            || !clips.Any(clip =>
-                !string.IsNullOrWhiteSpace(clip.ControlNetLora)
-                && clip.Stages.Any(stage => VideoStageModelCompat.IsLtxV2VideoModel(stage.Model))))
-        {
-            return;
-        }
-
-        throw new SwarmUserErrorException(
-            "VideoStages ControlNet LoRA requires the ComfyUI-LTXVideo custom nodes. "
-            + $"Install {Constants.LtxVideoNodeUrl} or use SwarmUI's LTXVideo feature installer.");
-    }
-
-    private void TryInjectConfiguredAudio(List<ClipSpec> clips)
-    {
-        if (clips.Count == 0)
-        {
-            ltxManager.TryInjectAudio(g.CurrentMedia?.AttachedAudio);
-            return;
-        }
-
-        ClipAudioMaps clipAudioMaps = BuildClipAudioMaps(clips);
-        ClipSpec first = clips[0];
-        string firstClipStageModel = first.Stages is { Count: > 0 }
-            ? first.Stages[0].Model
-            : null;
-        TryApplyControlNetClipLength(
-            first.ClipLengthFromControlNet,
-            first.ControlNetSource,
-            firstClipStageModel);
-        TryInjectResolvedClipAudio(
-            first.Id,
-            first.AudioSource,
-            first.ClipLengthFromAudio,
-            clipAudioMaps);
-    }
-
-    private void TryApplyControlNetClipLength(
-        bool clipLengthFromControlNet,
-        string controlNetSource,
-        string stageVideoModelName)
-    {
-        if (clipLengthFromControlNet && VideoStageModelCompat.IsLtxV2VideoModel(stageVideoModelName))
-        {
-            _ = ltxManager.TryApplyControlNetFrameCount(controlNetSource);
-        }
-    }
-
-    private readonly record struct ClipAudioMaps(
-        WGNodeData NativeAudio,
-        IReadOnlyDictionary<int, WGNodeData> ClipAudios,
-        IReadOnlyDictionary<int, WGNodeData> UploadedAudios);
-
-    private ClipAudioMaps BuildClipAudioMaps(IReadOnlyList<ClipSpec> clips)
-    {
-        WGNodeData nativeAudio = g.CurrentMedia?.AttachedAudio;
-        IReadOnlyDictionary<int, WGNodeData> clipAudios =
-            BuildPerClipExternalAudioDetections(clips);
-        IReadOnlyDictionary<int, WGNodeData> uploadedAudios =
-            BuildPerClipUploadDetections(clips);
-        audioHandler.PruneAceStepFunUnsavedTracks(clips);
-        return new ClipAudioMaps(nativeAudio, clipAudios, uploadedAudios);
-    }
-
-    private IReadOnlyDictionary<int, WGNodeData> BuildPerClipExternalAudioDetections(
-        IReadOnlyList<ClipSpec> clips)
-    {
-        Dictionary<int, WGNodeData> audios = new(BuildPerClipAudioDetections(audioHandler, clips));
-        ControlNetApplicator applicator = new(g);
-        foreach (ClipSpec clip in clips)
-        {
-            if (!ClipAudioWorkflowHelper.IsControlNetAudioSource(clip.AudioSource))
-            {
-                continue;
-            }
-            if (applicator.TryGetCapturedControlNetAudio(clip.ControlNetSource, out WGNodeData audio))
-            {
-                audios[clip.Id] = audio;
-            }
-        }
-        return audios;
-    }
-
-    private void TryInjectResolvedClipAudio(
-        int clipId,
-        string audioSource,
-        bool clipLengthFromAudio,
-        ClipAudioMaps maps)
-    {
-        WGNodeData audio = ClipAudioWorkflowHelper.ResolveClipAudio(
-            clipId,
-            audioSource,
-            maps.NativeAudio,
-            maps.ClipAudios,
-            maps.UploadedAudios,
-            suppressNativeFallback: false,
-            ClipAudioWorkflowHelper.ClipAudioSourceNormalization.CoordinatorField);
-        _ = ltxManager.TryInjectAudio(
-            audio,
-            ClipAudioWorkflowHelper.ShouldMatchVideoLengthForTryInjectAudio(
-                audioSource,
-                clipLengthFromAudio,
-                restrictLengthMatchToUploadOrAce: false));
-    }
-
-    private static IReadOnlyDictionary<int, WGNodeData> BuildPerClipAudioDetections(
-        AudioHandler handler,
-        IReadOnlyList<ClipSpec> clips)
-    {
-        Dictionary<int, WGNodeData> audios = [];
-        foreach (ClipSpec clip in clips)
-        {
-            WGNodeData audio = handler.DetectAceStepFunAudio(clip.AudioSource);
-            if (audio is not null)
-            {
-                audios[clip.Id] = audio;
-            }
-        }
-        return audios;
-    }
-
-    private IReadOnlyDictionary<int, WGNodeData> BuildPerClipUploadDetections(
-        IReadOnlyList<ClipSpec> clips)
-    {
-        Dictionary<int, WGNodeData> audios = [];
-        foreach (ClipSpec clip in clips)
-        {
-            if (!StringUtils.Equals(clip.AudioSource, Constants.AudioSourceUpload))
-            {
-                continue;
-            }
-            AudioFile uploaded = VideoStagesSpecParser.MaterializeUploadedAudioForClip(g, clip);
-            if (uploaded is null)
-            {
-                continue;
-            }
-            string loadNodeId = g.CreateAudioLoadNode(uploaded, "${vsaudioupload}");
-            audios[clip.Id] = new WGNodeData(
-                new JArray(loadNodeId, 0),
-                g,
-                WGNodeData.DT_AUDIO,
-                g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
-        }
-        return audios;
-    }
-
-    private void EnsureFinalStageOutputSaved()
-    {
-        if (g.UserInput.Get(T2IParamTypes.DoNotSave, false) || g.CurrentMedia is null)
-        {
-            return;
-        }
-
-        string saveId = g.GetStableDynamicID(FinalStageSaveId, 0);
-        if (g.CurrentMedia.Path is JArray { Count: 2 } currentPath)
-        {
-            WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-            INodeOutput output = bridge.ResolvePath(currentPath);
-            if (output is not null
-                && bridge.Graph.FindNearestDownstream<SwarmSaveAnimationWSNode>(output) is not null)
-            {
-                return;
-            }
-        }
-
-        g.CurrentMedia.SaveOutput(g.CurrentVae, g.CurrentAudioVae, saveId);
+        return hasVideoRefineSource
+            ? true
+            : throw new SwarmUserErrorException(
+                "VideoStages: this timeline was planned as a global refine of 'Refine Source "
+                + "Video', but that parameter no longer holds a video.");
     }
 }

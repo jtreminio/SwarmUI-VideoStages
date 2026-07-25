@@ -1,20 +1,31 @@
+import {
+    architectureForModel,
+    buildArchitectureModelCatalog,
+    supportedArchitectureCatalog,
+} from "./architectures/catalog";
+import type { VideoArchitectureId } from "./architectures/types";
 import { ROOT_DIMENSION_MIN } from "./constants";
+import { getVideoStagesHostBridge } from "./host";
 import {
     getDropdownOptions,
-    getRegisteredRootDimension,
-    getRegisteredRootFps,
     getRootModelInput,
     isRootTextToVideoModel,
 } from "./swarmInputs";
 import type { RootDefaults } from "./types";
-import { utils } from "./utils";
+import { toNumber } from "./utils";
 
 const trimDomValue = (el: { value: string } | null | undefined): string =>
     `${el?.value ?? ""}`.trim();
 
+/** Core input ids that carry the inherited dims/fps, in probe order. */
+const WIDTH_INPUT_IDS = ["input_width", "input_aspectratiowidth"];
+const HEIGHT_INPUT_IDS = ["input_height", "input_aspectratioheight"];
+const rootVideoFpsInput = (): HTMLInputElement | null =>
+    getVideoStagesHostBridge().getRootVideoFpsInput();
+
 const firstPresentInput = (...ids: string[]): HTMLInputElement | null => {
     for (let i = 0; i < ids.length; i++) {
-        const el = utils.getInputElement(ids[i]);
+        const el = getVideoStagesHostBridge().getInput(ids[i]);
         if (el) {
             return el;
         }
@@ -22,91 +33,117 @@ const firstPresentInput = (...ids: string[]): HTMLInputElement | null => {
     return null;
 };
 
-export const getDefaultStageModel = (modelValues: string[]): string => {
+export const getDefaultStageModel = (
+    modelValues: string[],
+    architectureId?: VideoArchitectureId,
+): string => {
+    const catalog = buildArchitectureModelCatalog(modelValues, modelValues);
+    const supports = (modelName: string): boolean => {
+        const resolved = architectureForModel(catalog, modelName);
+        return (
+            resolved !== null &&
+            (architectureId === undefined || resolved === architectureId)
+        );
+    };
     if (isRootTextToVideoModel()) {
         const modelName = trimDomValue(getRootModelInput());
-        if (modelName) {
+        if (modelName && supports(modelName)) {
             return modelName;
         }
     }
-    const videoModel = trimDomValue(utils.getSelectElement("input_videomodel"));
-    if (videoModel) {
+    const videoModel = trimDomValue(
+        getVideoStagesHostBridge().getSelect("input_videomodel"),
+    );
+    if (videoModel && supports(videoModel)) {
         return videoModel;
     }
-    return modelValues[0] ?? "";
+    return (
+        modelValues.find((modelName) => supports(modelName)) ??
+        modelValues[0] ??
+        ""
+    );
+};
+
+export const readInheritedDimsSignature = (): string => {
+    const width = trimDomValue(firstPresentInput(...WIDTH_INPUT_IDS));
+    const height = trimDomValue(firstPresentInput(...HEIGHT_INPUT_IDS));
+    const fps = trimDomValue(rootVideoFpsInput());
+    return `${width}|${height}|${fps}`;
 };
 
 export const getRootDefaults = (): RootDefaults => {
-    let model = utils.getSelectElement("input_videomodel");
+    let model = getVideoStagesHostBridge().getSelect("input_videomodel");
     if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {
-        model = utils.getSelectElement("input_model");
+        model = getVideoStagesHostBridge().getSelect("input_model");
     }
-    const vae = utils.getSelectElement("input_vae");
-    const loras = getDropdownOptions("loras", "input_loras");
+    // The host's lora list can lead with a "(None)" sentinel; it's meaningless
+    // in our add-a-lora lists and a freshly-added entry seeded with it would be
+    // dropped as "no lora" on the next normalize pass.
+    const rawLoras = getDropdownOptions("loras", "input_loras");
+    const loras = { values: [] as string[], labels: [] as string[] };
+    rawLoras.values.forEach((value, i) => {
+        if (`${value}`.replace(/\s+/g, "").toLowerCase() !== "(none)") {
+            loras.values.push(value);
+            loras.labels.push(rawLoras.labels[i] ?? value);
+        }
+    });
     const sampler = getDropdownOptions("sampler", "input_sampler");
     const scheduler = getDropdownOptions("scheduler", "input_scheduler");
-    const upscaleMethod = utils.getSelectElement("input_refinerupscalemethod");
-    const upscaleMethodValues = utils.getSelectValues(upscaleMethod);
-    const upscaleMethodLabels = utils.getSelectLabels(upscaleMethod);
+    const upscaleMethod = getVideoStagesHostBridge().getSelect(
+        "input_refinerupscalemethod",
+    );
+    const upscaleMethodValues =
+        getVideoStagesHostBridge().getSelectOptions(upscaleMethod).values;
+    const upscaleMethodLabels =
+        getVideoStagesHostBridge().getSelectOptions(upscaleMethod).labels;
+    const modelCatalog = supportedArchitectureCatalog(
+        buildArchitectureModelCatalog(
+            getVideoStagesHostBridge().getSelectOptions(model).values,
+            getVideoStagesHostBridge().getSelectOptions(model).labels,
+        ),
+    );
+    const models = {
+        values: modelCatalog.entries.map((entry) => entry.value),
+        labels: modelCatalog.entries.map((entry) => entry.label),
+    };
 
     const steps = firstPresentInput("input_videosteps", "input_steps");
     const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
-    const widthInput = firstPresentInput(
-        "input_width",
-        "input_aspectratiowidth",
-    );
-    const heightInput = firstPresentInput(
-        "input_height",
-        "input_aspectratioheight",
-    );
-    const fpsInput = firstPresentInput(
-        "input_videofps",
-        "input_videoframespersecond",
-    );
+    const widthInput = firstPresentInput(...WIDTH_INPUT_IDS);
+    const heightInput = firstPresentInput(...HEIGHT_INPUT_IDS);
+    const fpsInput = rootVideoFpsInput();
     const framesInput = firstPresentInput(
         "input_videoframes",
         "input_text2videoframes",
     );
 
-    const fps = Math.max(
-        1,
-        getRegisteredRootFps() ??
-            Math.round(utils.toNumber(fpsInput?.value, 24)),
-    );
-    const frames = Math.max(
-        1,
-        Math.round(utils.toNumber(framesInput?.value, 24)),
-    );
+    const fps = Math.max(1, Math.round(toNumber(fpsInput?.value, 24)));
+    const frames = Math.max(1, Math.round(toNumber(framesInput?.value, 24)));
 
     return {
-        modelValues: utils.getSelectValues(model),
-        modelLabels: utils.getSelectLabels(model),
+        modelValues: models.values,
+        modelLabels: models.labels,
+        modelCatalog,
         loraValues: loras.values,
         loraLabels: loras.labels,
-        vaeValues: utils.getSelectValues(vae),
-        vaeLabels: utils.getSelectLabels(vae),
         samplerValues: sampler.values,
         samplerLabels: sampler.labels,
         schedulerValues: scheduler.values,
         schedulerLabels: scheduler.labels,
         upscaleMethodValues,
         upscaleMethodLabels,
-        width:
-            getRegisteredRootDimension("width") ??
-            Math.max(
-                ROOT_DIMENSION_MIN,
-                Math.round(utils.toNumber(widthInput?.value, 1024)),
-            ),
-        height:
-            getRegisteredRootDimension("height") ??
-            Math.max(
-                ROOT_DIMENSION_MIN,
-                Math.round(utils.toNumber(heightInput?.value, 1024)),
-            ),
+        width: Math.max(
+            ROOT_DIMENSION_MIN,
+            Math.round(toNumber(widthInput?.value, 1024)),
+        ),
+        height: Math.max(
+            ROOT_DIMENSION_MIN,
+            Math.round(toNumber(heightInput?.value, 1024)),
+        ),
         fps,
         frames,
         control: 0.5,
-        controlMin: 0.05,
+        controlMin: 0,
         controlMax: 1,
         controlStep: 0.05,
         upscale: 1,
@@ -114,15 +151,15 @@ export const getRootDefaults = (): RootDefaults => {
         upscaleMax: 4,
         upscaleStep: 0.25,
         steps: 8,
-        stepsMin: Math.max(1, Math.round(utils.toNumber(steps?.min, 1))),
+        stepsMin: Math.max(1, Math.round(toNumber(steps?.min, 1))),
         stepsMax: Math.min(
             50,
-            Math.max(1, Math.round(utils.toNumber(steps?.max, 200))),
+            Math.max(1, Math.round(toNumber(steps?.max, 200))),
         ),
-        stepsStep: Math.max(1, Math.round(utils.toNumber(steps?.step, 1))),
+        stepsStep: Math.max(1, Math.round(toNumber(steps?.step, 1))),
         cfgScale: 1,
-        cfgScaleMin: utils.toNumber(cfgScale?.min, 0),
-        cfgScaleMax: Math.min(10, utils.toNumber(cfgScale?.max, 10)),
-        cfgScaleStep: utils.toNumber(cfgScale?.step, 0.5),
+        cfgScaleMin: toNumber(cfgScale?.min, 0),
+        cfgScaleMax: Math.min(10, toNumber(cfgScale?.max, 10)),
+        cfgScaleStep: toNumber(cfgScale?.step, 0.5),
     };
 };

@@ -1,0 +1,99 @@
+import { activeStageCount } from "../clipSemantics";
+import type { Clip } from "../types";
+import type { CapabilityRuleDecision } from "./types";
+
+export const CONDITIONAL_RULE_CODES = {
+    audioReuseRequiresStages: "audio.reuse.requires_three_stages",
+    promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
+    retakeExcludesReferences: "retake-frame-references-unsupported",
+    retakeRequiresSource: "retake-source-required",
+    uniformTimelineHdr: "mixed-hdr-timeline-unsupported",
+} as const;
+
+export type ConditionalRuleCode =
+    (typeof CONDITIONAL_RULE_CODES)[keyof typeof CONDITIONAL_RULE_CODES];
+
+export interface ConditionalRuleContext {
+    clip?: Clip;
+    globalRefineMode?: boolean;
+    timelineClips?: readonly Clip[];
+    hasActiveHdr?: (clip: Clip) => boolean;
+}
+
+export const conditionalRule = (
+    rules: readonly CapabilityRuleDecision[],
+    code: ConditionalRuleCode,
+): CapabilityRuleDecision | null =>
+    rules.find((rule) => rule.code === code) ?? null;
+
+const finiteConstraint = (
+    rule: CapabilityRuleDecision,
+    key: string,
+    fallback: number,
+): number => {
+    const value = Number(rule.constraints?.[key]);
+    return Number.isFinite(value) ? value : fallback;
+};
+
+const DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES = 3;
+
+export const audioReuseMinimumActiveStages = (
+    rule: CapabilityRuleDecision | null | undefined,
+): number =>
+    rule?.code === CONDITIONAL_RULE_CODES.audioReuseRequiresStages
+        ? finiteConstraint(
+              rule,
+              "minimumActiveStages",
+              DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES,
+          )
+        : DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES;
+
+/**
+ * Evaluates the architecture-owned condition independently of whether its
+ * feature is authored. Capability views use this for availability while
+ * diagnostics additionally require the affected persisted feature.
+ */
+export const evaluateConditionalRule = (
+    rule: CapabilityRuleDecision,
+    context: ConditionalRuleContext,
+): boolean => {
+    const clip = context.clip;
+    switch (rule.code as ConditionalRuleCode) {
+        case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
+            return (
+                clip !== undefined &&
+                activeStageCount(clip) < audioReuseMinimumActiveStages(rule)
+            );
+        case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
+            return (
+                clip !== undefined &&
+                (clip.clipLengthFromAudio || clip.clipLengthFromControlNet)
+            );
+        case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
+            return (
+                clip !== undefined &&
+                clip.refs.length > 0 &&
+                (clip.sourceVideo !== null || context.globalRefineMode === true)
+            );
+        case CONDITIONAL_RULE_CODES.retakeRequiresSource:
+            return (
+                clip !== undefined &&
+                clip.sourceVideo === null &&
+                context.globalRefineMode !== true
+            );
+        case CONDITIONAL_RULE_CODES.uniformTimelineHdr: {
+            const clips = context.timelineClips;
+            const hasActiveHdr = context.hasActiveHdr;
+            if (!clips || !hasActiveHdr) return false;
+            if (
+                clips.length < finiteConstraint(rule, "minimumTimelineClips", 2)
+            ) {
+                return false;
+            }
+            const hdr = clips.map(hasActiveHdr);
+            return hdr.some(Boolean) && hdr.some((value) => !value);
+        }
+        default:
+            return false;
+    }
+};

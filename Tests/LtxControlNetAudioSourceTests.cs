@@ -45,8 +45,8 @@ public class LtxControlNetAudioSourceTests
         generator.NodeHelpers["videostages.controlnet.audio.0"] =
             new JArray("301", 1).ToString(Formatting.None);
 
-        bool ok = new ControlNetApplicator(generator)
-            .TryGetCapturedControlNetAudio(Constants.ControlNetSourceOne, out WGNodeData audio);
+        bool ok = new ControlNetAudioCapture(generator)
+            .TryGetCapturedAudio(0, out WGNodeData audio);
 
         Assert.True(ok);
         Assert.NotNull(audio);
@@ -60,8 +60,8 @@ public class LtxControlNetAudioSourceTests
         JObject workflow = [];
         WorkflowGenerator generator = CreateGenerator(workflow);
 
-        bool ok = new ControlNetApplicator(generator)
-            .TryGetCapturedControlNetAudio(Constants.ControlNetSourceTwo, out WGNodeData audio);
+        bool ok = new ControlNetAudioCapture(generator)
+            .TryGetCapturedAudio(1, out WGNodeData audio);
 
         Assert.False(ok);
         Assert.Null(audio);
@@ -75,8 +75,8 @@ public class LtxControlNetAudioSourceTests
         generator.NodeHelpers["videostages.controlnet.audio.0"] =
             new JArray("301", 1).ToString(Formatting.None);
 
-        bool ok = new ControlNetApplicator(generator)
-            .TryGetCapturedControlNetAudio(Constants.ControlNetSourceOne, out WGNodeData audio);
+        bool ok = new ControlNetAudioCapture(generator)
+            .TryGetCapturedAudio(0, out WGNodeData audio);
 
         Assert.False(ok);
         Assert.Null(audio);
@@ -94,19 +94,19 @@ public class LtxControlNetAudioSourceTests
         generator.NodeHelpers["videostages.controlnet.audio.2"] =
             new JArray("701", 1).ToString(Formatting.None);
 
-        ControlNetApplicator applicator = new(generator);
+        ControlNetAudioCapture applicator = new(generator);
 
-        Assert.True(applicator.TryGetCapturedControlNetAudio(Constants.ControlNetSourceOne, out WGNodeData a0));
+        Assert.True(applicator.TryGetCapturedAudio(0, out WGNodeData a0));
         Assert.True(JToken.DeepEquals(a0.Path, new JArray("301", 1)));
 
-        Assert.False(applicator.TryGetCapturedControlNetAudio(Constants.ControlNetSourceTwo, out WGNodeData _));
+        Assert.False(applicator.TryGetCapturedAudio(1, out WGNodeData _));
 
-        Assert.True(applicator.TryGetCapturedControlNetAudio(Constants.ControlNetSourceThree, out WGNodeData a2));
+        Assert.True(applicator.TryGetCapturedAudio(2, out WGNodeData a2));
         Assert.True(JToken.DeepEquals(a2.Path, new JArray("701", 1)));
     }
 
     [Fact]
-    public void TryGetCapturedControlNetAudio_returns_false_for_blank_unknown_or_malformed_source()
+    public void TryGetCapturedControlNetAudio_typed_index_resolves_without_source_text()
     {
         JObject workflow = [];
         AddGetVideoComponentsStub(workflow, "301");
@@ -114,13 +114,10 @@ public class LtxControlNetAudioSourceTests
         generator.NodeHelpers["videostages.controlnet.audio.0"] =
             new JArray("301", 1).ToString(Formatting.None);
 
-        ControlNetApplicator applicator = new(generator);
+        bool ok = new ControlNetAudioCapture(generator).TryGetCapturedAudio(0, out WGNodeData audio);
 
-        Assert.False(applicator.TryGetCapturedControlNetAudio("", out _));
-        Assert.False(applicator.TryGetCapturedControlNetAudio("   ", out _));
-        Assert.False(applicator.TryGetCapturedControlNetAudio(null, out _));
-        Assert.False(applicator.TryGetCapturedControlNetAudio("ControlNet 4", out _));
-        Assert.False(applicator.TryGetCapturedControlNetAudio("garbage", out _));
+        Assert.True(ok);
+        Assert.True(JToken.DeepEquals(audio.Path, new JArray("301", 1)));
     }
 
     [Fact]
@@ -142,8 +139,7 @@ public class LtxControlNetAudioSourceTests
         };
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["AudioSource"] = Constants.AudioSourceControlNet;
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
+        clip["audioSource"] = Constants.AudioSourceControlNet;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
@@ -181,8 +177,7 @@ public class LtxControlNetAudioSourceTests
         };
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["AudioSource"] = Constants.AudioSourceControlNet;
-        clip["ControlNetSource"] = Constants.ControlNetSourceTwo;
+        clip["audioSource"] = Constants.AudioSourceControlNet;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[1].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[1].Model, controlNetModel);
@@ -223,7 +218,6 @@ public class LtxControlNetAudioSourceTests
         };
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["ControlNetSource"] = Constants.ControlNetSourceOne;
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);

@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -13,33 +14,50 @@ public sealed class AudioHandler(WorkflowGenerator g)
     public static string MakeAceStepFunDecodeId(int trackIndex) =>
         (AceStepFunDecodeIdBase + trackIndex * AceStepFunTrackIdStride).ToString();
 
-    public WGNodeData DetectAceStepFunAudio(string source)
+    /// <summary>Resolves a compiled AceStepFun track identity without reparsing its legacy source text.</summary>
+    public WGNodeData DetectAceStepFunAudio(int trackIndex)
     {
-        if (!TryParseAceStepFunAudioSource(source, out int trackIndex))
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        return DetectAceStepFunAudio(trackIndex, bridge);
+    }
+
+    /// <summary>Bridge-reusing typed counterpart for compiled execution plans.</summary>
+    public WGNodeData DetectAceStepFunAudio(int trackIndex, WorkflowBridge bridge)
+    {
+        if (trackIndex < 0)
         {
             return null;
         }
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         VAEDecodeAudioNode decode = FindAceStepFunDecode(bridge, trackIndex);
         return decode is null ? null : CreateAudioNode(decode.AUDIO);
     }
 
-    public void PruneAceStepFunUnsavedTracks(IReadOnlyList<ClipSpec> clips)
+    /// <summary>
+    /// Prunes only compiled AceStepFun audio tracks. Save intent comes from the terminal stage output
+    /// plan, so this method never needs to rediscover clip audio source strings.
+    /// </summary>
+    internal void PruneAceStepFunUnsavedTracks(IReadOnlyList<ClipPlan> clips)
     {
         HashSet<int> usedTracks = [];
         HashSet<int> savedTracks = [];
-        foreach (ClipSpec clip in clips)
+        foreach (ClipPlan clip in clips)
         {
-            if (!TryParseAceStepFunAudioSource(clip.AudioSource, out int trackIndex))
+            if (clip.Audio.Base.Kind != AudioSourceKind.AceStepFun
+                || clip.Audio.Base.AceStepFunTrack is not int trackIndex)
             {
                 continue;
             }
             usedTracks.Add(trackIndex);
-            if (clip.SaveAudioTrack)
+            if (clip.Stages.Any(stage => stage.Output.PreserveConfiguredAudioTrackSave))
             {
                 savedTracks.Add(trackIndex);
             }
         }
+        PruneUnsavedTracks(usedTracks, savedTracks);
+    }
+
+    private void PruneUnsavedTracks(ISet<int> usedTracks, ISet<int> savedTracks)
+    {
         if (usedTracks.Count == 0)
         {
             return;
@@ -52,11 +70,10 @@ public sealed class AudioHandler(WorkflowGenerator g)
                 continue;
             }
             VAEDecodeAudioNode decode = FindAceStepFunDecode(bridge, trackIndex);
-            if (decode is null)
+            if (decode is not null)
             {
-                continue;
+                PruneDownstreamSaveAudio(bridge, decode);
             }
-            PruneDownstreamSaveAudio(bridge, decode);
         }
     }
 
@@ -72,26 +89,26 @@ public sealed class AudioHandler(WorkflowGenerator g)
         return int.TryParse(indexText, out trackIndex) && trackIndex >= 0;
     }
 
-    private static void PruneDownstreamSaveAudio(WorkflowBridge bridge, VAEDecodeAudioNode decode)
+    private void PruneDownstreamSaveAudio(WorkflowBridge bridge, VAEDecodeAudioNode decode)
     {
         List<ComfyNode> toRemove = [];
         foreach (SaveAudioMP3Node save in bridge.Graph.NodesOfType<SaveAudioMP3Node>())
         {
-            if (save.Audio.Connection?.Node?.Id == decode.Id)
+            if (save.AudioInput.Connection?.Node?.Id == decode.Id)
             {
                 toRemove.Add(save);
             }
         }
         foreach (SaveAudioNode save in bridge.Graph.NodesOfType<SaveAudioNode>())
         {
-            if (save.Audio.Connection?.Node?.Id == decode.Id)
+            if (save.AudioInput.Connection?.Node?.Id == decode.Id)
             {
                 toRemove.Add(save);
             }
         }
         foreach (ComfyNode node in toRemove)
         {
-            bridge.RemoveNode(node);
+            VideoGraphHelpers.RemoveNode(g, bridge, node.Id);
         }
     }
 

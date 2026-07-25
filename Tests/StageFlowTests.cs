@@ -545,7 +545,7 @@ public partial class StageFlowTests
             rootGuideScale.Image.ConnectTo(refinerDecode.IMAGE);
             bridge.AddNode(rootGuideScale, "102");
 
-            var preprocess = new LTXVPreprocessNode().With(ImgCompression: 18);
+            var preprocess = new LTXVPreprocessNode().With(ImgCompression: 25);
             preprocess.Image.ConnectTo(rootGuideScale.IMAGE);
             bridge.AddNode(preprocess, "110");
 

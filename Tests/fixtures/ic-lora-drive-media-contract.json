@@ -1,0 +1,22 @@
+{
+  "none": {
+    "driveMediaKinds": [],
+    "acceptedKinds": [],
+    "driveData": "none"
+  },
+  "visual": {
+    "driveMediaKinds": ["image", "video"],
+    "acceptedKinds": ["image", "video"],
+    "driveData": "visual"
+  },
+  "audio": {
+    "driveMediaKinds": ["audio", "video"],
+    "acceptedKinds": ["audio", "video"],
+    "driveData": "audio"
+  },
+  "visual-image-only": {
+    "driveMediaKinds": ["image"],
+    "acceptedKinds": ["image"],
+    "driveData": "visual"
+  }
+}

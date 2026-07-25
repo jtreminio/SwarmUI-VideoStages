@@ -1,52 +1,69 @@
-import { audioSource } from "./audioSource";
+import { injectTimelineTab } from "./bottomTimelineTab";
+import { getVideoStagesHostBridge } from "./host";
 import { refineVideoButton } from "./refineVideoButton";
-import { videoStageEditor } from "./videoStageEditor";
+import { DATA_INPUT_ID } from "./swarmInputs";
+import { videoStagesTimeline } from "./videoStagesTimeline";
 
-const stageEditor = videoStageEditor();
+const timeline = videoStagesTimeline();
 
-const registerVideoClipPromptPrefix = (): void => {
-    if (typeof promptTabComplete === "undefined") {
+// One-shot diagnostic for the case where the Data input never gets built at
+// all (backend extension failed to load): the init gate below skips silently,
+// so without this a broken install would produce no signal.
+let dataInputWatchdog: ReturnType<typeof setTimeout> | null = null;
+const warnIfDataInputNeverAppears = (): void => {
+    if (dataInputWatchdog) {
         return;
     }
+    dataInputWatchdog = setTimeout(() => {
+        if (!getVideoStagesHostBridge().hasElement(DATA_INPUT_ID)) {
+            console.warn(
+                `VideoStages: Data param input (#${DATA_INPUT_ID}) never appeared — ` +
+                    "is the VideoStages backend extension loaded?",
+            );
+        }
+    }, 10000);
+};
 
-    promptTabComplete.registerPrefix(
+const registerVideoStagesPromptPrefix = (): void => {
+    getVideoStagesHostBridge().registerPromptPrefix(
         "videoclip",
-        "Add a prompt section that applies to VideoStages clips.",
+        "Per-clip prompt sections and prompt windows for the VideoStages timeline.",
         () => [
-            '\nUse "<videoclip>..." to apply to ALL VideoStages clips (including LoRAs inside the section).',
-            '\nUse "<videoclip[0]>..." to apply to clip 0, "<videoclip[1]>..." for clip 1, etc.',
-            '\nUse "<videoclip[0,0]>..." for clip 0 stage 0 only, e.g. "<videoclip[1,2]>" for clip 1 stage 2.',
-            "\nFor each stage, text from every matching <videoclip*> tier is CONCATENATED (e.g. clip 1 stage 0 gets <videoclip> + <videoclip[1]> + <videoclip[1,0]>).",
-            "\nIf the concatenated <videoclip*> text is empty (or LoRA-only), VideoStages falls back to <video>, then to the global prompt. LoRAs inside <videoclip*> are always scoped, even when the text is empty.",
+            "\n<videoclip[0]>the first clip's prompt text — everything until the next <videoclip...> tag.",
+            "\n<videoclip[0]:1.5-4>a prompt window on the first clip from 1.5s to 4s.",
+            "\nThe timeline owns these; structured config (stages, refs, audio) rides in the hidden Data param.",
         ],
         true,
     );
 };
 
-const tryRegisterStageEditor = (): boolean => {
-    if (!Array.isArray(postParamBuildSteps)) {
-        return false;
-    }
+const DATA_INPUT_RETRY_MS = 250;
+let dataInputRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
-    postParamBuildSteps.push(() => {
-        try {
-            stageEditor.init();
-        } catch (error) {
-            console.warn("VideoStages: failed to build stage editor", error);
+const initTimeline = (): void => {
+    // The Data input is built by genpage's async param build, which can land
+    // after (or without re-running) the postParamBuildSteps pass that calls
+    // us. Initializing against a paramless DOM would parse an empty carrier
+    // and silently no-op every save, so keep retrying until the input exists;
+    // init is re-runnable by design, so a later host-triggered call is fine.
+    if (!getVideoStagesHostBridge().hasElement(DATA_INPUT_ID)) {
+        warnIfDataInputNeverAppears();
+        if (!dataInputRetryTimer) {
+            dataInputRetryTimer = setTimeout(() => {
+                dataInputRetryTimer = null;
+                initTimeline();
+            }, DATA_INPUT_RETRY_MS);
         }
-    });
-    return true;
+        return;
+    }
+    try {
+        timeline.init();
+    } catch (error) {
+        console.warn("VideoStages: failed to init timeline", error);
+    }
 };
 
-if (!tryRegisterStageEditor()) {
-    const interval = setInterval(() => {
-        if (tryRegisterStageEditor()) {
-            clearInterval(interval);
-        }
-    }, 200);
-}
-
-registerVideoClipPromptPrefix();
-stageEditor.startGenerateWrapRetry();
-audioSource();
+getVideoStagesHostBridge().addPostParamBuildStep(initTimeline);
+registerVideoStagesPromptPrefix();
 refineVideoButton();
+injectTimelineTab();

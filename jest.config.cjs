@@ -19,7 +19,4 @@ module.exports = {
     setupFilesAfterEnv: ["<rootDir>/scripts/jest.setupAfterEnv.js"],
     testEnvironment: "jsdom",
     testMatch: ["<rootDir>/frontend/**/*.test.ts"],
-    transformIgnorePatterns: [
-        "/node_modules/(?!(html-template-tag|html-element-attributes|html-es6cape)/)",
-    ],
 };

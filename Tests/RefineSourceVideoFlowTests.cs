@@ -7,6 +7,7 @@ using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
+using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -34,7 +35,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -59,7 +60,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -85,29 +86,67 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
 
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        Assert.Equal(2, samplers.Count);
-
-        Assert.Equal(stage0Steps, samplers[0].StartAtStep.LiteralAsInt());
-
+        // The refine-skipped stage 0 is a passthrough with no sampler; stage 1 refines the
+        // source footage directly.
+        SwarmKSamplerNode refine = Assert.Single(SamplerNodesOrdered(bridge));
+        Assert.Equal((int)Math.Floor(stage1Steps * 0.5), refine.StartAtStep.LiteralAsInt());
         Assert.True(
-            ReachesUpstream(bridge, samplers[0].LatentImage.Connection!.Node, loadVideo.Id),
-            "Stage 0 sampler latent input does not trace upstream to the SwarmLoadVideoB64 node.");
-
-        Assert.True(
-            ReachesUpstream(bridge, samplers[1].LatentImage.Connection!.Node, samplers[0].Id),
-            "Stage 1 sampler latent input does not chain back to stage 0's sampler output.");
-
-        Assert.Equal((int)Math.Floor(stage1Steps * 0.5), samplers[1].StartAtStep.LiteralAsInt());
+            ReachesUpstream(bridge, refine.LatentImage.Connection!.Node, loadVideo.Id),
+            "Stage 1 sampler latent input does not trace upstream to the SwarmLoadVideoB64 node.");
     }
 
     [Fact]
-    public void Refine_source_video_skip_two_passes_through_first_two_stage_samplers()
+    public void Refine_source_video_replaces_t2v_root_and_is_the_only_published_output()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = JsonSingleClipStages(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10),
+            MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: 12));
+        T2IParamInput input = BuildTextToVideoInput(models.VideoModel, stagesJson);
+        input.Set(
+            VideoStagesExtension.RefineSourceVideo,
+            new Image([0x52, 0x45, 0x46, 0x49, 0x4E, 0x45], MediaType.VideoMp4));
+
+        // The native T2V fixture authors a sampler, decode and save before VideoStages runs. Global
+        // refine must replace that whole root component, retarget the one publication to the
+        // uploaded video's refine chain, and leave no stale root sampler or save.
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildNativeTextToVideoStepsWithPreCoreVideo(attachAudioToCurrentMedia: true),
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmLoadVideoB64Node loadVideo = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        Assert.False(workflow.ContainsKey("200"), "The displaced native T2V root sampler survived.");
+        Assert.False(workflow.ContainsKey("201"), "The displaced native T2V AV separator survived.");
+        Assert.False(workflow.ContainsKey("202"), "The displaced native T2V video decode survived.");
+        SwarmKSamplerNode refine = Assert.Single(SamplerNodesOrdered(bridge));
+        Assert.NotEqual("200", refine.Id);
+        Assert.True(
+            ReachesUpstream(bridge, refine, loadVideo.Id),
+            "The surviving stage sampler does not refine the uploaded global source video.");
+
+        SwarmSaveAnimationWSNode save = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.True(
+            ReachesUpstream(bridge, save.Images.Connection!.Node, loadVideo.Id),
+            "The sole save does not publish the uploaded global-refine timeline.");
+        Assert.True(JToken.DeepEquals(
+            WorkflowBridge.ToPath(save.Images.Connection),
+            generator.CurrentMedia.Path));
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Refine_source_video_skip_two_emits_no_samplers_for_the_skipped_stages()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -129,107 +168,18 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
 
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        Assert.Equal(3, samplers.Count);
-
-        Assert.Equal(stage0Steps, samplers[0].StartAtStep.LiteralAsInt());
-        Assert.Equal(stage1Steps, samplers[1].StartAtStep.LiteralAsInt());
-
+        // Both refine-skipped stages are samplerless passthroughs; only stage 2 samples, straight
+        // off the source footage.
+        SwarmKSamplerNode refine = Assert.Single(SamplerNodesOrdered(bridge));
+        Assert.Equal((int)Math.Floor(stage2Steps * 0.5), refine.StartAtStep.LiteralAsInt());
         Assert.True(
-            ReachesUpstream(bridge, samplers[0].LatentImage.Connection!.Node, loadVideo.Id),
-            "Stage 0 sampler latent input does not trace upstream to the SwarmLoadVideoB64 node.");
-        Assert.True(
-            ReachesUpstream(bridge, samplers[1].LatentImage.Connection!.Node, loadVideo.Id),
-            "Stage 1 sampler latent input does not trace upstream to the SwarmLoadVideoB64 node.");
-
-        Assert.Equal((int)Math.Floor(stage2Steps * 0.5), samplers[2].StartAtStep.LiteralAsInt());
-    }
-
-    [Fact]
-    public void Refine_source_video_with_wan_model_skips_stage0_and_chains_into_stage1()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22_14bImage2VideoModels();
-
-        const int stage0Steps = 10;
-        const int stage1Steps = 12;
-        string stagesJson = JsonSingleClipStages(
-            MakeStage(models.VideoModel.Name, "Generated", steps: stage0Steps),
-            MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: stage1Steps));
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(T2IParamTypes.VAE, models.BaseModel);
-        input.Set(
-            VideoStagesExtension.RefineSourceVideo,
-            new Image([0xDE, 0xAD, 0xBE, 0xEF], MediaType.VideoMp4));
-
-        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildCoreVideoWorkflowSteps(),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
-
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        Assert.Equal(2, samplers.Count);
-
-        Assert.Equal(stage0Steps, samplers[0].StartAtStep.LiteralAsInt());
-        Assert.True(
-            ReachesUpstream(bridge, samplers[0].LatentImage.Connection!.Node, loadVideo.Id),
-            "Stage 0 sampler latent input does not trace upstream to the SwarmLoadVideoB64 node on WAN.");
-        Assert.True(
-            ReachesUpstream(bridge, samplers[1].LatentImage.Connection!.Node, samplers[0].Id),
-            "Stage 1 sampler latent input does not chain back to stage 0's sampler output on WAN.");
-        Assert.Equal((int)Math.Floor(stage1Steps * 0.5), samplers[1].StartAtStep.LiteralAsInt());
-    }
-
-    [Fact]
-    public void Refine_source_video_with_wan_model_skip_two_passes_through_first_two_samplers()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22_14bImage2VideoModels();
-
-        const int stage0Steps = 10;
-        const int stage1Steps = 11;
-        const int stage2Steps = 12;
-        string stagesJson = JsonSingleClipStages(
-            MakeStage(models.VideoModel.Name, "Generated", steps: stage0Steps),
-            MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: stage1Steps),
-            MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: stage2Steps));
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(T2IParamTypes.VAE, models.BaseModel);
-        input.Set(
-            VideoStagesExtension.RefineSourceVideo,
-            new Image([0xDE, 0xAD, 0xBE, 0xEF], MediaType.VideoMp4));
-        input.Set(VideoStagesExtension.RefineSkipStages, 2);
-
-        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildCoreVideoWorkflowSteps(),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
-
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        Assert.Equal(3, samplers.Count);
-
-        Assert.Equal(stage0Steps, samplers[0].StartAtStep.LiteralAsInt());
-        Assert.Equal(stage1Steps, samplers[1].StartAtStep.LiteralAsInt());
-        Assert.True(
-            ReachesUpstream(bridge, samplers[0].LatentImage.Connection!.Node, loadVideo.Id),
-            "Stage 0 sampler latent does not trace upstream to the SwarmLoadVideoB64 node on WAN.");
-        Assert.True(
-            ReachesUpstream(bridge, samplers[1].LatentImage.Connection!.Node, loadVideo.Id),
-            "Stage 1 sampler latent does not trace upstream to the SwarmLoadVideoB64 node on WAN.");
-        Assert.Equal((int)Math.Floor(stage2Steps * 0.5), samplers[2].StartAtStep.LiteralAsInt());
+            ReachesUpstream(bridge, refine.LatentImage.Connection!.Node, loadVideo.Id),
+            "Stage 2 sampler latent input does not trace upstream to the SwarmLoadVideoB64 node.");
     }
 
     private static WorkflowGenerator.WorkflowGenStep SeedAceStepFunAudioTrackStep(int trackIndex) =>
@@ -250,8 +200,8 @@ public partial class StageFlowTests
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: stage0Steps),
             MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: stage1Steps));
-        clip["AudioSource"] = "audio0";
-        clip["ClipLengthFromAudio"] = true;
+        clip["audioSource"] = "audio0";
+        clip["clipLengthFromAudio"] = true;
         string stagesJson = new JArray(clip).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -262,7 +212,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false).Append(SeedAceStepFunAudioTrackStep(0)),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -288,12 +238,19 @@ public partial class StageFlowTests
             VideoStagesExtension.RefineSourceVideo,
             new Image([0xFF], MediaType.ImagePng));
 
-        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: false),
-            features: [Constants.LtxVideoFeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        StageSpec stage = Assert.Single(Assert.Single(generator.GetVideoStagesSpec().Clips).Stages);
+        Assert.NotEqual(0, stage.Control);
+        StagePlan plannedStage = Assert.Single(
+            Assert.Single(
+                generator.RequireVideoExecutionPlanContext().Plan.Clips)
+            .Stages);
+        Assert.False(plannedStage.IsPassthrough);
     }
 }

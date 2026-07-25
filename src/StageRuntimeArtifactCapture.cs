@@ -1,0 +1,24 @@
+using ComfyTyped.Core;
+using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Utils;
+using VideoStages.Execution;
+using VideoStages.Planning;
+
+namespace VideoStages;
+
+/// <summary>Captures and validates a stage's terminal runtime artifact.</summary>
+internal sealed class StageRuntimeArtifactCapture(WorkflowGenerator g)
+{
+    public RuntimeArtifact Capture(StagePlan stage)
+    {
+        ArgumentNullException.ThrowIfNull(stage);
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        RuntimeArtifact output = RuntimeArtifact.Capture(g, bridge, ArtifactOrigin.StageOutput);
+        if (!output.HasMedia)
+        {
+            throw new SwarmUserErrorException(
+                $"VideoStages: stage {stage.StageId} did not produce a video artifact.");
+        }
+        return output;
+    }
+}

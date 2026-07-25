@@ -1,10 +1,9 @@
 using System.IO;
-using System.Text.Json;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
-using VideoStages.Generated;
+using VideoStages.Architectures;
 
 namespace VideoStages;
 
@@ -12,11 +11,8 @@ public class VideoStagesExtension : Extension
 {
     public static int SectionIdForStage(int stageIndex) => Constants.SectionID_VideoStages + 1 + stageIndex;
     public static int SectionIdForClip(int clipIndex) => Constants.SectionID_VideoClip + 1 + clipIndex;
-    public static T2IRegisteredParam<string> DimensionsPreset;
-    public static T2IRegisteredParam<int> RootWidth;
-    public static T2IRegisteredParam<int> RootHeight;
-    public static T2IRegisteredParam<int> RootFPS;
-    public static T2IRegisteredParam<string> VideoStagesJson;
+    public static T2IRegisteredParam<bool> Enabled;
+    public static T2IRegisteredParam<string> Data;
     public static T2IRegisteredParam<Image> RefineSourceVideo;
     public static T2IRegisteredParam<int> RefineSkipStages;
     public static WorkflowGenerator.WorkflowGenStep CoreImageToVideoStep;
@@ -24,14 +20,10 @@ public class VideoStagesExtension : Extension
     public override void OnPreInit()
     {
         PromptRegion.RegisterCustomPrefix("videoclip");
-        T2IPromptHandling.PromptTagBasicProcessors["videoclip"] = (_, context) =>
-        {
-            PromptParser.TryResolveVideoclipSectionId(context.PreData?.Trim(), context, out int sectionId);
-            context.SectionID = sectionId;
-            return $"<videoclip//cid={context.SectionID}>";
-        };
+        T2IPromptHandling.PromptTagBasicProcessors["videoclip"] = PromptParser.ProcessVideoClipTag;
+        T2IPromptHandling.PromptTagBasicProcessors["videostages"] = PromptParser.ProcessVideoStagesTag;
         T2IPromptHandling.PromptTagLengthEstimators["videoclip"] = (_, _) => "<break>";
-
+        T2IPromptHandling.PromptTagLengthEstimators["videostages"] = (_, _) => "";
         StyleSheetFiles.Add("Assets/video-stages.css");
         ScriptFiles.Add("Assets/video-stages.js");
     }
@@ -41,14 +33,20 @@ public class VideoStagesExtension : Extension
         Logs.Info("VideoStages Extension initializing...");
         ComfyTyped.Generated.NodeRegistrations.EnsureRegistered();
         VideoStages.Generated.NodeRegistrations.EnsureRegistered();
-        RegisterComfyDependencies();
+        VideoArchitectureManifest.RegisterProductionDependencies();
         RegisterParameters();
         RegisterComfyNodes();
+        VideoStagesApi.Register();
+        AttachPromptMetadataRestorer("prompt");
+        AttachPromptMetadataRestorer("negativeprompt");
         CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(
             step => step.Priority == Constants.WorkflowStepPriority.CoreImageToVideo);
         AltImageToVideoScope.RegisterDispatcher();
-        RootVideoStageResizer.RegisterHandlers();
+        VideoArchitectureManifest.RegisterProductionHostHandlers();
 
+        WorkflowGenerator.AddStep(
+            Runner.PreflightRequest,
+            Constants.WorkflowStepPriority.PreflightRequest);
         WorkflowGenerator.AddStep(
             Runner.CaptureCoreVideoControlNetPreprocessors,
             Constants.WorkflowStepPriority.ControlNetPreprocessors);
@@ -72,23 +70,6 @@ public class VideoStagesExtension : Extension
             Constants.WorkflowStepPriority.RunConfiguredStages);
     }
 
-    private static void RegisterComfyDependencies()
-    {
-        InstallableFeatures.RegisterInstallableFeature(new(
-            "LTXVideo",
-            Constants.LtxVideoFeatureFlag,
-            Constants.LtxVideoNodeUrl,
-            "Lightricks",
-            "This will install LTXVideo ComfyUI nodes developed by Lightricks.\n"
-            + "If you already installed ComfyUI-LTXVideo in your ComfyUI custom_nodes folder, you do not need to install it again.\n"
-            + "Do you wish to install?"));
-
-        ComfyUIBackendExtension.NodeToFeatureMap[LTXICLoRALoaderModelOnlyNode.ClassType] =
-            Constants.LtxVideoFeatureFlag;
-        ComfyUIBackendExtension.NodeToFeatureMap[LTXAddVideoICLoRAGuideNode.ClassType] =
-            Constants.LtxVideoFeatureFlag;
-    }
-
     private static void RegisterParameters()
     {
         T2IParamGroup VideoStagesGroup = new(
@@ -99,93 +80,27 @@ public class VideoStagesExtension : Extension
             OrderPriority: -2.9
         );
 
-        int orderPriority = 0;
-
-        DimensionsPreset = T2IParamTypes.Register<string>(new T2IParamType(
-            Name: "Video Stages Dimensions",
-            Description: Constants.DimensionsPresetDescription,
-            Default: Constants.DimensionsPresetCustomValue,
-            GetValues: _ => BuildDimensionsPresetDropdownEntries(),
-            VisibleNormally: true,
-            IsAdvanced: false,
+        Enabled = T2IParamTypes.Register<bool>(new T2IParamType(
+            Name: "Video Stages Enabled",
+            Description: "Internal gate flag for the VideoStages group.",
+            Default: "true",
+            VisibleNormally: false,
             Toggleable: false,
-            Group: VideoStagesGroup,
-            OrderPriority: orderPriority++,
-            FeatureFlag: Constants.ComfyUIFeatureFlag,
             DoNotPreview: true,
-            HideFromMetadata: true
-        ));
-
-        RootWidth = T2IParamTypes.Register<int>(new T2IParamType(
-            Name: "Video Stages Width",
-            Description: Constants.RootDimensionsDescription,
-            Default: "1024",
-            Min: Constants.RootDimensionMin,
-            Max: Constants.RootDimensionMax,
-            ViewMin: Constants.RootDimensionMin,
-            ViewMax: 4096,
-            Step: 32,
-            ViewType: ParamViewType.POT_SLIDER,
-            DoNotPreview: true,
-            Toggleable: true,
+            HideFromMetadata: true,
             Group: VideoStagesGroup,
-            OrderPriority: orderPriority++,
             FeatureFlag: Constants.ComfyUIFeatureFlag
         ));
 
-        RootHeight = T2IParamTypes.Register<int>(new T2IParamType(
-            Name: "Video Stages Height",
-            Description: Constants.RootDimensionsDescription,
-            Default: "1024",
-            Min: Constants.RootDimensionMin,
-            Max: Constants.RootDimensionMax,
-            ViewMin: Constants.RootDimensionMin,
-            ViewMax: 4096,
-            Step: 32,
-            ViewType: ParamViewType.POT_SLIDER,
-            DoNotPreview: true,
-            Toggleable: true,
-            Group: VideoStagesGroup,
-            OrderPriority: orderPriority++,
-            FeatureFlag: Constants.ComfyUIFeatureFlag
-        ));
-
-        RootFPS = T2IParamTypes.Register<int>(new T2IParamType(
-            Name: "Video Stages FPS",
-            Description: Constants.RootFPSDescription,
-            Default: "24",
-            Min: 4,
-            Max: 60,
-            ViewMin: 4,
-            ViewMax: 60,
-            Step: 4,
-            ViewType: ParamViewType.SLIDER,
-            DoNotPreview: true,
-            Toggleable: true,
-            Group: VideoStagesGroup,
-            OrderPriority: orderPriority++,
-            FeatureFlag: Constants.ComfyUIFeatureFlag
-        ));
-
-        VideoStagesJson = T2IParamTypes.Register<string>(new T2IParamType(
+        Data = T2IParamTypes.Register<string>(new T2IParamType(
             Name: "Video Stages",
-            Description: "",
+            Description: "Internal",
             Default: "",
             VisibleNormally: false,
             DoNotPreview: true,
             Group: VideoStagesGroup,
             FeatureFlag: Constants.ComfyUIFeatureFlag,
             MetadataFormat: MetadataSanitizer.StripUploadDataFromJsonParameter
-        ));
-
-        T2IParamTypes.Register<string>(new T2IParamType(
-            Name: "Video Stages Dimensions Metadata",
-            Description: "",
-            Default: DimensionsPresetMetadataJson,
-            VisibleNormally: false,
-            DoNotPreview: true,
-            Group: VideoStagesGroup,
-            FeatureFlag: Constants.ComfyUIFeatureFlag
         ));
 
         RefineSourceVideo = T2IParamTypes.Register<Image>(new T2IParamType(
@@ -213,27 +128,29 @@ public class VideoStagesExtension : Extension
         ));
     }
 
+    /// <summary>Metadata stores the PROCESSED prompt, where videoclip tags have been rewritten into internal
+    /// PromptRegion markers (<c>&lt;videoclip:w|0|0.5|4//cid=N&gt;</c>). Attach a MetadataFormat to the core
+    /// prompt params so saved metadata shows the tags as the user typed them.</summary>
+    private static void AttachPromptMetadataRestorer(string paramId)
+    {
+        if (!T2IParamTypes.Types.TryGetValue(paramId, out T2IParamType type))
+        {
+            return;
+        }
+        Func<string, string> existing = type.MetadataFormat;
+        T2IParamTypes.Types[paramId] = type with
+        {
+            MetadataFormat = existing is null
+                ? PromptParser.RestoreTagsForMetadata
+                : val => existing(PromptParser.RestoreTagsForMetadata(val)),
+        };
+    }
+
     private void RegisterComfyNodes()
     {
         string rootPath = string.IsNullOrWhiteSpace(FilePath) ? "src/Extensions/SwarmUI-VideoStages" : FilePath;
         string nodeFolder = Path.GetFullPath(Path.Join(rootPath, "comfy_node"));
         ComfyUISelfStartBackend.CustomNodePaths.Add(nodeFolder);
         Logs.Init($"VideoStages: added {nodeFolder} to ComfyUI CustomNodePaths");
-    }
-
-    public static readonly string DimensionsPresetMetadataJson = JsonSerializer.Serialize(
-        Constants.DimensionsPresetMetadataTable,
-        new JsonSerializerOptions { WriteIndented = false });
-
-    public static List<string> BuildDimensionsPresetDropdownEntries()
-    {
-        List<string> list = [];
-        foreach (string key in Constants.DimensionsPresetOrderedKeys)
-        {
-            list.Add($"{key}///{key}");
-        }
-        list.Add($"{Constants.DimensionsPresetCustomValue}///Custom");
-
-        return list;
     }
 }

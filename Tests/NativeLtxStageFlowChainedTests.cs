@@ -119,6 +119,32 @@ public partial class StageFlowTests
         AssertNoAvLatentSplitTwice(bridge);
     }
 
+    [Fact]
+    public void Chained_native_ltx_latent_downscale_applies_the_latent_scale_node_too()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = JsonSingleClipStages(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8),
+            MakeStage(
+                models.VideoModel.Name,
+                "PreviousStage",
+                control: 0.5,
+                upscale: 0.5,
+                upscaleMethod: "latent-bislerp",
+                steps: 8));
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: true));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        LatentUpscaleByNode downscale = Assert.Single(bridge.Graph.NodesOfType<LatentUpscaleByNode>());
+        Assert.Equal("bislerp", downscale.UpscaleMethod.LiteralAsString());
+        Assert.Equal(0.5, downscale.ScaleBy.LiteralAsDouble());
+        AssertNoAvLatentSplitTwice(bridge);
+    }
+
     // A LATENT_AUDIOVIDEO tensor (e.g. a sampler output) split by more than one LTXVSeparateAVLatent is
     // the duplicate-separate bug: one node's video and another node's audio are used, each leaving its
     // other output dangling. Reusing a single separate (or reading a concat's pre-join tensors) avoids it.

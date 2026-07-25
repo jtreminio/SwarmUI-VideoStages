@@ -1,53 +1,37 @@
+import { getVideoStagesHostBridge } from "./host";
+
 export const REF_FRAME_MIN = 1;
 export const DEFAULT_CLIP_DURATION_SECONDS = 5;
 export const CLIP_DURATION_MIN = 1;
 export const CLIP_DURATION_MAX = 9999;
-export const CLIP_DURATION_SLIDER_MAX = 60;
-export const CLIP_DURATION_SLIDER_STEP = 0.5;
+export const PROMPT_WINDOW_MIN_DURATION = 0.25;
+export const PROMPT_WINDOW_DEFAULT_DURATION = 3;
+export const RETAKE_MIN_DURATION = 0.1;
+export const RETAKE_DEFAULT_DURATION = 3;
+export const RETAKE_DURATION_STEP = 0.1;
+export const RETAKE_STRENGTH_MIN = 0;
+export const RETAKE_STRENGTH_MAX = 1;
+export const RETAKE_STRENGTH_STEP = 0.05;
+export const RETAKE_STRENGTH_DEFAULT = 1;
+export const AUDIO_SEGMENT_MIN_LENGTH = 0.1;
+export const AUDIO_SEGMENT_DEFAULT_LENGTH = 2;
+export const AUDIO_SEGMENT_STEP = 0.1;
+export const AUDIO_SEGMENT_VOLUME_MIN = 0.00001;
+export const AUDIO_SEGMENT_VOLUME_MAX = 100000;
+export const AUDIO_SEGMENT_VOLUME_SLIDER_MIN = 0.1;
+export const AUDIO_SEGMENT_VOLUME_SLIDER_MAX = 4;
+export const AUDIO_SEGMENT_VOLUME_SLIDER_STEP = 0.1;
+export const AUDIO_SEGMENT_VOLUME_DEFAULT = 1;
 export const ROOT_DIMENSION_MIN = 256;
-export const DIMENSIONS_PRESET_CUSTOM_VALUE = "custom";
-export const ROOT_FPS_MIN = 4;
-export const CLIP_AUDIO_UPLOAD_FIELD = "uploadedAudio";
-export const CLIP_AUDIO_UPLOAD_LABEL = "Audio Upload";
-export const CLIP_AUDIO_UPLOAD_DESCRIPTION =
-    "Audio file to attach to this clip. Used when Audio Source is set to Upload.";
-export const CONTROLNET_SOURCE_OPTIONS = [
-    "ControlNet 1",
-    "ControlNet 2",
-    "ControlNet 3",
-];
+export const ROOT_DIMENSION_MAX = 4096;
+export const ROOT_DIMENSION_STEP = 32;
+export const ROOT_FPS_MIN = 1;
+export const ROOT_FPS_MAX = 120;
 export const STAGE_REF_STRENGTH_MIN = 0;
 export const STAGE_REF_STRENGTH_MAX = 1;
 export const STAGE_REF_STRENGTH_STEP = 0.1;
 export const STAGE_REF_STRENGTH_DEFAULT = 0.8;
 export const IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
-export const STAGE_REF_STRENGTH_FIELD_PREFIX = "refStrength_";
-export const STAGE_CONTROLNET_STRENGTH_MIN = 0;
-export const STAGE_CONTROLNET_STRENGTH_MAX = 1;
-export const STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
-export const STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
-
-export interface CachedRefUpload {
-    src: string;
-    name: string;
-}
-
-export const stageRefStrengthField = (refIdx: number): string =>
-    `${STAGE_REF_STRENGTH_FIELD_PREFIX}${refIdx}`;
-
-export const parseStageRefStrengthIndex = (field: string): number | null => {
-    if (!field.startsWith(STAGE_REF_STRENGTH_FIELD_PREFIX)) {
-        return null;
-    }
-    const refIdx = parseInt(
-        field.slice(STAGE_REF_STRENGTH_FIELD_PREFIX.length),
-        10,
-    );
-    if (!Number.isInteger(refIdx) || refIdx < 0) {
-        return null;
-    }
-    return refIdx;
-};
 
 export const parseBase2EditStageIndex = (value: string): number | null => {
     const match = `${value || ""}`
@@ -58,24 +42,6 @@ export const parseBase2EditStageIndex = (value: string): number | null => {
         return null;
     }
     return parseInt(match[1], 10);
-};
-
-export const refUploadKey = (clipIdx: number, refIdx: number): string =>
-    `${clipIdx}:${refIdx}`;
-
-export const parseRefUploadKey = (
-    key: string,
-): { clipIdx: number; refIdx: number } | null => {
-    const parts = key.split(":");
-    if (parts.length !== 2) {
-        return null;
-    }
-    const clipIdx = parseInt(parts[0], 10);
-    const refIdx = parseInt(parts[1], 10);
-    if (!Number.isInteger(clipIdx) || !Number.isInteger(refIdx)) {
-        return null;
-    }
-    return { clipIdx, refIdx };
 };
 
 export const normalizeUploadFileName = (
@@ -91,3 +57,11 @@ export const normalizeUploadFileName = (
 
 export const clamp = (value: number, min: number, max: number): number =>
     Math.min(Math.max(value, min), max);
+
+export const mediaPreviewSrc = (value: string): string => {
+    if (`${value ?? ""}`.startsWith("data:")) {
+        return value;
+    }
+    const prefix = getVideoStagesHostBridge().getMediaOutputPrefix();
+    return `${prefix}/${value}`;
+};

@@ -37,11 +37,3 @@ export const stubBase2EditStageRegistry = (
         }),
     };
 };
-
-export const stubAceStepFunRegistryThrowing = (error: Error): void => {
-    window.acestepfunTrackRegistry = {
-        getSnapshot: () => {
-            throw error;
-        },
-    };
-};

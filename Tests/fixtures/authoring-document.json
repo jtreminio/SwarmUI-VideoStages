@@ -1,0 +1,189 @@
+{
+    "schemaVersion": 5,
+    "width": 768,
+    "height": 512,
+    "clips": [
+        {
+            "id": "clip-0",
+            "architecture": "ltx2",
+            "modelProfileId": "ltx-2.3",
+            "skipped": false,
+            "boundaryOut": "continue",
+            "boundaryOutCarryAudio": true,
+            "boundaryOutOverlap": 8,
+            "duration": 3,
+            "audioSource": "Native",
+            "icLoras": [
+                {
+                    "lora": "ic-lora-pose.safetensors",
+                    "preset": "pose",
+                    "driveSource": "Upload",
+                    "driveData": "visual",
+                    "driveMediaKinds": [
+                        "video"
+                    ],
+                    "stage": 0,
+                    "strength": 0.9,
+                    "attentionStrength": 0.8,
+                    "controlType": "canny",
+                    "hdr": true,
+                    "driveMedia": {
+                        "data": "data:video/mp4;base64,QUJD",
+                        "fileName": "drive.mp4"
+                    }
+                }
+            ],
+            "saveAudioTrack": true,
+            "clipLengthFromAudio": false,
+            "clipLengthFromControlNet": false,
+            "reuseAudio": true,
+            "uploadedAudio": {
+                "data": "data:audio/wav;base64,QUJD",
+                "fileName": "clip.wav"
+            },
+            "sourceVideo": {
+                "data": "data:video/mp4;base64,REVG",
+                "fileName": "source.mp4",
+                "fps": 30,
+                "durationSeconds": 6,
+                "startSeconds": 1,
+                "lengthSeconds": 3
+            },
+            "retake": {
+                "id": "retake-0",
+                "startSeconds": 0.5,
+                "lengthSeconds": 1.5,
+                "strength": 0.7
+            },
+            "refs": [
+                {
+                    "id": "ref-0",
+                    "source": "Upload",
+                    "uploadFileName": "ref.png",
+                    "uploadedImage": {
+                        "data": "data:image/png;base64,QUJD",
+                        "fileName": "ref.png"
+                    },
+                    "frame": 2,
+                    "fromEnd": true
+                }
+            ],
+            "stages": [
+                {
+                    "id": "stage-0",
+                    "skipped": false,
+                    "control": 1,
+                    "controlNetStrength": 0.8,
+                    "icLoraStrengths": [
+                        0.8
+                    ],
+                    "refStrengths": [
+                        0.6
+                    ],
+                    "upscale": 1,
+                    "upscaleMethod": "pixel-lanczos",
+                    "model": "ltx-2.3.safetensors",
+                    "modelProfileId": "ltx-2.3",
+                    "steps": 12,
+                    "cfgScale": 4.5,
+                    "sampler": "euler",
+                    "scheduler": "normal",
+                    "loras": [
+                        {
+                            "name": "style.safetensors",
+                            "weight": 0.5
+                        }
+                    ]
+                },
+                {
+                    "id": "stage-1",
+                    "skipped": true,
+                    "control": 0.5,
+                    "controlNetStrength": 0.8,
+                    "icLoraStrengths": [
+                        0.5
+                    ],
+                    "refStrengths": [
+                        0.4
+                    ],
+                    "upscale": 1.5,
+                    "upscaleMethod": "latentmodel-upscaler.safetensors",
+                    "model": "ltx-2.3.safetensors",
+                    "modelProfileId": "ltx-2.3",
+                    "steps": 8,
+                    "cfgScale": 1,
+                    "sampler": "euler",
+                    "scheduler": "normal",
+                    "loras": []
+                }
+            ]
+        },
+        {
+            "id": "clip-1",
+            "architecture": "ltx2",
+            "modelProfileId": "ltx-2.3",
+            "skipped": false,
+            "boundaryOut": "cut",
+            "boundaryOutCarryAudio": false,
+            "boundaryOutOverlap": 1,
+            "duration": 2,
+            "audioSource": "Native",
+            "icLoras": [],
+            "saveAudioTrack": false,
+            "clipLengthFromAudio": false,
+            "clipLengthFromControlNet": false,
+            "reuseAudio": false,
+            "uploadedAudio": null,
+            "sourceVideo": null,
+            "retake": null,
+            "refs": [],
+            "stages": [
+                {
+                    "id": "stage-2",
+                    "skipped": false,
+                    "control": 0.5,
+                    "controlNetStrength": 0.8,
+                    "icLoraStrengths": [],
+                    "refStrengths": [],
+                    "upscale": 1,
+                    "upscaleMethod": "latentmodel-upscaler.safetensors",
+                    "model": "ltx-2.3.safetensors",
+                    "modelProfileId": "ltx-2.3",
+                    "steps": 8,
+                    "cfgScale": 1,
+                    "sampler": "euler",
+                    "scheduler": "normal",
+                    "loras": []
+                }
+            ]
+        }
+    ],
+    "audioTracks": [
+        {
+            "id": "track-0",
+            "volume": 0.75,
+            "source": {
+                "kind": "Upload",
+                "reference": "",
+                "uploadedAudio": {
+                    "data": "data:audio/wav;base64,REVG",
+                    "fileName": "track.wav"
+                }
+            },
+            "spans": [
+                {
+                    "id": "span-0",
+                    "timelineStartSeconds": 1,
+                    "timelineLengthSeconds": 3,
+                    "sourceStartSeconds": 0.5,
+                    "projection": {
+                        "firstClipId": "clip-0",
+                        "lastClipId": "clip-1",
+                        "clipStartOffsetSeconds": 1,
+                        "clipEndOffsetSeconds": 1
+                    }
+                }
+            ]
+        }
+    ]
+}

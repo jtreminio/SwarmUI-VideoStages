@@ -1,31 +1,46 @@
-export interface AudioSourceOption {
-    value: string;
-    label: string;
-}
+import { getVideoStagesHostBridge } from "./host";
+import { preserveSelectedOption, type SelectOption } from "./selectOption";
+
+export type AudioSourceOption = Pick<SelectOption, "value" | "label">;
 
 export interface AudioSourceContext {
-    /**
-     * True when the clip's ControlNet source dropdown is enabled (i.e. a
-     * controlNetLora is selected). Drives whether "ControlNet" is offered
-     * as an audio source.
-     */
     controlNetEnabled?: boolean;
+    allowedKinds?: readonly string[];
 }
 
 export const AUDIO_SOURCE_NATIVE = "Native";
 export const AUDIO_SOURCE_UPLOAD = "Upload";
 export const AUDIO_SOURCE_CONTROLNET = "ControlNet";
-
-import { videoStagesDebugLog } from "./debugLog";
-
-const ACESTEPFUN_EVENT = "acestepfun:tracks-changed";
-const SOURCE_SELECT_SELECTOR = '[data-clip-field="audioSource"]';
-const CONTROLNET_SOURCE_SELECT_SELECTOR =
-    '[data-clip-field="controlNetSource"]';
+export const AUDIO_SOURCE_DISABLED_KIND = "Disabled";
 const ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
 
 export const isAceStepFunAudioSource = (source: string): boolean =>
     ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
+
+export const audioSourceKind = (source: string): string => {
+    const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
+    return isAceStepFunAudioSource(normalized) ? "AceStepFun" : normalized;
+};
+
+export const isAllowedAudioSource = (
+    allowedKinds: readonly string[],
+    source: string,
+): boolean => {
+    const kind = audioSourceKind(source);
+    return (
+        allowedKinds.includes(kind) ||
+        (kind === AUDIO_SOURCE_NATIVE &&
+            allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND))
+    );
+};
+
+export const defaultAuthoringAudioSource = (
+    allowedKinds: readonly string[],
+): string =>
+    allowedKinds.includes(AUDIO_SOURCE_NATIVE) ||
+    allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND)
+        ? AUDIO_SOURCE_NATIVE
+        : (allowedKinds[0] ?? AUDIO_SOURCE_NATIVE);
 
 export const isControlNetAudioSource = (source: string): boolean =>
     `${source ?? ""}`.trim() === AUDIO_SOURCE_CONTROLNET;
@@ -39,19 +54,8 @@ export const canUseClipLengthFromAudio = (source: string): boolean => {
     );
 };
 
-const getSourceSelects = (): HTMLSelectElement[] =>
-    Array.from(document.querySelectorAll(SOURCE_SELECT_SELECTOR)).filter(
-        (elem): elem is HTMLSelectElement => elem instanceof HTMLSelectElement,
-    );
-
-const isSourceSelect = (
-    target: EventTarget | null,
-): target is HTMLSelectElement =>
-    target instanceof HTMLSelectElement &&
-    target.matches(SOURCE_SELECT_SELECTOR);
-
 const getAceStepFunRefs = (): string[] => {
-    const snapshot = window.acestepfunTrackRegistry?.getSnapshot?.();
+    const snapshot = getVideoStagesHostBridge().getAceStepFunRegistry();
     if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
         return [];
     }
@@ -76,6 +80,33 @@ const getAceStepFunRefLabel = (ref: string): string => {
     return ref;
 };
 
+const appendAceStepFunRefs = (options: AudioSourceOption[]): void => {
+    for (const ref of getAceStepFunRefs()) {
+        options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
+    }
+};
+
+const appendMissingSelectedRef = (
+    options: AudioSourceOption[],
+    currentValue: string,
+): void =>
+    preserveSelectedOption(options, currentValue, "end", (value) =>
+        isAceStepFunAudioSource(value)
+            ? { value, label: getAceStepFunRefLabel(value) }
+            : null,
+    );
+
+export const buildSegmentAudioSourceOptions = (
+    currentValue = "",
+): AudioSourceOption[] => {
+    const options: AudioSourceOption[] = [
+        { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD },
+    ];
+    appendAceStepFunRefs(options);
+    appendMissingSelectedRef(options, currentValue);
+    return options;
+};
+
 export const buildAudioSourceOptions = (
     currentValue = "",
     context: AudioSourceContext = {},
@@ -84,158 +115,30 @@ export const buildAudioSourceOptions = (
         { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
         { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD },
     ];
-    for (const ref of getAceStepFunRefs()) {
-        options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
-    }
+    appendAceStepFunRefs(options);
     if (context.controlNetEnabled) {
         options.push({
             value: AUDIO_SOURCE_CONTROLNET,
             label: AUDIO_SOURCE_CONTROLNET,
         });
     }
-    const selected = `${currentValue || ""}`.trim();
-    if (
-        isAceStepFunAudioSource(selected) &&
-        !options.some((option) => option.value === selected)
-    ) {
-        options.push({
-            value: selected,
-            label: getAceStepFunRefLabel(selected),
+    if (context.allowedKinds) {
+        const allowed = new Set(context.allowedKinds);
+        const filtered = options.filter((option) => {
+            const kind = audioSourceKind(option.value);
+            return (
+                allowed.has(kind) ||
+                (kind === AUDIO_SOURCE_NATIVE &&
+                    allowed.has(AUDIO_SOURCE_DISABLED_KIND))
+            );
         });
+        options.length = 0;
+        options.push(...filtered);
     }
+    appendMissingSelectedRef(options, currentValue);
+    preserveSelectedOption(options, currentValue, "start", (value) => ({
+        value,
+        label: `${value} (unsupported persisted value)`,
+    }));
     return options;
-};
-
-export const resolveAudioSourceValue = (
-    currentValue: string,
-    options: AudioSourceOption[],
-): string => {
-    const desired = `${currentValue || ""}`;
-    if (options.some((option) => option.value === desired)) {
-        return desired;
-    }
-    return AUDIO_SOURCE_NATIVE;
-};
-
-const detectControlNetEnabledForAudioSelect = (
-    audioSelect: HTMLSelectElement,
-): boolean => {
-    const clipIdx = audioSelect.dataset.clipIdx;
-    if (!clipIdx) {
-        return false;
-    }
-    for (const elem of document.querySelectorAll(
-        CONTROLNET_SOURCE_SELECT_SELECTOR,
-    )) {
-        if (
-            elem instanceof HTMLSelectElement &&
-            elem.dataset.clipIdx === clipIdx
-        ) {
-            return !elem.disabled;
-        }
-    }
-    return false;
-};
-
-export const audioSource = () => {
-    const refreshOptions = (reason = "manual"): void => {
-        const selects = getSourceSelects();
-        videoStagesDebugLog("audioSource", "refreshOptions", {
-            reason,
-            selectCount: selects.length,
-        });
-        if (selects.length === 0) {
-            return;
-        }
-        for (const select of selects) {
-            const options = buildAudioSourceOptions(select.value, {
-                controlNetEnabled:
-                    detectControlNetEnabledForAudioSelect(select),
-            });
-            const desired = resolveAudioSourceValue(select.value, options);
-            const newOptionsJson = JSON.stringify(
-                options.map((o) => [o.value, o.label]),
-            );
-            const currentOptionsJson = JSON.stringify(
-                Array.from(select.options).map((o) => [
-                    o.value,
-                    o.textContent ?? "",
-                ]),
-            );
-            if (
-                newOptionsJson === currentOptionsJson &&
-                select.value === desired
-            ) {
-                continue;
-            }
-            videoStagesDebugLog("audioSource", "refreshOptions DOM rebuild", {
-                reason,
-                previousValue: select.value,
-                desired,
-            });
-            select.innerHTML = "";
-            for (const option of options) {
-                const elem = document.createElement("option");
-                elem.value = option.value;
-                elem.textContent = option.label;
-                elem.dataset.cleanname = option.label;
-                elem.selected = option.value === desired;
-                select.appendChild(elem);
-            }
-            triggerChangeFor(select);
-        }
-    };
-
-    const onDocumentDropdownInteraction = (event: Event): void => {
-        if (isSourceSelect(event.target)) {
-            refreshOptions("dropdown-interaction");
-        }
-    };
-
-    const onAceStepFunTracksChanged = (): void => {
-        refreshOptions("acestepfun:tracks-changed");
-    };
-
-    const runOnEachBuild = (): void => {
-        try {
-            refreshOptions("postParamBuildSteps");
-        } catch (error) {
-            console.warn("audioSource: param build sync failed", error);
-        }
-    };
-
-    const scheduleInitialSync = (): void => {
-        if (!Array.isArray(postParamBuildSteps)) {
-            setTimeout(scheduleInitialSync, 200);
-            return;
-        }
-        postParamBuildSteps.push(runOnEachBuild);
-    };
-
-    document.addEventListener("mousedown", onDocumentDropdownInteraction);
-    document.addEventListener("focusin", onDocumentDropdownInteraction);
-    document.addEventListener(ACESTEPFUN_EVENT, onAceStepFunTracksChanged);
-
-    scheduleInitialSync();
-
-    return {
-        buildOptions: buildAudioSourceOptions,
-        resolveSelectedValue: resolveAudioSourceValue,
-        refreshOptions,
-        runOnEachBuild,
-        dispose: (): void => {
-            document.removeEventListener(
-                "mousedown",
-                onDocumentDropdownInteraction,
-            );
-            document.removeEventListener(
-                "focusin",
-                onDocumentDropdownInteraction,
-            );
-            document.removeEventListener(
-                ACESTEPFUN_EVENT,
-                onAceStepFunTracksChanged,
-            );
-        },
-    };
 };

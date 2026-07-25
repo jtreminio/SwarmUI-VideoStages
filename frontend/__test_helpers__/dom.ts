@@ -54,3 +54,49 @@ export const mountCheckbox = (
     document.body.appendChild(checkbox);
     return checkbox;
 };
+
+const ensureTextarea = (id: string): HTMLTextAreaElement => {
+    const existing = document.getElementById(id);
+    if (existing instanceof HTMLTextAreaElement) {
+        return existing;
+    }
+    const el = document.createElement("textarea");
+    el.id = id;
+    document.body.appendChild(el);
+    return el;
+};
+
+export const mountVideoStagesData = (state: unknown): HTMLTextAreaElement => {
+    const el = ensureTextarea("input_videostages");
+    const persisted =
+        typeof state === "object" &&
+        state !== null &&
+        !Array.isArray(state) &&
+        !Object.hasOwn(state, "schemaVersion")
+            ? { ...state, schemaVersion: 5 }
+            : state;
+    el.value =
+        typeof persisted === "string" ? persisted : JSON.stringify(persisted);
+    return el;
+};
+
+/** Core Video FPS param input — the timeline fps always mirrors this. */
+export const mountVideoFps = (value: number): HTMLInputElement => {
+    const existing = document.getElementById("input_videofps");
+    if (existing instanceof HTMLInputElement) {
+        existing.value = `${value}`;
+        return existing;
+    }
+    const el = document.createElement("input");
+    el.type = "number";
+    el.id = "input_videofps";
+    el.value = `${value}`;
+    document.body.appendChild(el);
+    return el;
+};
+
+export const mountPromptBox = (value = ""): HTMLTextAreaElement => {
+    const el = ensureTextarea("input_prompt");
+    el.value = value;
+    return el;
+};

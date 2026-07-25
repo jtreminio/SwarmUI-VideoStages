@@ -1,121 +1,100 @@
 import {
-    parseBase2EditStageIndex,
-    ROOT_DIMENSION_MIN,
-    ROOT_FPS_MIN,
-} from "./constants";
-import { utils } from "./utils";
+    architectureDescriptor,
+    architectureForModel,
+    buildArchitectureModelCatalog,
+} from "./architectures/catalog";
+import { parseBase2EditStageIndex } from "./constants";
+import { getVideoStagesHostBridge } from "./host";
+import {
+    type ClipTextInput,
+    extractGlobalPrompt,
+    serializeClipPrompts,
+} from "./promptSegments";
 
-export const getClipsInput = ():
+export const DATA_INPUT_ID = "input_videostages";
+let warnedMissingDataInput = false;
+
+export const getPromptInput = ():
+    | HTMLInputElement
+    | HTMLTextAreaElement
+    | null => getVideoStagesHostBridge().getTextInput("input_prompt");
+
+export const getDataInput = ():
     | HTMLInputElement
     | HTMLTextAreaElement
     | null => {
-    const el = document.getElementById("input_videostages");
-    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+    const el = getVideoStagesHostBridge().getTextInput(DATA_INPUT_ID);
+    if (el) {
         return el;
+    }
+    if (!warnedMissingDataInput) {
+        warnedMissingDataInput = true;
+        console.warn(
+            `VideoStages: Data param input not found (#${DATA_INPUT_ID}).`,
+        );
     }
     return null;
 };
 
-export const ROOT_DIMENSION_WIDTH_INPUT_ID = "input_videostageswidth";
-export const ROOT_DIMENSION_HEIGHT_INPUT_ID = "input_videostagesheight";
-export const DIMENSIONS_PRESET_SELECT_ID = "input_videostagesdimensions";
-export const DIMENSIONS_PRESET_METADATA_INPUT_ID =
-    "input_videostagesdimensionsmetadata";
-export const ROOT_FPS_INPUT_ID = "input_videostagesfps";
+export const readDataParam = (): string => getDataInput()?.value ?? "";
 
-export const getRootDimensionParamInput = (
-    field: "width" | "height",
-): HTMLInputElement | null =>
-    utils.getInputElement(
-        field === "width"
-            ? ROOT_DIMENSION_WIDTH_INPUT_ID
-            : ROOT_DIMENSION_HEIGHT_INPUT_ID,
-    );
-
-export const getRootFpsParamInput = (): HTMLInputElement | null =>
-    utils.getInputElement(ROOT_FPS_INPUT_ID);
-
-export const getCoreDimensionInput = (
-    field: "width" | "height",
-): HTMLInputElement | null => {
-    const primaryId = field === "width" ? "input_width" : "input_height";
-    const fallbackId =
-        field === "width"
-            ? "input_aspectratiowidth"
-            : "input_aspectratioheight";
-    return (
-        utils.getInputElement(primaryId) ?? utils.getInputElement(fallbackId)
-    );
-};
-
-export const getRegisteredRootDimension = (
-    field: "width" | "height",
-): number | null => {
-    const input = getRootDimensionParamInput(field);
-    if (!input) {
-        return null;
+export const writeDataParam = (json: string): void => {
+    const el = getDataInput();
+    if (!el) {
+        return;
     }
-    const value = Math.round(utils.toNumber(input.value, 0));
-    return value >= ROOT_DIMENSION_MIN ? value : null;
+    el.value = json;
 };
 
-export const getRegisteredRootFps = (): number | null => {
-    const input = getRootFpsParamInput();
-    if (!input) {
-        return null;
+export const readStateToken = (): string =>
+    `${readDataParam()}\x00${getPromptInput()?.value ?? ""}`;
+
+export const writeClipPrompts = (clips: ClipTextInput[]): void => {
+    const el = getPromptInput();
+    if (!el) {
+        return;
     }
-    const value = Math.round(utils.toNumber(input.value, 0));
-    return value >= ROOT_FPS_MIN ? value : null;
+    el.value = serializeClipPrompts(el.value ?? "", clips);
 };
 
-export const getCoreDimension = (field: "width" | "height"): number | null => {
-    const input = getCoreDimensionInput(field);
-    if (!input) {
-        return null;
+/**
+ * Dispatch the host `change` events for both carriers after a quiet write
+ * (store save path). Data param first, then prompt — the order the old
+ * notifying writes fired in. The prompt dispatch runs our own carrier
+ * listeners synchronously, so callers must only invoke this once the store's
+ * canonical model already reflects the written values.
+ */
+export const notifyCarrierChanged = (): void => {
+    const dataEl = getDataInput();
+    if (dataEl) {
+        getVideoStagesHostBridge().notifyChanged(dataEl);
     }
-    const value = Math.round(utils.toNumber(input.value, 0));
-    return value >= ROOT_DIMENSION_MIN ? value : null;
-};
-
-export const seedRegisteredDimensionsFromCore = (
-    notifyDomChange = true,
-): void => {
-    const fields: Array<"width" | "height"> = ["width", "height"];
-    for (const field of fields) {
-        const ourInput = getRootDimensionParamInput(field);
-        if (!ourInput) {
-            continue;
-        }
-        const ourValue = Math.round(utils.toNumber(ourInput.value, 0));
-        if (ourValue >= ROOT_DIMENSION_MIN) {
-            continue;
-        }
-        const coreValue = getCoreDimension(field);
-        if (coreValue === null) {
-            continue;
-        }
-        ourInput.value = `${coreValue}`;
-        if (notifyDomChange) {
-            triggerChangeFor(ourInput);
-        }
+    const promptEl = getPromptInput();
+    if (promptEl) {
+        getVideoStagesHostBridge().notifyChanged(promptEl, true);
     }
 };
+
+export const readGlobalPrompt = (): string =>
+    extractGlobalPrompt(getPromptInput()?.value ?? "");
 
 export const getGroupToggle = (): HTMLInputElement | null =>
-    utils.getInputElement("input_group_content_videostages_toggle");
+    getVideoStagesHostBridge().getInput(
+        "input_group_content_videostages_toggle",
+    );
 
 export const getRootModelInput = (): HTMLInputElement | null =>
-    utils.getInputElement("input_model");
+    getVideoStagesHostBridge().getInput("input_model");
 
 export const getBase2EditStageRefs = (): string[] => {
-    const snapshot = window.base2editStageRegistry?.getSnapshot?.();
+    const snapshot = getVideoStagesHostBridge().getBase2EditRegistry();
     if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
         return [];
     }
 
     const refs = snapshot.refs
         .map((value) => {
-            const stageIndex = parseBase2EditStageIndex(value);
+            const stageIndex = parseBase2EditStageIndex(`${value ?? ""}`);
             return stageIndex == null ? null : `edit${stageIndex}`;
         })
         .filter((value): value is string => !!value);
@@ -126,85 +105,49 @@ export const getBase2EditStageRefs = (): string[] => {
     );
 };
 
-export const isAvailableBase2EditReference = (value: string): boolean => {
-    const stageIndex = parseBase2EditStageIndex(value);
-    if (stageIndex == null) {
-        return false;
-    }
-    return getBase2EditStageRefs().includes(`edit${stageIndex}`);
-};
-
 export const isRootTextToVideoModel = (): boolean => {
     const modelName = `${getRootModelInput()?.value ?? ""}`.trim();
     if (!modelName) {
         return false;
     }
-
-    if (
-        typeof modelsHelpers !== "undefined" &&
-        modelsHelpers &&
-        typeof modelsHelpers.getDataFor === "function"
-    ) {
-        const modelData = modelsHelpers.getDataFor(
-            "Stable-Diffusion",
-            modelName,
-        );
-        if (modelData?.modelClass?.compatClass?.isText2Video) {
-            return true;
-        }
-    }
-
-    if (
-        typeof currentModelHelper !== "undefined" &&
-        currentModelHelper &&
-        currentModelHelper.curCompatClass &&
-        typeof modelsHelpers !== "undefined" &&
-        modelsHelpers?.compatClasses
-    ) {
-        const compatClass =
-            modelsHelpers.compatClasses[currentModelHelper.curCompatClass];
-        return !!compatClass?.isText2Video;
-    }
-
-    return false;
+    const catalog = buildArchitectureModelCatalog([modelName], [modelName]);
+    const architectureId = architectureForModel(catalog, modelName);
+    const architecture = architectureDescriptor(catalog, architectureId);
+    return (
+        architecture?.capabilities.entryModes.includes("text-to-video") ?? false
+    );
 };
 
-export const isImageToVideoWorkflow = (): boolean => {
-    if (isRootTextToVideoModel()) {
-        return false;
-    }
-    const videoModel = utils.getSelectElement("input_videomodel");
-    return !!`${videoModel?.value ?? ""}`.trim();
-};
+export const getRootGeneratedEntryMode = ():
+    | "text-to-video"
+    | "image-to-video" =>
+    !`${getRootModelInput()?.value ?? ""}`.trim() || isRootTextToVideoModel()
+        ? "text-to-video"
+        : "image-to-video";
 
 export const getDropdownOptions = (
     paramId: string,
     fallbackSelectId: string,
 ): { values: string[]; labels: string[] } => {
-    if (typeof getParamById === "function") {
-        const param = getParamById(paramId);
-        if (
-            param?.values &&
-            Array.isArray(param.values) &&
-            param.values.length > 0
-        ) {
-            const labels =
-                Array.isArray(param.value_names) &&
-                param.value_names.length === param.values.length
-                    ? [...param.value_names]
-                    : [...param.values];
-            return { values: [...param.values], labels: labels };
-        }
+    const registered = getVideoStagesHostBridge().getParamOptions(paramId);
+    if (registered) {
+        return registered;
     }
 
-    const select = utils.getSelectElement(fallbackSelectId);
-    return {
-        values: utils.getSelectValues(select),
-        labels: utils.getSelectLabels(select),
-    };
+    const bridge = getVideoStagesHostBridge();
+    return bridge.getSelectOptions(bridge.getSelect(fallbackSelectId));
 };
 
 export const isVideoStagesEnabled = (): boolean => {
     const toggler = getGroupToggle();
     return toggler ? toggler.checked : false;
+};
+
+export const setVideoStagesEnabled = (enabled: boolean): void => {
+    const toggler = getGroupToggle();
+    if (!toggler || toggler.checked === enabled) {
+        return;
+    }
+    toggler.checked = enabled;
+    getVideoStagesHostBridge().notifyChanged(toggler);
 };

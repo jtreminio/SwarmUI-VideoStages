@@ -1,6 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
-using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 
 namespace VideoStages;
@@ -19,39 +18,26 @@ public static class ImageReference
     public static string FormatBase2EditStageIndex(int stageIndex) => $"{Base2EditStagePrefix}{stageIndex}";
 
     public static ImageFile MaterializeUploadedRefImage(WorkflowGenerator g, ImageRefSpec spec, string descriptor)
+        => MaterializeUploadedRefImage(g, spec.Data, spec.UploadFileName, descriptor);
+
+    internal static ImageFile MaterializeUploadedRefImage(
+        WorkflowGenerator g,
+        string inlineData,
+        string uploadFileName,
+        string descriptor)
     {
-        string material = spec.Data ?? spec.UploadFileName;
+        string material = inlineData ?? uploadFileName;
         if (string.IsNullOrEmpty(material))
         {
             Logs.Warning($"VideoStages: Upload {descriptor} is missing inline data and a file name.");
             return null;
         }
 
-        if (material.StartsWith("inputs/", StringComparison.OrdinalIgnoreCase)
-            || material.StartsWith("raw/", StringComparison.OrdinalIgnoreCase)
-            || material.StartsWith("Starred/", StringComparison.OrdinalIgnoreCase))
+        material = UploadedMediaResolver.ResolveDataString(
+            g, material, descriptor, StringComparison.OrdinalIgnoreCase);
+        if (material is null)
         {
-            if (g.UserInput?.SourceSession is null)
-            {
-                Logs.Warning(
-                    $"VideoStages: {descriptor} uses a server-side path but no session is available; "
-                    + "cannot load the file.");
-                return null;
-            }
-
-            try
-            {
-                material = T2IParamTypes.FilePathToDataString(
-                    g.UserInput.SourceSession,
-                    material,
-                    $"for VideoStages {descriptor}");
-            }
-            catch (SwarmReadableErrorException ex)
-            {
-                Logs.Warning(
-                    $"VideoStages: Could not resolve uploaded {descriptor} path '{material}': {ex.Message}");
-                return null;
-            }
+            return null;
         }
 
         try

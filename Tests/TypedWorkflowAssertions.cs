@@ -9,6 +9,60 @@ public readonly record struct WorkflowNode(string Id, JObject Node);
 
 internal static class TypedWorkflowAssertions
 {
+    /// <summary>Fails when the graph has a dependency cycle (Comfy refuses to run such a workflow).</summary>
+    public static void AssertAcyclic(WorkflowBridge bridge)
+    {
+        Dictionary<string, int> state = [];
+        void Visit(ComfyNode node)
+        {
+            if (state.TryGetValue(node.Id, out int seen))
+            {
+                if (seen == 1)
+                {
+                    Assert.Fail($"Workflow contains a cycle through node {node.Id} ({node.ClassTypeName}).");
+                }
+                return;
+            }
+            state[node.Id] = 1;
+            foreach (ComfyNode upstream in bridge.Graph.FindUpstream(node))
+            {
+                Visit(upstream);
+            }
+            state[node.Id] = 2;
+        }
+        foreach (ComfyNode node in bridge.Graph.Nodes.Values)
+        {
+            Visit(node);
+        }
+    }
+
+    /// <summary>
+    /// Fails when any input references a node id the workflow no longer contains. Comfy raises
+    /// <c>NodeNotFoundError: Node N not found</c> at execution time for exactly this state.
+    /// </summary>
+    public static void AssertNoDanglingNodeRefs(JObject workflow)
+    {
+        foreach (JProperty node in workflow.Properties())
+        {
+            if (node.Value is not JObject { } nodeObj || nodeObj["inputs"] is not JObject inputs)
+            {
+                continue;
+            }
+            foreach (JProperty input in inputs.Properties())
+            {
+                if (input.Value is not JArray { Count: 2 } path
+                    || path[1].Type != JTokenType.Integer)
+                {
+                    continue;
+                }
+                Assert.True(
+                    workflow[$"{path[0]}"] is JObject,
+                    $"Node {node.Name} ({nodeObj["class_type"]}) input '{input.Name}' references "
+                        + $"missing node {path[0]}.");
+            }
+        }
+    }
+
     public static List<SwarmKSamplerNode> SamplerNodesOrdered(WorkflowBridge bridge)
     {
         return bridge.Graph.NodesOfType<SwarmKSamplerNode>()

@@ -4,7 +4,9 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using VideoStages.Generated;
+using VideoStages.Architectures.Ltx2;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -14,32 +16,44 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class AudioInjectionTests
 {
+    private static bool TryInject(
+        WorkflowGenerator generator,
+        WGNodeData audio,
+        bool matchVideoLengthToAudio = true,
+        IReadOnlyList<(double Start, double End)> preserveWindows = null) =>
+        new LtxAudioInjector(
+            generator,
+            new RootVideoStageResizer(
+                generator,
+                new RootVideoStageHandoff(
+                    generator,
+                    new StageRefStore(generator))))
+        .TryInject(audio, matchVideoLengthToAudio, preserveWindows);
+
     // Local override of Fixtures.MakeStage: pins Steps=10 and ImageReference="Generated" for audio-injection tests.
     private static JObject MakeStage(string model) => new()
     {
-        ["Control"] = 1.0,
-        ["Upscale"] = 1.0,
-        ["UpscaleMethod"] = "pixel-lanczos",
-        ["Model"] = model,
-        ["Vae"] = "",
-        ["Steps"] = 10,
-        ["CfgScale"] = 4.5,
-        ["Sampler"] = "euler",
-        ["Scheduler"] = "normal",
-        ["ImageReference"] = "Generated"
+        ["control"] = 1.0,
+        ["upscale"] = 1.0,
+        ["upscaleMethod"] = "pixel-lanczos",
+        ["model"] = model,
+        ["steps"] = 10,
+        ["cfgScale"] = 4.5,
+        ["sampler"] = "euler",
+        ["scheduler"] = "normal",
+        ["imageReference"] = "Generated"
     };
 
     private static JObject MakeClipConfig(string audioSource, params JObject[] stages) => new()
     {
-        ["Name"] = "Clip 0",
-        ["AudioSource"] = audioSource,
-        ["Stages"] = new JArray(stages)
+        ["audioSource"] = audioSource,
+        ["stages"] = new JArray(stages)
     };
 
     private static JObject MakeClipConfigWithUpload(JObject uploadedAudio, params JObject[] stages)
     {
         JObject clip = MakeClipConfig(Constants.AudioSourceUpload, stages);
-        clip["UploadedAudio"] = uploadedAudio;
+        clip["uploadedAudio"] = uploadedAudio;
         return clip;
     }
 
@@ -47,8 +61,28 @@ public class AudioInjectionTests
         string data = "data:audio/wav;base64,QUJD",
         string fileName = "clip.wav") => new()
     {
-        ["Data"] = data,
-        ["FileName"] = fileName
+        ["data"] = data,
+        ["fileName"] = fileName
+    };
+
+    /// <summary>A root timeline audio lane; planning projects it onto every clip it overlaps.</summary>
+    private static JObject MakeAudioTrack(
+        double timelineStartSeconds,
+        double timelineLengthSeconds) => new()
+    {
+        ["id"] = "track-seg",
+        ["source"] = new JObject
+        {
+            ["kind"] = "Upload",
+            ["reference"] = "seg.wav",
+            ["uploadedAudio"] = MakeUploadedAudio(fileName: "seg.wav"),
+        },
+        ["spans"] = new JArray(new JObject
+        {
+            ["timelineStartSeconds"] = timelineStartSeconds,
+            ["timelineLengthSeconds"] = timelineLengthSeconds,
+            ["sourceStartSeconds"] = 0.0,
+        }),
     };
 
     private static WorkflowGenerator CreateInjectorGenerator(JObject workflow)
@@ -167,6 +201,10 @@ public class AudioInjectionTests
             .Concat([SeedRootLtxVideoChainStep(), SeedNativeAudioStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildDeferredAudioVaeSteps() =>
+        WorkflowTestHarness.Template_BaseOnlyImage()
+            .Concat(WorkflowTestHarness.VideoStagesSteps());
+
     [Fact]
     public void Injector_sets_empty_video_length_from_audio_length_frames_before_cleanup_sensitive_stages_run()
     {
@@ -192,7 +230,7 @@ public class AudioInjectionTests
             UnknownNode audioSource = buildBridge.AddStub("UnitTest_AudioSource", "300").WithOutputs(WGNodeData.DT_AUDIO);
 
             SaveAudioMP3Node save = new();
-            save.Audio.ConnectToUntyped(audioSource.GetOutput(0));
+            save.AudioInput.ConnectToUntyped(audioSource.GetOutput(0));
             buildBridge.AddNode(save, "301");
 
             UnknownNode latentAudit = buildBridge.AddStub("UnitTest_LatentAudit", "400");
@@ -206,7 +244,7 @@ public class AudioInjectionTests
             WGNodeData.DT_AUDIO,
             generator.CurrentAudioVae?.Compat ?? generator.CurrentCompat());
 
-        Assert.True(Runner.TryInjectLtxAudio(generator, audio));
+        Assert.True(TryInject(generator, audio));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
@@ -222,37 +260,298 @@ public class AudioInjectionTests
     }
 
     [Fact]
-    public void Save_audio_stage_injects_audio_into_native_ltx_video_chain_without_configured_stages()
+    public void Injector_with_preserve_windows_uses_windowed_mask_node()
+    {
+        JObject workflow = [];
+        using (WorkflowBridge buildBridge = WorkflowBridge.Create(workflow))
+        {
+            UnknownNode audioVae = buildBridge.AddStub("UnitTest_AudioVae", "105").WithOutputs(WGNodeData.DT_VAE);
+
+            EmptyLTXVLatentVideoNode emptyVideoNode = new EmptyLTXVLatentVideoNode()
+                .With(Length: 16, Width: 512, Height: 512, BatchSize: 1);
+            buildBridge.AddNode(emptyVideoNode, "108");
+
+            LTXVEmptyLatentAudioNode emptyAudioNode = new LTXVEmptyLatentAudioNode()
+                .With(FramesNumber: 16, FrameRate: 24, BatchSize: 1);
+            emptyAudioNode.AudioVae.ConnectToUntyped(audioVae.GetOutput(0));
+            buildBridge.AddNode(emptyAudioNode, "109");
+
+            LTXVConcatAVLatentNode concat = new();
+            concat.VideoLatent.ConnectTo(emptyVideoNode.LATENT);
+            concat.AudioLatent.ConnectTo(emptyAudioNode.Latent);
+            buildBridge.AddNode(concat, "113");
+
+            _ = buildBridge.AddStub("UnitTest_AudioSource", "300").WithOutputs(WGNodeData.DT_AUDIO);
+        }
+
+        WorkflowGenerator generator = CreateInjectorGenerator(workflow);
+        WGNodeData audio = new(
+            new JArray("300", 0),
+            generator,
+            WGNodeData.DT_AUDIO,
+            generator.CurrentAudioVae?.Compat ?? generator.CurrentCompat());
+
+        Assert.True(TryInject(
+            generator,
+            audio,
+            matchVideoLengthToAudio: false,
+            preserveWindows: [(0.0, 1.0 / 3.0), (4.004, 5.555)]));
+
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        SwarmSetAudioMaskWindowsNode maskNode = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+
+        JArray windows = JArray.Parse(maskNode.Windows.LiteralAsString());
+        Assert.Equal(2, windows.Count);
+        Assert.Equal(0.0, (double)windows[0]["start"]);
+        Assert.Equal(0.33, (double)windows[0]["end"]);
+        Assert.Equal(4.0, (double)windows[1]["start"]);
+        Assert.Equal(5.56, (double)windows[1]["end"]);
+
+        Assert.Equal("105", maskNode.AudioVae.Connection!.Node.Id);
+        LTXVAudioVAEEncodeNode audioEncode = Assert.Single(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
+        Assert.Same(audioEncode.AudioLatent, maskNode.Samples.Connection);
+
+        LTXVConcatAVLatentNode rootConcat = RequireTypedNode<LTXVConcatAVLatentNode>(bridge, "113");
+        Assert.Same(maskNode.Latent, rootConcat.AudioLatent.Connection);
+    }
+
+    [Fact]
+    public void Segments_without_base_audio_condition_generation_with_preserve_windows()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject clip = MakeClipConfig(Constants.AudioSourceUpload, MakeStage(models.VideoModel.Name));
+        clip["duration"] = 10.0;
+        JObject root = MakeRootConfig(clip);
+        root["audioTracks"] = new JArray(MakeAudioTrack(1.0, 2.0));
+        string stagesJson = root.ToString();
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // Upload source with no payload -> no locked base track; the combined (bed + segment) audio is
+        // injected with a preserve-windows mask instead of the solid preserve-all mask.
+        SwarmSetAudioMaskWindowsNode maskNode = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+
+        JArray windows = JArray.Parse(maskNode.Windows.LiteralAsString());
+        JObject window = Assert.IsType<JObject>(Assert.Single(windows));
+        Assert.Equal(1.0, (double)window["start"]);
+        Assert.Equal(3.0, (double)window["end"]);
+
+        IReadOnlyList<(ComfyNode Node, INodeInput Input)> maskConsumers =
+            bridge.Graph.FindInputsConnectedTo(maskNode.Latent);
+        Assert.Contains(maskConsumers, c => c.Input.Name == "audio_latent" && c.Node is LTXVConcatAVLatentNode);
+    }
+
+    [Fact]
+    public void Timeline_wide_segment_reaches_the_real_ltx_audio_graph()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject clip = MakeClipConfig(Constants.AudioSourceUpload, MakeStage(models.VideoModel.Name));
+        clip["duration"] = 10.0;
+        JObject root = MakeRootConfig(clip);
+        root["audioTracks"] = new JArray(
+            new JObject
+            {
+                ["id"] = "timeline-segment",
+                ["volume"] = 0.5,
+                ["source"] = new JObject
+                {
+                    ["kind"] = "Upload",
+                    ["reference"] = "timeline.wav",
+                    ["uploadedAudio"] = MakeUploadedAudio(fileName: "timeline.wav"),
+                },
+                ["spans"] = new JArray(
+                    new JObject
+                    {
+                        ["timelineStartSeconds"] = 1.0,
+                        ["timelineLengthSeconds"] = 2.0,
+                        ["sourceStartSeconds"] = 0.5,
+                    }),
+            });
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            root.ToString());
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmSetAudioMaskWindowsNode maskNode = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>());
+        JObject window = Assert.IsType<JObject>(
+            Assert.Single(JArray.Parse(maskNode.Windows.LiteralAsString())));
+        Assert.Equal(1.0, (double)window["start"]);
+        Assert.Equal(3.0, (double)window["end"]);
+        TrimAudioDurationNode trim = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.Equal(0.5, trim.StartIndex.LiteralAsDouble());
+        Assert.Equal(2.0, trim.Duration.LiteralAsDouble());
+        AudioAdjustVolumeNode volume = Assert.Single(
+            bridge.Graph.NodesOfType<AudioAdjustVolumeNode>());
+        Assert.Equal(-6, volume.Volume.LiteralAsInt());
+        Assert.Contains(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>(),
+            concat => ReferenceEquals(concat.AudioLatent.Connection, maskNode.Latent));
+    }
+
+    [Fact]
+    public void Timeline_segment_crossing_first_clip_is_window_masked_after_stage_audio_vae_loads()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject firstClip = MakeClipConfig(
+            Constants.AudioSourceNative,
+            MakeStage(models.VideoModel.Name));
+        firstClip["duration"] = 5.0;
+        firstClip["boundaryOut"] = Constants.BoundaryOutContinue;
+        JObject secondClip = MakeClipConfig(
+            Constants.AudioSourceNative,
+            MakeStage(models.VideoModel.Name));
+        secondClip["duration"] = 5.0;
+
+        JObject root = MakeRootConfig(firstClip, secondClip);
+        root["audioTracks"] = new JArray(
+            new JObject
+            {
+                ["id"] = "cross-clip-segment",
+                ["volume"] = 2.0,
+                ["source"] = new JObject
+                {
+                    ["kind"] = "Upload",
+                    ["reference"] = "timeline.wav",
+                    ["uploadedAudio"] = MakeUploadedAudio(fileName: "timeline.wav"),
+                },
+                ["spans"] = new JArray(
+                    new JObject
+                    {
+                        ["timelineStartSeconds"] = 4.0,
+                        ["timelineLengthSeconds"] = 2.0,
+                        ["sourceStartSeconds"] = 0.0,
+                    }),
+            });
+        T2IParamInput input = BuildInput(models.BaseModel, root.ToString());
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildDeferredAudioVaeSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        List<SwarmSetAudioMaskWindowsNode> masks =
+            [.. bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>()];
+        Assert.Equal(2, masks.Count);
+        Assert.Empty(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+        Assert.Contains(masks, mask =>
+            JArray.Parse(mask.Windows.LiteralAsString())
+                .Any(window => window.Value<double>("start") == 4.0));
+        Assert.Contains(masks, mask =>
+            JArray.Parse(mask.Windows.LiteralAsString())
+                .Any(window => window.Value<double>("start") == 0.0));
+
+        List<LTXVConcatAVLatentNode> conditionedInputs =
+        [
+            .. bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>()
+                .Where(concat => masks.Any(mask =>
+                    ReferenceEquals(concat.AudioLatent.Connection, mask.Latent)))
+        ];
+        Assert.Equal(2, conditionedInputs.Count);
+        Assert.Equal(
+            2,
+            conditionedInputs
+                .SelectMany(concat => bridge.Graph.FindInputsConnectedTo(concat.Latent))
+                .Count(consumer => consumer.Node is SwarmKSamplerNode
+                    && consumer.Input.Name == "latent_image"));
+    }
+
+    [Fact]
+    public void Segments_without_clip_duration_do_not_condition_generation()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        // No Duration -> ClipSpec.Frames is null -> the clip has no resolvable timeline window, so the
+        // root audio lane stays pending and never reaches the clip; nothing conditions generation.
+        JObject clip = MakeClipConfig(Constants.AudioSourceUpload, MakeStage(models.VideoModel.Name));
+        JObject root = MakeRootConfig(clip);
+        root["audioTracks"] = new JArray(MakeAudioTrack(1.0, 2.0));
+        string stagesJson = root.ToString();
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>());
+    }
+
+    [Fact]
+    public void Active_audio_only_configuration_without_timeline_is_rejected()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]");
 
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps()));
+        Assert.Contains("no executable clips", error.Message);
+    }
 
-        SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
-        Assert.Equal("300", lengthToFrames.AudioInput.Connection!.Node.Id);
-        Assert.Equal(0, lengthToFrames.AudioInput.Connection.SlotIndex);
+    [Fact]
+    public void Missing_selected_ace_audio_track_is_a_user_error()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeRootConfig(MakeClipConfig("audio7", MakeStage(models.VideoModel.Name))).ToString());
 
-        EmptyLTXVLatentVideoNode emptyVideo = RequireTypedNode<EmptyLTXVLatentVideoNode>(bridge, "108");
-        Assert.Same(lengthToFrames.Frames, emptyVideo.Length.Connection);
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps()));
 
-        SetLatentNoiseMaskNode setMask = Assert.Single(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
-        LTXVConcatAVLatentNode rootConcat = RequireTypedNode<LTXVConcatAVLatentNode>(bridge, "113");
-        Assert.Same(setMask.LATENT, rootConcat.AudioLatent.Connection);
+        Assert.Contains("audio7", error.Message);
+        Assert.Contains("not present", error.Message);
+    }
 
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());
+    [Fact]
+    public void Missing_selected_controlnet_audio_capture_is_a_user_error()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        JObject clip = MakeClipConfig(
+            Constants.AudioSourceControlNet,
+            MakeStage(models.VideoModel.Name));
+        clip["icLoras"] = new JArray(new JObject
+        {
+            ["lora"] = "unused-control",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
+        });
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeRootConfig(clip).ToString());
 
-        SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
-        Assert.Equal("203", saveNode.Audio.Connection!.Node.Id);
-        Assert.Equal(0, saveNode.Audio.Connection.SlotIndex);
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps()));
 
-        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
-        Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray("202", 0)));
+        Assert.Contains("ControlNet 1 audio", error.Message);
+        Assert.Contains("unavailable", error.Message);
     }
 
     [Fact]
@@ -328,6 +627,120 @@ public class AudioInjectionTests
     }
 
     [Fact]
+    public void Multi_stage_clip_keeps_generated_audio_latent_native_between_stages()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = MakeRootConfig(
+            MakeClipConfigWithUpload(
+                MakeUploadedAudio(),
+                MakeStage(models.VideoModel.Name),
+                MakeStage(models.VideoModel.Name))
+        ).ToString();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            stagesJson);
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
+        Assert.Equal(2, samplers.Count);
+
+        LTXVConcatAVLatentNode secondStageInput = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>(),
+            node => node.Latent == samplers[1].LatentImage.Connection);
+        LTXVSeparateAVLatentNode handoff = Assert.IsType<LTXVSeparateAVLatentNode>(
+            secondStageInput.AudioLatent.Connection!.Node);
+        Assert.Equal(1, secondStageInput.AudioLatent.Connection.SlotIndex);
+        Assert.True(
+            ReachesUpstream(bridge, handoff.AvLatent.Connection!.Node, samplers[0].Id),
+            "Stage 1 audio must come directly from stage 0's sampled AV latent.");
+
+        // One encode/mask pair installs the authored upload before stage 0. The stage-to-stage
+        // handoff must not decode, ensure, re-encode, and mask that native audio latent again.
+        Assert.Single(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
+        Assert.Single(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+
+        SwarmLoadAudioB64Node uploaded = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        SwarmSaveAnimationWSNode save = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.True(ReachesUpstream(bridge, save.Audio.Connection!.Node, uploaded.Id));
+        Assert.True(ReachesUpstream(bridge, save.Audio.Connection.Node, samplers[1].Id));
+    }
+
+    [Fact]
+    public void Decoded_stage_audio_handoff_reuses_native_latent_without_encode_mask_cycle()
+    {
+        JObject workflow = [];
+        using (WorkflowBridge buildBridge = WorkflowBridge.Create(workflow))
+        {
+            _ = buildBridge.AddStub("UnitTest_VideoVae", "104")
+                .WithOutputs(WGNodeData.DT_VAE);
+            UnknownNode audioVae = buildBridge.AddStub("UnitTest_AudioVae", "105")
+                .WithOutputs(WGNodeData.DT_VAE);
+            UnknownNode avLatent = buildBridge.AddStub("UnitTest_PriorStageAvLatent", "200")
+                .WithOutputs(WGNodeData.DT_LATENT_AUDIOVIDEO);
+
+            LTXVSeparateAVLatentNode separate = new();
+            separate.AvLatent.ConnectToUntyped(avLatent.GetOutput(0));
+            buildBridge.AddNode(separate, "201");
+
+            LTXVAudioVAEDecodeNode decode = new();
+            decode.AudioVae.ConnectToUntyped(audioVae.GetOutput(0));
+            decode.Samples.ConnectTo(separate.AudioLatent);
+            buildBridge.AddNode(decode, "203");
+
+            _ = buildBridge.AddStub("UnitTest_NextStageVideoLatent", "204")
+                .WithOutputs(WGNodeData.DT_LATENT_VIDEO);
+        }
+
+        WorkflowGenerator generator = CreateInjectorGenerator(workflow);
+        generator.CurrentVae = new WGNodeData(
+            new JArray("104", 0),
+            generator,
+            WGNodeData.DT_VAE,
+            T2IModelClassSorter.CompatLtxv2);
+        WGNodeData nextStageVideoLatent = new(
+            new JArray("204", 0),
+            generator,
+            WGNodeData.DT_LATENT_VIDEO,
+            T2IModelClassSorter.CompatLtxv2)
+        {
+            AttachedAudio = new WGNodeData(
+                new JArray("203", 0),
+                generator,
+                WGNodeData.DT_AUDIO,
+                T2IModelClassSorter.CompatLtxv2)
+        };
+
+        WGNodeData normalized = LtxDecodedAudioHandoff.PreferNativeLatent(
+            generator,
+            nextStageVideoLatent);
+        WGNodeData samplingLatent = normalized.AsSamplingLatent(
+            generator.CurrentVae,
+            generator.CurrentAudioVae);
+
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        Assert.Equal(WGNodeData.DT_LATENT_AUDIO, normalized.AttachedAudio.DataType);
+        Assert.True(JToken.DeepEquals(
+            normalized.AttachedAudio.Path,
+            new JArray("201", 1)));
+
+        LTXVConcatAVLatentNode concat = Assert.IsType<LTXVConcatAVLatentNode>(
+            bridge.ResolvePath(samplingLatent.Path).Node);
+        Assert.Equal("201", concat.AudioLatent.Connection!.Node.Id);
+        Assert.Equal(1, concat.AudioLatent.Connection.SlotIndex);
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmEnsureAudioNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+    }
+
+    [Fact]
     public void Save_audio_stage_matches_video_length_to_uploaded_audio_when_enabled()
     {
         using SwarmUiTestContext _ = new();
@@ -336,7 +749,7 @@ public class AudioInjectionTests
         JObject clip = MakeClipConfigWithUpload(
             MakeUploadedAudio(),
             MakeStage(models.VideoModel.Name));
-        clip["ClipLengthFromAudio"] = true;
+        clip["clipLengthFromAudio"] = true;
         string stagesJson = MakeRootConfig(clip).ToString();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
@@ -521,9 +934,9 @@ public class AudioInjectionTests
 
         string stagesJson = new JObject
         {
-            ["Width"] = 384,
-            ["Height"] = 640,
-            ["Clips"] = new JArray(
+            ["width"] = 384,
+            ["height"] = 640,
+            ["clips"] = new JArray(
                 MakeClip(MakeStage(models.VideoModel.Name)))
         }.ToString();
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);

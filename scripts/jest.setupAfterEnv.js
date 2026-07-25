@@ -13,7 +13,7 @@
  *                              timers across tests.
  *   - window.acestepfunTrackRegistry / window.base2editStageRegistry
  *                              Cross-extension snapshot bridges read by
- *                              audioSource and videoStageEditor.
+ *                              audioSource and the timeline editor.
  *   - document.body            Tests build their own DOM fixtures; we wipe
  *                              them between tests so nothing bleeds over.
  *
@@ -28,11 +28,15 @@
 
 beforeEach(() => {
     globalThis.postParamBuildSteps = [];
+    // SwarmUI's post-model/lora-refresh callback array (params.js). The timeline
+    // pushes a repaint hook into it so its dropdowns pick up refreshed options.
+    globalThis.refreshParamsExtra = [];
 });
 
 afterEach(() => {
     document.body.innerHTML = "";
     delete globalThis.postParamBuildSteps;
+    delete globalThis.refreshParamsExtra;
     delete window.acestepfunTrackRegistry;
     delete window.base2editStageRegistry;
 });

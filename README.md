@@ -6,6 +6,67 @@ VideoStages adds a multi-step video flow to SwarmUI. Instead of asking one gener
 
 Think of it as draft, refine, and polish for video, built right into the normal SwarmUI experience.
 
+# The timeline
+
+Most of VideoStages lives in the **VideoStages** tab in SwarmUI's bottom bar. It is a real timeline editor: a ruler, zoom and snapping, drag-to-edit tracks, and a docked panel on the left that edits whatever you have selected. The VideoStages group toggle in the parameters list turns the whole thing on and off; a green checkmark on the tab shows when it is active.
+
+Everything below is authored on that timeline and rides along with your normal generation — same models, same prompt box, same generate button.
+
+## Clips and stages
+
+A **clip** is one piece of video with its own duration, model, prompt, and options. A **stage** is one generation pass over that clip. Add stages to go draft → refine → polish: each stage has its own model, steps, sampler, and Control value (how much of the previous result it is allowed to redo). Stages can be skipped without deleting them.
+
+All the stages in one clip must use the same model family. Switching a clip to another family is an explicit, undoable conversion that tells you up front which settings it has to drop.
+
+A timeline can hold as many clips as you like, each with its own model and settings.
+
+## Joins between clips
+
+Every gap between two clips is a **join**, edited by clicking the seam:
+
+- **Cut** — a hard splice.
+- **Continue** — the next clip picks up from the tail of the previous one, with a configurable overlap.
+- **Crossfade** — the two clips blend across the overlap.
+
+You can also carry the outgoing clip's audio tail across a non-cut join. Joins between clips using different model families are always cuts.
+
+## Starting material
+
+A clip can start from nothing (text to video), from an image, or from an existing **source video** you upload. A sourced clip is conformed for you — resampled to the timeline frame rate, trimmed to the clip's length, and scaled to the timeline resolution — and can then be refined by stages, or left alone as plain footage on the timeline.
+
+There is also a global **Refine Video** action for taking one finished video back through the timeline.
+
+## Prompts
+
+Each clip has a **major prompt** and optional **relay windows** — additional prompts pinned to time ranges inside the clip, so the description can change as the shot progresses. Both are edited on the prompt track. The `<videoclip>` prompt syntax documented below is the text-only equivalent and still works.
+
+## Retake windows
+
+A **retake** regenerates only a chosen frame range of an existing video and leaves the rest untouched — useful for fixing one bad moment without redoing the shot. Retakes need a source video (or the global Refine Video source).
+
+## Image references
+
+The references track pins images to specific frames of a clip: a first-frame reference to steer where the shot starts, an end-frame reference to steer where it lands, or anything in between.
+
+## Audio
+
+Two independent things:
+
+- **Clip audio** — the audio the clip itself owns, from the model's native audio, an upload, an AceStep track, or a ControlNet source. A clip can take its length from its audio.
+- **Timeline audio tracks** — audio lanes laid across the whole timeline, free to cross clip boundaries. Drag to place and trim them, set a per-lane volume, and overlap as many as you want; they mix additively over the finished video.
+
+## LoRAs, IC-LoRAs, and HDR
+
+Normal LoRAs can be attached per stage. **IC-LoRAs** are the control-style adapters: pick one of the curated presets (union control, motion tracking, in/outpainting, lip sync, spatial upscalers, deblur, colorization, restyle, and more) or choose Custom and point it at your own weights, then choose what drives it — an upload you supply or whatever media is already flowing into that stage, as visual, audio, or model-only. **HDR** is one of these; when it is on, the finished video is written as a 10-bit HDR10 file.
+
+## Upscaling
+
+Each stage can upscale in one of four ways — pixel, model, latent, or latent+model — so a polish stage can raise resolution without a separate workflow.
+
+## Resolution and frame rate
+
+The timeline's resolution and frame rate follow SwarmUI's core video parameters by default; the chip in the timeline header shows the current values and lets you override them.
+
 # Prompt syntax
 
 VideoStages adds a `<videoclip>` prompt section that lets you target every clip, a single clip, or a single stage of a single clip. LoRAs placed inside a `<videoclip>` section are scoped to that same target.

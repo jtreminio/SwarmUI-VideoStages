@@ -1,40 +1,35 @@
+import { getVideoStagesHostBridge } from "./host";
+import { readProp } from "./normalization";
 import { getState } from "./persistence";
 import { isVideoStagesEnabled } from "./swarmInputs";
 import type { VideoStagesConfig } from "./types";
+import { isRecord, safeJsonParse } from "./utils";
 
 export const refineNeedsExtraStageMessage = (skipCount: number): string =>
-    `Refine Video needs clip 0 to have at least one active stage after Stage ${skipCount - 1} ` +
+    `Refine Video needs Clip 0 to have at least one active stage after Stage ${skipCount - 1} ` +
     `(for example, an upscale or refine stage). Add a stage in the VideoStages panel, then click Refine Video again.`;
-
-interface ParsedMetadata {
-    sui_image_params?: {
-        seed?: number;
-        videostages?: string;
-    };
-}
 
 export const countActiveStagesInMetadataClip0 = (
     videostagesJson: string,
 ): number => {
-    let parsed: unknown;
-    try {
-        parsed = JSON.parse(videostagesJson);
-    } catch {
+    const parsed = safeJsonParse<unknown>(videostagesJson, null);
+    if (!isRecord(parsed)) {
         return 0;
     }
-    if (!parsed || typeof parsed !== "object") {
-        return 0;
-    }
-    const clips = (parsed as { clips?: unknown }).clips;
+    const clips = readProp(parsed, "clips");
     if (!Array.isArray(clips) || clips.length === 0) {
         return 0;
     }
-    const clip0 = clips[0] as { skipped?: unknown; stages?: unknown };
-    if (clip0.skipped === true || !Array.isArray(clip0.stages)) {
+    const clip0 = clips[0];
+    if (!isRecord(clip0) || readProp(clip0, "skipped") === true) {
         return 0;
     }
-    return (clip0.stages as { skipped?: unknown }[]).filter(
-        (stage) => stage.skipped !== true,
+    const stages = readProp(clip0, "stages");
+    if (!Array.isArray(stages)) {
+        return 0;
+    }
+    return stages.filter(
+        (stage) => !(isRecord(stage) && readProp(stage, "skipped") === true),
     ).length;
 };
 
@@ -55,66 +50,70 @@ export const hasRefinementWorkToDo = (
 };
 
 export const refineVideoButton = (): void => {
-    if (typeof registerMediaButton !== "function") {
-        return;
-    }
-
-    registerMediaButton(
-        "Refine Video",
+    const description =
+        "Re-runs VideoStages using this video as the source for Clip 0 (skips the first N stage samplers, " +
+        "where N is read from the source video's metadata). Requires an extra stage beyond those.";
+    getVideoStagesHostBridge().registerRefineVideoButton(
         (src: string): void => {
-            let parsedMetadata: ParsedMetadata | null = null;
-            if (currentMetadataVal) {
-                try {
-                    const readable = interpretMetadata(currentMetadataVal);
-                    parsedMetadata = readable
-                        ? (JSON.parse(readable) as ParsedMetadata)
-                        : null;
-                } catch (error) {
-                    console.warn(
-                        "VideoStages: failed to parse source video metadata",
-                        error,
-                    );
+            const host = getVideoStagesHostBridge();
+            const run = async (): Promise<void> => {
+                let parsedMetadata: unknown = null;
+                const currentMetadata = host.getCurrentMediaMetadata();
+                if (currentMetadata) {
+                    try {
+                        const readable =
+                            host.interpretMediaMetadata(currentMetadata);
+                        parsedMetadata = readable ? JSON.parse(readable) : null;
+                    } catch (error) {
+                        console.warn(
+                            "VideoStages: failed to parse source video metadata",
+                            error,
+                        );
+                    }
                 }
-            }
 
-            const sourceVideostages =
-                parsedMetadata?.sui_image_params?.videostages;
-            const skipCount = Math.max(
-                1,
-                typeof sourceVideostages === "string"
-                    ? countActiveStagesInMetadataClip0(sourceVideostages)
-                    : 0,
-            );
+                const params = isRecord(parsedMetadata)
+                    ? readProp(parsedMetadata, "sui_image_params")
+                    : null;
+                const sourceVideostages = isRecord(params)
+                    ? readProp(params, "videostages")
+                    : undefined;
+                const skipCount = Math.max(
+                    1,
+                    typeof sourceVideostages === "string"
+                        ? countActiveStagesInMetadataClip0(sourceVideostages)
+                        : 0,
+                );
 
-            if (
-                !hasRefinementWorkToDo(
-                    getState(),
-                    isVideoStagesEnabled(),
-                    skipCount,
-                )
-            ) {
-                showError(refineNeedsExtraStageMessage(skipCount));
-                return;
-            }
+                if (
+                    !hasRefinementWorkToDo(
+                        getState(),
+                        isVideoStagesEnabled(),
+                        skipCount,
+                    )
+                ) {
+                    host.showError(refineNeedsExtraStageMessage(skipCount));
+                    return;
+                }
 
-            toDataURL(src, (videoDataUrl: string): void => {
+                const videoDataUrl = await host.toDataUrl(src);
                 const inputOverrides: Record<string, unknown> = {
                     videostagesrefinesourcevideo: videoDataUrl,
                     videostagesrefineskipstages: skipCount,
                     images: 1,
                 };
 
-                const seed = parsedMetadata?.sui_image_params?.seed;
+                const seed = isRecord(params)
+                    ? readProp(params, "seed")
+                    : undefined;
                 if (typeof seed === "number") {
                     inputOverrides.seed = seed;
                 }
 
-                mainGenHandler.doGenerate(inputOverrides, {});
-            });
+                host.generate(inputOverrides);
+            };
+            void run();
         },
-        "Re-runs VideoStages using this video as the source for clip 0 (skips the first N stage samplers, " +
-            "where N is read from the source video's metadata). Requires an extra stage beyond those.",
-        ["video"],
-        true,
+        description,
     );
 };

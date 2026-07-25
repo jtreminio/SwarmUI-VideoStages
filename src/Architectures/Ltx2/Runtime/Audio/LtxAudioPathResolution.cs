@@ -1,0 +1,43 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using Newtonsoft.Json.Linq;
+
+namespace VideoStages.Architectures.Ltx2;
+
+internal static class LtxAudioPathResolution
+{
+    public static JToken ResolveLengthToFramesAudioSource(
+        WorkflowBridge bridge,
+        JToken rawAudioPath,
+        string swarmEnsureAudioStableNodeId)
+    {
+        if (rawAudioPath is not JArray { Count: 2 } rawRef)
+        {
+            return rawAudioPath;
+        }
+
+        string rawNodeId = $"{rawRef[0]}";
+        int rawSlot = (int)rawRef[1];
+        foreach (SwarmEnsureAudioNode existing in bridge.Graph.NodesOfType<SwarmEnsureAudioNode>())
+        {
+            if (existing.Audio.Connection is INodeOutput audioConn
+                && audioConn.Node.Id == rawNodeId
+                && audioConn.SlotIndex == rawSlot)
+            {
+                return existing.AUDIO.ToPath();
+            }
+        }
+
+        if (bridge.Graph.GetNode(rawNodeId) is not SwarmLoadAudioB64Node)
+        {
+            return rawAudioPath;
+        }
+
+        SwarmEnsureAudioNode ensure = swarmEnsureAudioStableNodeId is null
+            ? bridge.AddNode(new SwarmEnsureAudioNode())
+            : bridge.AddNode(new SwarmEnsureAudioNode(), swarmEnsureAudioStableNodeId);
+        ensure.Audio.ConnectFromPath(bridge, rawRef);
+        ensure.TargetDuration.Set(0.1);
+        return ensure.AUDIO.ToPath();
+    }
+}

@@ -1,36 +1,16 @@
 declare const mainGenHandler: {
-    doGenerate: ((...args: unknown[]) => void) & {
-        __videoStagesWrapped?: boolean;
-    };
+    doGenerate: (...args: unknown[]) => void;
 };
 
 declare function showError(message: string): void;
 declare function triggerChangeFor(element: HTMLElement): void;
-declare function doToggleEnable(prefix: string): void;
-declare function findParentOfClass(
-    element: Element,
-    className: string,
-): HTMLElement;
+declare function textPromptAddKeydownHandler(element: HTMLElement): void;
 declare function getParamById(
     id: string,
 ): { values?: string[]; value_names?: string[] } | null;
 
-declare function makeNumberInput(
-    featureid: string,
-    id: string,
-    paramid: string,
-    name: string,
-    description: string,
-    value: string | number,
-    min: string | number,
-    max: string | number,
-    step?: string | number,
-    format?: "small" | "big" | "seed",
-    toggles?: boolean,
-    popover_button?: boolean,
-): string;
 declare function makeSliderInput(
-    featureid: string,
+    featureid: string | null,
     id: string,
     paramid: string,
     name: string,
@@ -45,90 +25,27 @@ declare function makeSliderInput(
     toggles?: boolean,
     popover_button?: boolean,
 ): string;
-declare function makeGenericPopover(
-    id: string,
-    name: string,
-    type: string,
-    description: string,
-    example: string,
-): string;
-declare function makeDropdownInput(
-    featureid: string,
-    id: string,
-    paramid: string,
-    name: string,
-    description: string,
-    values: string[],
-    defaultVal: string,
-    toggles?: boolean,
-    popover_button?: boolean,
-    alt_names?: string[] | null,
-    reparse_alt_names?: boolean,
-): string;
-declare function makeImageInput(
-    featureid: string,
-    id: string,
-    paramid: string,
-    name: string,
-    description: string,
-    toggles?: boolean,
-    popover_button?: boolean,
-    can_upload?: boolean,
-    show_input_browser_button?: boolean,
-): string;
-declare function makeAudioInput(
-    featureid: string,
-    id: string,
-    paramid: string,
-    name: string,
-    description: string,
-    toggles?: boolean,
-    popover_button?: boolean,
-    can_upload?: boolean,
-    show_input_browser_button?: boolean,
-): string;
-declare function makeTextInput(
-    featureid: string,
-    id: string,
-    paramid: string,
-    name: string,
-    description: string,
-    value: string,
-    format: string,
-    placeholder: string,
-    toggles?: boolean,
-    genPopover?: boolean,
-    popover_button?: boolean,
-): string;
-declare function makeCheckboxInput(
-    featureid: string,
-    id: string,
-    paramid: string,
-    name: string,
-    description: string,
-    value: boolean | string,
-    toggles?: boolean,
-    genPopover?: boolean,
-    popover_button?: boolean,
-): string;
-declare function autoNumberWidth(elem: HTMLElement): void;
-declare function autoSelectWidth(elem: HTMLElement): void;
 declare function enableSlidersIn(elem: HTMLElement): void;
-declare function clearMediaFileInput(elem: HTMLInputElement): void;
-declare function setMediaFileDirect(
-    elem: HTMLInputElement,
-    src: string,
-    type: string,
-    name: string,
-    longName?: string | null,
-    callback?: (() => void) | null,
-): void;
 declare let postParamBuildSteps: (() => void)[] | undefined;
+// Callbacks run after the host refreshes model/lora/dropdown values (the
+// refresh button in the model browsers). Unlike postParamBuildSteps, this does
+// NOT re-run our init, so we hook it to re-read the fresh dropdown options.
+declare let refreshParamsExtra: (() => unknown)[] | undefined;
+
+declare function getImageOutPrefix(): string;
 
 declare function toDataURL(
     url: string,
     callback: (dataUrl: string) => void,
 ): void;
+
+declare const inputBrowserHelper:
+    | {
+          openInputBrowser(inputElemId: string, type: string[]): void;
+      }
+    | undefined;
+
+declare function doPopover(id: string, e?: Event): void;
 
 declare let currentMetadataVal: string | null;
 
@@ -155,6 +72,13 @@ declare const promptTabComplete:
               dataProvider: () => string[],
               insertable?: boolean,
           ) => void;
+          /**
+           * Host guard flag (prompttools.js): when true, `onInput` bails before
+           * opening the tab-complete popover. We raise it around our own
+           * programmatic prompt-box writes so a synthetic `input` event can
+           * never pop the keyboard-driven suggestion UI.
+           */
+          blockInput?: boolean;
       }
     | undefined;
 
@@ -208,3 +132,43 @@ interface Window {
     base2editStageRegistry?: Base2EditStageRegistry;
     acestepfunTrackRegistry?: AceStepFunTrackRegistry;
 }
+
+declare function genericRequest(
+    url: string,
+    data: Record<string, unknown>,
+    callback: (data: unknown) => void,
+    depth?: number,
+    errorHandle?: (error: unknown) => void,
+): void;
+
+declare const browserUtil: {
+    makeVisible(elem: Element | Document): void;
+};
+
+interface GenTabLayoutLike {
+    managedTabs: MovableGenTab[];
+    managedTabContainers: Element[];
+    reapplyPositions(): void;
+}
+
+declare const genTabLayout: GenTabLayoutLike;
+
+declare class MovableGenTab {
+    constructor(navLink: Element, handler: GenTabLayoutLike);
+    contentElem: HTMLElement;
+    navElem: HTMLElement;
+    update(): void;
+}
+
+/** Core websocket API caller (site.js); used for DoModelDownloadWS streaming downloads. */
+declare function makeWSRequest(
+    url: string,
+    in_data: Record<string, unknown>,
+    callback: (data: Record<string, unknown>) => void,
+    depth?: number,
+    errorHandle?: ((error: string) => void) | null,
+    onOpenHandle?: ((socket: WebSocket) => void) | null,
+): void;
+
+/** Core param refresh (genpage); re-lists models server-side and rebuilds param dropdowns. */
+declare function refreshParameterValues(callAlways?: boolean): void;

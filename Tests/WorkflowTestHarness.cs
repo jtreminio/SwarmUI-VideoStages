@@ -94,7 +94,9 @@ internal static class WorkflowTestHarness
             WorkflowGenerator generator = new()
             {
                 UserInput = input,
-                Features = features is null ? [Constants.LtxVideoFeatureFlag, "variation_seed"] : [.. features],
+                Features = features is null
+                    ? [Ltx2HostIntegration.FeatureFlag, "variation_seed"]
+                    : [.. features],
                 ModelFolderFormat = "/"
             };
 

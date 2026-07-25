@@ -1,106 +1,125 @@
 using ComfyTyped.Core;
-using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
+using VideoStages.Execution;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
-internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
+/// <summary>
+/// Orchestrates graph resolution and media ownership for a multi-clip timeline. Boundary planning and
+/// graph construction live in dedicated collaborators so this class remains the runner-facing facade.
+/// </summary>
+internal sealed class MultiClipParallelMerger(
+    WorkflowGenerator g,
+    IReadOnlyDictionary<ArchitectureId, IArchitectureBoundaryAssembler> boundaryAssemblers = null)
 {
-    internal const string NodeHelperKey = "videostages.parallel-multi-clip";
-    private const int BatchImagesNodeMaxInputs = 50;
+    private sealed record ArchitectureMergeRun(
+        int Start,
+        int Length,
+        IArchitectureBoundaryAssembler Assembler,
+        BoundaryOverlapPlan Overlap);
 
-    public void Apply(
-        IReadOnlyList<WGNodeData> clipOutputsInOrder,
-        WGNodeData parallelClipSourceMedia = null)
+    public BoundaryBudgetResolution Apply(
+        IReadOnlyList<DecodedClipArtifact> clipArtifacts,
+        IReadOnlyList<BoundaryPlan> boundaries)
     {
-        if (clipOutputsInOrder is null || clipOutputsInOrder.Count < 2)
+        if (clipArtifacts is null || clipArtifacts.Count < 2)
         {
-            return;
+            return new(boundaries ?? [], Degraded: false, Reason: null);
         }
-
-        List<WGNodeData> resolvedAudio = [];
-        int sumFrames = 0;
-        bool allFramesKnown = true;
-        foreach (WGNodeData clip in clipOutputsInOrder)
+        for (int i = 0; i < clipArtifacts.Count; i++)
         {
-            WGNodeData audio = TryGetClipConcatenatableAudio(clip);
-            if (audio is not null)
+            DecodedClipArtifact artifact = clipArtifacts[i];
+            if (artifact?.HasVideo != true
+                || artifact.Video.Kind != DecodedMediaKind.Video
+                || (artifact.Audio is not null
+                    && artifact.Audio.Kind != DecodedMediaKind.Audio)
+                || artifact.Width <= 0
+                || artifact.Height <= 0
+                || artifact.Frames <= 0
+                || artifact.FramesPerSecond <= 0)
             {
-                resolvedAudio.Add(audio);
-            }
-
-            if (allFramesKnown)
-            {
-                if (clip?.Frames is int f)
-                {
-                    sumFrames += f;
-                }
-                else
-                {
-                    allFramesKnown = false;
-                }
+                throw new SwarmUserErrorException(
+                    $"VideoStages: clip {i} is missing decoded video metadata.");
             }
         }
-
         using WorkflowBridge bridge = BridgeSync.For(g);
-
-        List<INodeOutput> videoOutputs = [];
-        HashSet<string> terminalKeys = [];
-        foreach (WGNodeData clip in clipOutputsInOrder)
+        List<INodeOutput> resolvedOutputs =
+            ResolveOutputs(bridge, clipArtifacts.Select(clip => clip.Video.ToPath()));
+        if (resolvedOutputs.Count != clipArtifacts.Count)
         {
-            INodeOutput output = bridge.ResolvePath(clip?.Path);
-            if (output is null)
-            {
-                continue;
-            }
-            videoOutputs.Add(output);
-            terminalKeys.Add(OutputKey(output));
+            throw new SwarmUserErrorException(
+                $"VideoStages: timeline assembly could resolve only {resolvedOutputs.Count} of "
+                + $"{clipArtifacts.Count} planned clip video outputs.");
         }
 
-        if (videoOutputs.Count < 2)
-        {
-            return;
-        }
+        // Conforming runs before every consumer of clip geometry, so overlap merging, the concat,
+        // and the published media all see one width, height, and frame rate.
+        TimelineGeometryConform.ConformResult conform = TimelineGeometryConform.Apply(
+            bridge,
+            clipArtifacts,
+            resolvedOutputs,
+            boundaries);
+        PlanDiagnosticReporter.ThrowIfBlocking(
+            conform.Diagnostics,
+            "VideoStages timeline assembly");
+        PlanDiagnosticReporter.Report(conform.Diagnostics);
+        IReadOnlyList<DecodedClipArtifact> clips = conform.Clips;
+        IReadOnlyList<INodeOutput> videoOutputs = conform.VideoOutputs;
+        int sumFrames = clips.Sum(clip => clip.Frames);
 
-        List<INodeOutput> audioOutputs = [];
-        foreach (WGNodeData audio in resolvedAudio)
-        {
-            INodeOutput output = bridge.ResolvePath(audio.Path);
-            if (output is not null)
-            {
-                audioOutputs.Add(output);
-            }
-        }
-
-        INodeOutput mergedVideo = MergeClipVideosWithBatchImagesNode(bridge, videoOutputs);
-        if (audioOutputs.Count > 0 && audioOutputs.Count != videoOutputs.Count)
+        BoundaryBudgetResolution runtimeBoundaries =
+            BoundaryOverlapPlanner.ValidateRuntime(clips, conform.Boundaries);
+        if (runtimeBoundaries.Degraded)
         {
             Logs.Warning(
-                $"VideoStages: merged clip audio omitted — only {audioOutputs.Count} of "
-                + $"{videoOutputs.Count} clips have concatenatable audio.");
+                $"VideoStages: overlap boundaries degraded to cuts because "
+                + $"{runtimeBoundaries.Reason}.");
         }
-        INodeOutput mergedAudio = audioOutputs.Count == videoOutputs.Count
-            ? CascadeAudioConcat(bridge, audioOutputs)
+        BoundaryOverlapPlan overlapPlan =
+            BoundaryOverlapPlanner.ToOverlapPlan(runtimeBoundaries.Boundaries);
+        IReadOnlyList<ArchitectureMergeRun> architectureRuns = overlapPlan is null
+            ? []
+            : PreflightArchitectureRuns(
+                clips,
+                runtimeBoundaries.Boundaries);
+        MultiClipAudioGraphAssembler.TimelineAudioPreflight audioPreflight =
+            MultiClipAudioGraphAssembler.PreflightTimelineAudio(
+                bridge,
+                clips);
+
+        INodeOutput mergedVideo = overlapPlan is null
+            ? MultiClipVideoGraphAssembler.MergeCut(bridge, videoOutputs)
+            : MergeArchitectureRuns(
+                bridge,
+                clips,
+                videoOutputs,
+                architectureRuns);
+
+        IReadOnlyList<INodeOutput> audioOutputs =
+            MultiClipAudioGraphAssembler.MaterializeTimelineAudio(
+                bridge,
+                clips,
+                audioPreflight);
+        INodeOutput mergedAudio = audioOutputs.Count > 0
+            ? MultiClipAudioGraphAssembler.Merge(
+                bridge,
+                clips,
+                audioOutputs,
+                overlapPlan)
             : null;
 
-        INodeOutput rootVideoOutput = bridge.ResolvePath(parallelClipSourceMedia?.Path);
-        if (rootVideoOutput is not null)
-        {
-            terminalKeys.Add(OutputKey(rootVideoOutput));
-        }
-
-        RetargetSwarmSaveAnimationWsForClipTerminals(bridge, terminalKeys, mergedVideo, mergedAudio);
-
-        WGNodeData template = clipOutputsInOrder[0];
-        g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(mergedVideo), g, WGNodeData.DT_VIDEO, template.Compat)
+        DecodedClipArtifact template = clips[0];
+        g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(mergedVideo), g, WGNodeData.DT_VIDEO, null)
         {
             Width = template.Width,
             Height = template.Height,
-            Frames = allFramesKnown ? sumFrames : template.Frames,
-            FPS = template.FPS
+            Frames = sumFrames - (overlapPlan?.RemovedFrames ?? 0),
+            FPS = template.FramesPerSecond
         };
         if (mergedAudio is not null)
         {
@@ -108,112 +127,109 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
                 WorkflowBridge.ToPath(mergedAudio),
                 g,
                 WGNodeData.DT_AUDIO,
-                template.AttachedAudio?.Compat ?? g.CurrentAudioVae?.Compat);
+                null);
         }
+        return runtimeBoundaries;
     }
 
-    private static string OutputKey(INodeOutput output) => $"{output.Node.Id}::{output.SlotIndex}";
-
-    private WGNodeData TryGetClipConcatenatableAudio(WGNodeData clip)
-    {
-        WGNodeData attached = clip?.AttachedAudio;
-        if (attached?.Path is not JArray { Count: 2 })
-        {
-            return null;
-        }
-
-        if (attached.DataType == WGNodeData.DT_AUDIO)
-        {
-            return attached;
-        }
-
-        if (attached.DataType == WGNodeData.DT_LATENT_AUDIO && g.CurrentAudioVae is not null)
-        {
-            WGNodeData decoded = attached.DecodeLatents(g.CurrentAudioVae, true);
-            if (decoded?.Path is JArray { Count: 2 } && decoded.DataType == WGNodeData.DT_AUDIO)
-            {
-                return decoded;
-            }
-        }
-
-        return null;
-    }
-
-    private static INodeOutput MergeClipVideosWithBatchImagesNode(
+    private static INodeOutput MergeArchitectureRuns(
         WorkflowBridge bridge,
-        IReadOnlyList<INodeOutput> outputs)
+        IReadOnlyList<DecodedClipArtifact> clips,
+        IReadOnlyList<INodeOutput> videoOutputs,
+        IReadOnlyList<ArchitectureMergeRun> runs)
     {
-        if (outputs.Count == 1)
+        List<INodeOutput> runOutputs = new(runs.Count);
+        foreach (ArchitectureMergeRun run in runs)
         {
-            return outputs[0];
-        }
-
-        List<INodeOutput> layer = [.. outputs];
-        while (layer.Count > BatchImagesNodeMaxInputs)
-        {
-            INodeOutput chunk = AddBatchImagesNode(bridge, layer.Take(BatchImagesNodeMaxInputs));
-            List<INodeOutput> next = [chunk];
-            for (int i = BatchImagesNodeMaxInputs; i < layer.Count; i++)
+            if (run.Length == 1)
             {
-                next.Add(layer[i]);
+                runOutputs.Add(videoOutputs[run.Start]);
+                continue;
             }
-            layer = next;
+            runOutputs.Add(run.Assembler.MergeOverlaps(
+                bridge,
+                [.. clips.Skip(run.Start).Take(run.Length)],
+                [.. videoOutputs.Skip(run.Start).Take(run.Length)],
+                run.Overlap));
         }
-
-        return AddBatchImagesNode(bridge, layer);
+        return MultiClipVideoGraphAssembler.MergeCut(bridge, runOutputs);
     }
 
-    private static INodeOutput AddBatchImagesNode(WorkflowBridge bridge, IEnumerable<INodeOutput> imageOutputs)
+    private IReadOnlyList<ArchitectureMergeRun> PreflightArchitectureRuns(
+        IReadOnlyList<DecodedClipArtifact> artifacts,
+        IReadOnlyList<BoundaryPlan> boundaries)
     {
-        BatchImagesNodeNode node = bridge.AddNode(new BatchImagesNodeNode());
-        foreach (INodeOutput imageOutput in imageOutputs)
+        if (boundaries.Count != artifacts.Count - 1)
         {
-            node.Images.AddFromUntyped(imageOutput);
+            throw new InvalidOperationException(
+                "Timeline boundary count does not match the decoded clip count.");
         }
 
-        return node.IMAGE;
-    }
-
-    private static INodeOutput CascadeAudioConcat(WorkflowBridge bridge, IReadOnlyList<INodeOutput> audioOutputs)
-    {
-        INodeOutput acc = audioOutputs[0];
-        for (int i = 1; i < audioOutputs.Count; i++)
+        List<ArchitectureMergeRun> runs = [];
+        int runStart = 0;
+        for (int boundaryIndex = 0; boundaryIndex <= boundaries.Count; boundaryIndex++)
         {
-            AudioConcatNode concat = bridge.AddNode(new AudioConcatNode());
-            concat.Audio1.ConnectToUntyped(acc);
-            concat.Audio2.ConnectToUntyped(audioOutputs[i]);
-            bridge.SyncNode(concat);
-            acc = concat.AUDIO;
-        }
-
-        return acc;
-    }
-
-    private static void RetargetSwarmSaveAnimationWsForClipTerminals(
-        WorkflowBridge bridge,
-        HashSet<string> terminalKeys,
-        INodeOutput images,
-        INodeOutput audio)
-    {
-        if (images is null || terminalKeys.Count == 0)
-        {
-            return;
-        }
-
-        foreach (SwarmSaveAnimationWSNode save in bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>())
-        {
-            if (save.Images.Connection is not INodeOutput existingImages
-                || !terminalKeys.Contains(OutputKey(existingImages)))
+            bool endOfTimeline = boundaryIndex == boundaries.Count;
+            if (!endOfTimeline
+                && boundaries[boundaryIndex].Effective != BoundaryExecutionMode.Cut)
             {
                 continue;
             }
 
-            save.Images.ConnectToUntyped(images);
-            if (!save.Audio.TryConnectToUntyped(audio))
+            int runEndExclusive = boundaryIndex + 1;
+            int runLength = runEndExclusive - runStart;
+            if (runLength == 1)
             {
-                save.Audio.Clear();
+                runs.Add(new(runStart, runLength, null, null));
+                runStart = runEndExclusive;
+                continue;
             }
-            bridge.SyncNode(save);
+
+            ArchitectureId architectureId = artifacts[runStart].ArchitectureId;
+            if (artifacts
+                .Skip(runStart)
+                .Take(runLength)
+                .Any(artifact => artifact.ArchitectureId != architectureId))
+            {
+                throw new InvalidOperationException(
+                    "A non-cut boundary run crossed architecture ownership.");
+            }
+            if (boundaryAssemblers is null
+                || !boundaryAssemblers.TryGetValue(
+                    architectureId,
+                    out IArchitectureBoundaryAssembler assembler))
+            {
+                throw new InvalidOperationException(
+                    $"No boundary assembler is registered for architecture '{architectureId}'.");
+            }
+            if (assembler.ArchitectureId != architectureId)
+            {
+                throw new InvalidOperationException(
+                    $"Boundary assembler '{assembler.ArchitectureId}' cannot assemble "
+                    + $"architecture '{architectureId}'.");
+            }
+
+            BoundaryOverlapPlan runPlan = BoundaryOverlapPlanner.ToOverlapPlan(
+                [.. boundaries.Skip(runStart).Take(runLength - 1)])
+                ?? throw new InvalidOperationException(
+                    "A non-cut architecture run has no overlap plan.");
+            runs.Add(new(runStart, runLength, assembler, runPlan));
+            runStart = runEndExclusive;
         }
+        return runs;
+    }
+
+    private static List<INodeOutput> ResolveOutputs(WorkflowBridge bridge, IEnumerable<JArray> paths)
+    {
+        List<INodeOutput> outputs = [];
+        foreach (JArray path in paths)
+        {
+            INodeOutput output = bridge.ResolvePath(path);
+            if (output is not null)
+            {
+                outputs.Add(output);
+            }
+        }
+        return outputs;
     }
 }
