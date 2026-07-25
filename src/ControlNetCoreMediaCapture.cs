@@ -109,9 +109,11 @@ internal sealed class ControlNetCoreMediaCapture(WorkflowGenerator g)
             {
                 return true;
             }
-            foreach (INodeInput input in current.Inputs)
+            // FindUpstream, not Inputs: it also reads autogrow list children, so a batch node
+            // between here and the loaded footage does not hide it.
+            foreach (ComfyNode upstream in bridge.Graph.FindUpstream(current))
             {
-                if (input.Connection?.Node is ComfyNode upstream && visited.Add(upstream.Id))
+                if (visited.Add(upstream.Id))
                 {
                     pending.Enqueue(upstream);
                 }

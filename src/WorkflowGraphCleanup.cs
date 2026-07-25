@@ -2,6 +2,13 @@ using ComfyTyped.Core;
 
 namespace VideoStages;
 
+/// <summary>
+/// Every walk here reads its upstream neighbours through <see cref="ComfyGraph.FindUpstream"/>, not
+/// <see cref="ComfyNode.Inputs"/>: autogrow list connections (a merged timeline's
+/// <c>BatchImagesNode.images.imageN</c>) live in <see cref="ComfyNode.InputLists"/>, so iterating
+/// <c>Inputs</c> would silently treat everything behind a multi-clip merge as unreachable and prune
+/// loaders its decodes still read.
+/// </summary>
 internal static class WorkflowGraphCleanup
 {
     public static void RemoveUnusedUpstreamNodes(
@@ -59,16 +66,7 @@ internal static class WorkflowGraphCleanup
                 continue;
             }
 
-            List<string> upstreamIds = [];
-            foreach (INodeInput input in node.Inputs)
-            {
-                string upId = input.Connection?.Node?.Id;
-                if (!string.IsNullOrWhiteSpace(upId))
-                {
-                    upstreamIds.Add(upId);
-                }
-            }
-
+            List<string> upstreamIds = [.. bridge.Graph.FindUpstream(node).Select(up => up.Id)];
             bridge.RemoveNode(nodeId);
             removed.Add(nodeId);
             foreach (string upId in upstreamIds)
@@ -173,12 +171,9 @@ internal static class WorkflowGraphCleanup
             }
             if (includeUpstream)
             {
-                foreach (INodeInput input in node.Inputs)
+                foreach (ComfyNode upstream in bridge.Graph.FindUpstream(node))
                 {
-                    if (input.Connection?.Node?.Id is string upstreamId)
-                    {
-                        pending.Enqueue(upstreamId);
-                    }
+                    pending.Enqueue(upstream.Id);
                 }
             }
             if (includeDownstream)

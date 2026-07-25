@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using Xunit;
@@ -28,6 +29,32 @@ public class WorkflowGraphCleanupTests
 
         Assert.True(component.SetEquals([upstream.Id, middle.Id, downstream.Id]));
         Assert.True(upstreamOnly.SetEquals([upstream.Id, middle.Id]));
+    }
+
+    /// <summary>
+    /// A multi-clip timeline reaches its save through a BatchImagesNode, whose per-image
+    /// connections are autogrow list children rather than singular inputs. Traversals that read
+    /// only <c>Inputs</c> stop dead at that node, so shared loaders behind the merge read as
+    /// unreachable and get pruned out from under the decodes still wired to them.
+    /// </summary>
+    [Fact]
+    public void Graph_traversal_crosses_autogrow_list_connections()
+    {
+        JObject workflow = [];
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        UnknownNode loader = bridge.AddStub("UnitTest_Vae", "101").WithOutputs(WGNodeData.DT_VAE);
+        UnknownNode decode = bridge.AddStub("UnitTest_Decode", "200")
+            .WithOutputs(WGNodeData.DT_IMAGE);
+        decode.GetInput("vae").ConnectToUntyped(loader.GetOutput(0));
+        BatchImagesNodeNode batch = bridge.AddNode(new BatchImagesNodeNode(), "300");
+        batch.Images.AddFromUntyped(decode.GetOutput(0));
+
+        Assert.True(
+            WorkflowGraphCleanup.CollectUpstreamClosure(bridge, [batch.Id])
+                .SetEquals([batch.Id, decode.Id, loader.Id]));
+        WorkflowGraphCleanup.RemoveOwnedNodesNotLive(bridge, [loader.Id, decode.Id], [batch.Id]);
+        Assert.True(workflow.ContainsKey(loader.Id));
+        Assert.True(workflow.ContainsKey(decode.Id));
     }
 
     [Fact]

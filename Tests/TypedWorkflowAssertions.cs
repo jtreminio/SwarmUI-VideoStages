@@ -24,18 +24,42 @@ internal static class TypedWorkflowAssertions
                 return;
             }
             state[node.Id] = 1;
-            foreach (INodeInput input in node.Inputs)
+            foreach (ComfyNode upstream in bridge.Graph.FindUpstream(node))
             {
-                if (input.Connection?.Node is ComfyNode upstream)
-                {
-                    Visit(upstream);
-                }
+                Visit(upstream);
             }
             state[node.Id] = 2;
         }
         foreach (ComfyNode node in bridge.Graph.Nodes.Values)
         {
             Visit(node);
+        }
+    }
+
+    /// <summary>
+    /// Fails when any input references a node id the workflow no longer contains. Comfy raises
+    /// <c>NodeNotFoundError: Node N not found</c> at execution time for exactly this state.
+    /// </summary>
+    public static void AssertNoDanglingNodeRefs(JObject workflow)
+    {
+        foreach (JProperty node in workflow.Properties())
+        {
+            if (node.Value is not JObject { } nodeObj || nodeObj["inputs"] is not JObject inputs)
+            {
+                continue;
+            }
+            foreach (JProperty input in inputs.Properties())
+            {
+                if (input.Value is not JArray { Count: 2 } path
+                    || path[1].Type != JTokenType.Integer)
+                {
+                    continue;
+                }
+                Assert.True(
+                    workflow[$"{path[0]}"] is JObject,
+                    $"Node {node.Name} ({nodeObj["class_type"]}) input '{input.Name}' references "
+                        + $"missing node {path[0]}.");
+            }
         }
     }
 

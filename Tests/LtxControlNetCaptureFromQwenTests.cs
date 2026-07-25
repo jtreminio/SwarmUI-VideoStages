@@ -184,7 +184,7 @@ public partial class StageFlowTests
             Assert.NotNull(guide.Image.Connection);
             ComfyNode imageSource = guide.Image.Connection.Node;
             Assert.True(
-                ReachesVideoSourceUpstream(imageSource),
+                ReachesVideoSourceUpstream(bridge, imageSource),
                 $"LTXAddVideoICLoRAGuideNode '{guide.Id}' image input does not trace back to a video source.");
         }
     }
@@ -237,12 +237,12 @@ public partial class StageFlowTests
             Assert.NotNull(guide.Image.Connection);
             ComfyNode imageSource = guide.Image.Connection.Node;
             Assert.True(
-                ReachesVideoSourceUpstream(imageSource),
+                ReachesVideoSourceUpstream(bridge, imageSource),
                 $"LTXAddVideoICLoRAGuideNode '{guide.Id}' image input does not trace back to a video source.");
         }
     }
 
-    private static bool ReachesVideoSourceUpstream(ComfyNode start)
+    private static bool ReachesVideoSourceUpstream(WorkflowBridge bridge, ComfyNode start)
     {
         if (start is null)
         {
@@ -259,9 +259,11 @@ public partial class StageFlowTests
             {
                 return true;
             }
-            foreach (INodeInput input in current.Inputs)
+            // FindUpstream also reads autogrow list children, so a batch node on the path cannot
+            // hide the video source (mirrors ControlNetCoreMediaCapture.HasVideoUpstream).
+            foreach (ComfyNode upstream in bridge.Graph.FindUpstream(current))
             {
-                if (input.Connection?.Node is ComfyNode upstream && visited.Add(upstream.Id))
+                if (visited.Add(upstream.Id))
                 {
                     pending.Enqueue(upstream);
                 }
