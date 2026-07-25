@@ -6,7 +6,11 @@ import {
 } from "../documentQueries";
 import { normalizeAudioTracks } from "../normalization";
 import { serializeStateForStorage } from "../persistence";
-import { getSelection, resetSelectionForTests } from "../selection";
+import {
+    getSelection,
+    resetSelectionForTests,
+    setSelection,
+} from "../selection";
 import type { TimelineSelection, VideoStagesConfig } from "../types";
 import { buildAudioTracksPanel } from "./audioTracksPanel";
 import type { DetailStripContext } from "./context";
@@ -53,12 +57,8 @@ describe("timeline-wide audio segments panel", () => {
         const selected = getSelection();
         const selection: Extract<
             TimelineSelection,
-            { kind: "none" | "audio-track" | "audio-track-span" }
-        > =
-            selected.kind === "audio-track" ||
-            selected.kind === "audio-track-span"
-                ? selected
-                : { kind: "none" };
+            { kind: "none" | "audio-track" }
+        > = selected.kind === "audio-track" ? selected : { kind: "none" };
         host.replaceChildren(buildAudioTracksPanel(ctx, state, selection));
     };
 
@@ -75,23 +75,15 @@ describe("timeline-wide audio segments panel", () => {
         render();
     });
 
-    it("reveals a span selection through the key its own panel emits", () => {
+    it("reveals a track selection through the key its own panel emits", () => {
         const section = buildAudioTracksPanel(ctx, state, {
-            kind: "audio-track-span",
+            kind: "audio-track",
             trackIdx: 0,
-            spanIdx: 0,
         });
 
         expect(revealRepeaterKey({ kind: "audio-track", trackIdx: 0 })).toBe(
             section.dataset.vstRepeaterKey,
         );
-        expect(
-            revealRepeaterKey({
-                kind: "audio-track-span",
-                trackIdx: 0,
-                spanIdx: 0,
-            }),
-        ).toBe(section.dataset.vstRepeaterKey);
     });
 
     it("adds one executable timeline lane and edits its source/window", () => {
@@ -215,6 +207,115 @@ describe("timeline-wide audio segments panel", () => {
             clipStartOffsetSeconds: 2,
             clipEndOffsetSeconds: 3.5,
         });
+    });
+
+    /**
+     * A stored track may carry more than one span (hand-authored, or written by
+     * an earlier planned-track schema). Every one of those spans executes, so
+     * every one becomes its own authorable lane on load.
+     */
+    const twoSpanTrack = (): unknown => ({
+        id: "track-multi",
+        volume: 0.5,
+        source: {
+            kind: "Upload",
+            reference: "score.wav",
+            uploadedAudio: {
+                data: "data:audio/wav;base64,AA==",
+                fileName: "score.wav",
+            },
+        },
+        spans: [
+            {
+                id: "span-first",
+                timelineStartSeconds: 0,
+                timelineLengthSeconds: 1,
+                sourceStartSeconds: 0,
+            },
+            {
+                id: "span-second",
+                timelineStartSeconds: 3,
+                timelineLengthSeconds: 2,
+                sourceStartSeconds: 5,
+            },
+        ],
+    });
+
+    it("gives every span of a multi-span track its own authorable lane", () => {
+        state.audioTracks = normalizeAudioTracks([twoSpanTrack()]);
+
+        expect(
+            state.audioTracks.map((track) => [
+                track.id,
+                track.spans.map((span) => span.id),
+            ]),
+        ).toEqual([
+            ["track-multi:0", ["span-first"]],
+            ["track-multi:1", ["span-second"]],
+        ]);
+        render();
+        const tabs = Array.from(host.querySelectorAll(".vst-audio-track-tab"));
+        expect(tabs).toHaveLength(2);
+        expect(tabs[0].textContent).toContain("S0");
+        expect(tabs[1].textContent).toContain("S1");
+
+        // Every lane still projects exactly the window its span described.
+        const raw = JSON.parse(serializeStateForStorage(state)) as {
+            audioTracks: Array<{
+                id: string;
+                volume: number;
+                spans: Array<Record<string, unknown>>;
+            }>;
+        };
+        expect(
+            raw.audioTracks.map((track) => [track.id, track.spans.length]),
+        ).toEqual([
+            ["track-multi:0", 1],
+            ["track-multi:1", 1],
+        ]);
+        expect(raw.audioTracks[1].volume).toBe(0.5);
+        expect(raw.audioTracks[1].spans[0]).toMatchObject({
+            timelineStartSeconds: 3,
+            timelineLengthSeconds: 2,
+            sourceStartSeconds: 5,
+            projection: {
+                firstClipId: "clip-b",
+                lastClipId: "clip-b",
+                clipStartOffsetSeconds: 0,
+                clipEndOffsetSeconds: 2,
+            },
+        });
+    });
+
+    it("edits each span lane independently", () => {
+        state.audioTracks = normalizeAudioTracks([twoSpanTrack()]);
+        setSelection({ kind: "audio-track", trackIdx: 1 });
+        render();
+
+        const trim = fieldControl<HTMLInputElement>(
+            host,
+            "Trim start (s)",
+            "input",
+        );
+        trim.value = "7";
+        trim.dispatchEvent(new Event("input", { bubbles: true }));
+
+        expect(state.audioTracks?.[1].spans[0].sourceStartSeconds).toBe(7);
+        expect(state.audioTracks?.[0].spans[0].sourceStartSeconds).toBe(0);
+    });
+
+    it("deleting one span lane leaves the other spans intact", () => {
+        state.audioTracks = normalizeAudioTracks([twoSpanTrack()]);
+        setSelection({ kind: "audio-track", trackIdx: 0 });
+        render();
+
+        host.querySelector<HTMLButtonElement>(
+            ".vst-audio-track-delete",
+        )?.click();
+
+        expect(
+            state.audioTracks?.map((track) => track.spans.map((s) => s.id)),
+        ).toEqual([["span-second"]]);
     });
 
     it("uses native Swarm slider wiring for volume", () => {

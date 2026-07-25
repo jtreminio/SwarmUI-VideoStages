@@ -1,82 +1,50 @@
+import {
+    anchorSelection,
+    isSameSelection,
+    resolveSelection,
+    type SelectionAnchor,
+    sameAnchor,
+    selectionAfterRemoval,
+} from "./selectionIdentity";
 import type { TimelineSelection } from "./selectionTypes";
 
-const NO_SELECTION: TimelineSelection = { kind: "none" };
-let selection: TimelineSelection = NO_SELECTION;
+export { isSameSelection, selectionAfterRemoval };
+
+const NO_SELECTION: SelectionAnchor = { selection: { kind: "none" } };
+let anchor: SelectionAnchor = NO_SELECTION;
 const selectionSubscribers = new Set<(sel: TimelineSelection) => void>();
 
 const clipIdxOf = (sel: TimelineSelection): number | null =>
-    sel.kind === "none" ||
-    sel.kind === "boundary" ||
-    sel.kind === "audio-track" ||
-    sel.kind === "audio-track-span"
+    sel.kind === "none" || sel.kind === "boundary" || sel.kind === "audio-track"
         ? null
         : sel.clipIdx;
 
-const sameSelection = (a: TimelineSelection, b: TimelineSelection): boolean => {
-    if (a.kind !== b.kind) {
-        return false;
-    }
-    if (a.kind === "none" || b.kind === "none") {
-        return true;
-    }
-    if (a.kind === "boundary" || b.kind === "boundary") {
-        return (
-            a.kind === "boundary" &&
-            b.kind === "boundary" &&
-            a.leftClipIdx === b.leftClipIdx
-        );
-    }
-    if (a.kind === "audio-track" && b.kind === "audio-track") {
-        return a.trackIdx === b.trackIdx;
-    }
-    if (a.kind === "audio-track-span" && b.kind === "audio-track-span") {
-        return a.trackIdx === b.trackIdx && a.spanIdx === b.spanIdx;
-    }
-    if (
-        a.kind === "audio-track" ||
-        b.kind === "audio-track" ||
-        a.kind === "audio-track-span" ||
-        b.kind === "audio-track-span"
-    ) {
-        return false;
-    }
-    if (a.clipIdx !== clipIdxOf(b)) {
-        return false;
-    }
-    if (a.kind === "clip" && b.kind === "clip") {
-        return a.stageIdx === b.stageIdx;
-    }
-    if (a.kind === "ref" && b.kind === "ref") {
-        return a.refIdx === b.refIdx;
-    }
-    if (a.kind === "ic-lora" && b.kind === "ic-lora") {
-        return a.entryIdx === b.entryIdx;
-    }
-    if (a.kind === "prompt-minor" && b.kind === "prompt-minor") {
-        return a.windowIdx === b.windowIdx;
-    }
-    return true;
-};
+/**
+ * The live selection: stable entity ids resolved against the current document,
+ * so callers keep reading plain array positions while structural edits and
+ * history restores can no longer retarget the dock.
+ */
+export const getSelection = (): TimelineSelection => resolveSelection(anchor);
 
-export const isSameSelection = (
-    a: TimelineSelection,
-    b: TimelineSelection,
-): boolean => sameSelection(a, b);
+export const getSelectedClipIndex = (): number | null =>
+    clipIdxOf(getSelection());
 
-export const getSelection = (): TimelineSelection => selection;
-
-export const getSelectedClipIndex = (): number | null => clipIdxOf(selection);
-
-export const setSelection = (next: TimelineSelection): void => {
-    if (sameSelection(selection, next)) {
-        return;
-    }
-    selection = next;
+const notify = (): void => {
+    const current = getSelection();
     for (const cb of [...selectionSubscribers]) {
         try {
-            cb(selection);
+            cb(current);
         } catch {}
     }
+};
+
+export const setSelection = (next: TimelineSelection): void => {
+    const nextAnchor = anchorSelection(next);
+    if (sameAnchor(anchor, nextAnchor)) {
+        return;
+    }
+    anchor = nextAnchor;
+    notify();
 };
 
 /**
@@ -84,12 +52,8 @@ export const setSelection = (next: TimelineSelection): void => {
  * use this when activation should also reveal the owning sidebar repeater.
  */
 export const activateSelection = (next: TimelineSelection): void => {
-    selection = next;
-    for (const cb of [...selectionSubscribers]) {
-        try {
-            cb(selection);
-        } catch {}
-    }
+    anchor = anchorSelection(next);
+    notify();
 };
 
 export const subscribeSelection = (
@@ -101,21 +65,7 @@ export const subscribeSelection = (
     };
 };
 
-/**
- * The one delete-then-reselect convention: keep the nearest surviving sibling
- * (the same slot, or the new last one), else fall back to the owning entity.
- * Every removal path routes through this — the detail strip's `commitRemoval`,
- * the timeline's clip delete, and the tracks' shift-click deletes.
- */
-export const selectionAfterRemoval = (
-    index: number,
-    remaining: number,
-    neighbour: (index: number) => TimelineSelection,
-    fallback: TimelineSelection,
-): TimelineSelection =>
-    remaining > 0 ? neighbour(Math.min(index, remaining - 1)) : fallback;
-
 export const resetSelectionForTests = (): void => {
-    selection = NO_SELECTION;
+    anchor = NO_SELECTION;
     selectionSubscribers.clear();
 };

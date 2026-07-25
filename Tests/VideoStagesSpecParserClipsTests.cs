@@ -1509,4 +1509,71 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal(1.5, segment.FirstClipOffsetSeconds);
         Assert.Equal(4, segment.LastClipOffsetSeconds);
     }
+
+    private static JObject MakeAudioTrack(string id, params JObject[] spans) => new()
+    {
+        ["id"] = id,
+        ["volume"] = 0.5,
+        ["source"] = new JObject
+        {
+            ["kind"] = "Upload",
+            ["reference"] = "score.wav",
+            ["uploadedAudio"] = MakeUploadedAudio(fileName: "score.wav"),
+        },
+        ["spans"] = new JArray(spans.Cast<object>().ToArray()),
+    };
+
+    private static JObject MakeAudioSpan(double start, double length, double sourceStart) => new()
+    {
+        ["timelineStartSeconds"] = start,
+        ["timelineLengthSeconds"] = length,
+        ["sourceStartSeconds"] = sourceStart,
+    };
+
+    /// <summary>
+    /// The browser splits a stored multi-span track into one single-span lane per span so every
+    /// executable span is authorable. That split must be projection-preserving: both shapes have
+    /// to compile to byte-identical segments, including the "trackId:spanIndex" identity.
+    /// </summary>
+    [Fact]
+    public void Parse_RootTimelineAudioSegments_MultiSpanTrackMatchesSplitSingleSpanLanes()
+    {
+        static VideoStagesSpec ParseWithTracks(params JObject[] tracks)
+        {
+            JObject root = new()
+            {
+                ["clips"] = new JArray(MakeClip([MakeStage("ltx-2")], duration: 8)),
+                ["audioTracks"] = new JArray(tracks.Cast<object>().ToArray()),
+            };
+            ((JObject)((JArray)root["clips"])[0])["id"] = "clip-a";
+            return VideoStagesSpecParser.Parse(BuildParser(root.ToString(Formatting.None)));
+        }
+
+        IReadOnlyList<TimelineAudioSegmentSpec> combined = ParseWithTracks(
+            MakeAudioTrack(
+                "track-multi",
+                MakeAudioSpan(0, 1, 0),
+                MakeAudioSpan(3, 2, 5))).TimelineAudioSegments;
+        IReadOnlyList<TimelineAudioSegmentSpec> split = ParseWithTracks(
+            MakeAudioTrack("track-multi:0", MakeAudioSpan(0, 1, 0)),
+            MakeAudioTrack("track-multi:1", MakeAudioSpan(3, 2, 5))).TimelineAudioSegments;
+
+        Assert.Equal(2, combined.Count);
+        Assert.Equal(
+            ["track-multi:0", "track-multi:1"],
+            combined.Select(segment => segment.Id).ToArray());
+        Assert.Equal(
+            combined.Select(segment => (
+                segment.Id,
+                segment.TimelineStartSeconds,
+                segment.LengthSeconds,
+                segment.SourceStartSeconds,
+                segment.Volume)).ToArray(),
+            split.Select(segment => (
+                segment.Id,
+                segment.TimelineStartSeconds,
+                segment.LengthSeconds,
+                segment.SourceStartSeconds,
+                segment.Volume)).ToArray());
+    }
 }

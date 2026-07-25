@@ -52,6 +52,25 @@ export const normalizeAudioTrackSpan = (
     };
 };
 
+/**
+ * Splits a multi-span track into one single-span lane per span, which is the
+ * shape both the authoring UI and the backend already work in: the backend
+ * flattens every span into its own segment with exactly this
+ * `trackId:spanIndex` identity, so the split is projection-preserving. Without
+ * it, spans past the first would execute with nothing on screen to edit them.
+ */
+const splitSpansIntoLanes = (track: AudioTrack): AudioTrack[] => {
+    if (track.spans.length <= 1) {
+        return [track];
+    }
+    return track.spans.map((span, spanIndex) => ({
+        ...track,
+        id: track.id === undefined ? undefined : `${track.id}:${spanIndex}`,
+        source: { ...track.source },
+        spans: [span],
+    }));
+};
+
 export const normalizeAudioTracks = (value: unknown): AudioTrack[] => {
     if (!Array.isArray(value)) {
         return [];
@@ -73,20 +92,24 @@ export const normalizeAudioTracks = (value: unknown): AudioTrack[] => {
                       AUDIO_SEGMENT_VOLUME_MIN,
                       AUDIO_SEGMENT_VOLUME_MAX,
                   );
-        tracks.push({
-            id: normalizeOptionalEntityId(rawTrack.id),
-            source: {
-                kind: normalizeAudioTrackSourceKind(source.kind),
-                reference: trimmedText(source.reference),
-                uploadedAudio: normalizeUploadedMedia(source.uploadedAudio),
-            },
-            spans: Array.isArray(rawSpans)
-                ? rawSpans
-                      .map(normalizeAudioTrackSpan)
-                      .filter((span): span is AudioTrackSpan => span !== null)
-                : [],
-            ...(volume === undefined ? {} : { volume }),
-        });
+        tracks.push(
+            ...splitSpansIntoLanes({
+                id: normalizeOptionalEntityId(rawTrack.id),
+                source: {
+                    kind: normalizeAudioTrackSourceKind(source.kind),
+                    reference: trimmedText(source.reference),
+                    uploadedAudio: normalizeUploadedMedia(source.uploadedAudio),
+                },
+                spans: Array.isArray(rawSpans)
+                    ? rawSpans
+                          .map(normalizeAudioTrackSpan)
+                          .filter(
+                              (span): span is AudioTrackSpan => span !== null,
+                          )
+                    : [],
+                ...(volume === undefined ? {} : { volume }),
+            }),
+        );
     }
     return tracks;
 };

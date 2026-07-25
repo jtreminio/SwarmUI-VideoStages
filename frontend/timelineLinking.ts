@@ -4,12 +4,7 @@ import { documentFps } from "./documentQueries";
 import type { GestureRouter, GestureSession } from "./gestureRouter";
 import { getClips, getState, saveClips } from "./persistence";
 import { getRootDefaults } from "./rootDefaults";
-import {
-    getSelectedClipIndex,
-    getSelection,
-    selectionAfterRemoval,
-    setSelection,
-} from "./selection";
+import { getSelectedClipIndex, getSelection, setSelection } from "./selection";
 import { getRootGeneratedEntryMode } from "./swarmInputs";
 import { applyClipDurationResize, pxToDuration } from "./timelineEdit";
 import {
@@ -195,25 +190,10 @@ export const createTimelineLinking = (): TimelineLinking => {
             clips,
             getRootGeneratedEntryMode(),
         );
+        // No selection remap here: selection is anchored to entity ids, so a
+        // surviving selection follows its clip and a deleted one degrades to
+        // the nearest surviving sibling on the next read.
         saveClips(clips, { origin: "linking" });
-        // Deleting the selected clip reselects its neighbour; a selection
-        // after the removed clip just shifts down with it.
-        const sel = getSelection();
-        if (sel.kind !== "clip") {
-            return;
-        }
-        if (sel.clipIdx === idx) {
-            setSelection(
-                selectionAfterRemoval(
-                    idx,
-                    clips.length,
-                    (index) => ({ kind: "clip", clipIdx: index, stageIdx: 0 }),
-                    { kind: "none" },
-                ),
-            );
-        } else if (sel.clipIdx > idx) {
-            setSelection({ ...sel, clipIdx: sel.clipIdx - 1 });
-        }
     };
 
     interface ResizeState {
@@ -335,19 +315,28 @@ export const createTimelineLinking = (): TimelineLinking => {
                     applySelectionHighlight(body);
                     return;
                 }
-                commitClipMutation(state.sourceRevision, "linking", (clips) => {
-                    if (from < 0 || from >= clips.length) {
-                        return null;
-                    }
-                    const destIdx = finalIndexAfterMove(from, gap);
-                    selectClip(destIdx, stageForClip(from));
-                    const reordered = moveItem(clips, from, gap);
-                    reconcileArchitectureIncomingIcLoraDrives(
-                        reordered,
-                        getRootGeneratedEntryMode(),
-                    );
-                    return reordered;
-                });
+                const stageIdx = stageForClip(from);
+                const moved = commitClipMutation(
+                    state.sourceRevision,
+                    "linking",
+                    (clips) => {
+                        if (from < 0 || from >= clips.length) {
+                            return null;
+                        }
+                        const reordered = moveItem(clips, from, gap);
+                        reconcileArchitectureIncomingIcLoraDrives(
+                            reordered,
+                            getRootGeneratedEntryMode(),
+                        );
+                        return reordered;
+                    },
+                );
+                if (moved) {
+                    // After the save: the selection anchors to the clip that is
+                    // really at the destination, not to whoever held that slot
+                    // before the move.
+                    selectClip(finalIndexAfterMove(from, gap), stageIdx);
+                }
             },
             onCancel: cleanup,
         };

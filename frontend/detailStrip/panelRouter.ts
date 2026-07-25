@@ -25,22 +25,9 @@ export const clampDetailSelection = (
             ? selection
             : { kind: "none" };
     }
-    if (
-        selection.kind === "audio-track" ||
-        selection.kind === "audio-track-span"
-    ) {
+    if (selection.kind === "audio-track") {
         const tracks = getState().audioTracks ?? [];
-        const track = tracks[selection.trackIdx];
-        if (!track) {
-            return { kind: "none" };
-        }
-        if (selection.kind === "audio-track") {
-            return selection;
-        }
-        if (selection.spanIdx < 0 || selection.spanIdx >= track.spans.length) {
-            return { kind: "audio-track", trackIdx: selection.trackIdx };
-        }
-        return selection;
+        return tracks[selection.trackIdx] ? selection : { kind: "none" };
     }
     if (selection.clipIdx < 0 || selection.clipIdx >= clips.length) {
         return { kind: "none" };
@@ -97,8 +84,6 @@ export const detailBreadcrumb = (
         case "audio":
             return `Audio · Clip ${selection.clipIdx}`;
         case "audio-track":
-            return `Audio segment S${selection.trackIdx}`;
-        case "audio-track-span":
             return `Audio segment S${selection.trackIdx}`;
         case "boundary":
             return `Boundary · Clip ${selection.leftClipIdx} → ${selection.leftClipIdx + 1}`;
@@ -166,7 +151,6 @@ export const buildDetailPanelBody = (
         case "audio":
             return buildAudioBody(context, selection, clips);
         case "audio-track":
-        case "audio-track-span":
             return buildTimelineAudioSegmentsBody(
                 context,
                 getState(),

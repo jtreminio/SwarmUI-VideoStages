@@ -5,7 +5,6 @@ export type TimelineSelection =
     | { kind: "ic-lora"; clipIdx: number; entryIdx: number }
     | { kind: "audio"; clipIdx: number }
     | { kind: "audio-track"; trackIdx: number }
-    | { kind: "audio-track-span"; trackIdx: number; spanIdx: number }
     | { kind: "prompt-major"; clipIdx: number }
     | { kind: "prompt-minor"; clipIdx: number; windowIdx: number }
     | { kind: "retake"; clipIdx: number }

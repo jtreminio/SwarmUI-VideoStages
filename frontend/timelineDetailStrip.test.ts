@@ -1946,7 +1946,7 @@ describe("createTimelineDetailStrip", () => {
         ).toMatchObject({ snap: false, autoCollapse: true });
     });
 
-    it("clamps the selection to none after its clip is removed", () => {
+    it("degrades a removed clip's selection to the nearest surviving clip", () => {
         const body = setup([
             { duration: 4, stages: [{}] },
             { duration: 4, stages: [{}] },
@@ -1956,6 +1956,21 @@ describe("createTimelineDetailStrip", () => {
 
         const clips = persistence.getClips().slice(0, 1);
         persistence.saveClips(clips, { notifyDomChange: false });
+        renderTimeline(body, persistence.getClips());
+        strip?.render();
+        expect(getSelection()).toEqual({
+            kind: "clip",
+            clipIdx: 0,
+            stageIdx: 0,
+        });
+        expect(crumbText()).toBe("Clip 0 · S0");
+    });
+
+    it("drops the selection when the last clip is removed", () => {
+        const body = setup([{ duration: 4, stages: [{}] }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+
+        persistence.saveClips([], { notifyDomChange: false });
         renderTimeline(body, persistence.getClips());
         strip?.render();
         expect(getSelection().kind).toBe("none");

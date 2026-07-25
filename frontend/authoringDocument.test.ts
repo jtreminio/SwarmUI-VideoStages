@@ -368,6 +368,16 @@ describe("versioned authoring document identity", () => {
                                 timelineLengthSeconds: null,
                                 sourceStartSeconds: 0,
                             },
+                        ],
+                    },
+                    {
+                        id: "track-b",
+                        source: {
+                            kind: "External",
+                            reference: "b",
+                            uploadedAudio: null,
+                        },
+                        spans: [
                             {
                                 id: "span-b",
                                 timelineStartSeconds: 1,
@@ -385,7 +395,7 @@ describe("versioned authoring document identity", () => {
         const clip = reordered.clips[0];
         clip.refs.reverse();
         clip.stages.reverse();
-        reordered.audioTracks?.[0].spans.reverse();
+        reordered.audioTracks?.reverse();
         saveState(reordered, { notifyDomChange: false });
         __resetPersistenceForTests();
 
@@ -398,9 +408,11 @@ describe("versioned authoring document identity", () => {
             "stage-b",
             "stage-a",
         ]);
-        expect(reloaded.audioTracks?.[0].spans.map((span) => span.id)).toEqual([
-            "span-b",
-            "span-a",
+        expect(
+            reloaded.audioTracks?.map((track) => [track.id, track.spans[0].id]),
+        ).toEqual([
+            ["track-b", "span-b"],
+            ["track-a", "span-a"],
         ]);
     });
 

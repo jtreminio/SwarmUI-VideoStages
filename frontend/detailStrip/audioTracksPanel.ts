@@ -333,10 +333,9 @@ export interface AudioTracksPanelOptions {
 export const buildAudioTracksPanel = (
     ctx: DetailStripContext,
     state: VideoStagesConfig,
-    selection: Extract<
-        TimelineSelection,
-        { kind: "none" | "audio-track" | "audio-track-span" }
-    > = { kind: "none" },
+    selection: Extract<TimelineSelection, { kind: "none" | "audio-track" }> = {
+        kind: "none",
+    },
     options?: AudioTracksPanelOptions,
 ): HTMLElement => {
     const tracks = state.audioTracks ?? [];
@@ -346,10 +345,7 @@ export const buildAudioTracksPanel = (
           )
         : tracks.map((_, trackIndex) => trackIndex);
     const selectedTrackIndex =
-        selection.kind === "audio-track" ||
-        selection.kind === "audio-track-span"
-            ? selection.trackIdx
-            : null;
+        selection.kind === "audio-track" ? selection.trackIdx : null;
     const activeTrackIndex =
         selectedTrackIndex !== null &&
         visibleTrackIndices.includes(selectedTrackIndex)
@@ -423,10 +419,7 @@ export const buildAudioTracksPanel = (
 export const buildTimelineAudioSegmentsBody = (
     ctx: DetailStripContext,
     state: VideoStagesConfig,
-    selection: Extract<
-        TimelineSelection,
-        { kind: "audio-track" | "audio-track-span" }
-    >,
+    selection: Extract<TimelineSelection, { kind: "audio-track" }>,
 ): HTMLElement => {
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-audio-body";

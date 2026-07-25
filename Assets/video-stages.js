@@ -189,11 +189,11 @@
       return { values: [...param.values], labels };
     },
     notifyChanged: (element, suppressPromptCompletion = false) => {
-      const notify = () => triggerChangeFor(element);
+      const notify2 = () => triggerChangeFor(element);
       if (suppressPromptCompletion) {
-        withSuppressedPromptCompletion(notify);
+        withSuppressedPromptCompletion(notify2);
       } else {
-        notify();
+        notify2();
       }
     },
     getBase2EditRegistry: () => registrySnapshot(window.base2editStageRegistry),
@@ -573,6 +573,17 @@
       sourceStartSeconds: sourceStart
     };
   };
+  var splitSpansIntoLanes = (track) => {
+    if (track.spans.length <= 1) {
+      return [track];
+    }
+    return track.spans.map((span, spanIndex) => ({
+      ...track,
+      id: track.id === void 0 ? void 0 : `${track.id}:${spanIndex}`,
+      source: { ...track.source },
+      spans: [span]
+    }));
+  };
   var normalizeAudioTracks = (value) => {
     if (!Array.isArray(value)) {
       return [];
@@ -591,16 +602,20 @@
         AUDIO_SEGMENT_VOLUME_MIN,
         AUDIO_SEGMENT_VOLUME_MAX
       );
-      tracks.push({
-        id: normalizeOptionalEntityId(rawTrack.id),
-        source: {
-          kind: normalizeAudioTrackSourceKind(source.kind),
-          reference: trimmedText(source.reference),
-          uploadedAudio: normalizeUploadedMedia(source.uploadedAudio)
-        },
-        spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter((span) => span !== null) : [],
-        ...volume === void 0 ? {} : { volume }
-      });
+      tracks.push(
+        ...splitSpansIntoLanes({
+          id: normalizeOptionalEntityId(rawTrack.id),
+          source: {
+            kind: normalizeAudioTrackSourceKind(source.kind),
+            reference: trimmedText(source.reference),
+            uploadedAudio: normalizeUploadedMedia(source.uploadedAudio)
+          },
+          spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter(
+            (span) => span !== null
+          ) : [],
+          ...volume === void 0 ? {} : { volume }
+        })
+      );
     }
     return tracks;
   };
@@ -3074,6 +3089,64 @@
     noticedOutdatedDocument = serialized;
     getVideoStagesHostBridge().showError(OUTDATED_SCHEMA_NOTICE);
   };
+  var DIVERGENT_PROJECTION_NOTICE = "VideoStages: the saved timeline has audio spans whose clip anchors disagree with their timeline seconds. The seconds were used and the anchors will be rewritten on the next save — re-check those segments.";
+  var noticedDivergentProjection = null;
+  var SPAN_PROJECTION_TOLERANCE = 1e-6;
+  var numberAt = (owner, key) => typeof owner[key] === "number" && Number.isFinite(owner[key]) ? owner[key] : null;
+  var storedSpanProjection = (span) => {
+    const raw = span.projection;
+    if (!isRecord(raw)) {
+      return null;
+    }
+    const first = raw.firstClipId;
+    const last = raw.lastClipId;
+    const startOffset = numberAt(raw, "clipStartOffsetSeconds");
+    const endOffset = numberAt(raw, "clipEndOffsetSeconds");
+    return typeof first === "string" && typeof last === "string" && startOffset !== null && endOffset !== null ? {
+      firstClipId: first,
+      lastClipId: last,
+      clipStartOffsetSeconds: startOffset,
+      clipEndOffsetSeconds: endOffset
+    } : null;
+  };
+  var hasDivergentSpanProjection = (parsed) => {
+    const clips = parsed.clips.map((clip) => ({
+      id: typeof clip.id === "string" ? clip.id : "",
+      duration: numberAt(clip, "duration") ?? 0
+    }));
+    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
+    for (const track of tracks) {
+      const spans = isRecord(track) && Array.isArray(track.spans) ? track.spans : [];
+      for (const span of spans) {
+        if (!isRecord(span)) {
+          continue;
+        }
+        const stored = storedSpanProjection(span);
+        if (!stored) {
+          continue;
+        }
+        const expected = timelineSpanProjection(clips, {
+          timelineStartSeconds: numberAt(span, "timelineStartSeconds"),
+          timelineLengthSeconds: numberAt(span, "timelineLengthSeconds")
+        });
+        if (!expected || expected.firstClipId !== stored.firstClipId || expected.lastClipId !== stored.lastClipId || Math.abs(
+          expected.clipStartOffsetSeconds - stored.clipStartOffsetSeconds
+        ) > SPAN_PROJECTION_TOLERANCE || Math.abs(
+          expected.clipEndOffsetSeconds - stored.clipEndOffsetSeconds
+        ) > SPAN_PROJECTION_TOLERANCE) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+  var noticeDivergentProjection = (serialized) => {
+    if (noticedDivergentProjection === serialized) {
+      return;
+    }
+    noticedDivergentProjection = serialized;
+    getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
+  };
   var decodeStoredDocument = (serialized, inherited) => {
     try {
       const parsed = JSON.parse(serialized);
@@ -3086,6 +3159,9 @@
       }
       if (!hasValidStoredCollections(parsed)) {
         return null;
+      }
+      if (hasDivergentSpanProjection(parsed)) {
+        noticeDivergentProjection(serialized);
       }
       const dims = resolveRootDims(inherited, {
         width: parsed.width,
@@ -4544,7 +4620,7 @@
       }
       return canonical;
     };
-    const notify = (meta) => {
+    const notify2 = (meta) => {
       const state = canonical;
       if (!state) {
         return;
@@ -4585,7 +4661,7 @@
       if (notifyDomChange) {
         deps.notifyHost();
       }
-      notify({ origin, hint });
+      notify2({ origin, hint });
       return serialized;
     };
     const dispatch = (command, origin, notifyDomChange, expectedRevision, hint) => {
@@ -4642,7 +4718,7 @@
       if (canonical) {
         deps.writeDurable?.(canonical);
       }
-      notify({ origin: "external" });
+      notify2({ origin: "external" });
       return true;
     };
     return {
@@ -5689,70 +5765,191 @@
     };
   };
 
-  // frontend/selection.ts
-  var NO_SELECTION = { kind: "none" };
-  var selection = NO_SELECTION;
-  var selectionSubscribers = /* @__PURE__ */ new Set();
-  var clipIdxOf = (sel) => sel.kind === "none" || sel.kind === "boundary" || sel.kind === "audio-track" || sel.kind === "audio-track-span" ? null : sel.clipIdx;
-  var sameSelection = (a, b) => {
+  // frontend/selectionIdentity.ts
+  var selectionAfterRemoval = (index, remaining, neighbour, fallback) => remaining > 0 ? neighbour(Math.min(index, remaining - 1)) : fallback;
+  var idAt = (list2, index) => list2?.[index]?.id ?? void 0;
+  var clipOwnerIndex = (selection) => {
+    switch (selection.kind) {
+      case "none":
+      case "audio-track":
+        return null;
+      case "boundary":
+        return selection.leftClipIdx;
+      default:
+        return selection.clipIdx;
+    }
+  };
+  var clipItemList = (selection, clip) => {
+    if (!clip) {
+      return null;
+    }
+    switch (selection.kind) {
+      case "clip":
+        return { list: clip.stages, index: selection.stageIdx };
+      case "ref":
+        return { list: clip.refs, index: selection.refIdx };
+      case "prompt-minor":
+        return {
+          list: clip.promptWindows ?? [],
+          index: selection.windowIdx
+        };
+      default:
+        return null;
+    }
+  };
+  var anchorSelection = (selection, stateOverride) => {
+    if (selection.kind === "none") {
+      return { selection };
+    }
+    const state = stateOverride ?? getState();
+    if (selection.kind === "audio-track") {
+      return {
+        selection,
+        ownerId: idAt(state.audioTracks, selection.trackIdx)
+      };
+    }
+    const ownerIdx = clipOwnerIndex(selection);
+    if (ownerIdx === null) {
+      return { selection };
+    }
+    const clip = state.clips[ownerIdx];
+    const item = clipItemList(selection, clip);
+    return {
+      selection,
+      ownerId: clip?.id ?? void 0,
+      itemId: item ? idAt(item.list, item.index) : void 0
+    };
+  };
+  var resolveIndex = (list2, id, hint) => {
+    if (id === void 0) {
+      return hint;
+    }
+    const found = list2.findIndex((entry) => entry.id === id);
+    return found >= 0 ? found : null;
+  };
+  var withClipIndex = (selection, clipIdx) => {
+    switch (selection.kind) {
+      case "none":
+      case "audio-track":
+        return selection;
+      case "boundary":
+        return { kind: "boundary", leftClipIdx: clipIdx };
+      default:
+        return { ...selection, clipIdx };
+    }
+  };
+  var withItemIndex = (selection, clipIdx, itemIdx) => {
+    switch (selection.kind) {
+      case "clip":
+        return { kind: "clip", clipIdx, stageIdx: itemIdx };
+      case "ref":
+        return { kind: "ref", clipIdx, refIdx: itemIdx };
+      case "prompt-minor":
+        return { kind: "prompt-minor", clipIdx, windowIdx: itemIdx };
+      default:
+        return withClipIndex(selection, clipIdx);
+    }
+  };
+  var itemFallback = (selection, clipIdx) => selection.kind === "clip" ? { kind: "clip", clipIdx, stageIdx: 0 } : { kind: "none" };
+  var resolveSelection = (anchor2, stateOverride) => {
+    const selection = anchor2.selection;
+    if (anchor2.ownerId === void 0 && anchor2.itemId === void 0) {
+      return selection;
+    }
+    const state = stateOverride ?? getState();
+    if (selection.kind === "audio-track") {
+      const tracks = state.audioTracks ?? [];
+      const trackIdx = resolveIndex(
+        tracks,
+        anchor2.ownerId,
+        selection.trackIdx
+      );
+      return trackIdx === null ? selectionAfterRemoval(
+        selection.trackIdx,
+        tracks.length,
+        (index) => ({ kind: "audio-track", trackIdx: index }),
+        { kind: "none" }
+      ) : { kind: "audio-track", trackIdx };
+    }
+    const ownerHint = clipOwnerIndex(selection);
+    if (ownerHint === null) {
+      return selection;
+    }
+    const clipIdx = resolveIndex(state.clips, anchor2.ownerId, ownerHint);
+    if (clipIdx === null) {
+      return selection.kind === "clip" ? selectionAfterRemoval(
+        ownerHint,
+        state.clips.length,
+        (index) => ({ kind: "clip", clipIdx: index, stageIdx: 0 }),
+        { kind: "none" }
+      ) : { kind: "none" };
+    }
+    const clip = state.clips[clipIdx];
+    const item = clipItemList(selection, clip);
+    if (!item) {
+      return withClipIndex(selection, clipIdx);
+    }
+    const itemIdx = resolveIndex(item.list, anchor2.itemId, item.index);
+    return itemIdx === null ? selectionAfterRemoval(
+      item.index,
+      item.list.length,
+      (index) => withItemIndex(selection, clipIdx, index),
+      itemFallback(selection, clipIdx)
+    ) : withItemIndex(selection, clipIdx, itemIdx);
+  };
+  var sameAnchor = (a, b, state) => a.ownerId === b.ownerId && a.itemId === b.itemId && sameSelectionShape(resolveSelection(a, state), resolveSelection(b, state));
+  var sameSelectionShape = (a, b) => {
     if (a.kind !== b.kind) {
       return false;
     }
-    if (a.kind === "none" || b.kind === "none") {
-      return true;
+    switch (a.kind) {
+      case "none":
+        return true;
+      case "boundary":
+        return a.leftClipIdx === b.leftClipIdx;
+      case "audio-track":
+        return a.trackIdx === b.trackIdx;
+      case "clip":
+        return a.clipIdx === b.clipIdx && a.stageIdx === b.stageIdx;
+      case "ref":
+        return a.clipIdx === b.clipIdx && a.refIdx === b.refIdx;
+      case "ic-lora":
+        return a.clipIdx === b.clipIdx && a.entryIdx === b.entryIdx;
+      case "prompt-minor":
+        return a.clipIdx === b.clipIdx && a.windowIdx === b.windowIdx;
+      default:
+        return a.clipIdx === b.clipIdx;
     }
-    if (a.kind === "boundary" || b.kind === "boundary") {
-      return a.kind === "boundary" && b.kind === "boundary" && a.leftClipIdx === b.leftClipIdx;
-    }
-    if (a.kind === "audio-track" && b.kind === "audio-track") {
-      return a.trackIdx === b.trackIdx;
-    }
-    if (a.kind === "audio-track-span" && b.kind === "audio-track-span") {
-      return a.trackIdx === b.trackIdx && a.spanIdx === b.spanIdx;
-    }
-    if (a.kind === "audio-track" || b.kind === "audio-track" || a.kind === "audio-track-span" || b.kind === "audio-track-span") {
-      return false;
-    }
-    if (a.clipIdx !== clipIdxOf(b)) {
-      return false;
-    }
-    if (a.kind === "clip" && b.kind === "clip") {
-      return a.stageIdx === b.stageIdx;
-    }
-    if (a.kind === "ref" && b.kind === "ref") {
-      return a.refIdx === b.refIdx;
-    }
-    if (a.kind === "ic-lora" && b.kind === "ic-lora") {
-      return a.entryIdx === b.entryIdx;
-    }
-    if (a.kind === "prompt-minor" && b.kind === "prompt-minor") {
-      return a.windowIdx === b.windowIdx;
-    }
-    return true;
   };
-  var isSameSelection = (a, b) => sameSelection(a, b);
-  var getSelection = () => selection;
-  var getSelectedClipIndex = () => clipIdxOf(selection);
+  var isSameSelection = sameSelectionShape;
+
+  // frontend/selection.ts
+  var NO_SELECTION = { selection: { kind: "none" } };
+  var anchor = NO_SELECTION;
+  var selectionSubscribers = /* @__PURE__ */ new Set();
+  var clipIdxOf = (sel) => sel.kind === "none" || sel.kind === "boundary" || sel.kind === "audio-track" ? null : sel.clipIdx;
+  var getSelection = () => resolveSelection(anchor);
+  var getSelectedClipIndex = () => clipIdxOf(getSelection());
+  var notify = () => {
+    const current = getSelection();
+    for (const cb of [...selectionSubscribers]) {
+      try {
+        cb(current);
+      } catch {
+      }
+    }
+  };
   var setSelection = (next) => {
-    if (sameSelection(selection, next)) {
+    const nextAnchor = anchorSelection(next);
+    if (sameAnchor(anchor, nextAnchor)) {
       return;
     }
-    selection = next;
-    for (const cb of [...selectionSubscribers]) {
-      try {
-        cb(selection);
-      } catch {
-      }
-    }
+    anchor = nextAnchor;
+    notify();
   };
   var activateSelection = (next) => {
-    selection = next;
-    for (const cb of [...selectionSubscribers]) {
-      try {
-        cb(selection);
-      } catch {
-      }
-    }
+    anchor = anchorSelection(next);
+    notify();
   };
   var subscribeSelection = (cb) => {
     selectionSubscribers.add(cb);
@@ -5760,7 +5957,6 @@
       selectionSubscribers.delete(cb);
     };
   };
-  var selectionAfterRemoval = (index, remaining, neighbour, fallback) => remaining > 0 ? neighbour(Math.min(index, remaining - 1)) : fallback;
 
   // frontend/timelineSnap.ts
   var SNAP_THRESHOLD_PX = 8;
@@ -6390,11 +6586,11 @@
       }
       return null;
     };
-    const activate = (selection2) => {
+    const activate = (selection) => {
       if (config.revealOnActivate) {
-        activateSelection(selection2);
+        activateSelection(selection);
       } else {
-        setSelection(selection2);
+        setSelection(selection);
       }
     };
     const onBodyClick = (event) => {
@@ -7698,20 +7894,20 @@
         saveClips(clips, { origin: "detail-strip" });
       }
       markCurrentSource();
-      const selection2 = commanded ? commanded.selection : outcome;
-      if (selection2 === null) {
+      const selection = commanded ? commanded.selection : outcome;
+      if (selection === null) {
         return;
       }
-      if (selection2 === "render") {
+      if (selection === "render") {
         options.render();
         return;
       }
       if (structuralOptions?.rebuildAfterSelect) {
-        options.setSelectionSilently(selection2);
+        options.setSelectionSilently(selection);
         options.render();
         return;
       }
-      setSelection(selection2);
+      setSelection(selection);
     };
     return {
       markCurrentSource,
@@ -7824,16 +8020,16 @@
         }
       }
     };
-    const focusKeyForSelection = (selection2) => {
-      if (selection2.kind === "prompt-major") {
+    const focusKeyForSelection = (selection) => {
+      if (selection.kind === "prompt-major") {
         return "prompt-major";
       }
-      if (selection2.kind === "prompt-minor") {
-        return `minor-${selection2.windowIdx}`;
+      if (selection.kind === "prompt-minor") {
+        return `minor-${selection.windowIdx}`;
       }
       return null;
     };
-    const autoFocusSelection = (detail, selection2) => {
+    const autoFocusSelection = (detail, selection) => {
       if (focusLeftDock) {
         return;
       }
@@ -7841,7 +8037,7 @@
       if (active instanceof HTMLElement && detail.contains(active)) {
         return;
       }
-      const focusKey = focusKeyForSelection(selection2);
+      const focusKey = focusKeyForSelection(selection);
       if (!focusKey) {
         return;
       }
@@ -8211,12 +8407,14 @@
     });
     return nextIndex;
   };
-  var buildAudioTracksPanel = (ctx, state, selection2 = { kind: "none" }, options) => {
+  var buildAudioTracksPanel = (ctx, state, selection = {
+    kind: "none"
+  }, options) => {
     const tracks = state.audioTracks ?? [];
     const visibleTrackIndices = options?.trackIndices ? options.trackIndices.filter(
       (trackIndex) => trackIndex >= 0 && trackIndex < tracks.length
     ) : tracks.map((_, trackIndex) => trackIndex);
-    const selectedTrackIndex = selection2.kind === "audio-track" || selection2.kind === "audio-track-span" ? selection2.trackIdx : null;
+    const selectedTrackIndex = selection.kind === "audio-track" ? selection.trackIdx : null;
     const activeTrackIndex = selectedTrackIndex !== null && visibleTrackIndices.includes(selectedTrackIndex) ? selectedTrackIndex : visibleTrackIndices[0] ?? null;
     const built = buildRepeatingEditor({
       key: "audio-tracks",
@@ -8271,10 +8469,10 @@
     built.content.insertBefore(note, built.content.firstChild);
     return built.section;
   };
-  var buildTimelineAudioSegmentsBody = (ctx, state, selection2) => {
+  var buildTimelineAudioSegmentsBody = (ctx, state, selection) => {
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-audio-body";
-    body.appendChild(buildAudioTracksPanel(ctx, state, selection2));
+    body.appendChild(buildAudioTracksPanel(ctx, state, selection));
     return body;
   };
 
@@ -11525,11 +11723,11 @@ The conversion is one undoable change.`;
   };
 
   // frontend/detailStrip/clipPanel.ts
-  var buildClipBody = (context, selection2, clips) => {
+  var buildClipBody = (context, selection, clips) => {
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-clip-body";
-    const { clipIdx } = selection2;
-    const stageIdx = selection2.kind === "clip" ? selection2.stageIdx : 0;
+    const { clipIdx } = selection;
+    const stageIdx = selection.kind === "clip" ? selection.stageIdx : 0;
     const clip = clips[clipIdx];
     body.classList.toggle("vst-detail-clip-skipped", clip.skipped === true);
     const defaults = getRootDefaults();
@@ -11560,7 +11758,7 @@ The conversion is one undoable change.`;
           defaults
         ) : void 0;
       },
-      selection2.kind === "clip"
+      selection.kind === "clip"
     );
     if (!clip.stages[stageIdx]) {
       const note = document.createElement("p");
@@ -11586,9 +11784,9 @@ The conversion is one undoable change.`;
       () => buildRefSection(
         context,
         clipIdx,
-        selection2.kind === "ref" ? selection2.refIdx : null,
+        selection.kind === "ref" ? selection.refIdx : null,
         clips,
-        selection2.kind === "ref"
+        selection.kind === "ref"
       ),
       []
     );
@@ -11600,8 +11798,8 @@ The conversion is one undoable change.`;
         clip,
         clipIdx,
         defaults,
-        selection2.kind === "ic-lora" ? selection2.entryIdx : null,
-        selection2.kind === "ic-lora"
+        selection.kind === "ic-lora" ? selection.entryIdx : null,
+        selection.kind === "ic-lora"
       ),
       [".vst-detail-delete"]
     );
@@ -11618,7 +11816,7 @@ The conversion is one undoable change.`;
         context,
         clip,
         clipIdx,
-        selection2.kind === "retake"
+        selection.kind === "retake"
       ),
       [".vst-detail-delete"]
     );
@@ -11877,8 +12075,8 @@ The conversion is one undoable change.`;
     };
     return buildSection(buildEditor);
   };
-  var buildPromptBody = (ctx, selection2, clips) => {
-    const clipIdx = selection2.clipIdx;
+  var buildPromptBody = (ctx, selection, clips) => {
+    const clipIdx = selection.clipIdx;
     const clip = clips[clipIdx];
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-prompts-body";
@@ -11887,7 +12085,7 @@ The conversion is one undoable change.`;
         ctx,
         clip,
         clipIdx,
-        selection2.kind === "prompt-major"
+        selection.kind === "prompt-major"
       )
     );
     body.appendChild(
@@ -11895,14 +12093,14 @@ The conversion is one undoable change.`;
         ctx,
         clip,
         clipIdx,
-        selection2.kind === "prompt-minor" ? selection2.windowIdx : null,
-        selection2.kind === "prompt-minor"
+        selection.kind === "prompt-minor" ? selection.windowIdx : null,
+        selection.kind === "prompt-minor"
       )
     );
     return body;
   };
-  var buildPromptMajorBody = (ctx, selection2, clips) => buildPromptBody(ctx, selection2, clips);
-  var buildPromptMinorBody = (ctx, selection2, clips) => buildPromptBody(ctx, selection2, clips);
+  var buildPromptMajorBody = (ctx, selection, clips) => buildPromptBody(ctx, selection, clips);
+  var buildPromptMinorBody = (ctx, selection, clips) => buildPromptBody(ctx, selection, clips);
 
   // frontend/detailStrip/settingsModal.ts
   var MODAL_CLASS = "vst-timeline-settings-modal";
@@ -12017,7 +12215,9 @@ The conversion is one undoable change.`;
       bridge2.notifyChanged(core);
     }, FPS_WRITE_DEBOUNCE_MS);
   };
-  var buildSettingsBody = (ctx, _selection = { kind: "none" }) => {
+  var buildSettingsBody = (ctx, _selection = {
+    kind: "none"
+  }) => {
     const state = getState();
     const defaults = getRootDefaults();
     const core = {
@@ -12141,101 +12341,89 @@ The conversion is one undoable change.`;
   };
 
   // frontend/detailStrip/panelRouter.ts
-  var clampDetailSelection = (selection2, clips) => {
-    if (selection2.kind === "none") {
-      return selection2;
+  var clampDetailSelection = (selection, clips) => {
+    if (selection.kind === "none") {
+      return selection;
     }
-    if (selection2.kind === "boundary") {
-      return selection2.leftClipIdx >= 0 && selection2.leftClipIdx <= clips.length - 2 ? selection2 : { kind: "none" };
+    if (selection.kind === "boundary") {
+      return selection.leftClipIdx >= 0 && selection.leftClipIdx <= clips.length - 2 ? selection : { kind: "none" };
     }
-    if (selection2.kind === "audio-track" || selection2.kind === "audio-track-span") {
+    if (selection.kind === "audio-track") {
       const tracks = getState().audioTracks ?? [];
-      const track = tracks[selection2.trackIdx];
-      if (!track) {
-        return { kind: "none" };
-      }
-      if (selection2.kind === "audio-track") {
-        return selection2;
-      }
-      if (selection2.spanIdx < 0 || selection2.spanIdx >= track.spans.length) {
-        return { kind: "audio-track", trackIdx: selection2.trackIdx };
-      }
-      return selection2;
+      return tracks[selection.trackIdx] ? selection : { kind: "none" };
     }
-    if (selection2.clipIdx < 0 || selection2.clipIdx >= clips.length) {
+    if (selection.clipIdx < 0 || selection.clipIdx >= clips.length) {
       return { kind: "none" };
     }
-    const clip = clips[selection2.clipIdx];
-    if (selection2.kind === "clip") {
+    const clip = clips[selection.clipIdx];
+    if (selection.kind === "clip") {
       if (clip.stages.length === 0) {
-        return { kind: "clip", clipIdx: selection2.clipIdx, stageIdx: 0 };
+        return { kind: "clip", clipIdx: selection.clipIdx, stageIdx: 0 };
       }
-      const stageIdx = clamp(selection2.stageIdx, 0, clip.stages.length - 1);
-      return stageIdx === selection2.stageIdx ? selection2 : { kind: "clip", clipIdx: selection2.clipIdx, stageIdx };
+      const stageIdx = clamp(selection.stageIdx, 0, clip.stages.length - 1);
+      return stageIdx === selection.stageIdx ? selection : { kind: "clip", clipIdx: selection.clipIdx, stageIdx };
     }
-    if (selection2.kind === "ref") {
-      return selection2.refIdx >= 0 && selection2.refIdx < clip.refs.length ? selection2 : { kind: "none" };
+    if (selection.kind === "ref") {
+      return selection.refIdx >= 0 && selection.refIdx < clip.refs.length ? selection : { kind: "none" };
     }
-    if (selection2.kind === "ic-lora") {
-      return selection2.entryIdx >= 0 && selection2.entryIdx < clip.icLoras.length ? selection2 : { kind: "clip", clipIdx: selection2.clipIdx, stageIdx: 0 };
+    if (selection.kind === "ic-lora") {
+      return selection.entryIdx >= 0 && selection.entryIdx < clip.icLoras.length ? selection : { kind: "clip", clipIdx: selection.clipIdx, stageIdx: 0 };
     }
-    if (selection2.kind === "prompt-minor") {
+    if (selection.kind === "prompt-minor") {
       const windows = clip.promptWindows ?? [];
-      return selection2.windowIdx >= 0 && selection2.windowIdx < windows.length ? selection2 : { kind: "none" };
+      return selection.windowIdx >= 0 && selection.windowIdx < windows.length ? selection : { kind: "none" };
     }
-    if (selection2.kind === "retake") {
-      return selection2;
+    if (selection.kind === "retake") {
+      return selection;
     }
-    return selection2;
+    return selection;
   };
-  var detailBreadcrumb = (selection2, clips) => {
-    switch (selection2.kind) {
+  var detailBreadcrumb = (selection, clips) => {
+    switch (selection.kind) {
       case "clip":
-        return clips[selection2.clipIdx]?.stages.length === 0 ? `Clip ${selection2.clipIdx} · Source only` : `Clip ${selection2.clipIdx} · ${stageChipLabel(selection2.stageIdx)}`;
+        return clips[selection.clipIdx]?.stages.length === 0 ? `Clip ${selection.clipIdx} · Source only` : `Clip ${selection.clipIdx} · ${stageChipLabel(selection.stageIdx)}`;
       case "ref":
-        return `Ref${selection2.refIdx} · Clip ${selection2.clipIdx}`;
+        return `Ref${selection.refIdx} · Clip ${selection.clipIdx}`;
       case "ic-lora":
-        return `IC-LoRA ${selection2.entryIdx} · Clip ${selection2.clipIdx}`;
+        return `IC-LoRA ${selection.entryIdx} · Clip ${selection.clipIdx}`;
       case "audio":
-        return `Audio · Clip ${selection2.clipIdx}`;
+        return `Audio · Clip ${selection.clipIdx}`;
       case "audio-track":
-        return `Audio segment S${selection2.trackIdx}`;
-      case "audio-track-span":
-        return `Audio segment S${selection2.trackIdx}`;
+        return `Audio segment S${selection.trackIdx}`;
       case "boundary":
-        return `Boundary · Clip ${selection2.leftClipIdx} → ${selection2.leftClipIdx + 1}`;
+        return `Boundary · Clip ${selection.leftClipIdx} → ${selection.leftClipIdx + 1}`;
       case "prompt-major":
-        return `Prompts · Clip ${selection2.clipIdx}`;
+        return `Prompts · Clip ${selection.clipIdx}`;
       case "prompt-minor": {
-        const window2 = clips[selection2.clipIdx]?.promptWindows?.[selection2.windowIdx];
+        const window2 = clips[selection.clipIdx]?.promptWindows?.[selection.windowIdx];
         if (!window2) {
-          return `Relay · Clip ${selection2.clipIdx}`;
+          return `Relay · Clip ${selection.clipIdx}`;
         }
         const start = roundToTenth(window2.start);
         const end = roundToTenth(window2.start + window2.duration);
-        return `Relay ${start}–${end}s · Clip ${selection2.clipIdx}`;
+        return `Relay ${start}–${end}s · Clip ${selection.clipIdx}`;
       }
       case "retake": {
-        const retake = clips[selection2.clipIdx]?.retake;
+        const retake = clips[selection.clipIdx]?.retake;
         if (!retake) {
-          return `Retake · Clip ${selection2.clipIdx}`;
+          return `Retake · Clip ${selection.clipIdx}`;
         }
         const start = roundToTenth(retake.startSeconds);
         const end = roundToTenth(
           retake.startSeconds + retake.lengthSeconds
         );
-        return `Retake · Clip ${selection2.clipIdx} · ${start}–${end} s`;
+        return `Retake · Clip ${selection.clipIdx} · ${start}–${end} s`;
       }
       default:
         return "Timeline settings";
     }
   };
-  var buildDetailHeader = (selection2, clips) => {
+  var buildDetailHeader = (selection, clips) => {
     const header = document.createElement("div");
     header.className = "vst-detail-head";
     const breadcrumb = document.createElement("span");
     breadcrumb.className = "vst-detail-crumb";
-    breadcrumb.textContent = detailBreadcrumb(selection2, clips);
+    breadcrumb.textContent = detailBreadcrumb(selection, clips);
     const settings = document.createElement("button");
     settings.type = "button";
     settings.className = "basic-button small-button vst-detail-settings-button";
@@ -12246,31 +12434,30 @@ The conversion is one undoable change.`;
     header.append(breadcrumb, settings);
     return header;
   };
-  var buildDetailPanelBody = (context, selection2, clips) => {
-    switch (selection2.kind) {
+  var buildDetailPanelBody = (context, selection, clips) => {
+    switch (selection.kind) {
       case "clip":
-        return buildClipBody(context, selection2, clips);
+        return buildClipBody(context, selection, clips);
       case "ref":
-        return buildClipBody(context, selection2, clips);
+        return buildClipBody(context, selection, clips);
       case "ic-lora":
-        return buildClipBody(context, selection2, clips);
+        return buildClipBody(context, selection, clips);
       case "audio":
-        return buildAudioBody(context, selection2, clips);
+        return buildAudioBody(context, selection, clips);
       case "audio-track":
-      case "audio-track-span":
         return buildTimelineAudioSegmentsBody(
           context,
           getState(),
-          selection2
+          selection
         );
       case "prompt-major":
-        return buildPromptMajorBody(context, selection2, clips);
+        return buildPromptMajorBody(context, selection, clips);
       case "prompt-minor":
-        return buildPromptMinorBody(context, selection2, clips);
+        return buildPromptMinorBody(context, selection, clips);
       case "retake":
-        return buildClipBody(context, selection2, clips);
+        return buildClipBody(context, selection, clips);
       case "boundary":
-        return buildBoundaryBody(context, selection2, clips);
+        return buildBoundaryBody(context, selection, clips);
       default:
         return buildSettingsBody(context, { kind: "none" });
     }
@@ -12278,12 +12465,11 @@ The conversion is one undoable change.`;
 
   // frontend/detailStrip/renderShell.ts
   var DETAIL_CLASS = "vst-detail";
-  var revealRepeaterKey = (selection2) => {
-    switch (selection2.kind) {
+  var revealRepeaterKey = (selection) => {
+    switch (selection.kind) {
       case "ref":
         return "references";
       case "audio-track":
-      case "audio-track-span":
         return "audio-tracks";
       case "prompt-minor":
         return "relay-prompts";
@@ -12853,8 +13039,8 @@ The conversion is one undoable change.`;
       isRendering: () => rendering,
       flushPending: () => draftQueue?.flush()
     });
-    const syncValueDerivedUi = (selection2) => {
-      if (!selection2 || !dockEl || !renderedSelection) {
+    const syncValueDerivedUi = (selection) => {
+      if (!selection || !dockEl || !renderedSelection) {
         return;
       }
       const breadcrumb = dockEl.querySelector(".vst-detail-crumb");
@@ -12872,9 +13058,9 @@ The conversion is one undoable change.`;
       getRenderedSelection: () => renderedSelection,
       syncValueDerivedUi,
       render,
-      setSelectionSilently: (selection2) => {
+      setSelectionSilently: (selection) => {
         suppressSelectionRender = true;
-        setSelection(selection2);
+        setSelection(selection);
         suppressSelectionRender = false;
       }
     });
@@ -12933,9 +13119,9 @@ The conversion is one undoable change.`;
         const detail = ensureDetail();
         const clips = getClips();
         const rawSelection = getSelection();
-        const selection2 = clampDetailSelection(rawSelection, clips);
-        if (!isSameSelection(rawSelection, selection2)) {
-          setSelection(selection2);
+        const selection = clampDetailSelection(rawSelection, clips);
+        if (!isSameSelection(rawSelection, selection)) {
+          setSelection(selection);
           return;
         }
         const revealSelection = revealSelectionOnNextRender;
@@ -12945,10 +13131,10 @@ The conversion is one undoable change.`;
           context,
           focus,
           clips,
-          selection: selection2,
+          selection,
           revealSelection
         });
-        renderedSelection = selection2;
+        renderedSelection = selection;
       } finally {
         rendering = false;
       }
@@ -13250,7 +13436,6 @@ The conversion is one undoable change.`;
         selector = `.vst-audio-clip[data-clip-idx="${sel.clipIdx}"]`;
         break;
       case "audio-track":
-      case "audio-track-span":
         selector = `.vst-audio-seg[data-track-idx="${sel.trackIdx}"]`;
         break;
       case "prompt-major":
@@ -13395,22 +13580,6 @@ The conversion is one undoable change.`;
         getRootGeneratedEntryMode()
       );
       saveClips(clips, { origin: "linking" });
-      const sel = getSelection();
-      if (sel.kind !== "clip") {
-        return;
-      }
-      if (sel.clipIdx === idx) {
-        setSelection(
-          selectionAfterRemoval(
-            idx,
-            clips.length,
-            (index) => ({ kind: "clip", clipIdx: index, stageIdx: 0 }),
-            { kind: "none" }
-          )
-        );
-      } else if (sel.clipIdx > idx) {
-        setSelection({ ...sel, clipIdx: sel.clipIdx - 1 });
-      }
     };
     const resizeSession = (body, state) => {
       const restore = () => {
@@ -13501,19 +13670,25 @@ The conversion is one undoable change.`;
             applySelectionHighlight(body);
             return;
           }
-          commitClipMutation(state.sourceRevision, "linking", (clips) => {
-            if (from < 0 || from >= clips.length) {
-              return null;
+          const stageIdx = stageForClip(from);
+          const moved = commitClipMutation(
+            state.sourceRevision,
+            "linking",
+            (clips) => {
+              if (from < 0 || from >= clips.length) {
+                return null;
+              }
+              const reordered = moveItem(clips, from, gap);
+              reconcileArchitectureIncomingIcLoraDrives(
+                reordered,
+                getRootGeneratedEntryMode()
+              );
+              return reordered;
             }
-            const destIdx = finalIndexAfterMove(from, gap);
-            selectClip(destIdx, stageForClip(from));
-            const reordered = moveItem(clips, from, gap);
-            reconcileArchitectureIncomingIcLoraDrives(
-              reordered,
-              getRootGeneratedEntryMode()
-            );
-            return reordered;
-          });
+          );
+          if (moved) {
+            selectClip(finalIndexAfterMove(from, gap), stageIdx);
+          }
         },
         onCancel: cleanup
       };

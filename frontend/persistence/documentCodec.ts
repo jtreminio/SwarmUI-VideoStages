@@ -151,8 +151,20 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
     );
 };
 
+interface ProjectionClip {
+    id: string;
+    duration: number;
+}
+
+interface SpanProjection {
+    firstClipId: string;
+    lastClipId: string;
+    clipStartOffsetSeconds: number;
+    clipEndOffsetSeconds: number;
+}
+
 const timelinePointProjection = (
-    clips: CanonicalClip[],
+    clips: readonly ProjectionClip[],
     seconds: number,
     edge: "start" | "end",
 ): { clipId: string; offsetSeconds: number } | null => {
@@ -189,9 +201,12 @@ const timelinePointProjection = (
  * LTX frame alignment makes a clip's runtime duration differ by one frame.
  */
 const timelineSpanProjection = (
-    clips: CanonicalClip[],
-    span: CanonicalVideoStagesConfig["audioTracks"][number]["spans"][number],
-): Record<string, unknown> | null => {
+    clips: readonly ProjectionClip[],
+    span: Pick<
+        CanonicalVideoStagesConfig["audioTracks"][number]["spans"][number],
+        "timelineStartSeconds" | "timelineLengthSeconds"
+    >,
+): SpanProjection | null => {
     if (
         span.timelineStartSeconds === null ||
         span.timelineLengthSeconds === null
@@ -378,6 +393,103 @@ const noticeOutdatedSchema = (serialized: string): void => {
     getVideoStagesHostBridge().showError(OUTDATED_SCHEMA_NOTICE);
 };
 
+const DIVERGENT_PROJECTION_NOTICE =
+    "VideoStages: the saved timeline has audio spans whose clip anchors " +
+    "disagree with their timeline seconds. The seconds were used and the " +
+    "anchors will be rewritten on the next save — re-check those segments.";
+
+let noticedDivergentProjection: string | null = null;
+
+const SPAN_PROJECTION_TOLERANCE = 1e-6;
+
+const numberAt = (
+    owner: Record<string, unknown>,
+    key: string,
+): number | null =>
+    typeof owner[key] === "number" && Number.isFinite(owner[key])
+        ? (owner[key] as number)
+        : null;
+
+const storedSpanProjection = (
+    span: Record<string, unknown>,
+): SpanProjection | null => {
+    const raw = span.projection;
+    if (!isRecord(raw)) {
+        return null;
+    }
+    const first = raw.firstClipId;
+    const last = raw.lastClipId;
+    const startOffset = numberAt(raw, "clipStartOffsetSeconds");
+    const endOffset = numberAt(raw, "clipEndOffsetSeconds");
+    return typeof first === "string" &&
+        typeof last === "string" &&
+        startOffset !== null &&
+        endOffset !== null
+        ? {
+              firstClipId: first,
+              lastClipId: last,
+              clipStartOffsetSeconds: startOffset,
+              clipEndOffsetSeconds: endOffset,
+          }
+        : null;
+};
+
+/**
+ * A stored clip anchor is DERIVED from the span's timeline seconds, so the
+ * authoring model has no field to keep a hand-authored anchor that says
+ * something else. Rather than silently rewriting one, decode reports it: the
+ * backend would otherwise execute a window the browser never showed.
+ */
+const hasDivergentSpanProjection = (
+    parsed: Record<string, unknown> & { clips: Record<string, unknown>[] },
+): boolean => {
+    const clips: ProjectionClip[] = parsed.clips.map((clip) => ({
+        id: typeof clip.id === "string" ? clip.id : "",
+        duration: numberAt(clip, "duration") ?? 0,
+    }));
+    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
+    for (const track of tracks) {
+        const spans =
+            isRecord(track) && Array.isArray(track.spans) ? track.spans : [];
+        for (const span of spans) {
+            if (!isRecord(span)) {
+                continue;
+            }
+            const stored = storedSpanProjection(span);
+            if (!stored) {
+                continue;
+            }
+            const expected = timelineSpanProjection(clips, {
+                timelineStartSeconds: numberAt(span, "timelineStartSeconds"),
+                timelineLengthSeconds: numberAt(span, "timelineLengthSeconds"),
+            });
+            if (
+                !expected ||
+                expected.firstClipId !== stored.firstClipId ||
+                expected.lastClipId !== stored.lastClipId ||
+                Math.abs(
+                    expected.clipStartOffsetSeconds -
+                        stored.clipStartOffsetSeconds,
+                ) > SPAN_PROJECTION_TOLERANCE ||
+                Math.abs(
+                    expected.clipEndOffsetSeconds - stored.clipEndOffsetSeconds,
+                ) > SPAN_PROJECTION_TOLERANCE
+            ) {
+                return true;
+            }
+        }
+    }
+    return false;
+};
+
+const noticeDivergentProjection = (serialized: string): void => {
+    if (noticedDivergentProjection === serialized) {
+        return;
+    }
+    noticedDivergentProjection = serialized;
+    getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
+};
+
 /** Strict current decode: any other schema version is rejected outright. */
 export const decodeStoredDocument = (
     serialized: string,
@@ -394,6 +506,9 @@ export const decodeStoredDocument = (
         }
         if (!hasValidStoredCollections(parsed)) {
             return null;
+        }
+        if (hasDivergentSpanProjection(parsed)) {
+            noticeDivergentProjection(serialized);
         }
         const dims = resolveRootDims(inherited, {
             width: parsed.width,

@@ -64,10 +64,9 @@ const scheduleCoreFpsWrite = (value: number): void => {
 
 export const buildSettingsBody = (
     ctx: DetailStripContext,
-    _selection: Extract<
-        TimelineSelection,
-        { kind: "none" | "audio-track" | "audio-track-span" }
-    > = { kind: "none" },
+    _selection: Extract<TimelineSelection, { kind: "none" | "audio-track" }> = {
+        kind: "none",
+    },
 ): HTMLElement => {
     const state = getState();
     const defaults = getRootDefaults();

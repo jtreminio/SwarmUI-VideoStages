@@ -9,7 +9,7 @@ const DETAIL_CLASS = "vst-detail";
 /**
  * The `data-vst-repeater-key` of the repeating section that owns a selection,
  * so the render can scroll it into view. Must match the key its panel builds
- * with; audio-track spans are edited inside their own track's repeater item.
+ * with.
  */
 export const revealRepeaterKey = (
     selection: TimelineSelection,
@@ -18,7 +18,6 @@ export const revealRepeaterKey = (
         case "ref":
             return "references";
         case "audio-track":
-        case "audio-track-span":
             return "audio-tracks";
         case "prompt-minor":
             return "relay-prompts";
