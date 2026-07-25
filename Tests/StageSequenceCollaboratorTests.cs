@@ -108,7 +108,7 @@ public class StageSequenceCollaboratorTests
     }
 
     [Fact]
-    public void Continuity_builder_conforms_the_tail_to_the_next_clips_settings()
+    public void Continuity_builder_conforms_the_tail_to_the_next_clips_frame_rate_only()
     {
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -140,7 +140,9 @@ public class StageSequenceCollaboratorTests
         // The window is 4 frames on the NEXT clip's 12fps grid, which is 8 frames of the previous
         // clip's 24fps output — the same duration.
         Assert.Equal(4, guide.Frames);
-        Assert.Equal(1024, guide.Width);
+        // The tail keeps the previous clip's resolution: the spatial conform belongs to whichever
+        // stage consumes it, so that a later stage can anchor on these frames without a downscale hop.
+        Assert.Equal(512, guide.Width);
         using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         ImageFromBatchNode tail = Assert.Single(bridge.Graph.NodesOfType<ImageFromBatchNode>());
         Assert.Equal(8, tail.BatchIndex.LiteralAsInt());
@@ -150,11 +152,8 @@ public class StageSequenceCollaboratorTests
         Assert.Equal(tail.Id, resample.ImagesInput.Connection!.Node.Id);
         Assert.Equal(24.0, resample.FpsIn.LiteralAsDouble());
         Assert.Equal(12.0, resample.FpsOut.LiteralAsDouble());
-        ImageScaleNode scale = Assert.Single(
-            bridge.Graph.NodesOfType<ImageScaleNode>(),
-            node => node.Image.Connection?.Node.Id == resample.Id);
-        Assert.Equal(1024, scale.Width.LiteralAsInt());
-        Assert.Equal(new Newtonsoft.Json.Linq.JArray(scale.Id, 0), guide.Path);
+        Assert.Empty(bridge.Graph.NodesOfType<ImageScaleNode>());
+        Assert.Equal(new Newtonsoft.Json.Linq.JArray(resample.Id, 0), guide.Path);
     }
 
     [Fact]

@@ -10,7 +10,14 @@ using VideoStages.Architectures.Ltx2.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>Builds the runtime opening-frame guide required by a planned continue boundary.</summary>
+/// <summary>
+/// Builds the runtime opening-frame guide required by a planned continue boundary. Everything here
+/// is clip-level and runs once: the tail slice and the frame-rate conform depend only on timeline
+/// properties, so they cannot change between the next clip's stages. The tail keeps the previous
+/// clip's native resolution; each stage that re-applies it conforms it to that stage's own
+/// resolution (<see cref="StageGuideMediaHelper.PrepareGuideMedia"/>), so the final stage anchors on
+/// full-fidelity frames instead of a downscale the first stage happened to need.
+/// </summary>
 internal sealed class ContinuityGuideBuilder(WorkflowGenerator g)
 {
     public WGNodeData TryBuild(
@@ -34,8 +41,7 @@ internal sealed class ContinuityGuideBuilder(WorkflowGenerator g)
                 + "on an LTX-2 model; treating the boundary as a cut.");
             return null;
         }
-        if (firstStage.RequireLtx2Payload().FrameReferences.Any(reference =>
-            reference.FrameOrigin == ImageReferenceFrameOrigin.Start && reference.Frame == 1))
+        if (firstStage.HasExplicitFirstFrameReference())
         {
             Logs.Warning(
                 $"VideoStages: Clip {nextClip.ClipId} has an explicit first-frame reference, which overrides the "
@@ -86,9 +92,11 @@ internal sealed class ContinuityGuideBuilder(WorkflowGenerator g)
     }
 
     /// <summary>
-    /// Conforms the carried tail to the next clip's settings, which win at a join because the tail
+    /// Conforms the carried tail to the next clip's frame rate, which wins at a join because the tail
     /// only exists as conditioning for that clip's generation. This runs on pixel frames, so no
-    /// decode/re-encode round trip is involved.
+    /// decode/re-encode round trip is involved. The spatial conform is deliberately absent: it belongs
+    /// to whichever stage consumes the tail, and doing it here would pin every stage to the first
+    /// stage's resolution.
     /// </summary>
     private WGNodeData ConformTail(
         WorkflowBridge bridge,
@@ -108,24 +116,14 @@ internal sealed class ContinuityGuideBuilder(WorkflowGenerator g)
             resample.ImagesInput.ConnectToUntyped(conformed);
             conformed = resample.Images;
         }
-        if (previousOutput.Width != nextGeometry.Width
-            || previousOutput.Height != nextGeometry.Height)
-        {
-            conformed = ImageScaleReuse.Create(
-                bridge,
-                WorkflowBridge.ToPath(conformed),
-                nextGeometry.Width,
-                nextGeometry.Height,
-                crop: "center").IMAGE;
-        }
         return new WGNodeData(
             WorkflowBridge.ToPath(conformed),
             g,
             WGNodeData.DT_IMAGE,
             previousOutput.Compat)
         {
-            Width = nextGeometry.Width,
-            Height = nextGeometry.Height,
+            Width = previousOutput.Width,
+            Height = previousOutput.Height,
             Frames = window
         };
     }

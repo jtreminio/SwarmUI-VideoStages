@@ -42,8 +42,7 @@ internal sealed class LtxStageLatentBuilder
         genInfo.StartStep = (int)Math.Floor(payload.Core.Steps * (1 - payload.Core.Control));
         // The per-frame noise mask (not StartStep) gates what regenerates, so the whole latent must
         // stay denoise-capable from step 0.
-        bool retakeActive = payload.Retake is not null
-            && Ltx2ModelCompatibility.IsLtxV2VideoModel(payload.Core.Model);
+        bool retakeActive = stage.HasActiveRetakeMask();
         if (retakeActive)
         {
             genInfo.StartStep = 0;

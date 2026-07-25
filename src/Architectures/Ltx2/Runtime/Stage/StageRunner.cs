@@ -137,16 +137,18 @@ internal class StageRunner
             sourceMedia);
         ResolvedClipRef primaryGuideClipRef = LtxClipRefResolver.ExtractPrimaryGuideClipRef(clipRefs);
         clipRefs = LtxClipRefResolver.RemovePrimaryGuideClipRef(clipRefs, primaryGuideClipRef);
-        bool isContinuationTail = clipContext.ContinuityFrame is WGNodeData continuityFrame
-            && clipContext.IsFirstStage(stage);
+        bool reanchorsContinuityTail = clipContext.ReanchorsContinuityTail(stage);
+        bool isContinuationTail = reanchorsContinuityTail && clipContext.IsFirstStage(stage);
         if (isContinuationTail)
         {
             // "continue" boundary: generate this clip with the previous clip's tail frames frozen as
             // its opening latent context (LTXVImgToVideoInplace encodes the whole batch). The sequence
             // runner only arms ContinuityFrame when the clip has no explicit first-frame ref, so this
-            // can only ever displace the implicit image-to-video default ref.
+            // can only ever displace the implicit image-to-video default ref. The tail is duplicated
+            // because preparing a guide stamps the consuming stage's dimensions onto the media it is
+            // given, and the stored tail has to stay at its own resolution for the later stages.
             primaryGuideClipRef = new ResolvedClipRef(
-                clipContext.ContinuityFrame,
+                clipContext.ContinuityFrame.Duplicate(),
                 new ImageReferencePlan(
                     Index: -1,
                     ImageReferenceSourceKind.Unknown,
@@ -158,6 +160,16 @@ internal class StageRunner
                     UploadFileName: null,
                     InlineData: null),
                 Strength: 1.0);
+        }
+        else if (reanchorsContinuityTail)
+        {
+            // Every later stage regenerates the head too, and the direct latent handoff pins nothing:
+            // re-freeze the tail here as well, conformed to THIS stage's resolution so the seam is
+            // anchored to the previous clip's own frames rather than to the opening stage's downscale.
+            stageFrame.ContinuityAnchor = _guideMediaHelper.PrepareGuideMedia(
+                clipContext.ContinuityFrame.Duplicate(),
+                sourceMedia,
+                scaleToSourceSize: true);
         }
 
         StageInputCase inputCase = StageInputDispatcher.Resolve(new StageInputFacts(

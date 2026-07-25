@@ -40,6 +40,12 @@ internal sealed class StageFrame
 
     public bool NeedsCropGuidesAfterSampler { get; set; }
 
+    /// <summary>The continue boundary's tail, conformed to this stage's resolution, for a stage past
+    /// the clip's first that regenerates the head. The opening stage takes the tail as its primary
+    /// guide instead; later stages already have their own input contract, so the anchor is layered on
+    /// top of it and leaves every frame past the overlap window exactly as the handoff left it.</summary>
+    public WGNodeData ContinuityAnchor { get; set; }
+
     /// <summary>Set when an audio-consuming IC-LoRA wrapped this stage's conditioning in
     /// LTXVSetAudioRefTokens. Lets guide cropping restore the unwrapped conditioning paths.</summary>
     public bool AudioReferenceActive { get; set; }

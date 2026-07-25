@@ -224,6 +224,22 @@ overlap snaps to that architecture's grid. A non-cut boundary may also carry
 the outgoing audio tail into the next clip, which requires the target to have a
 generation stage that can consume it.
 
+A continue boundary's frozen tail is an explicit boundary artifact, not an
+implicit incoming guide, and the two follow different stage rules. The implicit
+host image is the opening stage's guide only; every later defaulted stage
+refines its incoming latent directly. The continuity tail instead applies at
+*every* stage of the target clip that regenerates the clip's opening frames,
+because a later stage's denoise would otherwise wash the seam out. It is sliced
+and frame-rate-conformed once, at clip level, and kept at the previous clip's
+own resolution; each consuming stage conforms it spatially to that stage's
+resolution, so the final stage anchors on the previous clip's native frames
+rather than on whatever downscale the opening stage needed. The opening stage
+takes the tail as its primary guide; a later stage layers it over its own input,
+leaving every frame past the overlap window untouched. Stages that do not
+regenerate the head are skipped: passthrough stages, retake stages (their
+per-frame noise mask owns what regenerates), and any stage authoring its own
+first-frame reference.
+
 Timeline assembly partitions clips into maximal runs connected by effective
 non-cut boundaries. Each run is assembled by its architecture; the decoded run
 outputs are then concatenated with architecture-neutral cuts. Final output

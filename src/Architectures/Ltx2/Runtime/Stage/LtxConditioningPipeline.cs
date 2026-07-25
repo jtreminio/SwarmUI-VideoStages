@@ -23,10 +23,7 @@ internal sealed class LtxConditioningPipeline(
     /// it conditions (<c>mask[:, :, :F] = 1-strength</c>), so any inplace merge would clobber the retake
     /// window — skip them all.
     /// </summary>
-    private bool RetakeMaskActive =>
-        stageFrame.Stage.RequireLtx2Payload().Retake is not null
-        && Ltx2ModelCompatibility.IsLtxV2VideoModel(
-            stageFrame.Stage.RequireLtx2Payload().Core.Model);
+    private bool RetakeMaskActive => stageFrame.Stage.HasActiveRetakeMask();
 
     public LtxConditioningPipeline WithLatent(WGNodeData stageLatent, WGNodeData sourceMedia)
     {
@@ -114,6 +111,35 @@ internal sealed class LtxConditioningPipeline(
             guideMergeStrength,
             bypass: false);
         g.CurrentMedia = stageLatent.WithPath(
+            [imgToVideoNode, 0],
+            WGNodeData.DT_LATENT_VIDEO,
+            genInfo.Model.Compat);
+        return this;
+    }
+
+    /// <summary>
+    /// Re-freezes a continue boundary's tail over the stage's opening frames. It runs after the stage's
+    /// own input is bound so it wins over whatever conditioning covers the head, and it conditions only
+    /// the tail's own frame count, leaving everything past the overlap window as the handoff left it.
+    /// The opening stage of a clip takes the tail as its primary guide instead and skips this.
+    /// </summary>
+    public LtxConditioningPipeline WithContinuityAnchor()
+    {
+        if (stageFrame.ContinuityAnchor is null || RetakeMaskActive)
+        {
+            return this;
+        }
+
+        JArray preprocessed = ResolvePreprocessedGuidePath(
+            stageFrame.ContinuityAnchor.Path,
+            g.CurrentMedia);
+        string imgToVideoNode = CreateLtxvImgToVideoInplaceNode(
+            genInfo.Vae.Path,
+            preprocessed,
+            g.CurrentMedia.Path,
+            strength: 1.0,
+            bypass: false);
+        g.CurrentMedia = g.CurrentMedia.WithPath(
             [imgToVideoNode, 0],
             WGNodeData.DT_LATENT_VIDEO,
             genInfo.Model.Compat);

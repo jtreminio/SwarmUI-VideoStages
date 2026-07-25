@@ -34,6 +34,22 @@ internal static class Ltx2StagePlanExtensions
         return payload;
     }
 
+    /// <summary>
+    /// The stage's retake noise mask is the base lock, and <c>LTXVImgToVideoInplace</c> overwrites the
+    /// mask of every frame it conditions, so an active retake rules out every inplace guide merge.
+    /// </summary>
+    internal static bool HasActiveRetakeMask(this StagePlan stage)
+    {
+        Ltx2StagePayload payload = stage.RequireLtx2Payload();
+        return payload.Retake is not null
+            && Ltx2ModelCompatibility.IsLtxV2VideoModel(payload.Core.Model);
+    }
+
+    /// <summary>The stage authors its own opening frame, which outranks any implicit frame-1 guide.</summary>
+    internal static bool HasExplicitFirstFrameReference(this StagePlan stage) =>
+        stage.RequireLtx2Payload().FrameReferences.Any(reference =>
+            reference.FrameOrigin == ImageReferenceFrameOrigin.Start && reference.Frame == 1);
+
     internal static Ltx2ClipPayload RequireLtx2Payload(this ClipPlan clip)
     {
         ArgumentNullException.ThrowIfNull(clip);

@@ -83,6 +83,7 @@ internal sealed class LtxStageExecutor
                         skipGuideReinjection,
                         guideMedia,
                         guideMergeStrength)
+                    .WithContinuityAnchor()
                     .WithLtxvConditioning()
                     .WithGuideAdditions(clipRefs ?? []);
             }

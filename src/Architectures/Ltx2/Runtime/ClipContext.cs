@@ -1,4 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -36,11 +37,29 @@ internal sealed class ClipContext
     public Ltx2ClipAudioReuseState AudioReuse { get; } = new();
     public LtxPendingAudioConditioningState PendingAudioConditioning { get; } = new();
 
-    // Set when the previous clip's outgoing boundary is "continue": the previous clip's final rendered
-    // frame, used as this clip's first-frame guide so generation picks up where the prior clip ended.
+    // Set when the previous clip's outgoing boundary is "continue": the previous clip's tail frames at
+    // their native resolution, used as this clip's opening latent context so generation picks up where
+    // the prior clip ended. Each consuming stage conforms it to its own resolution.
     public WGNodeData ContinuityFrame { get; set; }
 
     public bool IsFirstStage(StagePlan stage) => stage?.ClipStageIndex == 0;
+
+    /// <summary>
+    /// Whether the continue boundary's tail must be (re-)applied at this stage. The anchor is not a
+    /// stage-0 artifact: any later stage that regenerates the clip's opening frames would otherwise
+    /// re-denoise them free of the previous clip's tail, and at that stage's own resolution the tail
+    /// no longer has to be the downscale the opening stage needed.
+    /// Skipped for passthrough stages (they regenerate nothing), for retake stages (their per-frame
+    /// noise mask owns what regenerates, and an inplace merge would clobber it — so a retake whose
+    /// window excludes the head cannot be re-anchored), and for stages that author their own
+    /// first-frame reference, which outranks an implicit boundary guide at every stage index.
+    /// </summary>
+    public bool ReanchorsContinuityTail(StagePlan stage) =>
+        ContinuityFrame is not null
+        && stage is not null
+        && !stage.IsPassthrough
+        && !stage.HasActiveRetakeMask()
+        && !stage.HasExplicitFirstFrameReference();
 }
 
 internal sealed class LtxPendingAudioConditioningState
