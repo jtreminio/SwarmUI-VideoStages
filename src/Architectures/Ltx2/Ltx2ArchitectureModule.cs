@@ -70,7 +70,7 @@ internal sealed class Ltx2ArchitectureModule :
             OutputCapability.Video
                 | OutputCapability.AttachedAudio
                 | OutputCapability.StandaloneAudio),
-        Ltx2BoundaryPolicy.Instance.PublishedRules)
+        Ltx2BoundaryPolicy.Instance)
     {
         Rules = Ltx2ConditionalRulePolicySource.PublishedRules,
     };
@@ -133,12 +133,9 @@ internal sealed record Ltx2ClipPayload(
     int? ControlNetSourceIndex) :
     IArchitectureClipPayload,
     IArchitectureStagePayloadSource,
-    IArchitectureBoundaryPolicySource,
     IArchitectureControlNetSourcePlan
 {
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
-
-    public IArchitectureBoundaryPolicy BoundaryPolicy => Ltx2BoundaryPolicy.Instance;
 
     public IArchitectureStagePayload GetStagePayload(int rawStageIndex) =>
         Stages.GetValueOrDefault(rawStageIndex)

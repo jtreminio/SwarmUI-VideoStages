@@ -16,7 +16,7 @@ import { getState } from "../persistence";
 import { getRootDefaults } from "../rootDefaults";
 import { setSelection } from "../selection";
 import { type Clip, REF_SOURCE_UPLOAD, type TimelineSelection } from "../types";
-import { disableCapabilityControls } from "./capabilityUi";
+import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
 /**
@@ -220,7 +220,7 @@ export const buildRefSection = (
             );
         }
         if (!decision.supported) {
-            disableCapabilityControls(fields, decision);
+            applyPersistedCapabilityRepair(fields, decision);
         }
         return fields;
     };

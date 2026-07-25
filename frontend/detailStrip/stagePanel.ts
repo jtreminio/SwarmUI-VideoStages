@@ -1,6 +1,6 @@
 import { buildSlider, tagFocus } from "../detailWidgets";
 import type { Clip, RootDefaults, Stage } from "../types";
-import { disableCapabilityControls } from "./capabilityUi";
+import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 import { buildStageLorasSection } from "./stageLorasPanel";
 import { appendStageModelSection } from "./stagePanel/modelSection";
@@ -106,9 +106,7 @@ export const buildStageParamsColumn = (
             defaults,
         );
         if (!loraState.enabled) {
-            disableCapabilityControls(loras, loraState, [
-                ".vst-stage-lora-remove",
-            ]);
+            applyPersistedCapabilityRepair(loras, loraState);
         }
         fields.appendChild(loras);
     }

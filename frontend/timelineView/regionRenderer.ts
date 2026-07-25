@@ -1,5 +1,6 @@
 import type { CapabilityViewResolver } from "../architectures/policy";
 import { clipHueCss } from "../clipColor";
+import { executableBoundaries } from "../clipSemantics";
 import { mediaPreviewSrc } from "../constants";
 import { skipGlyph, skipTitle } from "../skipVocabulary";
 import {
@@ -188,43 +189,45 @@ export const BOUNDARY_LABEL: Record<BoundaryOut, string> = {
     crossfade: "Crossfade",
 };
 
+/**
+ * One chip per EXECUTABLE join (`executableBoundaries`), positioned at the start
+ * of the clip execution actually continues into — so a skipped clip between two
+ * active ones shows the single A→C seam the backend compiles, not two.
+ */
 export const renderBoundarySeams = (
     clips: Clip[],
     layouts: RegionLayout[],
     capabilities?: CapabilityViewResolver,
-): string => {
-    const seams: string[] = [];
-    for (let i = 1; i < layouts.length; i++) {
-        const leftClipIdx = i - 1;
-        const clip = clips[leftClipIdx];
-        if (!clip) {
-            continue;
-        }
-        const value: BoundaryOut = clip.boundaryOut ?? "cut";
-        const capability = capabilities?.forBoundaryIndex(clips, leftClipIdx);
-        const effective = capability?.effective(value) ?? value;
-        const glyph = BOUNDARY_GLYPH[effective] ?? BOUNDARY_GLYPH.cut;
-        const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
-        const effectiveLabel = BOUNDARY_LABEL[effective];
-        const targetNumber =
-            capability?.rightClipIdx === null ||
-            capability?.rightClipIdx === undefined
-                ? i
-                : capability.rightClipIdx;
-        const fallback =
-            value === effective
-                ? ""
-                : ` Requested ${label}; effective ${effectiveLabel}.`;
-        const title = `Boundary clip ${leftClipIdx} → ${targetNumber}: ${label}.${fallback} Click to edit.`;
-        const ariaLabel = `Clip ${leftClipIdx} outgoing boundary: ${label}.${fallback} Click to edit.`;
-        seams.push(
-            `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${layouts[i].startPx}px" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}">` +
-                `<span class="vst-boundary-glyph" aria-hidden="true">${escapeHtml(glyph)}</span>` +
-                `</button>`,
-        );
-    }
-    return seams.join("");
-};
+): string =>
+    executableBoundaries(clips)
+        .flatMap((seam) => {
+            const layout = layouts[seam.rightIdx];
+            if (!layout) {
+                return [];
+            }
+            const clip = clips[seam.leftIdx];
+            const value: BoundaryOut = clip.boundaryOut ?? "cut";
+            const capability = capabilities?.forBoundaryIndex(
+                clips,
+                seam.leftIdx,
+            );
+            const effective = capability?.effective(value) ?? value;
+            const glyph = BOUNDARY_GLYPH[effective] ?? BOUNDARY_GLYPH.cut;
+            const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
+            const effectiveLabel = BOUNDARY_LABEL[effective];
+            const fallback =
+                value === effective
+                    ? ""
+                    : ` Requested ${label}; effective ${effectiveLabel}.`;
+            const title = `Boundary clip ${seam.leftIdx} → ${seam.rightIdx}: ${label}.${fallback} Click to edit.`;
+            const ariaLabel = `Clip ${seam.leftIdx} outgoing boundary: ${label}.${fallback} Click to edit.`;
+            return [
+                `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-left-clip-idx="${seam.leftIdx}" data-right-clip-idx="${seam.rightIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${layout.startPx}px" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}">` +
+                    `<span class="vst-boundary-glyph" aria-hidden="true">${escapeHtml(glyph)}</span>` +
+                    `</button>`,
+            ];
+        })
+        .join("");
 
 const renderRegions = (
     clips: Clip[],

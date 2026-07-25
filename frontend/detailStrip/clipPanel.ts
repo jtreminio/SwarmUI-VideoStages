@@ -2,7 +2,7 @@ import { buildArchitectureIcLorasSection } from "../architectures/authoringPanel
 import { buildStaticSection } from "../detailWidgets";
 import { getRootDefaults } from "../rootDefaults";
 import type { Clip, TimelineSelection } from "../types";
-import { disableCapabilityControls } from "./capabilityUi";
+import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import { buildClipColumn, buildClipSkipAction } from "./clipBasics";
 import type { DetailStripContext } from "./context";
 import { buildRefSection } from "./refPanel";
@@ -74,7 +74,6 @@ export const buildClipBody = (
         feature: "frameReferences" | "icLora" | "sourceVideo" | "retake",
         persisted: boolean,
         content: () => HTMLElement | DocumentFragment,
-        removableSelectors: readonly string[],
     ): void => {
         const state = capabilityView.authoringState(feature, persisted);
         if (!state.visible) {
@@ -82,54 +81,36 @@ export const buildClipBody = (
         }
         const section = content();
         if (!state.enabled) {
-            disableCapabilityControls(section, state, removableSelectors);
+            // Read-only, but the section's own delete stays operable so the
+            // persisted value can always be removed.
+            applyPersistedCapabilityRepair(section, state);
         }
         body.appendChild(section);
     };
-    appendCapabilitySection(
-        "frameReferences",
-        clip.refs.length > 0,
-        () =>
-            buildRefSection(
-                context,
-                clipIdx,
-                selection.kind === "ref" ? selection.refIdx : null,
-                clips,
-                selection.kind === "ref",
-            ),
-        [],
+    appendCapabilitySection("frameReferences", clip.refs.length > 0, () =>
+        buildRefSection(
+            context,
+            clipIdx,
+            selection.kind === "ref" ? selection.refIdx : null,
+            clips,
+            selection.kind === "ref",
+        ),
     );
-    appendCapabilitySection(
-        "icLora",
-        clip.icLoras.length > 0,
-        () =>
-            buildArchitectureIcLorasSection(
-                context,
-                clip,
-                clipIdx,
-                defaults,
-                selection.kind === "ic-lora" ? selection.entryIdx : null,
-                selection.kind === "ic-lora",
-            ),
-        [".vst-detail-delete"],
+    appendCapabilitySection("icLora", clip.icLoras.length > 0, () =>
+        buildArchitectureIcLorasSection(
+            context,
+            clip,
+            clipIdx,
+            defaults,
+            selection.kind === "ic-lora" ? selection.entryIdx : null,
+            selection.kind === "ic-lora",
+        ),
     );
-    appendCapabilitySection(
-        "sourceVideo",
-        clip.sourceVideo !== null,
-        () => buildSourceVideoSection(context, clip, clipIdx, false),
-        [".vst-detail-delete"],
+    appendCapabilitySection("sourceVideo", clip.sourceVideo !== null, () =>
+        buildSourceVideoSection(context, clip, clipIdx, false),
     );
-    appendCapabilitySection(
-        "retake",
-        clip.retake !== null,
-        () =>
-            buildRetakeSection(
-                context,
-                clip,
-                clipIdx,
-                selection.kind === "retake",
-            ),
-        [".vst-detail-delete"],
+    appendCapabilitySection("retake", clip.retake !== null, () =>
+        buildRetakeSection(context, clip, clipIdx, selection.kind === "retake"),
     );
     return body;
 };

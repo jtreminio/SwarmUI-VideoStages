@@ -182,7 +182,8 @@ public class ArchitectureRuntimeOwnershipTests
                 ClipCapability.SourceVideo,
                 StageCapability.ImageInput | StageCapability.VideoInput,
                 OutputCapability.Video),
-            new Dictionary<BoundaryExecutionMode, RuleDecision>());
+            new ArchitectureBoundaryPolicy(
+                new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>()));
     }
 
     private static WorkflowGenerator Generator(bool withRefineSource = false)

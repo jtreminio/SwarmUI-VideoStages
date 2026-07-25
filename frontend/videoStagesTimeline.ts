@@ -330,7 +330,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             history.capture();
             renderAll(meta);
         });
-        history.syncBaseline();
+        history.rebase();
         hostLifecycle.bind();
         refresh();
         void adoptArchitectureCatalog();

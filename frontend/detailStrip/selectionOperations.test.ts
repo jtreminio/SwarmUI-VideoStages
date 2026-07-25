@@ -166,7 +166,7 @@ describe("detail structural stage operations", () => {
                 carrier.value = value;
             },
         });
-        history.syncBaseline();
+        history.rebase();
         getTimelineStore().subscribe((_state, meta) => {
             notifications.push(meta.origin);
             history.capture();

@@ -256,6 +256,11 @@ internal sealed record ArchitectureBoundaryModePolicy(
     }
 }
 
+/// <summary>
+/// The single owner of an architecture's boundary behavior: catalog publication and plan
+/// compilation both read the same typed modes, so the advertised rule and the compiled rule
+/// cannot drift.
+/// </summary>
 internal interface IArchitectureBoundaryPolicy
 {
     IReadOnlyDictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy> Modes { get; }
@@ -263,9 +268,21 @@ internal interface IArchitectureBoundaryPolicy
     IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> PublishedRules { get; }
 }
 
-internal interface IArchitectureBoundaryPolicySource
+/// <summary>A boundary policy declared as modes; its published rules are derived from them.</summary>
+internal sealed class ArchitectureBoundaryPolicy : IArchitectureBoundaryPolicy
 {
-    IArchitectureBoundaryPolicy BoundaryPolicy { get; }
+    internal ArchitectureBoundaryPolicy(
+        IReadOnlyDictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy> modes)
+    {
+        Modes = modes;
+        PublishedRules = modes.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.ToRuleDecision());
+    }
+
+    public IReadOnlyDictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy> Modes { get; }
+
+    public IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> PublishedRules { get; }
 }
 
 /// <summary>
@@ -299,8 +316,12 @@ internal sealed record VideoArchitectureDescriptor(
     IReadOnlyList<AudioSourceKind> AudioSourceKinds,
     IReadOnlyList<VideoModelProfileDescriptor> Profiles,
     ArchitectureCapabilityDescriptor Capabilities,
-    IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> BoundaryRules)
+    IArchitectureBoundaryPolicy BoundaryPolicy)
 {
+    /// <summary>The catalog projection of <see cref="BoundaryPolicy"/>; never a separate source.</summary>
+    public IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> BoundaryRules =>
+        BoundaryPolicy.PublishedRules;
+
     public IReadOnlyList<ModelProfileId> ModelProfiles =>
         Array.AsReadOnly(Profiles.Select(profile => profile.Id).ToArray());
 

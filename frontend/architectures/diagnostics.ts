@@ -1,5 +1,5 @@
 import { audioSourceKind, canUseClipLengthFromAudio } from "../audioSource";
-import { activeStageCount, isExecutableClip } from "../clipSemantics";
+import { activeStageCount, executableBoundaries } from "../clipSemantics";
 import type { Clip } from "../types";
 import {
     hasArchitectureSlotSourcedIcLora,
@@ -298,12 +298,9 @@ export const deriveArchitectureDiagnostics = (
         });
     });
 
-    const executable = clips
-        .map((clip, clipIdx) => ({ clip, clipIdx }))
-        .filter(({ clip }) => isExecutableClip(clip));
-    for (let index = 0; index < executable.length - 1; index++) {
-        const left = executable[index];
-        const right = executable[index + 1];
+    for (const seam of executableBoundaries(clips)) {
+        const left = { clip: clips[seam.leftIdx], clipIdx: seam.leftIdx };
+        const right = { clip: clips[seam.rightIdx], clipIdx: seam.rightIdx };
         if (
             left.clip.architecture !== right.clip.architecture &&
             left.clip.boundaryOut !== "cut"

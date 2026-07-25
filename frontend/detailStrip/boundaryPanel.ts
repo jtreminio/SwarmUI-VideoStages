@@ -4,6 +4,10 @@ import {
 } from "../architectures/boundaryConstraints";
 import { type BoundaryPlan, crossfadePlanForClips } from "../boundaryPlan";
 import {
+    executableBoundaryForLeftClip,
+    executableClipIndexes,
+} from "../clipSemantics";
+import {
     buildCheckbox,
     buildField,
     buildOptionSelect,
@@ -30,6 +34,7 @@ export const buildBoundaryBody = (
     const clip = clips[leftClipIdx];
     const value: BoundaryOut = clip?.boundaryOut ?? "cut";
     const capability = ctx.capabilities().forBoundaryIndex(clips, leftClipIdx);
+    const seam = executableBoundaryForLeftClip(clips, leftClipIdx);
     const state = getState();
     const fps = Math.round(safeFps(state.fps));
     const carryTargetHasStage =
@@ -62,7 +67,7 @@ export const buildBoundaryBody = (
     });
     fields.appendChild(
         buildField(
-            `Join · Clip ${leftClipIdx} → ${capability.rightClipIdx === null ? leftClipIdx + 1 : capability.rightClipIdx}`,
+            `Join · Clip ${leftClipIdx} → ${seam === null ? "end" : seam.rightIdx}`,
             select,
             undefined,
             "How this clip joins the next one. Cut: hard concatenation. " +
@@ -151,6 +156,25 @@ export const buildBoundaryBody = (
         );
     }
 
+    // The preview budgets exactly what execution budgets: the compacted
+    // executable clips, indexed by this seam's position in that list.
+    const executable = executableClipIndexes(clips);
+    const plannedWindow = (): number => {
+        if (seam === null) {
+            return 0;
+        }
+        const plan: BoundaryPlan = crossfadePlanForClips(
+            executable.map((clipIdx) => clips[clipIdx]),
+            fps,
+            (_left, position, mode) =>
+                ctx
+                    .capabilities()
+                    .forBoundaryIndex(clips, executable[position])
+                    .overlapConstraints(mode),
+        );
+        return plan.fallback ? 0 : (plan.overlaps[seam.position] ?? 0);
+    };
+
     const info = document.createElement("div");
     info.className = "vst-boundary-info";
     const effective = capability.effective(value);
@@ -162,17 +186,8 @@ export const buildBoundaryBody = (
     } else if (value === "cut") {
         info.textContent = "Hard cut — clips are concatenated with no overlap.";
     } else if (value === "continue") {
-        const plan: BoundaryPlan = crossfadePlanForClips(
-            clips,
-            fps,
-            (_left, index, mode) =>
-                ctx
-                    .capabilities()
-                    .forBoundaryIndex(clips, index)
-                    .overlapConstraints(mode),
-        );
-        const window = plan.overlaps[leftClipIdx] ?? 0;
-        if (plan.fallback || window <= 0) {
+        const window = plannedWindow();
+        if (window <= 0) {
             info.classList.add("vst-boundary-warn");
             info.textContent =
                 "This continue will fall back to a cut — a clip is too short for the overlap.";
@@ -194,17 +209,8 @@ export const buildBoundaryBody = (
             info.textContent = text;
         }
     } else {
-        const plan: BoundaryPlan = crossfadePlanForClips(
-            clips,
-            fps,
-            (_left, index, mode) =>
-                ctx
-                    .capabilities()
-                    .forBoundaryIndex(clips, index)
-                    .overlapConstraints(mode),
-        );
-        const overlapFrames = plan.overlaps[leftClipIdx] ?? 0;
-        if (plan.fallback || overlapFrames <= 0) {
+        const overlapFrames = plannedWindow();
+        if (overlapFrames <= 0) {
             info.classList.add("vst-boundary-warn");
             info.textContent =
                 "This crossfade will fall back to a cut — a clip is too short for the overlap window.";

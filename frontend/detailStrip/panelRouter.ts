@@ -1,3 +1,4 @@
+import { executableBoundaryForLeftClip } from "../clipSemantics";
 import { clamp } from "../constants";
 import { getState } from "../persistence";
 import { stageChipLabel } from "../timelineDetail";
@@ -85,8 +86,13 @@ export const detailBreadcrumb = (
             return `Audio · Clip ${selection.clipIdx}`;
         case "audio-track":
             return `Audio segment S${selection.trackIdx}`;
-        case "boundary":
-            return `Boundary · Clip ${selection.leftClipIdx} → ${selection.leftClipIdx + 1}`;
+        case "boundary": {
+            const seam = executableBoundaryForLeftClip(
+                clips,
+                selection.leftClipIdx,
+            );
+            return `Boundary · Clip ${selection.leftClipIdx} → ${seam === null ? "end" : seam.rightIdx}`;
+        }
         case "prompt-major":
             return `Prompts · Clip ${selection.clipIdx}`;
         case "prompt-minor": {

@@ -1,4 +1,7 @@
-import { executableClipIndexes } from "../../clipSemantics";
+import {
+    executableBoundaries,
+    executableBoundaryForLeftClip,
+} from "../../clipSemantics";
 import type { BoundaryOut, Clip } from "../../types";
 import { boundaryOverlapConstraints } from "../boundaryConstraints";
 import type { ArchitectureCatalogEntryDto } from "../types";
@@ -14,11 +17,9 @@ type ArchitectureLookup = ReadonlyMap<string, ArchitectureCatalogEntryDto>;
 export const forceCrossArchitectureCutsForConversion = (
     clips: Clip[],
 ): void => {
-    const indexes = executableClipIndexes(clips);
-    for (let position = 0; position < indexes.length - 1; position++) {
-        const left = clips[indexes[position]];
-        const right = clips[indexes[position + 1]];
-        if (left.architecture !== right.architecture) {
+    for (const boundary of executableBoundaries(clips)) {
+        const left = clips[boundary.leftIdx];
+        if (left.architecture !== clips[boundary.rightIdx].architecture) {
             left.boundaryOut = "cut";
         }
     }
@@ -123,12 +124,8 @@ export const createBoundaryCapabilityViews = (
         if (!left) {
             throw new Error(`Missing left clip at index ${leftClipIdx}.`);
         }
-        const executable = executableClipIndexes(clips);
-        const executablePosition = executable.indexOf(leftClipIdx);
         const rightClipIdx =
-            executablePosition >= 0
-                ? (executable[executablePosition + 1] ?? null)
-                : null;
+            executableBoundaryForLeftClip(clips, leftClipIdx)?.rightIdx ?? null;
         return forBoundary(
             left,
             rightClipIdx === null ? null : clips[rightClipIdx],

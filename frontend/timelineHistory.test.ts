@@ -11,8 +11,8 @@ const make = (initial: string, maxDepth?: number) => {
         maxDepth,
     });
     // The baseline is lazily seeded in real usage too (timeline init calls
-    // syncBaseline once the carrier inputs exist); mirror that here.
-    history.syncBaseline();
+    // rebase once the carrier inputs exist); mirror that here.
+    history.rebase();
     return {
         history,
         get: () => value,
@@ -85,7 +85,7 @@ describe("timelineHistory", () => {
                 value = next;
             },
         });
-        history.syncBaseline();
+        history.rebase();
         value = "B";
         history.capture();
         rejectRestore = true;
@@ -119,7 +119,7 @@ describe("timelineHistory construction", () => {
             write: () => {},
         });
         expect(reads).toBe(0);
-        history.syncBaseline();
+        history.rebase();
         expect(reads).toBe(1);
     });
 });

@@ -20,8 +20,9 @@ import { getState } from "../persistence";
 import type { Clip, TimelineSelection } from "../types";
 import { buildAudioTracksPanel } from "./audioTracksPanel";
 import {
+    applyPersistedCapabilityRepair,
     buildCapabilityNotice,
-    disableCapabilityControls,
+    buildCapabilityRepairButton,
 } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
@@ -118,17 +119,18 @@ export const buildAudioBody = (
     base.appendChild(reuseRow);
     if (clip.reuseAudio && !reuseDecision.supported) {
         reuseRow.appendChild(buildCapabilityNotice(reuseDecision));
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "interrupt-button vst-btn-tiny vst-detail-delete";
-        remove.textContent = "Remove unsupported reuse";
-        remove.addEventListener("click", () => {
-            commitAudio((target) => {
-                target.reuseAudio = false;
-            });
-            ctx.render();
-        });
-        reuseRow.appendChild(remove);
+        reuseRow.appendChild(
+            buildCapabilityRepairButton({
+                label: "Remove unsupported reuse",
+                className: "vst-detail-delete",
+                onRepair: () => {
+                    commitAudio((target) => {
+                        target.reuseAudio = false;
+                    });
+                    ctx.render();
+                },
+            }),
+        );
     }
 
     const lengthRow = buildCheckbox(
@@ -189,29 +191,26 @@ export const buildAudioBody = (
         );
     }
     if (!audioDecision.supported) {
-        disableCapabilityControls(base, audioDecision, [
-            ".vst-remove-unsupported-audio",
-        ]);
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className =
-            "basic-button small-button vst-remove-unsupported-audio";
-        remove.textContent = "Remove unsupported clip audio";
-        remove.addEventListener("click", () => {
-            ctx.structuralCommit((items) => {
-                const target = items[clipIdx];
-                if (!target) {
-                    return null;
-                }
-                target.audioSource = "Native";
-                target.uploadedAudio = null;
-                target.reuseAudio = false;
-                target.clipLengthFromAudio = false;
-                target.saveAudioTrack = false;
-                return "render";
-            });
+        applyPersistedCapabilityRepair(base, audioDecision, {
+            repair: {
+                label: "Remove unsupported clip audio",
+                className: "vst-remove-unsupported-audio",
+                onRepair: () => {
+                    ctx.structuralCommit((items) => {
+                        const target = items[clipIdx];
+                        if (!target) {
+                            return null;
+                        }
+                        target.audioSource = "Native";
+                        target.uploadedAudio = null;
+                        target.reuseAudio = false;
+                        target.clipLengthFromAudio = false;
+                        target.saveAudioTrack = false;
+                        return "render";
+                    });
+                },
+            },
         });
-        base.appendChild(remove);
     }
     body.appendChild(
         buildAccordionSection({

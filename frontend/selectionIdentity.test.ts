@@ -111,7 +111,7 @@ describe("identity-anchored selection", () => {
                 carrier.value = value;
             },
         });
-        history.syncBaseline();
+        history.rebase();
 
         setSelection({ kind: "ref", clipIdx: 1, refIdx: 1 });
 

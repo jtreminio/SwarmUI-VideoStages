@@ -13,7 +13,10 @@ import {
 import { setSelection } from "../selection";
 import type { Clip, TimelineSelection } from "../types";
 import { gridCeil, gridFloor, roundToTenth } from "../utils";
-import { disableCapabilityControls } from "./capabilityUi";
+import {
+    applyPersistedCapabilityRepair,
+    buildCapabilityRepairButton,
+} from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
 type PromptSelection = Extract<
@@ -54,23 +57,23 @@ const buildMajorPromptSection = (
     });
     const decision = ctx.capabilities().forClip(clip).decision("majorPrompt");
     if (!decision.supported) {
-        disableCapabilityControls(built.section, decision);
+        applyPersistedCapabilityRepair(built.section, decision);
         if (clip.prompt.trim()) {
-            const clear = document.createElement("button");
-            clear.type = "button";
-            clear.className =
-                "interrupt-button vst-btn-tiny vst-remove-unsupported-prompt";
-            clear.textContent = "Remove unsupported clip prompt";
-            clear.addEventListener("click", () => {
-                ctx.commit((clips) => {
-                    const target = clips[clipIdx];
-                    if (target) {
-                        target.prompt = "";
-                    }
-                });
-                ctx.render();
-            });
-            built.content.appendChild(clear);
+            built.content.appendChild(
+                buildCapabilityRepairButton({
+                    label: "Remove unsupported clip prompt",
+                    className: "vst-remove-unsupported-prompt",
+                    onRepair: () => {
+                        ctx.commit((clips) => {
+                            const target = clips[clipIdx];
+                            if (target) {
+                                target.prompt = "";
+                            }
+                        });
+                        ctx.render();
+                    },
+                }),
+            );
         }
     }
     return built.section;
@@ -228,7 +231,7 @@ const buildRelayPromptSection = (
         editor.rows = 4;
         editorSection.appendChild(buildField("Prompt", editor));
         if (!decision.supported) {
-            disableCapabilityControls(editorSection, decision);
+            applyPersistedCapabilityRepair(editorSection, decision);
         }
         return editorSection;
     };

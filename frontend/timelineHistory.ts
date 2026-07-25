@@ -5,7 +5,15 @@ export interface TimelineHistoryDeps {
 }
 
 export interface TimelineHistory {
-    syncBaseline: () => void;
+    /**
+     * Adopt the document that currently sits in the carriers as the baseline.
+     * A DIFFERENT document means the one this history describes was replaced
+     * (first init, a host parameter rebuild, an external carrier write), so both
+     * stacks are dropped with it — an undo entry from another document would
+     * otherwise restore over the new one and look legitimate to the
+     * revision-checked write. An identical document keeps the stacks.
+     */
+    rebase: () => void;
     capture: () => void;
     undo: () => boolean;
     redo: () => boolean;
@@ -19,15 +27,21 @@ export const createTimelineHistory = (
     const max = deps.maxDepth ?? 50;
     const undoStack: string[] = [];
     let redoStack: string[] = [];
-    // Lazily seeded (first capture, or init's syncBaseline): the factory runs
-    // at script load, before genpage has built the carrier inputs — an eager
-    // read here would snapshot an empty carrier and warn about the missing
-    // Data input.
+    // Lazily seeded (first capture, or init's rebase): the factory runs at
+    // script load, before genpage has built the carrier inputs — an eager read
+    // here would snapshot an empty carrier and warn about the missing Data
+    // input.
     let last: string | null = null;
     let suppress = false;
 
-    const syncBaseline = (): void => {
-        last = deps.read();
+    const rebase = (): void => {
+        const current = deps.read();
+        if (current === last) {
+            return;
+        }
+        last = current;
+        undoStack.length = 0;
+        redoStack = [];
     };
 
     const capture = (): void => {
@@ -73,7 +87,7 @@ export const createTimelineHistory = (
     };
 
     return {
-        syncBaseline,
+        rebase,
         capture,
         undo: () => restore(undoStack, redoStack),
         redo: () => restore(redoStack, undoStack),

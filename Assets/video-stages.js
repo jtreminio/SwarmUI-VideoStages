@@ -624,6 +624,25 @@
   var activeStageCount = (clip) => clip.stages.filter((stage) => !stage.skipped).length;
   var isExecutableClip = (clip) => !clip.skipped && (clip.sourceVideo !== null || activeStageCount(clip) > 0);
   var executableClipIndexes = (clips) => clips.flatMap((clip, index) => isExecutableClip(clip) ? [index] : []);
+  var executableBoundaries = (clips) => {
+    const indexes = executableClipIndexes(clips);
+    const boundaries = [];
+    for (let position = 0; position < indexes.length - 1; position++) {
+      const leftIdx = indexes[position];
+      const rightIdx = indexes[position + 1];
+      boundaries.push({
+        position,
+        leftIdx,
+        rightIdx,
+        leftId: clips[leftIdx].id,
+        rightId: clips[rightIdx].id
+      });
+    }
+    return boundaries;
+  };
+  var executableBoundaryForLeftClip = (clips, leftClipIdx) => executableBoundaries(clips).find(
+    (boundary) => boundary.leftIdx === leftClipIdx
+  ) ?? null;
 
   // frontend/icLoraAuthoring.ts
   var STAGE_CONTROLNET_STRENGTH_MIN = 0;
@@ -3593,7 +3612,6 @@
       stage.modelProfileId = target.modelProfileId;
       if (!supportsReferences) {
         stage.refStrengths = [];
-        stage.icLoraStrengths = [];
       }
       if (!supportsNormalLoras && stage.loras.length > 0) {
         removedStageLoras += stage.loras.length;
@@ -3610,20 +3628,35 @@
     if (removedUpscaleSettings > 0) {
       removals.push("stage upscale settings");
     }
+    const removeIcLoras = (doomed) => {
+      const removed = clip.icLoras.filter(doomed);
+      if (removed.length === 0) {
+        return 0;
+      }
+      for (let index = clip.icLoras.length - 1; index >= 0; index--) {
+        if (doomed(clip.icLoras[index])) {
+          removeIcLoraStrengthAt(clip, index);
+        }
+      }
+      removedEntityIds.push(...collectIds(removed));
+      clip.icLoras = clip.icLoras.filter((entry) => !doomed(entry));
+      return removed.length;
+    };
     if (!supports("icLora") && clip.icLoras.length > 0) {
-      removals.push(countLabel(clip.icLoras.length, "IC-LoRA"));
-      clip.icLoras = [];
+      removals.push(
+        countLabel(
+          removeIcLoras(() => true),
+          "IC-LoRA"
+        )
+      );
       clip.clipLengthFromControlNet = false;
     } else if (supports("icLora")) {
       if (!supports("hdr")) {
-        const hdrCount = clip.icLoras.filter(
+        const hdrCount = removeIcLoras(
           (entry) => isArchitectureHdrFeature(source.architecture, entry)
-        ).length;
+        );
         if (hdrCount > 0) {
           removals.push(countLabel(hdrCount, "HDR IC-LoRA"));
-          clip.icLoras = clip.icLoras.filter(
-            (entry) => !isArchitectureHdrFeature(source.architecture, entry)
-          );
         }
       }
       let repairedTargets = false;
@@ -3684,11 +3717,9 @@
 
   // frontend/architectures/policy/boundaryPolicy.ts
   var forceCrossArchitectureCutsForConversion = (clips) => {
-    const indexes = executableClipIndexes(clips);
-    for (let position = 0; position < indexes.length - 1; position++) {
-      const left = clips[indexes[position]];
-      const right = clips[indexes[position + 1]];
-      if (left.architecture !== right.architecture) {
+    for (const boundary of executableBoundaries(clips)) {
+      const left = clips[boundary.leftIdx];
+      if (left.architecture !== clips[boundary.rightIdx].architecture) {
         left.boundaryOut = "cut";
       }
     }
@@ -3745,9 +3776,7 @@
       if (!left) {
         throw new Error(`Missing left clip at index ${leftClipIdx}.`);
       }
-      const executable = executableClipIndexes(clips);
-      const executablePosition = executable.indexOf(leftClipIdx);
-      const rightClipIdx = executablePosition >= 0 ? executable[executablePosition + 1] ?? null : null;
+      const rightClipIdx = executableBoundaryForLeftClip(clips, leftClipIdx)?.rightIdx ?? null;
       return forBoundary(
         left,
         rightClipIdx === null ? null : clips[rightClipIdx],
@@ -5499,10 +5528,9 @@
         }
       });
     });
-    const executable = clips.map((clip, clipIdx) => ({ clip, clipIdx })).filter(({ clip }) => isExecutableClip(clip));
-    for (let index = 0; index < executable.length - 1; index++) {
-      const left = executable[index];
-      const right = executable[index + 1];
+    for (const seam of executableBoundaries(clips)) {
+      const left = { clip: clips[seam.leftIdx], clipIdx: seam.leftIdx };
+      const right = { clip: clips[seam.rightIdx], clipIdx: seam.rightIdx };
       if (left.clip.architecture !== right.clip.architecture && left.clip.boundaryOut !== "cut") {
         diagnostics.push(
           issue(
@@ -8484,6 +8512,20 @@
     notice.dataset.vstCapabilityUnsupported = "true";
     return notice;
   };
+  var CAPABILITY_REPAIR_SELECTORS = [
+    ".vst-detail-delete",
+    ".vst-stage-lora-remove"
+  ];
+  var buildCapabilityRepairButton = (action) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `interrupt-button vst-btn-tiny vst-capability-repair ${action.className ?? ""}`.trim();
+    button.textContent = action.label;
+    button.title = action.title ?? action.label;
+    button.setAttribute("aria-label", button.title);
+    button.addEventListener("click", action.onRepair);
+    return button;
+  };
   var disableCapabilityControls = (root, decision, removableSelectors = []) => {
     const removable = new Set(
       removableSelectors.flatMap(
@@ -8505,6 +8547,16 @@
       root.classList.add("vst-capability-readonly");
     }
     root.prepend(buildCapabilityNotice(decision));
+  };
+  var applyPersistedCapabilityRepair = (root, decision, options = {}) => {
+    disableCapabilityControls(
+      root,
+      decision,
+      options.keep ?? CAPABILITY_REPAIR_SELECTORS
+    );
+    if (options.repair) {
+      root.appendChild(buildCapabilityRepairButton(options.repair));
+    }
   };
 
   // frontend/detailStrip/audioPanel.ts
@@ -8579,17 +8631,18 @@
     base.appendChild(reuseRow);
     if (clip.reuseAudio && !reuseDecision.supported) {
       reuseRow.appendChild(buildCapabilityNotice(reuseDecision));
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "interrupt-button vst-btn-tiny vst-detail-delete";
-      remove.textContent = "Remove unsupported reuse";
-      remove.addEventListener("click", () => {
-        commitAudio((target) => {
-          target.reuseAudio = false;
-        });
-        ctx.render();
-      });
-      reuseRow.appendChild(remove);
+      reuseRow.appendChild(
+        buildCapabilityRepairButton({
+          label: "Remove unsupported reuse",
+          className: "vst-detail-delete",
+          onRepair: () => {
+            commitAudio((target) => {
+              target.reuseAudio = false;
+            });
+            ctx.render();
+          }
+        })
+      );
     }
     const lengthRow = buildCheckbox(
       "Clip Length from Audio",
@@ -8642,28 +8695,26 @@
       );
     }
     if (!audioDecision.supported) {
-      disableCapabilityControls(base, audioDecision, [
-        ".vst-remove-unsupported-audio"
-      ]);
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "basic-button small-button vst-remove-unsupported-audio";
-      remove.textContent = "Remove unsupported clip audio";
-      remove.addEventListener("click", () => {
-        ctx.structuralCommit((items) => {
-          const target = items[clipIdx];
-          if (!target) {
-            return null;
+      applyPersistedCapabilityRepair(base, audioDecision, {
+        repair: {
+          label: "Remove unsupported clip audio",
+          className: "vst-remove-unsupported-audio",
+          onRepair: () => {
+            ctx.structuralCommit((items) => {
+              const target = items[clipIdx];
+              if (!target) {
+                return null;
+              }
+              target.audioSource = "Native";
+              target.uploadedAudio = null;
+              target.reuseAudio = false;
+              target.clipLengthFromAudio = false;
+              target.saveAudioTrack = false;
+              return "render";
+            });
           }
-          target.audioSource = "Native";
-          target.uploadedAudio = null;
-          target.reuseAudio = false;
-          target.clipLengthFromAudio = false;
-          target.saveAudioTrack = false;
-          return "render";
-        });
+        }
       });
-      base.appendChild(remove);
     }
     body.appendChild(
       buildAccordionSection({
@@ -8912,30 +8963,28 @@
     continue: "Continue",
     crossfade: "Crossfade"
   };
-  var renderBoundarySeams = (clips, layouts, capabilities) => {
-    const seams = [];
-    for (let i = 1; i < layouts.length; i++) {
-      const leftClipIdx = i - 1;
-      const clip = clips[leftClipIdx];
-      if (!clip) {
-        continue;
-      }
-      const value = clip.boundaryOut ?? "cut";
-      const capability = capabilities?.forBoundaryIndex(clips, leftClipIdx);
-      const effective = capability?.effective(value) ?? value;
-      const glyph = BOUNDARY_GLYPH[effective] ?? BOUNDARY_GLYPH.cut;
-      const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
-      const effectiveLabel = BOUNDARY_LABEL[effective];
-      const targetNumber = capability?.rightClipIdx === null || capability?.rightClipIdx === void 0 ? i : capability.rightClipIdx;
-      const fallback = value === effective ? "" : ` Requested ${label}; effective ${effectiveLabel}.`;
-      const title = `Boundary clip ${leftClipIdx} → ${targetNumber}: ${label}.${fallback} Click to edit.`;
-      const ariaLabel = `Clip ${leftClipIdx} outgoing boundary: ${label}.${fallback} Click to edit.`;
-      seams.push(
-        `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-left-clip-idx="${leftClipIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${layouts[i].startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
-      );
+  var renderBoundarySeams = (clips, layouts, capabilities) => executableBoundaries(clips).flatMap((seam) => {
+    const layout = layouts[seam.rightIdx];
+    if (!layout) {
+      return [];
     }
-    return seams.join("");
-  };
+    const clip = clips[seam.leftIdx];
+    const value = clip.boundaryOut ?? "cut";
+    const capability = capabilities?.forBoundaryIndex(
+      clips,
+      seam.leftIdx
+    );
+    const effective = capability?.effective(value) ?? value;
+    const glyph = BOUNDARY_GLYPH[effective] ?? BOUNDARY_GLYPH.cut;
+    const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
+    const effectiveLabel = BOUNDARY_LABEL[effective];
+    const fallback = value === effective ? "" : ` Requested ${label}; effective ${effectiveLabel}.`;
+    const title = `Boundary clip ${seam.leftIdx} → ${seam.rightIdx}: ${label}.${fallback} Click to edit.`;
+    const ariaLabel = `Clip ${seam.leftIdx} outgoing boundary: ${label}.${fallback} Click to edit.`;
+    return [
+      `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-left-clip-idx="${seam.leftIdx}" data-right-clip-idx="${seam.rightIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${layout.startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
+    ];
+  }).join("");
   var renderRegions = (clips, layouts, fps, unit, capabilities) => layouts.map((layout) => {
     const clip = clips[layout.index];
     const skippedClass = layout.skipped ? " vst-region-skipped" : "";
@@ -9527,6 +9576,7 @@
     const clip = clips[leftClipIdx];
     const value = clip?.boundaryOut ?? "cut";
     const capability = ctx.capabilities().forBoundaryIndex(clips, leftClipIdx);
+    const seam = executableBoundaryForLeftClip(clips, leftClipIdx);
     const state = getState();
     const fps = Math.round(safeFps(state.fps));
     const carryTargetHasStage = capability.rightClipIdx !== null && clips[capability.rightClipIdx]?.stages.some(
@@ -9555,7 +9605,7 @@
     });
     fields.appendChild(
       buildField(
-        `Join · Clip ${leftClipIdx} → ${capability.rightClipIdx === null ? leftClipIdx + 1 : capability.rightClipIdx}`,
+        `Join · Clip ${leftClipIdx} → ${seam === null ? "end" : seam.rightIdx}`,
         select2,
         void 0,
         "How this clip joins the next one. Cut: hard concatenation. Continue: the next clip is generated from this clip's last frames so motion carries through. Crossfade: the overlap is dissolved pixel-by-pixel."
@@ -9630,6 +9680,18 @@
         )
       );
     }
+    const executable = executableClipIndexes(clips);
+    const plannedWindow = () => {
+      if (seam === null) {
+        return 0;
+      }
+      const plan = crossfadePlanForClips(
+        executable.map((clipIdx) => clips[clipIdx]),
+        fps,
+        (_left, position, mode) => ctx.capabilities().forBoundaryIndex(clips, executable[position]).overlapConstraints(mode)
+      );
+      return plan.fallback ? 0 : plan.overlaps[seam.position] ?? 0;
+    };
     const info = document.createElement("div");
     info.className = "vst-boundary-info";
     const effective = capability.effective(value);
@@ -9639,13 +9701,8 @@
     } else if (value === "cut") {
       info.textContent = "Hard cut — clips are concatenated with no overlap.";
     } else if (value === "continue") {
-      const plan = crossfadePlanForClips(
-        clips,
-        fps,
-        (_left, index, mode) => ctx.capabilities().forBoundaryIndex(clips, index).overlapConstraints(mode)
-      );
-      const window2 = plan.overlaps[leftClipIdx] ?? 0;
-      if (plan.fallback || window2 <= 0) {
+      const window2 = plannedWindow();
+      if (window2 <= 0) {
         info.classList.add("vst-boundary-warn");
         info.textContent = "This continue will fall back to a cut — a clip is too short for the overlap.";
       } else {
@@ -9660,13 +9717,8 @@
         info.textContent = text2;
       }
     } else {
-      const plan = crossfadePlanForClips(
-        clips,
-        fps,
-        (_left, index, mode) => ctx.capabilities().forBoundaryIndex(clips, index).overlapConstraints(mode)
-      );
-      const overlapFrames = plan.overlaps[leftClipIdx] ?? 0;
-      if (plan.fallback || overlapFrames <= 0) {
+      const overlapFrames = plannedWindow();
+      if (overlapFrames <= 0) {
         info.classList.add("vst-boundary-warn");
         info.textContent = "This crossfade will fall back to a cut — a clip is too short for the overlap window.";
       } else {
@@ -10653,7 +10705,7 @@
         );
       }
       if (!decision.supported) {
-        disableCapabilityControls(fields, decision);
+        applyPersistedCapabilityRepair(fields, decision);
       }
       return fields;
     };
@@ -11586,8 +11638,21 @@ The conversion is one undoable change.`;
     fields.append(upscaleSlider, methodField);
     syncMethod(stage.upscale);
     if (!upscaleState.enabled) {
-      disableCapabilityControls(upscaleSlider, upscaleState);
-      disableCapabilityControls(methodField, upscaleState);
+      applyPersistedCapabilityRepair(upscaleSlider, upscaleState, {
+        // A persisted unsupported upscale must be repairable from here:
+        // 1× is the removal of the value, so it is this section's remove.
+        repair: Math.abs(stage.upscale - 1) < UPSCALE_EPSILON ? void 0 : {
+          label: "Reset upscale to 1×",
+          className: "vst-reset-unsupported-upscale",
+          onRepair: () => {
+            commit((target) => {
+              target.upscale = 1;
+            });
+            bindings.context.render();
+          }
+        }
+      });
+      applyPersistedCapabilityRepair(methodField, upscaleState);
     }
   };
 
@@ -11661,9 +11726,7 @@ The conversion is one undoable change.`;
         defaults
       );
       if (!loraState.enabled) {
-        disableCapabilityControls(loras, loraState, [
-          ".vst-stage-lora-remove"
-        ]);
+        applyPersistedCapabilityRepair(loras, loraState);
       }
       fields.appendChild(loras);
     }
@@ -11767,14 +11830,14 @@ The conversion is one undoable change.`;
       stages.appendChild(note);
     }
     body.appendChild(stages);
-    const appendCapabilitySection = (feature, persisted, content, removableSelectors) => {
+    const appendCapabilitySection = (feature, persisted, content) => {
       const state = capabilityView.authoringState(feature, persisted);
       if (!state.visible) {
         return;
       }
       const section = content();
       if (!state.enabled) {
-        disableCapabilityControls(section, state, removableSelectors);
+        applyPersistedCapabilityRepair(section, state);
       }
       body.appendChild(section);
     };
@@ -11787,8 +11850,7 @@ The conversion is one undoable change.`;
         selection.kind === "ref" ? selection.refIdx : null,
         clips,
         selection.kind === "ref"
-      ),
-      []
+      )
     );
     appendCapabilitySection(
       "icLora",
@@ -11800,25 +11862,17 @@ The conversion is one undoable change.`;
         defaults,
         selection.kind === "ic-lora" ? selection.entryIdx : null,
         selection.kind === "ic-lora"
-      ),
-      [".vst-detail-delete"]
+      )
     );
     appendCapabilitySection(
       "sourceVideo",
       clip.sourceVideo !== null,
-      () => buildSourceVideoSection(context, clip, clipIdx, false),
-      [".vst-detail-delete"]
+      () => buildSourceVideoSection(context, clip, clipIdx, false)
     );
     appendCapabilitySection(
       "retake",
       clip.retake !== null,
-      () => buildRetakeSection(
-        context,
-        clip,
-        clipIdx,
-        selection.kind === "retake"
-      ),
-      [".vst-detail-delete"]
+      () => buildRetakeSection(context, clip, clipIdx, selection.kind === "retake")
     );
     return body;
   };
@@ -11920,22 +11974,23 @@ The conversion is one undoable change.`;
     });
     const decision = ctx.capabilities().forClip(clip).decision("majorPrompt");
     if (!decision.supported) {
-      disableCapabilityControls(built.section, decision);
+      applyPersistedCapabilityRepair(built.section, decision);
       if (clip.prompt.trim()) {
-        const clear = document.createElement("button");
-        clear.type = "button";
-        clear.className = "interrupt-button vst-btn-tiny vst-remove-unsupported-prompt";
-        clear.textContent = "Remove unsupported clip prompt";
-        clear.addEventListener("click", () => {
-          ctx.commit((clips) => {
-            const target = clips[clipIdx];
-            if (target) {
-              target.prompt = "";
+        built.content.appendChild(
+          buildCapabilityRepairButton({
+            label: "Remove unsupported clip prompt",
+            className: "vst-remove-unsupported-prompt",
+            onRepair: () => {
+              ctx.commit((clips) => {
+                const target = clips[clipIdx];
+                if (target) {
+                  target.prompt = "";
+                }
+              });
+              ctx.render();
             }
-          });
-          ctx.render();
-        });
-        built.content.appendChild(clear);
+          })
+        );
       }
     }
     return built.section;
@@ -12069,7 +12124,7 @@ The conversion is one undoable change.`;
       editor.rows = 4;
       editorSection.appendChild(buildField("Prompt", editor));
       if (!decision.supported) {
-        disableCapabilityControls(editorSection, decision);
+        applyPersistedCapabilityRepair(editorSection, decision);
       }
       return editorSection;
     };
@@ -12390,8 +12445,13 @@ The conversion is one undoable change.`;
         return `Audio · Clip ${selection.clipIdx}`;
       case "audio-track":
         return `Audio segment S${selection.trackIdx}`;
-      case "boundary":
-        return `Boundary · Clip ${selection.leftClipIdx} → ${selection.leftClipIdx + 1}`;
+      case "boundary": {
+        const seam = executableBoundaryForLeftClip(
+          clips,
+          selection.leftClipIdx
+        );
+        return `Boundary · Clip ${selection.leftClipIdx} → ${seam === null ? "end" : seam.rightIdx}`;
+      }
       case "prompt-major":
         return `Prompts · Clip ${selection.clipIdx}`;
       case "prompt-minor": {
@@ -13257,8 +13317,14 @@ The conversion is one undoable change.`;
     let redoStack = [];
     let last = null;
     let suppress = false;
-    const syncBaseline = () => {
-      last = deps.read();
+    const rebase = () => {
+      const current = deps.read();
+      if (current === last) {
+        return;
+      }
+      last = current;
+      undoStack.length = 0;
+      redoStack = [];
     };
     const capture = () => {
       if (suppress) {
@@ -13298,7 +13364,7 @@ The conversion is one undoable change.`;
       return true;
     };
     return {
-      syncBaseline,
+      rebase,
       capture,
       undo: () => restore(undoStack, redoStack),
       redo: () => restore(redoStack, undoStack),
@@ -14622,7 +14688,7 @@ The conversion is one undoable change.`;
         history.capture();
         renderAll(meta);
       });
-      history.syncBaseline();
+      history.rebase();
       hostLifecycle.bind();
       refresh();
       void adoptArchitectureCatalog();

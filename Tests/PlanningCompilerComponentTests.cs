@@ -86,12 +86,14 @@ public class PlanningCompilerComponentTests
             },
         ]);
         VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
-        FakeBoundaryPolicy policy = new();
         ClipPlan[] planned =
         [
             plan.Clips[0] with
             {
-                ArchitecturePayload = new FakeBoundaryPayload(policy),
+                Architecture = plan.Clips[0].Architecture with
+                {
+                    BoundaryPolicy = FakeBoundaryPolicy,
+                },
             },
             plan.Clips[1],
         ];
@@ -488,17 +490,9 @@ public class PlanningCompilerComponentTests
             ClipStageIndex: id - 10,
             ClipStageRawIndex: rawIndex ?? id - 10);
 
-    private sealed record FakeBoundaryPayload(IArchitectureBoundaryPolicy BoundaryPolicy) :
-        IArchitectureClipPayload,
-        IArchitectureBoundaryPolicySource
-    {
-        public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
-    }
-
-    private sealed class FakeBoundaryPolicy : IArchitectureBoundaryPolicy
-    {
-        public IReadOnlyDictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy> Modes
-            { get; } = new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
+    private static readonly IArchitectureBoundaryPolicy FakeBoundaryPolicy =
+        new ArchitectureBoundaryPolicy(
+            new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
             {
                 [BoundaryExecutionMode.Continue] = new(
                     RuleSupport.Conditional,
@@ -512,9 +506,5 @@ public class PlanningCompilerComponentTests
                     TargetRequiresGeneratedEntry: false,
                     TargetRequiresStage: false,
                     TargetDisallowsInitialReference: false),
-            };
-
-        public IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> PublishedRules =>
-            Modes.ToDictionary(pair => pair.Key, pair => pair.Value.ToRuleDecision());
-    }
+            });
 }

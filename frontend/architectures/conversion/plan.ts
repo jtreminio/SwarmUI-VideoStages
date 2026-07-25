@@ -3,7 +3,8 @@ import {
     IC_LORA_SOURCE_UPLOAD,
     IC_LORA_STAGE_ALL,
 } from "../../icLoraAuthoring";
-import type { Clip } from "../../types";
+import { removeIcLoraStrengthAt } from "../../normalizationStage";
+import type { Clip, IcLora } from "../../types";
 import { isArchitectureHdrFeature } from "../behaviorRegistry";
 import { architectureDescriptor, modelCatalogEntry } from "../catalogQueries";
 import { architectureFeatureSupport } from "../policy/clipStageViews";
@@ -122,6 +123,9 @@ export const planArchitectureConversion = (
         clip.stages = clip.stages.slice(0, 1);
     }
 
+    // Each feature owns its COMPLETE state: references own refs + refStrengths,
+    // IC-LoRA owns icLoras + icLoraStrengths (below). Neither clears the other's
+    // per-stage strengths.
     if (!supportsReferences && clip.refs.length > 0) {
         removals.push(countLabel(clip.refs.length, "frame reference"));
         removedEntityIds.push(...collectIds(clip.refs));
@@ -135,7 +139,6 @@ export const planArchitectureConversion = (
         stage.modelProfileId = target.modelProfileId;
         if (!supportsReferences) {
             stage.refStrengths = [];
-            stage.icLoraStrengths = [];
         }
         if (!supportsNormalLoras && stage.loras.length > 0) {
             removedStageLoras += stage.loras.length;
@@ -156,21 +159,37 @@ export const planArchitectureConversion = (
         removals.push("stage upscale settings");
     }
 
+    /** Removes IC-LoRA entries with the per-stage strengths and ids they own. */
+    const removeIcLoras = (doomed: (entry: IcLora) => boolean): number => {
+        const removed = clip.icLoras.filter(doomed);
+        if (removed.length === 0) {
+            return 0;
+        }
+        for (let index = clip.icLoras.length - 1; index >= 0; index--) {
+            if (doomed(clip.icLoras[index])) {
+                removeIcLoraStrengthAt(clip, index);
+            }
+        }
+        removedEntityIds.push(...collectIds(removed));
+        clip.icLoras = clip.icLoras.filter((entry) => !doomed(entry));
+        return removed.length;
+    };
+
     if (!supports("icLora") && clip.icLoras.length > 0) {
-        removals.push(countLabel(clip.icLoras.length, "IC-LoRA"));
-        clip.icLoras = [];
+        removals.push(
+            countLabel(
+                removeIcLoras(() => true),
+                "IC-LoRA",
+            ),
+        );
         clip.clipLengthFromControlNet = false;
     } else if (supports("icLora")) {
         if (!supports("hdr")) {
-            const hdrCount = clip.icLoras.filter((entry) =>
+            const hdrCount = removeIcLoras((entry) =>
                 isArchitectureHdrFeature(source.architecture, entry),
-            ).length;
+            );
             if (hdrCount > 0) {
                 removals.push(countLabel(hdrCount, "HDR IC-LoRA"));
-                clip.icLoras = clip.icLoras.filter(
-                    (entry) =>
-                        !isArchitectureHdrFeature(source.architecture, entry),
-                );
             }
         }
         let repairedTargets = false;

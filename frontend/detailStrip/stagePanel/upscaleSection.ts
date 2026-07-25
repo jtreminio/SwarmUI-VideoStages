@@ -4,7 +4,7 @@ import {
     buildOptionSelect,
     type OptionSpec,
 } from "../../detailWidgets";
-import { disableCapabilityControls } from "../capabilityUi";
+import { applyPersistedCapabilityRepair } from "../capabilityUi";
 import type { StagePanelBindings } from "./types";
 
 const UPSCALE_EPSILON = 1e-6;
@@ -89,7 +89,23 @@ export const appendStageUpscaleSection = (
     fields.append(upscaleSlider, methodField);
     syncMethod(stage.upscale);
     if (!upscaleState.enabled) {
-        disableCapabilityControls(upscaleSlider, upscaleState);
-        disableCapabilityControls(methodField, upscaleState);
+        applyPersistedCapabilityRepair(upscaleSlider, upscaleState, {
+            // A persisted unsupported upscale must be repairable from here:
+            // 1× is the removal of the value, so it is this section's remove.
+            repair:
+                Math.abs(stage.upscale - 1) < UPSCALE_EPSILON
+                    ? undefined
+                    : {
+                          label: "Reset upscale to 1×",
+                          className: "vst-reset-unsupported-upscale",
+                          onRepair: () => {
+                              commit((target) => {
+                                  target.upscale = 1;
+                              });
+                              bindings.context.render();
+                          },
+                      },
+        });
+        applyPersistedCapabilityRepair(methodField, upscaleState);
     }
 };

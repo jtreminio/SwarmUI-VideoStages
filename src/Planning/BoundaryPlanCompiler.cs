@@ -26,11 +26,10 @@ internal static class BoundaryPlanCompiler
             ClipPlan plannedTo = plannedClips is not null && i + 1 < plannedClips.Count
                 ? plannedClips[i + 1]
                 : null;
-            IArchitectureBoundaryPolicy boundaryPolicy =
-                (plannedFrom?.ArchitecturePayload as IArchitectureBoundaryPolicySource)
-                    ?.BoundaryPolicy;
-            ArchitectureBoundaryModePolicy modePolicy =
-                boundaryPolicy?.Modes.GetValueOrDefault(requested);
+            // One owner: the architecture's typed boundary policy. The catalog publishes the
+            // same modes, so the advertised rule is the rule compiled here.
+            ArchitectureBoundaryModePolicy modePolicy = plannedFrom?.Architecture?.BoundaryPolicy
+                ?.Modes.GetValueOrDefault(requested);
             if (!isKnown)
             {
                 effective = BoundaryExecutionMode.Cut;
@@ -51,15 +50,14 @@ internal static class BoundaryPlanCompiler
                     from.Id));
             }
             else if (requested != BoundaryExecutionMode.Cut
-                && plannedFrom?.Architecture?.BoundaryRules?.GetValueOrDefault(requested)
-                    is RuleDecision { Support: RuleSupport.Unsupported } rule)
+                && modePolicy is { Support: RuleSupport.Unsupported })
             {
                 effective = BoundaryExecutionMode.Cut;
                 fallback = BoundaryFallback.ArchitectureRuleUnsupported;
                 diagnostics.Add(new PlanDiagnostic(
                     PlanDiagnosticSeverity.Error,
-                    rule.Code,
-                    rule.Reason,
+                    modePolicy.Code,
+                    modePolicy.Reason,
                     from.Id));
             }
             else if (requested != BoundaryExecutionMode.Cut

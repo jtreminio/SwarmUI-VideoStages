@@ -135,7 +135,7 @@ describe("architecture conversion policy", () => {
                 carrier = value;
             },
         });
-        history.syncBaseline();
+        history.rebase();
         carrier = after;
         history.capture();
 

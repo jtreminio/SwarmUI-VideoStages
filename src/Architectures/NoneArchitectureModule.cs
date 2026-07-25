@@ -9,6 +9,25 @@ internal static class NoneArchitecture
     internal static ArchitectureId Id { get; } = new("none");
     internal static ModelProfileId ProfileId { get; } = new("none");
 
+    /// <summary>Cut-only, owned here and published from the same modes the compiler reads.</summary>
+    internal static IArchitectureBoundaryPolicy BoundaryPolicy { get; } =
+        new ArchitectureBoundaryPolicy(
+            new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
+            {
+                [BoundaryExecutionMode.Cut] = Mode(
+                    RuleSupport.Supported,
+                    "none.boundary.cut",
+                    "Decoded sourced clips can be joined with a hard cut."),
+                [BoundaryExecutionMode.Continue] = Mode(
+                    RuleSupport.Unsupported,
+                    "none.boundary.continue.unsupported",
+                    "A sourced-only clip has no architecture stage that can consume continuity."),
+                [BoundaryExecutionMode.Crossfade] = Mode(
+                    RuleSupport.Unsupported,
+                    "none.boundary.crossfade.unsupported",
+                    "Architecture-neutral sourced clips currently support cut joins only."),
+            });
+
     internal static VideoArchitectureDescriptor Descriptor { get; } = new(
         Id,
         "Decoded source only",
@@ -32,21 +51,24 @@ internal static class NoneArchitecture
                 | ClipCapability.AudioSegments,
             StageCapability.None,
             OutputCapability.Video | OutputCapability.AttachedAudio),
-        new Dictionary<BoundaryExecutionMode, RuleDecision>
-        {
-            [BoundaryExecutionMode.Cut] = RuleDecision.Supported(
-                "none.boundary.cut",
-                "Decoded sourced clips can be joined with a hard cut.",
-                RuleScope.Boundary),
-            [BoundaryExecutionMode.Continue] = RuleDecision.Unsupported(
-                "none.boundary.continue.unsupported",
-                "A sourced-only clip has no architecture stage that can consume continuity.",
-                RuleScope.Boundary),
-            [BoundaryExecutionMode.Crossfade] = RuleDecision.Unsupported(
-                "none.boundary.crossfade.unsupported",
-                "Architecture-neutral sourced clips currently support cut joins only.",
-                RuleScope.Boundary),
-        });
+        BoundaryPolicy);
+
+    private static ArchitectureBoundaryModePolicy Mode(
+        RuleSupport support,
+        string code,
+        string reason) =>
+        new(
+            support,
+            code,
+            reason,
+            FrameStep: 1,
+            MinFrames: 0,
+            MaxFrames: 0,
+            DefaultFrames: 0,
+            ContinuityExtraFrames: 0,
+            TargetRequiresGeneratedEntry: false,
+            TargetRequiresStage: false,
+            TargetDisallowsInitialReference: false);
 }
 
 internal sealed class NoneArchitectureModule : IVideoArchitectureModule

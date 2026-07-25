@@ -1067,13 +1067,14 @@ public class ArchitectureFoundationTests
     {
         VideoArchitectureDescriptor invalid = Descriptor("fake", "profile") with
         {
-            BoundaryRules = new Dictionary<BoundaryExecutionMode, RuleDecision>
-            {
-                [BoundaryExecutionMode.Cut] = RuleDecision.Supported(
-                    "fake.cut",
-                    "cut",
-                    RuleScope.Boundary),
-            },
+            BoundaryPolicy = new ArchitectureBoundaryPolicy(
+                new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
+                {
+                    [BoundaryExecutionMode.Cut] = BoundaryMode(
+                        RuleSupport.Supported,
+                        "fake.cut",
+                        "cut"),
+                }),
         };
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
@@ -1505,21 +1506,39 @@ public class ArchitectureFoundationTests
                 ClipCapability.Prompts,
                 StageCapability.ImageInput | StageCapability.VideoInput,
                 OutputCapability.Video),
-            new Dictionary<BoundaryExecutionMode, RuleDecision>
-            {
-                [BoundaryExecutionMode.Cut] = RuleDecision.Supported(
-                    $"{id}.cut",
-                    "cut",
-                    RuleScope.Boundary),
-                [BoundaryExecutionMode.Continue] = RuleDecision.Conditional(
-                    $"{id}.continue",
-                    "same architecture",
-                    RuleScope.Boundary),
-                [BoundaryExecutionMode.Crossfade] = RuleDecision.Conditional(
-                    $"{id}.crossfade",
-                    "same architecture",
-                    RuleScope.Boundary),
-            });
+            new ArchitectureBoundaryPolicy(
+                new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
+                {
+                    [BoundaryExecutionMode.Cut] = BoundaryMode(
+                        RuleSupport.Supported,
+                        $"{id}.cut",
+                        "cut"),
+                    [BoundaryExecutionMode.Continue] = BoundaryMode(
+                        RuleSupport.Conditional,
+                        $"{id}.continue",
+                        "same architecture"),
+                    [BoundaryExecutionMode.Crossfade] = BoundaryMode(
+                        RuleSupport.Conditional,
+                        $"{id}.crossfade",
+                        "same architecture"),
+                }));
+
+    private static ArchitectureBoundaryModePolicy BoundaryMode(
+        RuleSupport support,
+        string code,
+        string reason) =>
+        new(
+            support,
+            code,
+            reason,
+            FrameStep: 1,
+            MinFrames: 1,
+            MaxFrames: 8,
+            DefaultFrames: 1,
+            ContinuityExtraFrames: 0,
+            TargetRequiresGeneratedEntry: false,
+            TargetRequiresStage: false,
+            TargetDisallowsInitialReference: false);
 
     private sealed class MatchingModule(
         VideoArchitectureDescriptor descriptor,
