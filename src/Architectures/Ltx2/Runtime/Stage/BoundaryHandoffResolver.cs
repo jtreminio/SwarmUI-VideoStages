@@ -49,7 +49,11 @@ internal sealed class BoundaryHandoffResolver(
                 previousClip,
                 previousOutput,
                 nextClip,
-                continuityWindow);
+                continuityWindow,
+                new TimelineGeometry(
+                    clipContext.Dimensions.Width,
+                    clipContext.Dimensions.Height,
+                    clipContext.Plan.FramesPerSecond));
             if (clipContext.ContinuityFrame is null)
             {
                 assembly.DegradeToCut(

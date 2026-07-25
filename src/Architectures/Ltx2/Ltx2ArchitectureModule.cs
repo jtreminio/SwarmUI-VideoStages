@@ -133,9 +133,37 @@ internal sealed record Ltx2ClipPayload(
     int? ControlNetSourceIndex) :
     IArchitectureClipPayload,
     IArchitectureStagePayloadSource,
-    IArchitectureControlNetSourcePlan
+    IArchitectureControlNetSourcePlan,
+    IArchitectureClipGeometryProjection
 {
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
+
+    /// <summary>
+    /// Replays the runtime upscale rules over the authored stage chain: latent upscales apply in
+    /// latent space and, once one has run, later pixel/model requests are ignored.
+    /// </summary>
+    public (int Width, int Height) ProjectFinalDimensions(
+        IReadOnlyList<StagePlan> stages,
+        int width,
+        int height)
+    {
+        bool hasLatentUpscale = false;
+        foreach (StagePlan stage in stages ?? [])
+        {
+            StageUpscalePlan upscale = stage.RequireLtx2Payload().Upscale;
+            bool isLatent = upscale.Mode is StageUpscaleMode.Latent or StageUpscaleMode.LatentModel;
+            if (!isLatent
+                && (upscale.Mode is not (StageUpscaleMode.Pixel or StageUpscaleMode.Model)
+                    || hasLatentUpscale
+                    || string.IsNullOrWhiteSpace(upscale.RawMethod)))
+            {
+                continue;
+            }
+            (width, height) = StageDimensionRules.ResolveUpscaled(stage, width, height);
+            hasLatentUpscale |= isLatent;
+        }
+        return (width, height);
+    }
 
     public IArchitectureStagePayload GetStagePayload(int rawStageIndex) =>
         Stages.GetValueOrDefault(rawStageIndex)

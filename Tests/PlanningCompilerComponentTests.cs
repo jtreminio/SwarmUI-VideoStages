@@ -475,6 +475,42 @@ public class PlanningCompilerComponentTests
         };
     }
 
+    [Fact]
+    public void ClipGeometryProjection_WarnsBeforeGenerationWhenAClipWillBeConformed()
+    {
+        VideoStagesSpec spec = new(512, 512, 24, false,
+        [
+            GeneratedClip(0, Stage(10) with { Upscale = 2 }),
+            GeneratedClip(1, Stage(11)),
+        ]);
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+
+        PlanDiagnostic diagnostic = Assert.Single(
+            plan.Diagnostics,
+            entry => entry.Code == "clip-geometry-will-conform");
+        Assert.Equal(PlanDiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.Equal(0, diagnostic.ClipId);
+        Assert.Contains("1024x1024", diagnostic.Message);
+        Assert.Contains("512x512", diagnostic.Message);
+    }
+
+    [Fact]
+    public void ClipGeometryProjection_StaysSilentWhenEveryClipEndsAtTheSameSize()
+    {
+        VideoStagesSpec spec = new(512, 512, 24, false,
+        [
+            GeneratedClip(0, Stage(10) with { Upscale = 2 }),
+            GeneratedClip(1, Stage(11) with { Upscale = 2 }),
+        ]);
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            entry => entry.Code is "clip-geometry-will-conform" or "clip-aspect-mismatch");
+    }
+
     private static string Serialize(VideoExecutionPlan plan) =>
         JsonSerializer.Serialize(plan, new JsonSerializerOptions { WriteIndented = true });
 

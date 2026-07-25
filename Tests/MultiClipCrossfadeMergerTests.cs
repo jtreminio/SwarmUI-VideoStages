@@ -45,7 +45,9 @@ public class MultiClipCrossfadeMergerTests
         int[] frames,
         T2IModelCompatClass compat,
         int[] widths = null,
-        int height = 512)
+        int height = 512,
+        int[] heights = null,
+        int[] framesPerSecond = null)
     {
         JObject workflow = [];
         WorkflowGenerator g = NewGenerator(workflow);
@@ -64,9 +66,9 @@ public class MultiClipCrossfadeMergerTests
             clips.Add(new WGNodeData(new JArray(VideoId(i), 0), g, WGNodeData.DT_VIDEO, compat)
             {
                 Width = widths is null ? 512 : widths[i],
-                Height = height,
+                Height = heights is null ? height : heights[i],
                 Frames = frames[i],
-                FPS = new JValue(Fps),
+                FPS = new JValue(framesPerSecond is null ? Fps : framesPerSecond[i]),
                 AttachedAudio = new WGNodeData(new JArray(AudioId(i), 0), g, WGNodeData.DT_AUDIO, compat),
             });
         }
@@ -427,20 +429,39 @@ public class MultiClipCrossfadeMergerTests
     }
 
     [Fact]
-    public void Crossfade_DimensionMismatch_FallsBackToCut()
+    public void Crossfade_DimensionMismatch_ConformsAndKeepsTheCrossfade()
     {
-        // Second clip has a different width, so the crossfade preconditions fail and everything degrades
-        // to the unchanged cut concat.
-        (WorkflowGenerator g, List<WGNodeData> clips) =
-            BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2, widths: [512, 640]);
+        // The second clip finished larger. It is conformed down to the timeline minimum before the
+        // overlap merge, so the crossfade survives instead of degrading to a cut.
+        (WorkflowGenerator g, List<WGNodeData> clips) = BuildClips(
+            [17, 17],
+            T2IModelClassSorter.CompatLtxv2,
+            widths: [512, 640],
+            heights: [512, 640]);
         Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["crossfade", "cut"]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
-        Assert.Equal(0, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
-        Assert.Equal(0, CountOf<ImageFromBatchNode>(bridge));
-        Assert.Equal(0, CountOf<TrimAudioDurationNode>(bridge));
-        Assert.Equal(34, g.CurrentMedia.Frames);
+        ImageScaleNode conform = Assert.Single(bridge.Graph.NodesOfType<ImageScaleNode>());
+        Assert.Equal(VideoId(1), conform.Image.Connection!.Node.Id);
+        Assert.Equal(512, conform.Width.LiteralAsInt());
+        Assert.Equal(512, conform.Height.LiteralAsInt());
+        Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        Assert.Equal(512, g.CurrentMedia.Width);
+        Assert.Equal(34 - 8, g.CurrentMedia.Frames);
+    }
+
+    [Fact]
+    public void Conform_AspectRatioMismatch_Blocks()
+    {
+        // Conforming width and height independently would distort, so this is reported rather than
+        // silently squashed.
+        (WorkflowGenerator g, List<WGNodeData> clips) =
+            BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2, widths: [512, 640]);
+
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["cut", "cut"])));
+
+        Assert.Contains("aspect ratio", error.Message);
     }
 
     [Fact]
@@ -488,19 +509,127 @@ public class MultiClipCrossfadeMergerTests
     }
 
     [Fact]
-    public void Crossfade_FpsMismatch_FallsBackToCut()
+    public void Crossfade_FpsMismatch_ResamplesToTheTimelineMinimum()
     {
-        // fps must match across clips (the audio trim converts frames->seconds); a mismatch degrades to cut.
+        // The faster clip is resampled to the timeline's minimum fps, which rescales both its frame
+        // count and the overlap it owns — an overlap is a duration, not a frame count.
         (WorkflowGenerator g, List<WGNodeData> clips) =
-            BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2);
-        clips[1].FPS = new JValue(30);
+            BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2, framesPerSecond: [Fps, 30]);
         Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["crossfade", "cut"]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
-        Assert.Equal(0, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
-        Assert.Equal(0, CountOf<TrimAudioDurationNode>(bridge));
-        Assert.Equal(34, g.CurrentMedia.Frames);
+        SwarmVideoResampleFPSNode resample =
+            Assert.Single(bridge.Graph.NodesOfType<SwarmVideoResampleFPSNode>());
+        Assert.Equal(VideoId(1), resample.ImagesInput.Connection!.Node.Id);
+        Assert.Equal(30.0, resample.FpsIn.LiteralAsDouble());
+        Assert.Equal(24.0, resample.FpsOut.LiteralAsDouble());
+        Assert.Equal(0, CountOf<ImageScaleNode>(bridge));
+        Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        // 17 frames @30 conform to 14 @24, and the 8-frame overlap to 6.
+        Assert.Equal(17 + 14 - 6, g.CurrentMedia.Frames);
+        Assert.Equal(24, g.CurrentMedia.GetRawFPS());
+    }
+
+    [Fact]
+    public void Conform_AllCutTimeline_ConformsEveryClipBeforeConcat()
+    {
+        // The owner's worked example, on an all-cut timeline — the case that used to run no
+        // dimension or fps check at all before batching.
+        (WorkflowGenerator g, List<WGNodeData> clips) = BuildClips(
+            [40, 32, 24],
+            T2IModelClassSorter.CompatLtxv2,
+            widths: [1024, 768, 512],
+            heights: [1024, 768, 512],
+            framesPerSecond: [40, 32, 24]);
+        Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["cut", "cut", "cut"]));
+
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        BatchImagesNodeNode concat = Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());
+        List<INodeOutput> concatInputs = [
+            .. Enumerable.Range(0, concat.Images.Count).Select(i => concat.Images[i].Connection)
+        ];
+        // Clip 2 is already at the target, so it reaches the concat with no conform nodes.
+        Assert.Equal(VideoId(2), concatInputs[2].Node.Id);
+        foreach (int index in (int[])[0, 1])
+        {
+            ImageScaleNode scale = Assert.IsType<ImageScaleNode>(concatInputs[index].Node);
+            Assert.Equal(512, scale.Width.LiteralAsInt());
+            Assert.Equal(512, scale.Height.LiteralAsInt());
+            SwarmVideoResampleFPSNode resample =
+                Assert.IsType<SwarmVideoResampleFPSNode>(scale.Image.Connection!.Node);
+            Assert.Equal(VideoId(index), resample.ImagesInput.Connection!.Node.Id);
+            Assert.Equal(24.0, resample.FpsOut.LiteralAsDouble());
+        }
+        Assert.Equal(512, g.CurrentMedia.Width);
+        Assert.Equal(24, g.CurrentMedia.GetRawFPS());
+        // Every clip is one second long, so the conformed timeline is 3 x 24 frames.
+        Assert.Equal(72, g.CurrentMedia.Frames);
+    }
+
+    [Fact]
+    public void Conform_SingleClipTimeline_AddsNoNodes()
+    {
+        (WorkflowGenerator g, List<WGNodeData> clips) =
+            BuildClips([17], T2IModelClassSorter.CompatLtxv2, widths: [1024], heights: [1024]);
+        JObject before = (JObject)g.Workflow.DeepClone();
+
+        Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["cut"]));
+
+        Assert.True(JToken.DeepEquals(before, g.Workflow));
+    }
+
+    [Fact]
+    public void Conform_MatchingClips_AddNoConformNodes()
+    {
+        (WorkflowGenerator g, List<WGNodeData> clips) =
+            BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2);
+        Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["cut", "cut"]));
+
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        Assert.Equal(0, CountOf<ImageScaleNode>(bridge));
+        Assert.Equal(0, CountOf<SwarmVideoResampleFPSNode>(bridge));
+    }
+
+    [Fact]
+    public void Overlap_BudgetFailureDegradesOnlyItsOwnRun()
+    {
+        // Clips 2/3 came back shorter than planned and cannot fund their crossfade; the unrelated
+        // 0->1 crossfade across the cut must survive, instead of one bad run degrading everything.
+        (WorkflowGenerator g, List<WGNodeData> clips) =
+            BuildClips([17, 17, 17, 17], T2IModelClassSorter.CompatLtxv2);
+        List<DecodedClipArtifact> artifacts = Artifacts(clips);
+        artifacts[2] = artifacts[2] with { Frames = 4 };
+        artifacts[3] = artifacts[3] with { Frames = 4 };
+        BoundaryBudgetResolution resolution = Merger(g).Apply(
+            artifacts,
+            PlansFor(clips, ["crossfade", "cut", "crossfade", "cut"]));
+
+        Assert.Equal(BoundaryExecutionMode.Crossfade, resolution.Boundaries[0].Effective);
+        Assert.Equal(BoundaryExecutionMode.Cut, resolution.Boundaries[2].Effective);
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+    }
+
+    [Fact]
+    public void Overlap_ConformedNeighbourAcrossACutKeepsTheCrossfade()
+    {
+        // Clip 2 is cut-separated and finished at a different size. Conforming it is enough; the
+        // 0->1 crossfade is untouched.
+        (WorkflowGenerator g, List<WGNodeData> clips) = BuildClips(
+            [17, 17, 17],
+            T2IModelClassSorter.CompatLtxv2,
+            widths: [512, 512, 1024],
+            heights: [512, 512, 1024]);
+        BoundaryBudgetResolution resolution = Merger(g).Apply(
+            Artifacts(clips),
+            PlansFor(clips, ["crossfade", "cut", "cut"]));
+
+        Assert.False(resolution.Degraded);
+        Assert.Equal(BoundaryExecutionMode.Crossfade, resolution.Boundaries[0].Effective);
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        ImageScaleNode conform = Assert.Single(bridge.Graph.NodesOfType<ImageScaleNode>());
+        Assert.Equal(VideoId(2), conform.Image.Connection!.Node.Id);
     }
 
     [Fact]

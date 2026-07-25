@@ -113,6 +113,7 @@ internal static class VideoExecutionPlanCompiler
                     architecturePayload)));
             firstStageOrdinal += activeClips[i].Stages?.Count ?? 0;
         }
+        diagnostics.AddRange(ClipGeometryProjection.Validate(clips, spec.Width, spec.Height));
         BoundaryPlanningResult boundaryResult = BoundaryPlanCompiler.Compile(activeClips, clips);
         diagnostics.AddRange(boundaryResult.Diagnostics);
         BoundaryBudgetResolution boundaryBudget = BoundaryOverlapPlanner.ResolvePlanBudgets(

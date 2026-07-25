@@ -62,7 +62,13 @@ public class StageSequenceCollaboratorTests
             .ToArray();
 
         Assert.Equal(
-            [typeof(ClipPlan), typeof(WGNodeData), typeof(ClipPlan), typeof(int)],
+            [
+                typeof(ClipPlan),
+                typeof(WGNodeData),
+                typeof(ClipPlan),
+                typeof(int),
+                typeof(TimelineGeometry)
+            ],
             parameterTypes);
         Assert.DoesNotContain(typeof(ClipSpec), parameterTypes);
     }
@@ -90,7 +96,8 @@ public class StageSequenceCollaboratorTests
             previousClip,
             previousOutput,
             nextClip,
-            window: 9);
+            window: 9,
+            new TimelineGeometry(plan.Width, plan.Height, plan.FramesPerSecond));
 
         Assert.NotNull(guide);
         Assert.Equal(9, guide.Frames);
@@ -98,6 +105,56 @@ public class StageSequenceCollaboratorTests
         ImageFromBatchNode tail = Assert.Single(bridge.Graph.NodesOfType<ImageFromBatchNode>());
         Assert.Equal(7, tail.BatchIndex.LiteralAsInt());
         Assert.Equal(9, tail.Length.LiteralAsInt());
+    }
+
+    [Fact]
+    public void Continuity_builder_conforms_the_tail_to_the_next_clips_settings()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(MakeStage(models.VideoModel.Name)));
+        (Newtonsoft.Json.Linq.JObject unusedWorkflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            WorkflowTestHarness.Template_BaseOnlyImage());
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(generator.GetVideoStagesSpec());
+        ClipPlan nextClip = Assert.Single(plan.Clips);
+        ClipPlan previousClip = nextClip with { ClipId = 41, Frames = 16 };
+        WGNodeData previousOutput = generator.CurrentMedia.Duplicate();
+        previousOutput.Frames = 16;
+        previousOutput.Width = 512;
+        previousOutput.Height = 512;
+        previousOutput.FPS = new Newtonsoft.Json.Linq.JValue(24);
+
+        WGNodeData guide = new ContinuityGuideBuilder(generator).TryBuild(
+            previousClip,
+            previousOutput,
+            nextClip,
+            window: 4,
+            new TimelineGeometry(1024, 1024, 12));
+
+        Assert.NotNull(guide);
+        // The window is 4 frames on the NEXT clip's 12fps grid, which is 8 frames of the previous
+        // clip's 24fps output — the same duration.
+        Assert.Equal(4, guide.Frames);
+        Assert.Equal(1024, guide.Width);
+        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        ImageFromBatchNode tail = Assert.Single(bridge.Graph.NodesOfType<ImageFromBatchNode>());
+        Assert.Equal(8, tail.BatchIndex.LiteralAsInt());
+        Assert.Equal(8, tail.Length.LiteralAsInt());
+        SwarmVideoResampleFPSNode resample =
+            Assert.Single(bridge.Graph.NodesOfType<SwarmVideoResampleFPSNode>());
+        Assert.Equal(tail.Id, resample.ImagesInput.Connection!.Node.Id);
+        Assert.Equal(24.0, resample.FpsIn.LiteralAsDouble());
+        Assert.Equal(12.0, resample.FpsOut.LiteralAsDouble());
+        ImageScaleNode scale = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            node => node.Image.Connection?.Node.Id == resample.Id);
+        Assert.Equal(1024, scale.Width.LiteralAsInt());
+        Assert.Equal(new Newtonsoft.Json.Linq.JArray(scale.Id, 0), guide.Path);
     }
 
     [Fact]

@@ -47,20 +47,33 @@ internal sealed class MultiClipParallelMerger(
                     $"VideoStages: clip {i} is missing decoded video metadata.");
             }
         }
-        int sumFrames = clipArtifacts.Sum(clip => clip.Frames);
-
-        BoundaryBudgetResolution runtimeBoundaries =
-            BoundaryOverlapPlanner.ValidateRuntime(clipArtifacts, boundaries);
         using WorkflowBridge bridge = BridgeSync.For(g);
-        List<INodeOutput> videoOutputs =
+        List<INodeOutput> resolvedOutputs =
             ResolveOutputs(bridge, clipArtifacts.Select(clip => clip.Video.ToPath()));
-        if (videoOutputs.Count != clipArtifacts.Count)
+        if (resolvedOutputs.Count != clipArtifacts.Count)
         {
             throw new SwarmUserErrorException(
-                $"VideoStages: timeline assembly could resolve only {videoOutputs.Count} of "
+                $"VideoStages: timeline assembly could resolve only {resolvedOutputs.Count} of "
                 + $"{clipArtifacts.Count} planned clip video outputs.");
         }
 
+        // Conforming runs before every consumer of clip geometry, so overlap merging, the concat,
+        // and the published media all see one width, height, and frame rate.
+        TimelineGeometryConform.ConformResult conform = TimelineGeometryConform.Apply(
+            bridge,
+            clipArtifacts,
+            resolvedOutputs,
+            boundaries);
+        PlanDiagnosticReporter.ThrowIfBlocking(
+            conform.Diagnostics,
+            "VideoStages timeline assembly");
+        PlanDiagnosticReporter.Report(conform.Diagnostics);
+        IReadOnlyList<DecodedClipArtifact> clips = conform.Clips;
+        IReadOnlyList<INodeOutput> videoOutputs = conform.VideoOutputs;
+        int sumFrames = clips.Sum(clip => clip.Frames);
+
+        BoundaryBudgetResolution runtimeBoundaries =
+            BoundaryOverlapPlanner.ValidateRuntime(clips, conform.Boundaries);
         if (runtimeBoundaries.Degraded)
         {
             Logs.Warning(
@@ -72,35 +85,35 @@ internal sealed class MultiClipParallelMerger(
         IReadOnlyList<ArchitectureMergeRun> architectureRuns = overlapPlan is null
             ? []
             : PreflightArchitectureRuns(
-                clipArtifacts,
+                clips,
                 runtimeBoundaries.Boundaries);
         MultiClipAudioGraphAssembler.TimelineAudioPreflight audioPreflight =
             MultiClipAudioGraphAssembler.PreflightTimelineAudio(
                 bridge,
-                clipArtifacts);
+                clips);
 
         INodeOutput mergedVideo = overlapPlan is null
             ? MultiClipVideoGraphAssembler.MergeCut(bridge, videoOutputs)
             : MergeArchitectureRuns(
                 bridge,
-                clipArtifacts,
+                clips,
                 videoOutputs,
                 architectureRuns);
 
         IReadOnlyList<INodeOutput> audioOutputs =
             MultiClipAudioGraphAssembler.MaterializeTimelineAudio(
                 bridge,
-                clipArtifacts,
+                clips,
                 audioPreflight);
         INodeOutput mergedAudio = audioOutputs.Count > 0
             ? MultiClipAudioGraphAssembler.Merge(
                 bridge,
-                clipArtifacts,
+                clips,
                 audioOutputs,
                 overlapPlan)
             : null;
 
-        DecodedClipArtifact template = clipArtifacts[0];
+        DecodedClipArtifact template = clips[0];
         g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(mergedVideo), g, WGNodeData.DT_VIDEO, null)
         {
             Width = template.Width,

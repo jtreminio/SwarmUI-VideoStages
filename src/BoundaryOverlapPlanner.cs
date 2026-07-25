@@ -124,9 +124,12 @@ internal static class BoundaryOverlapPlanner
     }
 
     /// <summary>
-    /// Validates already-resolved typed boundaries against runtime artifacts. Runtime never invents
-    /// a second overlap policy: if the planned windows no longer fit, all overlaps explicitly
-    /// degrade to cuts.
+    /// Validates already-resolved typed boundaries against runtime artifacts. Clip geometry is not
+    /// re-checked here: <see cref="TimelineGeometryConform"/> has already conformed every artifact
+    /// to one width, height, and fps, so only the frame budget can still fail. Each maximal
+    /// overlapped run is judged on its own frames, so a cut-separated clip cannot degrade an
+    /// unrelated overlap elsewhere. Runtime never invents a second overlap policy: a run whose
+    /// planned windows no longer fit degrades entirely to cuts.
     /// </summary>
     internal static BoundaryBudgetResolution ValidateRuntime(
         IReadOnlyList<DecodedClipArtifact> clips,
@@ -138,27 +141,67 @@ internal static class BoundaryOverlapPlanner
         {
             return new(source, Degraded: false, Reason: null);
         }
-
-        DecodedClipArtifact first = clips.FirstOrDefault();
-        if (first is null
-            || clips.Count != source.Count + 1
-            || clips.Any(clip => !IsCompatibleRuntimeClip(clip, first)))
+        if (clips.Count != source.Count + 1)
         {
             return DegradeAllToCuts(
                 source,
-                "runtime overlap needs decoded clips with known lengths and matching dimensions and fps");
+                "runtime overlap needs one decoded clip per planned boundary");
         }
 
-        BoundaryBudgetResolution runtimeBudget = ResolvePlanBudgets(
-            [.. clips.Select(clip => clip.Frames)],
-            source);
-        if (!SameEffectiveWindows(source, runtimeBudget.Boundaries))
+        List<BoundaryPlan> resolved = [.. source];
+        List<string> reasons = [];
+        foreach ((int start, int boundaryCount) in OverlappedRuns(source))
         {
-            return DegradeAllToCuts(
-                source,
-                "runtime clip lengths cannot support the compiled boundary windows");
+            IReadOnlyList<BoundaryPlan> runBoundaries =
+                [.. source.Skip(start).Take(boundaryCount)];
+            IReadOnlyList<int?> runFrames = [
+                .. clips
+                    .Skip(start)
+                    .Take(boundaryCount + 1)
+                    .Select(clip => clip?.Frames is int frames && frames > 0 ? frames : (int?)null)
+            ];
+            BoundaryBudgetResolution runBudget = ResolvePlanBudgets(runFrames, runBoundaries);
+            if (runFrames.All(frame => frame is > 0)
+                && SameEffectiveWindows(runBoundaries, runBudget.Boundaries))
+            {
+                continue;
+            }
+            for (int i = 0; i < boundaryCount; i++)
+            {
+                resolved[start + i] = DegradeToCut(resolved[start + i]) with
+                {
+                    Fallback = BoundaryFallback.InsufficientFrameBudget,
+                };
+            }
+            reasons.Add($"clips {start}-{start + boundaryCount}");
         }
-        return new(source, Degraded: false, Reason: null);
+        return reasons.Count == 0
+            ? new(source, Degraded: false, Reason: null)
+            : new(
+                resolved.AsReadOnly(),
+                Degraded: true,
+                "runtime clip lengths cannot support the compiled boundary windows for "
+                    + string.Join(", ", reasons));
+    }
+
+    /// <summary>Every maximal run of consecutive overlapped boundaries, as (start, count).</summary>
+    private static IEnumerable<(int Start, int Count)> OverlappedRuns(
+        IReadOnlyList<BoundaryPlan> boundaries)
+    {
+        int start = -1;
+        for (int i = 0; i <= boundaries.Count; i++)
+        {
+            bool overlapped = i < boundaries.Count && IsOverlapped(boundaries[i]);
+            if (overlapped && start < 0)
+            {
+                start = i;
+            }
+            else if (!overlapped && start >= 0)
+            {
+                yield return (start, i - start);
+                start = -1;
+            }
+        }
     }
 
     internal static BoundaryOverlapPlan ToOverlapPlan(IReadOnlyList<BoundaryPlan> boundaries)
@@ -211,16 +254,6 @@ internal static class BoundaryOverlapPlanner
             BoundaryExecutionMode.Crossfade => Math.Max(1, boundary.OverlapFrames),
             _ => 0,
         };
-
-    private static bool IsCompatibleRuntimeClip(DecodedClipArtifact clip, DecodedClipArtifact first) =>
-        clip is not null
-        && clip.Frames > 0
-        && clip.Width > 0
-        && clip.Width == first.Width
-        && clip.Height > 0
-        && clip.Height == first.Height
-        && clip.FramesPerSecond > 0
-        && clip.FramesPerSecond == first.FramesPerSecond;
 
     private static bool SameEffectiveWindows(
         IReadOnlyList<BoundaryPlan> expected,

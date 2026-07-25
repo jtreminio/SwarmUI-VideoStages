@@ -12,6 +12,18 @@ internal interface IArchitectureClipPayload
 }
 
 /// <summary>
+/// A clip payload that can say, before anything runs, what dimensions its authored stage chain will
+/// finish at. Timeline planning uses it to warn about conforming ahead of generation.
+/// </summary>
+internal interface IArchitectureClipGeometryProjection
+{
+    (int Width, int Height) ProjectFinalDimensions(
+        IReadOnlyList<StagePlan> stages,
+        int width,
+        int height);
+}
+
+/// <summary>
 /// Opaque architecture-owned stage instruction. Common planning and timeline code only carries
 /// this value to the selected architecture runtime.
 /// </summary>
