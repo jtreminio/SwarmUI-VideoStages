@@ -21,7 +21,12 @@ import type { DocumentCommand } from "../documentCommands";
 import { IC_LORA_STAGE_ALL } from "../icLoraAuthoring";
 import { createEntityId } from "../identity";
 import { defaultLoraWeight } from "../loraAuthoring";
-import { buildDefaultRef, buildDefaultStage } from "../normalization";
+import {
+    buildDefaultRef,
+    buildDefaultStage,
+    getReferenceFrameMax,
+} from "../normalization";
+import { nextAvailableReferenceFrame } from "../referenceAuthoring";
 import { getDefaultStageModel, getRootDefaults } from "../rootDefaults";
 import { selectionAfterRemoval, setSelection } from "../selection";
 import type { Clip, TimelineSelection } from "../types";
@@ -189,6 +194,13 @@ export const createDetailSelectionDomainOperations = (
             ) {
                 return null;
             }
+            const frame = nextAvailableReferenceFrame(
+                clip.refs,
+                getReferenceFrameMax(getRootDefaults, clip),
+            );
+            if (frame === null) {
+                return null;
+            }
             return {
                 command: {
                     type: "batch",
@@ -198,6 +210,7 @@ export const createDetailSelectionDomainOperations = (
                             clipId: clip.id,
                             ref: {
                                 ...buildDefaultRef(),
+                                frame,
                                 id: createEntityId("ref"),
                             },
                         },

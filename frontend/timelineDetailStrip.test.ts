@@ -3593,6 +3593,27 @@ describe("createTimelineDetailStrip", () => {
             ).toBe(true);
         });
 
+        it("adds references at unique rounded ten-percent frame intervals before wrapping", () => {
+            setup([{ duration: 5, stages: [{}], refs: [] }]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+
+            for (let index = 0; index < 12; index++) {
+                const add = document.querySelector<HTMLButtonElement>(
+                    ".vst-detail-add-ref",
+                );
+                expect(add).not.toBeNull();
+                add?.click();
+            }
+
+            const frames = committedClips()[0].refs.map(
+                (reference) => reference.frame,
+            );
+            expect(frames).toEqual([
+                1, 13, 25, 37, 49, 61, 73, 85, 97, 109, 121, 2,
+            ]);
+            expect(new Set(frames).size).toBe(12);
+        });
+
         it("uses local native groups without consulting host group cookies", () => {
             const globals = globalThis as unknown as {
                 getCookie: (name: string) => string;

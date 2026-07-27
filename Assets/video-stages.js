@@ -12768,6 +12768,42 @@ The conversion is one undoable change.`;
     options.focus.autoFocusSelection(options.detail, options.selection);
   };
 
+  // frontend/referenceAuthoring.ts
+  var REFERENCE_FRAME_STEP_FRACTION = 0.1;
+  var absoluteReferenceFrame = (ref, frameMax) => {
+    const authoredFrame = clamp(Math.round(ref.frame), REF_FRAME_MIN, frameMax);
+    return ref.fromEnd ? frameMax - authoredFrame + REF_FRAME_MIN : authoredFrame;
+  };
+  var nextAvailableReferenceFrame = (refs, rawFrameMax) => {
+    const frameMax = Number.isFinite(rawFrameMax) && rawFrameMax >= REF_FRAME_MIN ? Math.floor(rawFrameMax) : REF_FRAME_MIN;
+    const occupied = new Set(
+      refs.map((ref) => absoluteReferenceFrame(ref, frameMax))
+    );
+    const step = Math.max(
+      1,
+      Math.round(frameMax * REFERENCE_FRAME_STEP_FRACTION)
+    );
+    const preferred = /* @__PURE__ */ new Set();
+    for (let index = 0; ; index++) {
+      const candidate = Math.min(frameMax, REF_FRAME_MIN + index * step);
+      preferred.add(candidate);
+      if (candidate >= frameMax) {
+        break;
+      }
+    }
+    for (const candidate of preferred) {
+      if (!occupied.has(candidate)) {
+        return candidate;
+      }
+    }
+    for (let candidate = REF_FRAME_MIN; candidate <= frameMax; candidate++) {
+      if (!occupied.has(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  };
+
   // frontend/detailStrip/selectionDomainOperations.ts
   var refStrengthPatches = (clip, next) => clip.stages.flatMap(
     (stage) => stage.id ? [
@@ -12858,6 +12894,13 @@ The conversion is one undoable change.`;
         if (!clip?.id || !getCapabilities().forClip(clip).decision("frameReferences").supported) {
           return null;
         }
+        const frame = nextAvailableReferenceFrame(
+          clip.refs,
+          getReferenceFrameMax(getRootDefaults, clip)
+        );
+        if (frame === null) {
+          return null;
+        }
         return {
           command: {
             type: "batch",
@@ -12867,6 +12910,7 @@ The conversion is one undoable change.`;
                 clipId: clip.id,
                 ref: {
                   ...buildDefaultRef(),
+                  frame,
                   id: createEntityId("ref")
                 }
               },
