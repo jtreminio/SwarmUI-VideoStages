@@ -36,6 +36,7 @@ const getRootDefaults = (): RootDefaults => ({
     modelLabels: ["LTX"],
     loraValues: ["ltx-ic-lora.safetensors"],
     loraLabels: ["LTX IC LoRA"],
+    loraDefaultWeights: [null],
     samplerValues: ["euler"],
     samplerLabels: ["Euler"],
     schedulerValues: ["normal"],
@@ -230,7 +231,8 @@ describe("normalization", () => {
         prev.stages[0].model = "ltx-big";
         prev.stages[0].steps = 20;
         prev.stages[0].cfgScale = 4;
-        prev.stages[0].loras = [{ name: "look", weight: 0.6 }];
+        prev.loras = [{ name: "look" }];
+        prev.stages[0].loraWeights = [0.6];
 
         const clip = buildDefaultClip(
             getRootDefaults,
@@ -245,8 +247,10 @@ describe("normalization", () => {
         expect(stage.model).toBe("ltx-big");
         expect(stage.steps).toBe(20);
         expect(stage.cfgScale).toBe(4);
-        expect(stage.loras).toEqual([{ name: "look", weight: 0.6 }]);
-        expect(stage.loras).not.toBe(prev.stages[0].loras);
+        expect(clip.loras).toEqual([{ name: "look" }]);
+        expect(clip.loras).not.toBe(prev.loras);
+        expect(stage.loraWeights).toEqual([0.6]);
+        expect(stage.loraWeights).not.toBe(prev.stages[0].loraWeights);
         // The new clip is the trailing one — its own join stays the default.
         expect(clip.boundaryOut).toBe("cut");
         expect(clip.prompt).toBe("");
@@ -858,7 +862,7 @@ describe("appendRefToClip / removeRefAt", () => {
     });
 });
 
-describe("stage loras", () => {
+describe("clip LoRAs with per-stage weights", () => {
     it("normalizeStageLoras parses tolerant entries and drops invalid ones", () => {
         expect(
             normalizeStageLoras([
@@ -878,7 +882,7 @@ describe("stage loras", () => {
         expect(normalizeStageLoras("x")).toEqual([]);
     });
 
-    it("normalizeStage reads canonical LoRAs into the stage", () => {
+    it("normalizeStage aligns legacy LoRAs to clip definitions", () => {
         const stage = normalizeStage(
             getRootDefaults,
             getDefaultStageModel,
@@ -886,11 +890,14 @@ describe("stage loras", () => {
             null,
             0,
             0,
+            false,
+            [{ name: "l.safetensors" }],
+            [0],
         );
-        expect(stage.loras).toEqual([{ name: "l.safetensors", weight: 1 }]);
+        expect(stage.loraWeights).toEqual([1]);
     });
 
-    it("buildDefaultStage inherits (deep-copies) the previous stage's loras", () => {
+    it("buildDefaultStage inherits a copy of the previous stage's weights", () => {
         const first = normalizeStage(
             getRootDefaults,
             getDefaultStageModel,
@@ -901,6 +908,9 @@ describe("stage loras", () => {
             null,
             0,
             0,
+            false,
+            [{ name: "x.safetensors" }],
+            [0],
         );
         const next = buildDefaultStage(
             getRootDefaults,
@@ -908,10 +918,9 @@ describe("stage loras", () => {
             first,
             0,
         );
-        expect(next.loras).toEqual([{ name: "x.safetensors", weight: 0.7 }]);
-        // Deep copy: mutating the child must not touch the parent.
-        next.loras[0].weight = 0.1;
-        expect(first.loras[0].weight).toBe(0.7);
+        expect(next.loraWeights).toEqual([0.7]);
+        next.loraWeights[0] = 0.1;
+        expect(first.loraWeights[0]).toBe(0.7);
     });
 
     it("normalizeClip round-trips loras across a multi-stage clip", () => {
@@ -933,12 +942,12 @@ describe("stage loras", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(clip.stages[0].loras).toEqual([
-            { name: "base.safetensors", weight: 1 },
+        expect(clip.loras).toEqual([
+            { name: "base.safetensors" },
+            { name: "refine.safetensors" },
         ]);
-        expect(clip.stages[1].loras).toEqual([
-            { name: "refine.safetensors", weight: 0.4 },
-        ]);
+        expect(clip.stages[0].loraWeights).toEqual([1, 0]);
+        expect(clip.stages[1].loraWeights).toEqual([0, 0.4]);
     });
 
     describe("normalizeRetake", () => {

@@ -228,7 +228,7 @@ export const createClipStageCapabilityViews = (
                     supported,
                     reason: supported
                         ? ""
-                        : `Stage LoRAs require normal-LoRA support in ${descriptor.label}.`,
+                        : `LoRAs require normal-LoRA support in ${descriptor.label}.`,
                     rule: null,
                 };
             }

@@ -85,6 +85,7 @@ describe("architecture diagnostics", () => {
         const clip = minimalClip({
             architecture: "test-video",
             modelProfileId: "test-profile",
+            loras: [{ name: "detail" }],
             prompt: "persisted major prompt",
             refs: [
                 {
@@ -101,7 +102,7 @@ describe("architecture diagnostics", () => {
                 minimalStage({
                     model: "test-video.safetensors",
                     modelProfileId: "test-profile",
-                    loras: [{ name: "detail", weight: 1 }],
+                    loraWeights: [1],
                     upscale: 2,
                 }),
             ],
@@ -308,12 +309,13 @@ describe("architecture diagnostics", () => {
         if (!ltx) throw new Error("missing LTX architecture");
         ltx.profiles[0].capabilities = [];
         const clip = minimalClip({
+            loras: [{ name: "normal-lora.safetensors" }],
             stages: [
-                minimalStage({ model: "ltx" }),
+                minimalStage({ model: "ltx", loraWeights: [1] }),
                 minimalStage({
                     skipped: true,
                     model: "ltx",
-                    loras: [{ name: "normal-lora.safetensors", weight: 1 }],
+                    loraWeights: [1],
                 }),
             ],
         });
@@ -323,6 +325,25 @@ describe("architecture diagnostics", () => {
                 ({ code }) => code,
             ),
         ).toContain("architecture.unsupported.stage-loras-profile");
+    });
+
+    it("does not diagnose a clip LoRA disabled with zero weight on an unsupported profile", () => {
+        const models = combinedCatalog();
+        const ltx = models.architectures.find((entry) => entry.id === "ltx2");
+        if (!ltx) throw new Error("missing LTX architecture");
+        ltx.profiles[0].capabilities = [];
+        const clip = minimalClip({
+            loras: [{ name: "normal-lora.safetensors" }],
+            stages: [minimalStage({ model: "ltx", loraWeights: [0] })],
+        });
+
+        const codes = deriveArchitectureDiagnostics([clip], models).map(
+            ({ code }) => code,
+        );
+        expect(codes).not.toContain(
+            "architecture.unsupported.stage-loras-profile",
+        );
+        expect(codes).not.toContain("architecture.unsupported.stage-loras");
     });
 
     it("diagnoses a persisted upscale method whose exact mode is unsupported", () => {

@@ -154,6 +154,52 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
+    public void NormalLoraPlanCompiler_UsesStageWeightsAlignedToClipDefinitions()
+    {
+        StageSpec stage = Stage(10) with
+        {
+            LoraWeights = [0.35, -0.2],
+        };
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            Loras =
+            [
+                new LoraRef("cinematic", 1),
+                new LoraRef("detail", 0.8),
+            ],
+        };
+
+        var plans = NormalLoraPlanCompiler.Compile(clip, stage);
+
+        Assert.Collection(
+            plans,
+            lora =>
+            {
+                Assert.Equal("cinematic", lora.Name);
+                Assert.Equal(0.35, lora.ModelWeight);
+                Assert.Equal(0.35, lora.TextEncoderWeight);
+            },
+            lora =>
+            {
+                Assert.Equal("detail", lora.Name);
+                Assert.Equal(-0.2, lora.ModelWeight);
+                Assert.Equal(-0.2, lora.TextEncoderWeight);
+            });
+    }
+
+    [Fact]
+    public void NormalLoraPlanCompiler_SkipsZeroWeightClipDefinitions()
+    {
+        StageSpec stage = Stage(10) with { LoraWeights = [0] };
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            Loras = [new LoraRef("disabled-for-this-stage", 1)],
+        };
+
+        Assert.Empty(NormalLoraPlanCompiler.Compile(clip, stage));
+    }
+
+    [Fact]
     public void IcLoraPlanCompiler_UsesPerEntryStageStrengths()
     {
         StageSpec stage = Stage(11) with

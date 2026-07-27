@@ -3,18 +3,40 @@ import {
     STAGE_REF_STRENGTH_MIN,
     STAGE_REF_STRENGTH_STEP,
 } from "../../constants";
-import { buildSlider, tagFocus } from "../../detailWidgets";
+import {
+    buildField,
+    buildNumber,
+    buildSlider,
+    buildUnboundedNumber,
+    tagFocus,
+} from "../../detailWidgets";
 import {
     STAGE_CONTROLNET_STRENGTH_MAX,
     STAGE_CONTROLNET_STRENGTH_MIN,
     STAGE_CONTROLNET_STRENGTH_STEP,
 } from "../../icLoraAuthoring";
+import { LORA_WEIGHT_STEP } from "../../loraAuthoring";
 import { refSourceLabel } from "../../timelineDetail";
 import {
     buildCapabilityNotice,
     disableCapabilityControls,
 } from "../capabilityUi";
 import type { StagePanelBindings } from "./types";
+
+const appendSectionHeader = (fields: HTMLElement, label: string): void => {
+    const header = document.createElement("div");
+    header.className =
+        "vst-detail-sec vst-detail-span-full vst-detail-crumb vst-detail-subsection-crumb";
+    header.setAttribute("role", "heading");
+    header.setAttribute("aria-level", "4");
+    header.textContent = label;
+    fields.appendChild(header);
+};
+
+const shortModelName = (modelName: string): string => {
+    const parts = modelName.split(/[\\/]/);
+    return parts[parts.length - 1] || modelName;
+};
 
 export const appendStageReferenceGuideSection = ({
     context,
@@ -23,6 +45,7 @@ export const appendStageReferenceGuideSection = ({
     stage,
     stageIdx,
     fields,
+    stageCapabilities,
     debouncedCommit,
 }: StagePanelBindings): void => {
     if (clip.refs.length > 0) {
@@ -30,10 +53,7 @@ export const appendStageReferenceGuideSection = ({
             .capabilities()
             .forClip(clip)
             .decision("frameReferences");
-        const refsHeader = document.createElement("div");
-        refsHeader.className = "vst-detail-sec vst-detail-span-full";
-        refsHeader.textContent = "Reference Strengths";
-        fields.appendChild(refsHeader);
+        appendSectionHeader(fields, "Reference Strengths");
         const setRefHover = (refIdx: number, on: boolean): void => {
             context
                 .getBoundBody()
@@ -82,28 +102,75 @@ export const appendStageReferenceGuideSection = ({
         }
     }
 
-    if (clip.icLoras.length === 0) return;
-    const icDecision = context.capabilities().forClip(clip).decision("icLora");
-    clip.icLoras.forEach((entry, entryIdx) => {
-        if (entry.stage >= 0 && entry.stage !== stageIdx) {
-            return;
-        }
-        const guideStrength = buildSlider(
-            `IC-LoRA Strength ${entryIdx}`,
-            stage.icLoraStrengths[entryIdx] ?? stage.controlNetStrength,
-            STAGE_CONTROLNET_STRENGTH_MIN,
-            STAGE_CONTROLNET_STRENGTH_MAX,
-            STAGE_CONTROLNET_STRENGTH_STEP,
-            (value) => {
-                debouncedCommit(`ic-lora-strength-${entryIdx}`, (target) => {
-                    target.icLoraStrengths[entryIdx] = value;
-                });
-            },
+    if (clip.loras.length > 0) {
+        appendSectionHeader(fields, "LoRA Weights");
+        const loraState = stageCapabilities.authoringState(
+            "stageLoras",
+            clip.loras.length > 0,
         );
-        tagFocus(guideStrength, `ic-lora-strength-${entryIdx}`);
-        fields.appendChild(guideStrength);
-        if (!icDecision.supported) {
-            disableCapabilityControls(guideStrength, icDecision);
+        const group = document.createDocumentFragment();
+        clip.loras.forEach((entry, entryIdx) => {
+            const weight = tagFocus(
+                buildUnboundedNumber(
+                    stage.loraWeights[entryIdx] ?? 1,
+                    LORA_WEIGHT_STEP,
+                    (value) => {
+                        debouncedCommit(`lora-weight-${entryIdx}`, (target) => {
+                            target.loraWeights[entryIdx] = value;
+                        });
+                    },
+                ),
+                `lora-weight-${entryIdx}`,
+            );
+            weight.classList.add("lora-weight-input", "vst-stage-lora-weight");
+            const row = buildField(shortModelName(entry.name), weight);
+            row.classList.add("vst-stage-lora-weight-row");
+            row.title = entry.name;
+            group.appendChild(row);
+        });
+        if (!loraState.enabled) {
+            disableCapabilityControls(group, loraState);
         }
+        fields.appendChild(group);
+    }
+
+    const applicableIcLoras = clip.icLoras
+        .map((entry, entryIdx) => ({ entry, entryIdx }))
+        .filter(({ entry }) => entry.stage < 0 || entry.stage === stageIdx);
+    if (applicableIcLoras.length === 0) return;
+
+    appendSectionHeader(fields, "IC-LoRA Guide Strengths");
+    const icDecision = context.capabilities().forClip(clip).decision("icLora");
+    const icGroup = document.createDocumentFragment();
+    applicableIcLoras.forEach(({ entry, entryIdx }) => {
+        const guideStrength = tagFocus(
+            buildNumber(
+                stage.icLoraStrengths[entryIdx] ?? 1,
+                STAGE_CONTROLNET_STRENGTH_MIN,
+                STAGE_CONTROLNET_STRENGTH_MAX,
+                STAGE_CONTROLNET_STRENGTH_STEP,
+                (value) => {
+                    debouncedCommit(
+                        `ic-lora-strength-${entryIdx}`,
+                        (target) => {
+                            target.icLoraStrengths[entryIdx] = value;
+                        },
+                    );
+                },
+            ),
+            `ic-lora-strength-${entryIdx}`,
+        );
+        guideStrength.classList.add(
+            "lora-weight-input",
+            "vst-stage-iclora-strength",
+        );
+        const row = buildField(shortModelName(entry.lora), guideStrength);
+        row.classList.add("vst-stage-iclora-strength-row");
+        row.title = entry.lora;
+        icGroup.appendChild(row);
     });
+    if (!icDecision.supported) {
+        disableCapabilityControls(icGroup, icDecision);
+    }
+    fields.appendChild(icGroup);
 };

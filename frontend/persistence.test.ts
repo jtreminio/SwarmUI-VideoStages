@@ -72,8 +72,18 @@ describe("persistence", () => {
             ["clip ref item", { clips: [{ refs: [1] }] }],
             ["clip icLoras", { clips: [{ icLoras: {} }] }],
             ["clip IC-LoRA item", { clips: [{ icLoras: [false] }] }],
+            ["clip LoRAs", { clips: [{ loras: {} }] }],
+            ["clip LoRA item", { clips: [{ loras: [null] }] }],
             ["stage LoRAs", { clips: [{ stages: [{ loras: {} }] }] }],
             ["stage LoRA item", { clips: [{ stages: [{ loras: [null] }] }] }],
+            [
+                "stage LoRA weights",
+                { clips: [{ stages: [{ loraWeights: {} }] }] },
+            ],
+            [
+                "stage LoRA-weight item",
+                { clips: [{ stages: [{ loraWeights: [null] }] }] },
+            ],
             [
                 "stage ref strengths",
                 { clips: [{ stages: [{ refStrengths: {} }] }] },
@@ -155,6 +165,7 @@ describe("persistence", () => {
             const clips = [
                 minimalClip({
                     duration: 3,
+                    loras: [{ name: "detail.safetensors" }],
                     icLoras: [
                         {
                             lora: "ltx-ic-lora.safetensors",
@@ -177,9 +188,7 @@ describe("persistence", () => {
                         minimalStage({
                             controlNetStrength: 0.7,
                             refStrengths: [0.8],
-                            loras: [
-                                { name: "detail.safetensors", weight: 0.6 },
-                            ],
+                            loraWeights: [0.6],
                         }),
                     ],
                 }),
@@ -196,6 +205,7 @@ describe("persistence", () => {
                     boundaryOutOverlap: 8,
                     duration: 3,
                     audioSource: "Native",
+                    loras: [{ name: "detail.safetensors" }],
                     icLoras: [
                         {
                             lora: "ltx-ic-lora.safetensors",
@@ -235,6 +245,7 @@ describe("persistence", () => {
                             control: 1,
                             controlNetStrength: 0.7,
                             icLoraStrengths: [],
+                            loraWeights: [0.6],
                             refStrengths: [0.8],
                             upscale: 1,
                             upscaleMethod: "latentmodel-test.safetensors",
@@ -244,9 +255,6 @@ describe("persistence", () => {
                             cfgScale: 1,
                             sampler: "euler",
                             scheduler: "normal",
-                            loras: [
-                                { name: "detail.safetensors", weight: 0.6 },
-                            ],
                         },
                     ],
                 },

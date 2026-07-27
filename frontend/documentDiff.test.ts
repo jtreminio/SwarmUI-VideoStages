@@ -28,6 +28,7 @@ const stage = (id: string): CanonicalStage => ({
     control: 0.5,
     controlNetStrength: 1,
     icLoraStrengths: [],
+    loraWeights: [],
     refStrengths: [0.5],
     upscale: 1,
     upscaleMethod: "pixel-lanczos",
@@ -37,7 +38,6 @@ const stage = (id: string): CanonicalStage => ({
     cfgScale: 1,
     sampler: "euler",
     scheduler: "normal",
-    loras: [],
 });
 
 const ref = (id: string): CanonicalRefImage => ({
@@ -74,6 +74,7 @@ const clip = (id: string): CanonicalClip => ({
     boundaryOutOverlap: 8,
     duration: 4,
     audioSource: "Native",
+    loras: [],
     icLoras: [],
     saveAudioTrack: false,
     clipLengthFromAudio: false,
@@ -333,9 +334,8 @@ describe("diffDocuments", () => {
 
     it("emits one cleanup-aware conversion before same-architecture stage retargets", () => {
         const before = document();
-        before.clips[0].stages[0].loras = [
-            { name: "detail.safetensors", weight: 1 },
-        ];
+        before.clips[0].loras = [{ name: "detail.safetensors" }];
+        before.clips[0].stages[0].loraWeights = [1];
         before.clips[0].stages[0].upscale = 2;
         before.clips[0].refs = [ref("conversion-ref")];
         const { catalog, target } = crossArchitectureCatalog();
@@ -551,9 +551,7 @@ describe("diffDocuments", () => {
             name: "stage with owned arrays",
             type: "stage.patch",
             mutate: (after: CanonicalVideoStagesConfig) => {
-                after.clips[0].stages[0].loras = [
-                    { name: "detail", weight: 0.6 },
-                ];
+                after.clips[0].stages[0].loraWeights = [0.6];
                 after.clips[0].stages[0].refStrengths = [0.9, 0.4];
             },
         },

@@ -108,6 +108,7 @@ declare const modelsHelpers:
               category: string,
               modelName: string,
           ) => {
+              lora_default_weight?: string | number;
               modelClass?: {
                   id?: string;
                   compatClass?: { id?: string; isText2Video?: boolean };
@@ -123,6 +124,25 @@ declare const modelsHelpers:
 declare const currentModelHelper:
     | {
           curCompatClass?: string;
+      }
+    | undefined;
+
+declare const sdLoraBrowser:
+    | {
+          models?: Record<
+              string,
+              {
+                  data?: {
+                      lora_default_weight?: string | number;
+                  };
+              }
+          >;
+      }
+    | undefined;
+
+declare const loraHelper:
+    | {
+          loraWeightPref?: Record<string, string | number>;
       }
     | undefined;
 

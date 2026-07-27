@@ -20,6 +20,7 @@ import {
 import type { DocumentCommand } from "../documentCommands";
 import { IC_LORA_STAGE_ALL } from "../icLoraAuthoring";
 import { createEntityId } from "../identity";
+import { defaultLoraWeight } from "../loraAuthoring";
 import { buildDefaultRef, buildDefaultStage } from "../normalization";
 import { getDefaultStageModel, getRootDefaults } from "../rootDefaults";
 import { selectionAfterRemoval, setSelection } from "../selection";
@@ -407,6 +408,12 @@ export const createDetailSelectionDomainOperations = (
                         getDefaultStageModel(values, lockedArchitecture),
                     last,
                     clip.refs.length,
+                    clip.loras.map((entry) =>
+                        defaultLoraWeight(defaults, entry.name),
+                    ),
+                    clip.icLoras.map((entry) =>
+                        defaultLoraWeight(defaults, entry.lora),
+                    ),
                 );
                 if (
                     clip.architecture === NONE_ARCHITECTURE_ID &&

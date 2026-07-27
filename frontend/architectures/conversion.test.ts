@@ -30,12 +30,10 @@ describe("architecture conversion policy", () => {
             capabilities: fake.architectures[0].capabilities,
         };
         const clip = minimalClip({
+            loras: [{ name: "detail" }],
             refs: [minimalRef()],
             promptWindows: [{ prompt: "relay", start: 0, duration: 1 }],
-            stages: [
-                minimalStage({ loras: [{ name: "detail", weight: 1 }] }),
-                minimalStage(),
-            ],
+            stages: [minimalStage({ loraWeights: [1] }), minimalStage()],
         });
 
         const conversion = planArchitectureConversion(clip, target, fake);
@@ -51,7 +49,7 @@ describe("architecture conversion policy", () => {
             expect.arrayContaining([
                 "1 later authored stage",
                 "1 frame reference",
-                "1 stage LoRA",
+                "1 clip LoRA",
                 "1 relay prompt",
             ]),
         );
@@ -114,12 +112,13 @@ describe("architecture conversion policy", () => {
                 testArchitectureCatalog().architectures[0].capabilities,
         };
         const source = minimalClip({
+            loras: [{ name: "detail" }],
             refs: [minimalRef()],
             stages: [
                 minimalStage(),
                 minimalStage({
                     skipped: true,
-                    loras: [{ name: "detail", weight: 1 }],
+                    loraWeights: [1],
                 }),
             ],
         });

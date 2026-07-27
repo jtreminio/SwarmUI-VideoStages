@@ -19,6 +19,7 @@ import {
     IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH,
     STAGE_REF_STRENGTH_DEFAULT,
 } from "./constants";
+import { defaultLoraWeight } from "./loraAuthoring";
 import {
     normalizePromptWindows,
     normalizeRetake,
@@ -39,6 +40,7 @@ import {
     normalizeRef,
     normalizeStage,
     normalizeStageIcLoraStrengths,
+    normalizeStageLoras,
 } from "./normalizationStage";
 import { snapDurationToFps } from "./renderUtils";
 import type { BoundaryOut, Clip, RootDefaults, Stage } from "./types";
@@ -72,12 +74,22 @@ export const buildDefaultClip = (
 ): Clip => {
     const defaults = getRootDefaults();
     const refs = includeDefaultRef ? [buildDefaultRef()] : [];
+    const loras = previousClip?.loras.map((entry) => ({ ...entry })) ?? [];
+    const initialLoraWeights = loras.map(
+        (entry, index) =>
+            previousClip?.stages[0]?.loraWeights[index] ??
+            defaults.loraDefaultWeights[
+                defaults.loraValues.indexOf(entry.name)
+            ] ??
+            1,
+    );
     const firstStage = {
         ...buildDefaultStage(
             getRootDefaults,
             getDefaultStageModel,
             previousClip?.stages[0] ?? null,
             refs.length,
+            initialLoraWeights,
         ),
         refStrengths: buildDefaultStageRefStrengths(
             refs.length,
@@ -117,6 +129,7 @@ export const buildDefaultClip = (
                   defaults.fps,
               ),
         audioSource: AUDIO_SOURCE_NATIVE,
+        loras,
         icLoras: [],
         saveAudioTrack: false,
         clipLengthFromAudio: false,
@@ -167,6 +180,33 @@ export const normalizeClip = (
     const refs = refsRaw.map((rawRef) =>
         normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax),
     );
+    const clipScopedLoras = normalizeStageLoras(rawClip.loras);
+    const loraNames: string[] = [];
+    const loraDefaultWeightByName = new Map<string, number>();
+    const appendLoraName = (name: string, defaultWeight: number): void => {
+        if (loraDefaultWeightByName.has(name)) {
+            return;
+        }
+        loraNames.push(name);
+        loraDefaultWeightByName.set(name, defaultWeight);
+    };
+    for (const entry of clipScopedLoras) {
+        appendLoraName(entry.name, entry.weight);
+    }
+    for (const rawStage of stagesRaw) {
+        if (!isRecord(rawStage)) {
+            continue;
+        }
+        for (const entry of normalizeStageLoras(rawStage.loras)) {
+            // A legacy stage-local LoRA is absent from other stages unless
+            // those stages name it too.
+            appendLoraName(entry.name, 0);
+        }
+    }
+    const loras = loraNames.map((name) => ({ name }));
+    const loraDefaultWeights = loraNames.map(
+        (name) => loraDefaultWeightByName.get(name) ?? 1,
+    );
 
     const stages: Stage[] = [];
     for (let i = 0; i < stagesRaw.length; i++) {
@@ -180,6 +220,8 @@ export const normalizeClip = (
                 refs.length,
                 i,
                 sourceVideo !== null,
+                loras,
+                loraDefaultWeights,
             ),
         );
     }
@@ -210,11 +252,27 @@ export const normalizeClip = (
         architectureDescriptor(defaults.modelCatalog, architecture) === null ||
             architecture === NONE_ARCHITECTURE_ID,
     );
-    for (const stage of stages) {
+    const icLoraDefaultStrengths = icLoras.map((entry) =>
+        defaultLoraWeight(defaults, entry.lora),
+    );
+    for (let index = 0; index < stages.length; index++) {
+        const stage = stages[index];
+        const rawStage = isRecord(stagesRaw[index]) ? stagesRaw[index] : {};
+        const hasLegacyControlNetStrength = Object.hasOwn(
+            rawStage,
+            "controlNetStrength",
+        );
+        const legacyFallback = hasLegacyControlNetStrength
+            ? stage.controlNetStrength
+            : 1;
         stage.icLoraStrengths = normalizeStageIcLoraStrengths(
-            stage.icLoraStrengths,
+            rawStage.icLoraStrengths,
             icLoras.length,
-            stage.controlNetStrength,
+            legacyFallback,
+            hasLegacyControlNetStrength
+                ? []
+                : (stages[index - 1]?.icLoraStrengths ??
+                      icLoraDefaultStrengths),
         );
     }
     // Preserved exactly as authored: a source that cannot supply a length is
@@ -242,6 +300,7 @@ export const normalizeClip = (
         ),
         duration,
         audioSource,
+        loras,
         icLoras,
         saveAudioTrack: !!rawClip.saveAudioTrack,
         clipLengthFromAudio,

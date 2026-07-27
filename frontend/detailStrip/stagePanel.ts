@@ -1,8 +1,6 @@
 import { buildSlider, tagFocus } from "../detailWidgets";
 import type { Clip, RootDefaults, Stage } from "../types";
-import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
-import { buildStageLorasSection } from "./stageLorasPanel";
 import { appendStageModelSection } from "./stagePanel/modelSection";
 import { appendStageReferenceGuideSection } from "./stagePanel/referenceGuideSection";
 import {
@@ -92,24 +90,6 @@ export const buildStageParamsColumn = (
     appendStageUpscaleSection(bindings, isRefine);
     appendStageSamplerSchedulerSection(bindings);
     appendStageReferenceGuideSection(bindings);
-
-    const loraState = stageCapabilities.authoringState(
-        "stageLoras",
-        stage.loras.length > 0,
-    );
-    if (loraState.visible) {
-        const loras = buildStageLorasSection(
-            context,
-            clipIdx,
-            stageIdx,
-            stage,
-            defaults,
-        );
-        if (!loraState.enabled) {
-            applyPersistedCapabilityRepair(loras, loraState);
-        }
-        fields.appendChild(loras);
-    }
 
     if (sourcedStage0) {
         const note = document.createElement("p");

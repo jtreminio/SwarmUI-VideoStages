@@ -416,7 +416,8 @@ describe("videoStagesTimeline", () => {
         expect(stage.model).toBe("ltx-2.3.safetensors");
         expect(stage.steps).toBe(20);
         expect(stage.cfgScale).toBe(4);
-        expect(stage.loras).toEqual([{ name: "look", weight: 0.6 }]);
+        expect(clips[2].loras).toEqual([{ name: "look" }]);
+        expect(stage.loraWeights).toEqual([0.6]);
     });
 
     it("adds the first clip after the backend catalog resolves even when the video-model dropdown is absent", async () => {

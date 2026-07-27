@@ -18,8 +18,10 @@ import {
     IC_LORA_STRENGTH_MIN,
     IC_LORA_STRENGTH_STEP,
 } from "../../icLoraAuthoring";
+import { defaultLoraWeight } from "../../loraAuthoring";
 import {
     appendIcLoraStrengthToClip,
+    normalizeStageControlNetStrengthValue,
     removeIcLoraStrengthAt,
 } from "../../normalizationStage";
 import { getClips } from "../../persistence/repository";
@@ -139,7 +141,10 @@ export const buildIcLorasSection = (
                                 lora: IC_LORA_AUTO,
                             }),
                         );
-                        appendIcLoraStrengthToClip(target);
+                        appendIcLoraStrengthToClip(
+                            target,
+                            defaultLoraWeight(defaults, IC_LORA_AUTO),
+                        );
                         return {
                             kind: "ic-lora",
                             clipIdx,
@@ -299,6 +304,17 @@ export const buildIcLorasSection = (
                         const target = entryAt(clips, entryIdx);
                         if (target) {
                             target.lora = value;
+                            const initialStrength = defaultLoraWeight(
+                                defaults,
+                                value,
+                            );
+                            const targetClip = clips[clipIdx];
+                            for (const stage of targetClip?.stages ?? []) {
+                                stage.icLoraStrengths[entryIdx] =
+                                    normalizeStageControlNetStrengthValue(
+                                        initialStrength,
+                                    );
+                            }
                         }
                     });
                     if (value === IC_LORA_AUTO) {

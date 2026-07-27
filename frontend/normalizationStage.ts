@@ -28,11 +28,11 @@ import {
 import { framesForClip } from "./renderUtils";
 import {
     type Clip,
+    type ClipLora,
     REF_SOURCE_REFINER,
     type RefImage,
     type RootDefaults,
     type Stage,
-    type StageLora,
 } from "./types";
 import { isRecord } from "./utils";
 
@@ -57,12 +57,13 @@ export const normalizeStageControlNetStrengthValue = (value: unknown): number =>
 export const normalizeStageIcLoraStrengths = (
     rawStrengths: unknown,
     icLoraCount: number,
-    fallbackStrength = STAGE_CONTROLNET_STRENGTH_DEFAULT,
+    fallbackStrength = 1,
+    perLoraFallbacks: readonly number[] = [],
 ): number[] => {
     const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
     return Array.from({ length: icLoraCount }, (_, index) =>
         normalizeStageControlNetStrengthValue(
-            rawValues[index] ?? fallbackStrength,
+            rawValues[index] ?? perLoraFallbacks[index] ?? fallbackStrength,
         ),
     );
 };
@@ -100,11 +101,18 @@ export const readRawStageString = (
     return trimmedText(value) || undefined;
 };
 
-export const normalizeStageLoras = (raw: unknown): StageLora[] => {
+export interface NormalizedLegacyStageLora {
+    name: string;
+    weight: number;
+}
+
+export const normalizeStageLoras = (
+    raw: unknown,
+): NormalizedLegacyStageLora[] => {
     if (!Array.isArray(raw)) {
         return [];
     }
-    const out: StageLora[] = [];
+    const out: NormalizedLegacyStageLora[] = [];
     for (const entry of raw) {
         if (!isRecord(entry)) {
             continue;
@@ -121,14 +129,13 @@ export const normalizeStageLoras = (raw: unknown): StageLora[] => {
     return out;
 };
 
-const cloneStageLoras = (loras: StageLora[]): StageLora[] =>
-    loras.map((lora) => ({ name: lora.name, weight: lora.weight }));
-
 export const buildDefaultStage = (
     getRootDefaults: () => RootDefaults,
     getDefaultStageModel: (modelValues: string[]) => string,
     previousStage: Stage | null,
     refCount: number,
+    initialLoraWeights: readonly number[] = [],
+    initialIcLoraStrengths: readonly number[] = [],
 ): Stage => {
     const defaults = getRootDefaults();
     const model = previousStage
@@ -142,7 +149,10 @@ export const buildDefaultStage = (
             : STAGE_CONTROLNET_STRENGTH_DEFAULT,
         icLoraStrengths: previousStage
             ? [...previousStage.icLoraStrengths]
-            : [],
+            : initialIcLoraStrengths.map(normalizeStageControlNetStrengthValue),
+        loraWeights: previousStage
+            ? [...previousStage.loraWeights]
+            : [...initialLoraWeights],
         refStrengths: buildDefaultStageRefStrengths(refCount),
         upscale: previousStage ? previousStage.upscale : defaults.upscale,
         upscaleMethod: previousStage
@@ -161,7 +171,6 @@ export const buildDefaultStage = (
         scheduler: previousStage
             ? previousStage.scheduler
             : (defaults.schedulerValues[0] ?? "normal"),
-        loras: previousStage ? cloneStageLoras(previousStage.loras) : [],
     };
 };
 
@@ -195,9 +204,14 @@ export const removeRefAt = (clip: Clip, refIdx: number): boolean => {
     return true;
 };
 
-export const appendIcLoraStrengthToClip = (clip: Clip): void => {
+export const appendIcLoraStrengthToClip = (
+    clip: Clip,
+    initialStrength = 1,
+): void => {
     for (const stage of clip.stages) {
-        stage.icLoraStrengths.push(STAGE_CONTROLNET_STRENGTH_DEFAULT);
+        stage.icLoraStrengths.push(
+            normalizeStageControlNetStrengthValue(initialStrength),
+        );
     }
 };
 
@@ -235,6 +249,8 @@ export const normalizeStage = (
     refCount: number,
     stageIndexInClip: number,
     sourcedClip = false,
+    clipLoras: readonly ClipLora[] = [],
+    clipLoraDefaultWeights: readonly number[] = [],
 ): Stage => {
     const defaults = getRootDefaults();
     const fallback = buildDefaultStage(
@@ -242,6 +258,7 @@ export const normalizeStage = (
         getDefaultStageModel,
         previousStage,
         refCount,
+        clipLoraDefaultWeights,
     );
     // A generation first stage forces control/upscale; a sourced clip's stage 0
     // refines its footage (init-video img2img), so it keeps authored values.
@@ -283,6 +300,32 @@ export const normalizeStage = (
             defaults.controlMax,
         );
     }
+    const rawLoraWeights = readRawStageProp(rawStage, "loraWeights");
+    const legacyLoras = normalizeStageLoras(
+        readRawStageProp(rawStage, "loras"),
+    );
+    const legacyWeights = new Map(
+        legacyLoras.map((entry) => [entry.name, entry.weight]),
+    );
+    const hasLegacyLoras = Array.isArray(readRawStageProp(rawStage, "loras"));
+    const loraWeights = clipLoras.map((entry, index) => {
+        if (Array.isArray(rawLoraWeights)) {
+            return numberOr(
+                rawLoraWeights[index],
+                clipLoraDefaultWeights[index] ?? 1,
+            );
+        }
+        const legacyWeight = legacyWeights.get(entry.name);
+        if (legacyWeight !== undefined) {
+            return legacyWeight;
+        }
+        if (hasLegacyLoras) {
+            return clipLoraDefaultWeights[index] ?? 0;
+        }
+        return (
+            fallback.loraWeights[index] ?? clipLoraDefaultWeights[index] ?? 1
+        );
+    });
     const stage: Stage = {
         id: normalizeOptionalEntityId(rawStage.id),
         skipped: !!rawStage.skipped,
@@ -296,6 +339,7 @@ export const normalizeStage = (
                   normalizeStageControlNetStrengthValue,
               )
             : [...fallback.icLoraStrengths],
+        loraWeights,
         refStrengths: normalizeStageRefStrengths(
             rawStage.refStrengths,
             refCount,
@@ -323,7 +367,6 @@ export const normalizeStage = (
         ),
         sampler: textOr(rawStage.sampler, fallback.sampler),
         scheduler: textOr(rawStage.scheduler, fallback.scheduler),
-        loras: normalizeStageLoras(readRawStageProp(rawStage, "loras")),
     };
     stage.modelProfileId =
         trimmedText(readRawStageProp(rawStage, "modelProfileId")) ||

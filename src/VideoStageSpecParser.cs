@@ -107,7 +107,8 @@ internal static class VideoStageSpecParser
             IcLoraStrengths: ParseIcLoraStrengths(stage),
             ImageRefStrengths: ParseRefStrengths(stage, clipRefCount),
             ImageRefWasExplicit: VideoStagesJsonReader.HasProperty(stage, "imageReference"),
-            Loras: VideoStageResourceParser.ParseLoras(stage));
+            Loras: VideoStageResourceParser.ParseLoras(stage),
+            LoraWeights: VideoStageResourceParser.ParseLoraWeights(stage));
     }
 
     private static double? ParseControlNetStrength(JObject stage, string location)

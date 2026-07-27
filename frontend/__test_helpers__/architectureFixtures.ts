@@ -257,6 +257,7 @@ export const testRootDefaults = (
     modelLabels: modelCatalog.entries.map((entry) => entry.label),
     loraValues: [],
     loraLabels: [],
+    loraDefaultWeights: [],
     samplerValues: ["euler"],
     samplerLabels: ["Euler"],
     schedulerValues: ["normal"],

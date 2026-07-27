@@ -39,6 +39,7 @@ export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
     control: 1,
     controlNetStrength: 0.8,
     icLoraStrengths: [],
+    loraWeights: [],
     refStrengths: [],
     upscale: 1,
     upscaleMethod: "latentmodel-test.safetensors",
@@ -48,7 +49,6 @@ export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
     cfgScale: 1,
     sampler: "euler",
     scheduler: "normal",
-    loras: [],
     ...overrides,
 });
 
@@ -71,6 +71,7 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     boundaryOutOverlap: 8,
     duration: 2,
     audioSource: "Native",
+    loras: [],
     icLoras: [],
     saveAudioTrack: false,
     clipLengthFromAudio: false,

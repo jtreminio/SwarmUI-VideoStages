@@ -10,7 +10,7 @@ const FEATURE_LABEL: Record<AuthoringFeature, string> = {
     promptRelay: "Relay prompts",
     clipAudio: "Clip audio",
     audioReuse: "Captured stage audio reuse",
-    stageLoras: "Stage LoRAs",
+    stageLoras: "LoRAs",
     icLora: "IC-LoRA",
     hdr: "HDR",
     upscale: "Stage upscaling",

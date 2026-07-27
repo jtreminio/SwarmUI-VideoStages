@@ -19,6 +19,7 @@ export const STORED_STAGE_KEYS = [
     "control",
     "controlNetStrength",
     "icLoraStrengths",
+    "loraWeights",
     "refStrengths",
     "upscale",
     "upscaleMethod",
@@ -28,7 +29,6 @@ export const STORED_STAGE_KEYS = [
     "cfgScale",
     "sampler",
     "scheduler",
-    "loras",
 ] as const satisfies readonly (keyof Stage)[];
 
 export const STORED_CLIP_KEYS = [
@@ -41,6 +41,7 @@ export const STORED_CLIP_KEYS = [
     "boundaryOutOverlap",
     "duration",
     "audioSource",
+    "loras",
     "icLoras",
     "saveAudioTrack",
     "clipLengthFromAudio",

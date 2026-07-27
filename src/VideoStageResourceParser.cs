@@ -1,3 +1,4 @@
+using System.Globalization;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Utils;
 
@@ -48,6 +49,43 @@ internal static class VideoStageResourceParser
             loras.Add(new LoraRef(name.Trim(), weight, textEncoderWeight));
         }
         return loras;
+    }
+
+    public static IReadOnlyList<double> ParseLoraWeights(JObject obj)
+    {
+        if (!VideoStagesJsonReader.HasProperty(obj, "loraWeights"))
+        {
+            return null;
+        }
+        if (VideoStagesJsonReader.GetArray(obj, "loraWeights") is not JArray array)
+        {
+            return [];
+        }
+        List<double> weights = [];
+        foreach (JToken entry in array)
+        {
+            double value;
+            if (entry.Type is JTokenType.Float or JTokenType.Integer)
+            {
+                value = entry.Value<double>();
+            }
+            else if (
+                entry.Type == JTokenType.String
+                && double.TryParse(
+                    $"{entry}".Trim(),
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out double parsed))
+            {
+                value = parsed;
+            }
+            else
+            {
+                value = 1;
+            }
+            weights.Add(SanitizeWeight(value, 1));
+        }
+        return weights.AsReadOnly();
     }
 
     public static IReadOnlyList<IcLoraSpec> ParseIcLoras(JObject clipObject)

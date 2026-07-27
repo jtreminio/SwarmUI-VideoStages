@@ -3,7 +3,10 @@ import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
 } from "../__test_helpers__/architectureFixtures";
-import { minimalClip } from "../__test_helpers__/clipFixtures";
+import {
+    hdrIcLoraFixture,
+    minimalClip,
+} from "../__test_helpers__/clipFixtures";
 import {
     mountPromptBox,
     mountSelect,
@@ -101,6 +104,8 @@ describe("detail structural stage operations", () => {
             minimalClip({
                 architecture: "ltx2",
                 modelProfileId: "stale-profile",
+                loras: [{ name: "detail.safetensors" }],
+                icLoras: [hdrIcLoraFixture()],
                 stages: [],
             }),
         ];
@@ -125,6 +130,8 @@ describe("detail structural stage operations", () => {
         expect(clips[0].stages[0]).toMatchObject({
             model: "ltx-2.3.safetensors",
             modelProfileId: "ltx-2.3",
+            loraWeights: [1],
+            icLoraStrengths: [1],
         });
         expect(selection).toEqual({ kind: "clip", clipIdx: 0, stageIdx: 0 });
     });

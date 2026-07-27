@@ -212,6 +212,18 @@
       const id = modelsHelpers.getDataFor("Stable-Diffusion", modelName)?.modelClass?.id;
       return typeof id === "string" && id.trim() ? id : null;
     },
+    getLoraDefaultWeight: (modelName) => {
+      const browserModels = typeof sdLoraBrowser !== "undefined" ? sdLoraBrowser?.models : void 0;
+      const browserModel = browserModels?.[modelName] ?? browserModels?.[`${modelName}.safetensors`];
+      const browserRaw = browserModel?.data?.lora_default_weight;
+      const helperRaw = typeof modelsHelpers !== "undefined" && modelsHelpers && typeof modelsHelpers.getDataFor === "function" ? modelsHelpers.getDataFor("LoRA", modelName)?.lora_default_weight : void 0;
+      const preferenceRaw = typeof loraHelper !== "undefined" ? loraHelper?.loraWeightPref?.[modelName] : void 0;
+      const finiteWeight = (raw) => {
+        const value = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() ? Number(raw.trim()) : Number.NaN;
+        return Number.isFinite(value) ? value : null;
+      };
+      return finiteWeight(browserRaw) ?? finiteWeight(helperRaw) ?? finiteWeight(preferenceRaw);
+    },
     getCurrentModelCompatId: () => {
       if (typeof currentModelHelper === "undefined" || !currentModelHelper?.curCompatClass || typeof modelsHelpers === "undefined" || !modelsHelpers?.compatClasses) {
         return null;
@@ -1916,6 +1928,44 @@
     return `hsl(${resolved} ${HUE_SATURATION}% ${HUE_LIGHTNESS}%)`;
   };
 
+  // frontend/loraAuthoring.ts
+  var LORA_WEIGHT_DEFAULT = 1;
+  var LORA_WEIGHT_STEP = 0.05;
+  var defaultLoraWeight = (defaults, modelName) => {
+    const index = defaults.loraValues.indexOf(modelName);
+    const value = index >= 0 ? defaults.loraDefaultWeights[index] : null;
+    return typeof value === "number" && Number.isFinite(value) ? value : LORA_WEIGHT_DEFAULT;
+  };
+  var appendLoraToClip = (clip, name, initialWeight) => {
+    clip.loras.push({ name });
+    for (const stage of clip.stages) {
+      stage.loraWeights.push(initialWeight);
+    }
+  };
+  var replaceLoraModelAt = (clip, index, name, initialWeight) => {
+    const entry = clip.loras[index];
+    if (!entry) {
+      return false;
+    }
+    entry.name = name;
+    for (const stage of clip.stages) {
+      stage.loraWeights[index] = initialWeight;
+    }
+    return true;
+  };
+  var removeLoraAt = (clip, index) => {
+    if (index < 0 || index >= clip.loras.length) {
+      return false;
+    }
+    clip.loras.splice(index, 1);
+    for (const stage of clip.stages) {
+      if (index < stage.loraWeights.length) {
+        stage.loraWeights.splice(index, 1);
+      }
+    }
+    return true;
+  };
+
   // frontend/renderUtils.ts
   var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   var FRAME_ALIGNMENT = 8;
@@ -1955,12 +2005,12 @@
     STAGE_CONTROLNET_STRENGTH_MAX,
     STAGE_CONTROLNET_STRENGTH_STEP
   );
-  var normalizeStageIcLoraStrengths = (rawStrengths, icLoraCount, fallbackStrength = STAGE_CONTROLNET_STRENGTH_DEFAULT) => {
+  var normalizeStageIcLoraStrengths = (rawStrengths, icLoraCount, fallbackStrength = 1, perLoraFallbacks = []) => {
     const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
     return Array.from(
       { length: icLoraCount },
       (_, index) => normalizeStageControlNetStrengthValue(
-        rawValues[index] ?? fallbackStrength
+        rawValues[index] ?? perLoraFallbacks[index] ?? fallbackStrength
       )
     );
   };
@@ -2001,15 +2051,15 @@
     }
     return out;
   };
-  var cloneStageLoras = (loras) => loras.map((lora) => ({ name: lora.name, weight: lora.weight }));
-  var buildDefaultStage = (getRootDefaults2, getDefaultStageModel2, previousStage, refCount) => {
+  var buildDefaultStage = (getRootDefaults2, getDefaultStageModel2, previousStage, refCount, initialLoraWeights = [], initialIcLoraStrengths = []) => {
     const defaults = getRootDefaults2();
     const model = previousStage ? previousStage.model : getDefaultStageModel2(defaults.modelValues);
     return {
       skipped: false,
       control: previousStage ? previousStage.control : defaults.control,
       controlNetStrength: previousStage ? previousStage.controlNetStrength : STAGE_CONTROLNET_STRENGTH_DEFAULT,
-      icLoraStrengths: previousStage ? [...previousStage.icLoraStrengths] : [],
+      icLoraStrengths: previousStage ? [...previousStage.icLoraStrengths] : initialIcLoraStrengths.map(normalizeStageControlNetStrengthValue),
+      loraWeights: previousStage ? [...previousStage.loraWeights] : [...initialLoraWeights],
       refStrengths: buildDefaultStageRefStrengths(refCount),
       upscale: previousStage ? previousStage.upscale : defaults.upscale,
       upscaleMethod: previousStage ? previousStage.upscaleMethod : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
@@ -2018,8 +2068,7 @@
       steps: previousStage ? previousStage.steps : defaults.steps,
       cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
       sampler: previousStage ? previousStage.sampler : defaults.samplerValues[0] ?? "euler",
-      scheduler: previousStage ? previousStage.scheduler : defaults.schedulerValues[0] ?? "normal",
-      loras: previousStage ? cloneStageLoras(previousStage.loras) : []
+      scheduler: previousStage ? previousStage.scheduler : defaults.schedulerValues[0] ?? "normal"
     };
   };
   var buildDefaultRef = (source = REF_SOURCE_REFINER) => ({
@@ -2047,9 +2096,11 @@
     }
     return true;
   };
-  var appendIcLoraStrengthToClip = (clip) => {
+  var appendIcLoraStrengthToClip = (clip, initialStrength = 1) => {
     for (const stage of clip.stages) {
-      stage.icLoraStrengths.push(STAGE_CONTROLNET_STRENGTH_DEFAULT);
+      stage.icLoraStrengths.push(
+        normalizeStageControlNetStrengthValue(initialStrength)
+      );
     }
   };
   var removeIcLoraStrengthAt = (clip, entryIdx) => {
@@ -2067,13 +2118,14 @@
     }
     return Math.max(REF_FRAME_MIN, defaults.frames);
   };
-  var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, sourcedClip = false) => {
+  var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, sourcedClip = false, clipLoras = [], clipLoraDefaultWeights = []) => {
     const defaults = getRootDefaults2();
     const fallback = buildDefaultStage(
       getRootDefaults2,
       getDefaultStageModel2,
       previousStage,
-      refCount
+      refCount,
+      clipLoraDefaultWeights
     );
     const forcedFirstStage = stageIndexInClip === 0 && !sourcedClip;
     let firstStageUpscale;
@@ -2113,6 +2165,30 @@
         defaults.controlMax
       );
     }
+    const rawLoraWeights = readRawStageProp(rawStage, "loraWeights");
+    const legacyLoras = normalizeStageLoras(
+      readRawStageProp(rawStage, "loras")
+    );
+    const legacyWeights = new Map(
+      legacyLoras.map((entry) => [entry.name, entry.weight])
+    );
+    const hasLegacyLoras = Array.isArray(readRawStageProp(rawStage, "loras"));
+    const loraWeights = clipLoras.map((entry, index) => {
+      if (Array.isArray(rawLoraWeights)) {
+        return numberOr(
+          rawLoraWeights[index],
+          clipLoraDefaultWeights[index] ?? 1
+        );
+      }
+      const legacyWeight = legacyWeights.get(entry.name);
+      if (legacyWeight !== void 0) {
+        return legacyWeight;
+      }
+      if (hasLegacyLoras) {
+        return clipLoraDefaultWeights[index] ?? 0;
+      }
+      return fallback.loraWeights[index] ?? clipLoraDefaultWeights[index] ?? 1;
+    });
     const stage = {
       id: normalizeOptionalEntityId(rawStage.id),
       skipped: !!rawStage.skipped,
@@ -2123,6 +2199,7 @@
       icLoraStrengths: Array.isArray(rawStage.icLoraStrengths) ? rawStage.icLoraStrengths.map(
         normalizeStageControlNetStrengthValue
       ) : [...fallback.icLoraStrengths],
+      loraWeights,
       refStrengths: normalizeStageRefStrengths(
         rawStage.refStrengths,
         refCount
@@ -2149,8 +2226,7 @@
         defaults.cfgScaleMax
       ),
       sampler: textOr(rawStage.sampler, fallback.sampler),
-      scheduler: textOr(rawStage.scheduler, fallback.scheduler),
-      loras: normalizeStageLoras(readRawStageProp(rawStage, "loras"))
+      scheduler: textOr(rawStage.scheduler, fallback.scheduler)
     };
     stage.modelProfileId = trimmedText(readRawStageProp(rawStage, "modelProfileId")) || modelProfileForModel(defaults.modelCatalog, stage.model) || fallback.modelProfileId;
     if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
@@ -2193,12 +2269,17 @@
   var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
     const defaults = getRootDefaults2();
     const refs = includeDefaultRef ? [buildDefaultRef()] : [];
+    const loras = previousClip?.loras.map((entry) => ({ ...entry })) ?? [];
+    const initialLoraWeights = loras.map(
+      (entry, index) => previousClip?.stages[0]?.loraWeights[index] ?? defaults.loraDefaultWeights[defaults.loraValues.indexOf(entry.name)] ?? 1
+    );
     const firstStage = {
       ...buildDefaultStage(
         getRootDefaults2,
         getDefaultStageModel2,
         previousClip?.stages[0] ?? null,
-        refs.length
+        refs.length,
+        initialLoraWeights
       ),
       refStrengths: buildDefaultStageRefStrengths(
         refs.length,
@@ -2223,6 +2304,7 @@
         defaults.fps
       ),
       audioSource: AUDIO_SOURCE_NATIVE,
+      loras,
       icLoras: [],
       saveAudioTrack: false,
       clipLengthFromAudio: false,
@@ -2260,6 +2342,31 @@
     const refs = refsRaw.map(
       (rawRef) => normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax)
     );
+    const clipScopedLoras = normalizeStageLoras(rawClip.loras);
+    const loraNames = [];
+    const loraDefaultWeightByName = /* @__PURE__ */ new Map();
+    const appendLoraName = (name, defaultWeight) => {
+      if (loraDefaultWeightByName.has(name)) {
+        return;
+      }
+      loraNames.push(name);
+      loraDefaultWeightByName.set(name, defaultWeight);
+    };
+    for (const entry of clipScopedLoras) {
+      appendLoraName(entry.name, entry.weight);
+    }
+    for (const rawStage of stagesRaw) {
+      if (!isRecord(rawStage)) {
+        continue;
+      }
+      for (const entry of normalizeStageLoras(rawStage.loras)) {
+        appendLoraName(entry.name, 0);
+      }
+    }
+    const loras = loraNames.map((name) => ({ name }));
+    const loraDefaultWeights = loraNames.map(
+      (name) => loraDefaultWeightByName.get(name) ?? 1
+    );
     const stages = [];
     for (let i = 0; i < stagesRaw.length; i++) {
       const previousStage = i > 0 ? stages[i - 1] : null;
@@ -2271,7 +2378,9 @@
           previousStage,
           refs.length,
           i,
-          sourceVideo !== null
+          sourceVideo !== null,
+          loras,
+          loraDefaultWeights
         )
       );
     }
@@ -2293,11 +2402,22 @@
       sourceVideo !== null,
       architectureDescriptor(defaults.modelCatalog, architecture) === null || architecture === NONE_ARCHITECTURE_ID
     );
-    for (const stage of stages) {
+    const icLoraDefaultStrengths = icLoras.map(
+      (entry) => defaultLoraWeight(defaults, entry.lora)
+    );
+    for (let index = 0; index < stages.length; index++) {
+      const stage = stages[index];
+      const rawStage = isRecord(stagesRaw[index]) ? stagesRaw[index] : {};
+      const hasLegacyControlNetStrength = Object.hasOwn(
+        rawStage,
+        "controlNetStrength"
+      );
+      const legacyFallback = hasLegacyControlNetStrength ? stage.controlNetStrength : 1;
       stage.icLoraStrengths = normalizeStageIcLoraStrengths(
-        stage.icLoraStrengths,
+        rawStage.icLoraStrengths,
         icLoras.length,
-        stage.controlNetStrength
+        legacyFallback,
+        hasLegacyControlNetStrength ? [] : stages[index - 1]?.icLoraStrengths ?? icLoraDefaultStrengths
       );
     }
     const clipLengthFromAudio = !!rawClip.clipLengthFromAudio;
@@ -2321,6 +2441,7 @@
       ),
       duration,
       audioSource,
+      loras,
       icLoras,
       saveAudioTrack: !!rawClip.saveAudioTrack,
       clipLengthFromAudio,
@@ -2817,6 +2938,9 @@
       modelCatalog,
       loraValues: loras.values,
       loraLabels: loras.labels,
+      loraDefaultWeights: loras.values.map(
+        (value) => getVideoStagesHostBridge().getLoraDefaultWeight(value)
+      ),
       samplerValues: sampler.values,
       samplerLabels: sampler.labels,
       schedulerValues: scheduler.values,
@@ -2896,6 +3020,9 @@
         boundaryOutOverlap: clip.boundaryOutOverlap,
         duration: clip.duration,
         audioSource: clip.audioSource,
+        loras: clip.loras.map((entry) => ({
+          name: entry.name
+        })),
         icLoras: clip.icLoras.map((entry) => ({
           lora: entry.lora,
           preset: entry.preset,
@@ -2942,6 +3069,7 @@
           control: stage.control,
           controlNetStrength: stage.controlNetStrength,
           icLoraStrengths: stage.icLoraStrengths,
+          loraWeights: stage.loraWeights,
           refStrengths: stage.refStrengths,
           upscale: stage.upscale,
           upscaleMethod: stage.upscaleMethod,
@@ -2950,11 +3078,7 @@
           steps: stage.steps,
           cfgScale: stage.cfgScale,
           sampler: stage.sampler,
-          scheduler: stage.scheduler,
-          loras: stage.loras.map((lora) => ({
-            name: lora.name,
-            weight: lora.weight
-          }))
+          scheduler: stage.scheduler
         }))
       })
     );
@@ -3080,12 +3204,14 @@
       return false;
     }
     for (const clip of parsed.clips) {
-      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "refs") || !hasArrayOfRecords(clip, "icLoras")) {
+      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "refs") || !hasArrayOfRecords(clip, "icLoras") || Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras")) {
         return false;
       }
       const stages = Array.isArray(clip.stages) ? clip.stages : [];
       for (const stage of stages) {
-        if (!hasArrayOfRecords(stage, "loras") || Object.hasOwn(stage, "icLoraStrengths") && (!Array.isArray(stage.icLoraStrengths) || !stage.icLoraStrengths.every(
+        if (Object.hasOwn(stage, "loras") && !hasArrayOfRecords(stage, "loras") || Object.hasOwn(stage, "loraWeights") && (!Array.isArray(stage.loraWeights) || !stage.loraWeights.every(
+          (weight) => typeof weight === "number" && Number.isFinite(weight)
+        )) || Object.hasOwn(stage, "icLoraStrengths") && (!Array.isArray(stage.icLoraStrengths) || !stage.icLoraStrengths.every(
           (strength) => typeof strength === "number" && Number.isFinite(strength)
         )) || Object.hasOwn(stage, "refStrengths") && (!Array.isArray(stage.refStrengths) || !stage.refStrengths.every(
           (strength) => typeof strength === "number" && Number.isFinite(strength)
@@ -3382,7 +3508,7 @@
     promptRelay: "Relay prompts",
     clipAudio: "Clip audio",
     audioReuse: "Captured stage audio reuse",
-    stageLoras: "Stage LoRAs",
+    stageLoras: "LoRAs",
     icLora: "IC-LoRA",
     hdr: "HDR",
     upscale: "Stage upscaling"
@@ -3518,7 +3644,7 @@
           const supported = descriptor.capabilities.stage.includes("lora") && profile?.capabilities.includes("normal-lora") === true;
           return {
             supported,
-            reason: supported ? "" : `Stage LoRAs require normal-LoRA support in ${descriptor.label}.`,
+            reason: supported ? "" : `LoRAs require normal-LoRA support in ${descriptor.label}.`,
             rule: null
           };
         }
@@ -3605,7 +3731,10 @@
       removedEntityIds.push(...collectIds(clip.refs));
       clip.refs = [];
     }
-    let removedStageLoras = 0;
+    const removedClipLoras = !supportsNormalLoras ? clip.loras.length : 0;
+    if (removedClipLoras > 0) {
+      clip.loras = [];
+    }
     let removedUpscaleSettings = 0;
     for (const stage of clip.stages) {
       stage.model = target.model;
@@ -3613,17 +3742,16 @@
       if (!supportsReferences) {
         stage.refStrengths = [];
       }
-      if (!supportsNormalLoras && stage.loras.length > 0) {
-        removedStageLoras += stage.loras.length;
-        stage.loras = [];
+      if (!supportsNormalLoras) {
+        stage.loraWeights = [];
       }
       if (stage.upscale !== 1 && !supports("upscale", { upscaleMethod: stage.upscaleMethod })) {
         removedUpscaleSettings++;
         stage.upscale = 1;
       }
     }
-    if (removedStageLoras > 0) {
-      removals.push(countLabel(removedStageLoras, "stage LoRA"));
+    if (removedClipLoras > 0) {
+      removals.push(countLabel(removedClipLoras, "clip LoRA"));
     }
     if (removedUpscaleSettings > 0) {
       removals.push("stage upscale settings");
@@ -3820,6 +3948,7 @@
       "boundaryOutOverlap",
       "duration",
       "audioSource",
+      "loras",
       "icLoras",
       "saveAudioTrack",
       "clipLengthFromAudio",
@@ -3851,14 +3980,14 @@
       "control",
       "controlNetStrength",
       "icLoraStrengths",
+      "loraWeights",
       "refStrengths",
       "upscale",
       "upscaleMethod",
       "steps",
       "cfgScale",
       "sampler",
-      "scheduler",
-      "loras"
+      "scheduler"
     ],
     reservedKeys: ["id", "model", "modelProfileId"],
     reconcilesClipIdentity: true,
@@ -5386,9 +5515,13 @@
       "Prompt relay"
     );
     unsupported(
-      !supports("stageLoras") && clip.stages.some((stage) => stage.loras.length > 0),
+      !supports("stageLoras") && clip.stages.some(
+        (stage) => clip.loras.some(
+          (_, index) => (stage.loraWeights[index] ?? 1) !== 0
+        )
+      ),
       "stage-loras",
-      "Stage LoRAs"
+      "LoRAs"
     );
     unsupported(
       clip.stages.some(
@@ -5517,7 +5650,9 @@
         const resolvedProfile = architectureById.get(resolved.architectureId)?.profiles.find(
           (profile) => profile.id === resolved.modelProfileId
         );
-        if (stage.loras.length > 0 && resolvedProfile && !resolvedProfile.capabilities.includes("normal-lora")) {
+        if (clip.loras.some(
+          (_, index) => (stage.loraWeights[index] ?? 1) !== 0
+        ) && resolvedProfile && !resolvedProfile.capabilities.includes("normal-lora")) {
           diagnostics.push(
             issue(
               "architecture.unsupported.stage-loras-profile",
@@ -7060,6 +7195,7 @@
   var sliderSeq = 0;
   var helpSeq = 0;
   var checkboxSeq = 0;
+  var fieldSeq = 0;
   var slugify = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "field";
   var appendHelp = (labelEl, row, fieldName, helpText) => {
     const key = `vst_${slugify(fieldName)}_${++helpSeq}`;
@@ -7145,6 +7281,12 @@
     const labelEl = buildFieldLabel(label);
     if (help) {
       appendHelp(labelEl, row, label, help);
+    }
+    if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement) {
+      if (!control.id) {
+        control.id = `vst_field_${slugify(label)}_${++fieldSeq}`;
+      }
+      labelEl.htmlFor = control.id;
     }
     row.append(labelEl, control);
     if (hint) {
@@ -8513,8 +8655,7 @@
     return notice;
   };
   var CAPABILITY_REPAIR_SELECTORS = [
-    ".vst-detail-delete",
-    ".vst-stage-lora-remove"
+    ".vst-detail-delete"
   ];
   var buildCapabilityRepairButton = (action) => {
     const button = document.createElement("button");
@@ -9898,7 +10039,10 @@
                   lora: IC_LORA_AUTO
                 })
               );
-              appendIcLoraStrengthToClip(target);
+              appendIcLoraStrengthToClip(
+                target,
+                defaultLoraWeight(defaults, IC_LORA_AUTO)
+              );
               return {
                 kind: "ic-lora",
                 clipIdx,
@@ -10035,6 +10179,16 @@
               const target = entryAt(clips, entryIdx2);
               if (target) {
                 target.lora = value;
+                const initialStrength = defaultLoraWeight(
+                  defaults,
+                  value
+                );
+                const targetClip = clips[clipIdx];
+                for (const stage of targetClip?.stages ?? []) {
+                  stage.icLoraStrengths[entryIdx2] = normalizeStageControlNetStrengthValue(
+                    initialStrength
+                  );
+                }
               }
             });
             if (value === IC_LORA_AUTO) {
@@ -10513,6 +10667,122 @@
     active: clip.skipped === true,
     onClick: () => context.toggleClipSkip(clipIdx)
   });
+
+  // frontend/detailStrip/clipLorasPanel.ts
+  var buildClipLorasSection = (context, clip, clipIdx, stageIdx, defaults) => {
+    const selectedNames = new Set(clip.loras.map((entry) => entry.name));
+    const nextAvailableName = defaults.loraValues.find(
+      (value) => !selectedNames.has(value)
+    );
+    const applySupportedStageWeights = (target, loraIdx, supportedWeight) => {
+      const capabilities = context.capabilities();
+      for (const stage of target.stages) {
+        if (!capabilities.forStage(target, stage).decision("stageLoras").supported) {
+          stage.loraWeights[loraIdx] = 0;
+        } else {
+          stage.loraWeights[loraIdx] = supportedWeight;
+        }
+      }
+    };
+    const items = clip.loras.map((lora, loraIdx) => {
+      const editor = document.createElement("div");
+      const options = defaults.loraValues.filter(
+        (value) => value === lora.name || !clip.loras.some(
+          (entry, index) => index !== loraIdx && entry.name === value
+        )
+      ).map((value) => {
+        const optionIdx = defaults.loraValues.indexOf(value);
+        return {
+          value,
+          label: defaults.loraLabels[optionIdx] ?? value
+        };
+      });
+      preserveSelectedOption(options, lora.name, "start", (value) => ({
+        value,
+        label: `${value} (unsupported persisted value)`,
+        disabled: true
+      }));
+      const select2 = buildOptionSelect(options, lora.name, (value) => {
+        context.commit((clips) => {
+          const target = clips[clipIdx];
+          if (target) {
+            const initialWeight = defaultLoraWeight(defaults, value);
+            replaceLoraModelAt(target, loraIdx, value, initialWeight);
+            applySupportedStageWeights(target, loraIdx, initialWeight);
+          }
+        });
+        context.render();
+      });
+      select2.setAttribute(
+        "data-vst-focus-key",
+        `clip-${clipIdx}-lora-${loraIdx}-model`
+      );
+      editor.appendChild(buildField("Model", select2));
+      return {
+        label: `L${loraIdx}`,
+        groupClassName: "vst-clip-lora-entry",
+        editor,
+        onDelete: () => {
+          context.structuralCommit(
+            (clips) => {
+              const target = clips[clipIdx];
+              if (!target || !removeLoraAt(target, loraIdx)) {
+                return null;
+              }
+              return { kind: "clip", clipIdx, stageIdx };
+            },
+            { rebuildAfterSelect: true }
+          );
+        },
+        deleteTitle: `Delete LoRA ${loraIdx}`
+      };
+    });
+    const built = buildRepeatingEditor({
+      key: `clip-${clipIdx}-loras`,
+      label: "LoRAs",
+      sectionClass: "vst-detail-loras-section",
+      open: items.length > 0,
+      defaultActiveIndex: items.length > 0 ? 0 : null,
+      items,
+      add: {
+        title: nextAvailableName ? "Add a LoRA to this clip" : "All available LoRAs are already on this clip",
+        label: "+ Add LoRA",
+        className: "vst-detail-add-lora",
+        disabled: !nextAvailableName,
+        onClick: () => {
+          context.structuralCommit(
+            (clips) => {
+              const target = clips[clipIdx];
+              const name = nextAvailableName;
+              if (!target || !name) {
+                return null;
+              }
+              const initialWeight = defaultLoraWeight(defaults, name);
+              appendLoraToClip(target, name, initialWeight);
+              applySupportedStageWeights(
+                target,
+                target.loras.length - 1,
+                initialWeight
+              );
+              return { kind: "clip", clipIdx, stageIdx };
+            },
+            { rebuildAfterSelect: true }
+          );
+        }
+      },
+      remove: {
+        title: "Delete LoRA",
+        className: "vst-detail-delete-lora"
+      }
+    });
+    appendHelp(
+      built.heading,
+      built.section,
+      "LoRAs",
+      "Choose the normal LoRA models once for this clip. Each stage sets its own weight below its reference strengths."
+    );
+    return built.section;
+  };
 
   // frontend/imageSource.ts
   var buildImageSourceOptions = (currentValue = "") => {
@@ -11122,123 +11392,6 @@
     return wrap;
   };
 
-  // frontend/detailStrip/stageLorasPanel.ts
-  var LORA_WEIGHT_STEP = 0.05;
-  var LORA_WEIGHT_DEFAULT = 1;
-  var buildStageLorasSection = (context, clipIdx, stageIdx, stage, defaults) => {
-    const items = stage.loras.map((lora, loraIdx) => {
-      const editor = document.createElement("div");
-      const options = defaults.loraValues.map(
-        (value, optionIdx) => ({
-          value,
-          label: defaults.loraLabels[optionIdx] ?? value
-        })
-      );
-      preserveSelectedOption(options, lora.name, "start", (value) => ({
-        value,
-        label: `${value} (unsupported persisted value)`,
-        disabled: true
-      }));
-      const select2 = buildOptionSelect(options, lora.name, (value) => {
-        context.commit((clips) => {
-          const target = clips[clipIdx]?.stages[stageIdx]?.loras[loraIdx];
-          if (target) {
-            target.name = value;
-          }
-        });
-      });
-      select2.setAttribute(
-        "data-vst-focus-key",
-        `stage-${stageIdx}-lora-${loraIdx}-model`
-      );
-      editor.appendChild(buildField("Model", select2));
-      const weight = buildUnboundedNumber(
-        lora.weight,
-        LORA_WEIGHT_STEP,
-        (value) => {
-          context.debouncedCommit(
-            `stage-${stageIdx}-lora-${loraIdx}-weight`,
-            (clips) => {
-              const target = clips[clipIdx]?.stages[stageIdx]?.loras[loraIdx];
-              if (target) {
-                target.weight = value;
-              }
-            }
-          );
-        }
-      );
-      weight.setAttribute(
-        "data-vst-focus-key",
-        `stage-${stageIdx}-lora-${loraIdx}-weight`
-      );
-      editor.appendChild(buildField("Weight", weight));
-      return {
-        label: `LoRA ${loraIdx}`,
-        groupClassName: "vst-stage-lora-entry",
-        editor,
-        onDelete: () => {
-          context.structuralCommit(
-            (clips) => {
-              const target = clips[clipIdx]?.stages[stageIdx];
-              if (!target?.loras[loraIdx]) {
-                return null;
-              }
-              target.loras.splice(loraIdx, 1);
-              return { kind: "clip", clipIdx, stageIdx };
-            },
-            { rebuildAfterSelect: true }
-          );
-        },
-        deleteTitle: `Delete LoRA ${loraIdx}`
-      };
-    });
-    const built = buildRepeatingEditor({
-      key: `clip-${clipIdx}-stage-${stageIdx}-loras`,
-      label: "LoRAs",
-      sectionClass: "vst-stage-loras",
-      // Stage LoRAs do not have their own timeline selection kind. Structural
-      // add/remove commits therefore rebuild the owning stage selection; keep
-      // the nested editor open while it still has items instead of resetting
-      // it to the hard-coded closed state on every rebuild.
-      open: items.length > 0,
-      defaultActiveIndex: items.length > 0 ? 0 : null,
-      items,
-      add: {
-        title: defaults.loraValues.length > 0 ? "Add a LoRA to this stage" : "No LoRAs are available",
-        label: "+ Add LoRA",
-        className: "vst-stage-lora-add",
-        disabled: defaults.loraValues.length === 0,
-        onClick: () => {
-          context.structuralCommit(
-            (clips) => {
-              const target = clips[clipIdx]?.stages[stageIdx];
-              if (!target || defaults.loraValues.length === 0) {
-                return null;
-              }
-              target.loras.push({
-                name: defaults.loraValues[0],
-                weight: LORA_WEIGHT_DEFAULT
-              });
-              return { kind: "clip", clipIdx, stageIdx };
-            },
-            { rebuildAfterSelect: true }
-          );
-        }
-      },
-      remove: {
-        title: "Delete LoRA",
-        className: "vst-stage-lora-remove"
-      }
-    });
-    appendHelp(
-      built.heading,
-      built.section,
-      "Stage LoRAs",
-      "LoRAs applied only to this stage. A newly added stage copies every LoRA and weight from the previous stage."
-    );
-    return built.section;
-  };
-
   // frontend/architectures/conversion/presentation.ts
   var architectureConversionMessage = (fromLabel, toLabel, removals) => {
     const impact = removals.length === 0 ? "Architecture-owned stage settings will be retargeted." : `This removes: ${removals.join(", ")}.`;
@@ -11387,6 +11540,18 @@ The conversion is one undoable change.`;
   };
 
   // frontend/detailStrip/stagePanel/referenceGuideSection.ts
+  var appendSectionHeader = (fields, label) => {
+    const header = document.createElement("div");
+    header.className = "vst-detail-sec vst-detail-span-full vst-detail-crumb vst-detail-subsection-crumb";
+    header.setAttribute("role", "heading");
+    header.setAttribute("aria-level", "4");
+    header.textContent = label;
+    fields.appendChild(header);
+  };
+  var shortModelName2 = (modelName) => {
+    const parts = modelName.split(/[\\/]/);
+    return parts[parts.length - 1] || modelName;
+  };
   var appendStageReferenceGuideSection = ({
     context,
     clip,
@@ -11394,14 +11559,12 @@ The conversion is one undoable change.`;
     stage,
     stageIdx,
     fields,
+    stageCapabilities,
     debouncedCommit
   }) => {
     if (clip.refs.length > 0) {
       const refDecision = context.capabilities().forClip(clip).decision("frameReferences");
-      const refsHeader = document.createElement("div");
-      refsHeader.className = "vst-detail-sec vst-detail-span-full";
-      refsHeader.textContent = "Reference Strengths";
-      fields.appendChild(refsHeader);
+      appendSectionHeader(fields, "Reference Strengths");
       const setRefHover = (refIdx, on) => {
         context.getBoundBody()?.querySelector(
           `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`
@@ -11445,30 +11608,73 @@ The conversion is one undoable change.`;
         fields.appendChild(buildCapabilityNotice(refDecision));
       }
     }
-    if (clip.icLoras.length === 0) return;
-    const icDecision = context.capabilities().forClip(clip).decision("icLora");
-    clip.icLoras.forEach((entry, entryIdx) => {
-      if (entry.stage >= 0 && entry.stage !== stageIdx) {
-        return;
-      }
-      const guideStrength = buildSlider(
-        `IC-LoRA Strength ${entryIdx}`,
-        stage.icLoraStrengths[entryIdx] ?? stage.controlNetStrength,
-        STAGE_CONTROLNET_STRENGTH_MIN,
-        STAGE_CONTROLNET_STRENGTH_MAX,
-        STAGE_CONTROLNET_STRENGTH_STEP,
-        (value) => {
-          debouncedCommit(`ic-lora-strength-${entryIdx}`, (target) => {
-            target.icLoraStrengths[entryIdx] = value;
-          });
-        }
+    if (clip.loras.length > 0) {
+      appendSectionHeader(fields, "LoRA Weights");
+      const loraState = stageCapabilities.authoringState(
+        "stageLoras",
+        clip.loras.length > 0
       );
-      tagFocus(guideStrength, `ic-lora-strength-${entryIdx}`);
-      fields.appendChild(guideStrength);
-      if (!icDecision.supported) {
-        disableCapabilityControls(guideStrength, icDecision);
+      const group = document.createDocumentFragment();
+      clip.loras.forEach((entry, entryIdx) => {
+        const weight = tagFocus(
+          buildUnboundedNumber(
+            stage.loraWeights[entryIdx] ?? 1,
+            LORA_WEIGHT_STEP,
+            (value) => {
+              debouncedCommit(`lora-weight-${entryIdx}`, (target) => {
+                target.loraWeights[entryIdx] = value;
+              });
+            }
+          ),
+          `lora-weight-${entryIdx}`
+        );
+        weight.classList.add("lora-weight-input", "vst-stage-lora-weight");
+        const row = buildField(shortModelName2(entry.name), weight);
+        row.classList.add("vst-stage-lora-weight-row");
+        row.title = entry.name;
+        group.appendChild(row);
+      });
+      if (!loraState.enabled) {
+        disableCapabilityControls(group, loraState);
       }
+      fields.appendChild(group);
+    }
+    const applicableIcLoras = clip.icLoras.map((entry, entryIdx) => ({ entry, entryIdx })).filter(({ entry }) => entry.stage < 0 || entry.stage === stageIdx);
+    if (applicableIcLoras.length === 0) return;
+    appendSectionHeader(fields, "IC-LoRA Guide Strengths");
+    const icDecision = context.capabilities().forClip(clip).decision("icLora");
+    const icGroup = document.createDocumentFragment();
+    applicableIcLoras.forEach(({ entry, entryIdx }) => {
+      const guideStrength = tagFocus(
+        buildNumber(
+          stage.icLoraStrengths[entryIdx] ?? 1,
+          STAGE_CONTROLNET_STRENGTH_MIN,
+          STAGE_CONTROLNET_STRENGTH_MAX,
+          STAGE_CONTROLNET_STRENGTH_STEP,
+          (value) => {
+            debouncedCommit(
+              `ic-lora-strength-${entryIdx}`,
+              (target) => {
+                target.icLoraStrengths[entryIdx] = value;
+              }
+            );
+          }
+        ),
+        `ic-lora-strength-${entryIdx}`
+      );
+      guideStrength.classList.add(
+        "lora-weight-input",
+        "vst-stage-iclora-strength"
+      );
+      const row = buildField(shortModelName2(entry.lora), guideStrength);
+      row.classList.add("vst-stage-iclora-strength-row");
+      row.title = entry.lora;
+      icGroup.appendChild(row);
     });
+    if (!icDecision.supported) {
+      disableCapabilityControls(icGroup, icDecision);
+    }
+    fields.appendChild(icGroup);
   };
 
   // frontend/detailStrip/stagePanel/samplingSection.ts
@@ -11713,23 +11919,6 @@ The conversion is one undoable change.`;
     appendStageUpscaleSection(bindings, isRefine);
     appendStageSamplerSchedulerSection(bindings);
     appendStageReferenceGuideSection(bindings);
-    const loraState = stageCapabilities.authoringState(
-      "stageLoras",
-      stage.loras.length > 0
-    );
-    if (loraState.visible) {
-      const loras = buildStageLorasSection(
-        context,
-        clipIdx,
-        stageIdx,
-        stage,
-        defaults
-      );
-      if (!loraState.enabled) {
-        applyPersistedCapabilityRepair(loras, loraState);
-      }
-      fields.appendChild(loras);
-    }
     if (sourcedStage0) {
       const note = document.createElement("p");
       note.className = "vst-detail-note vst-stage-passthrough-note";
@@ -11851,6 +12040,11 @@ The conversion is one undoable change.`;
         clips,
         selection.kind === "ref"
       )
+    );
+    appendCapabilitySection(
+      "stageLoras",
+      clip.loras.length > 0,
+      () => buildClipLorasSection(context, clip, clipIdx, stageIdx, defaults)
     );
     appendCapabilitySection(
       "icLora",
@@ -12848,7 +13042,13 @@ The conversion is one undoable change.`;
             getRootDefaults,
             (values) => getDefaultStageModel(values, lockedArchitecture),
             last,
-            clip.refs.length
+            clip.refs.length,
+            clip.loras.map(
+              (entry) => defaultLoraWeight(defaults, entry.name)
+            ),
+            clip.icLoras.map(
+              (entry) => defaultLoraWeight(defaults, entry.lora)
+            )
           );
           if (clip.architecture === NONE_ARCHITECTURE_ID && clip.stages.length === 0) {
             const target = buildArchitectureRetargetPlan(

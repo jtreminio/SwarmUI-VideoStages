@@ -133,11 +133,21 @@ const mountRootDefaults = (loras: string[] = ["lora-x.safetensors"]): void => {
 };
 
 const modelGlobals = globalThis as unknown as {
+    sdLoraBrowser?: {
+        models: Record<
+            string,
+            { data: { lora_default_weight?: string | number } }
+        >;
+    };
+    loraHelper?: {
+        loraWeightPref: Record<string, string | number>;
+    };
     modelsHelpers?: {
         getDataFor: (
             category: string,
             modelName: string,
         ) => {
+            lora_default_weight?: string | number;
             modelClass: { compatClass: { id: string } };
         };
     };
@@ -263,6 +273,8 @@ describe("createTimelineDetailStrip", () => {
         resetSelectionForTests();
         document.body.innerHTML = "";
         delete modelGlobals.modelsHelpers;
+        delete modelGlobals.sdLoraBrowser;
+        delete modelGlobals.loraHelper;
         delete swarmGlobals.makeWSRequest;
         delete swarmGlobals.refreshParameterValues;
     });
@@ -353,10 +365,9 @@ describe("createTimelineDetailStrip", () => {
         expect(
             detailBody()?.querySelector(".vst-detail-params"),
         ).not.toBeNull();
-        // LoRAs are a sibling subsection to Stages, not mixed into stage
-        // parameter fields.
+        // LoRA model definitions are clip-level, not nested in stage fields.
         const loras = detailBody()?.querySelector<HTMLElement>(
-            ".vst-detail-params .vst-stage-loras",
+            ".vst-detail-loras-section",
         );
         expect(loras).not.toBeNull();
     });
@@ -499,7 +510,7 @@ describe("createTimelineDetailStrip", () => {
     it("hides IC-LoRA strengths when the clip has no IC-LoRAs", () => {
         setup([{ duration: 4, stages: [{}], controlNetLora: "" }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(controlNetLabels()).not.toContain("IC-LoRA Strength 0");
+        expect(document.querySelector(".vst-stage-iclora-strength")).toBeNull();
     });
 
     it("shows a zero-based strength for each IC-LoRA in the stage", () => {
@@ -523,11 +534,39 @@ describe("createTimelineDetailStrip", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(controlNetLabels()).toEqual(
-            expect.arrayContaining([
-                "IC-LoRA Strength 0",
-                "IC-LoRA Strength 1",
-            ]),
+            expect.arrayContaining(["some-cnet-lora", "some-other-cnet-lora"]),
         );
+        const strengthInputs = Array.from(
+            document.querySelectorAll<HTMLInputElement>(
+                ".vst-stage-iclora-strength-row input.lora-weight-input",
+            ),
+        );
+        expect(strengthInputs).toHaveLength(2);
+        for (const input of strengthInputs) {
+            const label = input
+                .closest(".vst-stage-iclora-strength-row")
+                ?.querySelector<HTMLLabelElement>("label");
+            expect(input.id).not.toBe("");
+            expect(label?.htmlFor).toBe(input.id);
+        }
+        expect(
+            document.querySelector(
+                ".vst-stage-iclora-strength-row input.auto-slider-range",
+            ),
+        ).toBeNull();
+        const subsectionHeaders = Array.from(
+            document.querySelectorAll<HTMLElement>(
+                ".vst-detail-subsection-crumb",
+            ),
+        );
+        expect(subsectionHeaders.map((header) => header.textContent)).toEqual(
+            expect.arrayContaining(["IC-LoRA Guide Strengths"]),
+        );
+        for (const header of subsectionHeaders) {
+            expect(header.classList.contains("vst-detail-crumb")).toBe(true);
+            expect(header.getAttribute("role")).toBe("heading");
+            expect(header.getAttribute("aria-level")).toBe("4");
+        }
     });
 
     it("persists IC-LoRA strengths independently by zero-based entry index", () => {
@@ -543,12 +582,16 @@ describe("createTimelineDetailStrip", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
-        const second = sliderNumberByLabel("IC-LoRA Strength 1");
+        const second =
+            fieldByLabel("second.safetensors").querySelector<HTMLInputElement>(
+                "input",
+            );
+        if (!second) throw new Error("IC-LoRA strength input missing");
         second.value = "0.3";
         second.dispatchEvent(new Event("input", { bubbles: true }));
         jest.advanceTimersByTime(200);
         expect(savedClips(saveSpy)[0].stages[0].icLoraStrengths).toEqual([
-            0.8, 0.3,
+            1, 0.3,
         ]);
     });
 
@@ -577,6 +620,7 @@ describe("createTimelineDetailStrip", () => {
             hdr: false,
             driveMedia: null,
         });
+        expect(clips[0].stages[0].icLoraStrengths).toEqual([1]);
         expect(document.querySelector(".vst-detail-iclora")).not.toBeNull();
         expect(controlNetLabels()).toContain("Drive Media");
     });
@@ -1689,54 +1733,135 @@ describe("createTimelineDetailStrip", () => {
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         document
             .querySelector<HTMLElement>(
-                ".vst-detail .vst-stage-loras > .input-group-header",
+                ".vst-detail .vst-detail-loras-section > .input-group-header",
             )
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         document
-            .querySelector<HTMLElement>(".vst-detail .vst-stage-lora-add")
+            .querySelector<HTMLElement>(".vst-detail .vst-detail-add-lora")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(
-            document.querySelectorAll(".vst-detail .vst-stage-lora-entry"),
+            document.querySelectorAll(".vst-detail .vst-clip-lora-entry"),
         ).toHaveLength(1);
         expect(saveSpy).toHaveBeenCalled();
-        expect(savedClips(saveSpy)[0].stages[0].loras).toEqual([
-            { name: "lora-x.safetensors", weight: 1 },
+        expect(savedClips(saveSpy)[0].loras).toEqual([
+            { name: "lora-x.safetensors" },
         ]);
+        expect(savedClips(saveSpy)[0].stages[0].loraWeights).toEqual([1]);
         expect(
             document
-                .querySelector(".vst-detail .vst-stage-loras")
+                .querySelector(".vst-detail .vst-detail-loras-section")
                 ?.classList.contains("input-group-open"),
         ).toBe(true);
     });
 
-    it("uses zero-based LoRA labels and opens the newly added LoRA", () => {
-        setup([
-            {
-                duration: 4,
-                stages: [
-                    { loras: [{ name: "lora-x.safetensors", weight: 0.5 }] },
-                ],
+    it("seeds a new clip LoRA from SwarmUI model metadata", () => {
+        modelGlobals.sdLoraBrowser = {
+            models: {
+                "weighted-lora.safetensors": {
+                    data: { lora_default_weight: "0.65" },
+                },
             },
-        ]);
+        };
+        setup([{ duration: 4, stages: [{}] }], ["weighted-lora.safetensors"]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         document
-            .querySelector<HTMLButtonElement>(".vst-stage-lora-add")
+            .querySelector<HTMLButtonElement>(".vst-detail-add-lora")
+            ?.click();
+
+        expect(savedClips(saveSpy)[0].stages[0].loraWeights).toEqual([0.65]);
+    });
+
+    it("falls back to SwarmUI's remembered per-LoRA weight", () => {
+        modelGlobals.sdLoraBrowser = {
+            models: {
+                "weighted-lora.safetensors": {
+                    data: { lora_default_weight: "" },
+                },
+            },
+        };
+        modelGlobals.loraHelper = {
+            loraWeightPref: { "weighted-lora.safetensors": "0.55" },
+        };
+        setup([{ duration: 4, stages: [{}] }], ["weighted-lora.safetensors"]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        document
+            .querySelector<HTMLButtonElement>(".vst-detail-add-lora")
+            ?.click();
+
+        expect(savedClips(saveSpy)[0].stages[0].loraWeights).toEqual([0.55]);
+    });
+
+    it("resets per-stage IC-LoRA strengths from the selected model default", () => {
+        modelGlobals.sdLoraBrowser = {
+            models: {
+                "weighted-ic.safetensors": {
+                    data: { lora_default_weight: "0.4" },
+                },
+            },
+        };
+        setup(
+            [
+                {
+                    duration: 4,
+                    stages: [{}],
+                    icLoras: [
+                        {
+                            lora: "lora-x.safetensors",
+                            driveData: "visual",
+                        },
+                    ],
+                },
+            ],
+            ["lora-x.safetensors", "weighted-ic.safetensors"],
+        );
+        setSelection({ kind: "ic-lora", clipIdx: 0, entryIdx: 0 });
+        const select =
+            fieldByLabel("LoRA").querySelector<HTMLSelectElement>("select");
+        if (!select) throw new Error("IC-LoRA model select missing");
+        select.value = "weighted-ic.safetensors";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+
+        expect(savedClips(saveSpy)[0].stages[0].icLoraStrengths).toEqual([0.4]);
+    });
+
+    it("uses zero-based LoRA labels and opens the newly added LoRA", () => {
+        setup(
+            [
+                {
+                    duration: 4,
+                    stages: [
+                        {
+                            loras: [
+                                {
+                                    name: "lora-x.safetensors",
+                                    weight: 0.5,
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+            ["lora-x.safetensors", "lora-y.safetensors"],
+        );
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        document
+            .querySelector<HTMLButtonElement>(".vst-detail-add-lora")
             ?.click();
         const groups = document.querySelectorAll<HTMLElement>(
-            ".vst-stage-lora-entry",
+            ".vst-clip-lora-entry",
         );
         expect(groups).toHaveLength(2);
         expect(groups[0].querySelector(".header-label")?.textContent).toBe(
-            "LoRA 0",
+            "L0",
         );
         expect(groups[1].querySelector(".header-label")?.textContent).toBe(
-            "LoRA 1",
+            "L1",
         );
         expect(groups[0].classList.contains("input-group-closed")).toBe(true);
         expect(groups[1].classList.contains("input-group-open")).toBe(true);
     });
 
-    it("renders a LoRA row with a name select and a weight input", () => {
+    it("renders clip LoRA model rows and flat numeric stage weights", () => {
         setup([
             {
                 duration: 4,
@@ -1747,7 +1872,7 @@ describe("createTimelineDetailStrip", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const row = document.querySelector<HTMLElement>(
-            ".vst-detail .vst-stage-lora-entry",
+            ".vst-detail .vst-clip-lora-entry",
         );
         expect(row).not.toBeNull();
         const nameSelect = row?.querySelector<HTMLSelectElement>("select");
@@ -1755,19 +1880,26 @@ describe("createTimelineDetailStrip", () => {
         // Name renders at input font size (via .vst-audio-select), not the
         // small 3xs label size.
         expect(nameSelect?.classList.contains("vst-audio-select")).toBe(true);
-        const weight =
-            row?.querySelector<HTMLInputElement>("input.auto-number");
+        expect(row?.querySelector("input.auto-number")).toBeNull();
+        const weight = document.querySelector<HTMLInputElement>(
+            '.vst-detail input[data-vst-focus-key="lora-weight-0"]',
+        );
         expect(weight?.value).toBe("0.7");
         expect(weight?.step).toBe("0.05");
         expect(weight?.hasAttribute("min")).toBe(false);
         expect(weight?.hasAttribute("max")).toBe(false);
         expect(row?.querySelector("input.auto-slider-range")).toBeNull();
-        expect(fieldByLabel("Weight").classList).toContain("auto-number-box");
+        expect(weight?.classList.contains("lora-weight-input")).toBe(true);
+        const weightRow = weight?.closest<HTMLElement>(
+            ".vst-stage-lora-weight-row",
+        );
+        const weightLabel = weightRow?.querySelector<HTMLLabelElement>("label");
+        expect(weightRow).not.toBeNull();
+        expect(weightLabel?.textContent).toBe("lora-x.safetensors");
+        expect(weight?.id).not.toBe("");
+        expect(weightLabel?.htmlFor).toBe(weight?.id);
         expect(
-            fieldByLabel("Weight").querySelector(".info-popover-button"),
-        ).toBeNull();
-        expect(
-            detailBody()?.querySelector(".vst-stage-lora-remove"),
+            detailBody()?.querySelector(".vst-detail-delete-lora"),
         ).not.toBeNull();
     });
 
@@ -1783,20 +1915,18 @@ describe("createTimelineDetailStrip", () => {
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
         const weight = document.querySelector<HTMLInputElement>(
-            '.vst-detail input[data-vst-focus-key="stage-0-lora-0-weight"]',
+            '.vst-detail input[data-vst-focus-key="lora-weight-0"]',
         );
         if (!weight) {
             throw new Error("lora weight input missing");
         }
-        expect(weight.getAttribute("data-vst-focus-key")).toBe(
-            "stage-0-lora-0-weight",
-        );
+        expect(weight.getAttribute("data-vst-focus-key")).toBe("lora-weight-0");
         weight.value = "0.4";
         weight.dispatchEvent(new Event("input", { bubbles: true }));
         expect(saveSpy).not.toHaveBeenCalled();
         jest.advanceTimersByTime(200);
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].stages[0].loras[0].weight).toBe(0.4);
+        expect(savedClips(saveSpy)[0].stages[0].loraWeights[0]).toBe(0.4);
     });
 
     it("allows a negative LoRA weight through the number input", () => {
@@ -1811,13 +1941,13 @@ describe("createTimelineDetailStrip", () => {
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
         const weight = document.querySelector<HTMLInputElement>(
-            '.vst-detail input[data-vst-focus-key="stage-0-lora-0-weight"]',
+            '.vst-detail input[data-vst-focus-key="lora-weight-0"]',
         );
         if (!weight) throw new Error("lora weight input missing");
         weight.value = "-2.5";
         weight.dispatchEvent(new Event("input", { bubbles: true }));
         jest.advanceTimersByTime(200);
-        expect(savedClips(saveSpy)[0].stages[0].loras[0].weight).toBe(-2.5);
+        expect(savedClips(saveSpy)[0].stages[0].loraWeights[0]).toBe(-2.5);
     });
 
     it("removes a LoRA row (flush-first) through saveClips", () => {
@@ -1828,7 +1958,7 @@ describe("createTimelineDetailStrip", () => {
                     {
                         loras: [
                             { name: "lora-x.safetensors", weight: 1 },
-                            { name: "lora-x.safetensors", weight: 0.5 },
+                            { name: "lora-y.safetensors", weight: 0.5 },
                         ],
                     },
                 ],
@@ -1836,22 +1966,23 @@ describe("createTimelineDetailStrip", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(
-            document.querySelectorAll(".vst-detail .vst-stage-lora-entry"),
+            document.querySelectorAll(".vst-detail .vst-clip-lora-entry"),
         ).toHaveLength(2);
         document
             .querySelectorAll<HTMLElement>(
-                ".vst-detail .vst-stage-lora-remove",
+                ".vst-detail .vst-detail-delete-lora",
             )[0]
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        expect(savedClips(saveSpy)[0].stages[0].loras).toEqual([
-            { name: "lora-x.safetensors", weight: 0.5 },
+        expect(savedClips(saveSpy)[0].loras).toEqual([
+            { name: "lora-y.safetensors" },
         ]);
+        expect(savedClips(saveSpy)[0].stages[0].loraWeights).toEqual([0.5]);
         expect(
-            document.querySelectorAll(".vst-detail .vst-stage-lora-entry"),
+            document.querySelectorAll(".vst-detail .vst-clip-lora-entry"),
         ).toHaveLength(1);
         expect(
             document
-                .querySelector(".vst-detail .vst-stage-loras")
+                .querySelector(".vst-detail .vst-detail-loras-section")
                 ?.classList.contains("input-group-open"),
         ).toBe(true);
     });
@@ -1895,9 +2026,7 @@ describe("createTimelineDetailStrip", () => {
             ?.click();
         const stages = savedClips(saveSpy)[0].stages;
         expect(stages).toHaveLength(2);
-        expect(stages[1].loras).toEqual([
-            { name: "lora-x.safetensors", weight: 0.65 },
-        ]);
+        expect(stages[1].loraWeights).toEqual([0.65]);
     });
 
     it("deletes the current stage from the rail's Delete stage button", () => {
@@ -2072,6 +2201,12 @@ describe("createTimelineDetailStrip", () => {
                     duration: 5,
                     stages: [{}],
                     refs: [{ source: "Base", frame: 1 }],
+                    icLoras: [
+                        {
+                            lora: "lora-x.safetensors",
+                            driveData: "visual",
+                        },
+                    ],
                 },
             ]);
             setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
@@ -3308,9 +3443,7 @@ describe("createTimelineDetailStrip", () => {
                 ),
             ).not.toBeNull();
             expect(
-                detailBody()?.querySelector(
-                    ".vst-detail-params .vst-stage-loras",
-                ),
+                detailBody()?.querySelector(".vst-detail-loras-section"),
             ).not.toBeNull();
 
             const retakeSec = detailBody()?.querySelector<HTMLElement>(
@@ -4067,7 +4200,17 @@ describe("createTimelineDetailStrip", () => {
             setup([
                 {
                     duration: 10,
-                    stages: [{}, {}],
+                    stages: [
+                        {
+                            loras: [
+                                {
+                                    name: "lora-x.safetensors",
+                                    weight: 0.7,
+                                },
+                            ],
+                        },
+                        {},
+                    ],
                     refs: [{ source: "Base", frame: 1 }],
                     windows: [{ start: 1, duration: 2, prompt: "w" }],
                 },
@@ -4129,7 +4272,7 @@ describe("createTimelineDetailStrip", () => {
             expect(source).not.toMatch(/\.vst-detail\s+\.auto-input\s*\{/);
             expect(source).not.toMatch(/\.vst-detail\s+\.auto-dropdown/);
             expect(source).toMatch(
-                /\.vst-detail\s+\.input-group\.vst-stage-loras\s*\{/,
+                /\.vst-detail\s+\.vst-detail-section\s*>[\s\S]*\.vst-detail-section-content\s*>[\s\S]*\.vst-detail-repeating-group\s*\{/,
             );
             expect(source).toMatch(
                 /\.vst-detail\s+\.input-group\.input-group-open\s*\{[^}]*min-width:\s*0\s*!important;/s,
@@ -4160,15 +4303,54 @@ describe("createTimelineDetailStrip", () => {
                 expect(content).not.toBeNull();
                 if (content) {
                     expect(computed(content).paddingLeft).toBe("7px");
-                    const stageLoras =
-                        content.querySelector<HTMLElement>(".vst-stage-loras");
-                    expect(stageLoras).not.toBeNull();
-                    if (stageLoras) {
-                        expect(computed(stageLoras).borderLeftWidth).toBe(
-                            "2px",
-                        );
-                    }
                 }
+            }
+            const outlinedItems = Array.from(
+                document.querySelectorAll<HTMLElement>(
+                    ".vst-detail-section > .vst-detail-section-content > .vst-detail-repeating-group",
+                ),
+            );
+            expect(outlinedItems.length).toBeGreaterThanOrEqual(4);
+            for (const nestedItem of outlinedItems) {
+                expect(computed(nestedItem).borderLeftWidth).toBe("2px");
+            }
+            const loraWeightRow = document.querySelector<HTMLElement>(
+                ".vst-stage-lora-weight-row",
+            );
+            const loraWeightLabel =
+                loraWeightRow?.querySelector<HTMLElement>(
+                    ".vst-detail-field-label",
+                ) ?? null;
+            const loraWeightLabelElement =
+                loraWeightRow?.querySelector<HTMLLabelElement>("label") ?? null;
+            expect(loraWeightRow).not.toBeNull();
+            expect(loraWeightLabel).not.toBeNull();
+            expect(loraWeightLabelElement).not.toBeNull();
+            if (loraWeightRow && loraWeightLabel && loraWeightLabelElement) {
+                expect(computed(loraWeightRow).flexWrap).toBe("nowrap");
+                expect(computed(loraWeightLabelElement).flexGrow).toBe("1");
+                expect(
+                    Number.parseFloat(
+                        computed(loraWeightLabelElement).minWidth,
+                    ),
+                ).toBe(0);
+                expect(computed(loraWeightLabel).width).not.toBe("0px");
+                expect(computed(loraWeightLabel).textOverflow).toBe("ellipsis");
+            }
+            const subsectionHeader = document.querySelector<HTMLElement>(
+                ".vst-detail-subsection-crumb",
+            );
+            expect(subsectionHeader).not.toBeNull();
+            if (subsectionHeader) {
+                expect(
+                    subsectionHeader.classList.contains("vst-detail-crumb"),
+                ).toBe(true);
+                expect(computed(subsectionHeader).textTransform).toBe(
+                    "uppercase",
+                );
+                expect(computed(subsectionHeader).borderBottomWidth).toBe(
+                    "1px",
+                );
             }
         });
 

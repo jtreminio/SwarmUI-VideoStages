@@ -1598,6 +1598,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.vst-detail .vst-detail-subsection-crumb {
+    box-sizing: border-box;
+    flex: none;
+    width: 100%;
+    margin: 9px 0 3px;
+    padding: 4px 0 3px;
+    border-bottom-width: 1px;
+    border-bottom-style: solid;
+    border-bottom-color: var(--vst-hairline);
+}
 .vst-detail-settings-button {
     flex: none;
     padding: 0 6px;
@@ -1672,19 +1682,17 @@
     margin: 6px 5px;
 }
 
-/* The stage rail is the first outline depth. Its content stays transparent so
-   native controls remain the visual surface instead of accumulating cards. */
+/* Every repeating section uses the same native-outline rail. Stages,
+   references, LoRAs, IC-LoRAs, audio tracks, and their nested repeaters keep
+   SwarmUI's input-group structure; only the hierarchy cue is additive. */
 .vst-detail
-    .vst-detail-stage-groups.input-group-open
-    > .vst-detail-section-content,
-.vst-detail
-    .vst-stage-loras.input-group-open
+    .vst-detail-section.input-group-open
     > .vst-detail-section-content {
     border-radius: 0 !important;
     background: transparent;
 }
 .vst-detail
-    .vst-detail-stage-groups
+    .vst-detail-section
     > .vst-detail-section-content
     > .vst-detail-repeating-group {
     box-sizing: border-box;
@@ -1697,7 +1705,7 @@
     background: transparent;
 }
 .vst-detail
-    .vst-detail-stage-groups
+    .vst-detail-section
     > .vst-detail-section-content
     > .vst-detail-repeating-group
     > .vst-detail-repeating-group-header
@@ -1709,7 +1717,7 @@
     background: var(--vst-detail-row);
 }
 .vst-detail
-    .vst-detail-stage-groups
+    .vst-detail-section
     > .vst-detail-section-content
     > .vst-detail-repeating-group.input-group-open
     > .vst-detail-repeating-group-header
@@ -1717,7 +1725,7 @@
     background: var(--vst-detail-row-open);
 }
 .vst-detail
-    .vst-detail-stage-groups
+    .vst-detail-section
     > .vst-detail-section-content
     > .vst-detail-repeating-group
     > .vst-detail-repeating-group-header[aria-pressed="true"]
@@ -1725,7 +1733,7 @@
     background: var(--vst-detail-row-active);
 }
 .vst-detail
-    .vst-detail-stage-groups
+    .vst-detail-section
     > .vst-detail-section-content
     > .vst-detail-repeating-group
     > .vst-detail-repeating-group-header[aria-pressed="true"]
@@ -1733,7 +1741,7 @@
     color: var(--emphasis);
 }
 .vst-detail
-    .vst-detail-stage-groups
+    .vst-detail-section
     > .vst-detail-section-content
     > .vst-detail-repeating-group
     > .vst-detail-repeating-group-content {
@@ -1753,9 +1761,14 @@
     padding: 2px 4px 4px 0;
 }
 
-/* Stage LoRAs form the second outline depth. Their existing group class gives
-   the hierarchy a stable hook without changing generated HTML. */
-.vst-detail .input-group.vst-stage-loras {
+/* Nested section containers form the next outline depth regardless of which
+   VideoStages sidebar owns them. */
+.vst-detail
+    .vst-detail-repeating-group-content
+    > .input-group.vst-detail-section,
+.vst-detail
+    .vst-detail-section-content
+    > .input-group.vst-detail-section {
     box-sizing: border-box;
     padding-left: 7px;
     border: 0;
@@ -1766,28 +1779,37 @@
     background: transparent;
 }
 .vst-detail
-    .vst-stage-loras
+    .vst-detail-repeating-group-content
+    > .vst-detail-section
     > .vst-detail-section-header
     > .header-label-wrap {
     min-height: 25px;
     color: var(--emphasis);
 }
-.vst-detail
-    .vst-stage-loras
-    > .vst-detail-section-content
-    > .vst-stage-lora-entry {
-    box-sizing: border-box;
-    padding: 3px 5px;
-    border: 1px solid var(--vst-hairline);
-    border-radius: 7px;
-    background: color-mix(in srgb, var(--text) 3%, var(--vst-panel));
+
+.vst-detail .vst-stage-lora-weight-row > label,
+.vst-detail .vst-stage-iclora-strength-row > label {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
 }
-.vst-detail
-    .vst-stage-lora-entry
-    > .vst-detail-repeating-group-content {
-    padding-left: 5px;
-    border-radius: 0 !important;
-    background: transparent;
+.vst-stage-lora-weight-row .vst-detail-field-label,
+.vst-stage-iclora-strength-row .vst-detail-field-label {
+    display: block;
+    width: auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.vst-detail .vst-stage-lora-weight-row,
+.vst-detail .vst-stage-iclora-strength-row {
+    flex-wrap: nowrap;
+}
+.vst-detail .vst-stage-lora-weight,
+.vst-detail .vst-stage-iclora-strength {
+    flex: none;
+    width: 3rem;
 }
 
 /* --- boundary (seam) chips ------------------------------------------------ */

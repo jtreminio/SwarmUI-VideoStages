@@ -49,6 +49,9 @@ public sealed record StageSpec(
     IReadOnlyList<double> ImageRefStrengths = null,
     bool ImageRefWasExplicit = false,
     IReadOnlyList<LoraRef> Loras = null,
+    // When present, weights aligned with the owning clip's LoRA definitions.
+    // Null preserves legacy uniform clip-wide LoRAs; [] applies no definitions.
+    IReadOnlyList<double> LoraWeights = null,
     RetakeWindowSpec RetakeWindow = null
 )
 {

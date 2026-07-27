@@ -16,7 +16,6 @@ export const buildCapabilityNotice = (
  */
 export const CAPABILITY_REPAIR_SELECTORS: readonly string[] = [
     ".vst-detail-delete",
-    ".vst-stage-lora-remove",
 ];
 
 export interface CapabilityRepairAction {

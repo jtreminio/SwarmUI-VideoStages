@@ -115,6 +115,43 @@ export const createDefaultVideoStagesHostBridge =
                 ?.modelClass?.id;
             return typeof id === "string" && id.trim() ? id : null;
         },
+        getLoraDefaultWeight: (modelName) => {
+            const browserModels =
+                typeof sdLoraBrowser !== "undefined"
+                    ? sdLoraBrowser?.models
+                    : undefined;
+            const browserModel =
+                browserModels?.[modelName] ??
+                browserModels?.[`${modelName}.safetensors`];
+            const browserRaw = browserModel?.data?.lora_default_weight;
+            const helperRaw =
+                typeof modelsHelpers !== "undefined" &&
+                modelsHelpers &&
+                typeof modelsHelpers.getDataFor === "function"
+                    ? modelsHelpers.getDataFor("LoRA", modelName)
+                          ?.lora_default_weight
+                    : undefined;
+            const preferenceRaw =
+                typeof loraHelper !== "undefined"
+                    ? loraHelper?.loraWeightPref?.[modelName]
+                    : undefined;
+            const finiteWeight = (
+                raw: string | number | undefined,
+            ): number | null => {
+                const value =
+                    typeof raw === "number"
+                        ? raw
+                        : typeof raw === "string" && raw.trim()
+                          ? Number(raw.trim())
+                          : Number.NaN;
+                return Number.isFinite(value) ? value : null;
+            };
+            return (
+                finiteWeight(browserRaw) ??
+                finiteWeight(helperRaw) ??
+                finiteWeight(preferenceRaw)
+            );
+        },
         getCurrentModelCompatId: () => {
             if (
                 typeof currentModelHelper === "undefined" ||

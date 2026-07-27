@@ -27,6 +27,7 @@ export interface VideoStagesHostBridge {
     getAceStepFunRegistry(): HostRegistrySnapshot | null;
     getModelCompatId(modelName: string): string | null;
     getModelClassId(modelName: string): string | null;
+    getLoraDefaultWeight(modelName: string): number | null;
     getCurrentModelCompatId(): string | null;
     requestJson(url: string, data?: Record<string, unknown>): Promise<unknown>;
 

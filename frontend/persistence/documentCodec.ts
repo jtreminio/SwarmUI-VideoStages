@@ -83,6 +83,9 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
             boundaryOutOverlap: clip.boundaryOutOverlap,
             duration: clip.duration,
             audioSource: clip.audioSource,
+            loras: clip.loras.map((entry) => ({
+                name: entry.name,
+            })),
             icLoras: clip.icLoras.map((entry) => ({
                 lora: entry.lora,
                 preset: entry.preset,
@@ -133,6 +136,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 control: stage.control,
                 controlNetStrength: stage.controlNetStrength,
                 icLoraStrengths: stage.icLoraStrengths,
+                loraWeights: stage.loraWeights,
                 refStrengths: stage.refStrengths,
                 upscale: stage.upscale,
                 upscaleMethod: stage.upscaleMethod,
@@ -142,10 +146,6 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 cfgScale: stage.cfgScale,
                 sampler: stage.sampler,
                 scheduler: stage.scheduler,
-                loras: stage.loras.map((lora) => ({
-                    name: lora.name,
-                    weight: lora.weight,
-                })),
             })),
         }),
     );
@@ -343,14 +343,23 @@ const hasValidStoredCollections = (
         if (
             !hasArrayOfRecords(clip, "stages") ||
             !hasArrayOfRecords(clip, "refs") ||
-            !hasArrayOfRecords(clip, "icLoras")
+            !hasArrayOfRecords(clip, "icLoras") ||
+            (Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras"))
         ) {
             return false;
         }
         const stages = Array.isArray(clip.stages) ? clip.stages : [];
         for (const stage of stages) {
             if (
-                !hasArrayOfRecords(stage, "loras") ||
+                (Object.hasOwn(stage, "loras") &&
+                    !hasArrayOfRecords(stage, "loras")) ||
+                (Object.hasOwn(stage, "loraWeights") &&
+                    (!Array.isArray(stage.loraWeights) ||
+                        !stage.loraWeights.every(
+                            (weight: unknown) =>
+                                typeof weight === "number" &&
+                                Number.isFinite(weight),
+                        ))) ||
                 (Object.hasOwn(stage, "icLoraStrengths") &&
                     (!Array.isArray(stage.icLoraStrengths) ||
                         !stage.icLoraStrengths.every(

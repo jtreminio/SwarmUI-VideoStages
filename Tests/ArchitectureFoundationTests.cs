@@ -567,7 +567,7 @@ public class ArchitectureFoundationTests
         Assert.Contains(
             plan.Diagnostics,
             item => item.Message.Contains(
-                "stage LoRA for model profile 'fake-profile'"));
+                "normal LoRA for model profile 'fake-profile'"));
         Assert.Equal(0, registry.CompileCounts[new("fake")]);
     }
 
@@ -595,7 +595,7 @@ public class ArchitectureFoundationTests
         Assert.Contains(
             plan.Diagnostics,
             item => item.Message.Contains(
-                "stage LoRA for model profile 'fake-profile'"));
+                "normal LoRA for model profile 'fake-profile'"));
         Assert.Equal(0, registry.CompileCounts[new("fake")]);
     }
 

@@ -40,9 +40,13 @@ public class AuthoringDocumentContractTests
         // The timeline always follows the core Video FPS param, so fps is never serialized; the
         // backend keeps the reader for hand-authored/API documents that do set it.
         "fps",
-        // Clip-scope LoRAs have no authoring UI yet; the runtime plan compiler still applies them.
-        "clips[].loras",
-        // Split model/text-encoder LoRA weights are API-only; the UI authors a single weight.
+        // Legacy/API stage-local LoRA objects remain readable; the UI now emits
+        // clip model definitions plus aligned per-stage loraWeights.
+        "clips[].stages[].loras",
+        // Clip definitions are names only; stages own their aligned weights.
+        "clips[].loras[].weight",
+        "clips[].loras[].textEncoderWeight",
+        // Split model/text-encoder stage LoRA weights are API-only.
         "clips[].stages[].loras[].textEncoderWeight",
         // Pre-container reference payload kept for API documents; the UI writes uploadedImage.
         "clips[].refs[].data",
@@ -189,9 +193,11 @@ public class AuthoringDocumentContractTests
         Assert.Equal(0.8, stage.ControlNetStrength.Value);
         Assert.Equal([0.8], stage.IcLoraStrengths);
         Assert.Equal([0.6], stage.ImageRefStrengths);
-        LoraRef lora = Assert.Single(stage.Loras);
+        LoraRef lora = Assert.Single(clip.Loras);
         Assert.Equal("style.safetensors", lora.Name);
-        Assert.Equal(0.5, lora.Weight);
+        Assert.Equal(1, lora.Weight);
+        Assert.Equal([0.5], stage.LoraWeights);
+        Assert.Empty(stage.Loras);
         Assert.NotNull(stage.RetakeWindow);
         Assert.Equal(12, stage.RetakeWindow.StartFrame);
         Assert.Equal(0.7, stage.RetakeWindow.Strength);

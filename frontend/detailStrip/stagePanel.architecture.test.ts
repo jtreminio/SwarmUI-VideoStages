@@ -26,8 +26,8 @@ import {
     saveState,
 } from "../persistence";
 import { createTimelineHistory } from "../timelineHistory";
+import { buildClipLorasSection } from "./clipLorasPanel";
 import type { DetailStripContext } from "./context";
-import { buildStageLorasSection } from "./stageLorasPanel";
 import { buildStageParamsColumn } from "./stagePanel";
 
 const catalog = (): ArchitectureModelCatalog => {
@@ -93,9 +93,12 @@ describe("stage architecture model filtering", () => {
         const stage = minimalStage({
             sampler: "removed-sampler",
             scheduler: "removed-scheduler",
-            loras: [{ name: "removed-lora.safetensors", weight: 1 }],
+            loraWeights: [1],
         });
-        const clip = minimalClip({ stages: [stage] });
+        const clip = minimalClip({
+            loras: [{ name: "removed-lora.safetensors" }],
+            stages: [stage],
+        });
         const column = buildStageParamsColumn(
             context(models),
             clip,
@@ -105,11 +108,11 @@ describe("stage architecture model filtering", () => {
             testRootDefaults(models),
         );
         column.appendChild(
-            buildStageLorasSection(
+            buildClipLorasSection(
                 context(models),
+                clip,
                 0,
                 0,
-                stage,
                 testRootDefaults(models),
             ),
         );

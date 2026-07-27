@@ -10,6 +10,8 @@ export interface RootDefaults {
     modelCatalog: ArchitectureModelCatalog;
     loraValues: string[];
     loraLabels: string[];
+    /** Host model-metadata defaults aligned with loraValues; null means 1. */
+    loraDefaultWeights: (number | null)[];
     samplerValues: string[];
     samplerLabels: string[];
     schedulerValues: string[];
@@ -68,9 +70,8 @@ export interface UploadedMedia {
     fileName: string | null;
 }
 
-export interface StageLora {
+export interface ClipLora {
     name: string;
-    weight: number;
 }
 
 export interface Stage {
@@ -84,6 +85,8 @@ export interface Stage {
     controlNetStrength: number;
     /** Per-stage strength for each clip IC-LoRA, aligned by IC-LoRA index. */
     icLoraStrengths: number[];
+    /** Per-stage weight for each clip LoRA, aligned by clip LoRA index. */
+    loraWeights: number[];
     refStrengths: number[];
     upscale: number;
     upscaleMethod: string;
@@ -93,7 +96,6 @@ export interface Stage {
     cfgScale: number;
     sampler: string;
     scheduler: string;
-    loras: StageLora[];
 }
 
 export interface PromptWindow {
@@ -213,6 +215,8 @@ export interface Clip {
     boundaryOutOverlap: number;
     duration: number;
     audioSource: string;
+    /** Normal LoRA model definitions shared by every stage in this clip. */
+    loras: ClipLora[];
     icLoras: IcLora[];
     saveAudioTrack: boolean;
     clipLengthFromAudio: boolean;

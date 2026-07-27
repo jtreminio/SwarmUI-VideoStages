@@ -13,6 +13,11 @@
             "boundaryOutOverlap": 8,
             "duration": 3,
             "audioSource": "Native",
+            "loras": [
+                {
+                    "name": "style.safetensors"
+                }
+            ],
             "icLoras": [
                 {
                     "lora": "ic-lora-pose.safetensors",
@@ -77,6 +82,9 @@
                     "icLoraStrengths": [
                         0.8
                     ],
+                    "loraWeights": [
+                        0.5
+                    ],
                     "refStrengths": [
                         0.6
                     ],
@@ -87,13 +95,7 @@
                     "steps": 12,
                     "cfgScale": 4.5,
                     "sampler": "euler",
-                    "scheduler": "normal",
-                    "loras": [
-                        {
-                            "name": "style.safetensors",
-                            "weight": 0.5
-                        }
-                    ]
+                    "scheduler": "normal"
                 },
                 {
                     "id": "stage-1",
@@ -102,6 +104,9 @@
                     "controlNetStrength": 0.8,
                     "icLoraStrengths": [
                         0.5
+                    ],
+                    "loraWeights": [
+                        0
                     ],
                     "refStrengths": [
                         0.4
@@ -113,8 +118,7 @@
                     "steps": 8,
                     "cfgScale": 1,
                     "sampler": "euler",
-                    "scheduler": "normal",
-                    "loras": []
+                    "scheduler": "normal"
                 }
             ]
         },
@@ -128,6 +132,7 @@
             "boundaryOutOverlap": 1,
             "duration": 2,
             "audioSource": "Native",
+            "loras": [],
             "icLoras": [],
             "saveAudioTrack": false,
             "clipLengthFromAudio": false,
@@ -144,6 +149,7 @@
                     "control": 0.5,
                     "controlNetStrength": 0.8,
                     "icLoraStrengths": [],
+                    "loraWeights": [],
                     "refStrengths": [],
                     "upscale": 1,
                     "upscaleMethod": "latentmodel-upscaler.safetensors",
@@ -152,8 +158,7 @@
                     "steps": 8,
                     "cfgScale": 1,
                     "sampler": "euler",
-                    "scheduler": "normal",
-                    "loras": []
+                    "scheduler": "normal"
                 }
             ]
         }

@@ -4,6 +4,7 @@ import { getRootDefaults } from "../rootDefaults";
 import type { Clip, TimelineSelection } from "../types";
 import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import { buildClipColumn, buildClipSkipAction } from "./clipBasics";
+import { buildClipLorasSection } from "./clipLorasPanel";
 import type { DetailStripContext } from "./context";
 import { buildRefSection } from "./refPanel";
 import { buildRetakeSection } from "./retakePanel";
@@ -71,7 +72,12 @@ export const buildClipBody = (
     }
     body.appendChild(stages);
     const appendCapabilitySection = (
-        feature: "frameReferences" | "icLora" | "sourceVideo" | "retake",
+        feature:
+            | "frameReferences"
+            | "stageLoras"
+            | "icLora"
+            | "sourceVideo"
+            | "retake",
         persisted: boolean,
         content: () => HTMLElement | DocumentFragment,
     ): void => {
@@ -95,6 +101,9 @@ export const buildClipBody = (
             clips,
             selection.kind === "ref",
         ),
+    );
+    appendCapabilitySection("stageLoras", clip.loras.length > 0, () =>
+        buildClipLorasSection(context, clip, clipIdx, stageIdx, defaults),
     );
     appendCapabilitySection("icLora", clip.icLoras.length > 0, () =>
         buildArchitectureIcLorasSection(

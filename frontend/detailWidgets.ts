@@ -12,6 +12,7 @@ import { getTimelineAuthoringSettings } from "./timelineAuthoringSettings";
 let sliderSeq = 0;
 let helpSeq = 0;
 let checkboxSeq = 0;
+let fieldSeq = 0;
 
 const slugify = (value: string): string =>
     value
@@ -137,6 +138,16 @@ export const buildField = (
     const labelEl = buildFieldLabel(label);
     if (help) {
         appendHelp(labelEl, row, label, help);
+    }
+    if (
+        control instanceof HTMLInputElement ||
+        control instanceof HTMLSelectElement ||
+        control instanceof HTMLTextAreaElement
+    ) {
+        if (!control.id) {
+            control.id = `vst_field_${slugify(label)}_${++fieldSeq}`;
+        }
+        labelEl.htmlFor = control.id;
     }
     row.append(labelEl, control);
     if (hint) {

@@ -17,6 +17,7 @@ const getRootDefaults = (): RootDefaults => ({
     modelLabels: ["LTX"],
     loraValues: ["detail.safetensors"],
     loraLabels: ["Detail"],
+    loraDefaultWeights: [null],
     samplerValues: ["euler"],
     samplerLabels: ["Euler"],
     schedulerValues: ["normal"],
@@ -71,6 +72,7 @@ const maximalClip = (): Clip =>
         boundaryOutOverlap: 16,
         duration: 4,
         audioSource: "Native",
+        loras: [{ name: "detail.safetensors" }],
         icLoras: [
             {
                 lora: "detail.safetensors",
@@ -124,6 +126,7 @@ const maximalClip = (): Clip =>
                 control: 0.5,
                 controlNetStrength: 0.7,
                 icLoraStrengths: [],
+                loraWeights: [0.6],
                 refStrengths: [0.8],
                 upscale: 1,
                 upscaleMethod: "latentmodel-a.safetensors",
@@ -133,7 +136,6 @@ const maximalClip = (): Clip =>
                 cfgScale: 1,
                 sampler: "euler",
                 scheduler: "normal",
-                loras: [{ name: "detail.safetensors", weight: 0.6 }],
             },
         ],
     });
@@ -173,7 +175,8 @@ describe("serialize storage completeness guard", () => {
         expect(stored.icLoras.length).toBeGreaterThan(0);
         expect(stored.refs.length).toBeGreaterThan(0);
         expect(stored.stages.length).toBeGreaterThan(0);
-        expect(stored.stages[0].loras.length).toBeGreaterThan(0);
+        expect(stored.loras.length).toBeGreaterThan(0);
+        expect(stored.stages[0].loraWeights.length).toBeGreaterThan(0);
         expect(stored.stages[0].refStrengths.length).toBeGreaterThan(0);
         expect(stored.retake).not.toBeNull();
         expect(stored.uploadedAudio).not.toBeNull();

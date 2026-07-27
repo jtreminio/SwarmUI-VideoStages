@@ -126,6 +126,9 @@ export const getRootDefaults = (): RootDefaults => {
         modelCatalog,
         loraValues: loras.values,
         loraLabels: loras.labels,
+        loraDefaultWeights: loras.values.map((value) =>
+            getVideoStagesHostBridge().getLoraDefaultWeight(value),
+        ),
         samplerValues: sampler.values,
         samplerLabels: sampler.labels,
         schedulerValues: scheduler.values,

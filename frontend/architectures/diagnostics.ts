@@ -98,9 +98,13 @@ const persistedCapabilityIssues = (
     );
     unsupported(
         !supports("stageLoras") &&
-            clip.stages.some((stage) => stage.loras.length > 0),
+            clip.stages.some((stage) =>
+                clip.loras.some(
+                    (_, index) => (stage.loraWeights[index] ?? 1) !== 0,
+                ),
+            ),
         "stage-loras",
-        "Stage LoRAs",
+        "LoRAs",
     );
     unsupported(
         clip.stages.some(
@@ -283,7 +287,9 @@ export const deriveArchitectureDiagnostics = (
                     (profile) => profile.id === resolved.modelProfileId,
                 );
             if (
-                stage.loras.length > 0 &&
+                clip.loras.some(
+                    (_, index) => (stage.loraWeights[index] ?? 1) !== 0,
+                ) &&
                 resolvedProfile &&
                 !resolvedProfile.capabilities.includes("normal-lora")
             ) {

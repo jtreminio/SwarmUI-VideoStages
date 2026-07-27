@@ -132,7 +132,10 @@ export const planArchitectureConversion = (
         clip.refs = [];
     }
 
-    let removedStageLoras = 0;
+    const removedClipLoras = !supportsNormalLoras ? clip.loras.length : 0;
+    if (removedClipLoras > 0) {
+        clip.loras = [];
+    }
     let removedUpscaleSettings = 0;
     for (const stage of clip.stages) {
         stage.model = target.model;
@@ -140,9 +143,8 @@ export const planArchitectureConversion = (
         if (!supportsReferences) {
             stage.refStrengths = [];
         }
-        if (!supportsNormalLoras && stage.loras.length > 0) {
-            removedStageLoras += stage.loras.length;
-            stage.loras = [];
+        if (!supportsNormalLoras) {
+            stage.loraWeights = [];
         }
         if (
             stage.upscale !== 1 &&
@@ -152,8 +154,8 @@ export const planArchitectureConversion = (
             stage.upscale = 1;
         }
     }
-    if (removedStageLoras > 0) {
-        removals.push(countLabel(removedStageLoras, "stage LoRA"));
+    if (removedClipLoras > 0) {
+        removals.push(countLabel(removedClipLoras, "clip LoRA"));
     }
     if (removedUpscaleSettings > 0) {
         removals.push("stage upscale settings");

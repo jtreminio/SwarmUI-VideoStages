@@ -107,10 +107,10 @@ internal static class ArchitectureCapabilityValidator
             Has(descriptor.Capabilities.Stage, StageCapability.IcLora),
             "IC-LoRA");
         Require(
-            hasActiveStages && (clip.Loras is { Count: > 0 }
-                || clip.Stages?.Any(stage => stage.Loras is { Count: > 0 }) == true),
+            hasActiveStages
+                && clip.Stages?.Any(stage => HasNormalLora(clip, stage)) == true,
             Has(descriptor.Capabilities.Stage, StageCapability.Lora),
-            "stage LoRA");
+            "normal LoRA");
         ValidateAudioSourceKind(clip, descriptor, diagnostics);
         ValidateStages(clip, descriptor, stageModels, diagnostics);
         return diagnostics.AsReadOnly();
@@ -253,9 +253,9 @@ internal static class ArchitectureCapabilityValidator
                 profile,
                 diagnostics);
             RequireProfileCapability(
-                stage.Loras is { Count: > 0 } || clip.Loras is { Count: > 0 },
+                HasNormalLora(clip, stage),
                 ModelProfileCapability.NormalLora,
-                "stage LoRA",
+                "normal LoRA",
                 clip,
                 descriptor,
                 stage,
@@ -263,6 +263,33 @@ internal static class ArchitectureCapabilityValidator
                 profile,
                 diagnostics);
         }
+    }
+
+    private static bool HasNormalLora(ClipSpec clip, StageSpec stage)
+    {
+        if (stage.Loras is { Count: > 0 })
+        {
+            return true;
+        }
+        if (clip.Loras is not { Count: > 0 })
+        {
+            return false;
+        }
+        if (stage.LoraWeights is null)
+        {
+            return true;
+        }
+        for (int index = 0; index < clip.Loras.Count; index++)
+        {
+            double weight = index < stage.LoraWeights.Count
+                ? stage.LoraWeights[index]
+                : clip.Loras[index].Weight;
+            if (weight != 0)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void RequireProfileCapability(
