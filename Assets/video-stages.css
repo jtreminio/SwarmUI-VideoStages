@@ -1253,7 +1253,6 @@
     cursor: pointer;
     padding: 1px 8px;
     line-height: 1.6;
-    background: color-mix(in srgb, var(--background) 40%, transparent);
     transition: border-color var(--vst-ease), background var(--vst-ease),
         filter var(--vst-ease);
 }
@@ -1261,13 +1260,11 @@
 .vst-stage-tab:focus-visible {
     outline: none;
     border-color: var(--emphasis);
-    background: color-mix(in srgb, var(--emphasis) 16%, var(--background));
 }
 .vst-stage-tab-skipped {
     opacity: 0.4;
     filter: grayscale(1);
     text-decoration: line-through;
-    border-style: dashed;
 }
 .vst-stage-fields-muted {
     opacity: 0.45;
@@ -1661,6 +1658,14 @@
     margin-bottom: 0;
 }
 
+/* Make editable boxes legible against nested transparent outline surfaces.
+   Checkbox, radio, and range controls retain the active SwarmUI theme's
+   specialized rendering. */
+.vst-detail
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
+    background-color: var(--background);
+}
+
 /* All form geometry below the breadcrumb is SwarmUI's native `.input-group`
    and `.auto-input` layout. VideoStages only wires progressive disclosure and
    keeps its repeatable-item actions. */
@@ -1714,23 +1719,6 @@
     min-height: 26px;
     padding: 3px 6px;
     border-radius: 5px;
-    background: var(--vst-detail-row);
-}
-.vst-detail
-    .vst-detail-section
-    > .vst-detail-section-content
-    > .vst-detail-repeating-group.input-group-open
-    > .vst-detail-repeating-group-header
-    > .header-label-wrap {
-    background: var(--vst-detail-row-open);
-}
-.vst-detail
-    .vst-detail-section
-    > .vst-detail-section-content
-    > .vst-detail-repeating-group
-    > .vst-detail-repeating-group-header[aria-pressed="true"]
-    > .header-label-wrap {
-    background: var(--vst-detail-row-active);
 }
 .vst-detail
     .vst-detail-section

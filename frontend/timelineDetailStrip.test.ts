@@ -4336,6 +4336,9 @@ describe("createTimelineDetailStrip", () => {
             expect(source).toMatch(
                 /\.vst-detail\s+\.input-group\.input-group-open\s*\{[^}]*min-width:\s*0\s*!important;/s,
             );
+            expect(source).toMatch(
+                /\.vst-detail[\s\S]*input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):not\(\[type="range"\]\)\s*\{[^}]*background-color:\s*var\(--background\);/s,
+            );
             expect(computed(detailBody() as HTMLElement).marginBottom).toBe(
                 "6px",
             );
