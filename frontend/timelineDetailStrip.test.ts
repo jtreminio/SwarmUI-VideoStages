@@ -62,6 +62,7 @@ interface ClipFixture {
     prompt?: string;
     windows?: WindowFixture[];
     boundaryOut?: "cut" | "continue" | "crossfade";
+    boundaryOutOverlap?: number;
     boundaryOutCarryAudio?: boolean;
     retake?: {
         startSeconds: number;
@@ -82,6 +83,7 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     duration: clip.duration,
     skipped: clip.skipped ?? false,
     boundaryOut: clip.boundaryOut ?? "cut",
+    boundaryOutOverlap: clip.boundaryOutOverlap ?? 8,
     boundaryOutCarryAudio: clip.boundaryOutCarryAudio ?? false,
     audioSource: clip.audioSource ?? "Native",
     ...(clip.uploadedAudio ? { uploadedAudio: clip.uploadedAudio } : {}),
@@ -1148,7 +1150,7 @@ describe("createTimelineDetailStrip", () => {
 
     it("repairs a later clip's Incoming source when its prior clip is skipped", () => {
         setup([
-            { duration: 4, skipped: true, stages: [{}] },
+            { duration: 4, stages: [{}] },
             { duration: 4, stages: [{}] },
             {
                 duration: 4,
@@ -1171,7 +1173,7 @@ describe("createTimelineDetailStrip", () => {
         expect(committedClips()[2].icLoras[0].driveSource).toBe("Upload");
     });
 
-    it("uses the nearest executable earlier clip for Incoming availability", () => {
+    it("disables Incoming after the first skipped clip truncates the sequence", () => {
         setup([
             { duration: 4, stages: [{}] },
             { duration: 4, skipped: true, stages: [{}] },
@@ -1188,7 +1190,7 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 2, stageIdx: 0 });
-        expect(icLoraSelect("source").options[1].disabled).toBe(false);
+        expect(icLoraSelect("source").options[1].disabled).toBe(true);
     });
 
     it("does not treat a skipped earlier clip as Incoming output", () => {
@@ -1643,6 +1645,56 @@ describe("createTimelineDetailStrip", () => {
                 ?.classList.contains("vst-stage-fields-muted"),
         ).toBe(true);
         expect(committedClips()[0].stages[1].skipped).toBe(true);
+    });
+
+    it("persists clip skip and restore cascades through the detail dock", () => {
+        setup([
+            { duration: 2, stages: [{}] },
+            { duration: 3, stages: [{}] },
+            { duration: 4, stages: [{}] },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
+        document
+            .querySelector<HTMLButtonElement>(".vst-detail-skip-clip")
+            ?.click();
+        expect(committedClips().map((clip) => clip.skipped)).toEqual([
+            false,
+            true,
+            true,
+        ]);
+
+        setSelection({ kind: "clip", clipIdx: 2, stageIdx: 0 });
+        document
+            .querySelector<HTMLButtonElement>(".vst-detail-skip-clip")
+            ?.click();
+        expect(committedClips().map((clip) => clip.skipped)).toEqual([
+            false,
+            false,
+            false,
+        ]);
+    });
+
+    it("persists stage skip and restore cascades through the detail dock", () => {
+        setup([{ duration: 4, stages: [{}, {}, {}] }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
+        document
+            .querySelector<HTMLButtonElement>(
+                '.vst-stage-tab[aria-pressed="true"] .vst-detail-skip-stage',
+            )
+            ?.click();
+        expect(
+            committedClips()[0].stages.map((stage) => stage.skipped),
+        ).toEqual([false, true, true]);
+
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 2 });
+        document
+            .querySelector<HTMLButtonElement>(
+                '.vst-stage-tab[aria-pressed="true"] .vst-detail-skip-stage',
+            )
+            ?.click();
+        expect(
+            committedClips()[0].stages.map((stage) => stage.skipped),
+        ).toEqual([false, false, false]);
     });
 
     describe("sourced clip stage 0 refine params", () => {
@@ -4043,6 +4095,59 @@ describe("createTimelineDetailStrip", () => {
             expect(infoText()).toContain("last 9 frames");
             expect(overlapSelect()).not.toBeNull();
             expect(overlapSelect()?.value).toBe("8");
+        });
+
+        it("shows tenths-rounded frame arithmetic for both clips and the shared join", () => {
+            setup([
+                {
+                    duration: 3,
+                    boundaryOut: "continue",
+                    boundaryOutOverlap: 24,
+                    stages: [{}],
+                },
+                { duration: 3, stages: [{}] },
+            ]);
+            setSelection({ kind: "boundary", leftClipIdx: 0 });
+
+            const impact =
+                detailBody()?.querySelector<HTMLElement>(
+                    ".vst-boundary-impact",
+                ) ?? null;
+            expect(impact).not.toBeNull();
+            expect(
+                impact?.querySelector(".vst-detail-crumb")?.textContent,
+            ).toBe("Output impact");
+            expect(impact?.textContent).toContain("Clip 073f · 3.0s");
+            expect(impact?.textContent).toContain("Clip 1+73f · +3.0s");
+            expect(impact?.textContent).toContain(
+                "Continue shared−25f · −1.0s",
+            );
+            expect(impact?.textContent).toContain(
+                "Pair after this join121f · 5.0s",
+            );
+            expect(impact?.textContent).toContain(
+                "24f selected + 1 LTX continuation frame",
+            );
+        });
+
+        it("reports the normalized Continue selection in its arithmetic note", () => {
+            setup([
+                {
+                    duration: 3,
+                    boundaryOut: "continue",
+                    boundaryOutOverlap: 20,
+                    stages: [{}],
+                },
+                { duration: 3, stages: [{}] },
+            ]);
+            setSelection({ kind: "boundary", leftClipIdx: 0 });
+
+            expect(
+                detailBody()?.querySelector(".vst-boundary-impact")
+                    ?.textContent,
+            ).toContain(
+                "16f selected + 1 LTX continuation frame = 17f effective",
+            );
         });
 
         it("commits a chosen overlap to boundaryOutOverlap", () => {

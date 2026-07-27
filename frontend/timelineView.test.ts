@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
 import { minimalClip } from "./__test_helpers__/clipFixtures";
+import { createCapabilityViewResolver } from "./architectures/policy";
 import { renderTimeline } from "./timelineView";
 import {
     audioSegmentWaveBarHeights,
@@ -737,19 +739,20 @@ describe("renderTimeline (DOM)", () => {
         ).not.toBe(segments[1].querySelector(".vst-audio-seg-wave")?.innerHTML);
     });
 
-    it("marks sub-12px regions as tiny so CSS can collapse their interiors", () => {
+    it("uses aligned generated width when deciding whether a region is tiny", () => {
         renderTimeline(body, [makeClip(0.1, 1, 0), makeClip(5, 1, 0)], {
             pxPerSecond: 44,
         });
         const regions = body.querySelectorAll(".vst-region");
-        expect(regions[0].classList.contains("vst-region-tiny")).toBe(true);
+        expect(regions[0].classList.contains("vst-region-tiny")).toBe(false);
         expect(regions[1].classList.contains("vst-region-tiny")).toBe(false);
     });
 
     it("renders the info readout with a labeled total and a live-updatable selection slot", () => {
         renderTimeline(body, [makeClip(2, 1, 0)]);
         const readout = body.querySelector("[data-vst-readout]");
-        expect(readout?.textContent).toContain("2s total");
+        expect(readout?.textContent).toContain("2.0s output");
+        expect(readout?.textContent).toContain("2.0s authored · 0.0s joins");
         // The selection slot always exists (the orchestrator pokes it on click-select) but hides empty.
         expect(
             body.querySelector<HTMLElement>("[data-vst-readout-sel]")?.hidden,
@@ -759,6 +762,182 @@ describe("renderTimeline (DOM)", () => {
         const sel = body.querySelector<HTMLElement>("[data-vst-readout-sel]");
         expect(sel?.hidden).toBe(false);
         expect(sel?.textContent).toBe("clip 0");
+    });
+
+    it("keeps skipped tail cards on the authored ruler and marks the output endpoint", () => {
+        renderTimeline(body, [
+            makeClip(2, 1, 0),
+            makeClip(3, 1, 0, true),
+            makeClip(4, 1, 0),
+        ]);
+
+        expect(
+            body.querySelector(".vst-tick-end .vst-tick-label")?.textContent,
+        ).toBe("9s");
+        expect(
+            body.querySelector(".vst-tick-output .vst-tick-label")?.textContent,
+        ).toBe("2s output");
+        expect(body.querySelector("[data-vst-readout]")?.textContent).toContain(
+            "2.0s output",
+        );
+    });
+
+    it("centers the resolved join over adjacent clip regions", () => {
+        const clips = [
+            minimalClip({
+                duration: 3,
+                boundaryOut: "continue",
+                boundaryOutOverlap: 24,
+            }),
+            minimalClip({ duration: 3 }),
+        ];
+        renderTimeline(body, clips, {
+            fps: 24,
+            pxPerSecond: 100,
+            capabilities: createCapabilityViewResolver(
+                testArchitectureCatalog(),
+            ),
+        });
+
+        const regions = body.querySelectorAll<HTMLElement>(".vst-region");
+        expect(Number.parseFloat(regions[0].style.left)).toBeCloseTo(0);
+        expect(Number.parseFloat(regions[0].style.width)).toBeCloseTo(
+            (121 / 48) * 100 - 2,
+        );
+        expect(Number.parseFloat(regions[1].style.left)).toBeCloseTo(
+            (121 / 48) * 100,
+        );
+        expect(Number.parseFloat(regions[1].style.width)).toBeCloseTo(
+            (121 / 48) * 100 - 2,
+        );
+        const overlap = body.querySelector<HTMLElement>(
+            ".vst-boundary-overlap",
+        );
+        expect(Number.parseFloat(overlap?.style.left ?? "")).toBeCloseTo(200);
+        expect(Number.parseFloat(overlap?.style.width ?? "")).toBeCloseTo(
+            (25 / 24) * 100,
+        );
+        expect(overlap?.textContent).toBe("");
+        expect(Number.parseFloat(overlap?.style.left ?? "")).toBeLessThan(
+            Number.parseFloat(regions[0].style.left) +
+                Number.parseFloat(regions[0].style.width),
+        );
+        expect(
+            Number.parseFloat(overlap?.style.left ?? "") +
+                Number.parseFloat(overlap?.style.width ?? ""),
+        ).toBeGreaterThan(Number.parseFloat(regions[1].style.left));
+        expect(
+            Number.parseFloat(regions[0].style.left) +
+                Number.parseFloat(regions[0].style.width),
+        ).toBeLessThanOrEqual(Number.parseFloat(regions[1].style.left));
+        expect(
+            Number.parseFloat(
+                body.querySelector<HTMLElement>(".vst-tick-end")?.style.left ??
+                    "",
+            ),
+        ).toBeCloseTo((121 / 24) * 100);
+        const boundaryChip = body.querySelector<HTMLElement>(
+            "[data-vst-boundary-chip]",
+        );
+        expect(Number.parseFloat(boundaryChip?.style.left ?? "")).toBeCloseTo(
+            (121 / 48) * 100,
+        );
+        expect(boundaryChip?.dataset.vstBoundaryDensity).toBe("full");
+        expect(
+            boundaryChip?.querySelector(".vst-boundary-kind")?.textContent,
+        ).toBe("Continue");
+        expect(
+            boundaryChip?.querySelector(".vst-boundary-duration")?.textContent,
+        ).toBe("1.0s");
+        expect(boundaryChip?.textContent).not.toContain("−");
+        expect(regions[0].title).toContain(
+            "3.0s generated · 2.5s unique · 0.5s shared",
+        );
+        expect(
+            Array.from(body.querySelectorAll(".vst-tick-label")).filter(
+                (label) => label.textContent === "5s",
+            ),
+        ).toHaveLength(1);
+        expect(body.querySelector("[data-vst-readout]")?.textContent).toContain(
+            "5.0s output",
+        );
+        expect(body.querySelector("[data-vst-readout]")?.textContent).toContain(
+            "6.0s authored · −1.0s joins",
+        );
+    });
+
+    it("progressively discloses the join capsule as its rendered span narrows", () => {
+        const clips = [
+            minimalClip({
+                duration: 3,
+                boundaryOut: "continue",
+                boundaryOutOverlap: 24,
+            }),
+            minimalClip({ duration: 3 }),
+        ];
+        const options = {
+            fps: 24,
+            capabilities: createCapabilityViewResolver(
+                testArchitectureCatalog(),
+            ),
+        };
+        const densityAt = (pxPerSecond: number): string | undefined => {
+            renderTimeline(body, clips, { ...options, pxPerSecond });
+            return body.querySelector<HTMLElement>("[data-vst-boundary-chip]")
+                ?.dataset.vstBoundaryDensity;
+        };
+
+        expect(densityAt(100)).toBe("full");
+        expect(densityAt(55)).toBe("compact");
+        expect(densityAt(20)).toBe("icon");
+
+        const capsuleMarkup = body.querySelector<HTMLElement>(
+            "[data-vst-boundary-chip]",
+        );
+        expect(
+            capsuleMarkup?.querySelector(".vst-boundary-kind")?.textContent,
+        ).toBe("Continue");
+        expect(
+            capsuleMarkup?.querySelector(".vst-boundary-duration")?.textContent,
+        ).toBe("1.0s");
+        expect(capsuleMarkup?.dataset.vstBoundaryHasDuration).toBe("true");
+    });
+
+    it("shows a budget-forced cut as the effective boundary", () => {
+        const clips = [
+            minimalClip({
+                duration: 0.1,
+                boundaryOut: "continue",
+                boundaryOutOverlap: 24,
+            }),
+            minimalClip({ duration: 0.1 }),
+        ];
+        renderTimeline(body, clips, {
+            fps: 24,
+            capabilities: createCapabilityViewResolver(
+                testArchitectureCatalog(),
+            ),
+        });
+
+        const chip = body.querySelector<HTMLElement>(
+            "[data-vst-boundary-chip]",
+        );
+        expect(chip?.dataset.effectiveBoundary).toBe("cut");
+        expect(chip?.classList.contains("vst-boundary-cut")).toBe(true);
+        expect(chip?.title).toContain("effective Cut");
+        expect(body.querySelector(".vst-boundary-overlap")).toBeNull();
+    });
+
+    it("labels aligned regions with their generated frame count", () => {
+        renderTimeline(
+            body,
+            [minimalClip({ duration: 3 }), minimalClip({ duration: 3 })],
+            { fps: 24, unit: "frames" },
+        );
+
+        expect(body.querySelector<HTMLElement>(".vst-region")?.title).toContain(
+            "73f",
+        );
     });
 
     it("bounds the audio waveform bar count (min 8, cap 400)", () => {
@@ -1058,14 +1237,16 @@ describe("timeline-wide audio segment lanes", () => {
             '.vst-audio-seg[data-track-idx="0"]',
         );
         expect(lane?.style.left).toBe("0px");
-        expect(lane?.style.width).toBe("700px");
+        expect(Number.parseFloat(lane?.style.width ?? "")).toBeCloseTo(
+            (170 / 24) * 100,
+        );
         expect(segment?.hasAttribute("data-clip-idx")).toBe(false);
         expect(Number.parseFloat(segment?.style.left ?? "")).toBeCloseTo(
-            (2 / 7) * 100,
+            (2 / (170 / 24)) * 100,
             5,
         );
         expect(Number.parseFloat(segment?.style.width ?? "")).toBeCloseTo(
-            (4 / 7) * 100,
+            (4 / (170 / 24)) * 100,
             5,
         );
         expect(document.querySelectorAll(".vst-audio-seg-lane")).toHaveLength(

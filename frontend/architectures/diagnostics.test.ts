@@ -128,7 +128,6 @@ describe("architecture diagnostics", () => {
 
     it("blocks cross-architecture non-cut joins between executable neighbors", () => {
         const left = minimalClip({ boundaryOut: "continue" });
-        const skipped = minimalClip({ skipped: true });
         const right = minimalClip({
             architecture: "test-video",
             modelProfileId: "test-profile",
@@ -141,10 +140,9 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            deriveArchitectureDiagnostics(
-                [left, skipped, right],
-                combinedCatalog(),
-            ).map(({ code }) => code),
+            deriveArchitectureDiagnostics([left, right], combinedCatalog()).map(
+                ({ code }) => code,
+            ),
         ).toContain("architecture.cross-boundary-cut-only");
     });
 

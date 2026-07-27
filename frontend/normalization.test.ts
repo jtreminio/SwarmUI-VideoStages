@@ -224,6 +224,7 @@ describe("normalization", () => {
     it("buildDefaultClip copies base settings from a previous clip", () => {
         const prev = buildDefaultClip(getRootDefaults, getDefaultStageModel);
         prev.duration = 3;
+        prev.skipped = true;
         prev.boundaryOut = "continue";
         prev.boundaryOutOverlap = 16;
         prev.stages[0].sampler = "res_multistep";
@@ -241,6 +242,7 @@ describe("normalization", () => {
             prev,
         );
         expect(clip.duration).toBe(3);
+        expect(clip.skipped).toBe(true);
         const stage = clip.stages[0];
         expect(stage.sampler).toBe("res_multistep");
         expect(stage.scheduler).toBe("sgm_uniform");

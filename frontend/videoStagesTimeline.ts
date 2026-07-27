@@ -41,6 +41,10 @@ import { createTimelinePromptTrack } from "./timelinePromptTrack";
 import { createTimelineReferencesTrack } from "./timelineReferencesTrack";
 import { createTimelineRetakeTrack } from "./timelineRetakeTrack";
 import { applySelectionHighlight } from "./timelineSelectionView";
+import {
+    resolveTimelineTiming,
+    timelineDisplaySeconds,
+} from "./timelineTiming";
 import { renderTimeline } from "./timelineView";
 import { createTimelineViewport } from "./timelineViewport";
 
@@ -57,24 +61,28 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         document.getElementById(TIMELINE_BODY_ID);
     const scrollEl = (): HTMLElement | null =>
         timelineBody()?.querySelector<HTMLElement>(".vst-scroll") ?? null;
+    const capabilities = currentCapabilityViewResolver;
     const viewport = createTimelineViewport({
         refresh: () => refresh(),
-        totalSeconds: () =>
-            getClips().reduce(
-                (sum, clip) => sum + Math.max(0, clip.duration || 0),
-                0,
-            ),
+        totalSeconds: () => {
+            const state = getState();
+            const timing = resolveTimelineTiming(
+                state.clips,
+                safeFps(state.fps),
+                capabilities(),
+            );
+            return timelineDisplaySeconds(state.clips, timing);
+        },
         timelineBody,
         scrollElement: scrollEl,
     });
     const detailStrip = createTimelineDetailStrip();
-    const capabilities = currentCapabilityViewResolver;
     const linking = createTimelineLinking();
     const gestures = createGestureRouter();
     const retakeTrack = createTimelineRetakeTrack(capabilities);
     const promptTrack = createTimelinePromptTrack(capabilities);
     const audioTrack = createTimelineAudioTrack();
-    const audioSegmentTrack = createTimelineAudioSegmentTrack();
+    const audioSegmentTrack = createTimelineAudioSegmentTrack(capabilities);
     const boundaryTrack = createTimelineBoundaryTrack();
     const referencesTrack = createTimelineReferencesTrack(capabilities);
     let addClipInFlight = false;

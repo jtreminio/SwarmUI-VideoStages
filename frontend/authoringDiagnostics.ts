@@ -7,7 +7,7 @@ import {
 } from "./architectures/conditionalRules";
 import { deriveArchitectureDiagnostics } from "./architectures/diagnostics";
 import type { ArchitectureModelCatalog } from "./architectures/types";
-import { isExecutableClip } from "./clipSemantics";
+import { executableClipIndexes } from "./clipSemantics";
 import type { Clip } from "./types";
 
 export type AuthoringDiagnosticSeverity = "warning" | "error";
@@ -45,18 +45,22 @@ export const deriveAuthoringDiagnostics = (
     context: AuthoringDiagnosticContext = {},
 ): AuthoringDiagnostic[] => {
     const diagnostics: AuthoringDiagnostic[] = [];
+    const firstSkippedClip = clips.findIndex((clip) => clip.skipped === true);
+    const authoredPrefix =
+        firstSkippedClip < 0 ? clips : clips.slice(0, firstSkippedClip);
     if (context.catalog) {
         diagnostics.push(
             ...deriveArchitectureDiagnostics(
-                clips,
+                authoredPrefix,
                 context.catalog,
                 context.generatedEntryMode,
             ),
         );
     }
-    const executable = clips
-        .map((clip, clipIdx) => ({ clip, clipIdx }))
-        .filter(({ clip }) => isExecutableClip(clip));
+    const executable = executableClipIndexes(clips).map((clipIdx) => ({
+        clip: clips[clipIdx],
+        clipIdx,
+    }));
 
     for (const { clip, clipIdx } of executable) {
         const descriptor = architectureDescriptor(

@@ -1,3 +1,4 @@
+import { activeStageCount } from "../clipSemantics";
 import type { Clip, IcLora } from "../types";
 import { ltx2Behavior } from "./ltx2/behavior";
 import type { GeneratedEntryMode } from "./ltx2/icLoraDriveAvailability";
@@ -104,9 +105,10 @@ export const clipHasActiveHdr = (clip: Clip): boolean =>
     clip.icLoras.some(
         (entry) =>
             isArchitectureHdrFeature(clip.architecture, entry) &&
-            clip.stages.some(
-                (stage, rawStageIdx) =>
-                    stage.skipped !== true &&
-                    (entry.stage < 0 || entry.stage === rawStageIdx),
-            ),
+            clip.stages
+                .slice(0, activeStageCount(clip))
+                .some(
+                    (_stage, rawStageIdx) =>
+                        entry.stage < 0 || entry.stage === rawStageIdx,
+                ),
     );

@@ -76,7 +76,16 @@ export const applyClipSkip = (
     if (!clip || (clipIdx === 0 && clip.skipped !== true)) {
         return false;
     }
-    clip.skipped = !clip.skipped;
+    const skipped = !clip.skipped;
+    const start = skipped
+        ? clipIdx
+        : Math.max(
+              0,
+              clips.findIndex((candidate) => candidate.skipped === true),
+          );
+    for (let index = start; index < clips.length; index++) {
+        clips[index].skipped = skipped;
+    }
     reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
     return true;
 };
@@ -94,7 +103,16 @@ export const applyStageSkip = (
     if (!clip || !stage || (stageIdx === 0 && stage.skipped !== true)) {
         return false;
     }
-    stage.skipped = !stage.skipped;
+    const skipped = !stage.skipped;
+    const start = skipped
+        ? stageIdx
+        : Math.max(
+              0,
+              clip.stages.findIndex((candidate) => candidate.skipped === true),
+          );
+    for (let index = start; index < clip.stages.length; index++) {
+        clip.stages[index].skipped = skipped;
+    }
     reconcileSourcedClipIdentity(clip, catalog);
     reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
     return true;
@@ -455,6 +473,7 @@ export const createDetailSelectionDomainOperations = (
                         defaultLoraWeight(defaults, entry.lora),
                     ),
                 );
+                stage.skipped = last?.skipped === true;
                 if (
                     clip.architecture === NONE_ARCHITECTURE_ID &&
                     clip.stages.length === 0
@@ -558,21 +577,60 @@ export const createDetailSelectionDomainOperations = (
     const commitSkip = (
         clips: Clip[],
         mutate: (clips: Clip[]) => boolean,
-        skipCommand: (clips: Clip[]) => DocumentCommand | null,
     ): StructuralCommand | null => {
         const beforeDrives = clips.map((clip) => JSON.stringify(clip.icLoras));
+        const beforeClipSkips = clips.map((clip) => clip.skipped === true);
+        const beforeStageSkips = clips.map((clip) =>
+            clip.stages.map((stage) => stage.skipped === true),
+        );
         if (!mutate(clips)) {
             return null;
         }
-        const skip = skipCommand(clips);
-        if (!skip) {
+        const skipCommands: DocumentCommand[] = clips.flatMap(
+            (clip, clipIdx) => {
+                const commands: DocumentCommand[] = [];
+                if (
+                    clip.id &&
+                    (clip.skipped === true) !== beforeClipSkips[clipIdx]
+                ) {
+                    commands.push({
+                        type: "clip.patch",
+                        clipId: clip.id,
+                        patch: { skipped: clip.skipped },
+                    });
+                }
+                if (clip.id) {
+                    for (
+                        let stageIdx = 0;
+                        stageIdx < clip.stages.length;
+                        stageIdx++
+                    ) {
+                        const stage = clip.stages[stageIdx];
+                        if (
+                            stage.id &&
+                            (stage.skipped === true) !==
+                                beforeStageSkips[clipIdx]?.[stageIdx]
+                        ) {
+                            commands.push({
+                                type: "stage.patch",
+                                clipId: clip.id,
+                                stageId: stage.id,
+                                patch: { skipped: stage.skipped },
+                            });
+                        }
+                    }
+                }
+                return commands;
+            },
+        );
+        if (skipCommands.length === 0) {
             return null;
         }
         return {
             command: {
                 type: "batch",
                 commands: [
-                    skip,
+                    ...skipCommands,
                     ...clips.flatMap((clip, index) =>
                         clip.id &&
                         JSON.stringify(clip.icLoras) !== beforeDrives[index]
@@ -593,50 +651,22 @@ export const createDetailSelectionDomainOperations = (
 
     const toggleClipSkip = (clipIdx: number): void => {
         structuralCommit((clips) =>
-            commitSkip(
-                clips,
-                (working) =>
-                    applyClipSkip(working, clipIdx, getGeneratedEntryMode()),
-                (working) => {
-                    const clip = working[clipIdx];
-                    return clip.id
-                        ? {
-                              type: "clip.patch",
-                              clipId: clip.id,
-                              patch: { skipped: clip.skipped },
-                          }
-                        : null;
-                },
+            commitSkip(clips, (working) =>
+                applyClipSkip(working, clipIdx, getGeneratedEntryMode()),
             ),
         );
     };
 
     const toggleStageSkip = (clipIdx: number, stageIdx: number): void => {
         structuralCommit((clips) =>
-            commitSkip(
-                clips,
-                (working) =>
-                    applyStageSkip(
-                        working,
-                        clipIdx,
-                        stageIdx,
-                        getCapabilities().catalog,
-                        getGeneratedEntryMode(),
-                    ),
-                (working) => {
-                    const clip = working[clipIdx];
-                    const stage = clip.stages[stageIdx];
-                    // The reducer re-derives the clip's identity from the
-                    // surviving active stages, exactly as applyStageSkip did.
-                    return clip.id && stage.id
-                        ? {
-                              type: "stage.patch",
-                              clipId: clip.id,
-                              stageId: stage.id,
-                              patch: { skipped: stage.skipped },
-                          }
-                        : null;
-                },
+            commitSkip(clips, (working) =>
+                applyStageSkip(
+                    working,
+                    clipIdx,
+                    stageIdx,
+                    getCapabilities().catalog,
+                    getGeneratedEntryMode(),
+                ),
             ),
         );
     };

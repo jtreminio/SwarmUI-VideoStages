@@ -1,3 +1,4 @@
+import { activeStageCount } from "../clipSemantics";
 import type { Clip } from "../types";
 import { architectureDescriptor, modelCatalogEntry } from "./catalogQueries";
 import { NONE_ARCHITECTURE_ID } from "./none/definition";
@@ -81,10 +82,7 @@ export const deriveClipArchitectureIdentity = (
         authoredArchitectureId: authored?.architectureId ?? null,
         authoredModelProfileId: authored?.modelProfileId ?? null,
     };
-    if (
-        clip.sourceVideo !== null &&
-        clip.stages.every((stage) => stage.skipped)
-    ) {
+    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
         return {
             architectureId: NONE_ARCHITECTURE_ID,
             modelProfileId: NONE_ARCHITECTURE_ID,

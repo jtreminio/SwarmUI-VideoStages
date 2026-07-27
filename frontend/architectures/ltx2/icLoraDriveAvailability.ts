@@ -1,4 +1,4 @@
-import { isExecutableClip } from "../../clipSemantics";
+import { activeStageCount, executableClipIndexes } from "../../clipSemantics";
 import {
     IC_LORA_SOURCE_INCOMING,
     IC_LORA_SOURCE_UPLOAD,
@@ -15,22 +15,21 @@ export const canUseIncomingIcLoraDrive = (
     clips: readonly Clip[],
     generatedEntryMode: GeneratedEntryMode,
 ): boolean => {
-    if (entry.driveData === "none" || !isExecutableClip(clip)) {
+    const executable = executableClipIndexes(clips);
+    if (entry.driveData === "none" || !executable.includes(clipIdx)) {
         return false;
     }
     const acceptedKinds = entry.driveMediaKinds;
-    const activeStageIndexes = clip.stages.flatMap((stage, rawIndex) =>
-        stage.skipped ? [] : [rawIndex],
-    );
+    const activeStageIndexes = clip.stages
+        .slice(0, activeStageCount(clip))
+        .map((_stage, rawIndex) => rawIndex);
     const targetedStages =
         entry.stage >= 0
             ? activeStageIndexes.includes(entry.stage)
                 ? [entry.stage]
                 : []
             : activeStageIndexes;
-    const hasPreviousClipOutput = clips
-        .slice(0, clipIdx)
-        .some(isExecutableClip);
+    const hasPreviousClipOutput = executable.some((index) => index < clipIdx);
     return (
         targetedStages.length > 0 &&
         targetedStages.every((targetStage) => {

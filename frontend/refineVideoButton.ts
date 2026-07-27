@@ -1,3 +1,4 @@
+import { activeStageCount } from "./clipSemantics";
 import { getVideoStagesHostBridge } from "./host";
 import { readProp } from "./normalization";
 import { getState } from "./persistence";
@@ -28,9 +29,10 @@ export const countActiveStagesInMetadataClip0 = (
     if (!Array.isArray(stages)) {
         return 0;
     }
-    return stages.filter(
-        (stage) => !(isRecord(stage) && readProp(stage, "skipped") === true),
-    ).length;
+    const firstSkipped = stages.findIndex(
+        (stage) => isRecord(stage) && readProp(stage, "skipped") === true,
+    );
+    return firstSkipped < 0 ? stages.length : firstSkipped;
 };
 
 export const hasRefinementWorkToDo = (
@@ -45,8 +47,7 @@ export const hasRefinementWorkToDo = (
     if (!clip0 || clip0.skipped) {
         return false;
     }
-    const activeStages = clip0.stages.filter((stage) => !stage.skipped);
-    return activeStages.length > skipCount;
+    return activeStageCount(clip0) > skipCount;
 };
 
 export const refineVideoButton = (): void => {

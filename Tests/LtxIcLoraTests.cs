@@ -216,9 +216,9 @@ public sealed class LtxIcLoraTests
     }
 
     [Fact]
-    public void Stage_scope_counts_skipped_stages()
+    public void Stage_scope_after_skip_marker_does_not_execute()
     {
-        // entry.Stage indexes the authored stage list, so a skipped earlier stage doesn't shift it.
+        // A skipped stage truncates the stage chain, so a later authored target is dormant.
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         RegisterLora("UnitTest_IcLoraA");
@@ -233,7 +233,7 @@ public sealed class LtxIcLoraTests
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
 
-        Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
     }
 
     [Fact]

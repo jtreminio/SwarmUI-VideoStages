@@ -4,6 +4,7 @@ import {
 } from "../architectures/boundaryConstraints";
 import { type BoundaryPlan, crossfadePlanForClips } from "../boundaryPlan";
 import {
+    activeStageCount,
     executableBoundaryForLeftClip,
     executableClipIndexes,
 } from "../clipSemantics";
@@ -15,7 +16,15 @@ import {
     type OptionSpec,
 } from "../detailWidgets";
 import { getState } from "../persistence";
-import { formatOverlapSeconds, safeFps } from "../timelineDetail";
+import {
+    formatOverlapSeconds,
+    formatSecondsTenth,
+    safeFps,
+} from "../timelineDetail";
+import {
+    boundaryImpactForLeftClip,
+    resolveTimelineTiming,
+} from "../timelineTiming";
 import { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "../timelineView";
 import type { BoundaryOut, Clip, TimelineSelection } from "../types";
 import { buildCapabilityNotice } from "./capabilityUi";
@@ -39,9 +48,7 @@ export const buildBoundaryBody = (
     const fps = Math.round(safeFps(state.fps));
     const carryTargetHasStage =
         capability.rightClipIdx !== null &&
-        clips[capability.rightClipIdx]?.stages.some(
-            (stage) => !stage.skipped,
-        ) === true;
+        activeStageCount(clips[capability.rightClipIdx]) > 0;
     const carryAudioActive =
         clip?.boundaryOutCarryAudio === true && carryTargetHasStage;
 
@@ -232,6 +239,73 @@ export const buildBoundaryBody = (
         }
     }
     fields.appendChild(info);
+
+    if (seam !== null) {
+        const timing = resolveTimelineTiming(clips, fps, ctx.capabilities());
+        const impact = boundaryImpactForLeftClip(timing, leftClipIdx);
+        if (impact) {
+            const leftFrames = timing.clipFrames[impact.leftIdx] ?? 0;
+            const rightFrames = timing.clipFrames[impact.rightIdx] ?? 0;
+            const combinedFrames = Math.max(
+                0,
+                leftFrames + rightFrames - impact.overlapFrames,
+            );
+            const impactBlock = document.createElement("div");
+            impactBlock.className = "vst-boundary-impact";
+
+            const heading = document.createElement("div");
+            heading.className =
+                "vst-detail-crumb vst-detail-subsection-crumb vst-boundary-impact-title";
+            heading.textContent = "Output impact";
+            impactBlock.appendChild(heading);
+
+            const rows = document.createElement("div");
+            rows.className = "vst-boundary-impact-rows";
+            const addRow = (
+                label: string,
+                frames: number,
+                sign: "" | "+" | "−" = "",
+                strong = false,
+            ): void => {
+                const row = document.createElement("div");
+                row.className = `vst-boundary-impact-row${strong ? " vst-boundary-impact-total" : ""}`;
+                const name = document.createElement("span");
+                name.textContent = label;
+                const value = document.createElement("span");
+                value.textContent = `${sign}${frames}f · ${sign}${formatSecondsTenth(frames / fps)}`;
+                row.append(name, value);
+                rows.appendChild(row);
+            };
+            addRow(`Clip ${impact.leftIdx}`, leftFrames);
+            addRow(`Clip ${impact.rightIdx}`, rightFrames, "+");
+            addRow(
+                `${BOUNDARY_LABEL[impact.effectiveMode]} shared`,
+                impact.overlapFrames,
+                impact.overlapFrames > 0 ? "−" : "",
+            );
+            addRow("Pair after this join", combinedFrames, "", true);
+            impactBlock.appendChild(rows);
+
+            if (
+                value === "continue" &&
+                impact.overlapFrames > 0 &&
+                overlapPolicy.continuityExtraFrames > 0
+            ) {
+                const note = document.createElement("div");
+                note.className = "vst-boundary-impact-note";
+                const selectedFrames = Math.max(
+                    0,
+                    impact.overlapFrames - overlapPolicy.continuityExtraFrames,
+                );
+                note.textContent =
+                    `${selectedFrames}f selected + ` +
+                    `${overlapPolicy.continuityExtraFrames} LTX continuation frame = ` +
+                    `${impact.overlapFrames}f effective shared window.`;
+                impactBlock.appendChild(note);
+            }
+            fields.appendChild(impactBlock);
+        }
+    }
 
     body.appendChild(
         buildStaticSection({

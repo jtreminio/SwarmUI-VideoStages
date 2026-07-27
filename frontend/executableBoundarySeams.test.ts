@@ -7,8 +7,8 @@ import { computeRegionLayout } from "./timelineView/layout";
 import { renderBoundarySeams } from "./timelineView/regionRenderer";
 import type { Clip } from "./types";
 
-// Active A, skipped B, active C: execution compiles the single A→C join, so the
-// timeline must render exactly that seam — not the two raw-adjacency seams.
+// Active A, skipped B, authored C: B is a truncation marker, so execution ends
+// after A and no later boundary exists.
 const clips = (): Clip[] => [
     minimalClip({ id: "a" }),
     minimalClip({ id: "b", skipped: true }),
@@ -16,19 +16,11 @@ const clips = (): Clip[] => [
 ];
 
 describe("executable boundary seams", () => {
-    it("compacts a skipped clip into one A→C descriptor", () => {
-        expect(executableBoundaries(clips())).toEqual([
-            {
-                position: 0,
-                leftIdx: 0,
-                rightIdx: 2,
-                leftId: "a",
-                rightId: "c",
-            },
-        ]);
+    it("truncates boundaries at the first skipped clip", () => {
+        expect(executableBoundaries(clips())).toEqual([]);
     });
 
-    it("renders exactly one chip, anchored at the executable target clip", () => {
+    it("renders no chip beyond the truncation point", () => {
         const list = clips();
         const layouts = computeRegionLayout(list, { pxPerSecond: 10 });
         const host = document.createElement("div");
@@ -36,18 +28,12 @@ describe("executable boundary seams", () => {
         const chips = Array.from(
             host.querySelectorAll<HTMLElement>("[data-vst-boundary-chip]"),
         );
-        expect(chips).toHaveLength(1);
-        expect(chips[0].getAttribute("data-left-clip-idx")).toBe("0");
-        expect(chips[0].getAttribute("data-right-clip-idx")).toBe("2");
-        expect(chips[0].style.left).toBe(`${layouts[2].startPx}px`);
-        expect(chips[0].getAttribute("title")).toContain(
-            "Boundary clip 0 → 2:",
-        );
+        expect(chips).toHaveLength(0);
     });
 
-    it("labels the dock breadcrumb with the executable neighbour", () => {
+    it("labels the final executable clip as the end", () => {
         expect(
             detailBreadcrumb({ kind: "boundary", leftClipIdx: 0 }, clips()),
-        ).toBe("Boundary · Clip 0 → 2");
+        ).toBe("Boundary · Clip 0 → end");
     });
 });

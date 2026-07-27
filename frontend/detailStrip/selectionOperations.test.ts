@@ -34,6 +34,76 @@ type StructuralOutcome =
     | StructuralCommand;
 
 describe("detail structural stage operations", () => {
+    it("cascades a clip skip marker through every later clip", () => {
+        const clips = [minimalClip(), minimalClip(), minimalClip()];
+
+        expect(applyClipSkip(clips, 1, "text-to-video")).toBe(true);
+        expect(clips.map((clip) => clip.skipped)).toEqual([false, true, true]);
+
+        expect(applyClipSkip(clips, 2, "text-to-video")).toBe(true);
+        expect(clips.map((clip) => clip.skipped)).toEqual([
+            false,
+            false,
+            false,
+        ]);
+    });
+
+    it("cascades a stage skip marker through every later stage", () => {
+        const clip = minimalClip({
+            stages: [
+                minimalClip().stages[0],
+                structuredClone(minimalClip().stages[0]),
+                structuredClone(minimalClip().stages[0]),
+            ],
+        });
+        const clips = [clip];
+        const catalog = testArchitectureCatalog();
+
+        expect(applyStageSkip(clips, 0, 1, catalog, "text-to-video")).toBe(
+            true,
+        );
+        expect(clip.stages.map((stage) => stage.skipped)).toEqual([
+            false,
+            true,
+            true,
+        ]);
+
+        expect(applyStageSkip(clips, 0, 2, catalog, "text-to-video")).toBe(
+            true,
+        );
+        expect(clip.stages.map((stage) => stage.skipped)).toEqual([
+            false,
+            false,
+            false,
+        ]);
+    });
+
+    it("keeps a newly appended stage behind an existing skip marker", () => {
+        const clip = minimalClip({
+            stages: [
+                minimalClip().stages[0],
+                {
+                    ...structuredClone(minimalClip().stages[0]),
+                    skipped: true,
+                },
+            ],
+        });
+        const structuralCommit = jest.fn(
+            (apply: (value: Clip[]) => StructuralOutcome) => {
+                apply([clip]);
+            },
+        );
+        const operations = createDetailSelectionOperations(
+            structuralCommit,
+            () => createCapabilityViewResolver(testArchitectureCatalog()),
+        );
+
+        operations.addStage(0);
+
+        expect(clip.stages).toHaveLength(3);
+        expect(clip.stages[2].skipped).toBe(true);
+    });
+
     it("allows legacy skipped first items to be restored, but not skipped again", () => {
         const clip = minimalClip({ skipped: true });
         clip.stages[0].skipped = true;

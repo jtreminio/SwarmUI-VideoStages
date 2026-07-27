@@ -83,12 +83,30 @@ internal static class VideoClipSpecParser
                 "modelProfileId")?.Trim().ToLowerInvariant(),
             // Prompt-tag overrides have already been applied to rawStages by the top-level parser,
             // so architecture resolution observes exactly the authored state generation would use.
-            AuthoredStages = [.. rawStages.Select((stage, rawIndex) => new AuthoredStageModelSpec(
+            AuthoredStages = ProjectAuthoredStages(rawStages),
+        };
+    }
+
+    private static IReadOnlyList<AuthoredStageModelSpec> ProjectAuthoredStages(
+        IReadOnlyList<JObject> rawStages)
+    {
+        int firstSkipped = -1;
+        List<AuthoredStageModelSpec> authored = [];
+        for (int rawIndex = 0; rawIndex < rawStages.Count; rawIndex++)
+        {
+            JObject stage = rawStages[rawIndex];
+            if (firstSkipped < 0
+                && VideoStagesJsonReader.GetOptionalBool(stage, "skipped", false))
+            {
+                firstSkipped = rawIndex;
+            }
+            authored.Add(new(
                 rawIndex,
                 VideoStagesJsonReader.GetString(stage, "model"),
                 VideoStagesJsonReader.GetString(stage, "modelProfileId")?.Trim().ToLowerInvariant(),
-                VideoStagesJsonReader.GetOptionalBool(stage, "skipped", false)))],
-        };
+                firstSkipped >= 0));
+        }
+        return authored;
     }
 
     private static List<StageSpec> ParseStages(
@@ -104,7 +122,7 @@ internal static class VideoClipSpecParser
             JObject stage = rawStages[stageIndex];
             if (VideoStagesJsonReader.GetOptionalBool(stage, "skipped", false))
             {
-                continue;
+                break;
             }
             stages.Add(VideoStageSpecParser.Parse(
                 stage,

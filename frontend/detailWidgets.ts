@@ -453,9 +453,6 @@ const setAccordionOpen = (section: HTMLElement, open: boolean): void => {
     section.classList.toggle("input-group-open", open);
     section.classList.toggle("input-group-closed", !open);
     header?.setAttribute("aria-expanded", `${open}`);
-    if (section.classList.contains("vst-detail-repeating-group")) {
-        header?.setAttribute("aria-pressed", `${open}`);
-    }
     if (content) {
         content.style.removeProperty("display");
         content.hidden = !open;

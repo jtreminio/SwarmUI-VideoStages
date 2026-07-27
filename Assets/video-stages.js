@@ -323,6 +323,41 @@
   var bridge = createDefaultVideoStagesHostBridge();
   var getVideoStagesHostBridge = () => bridge;
 
+  // frontend/clipSemantics.ts
+  var activeStageCount = (clip) => {
+    const firstSkipped = clip.stages.findIndex(
+      (stage) => stage.skipped === true
+    );
+    return firstSkipped < 0 ? clip.stages.length : firstSkipped;
+  };
+  var isExecutableClip = (clip) => !clip.skipped && (clip.sourceVideo !== null || activeStageCount(clip) > 0);
+  var executableClipIndexes = (clips) => {
+    const firstSkipped = clips.findIndex((clip) => clip.skipped === true);
+    const prefix = firstSkipped < 0 ? clips : clips.slice(0, firstSkipped);
+    return prefix.flatMap(
+      (clip, index) => isExecutableClip(clip) ? [index] : []
+    );
+  };
+  var executableBoundaries = (clips) => {
+    const indexes = executableClipIndexes(clips);
+    const boundaries = [];
+    for (let position = 0; position < indexes.length - 1; position++) {
+      const leftIdx = indexes[position];
+      const rightIdx = indexes[position + 1];
+      boundaries.push({
+        position,
+        leftIdx,
+        rightIdx,
+        leftId: clips[leftIdx].id,
+        rightId: clips[rightIdx].id
+      });
+    }
+    return boundaries;
+  };
+  var executableBoundaryForLeftClip = (clips, leftClipIdx) => executableBoundaries(clips).find(
+    (boundary) => boundary.leftIdx === leftClipIdx
+  ) ?? null;
+
   // frontend/constants.ts
   var REF_FRAME_MIN = 1;
   var DEFAULT_CLIP_DURATION_SECONDS = 5;
@@ -632,30 +667,6 @@
     return tracks;
   };
 
-  // frontend/clipSemantics.ts
-  var activeStageCount = (clip) => clip.stages.filter((stage) => !stage.skipped).length;
-  var isExecutableClip = (clip) => !clip.skipped && (clip.sourceVideo !== null || activeStageCount(clip) > 0);
-  var executableClipIndexes = (clips) => clips.flatMap((clip, index) => isExecutableClip(clip) ? [index] : []);
-  var executableBoundaries = (clips) => {
-    const indexes = executableClipIndexes(clips);
-    const boundaries = [];
-    for (let position = 0; position < indexes.length - 1; position++) {
-      const leftIdx = indexes[position];
-      const rightIdx = indexes[position + 1];
-      boundaries.push({
-        position,
-        leftIdx,
-        rightIdx,
-        leftId: clips[leftIdx].id,
-        rightId: clips[rightIdx].id
-      });
-    }
-    return boundaries;
-  };
-  var executableBoundaryForLeftClip = (clips, leftClipIdx) => executableBoundaries(clips).find(
-    (boundary) => boundary.leftIdx === leftClipIdx
-  ) ?? null;
-
   // frontend/icLoraAuthoring.ts
   var STAGE_CONTROLNET_STRENGTH_MIN = 0;
   var STAGE_CONTROLNET_STRENGTH_MAX = 1;
@@ -675,15 +686,14 @@
 
   // frontend/architectures/ltx2/icLoraDriveAvailability.ts
   var canUseIncomingIcLoraDrive = (entry, clip, clipIdx, clips, generatedEntryMode) => {
-    if (entry.driveData === "none" || !isExecutableClip(clip)) {
+    const executable = executableClipIndexes(clips);
+    if (entry.driveData === "none" || !executable.includes(clipIdx)) {
       return false;
     }
     const acceptedKinds = entry.driveMediaKinds;
-    const activeStageIndexes = clip.stages.flatMap(
-      (stage, rawIndex) => stage.skipped ? [] : [rawIndex]
-    );
+    const activeStageIndexes = clip.stages.slice(0, activeStageCount(clip)).map((_stage, rawIndex) => rawIndex);
     const targetedStages = entry.stage >= 0 ? activeStageIndexes.includes(entry.stage) ? [entry.stage] : [] : activeStageIndexes;
-    const hasPreviousClipOutput = clips.slice(0, clipIdx).some(isExecutableClip);
+    const hasPreviousClipOutput = executable.some((index) => index < clipIdx);
     return targetedStages.length > 0 && targetedStages.every((targetStage) => {
       const activeStageIndex = activeStageIndexes.indexOf(targetStage);
       const incomingKind = activeStageIndex > 0 || clip.sourceVideo ? "video" : hasPreviousClipOutput ? "video" : generatedEntryMode === "image-to-video" ? "image" : null;
@@ -1386,8 +1396,8 @@
   var isArchitectureHdrFeature = (architectureId, entry) => architectureBehavior(architectureId)?.isHdrFeature(entry) ?? false;
   var architectureIcLoraDisplayName = (architectureId, entry) => architectureBehavior(architectureId)?.icLoraDisplayName(entry) ?? entry.lora;
   var clipHasActiveHdr = (clip) => clip.icLoras.some(
-    (entry) => isArchitectureHdrFeature(clip.architecture, entry) && clip.stages.some(
-      (stage, rawStageIdx) => stage.skipped !== true && (entry.stage < 0 || entry.stage === rawStageIdx)
+    (entry) => isArchitectureHdrFeature(clip.architecture, entry) && clip.stages.slice(0, activeStageCount(clip)).some(
+      (_stage, rawStageIdx) => entry.stage < 0 || entry.stage === rawStageIdx
     )
   );
 
@@ -2306,7 +2316,7 @@
     return {
       architecture,
       modelProfileId: (previousClip?.architecture !== NONE_ARCHITECTURE_ID ? previousClip?.modelProfileId : null) ?? modelProfileForModel(defaults.modelCatalog, firstStage.model) ?? firstStage.modelProfileId,
-      skipped: false,
+      skipped: previousClip?.skipped === true,
       hue: UNASSIGNED_HUE,
       boundaryOut: "cut",
       boundaryOutCarryAudio: false,
@@ -2395,6 +2405,14 @@
           loraDefaultWeights
         )
       );
+    }
+    const firstSkippedStage = stages.findIndex(
+      (stage) => stage.skipped === true
+    );
+    if (firstSkippedStage >= 0) {
+      for (let index = firstSkippedStage; index < stages.length; index++) {
+        stages[index].skipped = true;
+      }
     }
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const stageZero = stages[0] ?? null;
@@ -3324,16 +3342,25 @@
         width: parsed.width,
         height: parsed.height
       });
+      const clips = parsed.clips.map(
+        (entry) => normalizeClip(
+          entry,
+          getRootDefaults,
+          getDefaultStageModel,
+          dims.fps
+        )
+      );
+      const firstSkippedClip = clips.findIndex(
+        (clip) => clip.skipped === true
+      );
+      if (firstSkippedClip >= 0) {
+        for (let index = firstSkippedClip; index < clips.length; index++) {
+          clips[index].skipped = true;
+        }
+      }
       return {
         dims,
-        clips: parsed.clips.map(
-          (entry) => normalizeClip(
-            entry,
-            getRootDefaults,
-            getDefaultStageModel,
-            dims.fps
-          )
-        ),
+        clips,
         audioTracks: normalizeAudioTracks(parsed.audioTracks)
       };
     } catch {
@@ -3429,7 +3456,7 @@
       authoredArchitectureId: authored?.architectureId ?? null,
       authoredModelProfileId: authored?.modelProfileId ?? null
     };
-    if (clip.sourceVideo !== null && clip.stages.every((stage) => stage.skipped)) {
+    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
       return {
         architectureId: NONE_ARCHITECTURE_ID,
         modelProfileId: NONE_ARCHITECTURE_ID,
@@ -3872,7 +3899,7 @@
       const hasInitialReference = right?.refs.some(
         (reference) => reference.fromEnd !== true && Math.max(1, Math.round(reference.frame)) === 1
       ) ?? false;
-      const rightHasActiveStage = right?.stages.some((stage) => !stage.skipped) ?? false;
+      const rightHasActiveStage = right !== null && activeStageCount(right) > 0;
       const supportsMode = (mode) => {
         const rule = leftDescriptor?.boundaryRules[mode];
         if (!rule || rule.support === "unsupported") {
@@ -5364,9 +5391,10 @@
     if (!Array.isArray(stages)) {
       return 0;
     }
-    return stages.filter(
-      (stage) => !(isRecord(stage) && readProp(stage, "skipped") === true)
-    ).length;
+    const firstSkipped = stages.findIndex(
+      (stage) => isRecord(stage) && readProp(stage, "skipped") === true
+    );
+    return firstSkipped < 0 ? stages.length : firstSkipped;
   };
   var hasRefinementWorkToDo = (state, enabled, skipCount) => {
     if (!enabled) {
@@ -5376,8 +5404,7 @@
     if (!clip0 || clip0.skipped) {
       return false;
     }
-    const activeStages = clip0.stages.filter((stage) => !stage.skipped);
-    return activeStages.length > skipCount;
+    return activeStageCount(clip0) > skipCount;
   };
   var refineVideoButton = () => {
     const description = "Re-runs VideoStages using this video as the source for Clip 0 (skips the first N stage samplers, where N is read from the source video's metadata). Requires an extra stage beyond those.";
@@ -5712,16 +5739,21 @@
   var diagnostic = (severity, code, message, clipIdx) => ({ severity, code, message, clipIdx });
   var deriveAuthoringDiagnostics = (clips, context = {}) => {
     const diagnostics = [];
+    const firstSkippedClip = clips.findIndex((clip) => clip.skipped === true);
+    const authoredPrefix = firstSkippedClip < 0 ? clips : clips.slice(0, firstSkippedClip);
     if (context.catalog) {
       diagnostics.push(
         ...deriveArchitectureDiagnostics(
-          clips,
+          authoredPrefix,
           context.catalog,
           context.generatedEntryMode
         )
       );
     }
-    const executable = clips.map((clip, clipIdx) => ({ clip, clipIdx })).filter(({ clip }) => isExecutableClip(clip));
+    const executable = executableClipIndexes(clips).map((clipIdx) => ({
+      clip: clips[clipIdx],
+      clipIdx
+    }));
     for (const { clip, clipIdx } of executable) {
       const descriptor = architectureDescriptor(
         context.catalog,
@@ -6177,7 +6209,38 @@
     }
     return Math.abs(fallbackStart - start) <= Math.abs(fallbackEnd - (start + length)) ? fallbackStart : fallbackEnd - length;
   };
-  var timelineClipEdges = (clips) => {
+  var timelineClipEdges = (clips, timing) => {
+    if (timing) {
+      const overlapAfter = new Map(
+        timing.boundaries.map((boundary) => [
+          boundary.leftIdx,
+          boundary.overlapSeconds
+        ])
+      );
+      const overlapBefore = new Map(
+        timing.boundaries.map((boundary) => [
+          boundary.rightIdx,
+          boundary.overlapSeconds
+        ])
+      );
+      const edges2 = [0];
+      let cursor2 = 0;
+      for (const clipIdx of timing.executableClipIndexes) {
+        const duration = (timing.clipFrames[clipIdx] ?? 0) / timing.fps;
+        const incoming = overlapBefore.get(clipIdx) ?? 0;
+        const outgoing = overlapAfter.get(clipIdx) ?? 0;
+        const editEnd = cursor2 + Math.max(0, duration - incoming / 2 - outgoing / 2);
+        edges2.push(cursor2, editEnd);
+        if (outgoing > 0) {
+          edges2.push(editEnd - outgoing / 2, editEnd + outgoing / 2);
+        }
+        cursor2 = editEnd;
+      }
+      edges2.push(timing.outputSeconds);
+      return edges2.sort((left, right) => left - right).filter(
+        (edge, index, sorted) => index === 0 || Math.abs(edge - sorted[index - 1]) > 1e-9
+      );
+    }
     const edges = [0];
     let cursor = 0;
     for (const clip of clips) {
@@ -6186,6 +6249,252 @@
     }
     return edges;
   };
+
+  // frontend/boundaryPlan.ts
+  var crossfadePlanForClips = (clips, fps, resolveConstraints = (clip, _index, mode) => {
+    const generic = boundaryOverlapConstraints(null);
+    const persisted = Math.trunc(Number(clip.boundaryOutOverlap));
+    return {
+      ...generic,
+      defaultFrames: mode === "cut" || !Number.isFinite(persisted) || persisted <= 0 ? generic.defaultFrames : persisted
+    };
+  }) => {
+    const count = clips.length;
+    const boundaryCount = Math.max(0, count - 1);
+    const noOverlap = () => new Array(boundaryCount).fill(0);
+    if (count < 2) {
+      return { overlaps: noOverlap(), fallback: false };
+    }
+    let requested = 0;
+    const modes = [];
+    for (let i = 0; i < count - 1; i++) {
+      const b = clips[i].boundaryOut ?? "cut";
+      modes[i] = b;
+      if (b === "crossfade" || b === "continue") {
+        requested++;
+      }
+    }
+    if (requested === 0) {
+      return { overlaps: noOverlap(), fallback: false };
+    }
+    const frames = clips.map((c) => framesForClip(c.duration, fps));
+    const constraints = clips.map(
+      (clip, index) => resolveConstraints(clip, index, clip.boundaryOut ?? "cut")
+    );
+    const prefs = clips.map(
+      (clip, index) => normalizeBoundaryOverlap(clip.boundaryOutOverlap, constraints[index])
+    );
+    const active = (index) => modes[index] === "continue" || modes[index] === "crossfade";
+    const trim = (index) => modes[index] === "continue" ? prefs[index] + constraints[index].continuityExtraFrames : modes[index] === "crossfade" ? prefs[index] : 0;
+    while (true) {
+      let overBudgetClip = -1;
+      for (let i = 0; i < count; i++) {
+        const left = i > 0 ? trim(i - 1) : 0;
+        const right = i < boundaryCount ? trim(i) : 0;
+        if (left + right > frames[i] - 1) {
+          overBudgetClip = i;
+          break;
+        }
+      }
+      if (overBudgetClip < 0) break;
+      const candidate = overBudgetClip < boundaryCount && active(overBudgetClip) ? overBudgetClip : overBudgetClip > 0 && active(overBudgetClip - 1) ? overBudgetClip - 1 : -1;
+      if (candidate < 0) {
+        return { overlaps: noOverlap(), fallback: true };
+      }
+      const reduced = prefs[candidate] - constraints[candidate].frameStep;
+      if (reduced < constraints[candidate].minFrames) {
+        modes[candidate] = "cut";
+        prefs[candidate] = 0;
+      } else {
+        prefs[candidate] = reduced;
+      }
+    }
+    const overlaps = modes.slice(0, boundaryCount).map((_mode, index) => trim(index));
+    return {
+      overlaps,
+      fallback: requested > 0 && !modes.some((_mode, index) => active(index))
+    };
+  };
+
+  // frontend/timelineDetail.ts
+  var DEFAULT_FPS = 24;
+  var safeFps = (fps) => typeof fps === "number" && Number.isFinite(fps) && fps > 0 ? fps : DEFAULT_FPS;
+  var keyframeTimeSeconds = (frame, fromEnd, clipDurationSeconds, fps) => {
+    const duration = Math.max(0, clipDurationSeconds || 0);
+    const offset = Math.max(0, frame || 0) / safeFps(fps);
+    const raw = fromEnd ? duration - offset : offset;
+    return Math.min(Math.max(raw, 0), duration);
+  };
+  var formatTimeLabel = (seconds, unit, fps) => {
+    if (unit === "frames") {
+      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
+    }
+    const rounded = Math.round((seconds || 0) * 10) / 10;
+    return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`;
+  };
+  var formatSecondsTenth = (seconds) => `${(Math.round((Number.isFinite(seconds) ? seconds : 0) * 10) / 10).toFixed(1)}s`;
+  var formatOverlapSeconds = (frames, fps) => formatSecondsTenth(frames / Math.max(1, fps));
+  var RULER_MIN_TICK_SPACING_PX = 60;
+  var RULER_STEP_LADDER_SECONDS = [
+    0.5,
+    1,
+    2,
+    5,
+    10,
+    15,
+    30,
+    60,
+    120,
+    300,
+    600,
+    900,
+    1800,
+    3600
+  ];
+  var chooseRulerStepSeconds = (pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
+    const pps = pxPerSecond > 0 ? pxPerSecond : 1;
+    for (const step of RULER_STEP_LADDER_SECONDS) {
+      if (step * pps >= minSpacingPx) {
+        return step;
+      }
+    }
+    return RULER_STEP_LADDER_SECONDS[RULER_STEP_LADDER_SECONDS.length - 1];
+  };
+  var computeRulerTicks = (totalSeconds, pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
+    const total = Math.max(0, totalSeconds || 0);
+    if (total <= 0 || pxPerSecond <= 0) {
+      return [{ x: 0, seconds: 0 }];
+    }
+    const step = chooseRulerStepSeconds(pxPerSecond, minSpacingPx);
+    const ticks = [];
+    const MAX_TICKS = 1e3;
+    for (let i = 0; i < MAX_TICKS; i++) {
+      const t = i * step;
+      if (t > total + 1e-6) {
+        break;
+      }
+      ticks.push({ x: t * pxPerSecond, seconds: t });
+    }
+    return ticks;
+  };
+  var formatRulerLabel = (seconds, unit, fps) => {
+    if (unit === "frames") {
+      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
+    }
+    const s = Math.max(0, seconds || 0);
+    if (s >= 60) {
+      const totalWhole = Math.round(s);
+      const mm = Math.floor(totalWhole / 60);
+      const ss = totalWhole % 60;
+      return `${mm}:${`${ss}`.padStart(2, "0")}`;
+    }
+    return formatTimeLabel(s, unit, fps);
+  };
+  var truncate = (value, max = 80) => {
+    const text2 = `${value ?? ""}`;
+    return text2.length <= max ? text2 : `${text2.slice(0, Math.max(0, max - 1))}…`;
+  };
+  var refSourceLabel = (source) => {
+    const value = `${source ?? ""}`.trim();
+    if (!value) {
+      return REF_SOURCE_REFINER;
+    }
+    const editStage = parseBase2EditStageIndex(value);
+    if (editStage != null) {
+      return `Base2Edit Edit ${editStage}`;
+    }
+    return value;
+  };
+  var audioSourceBadge = (source) => {
+    const value = `${source ?? ""}`.trim();
+    if (!value || value === "Native") {
+      return { label: "Native", title: "Audio source: Native" };
+    }
+    return { label: value, title: `Audio source: ${value}` };
+  };
+  var shortModelName = (model) => {
+    const raw = `${model ?? ""}`.trim();
+    if (!raw) {
+      return "(default)";
+    }
+    const segment = raw.split(/[\\/]/).pop() ?? raw;
+    return segment.replace(/\.(safetensors|ckpt|pt|pth|gguf|sft|bin)$/i, "");
+  };
+  var stageChipLabel = (index) => `S${index}`;
+  var stageChipTitle = (stage, index) => {
+    const parts = [
+      `Stage ${index}${index === 0 ? " (full gen)" : " (refine)"}`,
+      `model: ${shortModelName(stage?.model ?? "")}`,
+      `steps: ${stage?.steps ?? "?"}`,
+      `cfg: ${stage?.cfgScale ?? "?"}`,
+      `control: ${stage?.control ?? "?"}`
+    ];
+    if (stage?.skipped) {
+      parts.push("skipped");
+    }
+    return parts.join(" · ");
+  };
+
+  // frontend/timelineTiming.ts
+  var resolveTimelineTiming = (clips, rawFps, capabilities) => {
+    const fps = safeFps(rawFps);
+    const indexes = executableClipIndexes(clips);
+    const executable = new Set(indexes);
+    const compacted = indexes.map((clipIdx, position) => {
+      const clip = clips[clipIdx];
+      const requested = clip.boundaryOut ?? "cut";
+      const effective = position < indexes.length - 1 ? capabilities?.forBoundaryIndex(clips, clipIdx).effective(requested) ?? requested : "cut";
+      return { ...clip, boundaryOut: effective };
+    });
+    const plan = capabilities ? crossfadePlanForClips(
+      compacted,
+      fps,
+      (_left, position, mode) => capabilities.forBoundaryIndex(clips, indexes[position]).overlapConstraints(mode)
+    ) : crossfadePlanForClips(compacted, fps);
+    const seams = executableBoundaries(clips);
+    const boundaries = seams.map((seam) => {
+      const requestedMode = clips[seam.leftIdx].boundaryOut ?? "cut";
+      const policyEffective = capabilities?.forBoundaryIndex(clips, seam.leftIdx).effective(requestedMode) ?? requestedMode;
+      const overlapFrames = Math.max(0, plan.overlaps[seam.position] ?? 0);
+      return {
+        ...seam,
+        requestedMode,
+        effectiveMode: overlapFrames > 0 ? policyEffective : "cut",
+        overlapFrames,
+        overlapSeconds: overlapFrames / fps
+      };
+    });
+    const clipFrames = clips.map(
+      (clip, clipIdx) => executable.has(clipIdx) ? framesForClip(clip.duration, fps) : 0
+    );
+    const generatedFrames = indexes.reduce(
+      (sum, clipIdx) => sum + clipFrames[clipIdx],
+      0
+    );
+    const joinFrames = boundaries.reduce(
+      (sum, boundary) => sum + boundary.overlapFrames,
+      0
+    );
+    const outputFrames = Math.max(0, generatedFrames - joinFrames);
+    return {
+      fps,
+      executableClipIndexes: indexes,
+      clipFrames,
+      boundaries,
+      authoredSeconds: indexes.reduce(
+        (sum, clipIdx) => sum + Math.max(0, clips[clipIdx].duration || 0),
+        0
+      ),
+      generatedFrames,
+      joinFrames,
+      joinSeconds: joinFrames / fps,
+      outputFrames,
+      outputSeconds: outputFrames / fps,
+      outputGeometryAvailable: indexes.length === clips.length
+    };
+  };
+  var boundaryImpactForLeftClip = (timing, leftClipIdx) => timing.boundaries.find((boundary) => boundary.leftIdx === leftClipIdx) ?? null;
+  var timelineDisplaySeconds = (clips, timing) => timing.outputGeometryAvailable ? timing.outputSeconds : clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
 
   // frontend/timelineAuthoringSettings.ts
   var SETTINGS_KEY = "videostages.timeline.authoringSettings";
@@ -6257,28 +6566,53 @@
   };
   var computeRegionLayout = (clips, options) => {
     const pxPerSecond = options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND;
+    const timing = options?.timing;
+    const useOutputGeometry = timing?.outputGeometryAvailable === true;
+    const overlapAfter = new Map(
+      timing?.boundaries.map((boundary) => [
+        boundary.leftIdx,
+        boundary.overlapSeconds
+      ]) ?? []
+    );
+    const overlapBefore = new Map(
+      timing?.boundaries.map((boundary) => [
+        boundary.rightIdx,
+        boundary.overlapSeconds
+      ]) ?? []
+    );
     const layouts = [];
     let cursorSeconds = 0;
     let cursorPx = 0;
     for (let index = 0; index < clips.length; index++) {
       const clip = clips[index];
       const durationSeconds = Math.max(0, clip.duration || 0);
-      const widthPx = Math.max(
-        DEFAULT_MIN_WIDTH_PX,
-        durationSeconds * pxPerSecond
+      const frameCount = timing?.clipFrames[index] ?? 0;
+      const generatedDurationSeconds = useOutputGeometry && frameCount > 0 ? frameCount / timing.fps : durationSeconds;
+      const incomingJoinSeconds = useOutputGeometry ? overlapBefore.get(index) ?? 0 : 0;
+      const outgoingJoinSeconds = useOutputGeometry ? overlapAfter.get(index) ?? 0 : 0;
+      const timelineDurationSeconds = Math.max(
+        0,
+        generatedDurationSeconds - incomingJoinSeconds / 2 - outgoingJoinSeconds / 2
       );
+      const rawWidthPx = timelineDurationSeconds * pxPerSecond;
+      const widthPx = incomingJoinSeconds > 0 || outgoingJoinSeconds > 0 ? Math.max(1, rawWidthPx) : Math.max(DEFAULT_MIN_WIDTH_PX, rawWidthPx);
       layouts.push({
         index,
         startSeconds: cursorSeconds,
         durationSeconds,
+        generatedDurationSeconds,
+        timelineDurationSeconds,
+        incomingJoinSeconds,
+        outgoingJoinSeconds,
+        frameCount,
         startPx: cursorPx,
         widthPx,
         stageCount: (clip.stages ?? []).length,
         keyframeCount: (clip.refs ?? []).length,
         skipped: clip.skipped === true
       });
-      cursorSeconds += durationSeconds;
-      cursorPx += durationSeconds * pxPerSecond;
+      cursorSeconds += timelineDurationSeconds;
+      cursorPx += timelineDurationSeconds * pxPerSecond;
     }
     return layouts;
   };
@@ -6854,7 +7188,8 @@
   };
 
   // frontend/timelineAudioSegmentTrack.ts
-  var timelineDuration = (state) => state.clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
+  var timelineTiming = (state, capabilities) => resolveTimelineTiming(state.clips, state.fps, capabilities?.());
+  var timelineDuration = (state, capabilities) => timelineTiming(state, capabilities).outputSeconds;
   var pressSpanOf = (span) => span && span.timelineStartSeconds !== null && span.timelineLengthSeconds !== null ? {
     start: span.timelineStartSeconds,
     length: span.timelineLengthSeconds,
@@ -6866,11 +7201,15 @@
     volume: AUDIO_SEGMENT_VOLUME_DEFAULT,
     spans: []
   });
-  var audioTrackScope = () => ({
+  var audioTrackScope = (capabilities) => ({
     read: (ownerIdx) => {
       const state = getState();
       const owner = state.audioTracks?.[ownerIdx];
-      return owner ? { owner, ownerIdx, duration: timelineDuration(state) } : null;
+      return owner ? {
+        owner,
+        ownerIdx,
+        duration: timelineDuration(state, capabilities)
+      } : null;
     },
     // The blank lane carries no index: a create appends a new track.
     resolveLane: () => {
@@ -6878,7 +7217,7 @@
       return {
         owner: null,
         ownerIdx: state.audioTracks?.length ?? 0,
-        duration: timelineDuration(state)
+        duration: timelineDuration(state, capabilities)
       };
     },
     write: (ownerIdx, create, mutate) => {
@@ -6895,7 +7234,7 @@
       const applied = mutate({
         owner,
         ownerIdx,
-        duration: timelineDuration(state),
+        duration: timelineDuration(state, capabilities),
         removeOwner: () => {
           tracks.splice(ownerIdx, 1);
           return tracks.length;
@@ -6908,10 +7247,10 @@
       return true;
     }
   });
-  var createTimelineAudioSegmentTrack = () => createWindowTrack({
+  var createTimelineAudioSegmentTrack = (capabilities) => createWindowTrack({
     routeId: "timeline-audio-segment",
     priority: 40,
-    scope: audioTrackScope(),
+    scope: audioTrackScope(capabilities),
     spanSelector: ".vst-audio-seg[data-track-idx]",
     ownerIdxAttr: "data-track-idx",
     itemIdxAttr: null,
@@ -6931,12 +7270,13 @@
     // to the clip boundaries underneath them.
     snapTargets: (ownerIdx) => {
       const state = getState();
+      const timing = timelineTiming(state, capabilities);
       const above = pressSpanOf(
         ownerIdx > 0 ? state.audioTracks?.[ownerIdx - 1]?.spans[0] : void 0
       );
       return {
         primary: above ? [above.start, above.start + above.length] : [],
-        fallback: timelineClipEdges(state.clips)
+        fallback: timelineClipEdges(state.clips, timing)
       };
     },
     moveTargetStart: ({ duration }, _itemIdx, press, desiredStart) => Math.min(
@@ -7083,124 +7423,6 @@
       boundBody = null;
     };
     return { attach, dispose };
-  };
-
-  // frontend/timelineDetail.ts
-  var DEFAULT_FPS = 24;
-  var safeFps = (fps) => typeof fps === "number" && Number.isFinite(fps) && fps > 0 ? fps : DEFAULT_FPS;
-  var keyframeTimeSeconds = (frame, fromEnd, clipDurationSeconds, fps) => {
-    const duration = Math.max(0, clipDurationSeconds || 0);
-    const offset = Math.max(0, frame || 0) / safeFps(fps);
-    const raw = fromEnd ? duration - offset : offset;
-    return Math.min(Math.max(raw, 0), duration);
-  };
-  var formatTimeLabel = (seconds, unit, fps) => {
-    if (unit === "frames") {
-      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
-    }
-    const rounded = Math.round((seconds || 0) * 10) / 10;
-    return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`;
-  };
-  var formatOverlapSeconds = (frames, fps) => `${(frames / Math.max(1, fps)).toFixed(2)}s`;
-  var RULER_MIN_TICK_SPACING_PX = 60;
-  var RULER_STEP_LADDER_SECONDS = [
-    0.5,
-    1,
-    2,
-    5,
-    10,
-    15,
-    30,
-    60,
-    120,
-    300,
-    600,
-    900,
-    1800,
-    3600
-  ];
-  var chooseRulerStepSeconds = (pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
-    const pps = pxPerSecond > 0 ? pxPerSecond : 1;
-    for (const step of RULER_STEP_LADDER_SECONDS) {
-      if (step * pps >= minSpacingPx) {
-        return step;
-      }
-    }
-    return RULER_STEP_LADDER_SECONDS[RULER_STEP_LADDER_SECONDS.length - 1];
-  };
-  var computeRulerTicks = (totalSeconds, pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
-    const total = Math.max(0, totalSeconds || 0);
-    if (total <= 0 || pxPerSecond <= 0) {
-      return [{ x: 0, seconds: 0 }];
-    }
-    const step = chooseRulerStepSeconds(pxPerSecond, minSpacingPx);
-    const ticks = [];
-    const MAX_TICKS = 1e3;
-    for (let i = 0; i < MAX_TICKS; i++) {
-      const t = i * step;
-      if (t > total + 1e-6) {
-        break;
-      }
-      ticks.push({ x: t * pxPerSecond, seconds: t });
-    }
-    return ticks;
-  };
-  var formatRulerLabel = (seconds, unit, fps) => {
-    if (unit === "frames") {
-      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
-    }
-    const s = Math.max(0, seconds || 0);
-    if (s >= 60) {
-      const totalWhole = Math.round(s);
-      const mm = Math.floor(totalWhole / 60);
-      const ss = totalWhole % 60;
-      return `${mm}:${`${ss}`.padStart(2, "0")}`;
-    }
-    return formatTimeLabel(s, unit, fps);
-  };
-  var truncate = (value, max = 80) => {
-    const text2 = `${value ?? ""}`;
-    return text2.length <= max ? text2 : `${text2.slice(0, Math.max(0, max - 1))}…`;
-  };
-  var refSourceLabel = (source) => {
-    const value = `${source ?? ""}`.trim();
-    if (!value) {
-      return REF_SOURCE_REFINER;
-    }
-    const editStage = parseBase2EditStageIndex(value);
-    if (editStage != null) {
-      return `Base2Edit Edit ${editStage}`;
-    }
-    return value;
-  };
-  var audioSourceBadge = (source) => {
-    const value = `${source ?? ""}`.trim();
-    if (!value || value === "Native") {
-      return { label: "Native", title: "Audio source: Native" };
-    }
-    return { label: value, title: `Audio source: ${value}` };
-  };
-  var shortModelName = (model) => {
-    const raw = `${model ?? ""}`.trim();
-    if (!raw) {
-      return "(default)";
-    }
-    const segment = raw.split(/[\\/]/).pop() ?? raw;
-    return segment.replace(/\.(safetensors|ckpt|pt|pth|gguf|sft|bin)$/i, "");
-  };
-  var stageChipLabel = (index) => `S${index}`;
-  var stageChipTitle = (stage, index) => {
-    const parts = [
-      `Stage ${index}${index === 0 ? " (full gen)" : " (refine)"}`,
-      `model: ${shortModelName(stage?.model ?? "")}`,
-      `steps: ${stage?.steps ?? "?"}`,
-      `cfg: ${stage?.cfgScale ?? "?"}`,
-      `control: ${stage?.control ?? "?"}`
-    ];
-    if (stage?.skipped) {
-      parts.push("skipped");
-    }
-    return parts.join(" · ");
   };
 
   // frontend/detailWidgets.ts
@@ -7509,9 +7731,6 @@
     section.classList.toggle("input-group-open", open);
     section.classList.toggle("input-group-closed", !open);
     header?.setAttribute("aria-expanded", `${open}`);
-    if (section.classList.contains("vst-detail-repeating-group")) {
-      header?.setAttribute("aria-pressed", `${open}`);
-    }
     if (content) {
       content.style.removeProperty("display");
       content.hidden = !open;
@@ -8901,72 +9120,6 @@
     return body;
   };
 
-  // frontend/boundaryPlan.ts
-  var crossfadePlanForClips = (clips, fps, resolveConstraints = (clip, _index, mode) => {
-    const generic = boundaryOverlapConstraints(null);
-    const persisted = Math.trunc(Number(clip.boundaryOutOverlap));
-    return {
-      ...generic,
-      defaultFrames: mode === "cut" || !Number.isFinite(persisted) || persisted <= 0 ? generic.defaultFrames : persisted
-    };
-  }) => {
-    const count = clips.length;
-    const boundaryCount = Math.max(0, count - 1);
-    const noOverlap = () => new Array(boundaryCount).fill(0);
-    if (count < 2) {
-      return { overlaps: noOverlap(), fallback: false };
-    }
-    let requested = 0;
-    const modes = [];
-    for (let i = 0; i < count - 1; i++) {
-      const b = clips[i].boundaryOut ?? "cut";
-      modes[i] = b;
-      if (b === "crossfade" || b === "continue") {
-        requested++;
-      }
-    }
-    if (requested === 0) {
-      return { overlaps: noOverlap(), fallback: false };
-    }
-    const frames = clips.map((c) => framesForClip(c.duration, fps));
-    const constraints = clips.map(
-      (clip, index) => resolveConstraints(clip, index, clip.boundaryOut ?? "cut")
-    );
-    const prefs = clips.map(
-      (clip, index) => normalizeBoundaryOverlap(clip.boundaryOutOverlap, constraints[index])
-    );
-    const active = (index) => modes[index] === "continue" || modes[index] === "crossfade";
-    const trim = (index) => modes[index] === "continue" ? prefs[index] + constraints[index].continuityExtraFrames : modes[index] === "crossfade" ? prefs[index] : 0;
-    while (true) {
-      let overBudgetClip = -1;
-      for (let i = 0; i < count; i++) {
-        const left = i > 0 ? trim(i - 1) : 0;
-        const right = i < boundaryCount ? trim(i) : 0;
-        if (left + right > frames[i] - 1) {
-          overBudgetClip = i;
-          break;
-        }
-      }
-      if (overBudgetClip < 0) break;
-      const candidate = overBudgetClip < boundaryCount && active(overBudgetClip) ? overBudgetClip : overBudgetClip > 0 && active(overBudgetClip - 1) ? overBudgetClip - 1 : -1;
-      if (candidate < 0) {
-        return { overlaps: noOverlap(), fallback: true };
-      }
-      const reduced = prefs[candidate] - constraints[candidate].frameStep;
-      if (reduced < constraints[candidate].minFrames) {
-        modes[candidate] = "cut";
-        prefs[candidate] = 0;
-      } else {
-        prefs[candidate] = reduced;
-      }
-    }
-    const overlaps = modes.slice(0, boundaryCount).map((_mode, index) => trim(index));
-    return {
-      overlaps,
-      fallback: requested > 0 && !modes.some((_mode, index) => active(index))
-    };
-  };
-
   // frontend/skipVocabulary.ts
   var skipGlyph = (skipped) => skipped ? "⟲" : "⏭︎";
   var skipTitle = (subject, skipped) => `${skipped ? "Re-enable" : "Skip"} ${subject}`;
@@ -9124,7 +9277,7 @@
     continue: "Continue",
     crossfade: "Crossfade"
   };
-  var renderBoundarySeams = (clips, layouts, capabilities) => executableBoundaries(clips).flatMap((seam) => {
+  var renderBoundarySeams = (clips, layouts, capabilities, timing, pxPerSecond = 1) => executableBoundaries(clips).flatMap((seam) => {
     const layout = layouts[seam.rightIdx];
     if (!layout) {
       return [];
@@ -9135,16 +9288,34 @@
       clips,
       seam.leftIdx
     );
-    const effective = capability?.effective(value) ?? value;
+    const policyEffective = capability?.effective(value) ?? value;
+    const impact = timing?.boundaries.find(
+      (boundary) => boundary.leftIdx === seam.leftIdx
+    );
+    const effective = impact?.effectiveMode ?? policyEffective;
     const glyph = BOUNDARY_GLYPH[effective] ?? BOUNDARY_GLYPH.cut;
     const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
     const effectiveLabel = BOUNDARY_LABEL[effective];
     const fallback = value === effective ? "" : ` Requested ${label}; effective ${effectiveLabel}.`;
-    const title = `Boundary clip ${seam.leftIdx} → ${seam.rightIdx}: ${label}.${fallback} Click to edit.`;
-    const ariaLabel = `Clip ${seam.leftIdx} outgoing boundary: ${label}.${fallback} Click to edit.`;
+    const shared = impact && impact.overlapFrames > 0 ? ` ${impact.overlapFrames} frames (${formatSecondsTenth(impact.overlapSeconds)}) shared.` : "";
+    const duration = impact && impact.overlapFrames > 0 ? formatSecondsTenth(impact.overlapSeconds) : "";
+    const sharedPixels = impact && impact.overlapFrames > 0 ? impact.overlapSeconds * pxPerSecond : 0;
+    const density = sharedPixels >= 88 ? "full" : sharedPixels >= 44 ? "compact" : "icon";
+    const title = `Boundary clip ${seam.leftIdx} → ${seam.rightIdx}: ${label}.${fallback}${shared} Click to edit.`;
+    const ariaLabel = `Clip ${seam.leftIdx} outgoing boundary: ${label}.${fallback}${shared} Click to edit.`;
+    const left = layout.startPx;
     return [
-      `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-left-clip-idx="${seam.leftIdx}" data-right-clip-idx="${seam.rightIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${layout.startPx}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span></button>`
+      `<button type="button" class="basic-button vst-boundary-chip vst-boundary-chip-${density} vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-vst-boundary-density="${density}" data-vst-boundary-has-duration="${duration ? "true" : "false"}" data-left-clip-idx="${seam.leftIdx}" data-right-clip-idx="${seam.rightIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${left}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span>` + (duration ? `<span class="vst-boundary-kind">${escapeAttr(effectiveLabel)}</span><span class="vst-boundary-divider" aria-hidden="true"></span><span class="vst-boundary-duration">${escapeAttr(duration)}</span>` : "") + `</button>`
     ];
+  }).join("");
+  var renderBoundaryOverlapBands = (layouts, boundaries, pxPerSecond) => boundaries.filter((boundary) => boundary.overlapFrames > 0).map((boundary) => {
+    const right = layouts[boundary.rightIdx];
+    if (!right) {
+      return "";
+    }
+    const width = boundary.overlapSeconds * pxPerSecond;
+    const left = right.startPx - width / 2;
+    return `<div class="vst-boundary-overlap vst-boundary-overlap-${boundary.effectiveMode}" style="left:${left}px;width:${width}px" aria-hidden="true"></div>`;
   }).join("");
   var renderRegions = (clips, layouts, fps, unit, capabilities) => layouts.map((layout) => {
     const clip = clips[layout.index];
@@ -9152,8 +9323,14 @@
     const tinyClass = layout.widthPx <= 12 ? " vst-region-tiny" : "";
     const skippedChip = layout.skipped ? `<span class="vst-chip vst-chip-skip">skipped</span>` : "";
     const duration = escapeAttr(
-      formatTimeLabel(layout.durationSeconds, unit, fps)
+      unit === "frames" && layout.frameCount > 0 ? `${layout.frameCount}f` : formatTimeLabel(
+        layout.generatedDurationSeconds,
+        unit,
+        fps
+      )
     );
+    const sharedAllocation = (layout.incomingJoinSeconds + layout.outgoingJoinSeconds) / 2;
+    const timingTitle = sharedAllocation > 0 ? ` · ${formatSecondsTenth(layout.generatedDurationSeconds)} generated · ${formatSecondsTenth(layout.timelineDurationSeconds)} unique · ${formatSecondsTenth(sharedAllocation)} shared` : ` · ${duration}`;
     const skipLabel = skipTitle("clip", layout.skipped);
     const skipMark = skipGlyph(layout.skipped);
     const firstClip = layout.index === 0;
@@ -9164,7 +9341,7 @@
     const canAddRetake = retakeSupported && !clip.retake;
     const retakeLaneAttrs = canAddRetake ? " data-vst-retake-add" : retakeSupported ? " data-vst-retake-full" : ' data-vst-capability-disabled="retake"';
     const retakeLaneTitle = canAddRetake ? "Click empty space to add a retake window" : retakeSupported ? "This clip already has a retake window" : "Retakes are not supported by this clip architecture";
-    return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index} · ${duration} · Click to edit${firstClip ? "" : " · Shift+click to delete"}">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
+    return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" data-vst-join-trim-seconds="${sharedAllocation}" title="Clip ${layout.index}${timingTitle} · Click to edit${firstClip ? "" : " · Shift+click to delete"}">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
       clip,
       layout.index,
       layout.durationSeconds,
@@ -9176,7 +9353,7 @@
       layout.durationSeconds
     ) + `</div>`;
   }).join("");
-  var renderVideoTrackRow = (clips, layouts, fps, unit, capabilities) => {
+  var renderVideoTrackRow = (clips, layouts, fps, unit, capabilities, timing, pxPerSecond = 1) => {
     const head = renderTrackHead(
       "vst-track-icon-video",
       "▶",
@@ -9185,7 +9362,11 @@
         active: clips.some((clip) => clip.retake != null)
       })
     );
-    return `<div class="vst-track-row vst-track-video">${head}<div class="vst-track-cell">` + renderRegions(clips, layouts, fps, unit, capabilities) + renderBoundarySeams(clips, layouts, capabilities) + `</div></div>`;
+    return `<div class="vst-track-row vst-track-video">${head}<div class="vst-track-cell">` + renderRegions(clips, layouts, fps, unit, capabilities) + renderBoundaryOverlapBands(
+      layouts,
+      timing?.outputGeometryAvailable === true ? timing.boundaries : [],
+      pxPerSecond
+    ) + renderBoundarySeams(clips, layouts, capabilities, timing, pxPerSecond) + `</div></div>`;
   };
 
   // frontend/dimensionPresets.ts
@@ -9319,15 +9500,20 @@
     ).join("");
     return content ? `<div class="vst-diagnostics" role="status">${content}</div>` : "";
   };
-  var renderTimelineHeader = (clipCount, totalSeconds, fps, unit, pxPerSecond, options) => {
+  var renderTimelineHeader = (clipCount, totalSeconds, fps, unit, pxPerSecond, options, timing) => {
     const toggleLabel = unit === "frames" ? "Show seconds" : "Show frames";
     const clipWord = `clip${clipCount === 1 ? "" : "s"}`;
-    const totalLabel = escapeAttr(formatTimeLabel(totalSeconds, unit, fps));
+    const totalLabel = unit === "frames" ? `${timing?.outputFrames ?? Math.round(totalSeconds * fps)}f` : formatSecondsTenth(totalSeconds);
     const zoomPct = Math.round(pxPerSecond / DEFAULT_PX_PER_SECOND * 100);
     const rawSelected = options?.selectedIndex;
     const selectedIndex = typeof rawSelected === "number" && Number.isInteger(rawSelected) && rawSelected >= 0 && rawSelected < clipCount ? rawSelected : null;
     const selectedHidden = selectedIndex === null ? " hidden" : "";
-    const readout = `<span class="vst-readout" data-vst-readout><span title="Sequence total">${totalLabel} total</span><span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
+    const joinFrames = timing?.joinFrames ?? 0;
+    const joinSeconds = timing?.joinSeconds ?? 0;
+    const joinFrameLabel = `${joinFrames > 0 ? "−" : ""}${joinFrames}f`;
+    const joinSecondsLabel = `${joinSeconds > 0 ? "−" : ""}${formatSecondsTenth(joinSeconds)}`;
+    const secondary = unit === "frames" ? `${timing?.generatedFrames ?? 0}f generated · ${joinFrameLabel} shared` : `${formatSecondsTenth(timing?.authoredSeconds ?? totalSeconds)} authored · ${joinSecondsLabel} joins`;
+    const readout = `<span class="vst-readout" data-vst-readout><span class="vst-readout-output" title="Published sequence length">${escapeAttr(totalLabel)} output</span><span class="vst-readout-detail" title="Authored length and resolved shared joins">${escapeAttr(secondary)}</span><span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
     const width = Math.max(0, Math.round(options?.width ?? 0));
     const height = Math.max(0, Math.round(options?.height ?? 0));
     const dimsExplicit = options?.dimsExplicit === true;
@@ -9541,7 +9727,7 @@
     );
     return lanes.join("");
   };
-  var renderAudioTrackRow = (clips, layouts, capabilities, audioTracks = [], pxPerSecond = 1) => {
+  var renderAudioTrackRow = (clips, layouts, capabilities, audioTracks = [], pxPerSecond = 1, timelineTotalSeconds) => {
     const baseSegments = layouts.map((layout) => {
       const clip = clips[layout.index];
       if (!clip) {
@@ -9566,8 +9752,11 @@
       const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
       return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${clipAudioSupported || persistedAudio ? ' data-vst-audio="clip"' : ""} data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(clipAudioSupported ? title : "Clip audio is unsupported; click persisted audio to remove it")}" aria-label="Edit audio for clip ${layout.index}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>`;
     }).join("");
-    const totalSeconds = layouts.reduce(
-      (sum, layout) => sum + layout.durationSeconds,
+    const totalSeconds = timelineTotalSeconds ?? layouts.reduce(
+      (max, layout) => Math.max(
+        max,
+        layout.startSeconds + layout.timelineDurationSeconds
+      ),
       0
     );
     const totalWidthPx = totalSeconds * pxPerSecond;
@@ -9635,10 +9824,11 @@
   };
 
   // frontend/timelineView.ts
-  var renderRulerTicks = (layouts, totalSeconds, pxPerSecond, fps, unit) => {
-    const lastLayout = layouts[layouts.length - 1];
-    const endPx = lastLayout.startPx + lastLayout.widthPx;
-    const gridTicks = computeRulerTicks(totalSeconds, pxPerSecond).map(
+  var renderRulerTicks = (layouts, totalSeconds, endPx, pxPerSecond, fps, unit, timing) => {
+    const endLabel = formatRulerLabel(totalSeconds, unit, fps);
+    const gridTicks = computeRulerTicks(totalSeconds, pxPerSecond).filter(
+      (tick) => Math.abs(tick.seconds - totalSeconds) > 1e-6 && !(formatRulerLabel(tick.seconds, unit, fps) === endLabel && Math.abs(tick.x - endPx) < 40)
+    ).map(
       (tick) => `<span class="vst-tick vst-tick-grid" style="left:${tick.x}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(tick.seconds, unit, fps))}</span></span>`
     );
     const minorStep = chooseRulerStepSeconds(pxPerSecond) / 5;
@@ -9656,11 +9846,19 @@
         `<span class="vst-tick vst-tick-minor" style="left:${seconds * pxPerSecond}px" aria-hidden="true"></span>`
       );
     }
-    const seamTicks = layouts.slice(1).map(
-      (layout) => `<span class="vst-tick vst-tick-seam" style="left:${layout.startPx}px" aria-hidden="true"></span>`
-    );
-    const endTick = `<span class="vst-tick vst-tick-end" style="left:${endPx}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(totalSeconds, unit, fps))}</span></span>`;
-    return [...minorTicks, ...gridTicks, ...seamTicks, endTick].join("");
+    const seamTicks = timing.boundaries.map((boundary) => {
+      const editPoint = layouts[boundary.rightIdx]?.startPx ?? 0;
+      return `<span class="vst-tick vst-tick-seam" style="left:${editPoint}px" aria-hidden="true"></span>`;
+    });
+    const endTick = `<span class="vst-tick vst-tick-end" style="left:${endPx}px"><span class="vst-tick-label">${escapeAttr(endLabel)}</span></span>`;
+    const outputTick = timing.outputSeconds < totalSeconds - 1e-6 ? `<span class="vst-tick vst-tick-output" style="left:${timing.outputSeconds * pxPerSecond}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(timing.outputSeconds, unit, fps))} output</span></span>` : "";
+    return [
+      ...minorTicks,
+      ...gridTicks,
+      ...seamTicks,
+      outputTick,
+      endTick
+    ].join("");
   };
   var renderTimeline = (body, clips, options) => {
     const fps = safeFps(options?.fps);
@@ -9670,22 +9868,21 @@
     );
     body.dataset.vstPps = String(pxPerSecond);
     body.dataset.vstFps = String(fps);
-    const layouts = computeRegionLayout(clips, { pxPerSecond });
-    const totalSeconds = layouts.reduce(
-      (sum, layout) => sum + layout.durationSeconds,
-      0
-    );
+    const timing = resolveTimelineTiming(clips, fps, options?.capabilities);
+    const layouts = computeRegionLayout(clips, { pxPerSecond, timing });
+    const totalSeconds = timelineDisplaySeconds(clips, timing);
     const totalPx = layouts.reduce(
       (max, layout) => Math.max(max, layout.startPx + layout.widthPx),
       0
     );
     const header = renderTimelineHeader(
       clips.length,
-      totalSeconds,
+      timing.outputSeconds,
       fps,
       unit,
       pxPerSecond,
-      options
+      options,
+      timing
     );
     const diagnostics = renderDiagnosticPanel(options?.diagnostics);
     if (clips.length === 0) {
@@ -9705,7 +9902,9 @@
       layouts,
       fps,
       unit,
-      options?.capabilities
+      options?.capabilities,
+      timing,
+      pxPerSecond
     );
     const referencesRow = renderReferencesTrackRow(
       clips,
@@ -9719,10 +9918,11 @@
       layouts,
       options?.capabilities,
       options?.audioTracks,
-      pxPerSecond
+      pxPerSecond,
+      timing.outputSeconds
     );
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
-    body.innerHTML = `${header}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, pxPerSecond, fps, unit)}</div></div>` + promptRow + videoRow + referencesRow + renderedAudioRow + `</div></div>`;
+    body.innerHTML = `${header}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, totalSeconds * pxPerSecond, pxPerSecond, fps, unit, timing)}</div></div>` + promptRow + videoRow + referencesRow + renderedAudioRow + `</div></div>`;
     applyBackgroundImages(body);
     wireTimelineToolbar(body, options);
     wireTimelineZoomWheel(body, options);
@@ -9741,9 +9941,7 @@
     const seam = executableBoundaryForLeftClip(clips, leftClipIdx);
     const state = getState();
     const fps = Math.round(safeFps(state.fps));
-    const carryTargetHasStage = capability.rightClipIdx !== null && clips[capability.rightClipIdx]?.stages.some(
-      (stage) => !stage.skipped
-    ) === true;
+    const carryTargetHasStage = capability.rightClipIdx !== null && activeStageCount(clips[capability.rightClipIdx]) > 0;
     const carryAudioActive = clip?.boundaryOutCarryAudio === true && carryTargetHasStage;
     const joinSpecs = capability.modes.map((mode) => ({
       value: mode,
@@ -9896,6 +10094,56 @@
       }
     }
     fields.appendChild(info);
+    if (seam !== null) {
+      const timing = resolveTimelineTiming(clips, fps, ctx.capabilities());
+      const impact = boundaryImpactForLeftClip(timing, leftClipIdx);
+      if (impact) {
+        const leftFrames = timing.clipFrames[impact.leftIdx] ?? 0;
+        const rightFrames = timing.clipFrames[impact.rightIdx] ?? 0;
+        const combinedFrames = Math.max(
+          0,
+          leftFrames + rightFrames - impact.overlapFrames
+        );
+        const impactBlock = document.createElement("div");
+        impactBlock.className = "vst-boundary-impact";
+        const heading = document.createElement("div");
+        heading.className = "vst-detail-crumb vst-detail-subsection-crumb vst-boundary-impact-title";
+        heading.textContent = "Output impact";
+        impactBlock.appendChild(heading);
+        const rows = document.createElement("div");
+        rows.className = "vst-boundary-impact-rows";
+        const addRow = (label, frames, sign = "", strong = false) => {
+          const row = document.createElement("div");
+          row.className = `vst-boundary-impact-row${strong ? " vst-boundary-impact-total" : ""}`;
+          const name = document.createElement("span");
+          name.textContent = label;
+          const value2 = document.createElement("span");
+          value2.textContent = `${sign}${frames}f · ${sign}${formatSecondsTenth(frames / fps)}`;
+          row.append(name, value2);
+          rows.appendChild(row);
+        };
+        addRow(`Clip ${impact.leftIdx}`, leftFrames);
+        addRow(`Clip ${impact.rightIdx}`, rightFrames, "+");
+        addRow(
+          `${BOUNDARY_LABEL[impact.effectiveMode]} shared`,
+          impact.overlapFrames,
+          impact.overlapFrames > 0 ? "−" : ""
+        );
+        addRow("Pair after this join", combinedFrames, "", true);
+        impactBlock.appendChild(rows);
+        if (value === "continue" && impact.overlapFrames > 0 && overlapPolicy.continuityExtraFrames > 0) {
+          const note = document.createElement("div");
+          note.className = "vst-boundary-impact-note";
+          const selectedFrames = Math.max(
+            0,
+            impact.overlapFrames - overlapPolicy.continuityExtraFrames
+          );
+          note.textContent = `${selectedFrames}f selected + ${overlapPolicy.continuityExtraFrames} LTX continuation frame = ${impact.overlapFrames}f effective shared window.`;
+          impactBlock.appendChild(note);
+        }
+        fields.appendChild(impactBlock);
+      }
+    }
     body.appendChild(
       buildStaticSection({
         key: "boundary",
@@ -12887,7 +13135,14 @@ The conversion is one undoable change.`;
     if (!clip || clipIdx === 0 && clip.skipped !== true) {
       return false;
     }
-    clip.skipped = !clip.skipped;
+    const skipped = !clip.skipped;
+    const start = skipped ? clipIdx : Math.max(
+      0,
+      clips.findIndex((candidate) => candidate.skipped === true)
+    );
+    for (let index = start; index < clips.length; index++) {
+      clips[index].skipped = skipped;
+    }
     reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
     return true;
   };
@@ -12897,7 +13152,14 @@ The conversion is one undoable change.`;
     if (!clip || !stage || stageIdx === 0 && stage.skipped !== true) {
       return false;
     }
-    stage.skipped = !stage.skipped;
+    const skipped = !stage.skipped;
+    const start = skipped ? stageIdx : Math.max(
+      0,
+      clip.stages.findIndex((candidate) => candidate.skipped === true)
+    );
+    for (let index = start; index < clip.stages.length; index++) {
+      clip.stages[index].skipped = skipped;
+    }
     reconcileSourcedClipIdentity(clip, catalog);
     reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
     return true;
@@ -13189,6 +13451,7 @@ The conversion is one undoable change.`;
               (entry) => defaultLoraWeight(defaults, entry.lora)
             )
           );
+          stage.skipped = last?.skipped === true;
           if (clip.architecture === NONE_ARCHITECTURE_ID && clip.stages.length === 0) {
             const target = buildArchitectureRetargetPlan(
               defaults.modelCatalog,
@@ -13269,20 +13532,49 @@ The conversion is one undoable change.`;
         { rebuildAfterSelect: true }
       );
     };
-    const commitSkip = (clips, mutate, skipCommand) => {
+    const commitSkip = (clips, mutate) => {
       const beforeDrives = clips.map((clip) => JSON.stringify(clip.icLoras));
+      const beforeClipSkips = clips.map((clip) => clip.skipped === true);
+      const beforeStageSkips = clips.map(
+        (clip) => clip.stages.map((stage) => stage.skipped === true)
+      );
       if (!mutate(clips)) {
         return null;
       }
-      const skip = skipCommand(clips);
-      if (!skip) {
+      const skipCommands = clips.flatMap(
+        (clip, clipIdx) => {
+          const commands = [];
+          if (clip.id && clip.skipped === true !== beforeClipSkips[clipIdx]) {
+            commands.push({
+              type: "clip.patch",
+              clipId: clip.id,
+              patch: { skipped: clip.skipped }
+            });
+          }
+          if (clip.id) {
+            for (let stageIdx = 0; stageIdx < clip.stages.length; stageIdx++) {
+              const stage = clip.stages[stageIdx];
+              if (stage.id && stage.skipped === true !== beforeStageSkips[clipIdx]?.[stageIdx]) {
+                commands.push({
+                  type: "stage.patch",
+                  clipId: clip.id,
+                  stageId: stage.id,
+                  patch: { skipped: stage.skipped }
+                });
+              }
+            }
+          }
+          return commands;
+        }
+      );
+      if (skipCommands.length === 0) {
         return null;
       }
       return {
         command: {
           type: "batch",
           commands: [
-            skip,
+            ...skipCommands,
             ...clips.flatMap(
               (clip, index) => clip.id && JSON.stringify(clip.icLoras) !== beforeDrives[index] ? [
                 {
@@ -13301,15 +13593,7 @@ The conversion is one undoable change.`;
       structuralCommit(
         (clips) => commitSkip(
           clips,
-          (working) => applyClipSkip(working, clipIdx, getGeneratedEntryMode()),
-          (working) => {
-            const clip = working[clipIdx];
-            return clip.id ? {
-              type: "clip.patch",
-              clipId: clip.id,
-              patch: { skipped: clip.skipped }
-            } : null;
-          }
+          (working) => applyClipSkip(working, clipIdx, getGeneratedEntryMode())
         )
       );
     };
@@ -13323,17 +13607,7 @@ The conversion is one undoable change.`;
             stageIdx,
             getCapabilities().catalog,
             getGeneratedEntryMode()
-          ),
-          (working) => {
-            const clip = working[clipIdx];
-            const stage = clip.stages[stageIdx];
-            return clip.id && stage.id ? {
-              type: "stage.patch",
-              clipId: clip.id,
-              stageId: stage.id,
-              patch: { skipped: stage.skipped }
-            } : null;
-          }
+          )
         )
       );
     };
@@ -14014,9 +14288,14 @@ The conversion is one undoable change.`;
                 return null;
               }
               const fps = documentFps(getState());
+              const pxPerSecond = livePxPerSecond(body);
+              const joinTrimSeconds = Math.max(
+                0,
+                Number(state.el.dataset.vstJoinTrimSeconds ?? 0) || 0
+              );
               const newDuration = pxToDuration(
-                width,
-                livePxPerSecond(body),
+                width + joinTrimSeconds * pxPerSecond,
+                pxPerSecond,
                 fps
               );
               if (!applyClipDurationResize(
@@ -14806,23 +15085,28 @@ The conversion is one undoable change.`;
     let selectionUnsub = null;
     const timelineBody = () => document.getElementById(TIMELINE_BODY_ID);
     const scrollEl = () => timelineBody()?.querySelector(".vst-scroll") ?? null;
+    const capabilities = currentCapabilityViewResolver;
     const viewport = createTimelineViewport({
       refresh: () => refresh(),
-      totalSeconds: () => getClips().reduce(
-        (sum, clip) => sum + Math.max(0, clip.duration || 0),
-        0
-      ),
+      totalSeconds: () => {
+        const state = getState();
+        const timing = resolveTimelineTiming(
+          state.clips,
+          safeFps(state.fps),
+          capabilities()
+        );
+        return timelineDisplaySeconds(state.clips, timing);
+      },
       timelineBody,
       scrollElement: scrollEl
     });
     const detailStrip = createTimelineDetailStrip();
-    const capabilities = currentCapabilityViewResolver;
     const linking = createTimelineLinking();
     const gestures = createGestureRouter();
     const retakeTrack = createTimelineRetakeTrack(capabilities);
     const promptTrack = createTimelinePromptTrack(capabilities);
     const audioTrack = createTimelineAudioTrack();
-    const audioSegmentTrack = createTimelineAudioSegmentTrack();
+    const audioSegmentTrack = createTimelineAudioSegmentTrack(capabilities);
     const boundaryTrack = createTimelineBoundaryTrack();
     const referencesTrack = createTimelineReferencesTrack(capabilities);
     let addClipInFlight = false;

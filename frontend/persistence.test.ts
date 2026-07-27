@@ -132,6 +132,32 @@ describe("persistence", () => {
             expect(decoded?.audioTracks).toEqual([]);
         });
 
+        it("canonicalizes every clip and stage after the first skip marker", () => {
+            const decoded = decode({
+                schemaVersion: 5,
+                clips: [
+                    {
+                        stages: [
+                            { skipped: false },
+                            { skipped: true },
+                            { skipped: false },
+                        ],
+                    },
+                    { skipped: true, stages: [{ skipped: false }] },
+                    { skipped: false, stages: [{ skipped: false }] },
+                ],
+            });
+
+            expect(
+                decoded?.clips[0].stages.map((stage) => stage.skipped),
+            ).toEqual([false, true, true]);
+            expect(decoded?.clips.map((clip) => clip.skipped)).toEqual([
+                false,
+                true,
+                true,
+            ]);
+        });
+
         it("round-trips an explicit IC-LoRA Drive Media kind contract", () => {
             const decoded = decode({
                 schemaVersion: 5,

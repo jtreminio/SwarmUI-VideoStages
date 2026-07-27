@@ -523,16 +523,25 @@ export const decodeStoredDocument = (
             width: parsed.width,
             height: parsed.height,
         });
+        const clips = parsed.clips.map((entry) =>
+            normalizeClip(
+                entry,
+                getRootDefaults,
+                getDefaultStageModel,
+                dims.fps,
+            ),
+        );
+        const firstSkippedClip = clips.findIndex(
+            (clip) => clip.skipped === true,
+        );
+        if (firstSkippedClip >= 0) {
+            for (let index = firstSkippedClip; index < clips.length; index++) {
+                clips[index].skipped = true;
+            }
+        }
         return {
             dims,
-            clips: parsed.clips.map((entry) =>
-                normalizeClip(
-                    entry,
-                    getRootDefaults,
-                    getDefaultStageModel,
-                    dims.fps,
-                ),
-            ),
+            clips,
             audioTracks: normalizeAudioTracks(parsed.audioTracks),
         };
     } catch {

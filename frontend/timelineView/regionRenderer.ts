@@ -5,6 +5,7 @@ import { mediaPreviewSrc } from "../constants";
 import { skipGlyph, skipTitle } from "../skipVocabulary";
 import {
     escapeHtml,
+    formatSecondsTenth,
     formatTimeLabel,
     keyframeTimeSeconds,
     refSourceLabel,
@@ -13,6 +14,7 @@ import {
     stageChipTitle,
     type TimelineUnit,
 } from "../timelineDetail";
+import type { TimelineBoundaryImpact, TimelineTiming } from "../timelineTiming";
 import { keyframeLeftPercent, spanGeometry } from "../trackDomUtils";
 import type { BoundaryOut, Clip, RefImage } from "../types";
 import { roundToTenth } from "../utils";
@@ -198,6 +200,8 @@ export const renderBoundarySeams = (
     clips: Clip[],
     layouts: RegionLayout[],
     capabilities?: CapabilityViewResolver,
+    timing?: TimelineTiming,
+    pxPerSecond = 1,
 ): string =>
     executableBoundaries(clips)
         .flatMap((seam) => {
@@ -211,7 +215,11 @@ export const renderBoundarySeams = (
                 clips,
                 seam.leftIdx,
             );
-            const effective = capability?.effective(value) ?? value;
+            const policyEffective = capability?.effective(value) ?? value;
+            const impact = timing?.boundaries.find(
+                (boundary) => boundary.leftIdx === seam.leftIdx,
+            );
+            const effective = impact?.effectiveMode ?? policyEffective;
             const glyph = BOUNDARY_GLYPH[effective] ?? BOUNDARY_GLYPH.cut;
             const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
             const effectiveLabel = BOUNDARY_LABEL[effective];
@@ -219,13 +227,58 @@ export const renderBoundarySeams = (
                 value === effective
                     ? ""
                     : ` Requested ${label}; effective ${effectiveLabel}.`;
-            const title = `Boundary clip ${seam.leftIdx} → ${seam.rightIdx}: ${label}.${fallback} Click to edit.`;
-            const ariaLabel = `Clip ${seam.leftIdx} outgoing boundary: ${label}.${fallback} Click to edit.`;
+            const shared =
+                impact && impact.overlapFrames > 0
+                    ? ` ${impact.overlapFrames} frames (${formatSecondsTenth(impact.overlapSeconds)}) shared.`
+                    : "";
+            const duration =
+                impact && impact.overlapFrames > 0
+                    ? formatSecondsTenth(impact.overlapSeconds)
+                    : "";
+            const sharedPixels =
+                impact && impact.overlapFrames > 0
+                    ? impact.overlapSeconds * pxPerSecond
+                    : 0;
+            const density =
+                sharedPixels >= 88
+                    ? "full"
+                    : sharedPixels >= 44
+                      ? "compact"
+                      : "icon";
+            const title = `Boundary clip ${seam.leftIdx} → ${seam.rightIdx}: ${label}.${fallback}${shared} Click to edit.`;
+            const ariaLabel = `Clip ${seam.leftIdx} outgoing boundary: ${label}.${fallback}${shared} Click to edit.`;
+            const left = layout.startPx;
             return [
-                `<button type="button" class="basic-button vst-boundary-chip vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-left-clip-idx="${seam.leftIdx}" data-right-clip-idx="${seam.rightIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${layout.startPx}px" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}">` +
+                `<button type="button" class="basic-button vst-boundary-chip vst-boundary-chip-${density} vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-vst-boundary-density="${density}" data-vst-boundary-has-duration="${duration ? "true" : "false"}" data-left-clip-idx="${seam.leftIdx}" data-right-clip-idx="${seam.rightIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${left}px" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}">` +
                     `<span class="vst-boundary-glyph" aria-hidden="true">${escapeHtml(glyph)}</span>` +
+                    (duration
+                        ? `<span class="vst-boundary-kind">${escapeHtml(effectiveLabel)}</span>` +
+                          `<span class="vst-boundary-divider" aria-hidden="true"></span>` +
+                          `<span class="vst-boundary-duration">${escapeHtml(duration)}</span>`
+                        : "") +
                     `</button>`,
             ];
+        })
+        .join("");
+
+const renderBoundaryOverlapBands = (
+    layouts: RegionLayout[],
+    boundaries: readonly TimelineBoundaryImpact[],
+    pxPerSecond: number,
+): string =>
+    boundaries
+        .filter((boundary) => boundary.overlapFrames > 0)
+        .map((boundary) => {
+            const right = layouts[boundary.rightIdx];
+            if (!right) {
+                return "";
+            }
+            const width = boundary.overlapSeconds * pxPerSecond;
+            const left = right.startPx - width / 2;
+            return (
+                `<div class="vst-boundary-overlap vst-boundary-overlap-${boundary.effectiveMode}" ` +
+                `style="left:${left}px;width:${width}px" aria-hidden="true"></div>`
+            );
         })
         .join("");
 
@@ -245,8 +298,20 @@ const renderRegions = (
                 ? `<span class="vst-chip vst-chip-skip">skipped</span>`
                 : "";
             const duration = escapeHtml(
-                formatTimeLabel(layout.durationSeconds, unit, fps),
+                unit === "frames" && layout.frameCount > 0
+                    ? `${layout.frameCount}f`
+                    : formatTimeLabel(
+                          layout.generatedDurationSeconds,
+                          unit,
+                          fps,
+                      ),
             );
+            const sharedAllocation =
+                (layout.incomingJoinSeconds + layout.outgoingJoinSeconds) / 2;
+            const timingTitle =
+                sharedAllocation > 0
+                    ? ` · ${formatSecondsTenth(layout.generatedDurationSeconds)} generated · ${formatSecondsTenth(layout.timelineDurationSeconds)} unique · ${formatSecondsTenth(sharedAllocation)} shared`
+                    : ` · ${duration}`;
             const skipLabel = skipTitle("clip", layout.skipped);
             const skipMark = skipGlyph(layout.skipped);
             const firstClip = layout.index === 0;
@@ -274,7 +339,7 @@ const renderRegions = (
                   ? "This clip already has a retake window"
                   : "Retakes are not supported by this clip architecture";
             return (
-                `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index} · ${duration} · Click to edit${firstClip ? "" : " · Shift+click to delete"}">` +
+                `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" data-vst-join-trim-seconds="${sharedAllocation}" title="Clip ${layout.index}${timingTitle} · Click to edit${firstClip ? "" : " · Shift+click to delete"}">` +
                 renderRegionThumb(clip) +
                 renderRetakeRegionShade(clip, layout.durationSeconds) +
                 renderKeyframes(
@@ -312,6 +377,8 @@ export const renderVideoTrackRow = (
     fps: number,
     unit: TimelineUnit,
     capabilities?: CapabilityViewResolver,
+    timing?: TimelineTiming,
+    pxPerSecond = 1,
 ): string => {
     const head = renderTrackHead(
         "vst-track-icon-video",
@@ -325,7 +392,12 @@ export const renderVideoTrackRow = (
     return (
         `<div class="vst-track-row vst-track-video">${head}<div class="vst-track-cell">` +
         renderRegions(clips, layouts, fps, unit, capabilities) +
-        renderBoundarySeams(clips, layouts, capabilities) +
+        renderBoundaryOverlapBands(
+            layouts,
+            timing?.outputGeometryAvailable === true ? timing.boundaries : [],
+            pxPerSecond,
+        ) +
+        renderBoundarySeams(clips, layouts, capabilities, timing, pxPerSecond) +
         `</div></div>`
     );
 };

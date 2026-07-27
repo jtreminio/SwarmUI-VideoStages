@@ -1,3 +1,4 @@
+import type { TimelineTiming } from "./timelineTiming";
 import type { Clip } from "./types";
 
 export const SNAP_THRESHOLD_PX = 8;
@@ -72,7 +73,45 @@ export const snapMovedStart = (
         : fallbackEnd - length;
 };
 
-export const timelineClipEdges = (clips: readonly Clip[]): number[] => {
+export const timelineClipEdges = (
+    clips: readonly Clip[],
+    timing?: TimelineTiming,
+): number[] => {
+    if (timing) {
+        const overlapAfter = new Map(
+            timing.boundaries.map((boundary) => [
+                boundary.leftIdx,
+                boundary.overlapSeconds,
+            ]),
+        );
+        const overlapBefore = new Map(
+            timing.boundaries.map((boundary) => [
+                boundary.rightIdx,
+                boundary.overlapSeconds,
+            ]),
+        );
+        const edges: number[] = [0];
+        let cursor = 0;
+        for (const clipIdx of timing.executableClipIndexes) {
+            const duration = (timing.clipFrames[clipIdx] ?? 0) / timing.fps;
+            const incoming = overlapBefore.get(clipIdx) ?? 0;
+            const outgoing = overlapAfter.get(clipIdx) ?? 0;
+            const editEnd =
+                cursor + Math.max(0, duration - incoming / 2 - outgoing / 2);
+            edges.push(cursor, editEnd);
+            if (outgoing > 0) {
+                edges.push(editEnd - outgoing / 2, editEnd + outgoing / 2);
+            }
+            cursor = editEnd;
+        }
+        edges.push(timing.outputSeconds);
+        return edges
+            .sort((left, right) => left - right)
+            .filter(
+                (edge, index, sorted) =>
+                    index === 0 || Math.abs(edge - sorted[index - 1]) > 1e-9,
+            );
+    }
     const edges = [0];
     let cursor = 0;
     for (const clip of clips) {

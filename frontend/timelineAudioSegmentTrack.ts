@@ -1,3 +1,4 @@
+import type { CapabilityViewResolver } from "./architectures/policy";
 import {
     AUDIO_SEGMENT_DEFAULT_LENGTH,
     AUDIO_SEGMENT_MIN_LENGTH,
@@ -8,6 +9,7 @@ import { createEntityId } from "./identity";
 import { getState, saveState } from "./persistence";
 import { selectionAfterRemoval } from "./selection";
 import { timelineClipEdges } from "./timelineSnap";
+import { resolveTimelineTiming } from "./timelineTiming";
 import type { AudioTrack, AudioTrackSpan, VideoStagesConfig } from "./types";
 import { roundToTenth } from "./utils";
 import {
@@ -23,8 +25,17 @@ export interface TimelineAudioSegmentTrack {
     dispose(): void;
 }
 
-const timelineDuration = (state: VideoStagesConfig): number =>
-    state.clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
+type CapabilitySource = () => CapabilityViewResolver | undefined;
+
+const timelineTiming = (
+    state: VideoStagesConfig,
+    capabilities?: CapabilitySource,
+) => resolveTimelineTiming(state.clips, state.fps, capabilities?.());
+
+const timelineDuration = (
+    state: VideoStagesConfig,
+    capabilities?: CapabilitySource,
+): number => timelineTiming(state, capabilities).outputSeconds;
 
 /** Each track owns one lane-spanning segment; `sourceStartSeconds` is its trim. */
 const pressSpanOf = (span: AudioTrackSpan | undefined): PressSpan | null =>
@@ -50,12 +61,18 @@ const blankTrack = (): AudioTrack => ({
  * `data-track-idx` and their lane is the whole timeline. A create gesture
  * materialises the track itself, and removing the last span removes the track.
  */
-const audioTrackScope = (): WindowTrackScope<AudioTrack> => ({
+const audioTrackScope = (
+    capabilities?: CapabilitySource,
+): WindowTrackScope<AudioTrack> => ({
     read: (ownerIdx) => {
         const state = getState();
         const owner = state.audioTracks?.[ownerIdx];
         return owner
-            ? { owner, ownerIdx, duration: timelineDuration(state) }
+            ? {
+                  owner,
+                  ownerIdx,
+                  duration: timelineDuration(state, capabilities),
+              }
             : null;
     },
     // The blank lane carries no index: a create appends a new track.
@@ -64,7 +81,7 @@ const audioTrackScope = (): WindowTrackScope<AudioTrack> => ({
         return {
             owner: null,
             ownerIdx: state.audioTracks?.length ?? 0,
-            duration: timelineDuration(state),
+            duration: timelineDuration(state, capabilities),
         };
     },
     write: (ownerIdx, create, mutate) => {
@@ -81,7 +98,7 @@ const audioTrackScope = (): WindowTrackScope<AudioTrack> => ({
         const applied = mutate({
             owner,
             ownerIdx,
-            duration: timelineDuration(state),
+            duration: timelineDuration(state, capabilities),
             removeOwner: () => {
                 tracks.splice(ownerIdx, 1);
                 return tracks.length;
@@ -101,11 +118,13 @@ const audioTrackScope = (): WindowTrackScope<AudioTrack> => ({
  * overlapping audio additively). Left-edge resize keeps the end fixed and the
  * source offset FOLLOWS the edge, floored at 0.
  */
-export const createTimelineAudioSegmentTrack = (): TimelineAudioSegmentTrack =>
+export const createTimelineAudioSegmentTrack = (
+    capabilities?: CapabilitySource,
+): TimelineAudioSegmentTrack =>
     createWindowTrack<AudioTrack>({
         routeId: "timeline-audio-segment",
         priority: 40,
-        scope: audioTrackScope(),
+        scope: audioTrackScope(capabilities),
         spanSelector: ".vst-audio-seg[data-track-idx]",
         ownerIdxAttr: "data-track-idx",
         itemIdxAttr: null,
@@ -126,6 +145,7 @@ export const createTimelineAudioSegmentTrack = (): TimelineAudioSegmentTrack =>
         // to the clip boundaries underneath them.
         snapTargets: (ownerIdx) => {
             const state = getState();
+            const timing = timelineTiming(state, capabilities);
             const above = pressSpanOf(
                 ownerIdx > 0
                     ? state.audioTracks?.[ownerIdx - 1]?.spans[0]
@@ -133,7 +153,7 @@ export const createTimelineAudioSegmentTrack = (): TimelineAudioSegmentTrack =>
             );
             return {
                 primary: above ? [above.start, above.start + above.length] : [],
-                fallback: timelineClipEdges(state.clips),
+                fallback: timelineClipEdges(state.clips, timing),
             };
         },
         moveTargetStart: ({ duration }, _itemIdx, press, desiredStart) =>

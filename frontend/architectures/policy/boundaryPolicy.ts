@@ -1,4 +1,5 @@
 import {
+    activeStageCount,
     executableBoundaries,
     executableBoundaryForLeftClip,
 } from "../../clipSemantics";
@@ -57,7 +58,7 @@ export const createBoundaryCapabilityViews = (
                     Math.max(1, Math.round(reference.frame)) === 1,
             ) ?? false;
         const rightHasActiveStage =
-            right?.stages.some((stage) => !stage.skipped) ?? false;
+            right !== null && activeStageCount(right) > 0;
         const supportsMode = (mode: BoundaryOut): boolean => {
             const rule = leftDescriptor?.boundaryRules[mode];
             if (!rule || rule.support === "unsupported") {

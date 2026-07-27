@@ -609,13 +609,13 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseConfig_SkipsSkippedClipsAndStages()
+    public void ParseConfig_TruncatesAtFirstSkippedClipAndStage()
     {
         JObject skippedStage = MakeStage("model-skip");
         skippedStage["skipped"] = true;
 
         string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip( stages: [MakeStage("model-a"), skippedStage]),
+            MakeClip( stages: [MakeStage("model-a"), skippedStage, MakeStage("model-late")]),
             MakeClip( stages: [MakeStage("model-skipped-clip")], skipped: true),
             MakeClip( stages: [MakeStage("model-c")])
         ));
@@ -623,9 +623,8 @@ public class VideoStagesSpecParserClipsTests
 
         List<StageSpec> stages = FlattenedActiveStages(parser);
 
-        Assert.Equal(2, stages.Count);
+        Assert.Single(stages);
         Assert.Equal("model-a", stages[0].Model);
-        Assert.Equal("model-c", stages[1].Model);
         ClipSpec firstClip = parser.GetVideoStagesSpec().Clips[0];
         Assert.Collection(
             firstClip.AuthoredStages,
@@ -639,6 +638,12 @@ public class VideoStagesSpecParserClipsTests
             {
                 Assert.Equal(1, stage.RawIndex);
                 Assert.Equal("model-skip", stage.Model);
+                Assert.True(stage.Skipped);
+            },
+            stage =>
+            {
+                Assert.Equal(2, stage.RawIndex);
+                Assert.Equal("model-late", stage.Model);
                 Assert.True(stage.Skipped);
             });
     }

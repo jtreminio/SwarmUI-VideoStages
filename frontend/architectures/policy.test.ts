@@ -227,7 +227,7 @@ describe("catalog-backed authoring policy", () => {
         ).toBe(true);
     });
 
-    it("compacts skipped clips while preserving requested joins behind an effective cut", () => {
+    it("truncates the executable sequence at the first skipped clip", () => {
         const models = catalog();
         const left = minimalClip({ boundaryOut: "continue" });
         const skipped = fakeClip();
@@ -236,12 +236,12 @@ describe("catalog-backed authoring policy", () => {
         const clips = [left, skipped, right];
         const resolver = createCapabilityViewResolver(models);
 
-        expect(resolver.executableClipIndexes(clips)).toEqual([0, 2]);
+        expect(resolver.executableClipIndexes(clips)).toEqual([0]);
         expect(resolver.forBoundaryIndex(clips, 0)).toMatchObject({
             leftClipIdx: 0,
-            rightClipIdx: 2,
-            modes: ["cut"],
-            crossArchitecture: true,
+            rightClipIdx: null,
+            modes: ["cut", "crossfade"],
+            crossArchitecture: false,
         });
 
         expect(left.boundaryOut).toBe("continue");

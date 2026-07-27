@@ -1,9 +1,17 @@
+import type { TimelineTiming } from "../timelineTiming";
 import type { Clip } from "../types";
 
 export interface RegionLayout {
     index: number;
     startSeconds: number;
     durationSeconds: number;
+    /** Full frame-aligned duration generated for this clip. */
+    generatedDurationSeconds: number;
+    /** Unique, non-shared contribution rendered as the clip card. */
+    timelineDurationSeconds: number;
+    incomingJoinSeconds: number;
+    outgoingJoinSeconds: number;
+    frameCount: number;
     startPx: number;
     widthPx: number;
     stageCount: number;
@@ -13,6 +21,7 @@ export interface RegionLayout {
 
 export interface RegionLayoutOptions {
     pxPerSecond?: number;
+    timing?: TimelineTiming;
 }
 
 export const DEFAULT_PX_PER_SECOND = 44;
@@ -84,28 +93,65 @@ export const computeRegionLayout = (
     options?: RegionLayoutOptions,
 ): RegionLayout[] => {
     const pxPerSecond = options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND;
+    const timing = options?.timing;
+    const useOutputGeometry = timing?.outputGeometryAvailable === true;
+    const overlapAfter = new Map(
+        timing?.boundaries.map((boundary) => [
+            boundary.leftIdx,
+            boundary.overlapSeconds,
+        ]) ?? [],
+    );
+    const overlapBefore = new Map(
+        timing?.boundaries.map((boundary) => [
+            boundary.rightIdx,
+            boundary.overlapSeconds,
+        ]) ?? [],
+    );
     const layouts: RegionLayout[] = [];
     let cursorSeconds = 0;
     let cursorPx = 0;
     for (let index = 0; index < clips.length; index++) {
         const clip = clips[index];
         const durationSeconds = Math.max(0, clip.duration || 0);
-        const widthPx = Math.max(
-            DEFAULT_MIN_WIDTH_PX,
-            durationSeconds * pxPerSecond,
+        const frameCount = timing?.clipFrames[index] ?? 0;
+        const generatedDurationSeconds =
+            useOutputGeometry && frameCount > 0
+                ? frameCount / timing.fps
+                : durationSeconds;
+        const incomingJoinSeconds = useOutputGeometry
+            ? (overlapBefore.get(index) ?? 0)
+            : 0;
+        const outgoingJoinSeconds = useOutputGeometry
+            ? (overlapAfter.get(index) ?? 0)
+            : 0;
+        const timelineDurationSeconds = Math.max(
+            0,
+            generatedDurationSeconds -
+                incomingJoinSeconds / 2 -
+                outgoingJoinSeconds / 2,
         );
+        const rawWidthPx = timelineDurationSeconds * pxPerSecond;
+        const widthPx =
+            incomingJoinSeconds > 0 || outgoingJoinSeconds > 0
+                ? Math.max(1, rawWidthPx)
+                : Math.max(DEFAULT_MIN_WIDTH_PX, rawWidthPx);
         layouts.push({
             index,
             startSeconds: cursorSeconds,
             durationSeconds,
+            generatedDurationSeconds,
+            timelineDurationSeconds,
+            incomingJoinSeconds,
+            outgoingJoinSeconds,
+            frameCount,
             startPx: cursorPx,
             widthPx,
             stageCount: (clip.stages ?? []).length,
             keyframeCount: (clip.refs ?? []).length,
             skipped: clip.skipped === true,
         });
-        cursorSeconds += durationSeconds;
-        cursorPx += durationSeconds * pxPerSecond;
+        cursorSeconds += timelineDurationSeconds;
+        cursorPx += timelineDurationSeconds * pxPerSecond;
     }
     return layouts;
 };

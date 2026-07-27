@@ -376,6 +376,28 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         expect(clips[1].duration).toBe(2);
     });
 
+    it("restores the clip's allocated half-join when resizing its unique region", () => {
+        clipsSection(durationClips([3, 3]));
+        const body = makeBody();
+        renderRegions(body, 2);
+        stubRegionRects(body);
+        region(body, 0).dataset.vstJoinTrimSeconds = "0.5";
+        const saveSpy = jest.spyOn(persistence, "saveClips");
+
+        linking = createTimelineLinking();
+        router = createGestureRouter();
+        router.attach(body);
+        linking.attach(body, router);
+
+        region(body, 0)
+            .querySelector<HTMLElement>(".vst-region-resize")
+            ?.dispatchEvent(mouse("mousedown", 100));
+        document.dispatchEvent(mouse("mousemove", 176));
+        document.dispatchEvent(mouse("mouseup", 176));
+
+        expect(savedClips(saveSpy)[0].duration).toBe(4.5);
+    });
+
     it("uses stored 16fps for duration snapping and reference clamping on resize", () => {
         clipsSection(
             [

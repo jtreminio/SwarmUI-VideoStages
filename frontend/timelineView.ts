@@ -6,6 +6,11 @@ import {
     safeFps,
     type TimelineUnit,
 } from "./timelineDetail";
+import type { TimelineTiming } from "./timelineTiming";
+import {
+    resolveTimelineTiming,
+    timelineDisplaySeconds,
+} from "./timelineTiming";
 import {
     clampPxPerSecond,
     computeRegionLayout,
@@ -43,16 +48,26 @@ export { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "./timelineView/regionRenderer";
 const renderRulerTicks = (
     layouts: RegionLayout[],
     totalSeconds: number,
+    endPx: number,
     pxPerSecond: number,
     fps: number,
     unit: TimelineUnit,
+    timing: TimelineTiming,
 ): string => {
-    const lastLayout = layouts[layouts.length - 1];
-    const endPx = lastLayout.startPx + lastLayout.widthPx;
-    const gridTicks = computeRulerTicks(totalSeconds, pxPerSecond).map(
-        (tick) =>
-            `<span class="vst-tick vst-tick-grid" style="left:${tick.x}px"><span class="vst-tick-label">${escapeHtml(formatRulerLabel(tick.seconds, unit, fps))}</span></span>`,
-    );
+    const endLabel = formatRulerLabel(totalSeconds, unit, fps);
+    const gridTicks = computeRulerTicks(totalSeconds, pxPerSecond)
+        .filter(
+            (tick) =>
+                Math.abs(tick.seconds - totalSeconds) > 1e-6 &&
+                !(
+                    formatRulerLabel(tick.seconds, unit, fps) === endLabel &&
+                    Math.abs(tick.x - endPx) < 40
+                ),
+        )
+        .map(
+            (tick) =>
+                `<span class="vst-tick vst-tick-grid" style="left:${tick.x}px"><span class="vst-tick-label">${escapeHtml(formatRulerLabel(tick.seconds, unit, fps))}</span></span>`,
+        );
     const minorStep = chooseRulerStepSeconds(pxPerSecond) / 5;
     const minorTicks: string[] = [];
     const maxMinorTicks = 5000;
@@ -68,17 +83,27 @@ const renderRulerTicks = (
             `<span class="vst-tick vst-tick-minor" style="left:${seconds * pxPerSecond}px" aria-hidden="true"></span>`,
         );
     }
-    const seamTicks = layouts
-        .slice(1)
-        .map(
-            (layout) =>
-                `<span class="vst-tick vst-tick-seam" style="left:${layout.startPx}px" aria-hidden="true"></span>`,
-        );
+    const seamTicks = timing.boundaries.map((boundary) => {
+        const editPoint = layouts[boundary.rightIdx]?.startPx ?? 0;
+        return `<span class="vst-tick vst-tick-seam" style="left:${editPoint}px" aria-hidden="true"></span>`;
+    });
     const endTick =
         `<span class="vst-tick vst-tick-end" style="left:${endPx}px">` +
-        `<span class="vst-tick-label">${escapeHtml(formatRulerLabel(totalSeconds, unit, fps))}</span>` +
+        `<span class="vst-tick-label">${escapeHtml(endLabel)}</span>` +
         `</span>`;
-    return [...minorTicks, ...gridTicks, ...seamTicks, endTick].join("");
+    const outputTick =
+        timing.outputSeconds < totalSeconds - 1e-6
+            ? `<span class="vst-tick vst-tick-output" style="left:${timing.outputSeconds * pxPerSecond}px">` +
+              `<span class="vst-tick-label">${escapeHtml(formatRulerLabel(timing.outputSeconds, unit, fps))} output</span>` +
+              `</span>`
+            : "";
+    return [
+        ...minorTicks,
+        ...gridTicks,
+        ...seamTicks,
+        outputTick,
+        endTick,
+    ].join("");
 };
 
 export const renderTimeline = (
@@ -95,22 +120,21 @@ export const renderTimeline = (
     body.dataset.vstPps = String(pxPerSecond);
     body.dataset.vstFps = String(fps);
 
-    const layouts = computeRegionLayout(clips, { pxPerSecond });
-    const totalSeconds = layouts.reduce(
-        (sum, layout) => sum + layout.durationSeconds,
-        0,
-    );
+    const timing = resolveTimelineTiming(clips, fps, options?.capabilities);
+    const layouts = computeRegionLayout(clips, { pxPerSecond, timing });
+    const totalSeconds = timelineDisplaySeconds(clips, timing);
     const totalPx = layouts.reduce(
         (max, layout) => Math.max(max, layout.startPx + layout.widthPx),
         0,
     );
     const header = renderTimelineHeader(
         clips.length,
-        totalSeconds,
+        timing.outputSeconds,
         fps,
         unit,
         pxPerSecond,
         options,
+        timing,
     );
     const diagnostics = renderDiagnosticPanel(options?.diagnostics);
 
@@ -139,6 +163,8 @@ export const renderTimeline = (
         fps,
         unit,
         options?.capabilities,
+        timing,
+        pxPerSecond,
     );
     const referencesRow = renderReferencesTrackRow(
         clips,
@@ -153,13 +179,14 @@ export const renderTimeline = (
         options?.capabilities,
         options?.audioTracks,
         pxPerSecond,
+        timing.outputSeconds,
     );
     const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
     body.innerHTML =
         `${header}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px">` +
         `<div class="vst-ruler-row">` +
         `<div class="vst-corner">Timeline</div>` +
-        `<div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, pxPerSecond, fps, unit)}</div>` +
+        `<div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, totalSeconds * pxPerSecond, pxPerSecond, fps, unit, timing)}</div>` +
         `</div>` +
         promptRow +
         videoRow +

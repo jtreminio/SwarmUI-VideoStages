@@ -3,9 +3,10 @@ import type { AuthoringDiagnostic } from "../authoringDiagnostics";
 import { matchPresetKey } from "../dimensionPresets";
 import {
     escapeHtml,
-    formatTimeLabel,
+    formatSecondsTenth,
     type TimelineUnit,
 } from "../timelineDetail";
+import type { TimelineTiming } from "../timelineTiming";
 import type { AudioTrack } from "../types";
 import {
     DEFAULT_PX_PER_SECOND,
@@ -63,10 +64,14 @@ export const renderTimelineHeader = (
     unit: TimelineUnit,
     pxPerSecond: number,
     options?: RenderTimelineOptions,
+    timing?: TimelineTiming,
 ): string => {
     const toggleLabel = unit === "frames" ? "Show seconds" : "Show frames";
     const clipWord = `clip${clipCount === 1 ? "" : "s"}`;
-    const totalLabel = escapeHtml(formatTimeLabel(totalSeconds, unit, fps));
+    const totalLabel =
+        unit === "frames"
+            ? `${timing?.outputFrames ?? Math.round(totalSeconds * fps)}f`
+            : formatSecondsTenth(totalSeconds);
     const zoomPct = Math.round((pxPerSecond / DEFAULT_PX_PER_SECOND) * 100);
     const rawSelected = options?.selectedIndex;
     const selectedIndex =
@@ -77,9 +82,18 @@ export const renderTimelineHeader = (
             ? rawSelected
             : null;
     const selectedHidden = selectedIndex === null ? " hidden" : "";
+    const joinFrames = timing?.joinFrames ?? 0;
+    const joinSeconds = timing?.joinSeconds ?? 0;
+    const joinFrameLabel = `${joinFrames > 0 ? "−" : ""}${joinFrames}f`;
+    const joinSecondsLabel = `${joinSeconds > 0 ? "−" : ""}${formatSecondsTenth(joinSeconds)}`;
+    const secondary =
+        unit === "frames"
+            ? `${timing?.generatedFrames ?? 0}f generated · ${joinFrameLabel} shared`
+            : `${formatSecondsTenth(timing?.authoredSeconds ?? totalSeconds)} authored · ${joinSecondsLabel} joins`;
     const readout =
         `<span class="vst-readout" data-vst-readout>` +
-        `<span title="Sequence total">${totalLabel} total</span>` +
+        `<span class="vst-readout-output" title="Published sequence length">${escapeHtml(totalLabel)} output</span>` +
+        `<span class="vst-readout-detail" title="Authored length and resolved shared joins">${escapeHtml(secondary)}</span>` +
         `<span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span>` +
         `<span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span>` +
         `</span>`;

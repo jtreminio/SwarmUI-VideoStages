@@ -576,7 +576,7 @@ describe("videoStagesTimeline", () => {
         // Default is seconds; no DOM fps inputs => getRootDefaults falls back to 24fps.
         expect(dur()).toBe("2s");
         toggle()?.click();
-        expect(dur()).toBe("48f"); // round(2s * 24fps)
+        expect(dur()).toBe("49f"); // aligned generated frame count
         toggle()?.click();
         expect(dur()).toBe("2s");
     });

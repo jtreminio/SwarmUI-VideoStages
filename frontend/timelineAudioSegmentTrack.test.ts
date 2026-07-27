@@ -55,41 +55,54 @@ describe("timeline-wide audio segment gestures", () => {
     let router: GestureRouter | null = null;
     let saveSpy: jest.SpiedFunction<typeof persistence.saveState>;
 
-    const rootState = (withTrack = true): Record<string, unknown> => ({
-        schemaVersion: 5,
-        clips: [clipRecord(3), clipRecord(4)],
-        audioTracks: withTrack
-            ? [
-                  {
-                      id: "track-global",
-                      volume: 0.75,
-                      source: {
-                          kind: "AceStepFun",
-                          reference: "audio0",
-                          uploadedAudio: null,
-                      },
-                      spans: [
-                          {
-                              id: "span-global",
-                              timelineStartSeconds: 2,
-                              timelineLengthSeconds: 3,
-                              sourceStartSeconds: 1,
+    const rootState = (
+        withTrack = true,
+        withJoin = false,
+    ): Record<string, unknown> => {
+        const clips = [clipRecord(3), clipRecord(4)];
+        if (withJoin) {
+            Object.assign(clips[0], {
+                boundaryOut: "crossfade",
+                boundaryOutOverlap: 24,
+            });
+        }
+        return {
+            schemaVersion: 5,
+            clips,
+            audioTracks: withTrack
+                ? [
+                      {
+                          id: "track-global",
+                          volume: 0.75,
+                          source: {
+                              kind: "AceStepFun",
+                              reference: "audio0",
+                              uploadedAudio: null,
                           },
-                      ],
-                  },
-              ]
-            : [],
-    });
+                          spans: [
+                              {
+                                  id: "span-global",
+                                  timelineStartSeconds: 2,
+                                  timelineLengthSeconds: 3,
+                                  sourceStartSeconds: 1,
+                              },
+                          ],
+                      },
+                  ]
+                : [],
+        };
+    };
 
-    const setupGlobal = (withTrack = true): HTMLElement => {
-        mountVideoStagesData(rootState(withTrack));
+    const setupGlobal = (withTrack = true, withJoin = false): HTMLElement => {
+        mountVideoStagesData(rootState(withTrack, withJoin));
         mountPromptBox("");
+        const duration = withJoin ? 6 : 7;
         const body = makeBody();
         body.innerHTML =
             `<div class="vst-audio-seg-lane${withTrack ? "" : " vst-audio-seg-lane-blank"}" ` +
-            `${withTrack ? 'data-track-idx="0"' : "data-vst-audio-seg-add"} style="left:0;width:${7 * PPS}px">` +
+            `${withTrack ? 'data-track-idx="0"' : "data-vst-audio-seg-add"} style="left:0;width:${duration * PPS}px">` +
             (withTrack
-                ? `<div class="vst-audio-seg" data-vst-audio-seg data-track-idx="0" style="left:${(2 / 7) * 100}%;width:${(3 / 7) * 100}%">` +
+                ? `<div class="vst-audio-seg" data-vst-audio-seg data-track-idx="0" style="left:${(2 / duration) * 100}%;width:${(3 / duration) * 100}%">` +
                   `<span data-vst-audio-seg-edge="left"></span><span data-vst-audio-seg-edge="right"></span></div>`
                 : "") +
             `</div>`;
@@ -98,8 +111,8 @@ describe("timeline-wide audio segment gestures", () => {
             lane.getBoundingClientRect = (() =>
                 ({
                     left: 0,
-                    width: 7 * PPS,
-                    right: 7 * PPS,
+                    width: duration * PPS,
+                    right: duration * PPS,
                     top: 0,
                     bottom: 20,
                     height: 20,
@@ -148,6 +161,18 @@ describe("timeline-wide audio segment gestures", () => {
             sourceStartSeconds: 1,
         });
         expect(getSelection()).toEqual({ kind: "audio-track", trackIdx: 0 });
+    });
+
+    it("clamps movement to the join-adjusted output duration", () => {
+        const body = setupGlobal(true, true);
+        const segment = el(body, '.vst-audio-seg[data-track-idx="0"]');
+
+        segment.dispatchEvent(mouse("mousedown", 2 * PPS));
+        document.dispatchEvent(mouse("mousemove", 5 * PPS));
+        document.dispatchEvent(mouse("mouseup", 5 * PPS));
+
+        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        expect(saved.audioTracks?.[0].spans[0].timelineStartSeconds).toBe(3.1);
     });
 
     it("snaps to the segment immediately above before clip edges", () => {

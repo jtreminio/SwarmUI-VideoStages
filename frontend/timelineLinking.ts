@@ -242,9 +242,15 @@ export const createTimelineLinking = (): TimelineLinking => {
                             return null;
                         }
                         const fps = documentFps(getState());
+                        const pxPerSecond = livePxPerSecond(body);
+                        const joinTrimSeconds = Math.max(
+                            0,
+                            Number(state.el.dataset.vstJoinTrimSeconds ?? 0) ||
+                                0,
+                        );
                         const newDuration = pxToDuration(
-                            width,
-                            livePxPerSecond(body),
+                            width + joinTrimSeconds * pxPerSecond,
+                            pxPerSecond,
                             fps,
                         );
                         if (

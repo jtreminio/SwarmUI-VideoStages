@@ -28,7 +28,7 @@ describe("backend-aligned authoring diagnostics", () => {
                 minimalStage(),
             ],
         });
-        expect(activeStageCount(clip)).toBe(2);
+        expect(activeStageCount(clip)).toBe(1);
         clip.stages[1].skipped = false;
         expect(activeStageCount(clip)).toBe(3);
     });
@@ -183,6 +183,32 @@ describe("backend-aligned authoring diagnostics", () => {
                 minimalClip(),
             ]),
         ).not.toContain("mixed-hdr-timeline-unsupported");
+    });
+
+    it("does not diagnose architectures after the first skipped clip", () => {
+        const catalog = fakeArchitectureCatalog();
+        const fakeClip = minimalClip({
+            architecture: "test-video",
+            modelProfileId: "test-profile",
+            stages: [
+                minimalStage({
+                    model: "test-video.safetensors",
+                    modelProfileId: "test-profile",
+                }),
+            ],
+        });
+        const invalidTail = minimalClip({
+            skipped: true,
+            architecture: "removed-architecture",
+            modelProfileId: "removed-profile",
+            stages: [minimalStage({ model: "removed-model.safetensors" })],
+        });
+
+        expect(
+            deriveAuthoringDiagnostics([fakeClip, invalidTail], {
+                catalog,
+            }).filter((item) => item.clipIdx === 1),
+        ).toEqual([]);
     });
 
     it("does not apply LTX combination rules to a future architecture that omits them", () => {

@@ -57,7 +57,7 @@ internal static class VideoStagesSpecParser
             JObject clipObject = document.Entries[clipIndex];
             if (VideoStagesJsonReader.GetOptionalBool(clipObject, "skipped", false))
             {
-                continue;
+                break;
             }
 
             ClipSpec clip = VideoClipSpecParser.Parse(clipObject, clipIndex, context);

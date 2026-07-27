@@ -37,9 +37,13 @@ export const formatTimeLabel = (
     return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`;
 };
 
-/** A frame count expressed as seconds at `fps`, e.g. "0.33s". */
+/** Duration summaries always retain one decimal place: `1.0s`, not `1s`. */
+export const formatSecondsTenth = (seconds: number): string =>
+    `${(Math.round((Number.isFinite(seconds) ? seconds : 0) * 10) / 10).toFixed(1)}s`;
+
+/** A frame count expressed as tenths-rounded seconds at `fps`. */
 export const formatOverlapSeconds = (frames: number, fps: number): string =>
-    `${(frames / Math.max(1, fps)).toFixed(2)}s`;
+    formatSecondsTenth(frames / Math.max(1, fps));
 
 export interface RulerTick {
     x: number;

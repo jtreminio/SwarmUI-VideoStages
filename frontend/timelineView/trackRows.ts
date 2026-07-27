@@ -239,6 +239,7 @@ export const renderAudioTrackRow = (
     capabilities?: CapabilityViewResolver,
     audioTracks: AudioTrack[] = [],
     pxPerSecond = 1,
+    timelineTotalSeconds?: number,
 ): string => {
     const baseSegments = layouts
         .map((layout) => {
@@ -293,10 +294,16 @@ export const renderAudioTrackRow = (
             );
         })
         .join("");
-    const totalSeconds = layouts.reduce(
-        (sum, layout) => sum + layout.durationSeconds,
-        0,
-    );
+    const totalSeconds =
+        timelineTotalSeconds ??
+        layouts.reduce(
+            (max, layout) =>
+                Math.max(
+                    max,
+                    layout.startSeconds + layout.timelineDurationSeconds,
+                ),
+            0,
+        );
     const totalWidthPx = totalSeconds * pxPerSecond;
     const overlaySegments = renderTimelineAudioSegmentLanes(
         audioTracks,

@@ -116,7 +116,7 @@ export const buildDefaultClip = (
                 : null) ??
             modelProfileForModel(defaults.modelCatalog, firstStage.model) ??
             firstStage.modelProfileId,
-        skipped: false,
+        skipped: previousClip?.skipped === true,
         hue: UNASSIGNED_HUE,
         boundaryOut: "cut",
         boundaryOutCarryAudio: false,
@@ -224,6 +224,14 @@ export const normalizeClip = (
                 loraDefaultWeights,
             ),
         );
+    }
+    const firstSkippedStage = stages.findIndex(
+        (stage) => stage.skipped === true,
+    );
+    if (firstSkippedStage >= 0) {
+        for (let index = firstSkippedStage; index < stages.length; index++) {
+            stages[index].skipped = true;
+        }
     }
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const stageZero = stages[0] ?? null;

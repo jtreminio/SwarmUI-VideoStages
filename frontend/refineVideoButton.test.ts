@@ -58,7 +58,7 @@ describe("hasRefinementWorkToDo", () => {
         expect(hasRefinementWorkToDo(config, true, 1)).toBe(true);
     });
 
-    it("returns true with three stages even if the middle one is skipped (skip=1)", () => {
+    it("returns false when a middle skip truncates every later stage (skip=1)", () => {
         const config = makeConfig([
             minimalClip({
                 stages: [
@@ -68,7 +68,7 @@ describe("hasRefinementWorkToDo", () => {
                 ],
             }),
         ]);
-        expect(hasRefinementWorkToDo(config, true, 1)).toBe(true);
+        expect(hasRefinementWorkToDo(config, true, 1)).toBe(false);
     });
 
     it("returns false when active stages equal skipCount (skip=2)", () => {
@@ -87,7 +87,7 @@ describe("hasRefinementWorkToDo", () => {
         expect(hasRefinementWorkToDo(config, true, 2)).toBe(true);
     });
 
-    it("skipped stages don't count toward skipCount comparison (skip=2)", () => {
+    it("does not count stages after the first skip marker (skip=2)", () => {
         const config = makeConfig([
             minimalClip({
                 stages: [
@@ -98,7 +98,7 @@ describe("hasRefinementWorkToDo", () => {
                 ],
             }),
         ]);
-        expect(hasRefinementWorkToDo(config, true, 2)).toBe(true);
+        expect(hasRefinementWorkToDo(config, true, 2)).toBe(false);
     });
 });
 
@@ -136,7 +136,7 @@ describe("countActiveStagesInMetadataClip0", () => {
         expect(countActiveStagesInMetadataClip0(json)).toBe(0);
     });
 
-    it("counts active (non-skipped) stages in clip 0", () => {
+    it("counts only the stage prefix before the first skip marker", () => {
         const json = JSON.stringify({
             clips: [
                 {
@@ -153,7 +153,7 @@ describe("countActiveStagesInMetadataClip0", () => {
                 },
             ],
         });
-        expect(countActiveStagesInMetadataClip0(json)).toBe(2);
+        expect(countActiveStagesInMetadataClip0(json)).toBe(1);
     });
 
     it("treats stages without an explicit skipped flag as active", () => {
