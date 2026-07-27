@@ -999,7 +999,10 @@ export const buildRepeatingEditor = (
         label: spec.label,
         content: children,
         counter: spec.items.length,
-        open: forceOpen || spec.open,
+        // An empty repeater has no child row that can reveal its action.
+        // Keep its outer group open so the Add button is immediately
+        // discoverable in every panel that uses this shared primitive.
+        open: forceOpen || spec.items.length === 0 || spec.open,
         className:
             `vst-detail-repeating-editor ${spec.sectionClass ?? ""}`.trim(),
     });

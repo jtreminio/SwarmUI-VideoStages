@@ -268,6 +268,30 @@ describe("native detail groups", () => {
         ).toBe(false);
     });
 
+    it("opens an empty repeater so its Add action is visible by default", () => {
+        const built = buildRepeatingEditor({
+            key: "empty-add-test",
+            label: "References",
+            items: [],
+            add: {
+                title: "Add reference",
+                label: "+ Add Reference Image",
+                className: "test-add",
+                onClick: () => {},
+            },
+            remove: {
+                title: "Delete reference",
+                className: "test-remove",
+            },
+        });
+
+        expect(built.section.classList.contains("input-group-open")).toBe(true);
+        expect(built.content.hidden).toBe(false);
+        const add = built.content.querySelector<HTMLButtonElement>(".test-add");
+        expect(add).not.toBeNull();
+        expect(add?.textContent).toBe("+ Add Reference Image");
+    });
+
     it("puts each item's title on its header", () => {
         const section = buildRepeatingEditor({
             key: "item-title-test",

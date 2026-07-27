@@ -372,6 +372,44 @@ describe("createTimelineDetailStrip", () => {
         expect(loras).not.toBeNull();
     });
 
+    it("opens every empty addable repeater so its Add action is visible", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                refs: [],
+                icLoras: [],
+                windows: [],
+            },
+        ]);
+        const expectOpenAdd = (
+            sectionSelector: string,
+            addSelector: string,
+        ): void => {
+            const section =
+                document.querySelector<HTMLElement>(sectionSelector);
+            expect(section).not.toBeNull();
+            expect(section?.classList.contains("input-group-open")).toBe(true);
+            expect(
+                section?.querySelector<HTMLElement>(
+                    ":scope > .vst-detail-section-content",
+                )?.hidden,
+            ).toBe(false);
+            expect(section?.querySelector(addSelector)).not.toBeNull();
+        };
+
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        expectOpenAdd(".vst-detail-ref-section", ".vst-detail-add-ref");
+        expectOpenAdd(".vst-detail-loras-section", ".vst-detail-add-lora");
+        expectOpenAdd(".vst-detail-iclora-section", ".vst-detail-add-iclora");
+
+        setSelection({ kind: "prompt-major", clipIdx: 0 });
+        expectOpenAdd(".vst-detail-relay-section", ".vst-detail-add-relay");
+
+        setSelection({ kind: "audio", clipIdx: 0 });
+        expectOpenAdd(".vst-audio-tracks-panel", ".vst-audio-track-add");
+    });
+
     it("switches the active stage when a rail chip is clicked", () => {
         setup([{ duration: 4, stages: [{ steps: 5 }, { steps: 9 }] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
