@@ -1,17 +1,20 @@
 import type {
+    IcLora,
     IcLoraControlType,
     IcLoraDriveData,
     IcLoraDriveMediaKind,
 } from "../../types";
 
 const IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
+/** Internal preset-model sentinel; never offered as a Custom model option. */
+export const IC_LORA_AUTO = "[AUTO]";
 
 // Curated LTX-2.3 IC-LoRA presets for the IC-LoRAs section's Preset dropdown: picking one seeds
 // strength / control-type defaults and surfaces a trigger-phrase hint. Most presets are guidance only;
 // the media contract is an LTX runtime behavior declaration (any installed LoRA still works via
-// "Custom"). The exception is the "[AUTO]"
-// LoRA choice, which downloads the weights to `LTX-2/IC-LoRA/<original upstream filename>` and
-// resolves the entry to that model by convention (see icLoraAutoModelName).
+// "Custom"). Curated presets store an internal "[AUTO]" model sentinel, which downloads weights
+// to `LTX-2/IC-LoRA/<original upstream filename>` and resolves the entry to that model by
+// convention (see icLoraAutoModelName). The sentinel is not an author-selectable model.
 
 export interface IcLoraPreset {
     /** Stable id used as the Preset dropdown value AND the backend IcLoraWeights key — never rename. */
@@ -63,6 +66,8 @@ export const icLoraDriveMediaContractForData = (
 
 /** Sentinel id for the "Custom" (no preset) choice. */
 export const IC_LORA_PRESET_CUSTOM_ID = "custom";
+/** Stable initial preset for newly authored IC-LoRAs. */
+export const IC_LORA_DEFAULT_PRESET_ID = "union-control";
 
 const HF = "https://huggingface.co";
 
@@ -269,6 +274,16 @@ export const findIcLoraPreset = (id: string): IcLoraPreset | null => {
         return null;
     }
     return IC_LORA_PRESETS.find((preset) => preset.id === wanted) ?? null;
+};
+
+/** Human-facing guide label: preset display name, or the selected custom model. */
+export const icLoraDisplayName = (
+    entry: Pick<IcLora, "preset" | "lora">,
+): string => {
+    if (entry.preset === IC_LORA_PRESET_CUSTOM_ID) {
+        return entry.lora;
+    }
+    return findIcLoraPreset(entry.preset)?.displayName ?? entry.preset;
 };
 
 /** Returns the LTX media contract for a preset, including Custom/unknown visual defaults. */

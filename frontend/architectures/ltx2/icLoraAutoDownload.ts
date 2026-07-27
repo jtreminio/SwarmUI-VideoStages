@@ -6,11 +6,12 @@ import {
 import type { IcLora } from "../../types";
 import {
     findIcLoraPreset,
+    IC_LORA_AUTO,
     type IcLoraPreset,
     icLoraAutoModelName,
 } from "./icLoraPresets";
 
-export const IC_LORA_AUTO = "[AUTO]";
+export { IC_LORA_AUTO } from "./icLoraPresets";
 
 // Fulfills "[AUTO]" IC-LoRA entries: kicks off the extension's VideoStagesDownloadIcLoraWS to fetch
 // the preset's safetensors into LTX-2/IC-LoRA/ under the upstream filename (the core downloader

@@ -40,7 +40,20 @@ export const buildClipBody = (
             className: "vst-detail-clip-section",
             content: buildClipColumn(context, clip, clipIdx),
             flattenContent: true,
-            headerAction: buildClipSkipAction(context, clip, clipIdx),
+            headerActions:
+                clipIdx === 0
+                    ? []
+                    : [
+                          buildClipSkipAction(context, clip, clipIdx),
+                          {
+                              label: "×",
+                              title: `Delete clip ${clipIdx}`,
+                              className:
+                                  "vst-detail-delete vst-detail-repeating-group-delete vst-detail-delete-clip",
+                              variant: "interrupt",
+                              onClick: () => context.deleteClip?.(clipIdx),
+                          },
+                      ],
         }).section,
     );
     const stages = buildStageRail(

@@ -255,6 +255,29 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         );
     });
 
+    it("does not skip or shift-delete the first clip", () => {
+        clipsSection(durationClips([1, 2]));
+        const body = makeBody();
+        renderRegions(body, 2);
+        const saveSpy = jest.spyOn(persistence, "saveClips");
+
+        linking = createTimelineLinking();
+        router = createGestureRouter();
+        router.attach(body);
+        linking.attach(body, router);
+
+        region(body, 0)
+            .querySelector<HTMLButtonElement>("[data-vst-region-action='skip']")
+            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        region(body, 0).dispatchEvent(
+            new MouseEvent("click", { bubbles: true, shiftKey: true }),
+        );
+
+        expect(saveSpy).not.toHaveBeenCalled();
+        expect(persistence.getClips()).toHaveLength(2);
+        expect(persistence.getClips()[0].skipped).toBe(false);
+    });
+
     it("shift+click removes the clip via saveClips", () => {
         clipsSection(durationClips([1, 2, 3]));
         const body = makeBody();

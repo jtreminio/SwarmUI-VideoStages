@@ -30,7 +30,11 @@ import {
     saveClips,
     saveState,
 } from "./persistence";
-import { resetSelectionForTests, setSelection } from "./selection";
+import {
+    getSelection,
+    resetSelectionForTests,
+    setSelection,
+} from "./selection";
 import { clearUiStateForTests } from "./uiState";
 import {
     type VideoStagesTimeline,
@@ -418,6 +422,15 @@ describe("videoStagesTimeline", () => {
         expect(stage.cfgScale).toBe(4);
         expect(clips[2].loras).toEqual([{ name: "look" }]);
         expect(stage.loraWeights).toEqual([0.6]);
+        expect(getSelection()).toEqual({
+            kind: "clip",
+            clipIdx: 2,
+            stageIdx: 0,
+        });
+        expect(document.querySelector(".vst-detail-clip")).not.toBeNull();
+        expect(
+            document.querySelector(".vst-detail-crumb")?.textContent,
+        ).toContain("Clip 2");
     });
 
     it("adds the first clip after the backend catalog resolves even when the video-model dropdown is absent", async () => {
@@ -478,6 +491,12 @@ describe("videoStagesTimeline", () => {
                 },
             ],
         });
+        expect(getSelection()).toEqual({
+            kind: "clip",
+            clipIdx: 0,
+            stageIdx: 0,
+        });
+        expect(document.querySelector(".vst-detail-clip")).not.toBeNull();
     });
 
     it("keeps the region count stable when only surrounding prompt prose changes", () => {

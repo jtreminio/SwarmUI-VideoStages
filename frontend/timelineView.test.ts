@@ -822,12 +822,32 @@ describe("renderTimeline (DOM)", () => {
         expect(chips[0].classList.contains("vst-stage-chip-skipped")).toBe(
             false,
         );
-        // Stage chips carry edit + delete affordances in the tooltip.
+        // Stage 0 is permanent; later stages carry the delete gesture.
         expect(chips[0].getAttribute("title")).toContain("click to edit");
-        expect(chips[0].getAttribute("title")).toContain(
+        expect(chips[0].getAttribute("title")).not.toContain(
+            "Shift+click to delete",
+        );
+        expect(chips[1].getAttribute("title")).toContain(
             "Shift+click to delete",
         );
         expect(body.querySelector("[data-vst-stage-add]")).toBeNull();
+    });
+
+    it("marks the first clip as permanent in its controls and tooltip", () => {
+        renderTimeline(body, [makeClip(2, 1, 0), makeClip(2, 1, 0)]);
+        const regions = body.querySelectorAll<HTMLElement>(".vst-region");
+        const skips = body.querySelectorAll<HTMLButtonElement>(
+            '[data-vst-region-action="skip"]',
+        );
+
+        expect(regions[0].title).not.toContain("Shift+click to delete");
+        expect(regions[1].title).toContain("Shift+click to delete");
+        expect(regions[0].querySelector(".vst-region-controls")).toBeNull();
+        expect(skips).toHaveLength(1);
+        expect(
+            regions[1].querySelector('[data-vst-region-action="skip"]'),
+        ).not.toBeNull();
+        expect(skips[0].disabled).toBe(false);
     });
 
     it("draws a bare arrow marker on the clip and shows the ref image on the References-track thumbnail", () => {

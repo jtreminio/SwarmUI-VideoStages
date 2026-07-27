@@ -73,7 +73,7 @@ export const applyClipSkip = (
     generatedEntryMode: "text-to-video" | "image-to-video",
 ): boolean => {
     const clip = clips[clipIdx];
-    if (!clip) {
+    if (!clip || (clipIdx === 0 && clip.skipped !== true)) {
         return false;
     }
     clip.skipped = !clip.skipped;
@@ -91,7 +91,7 @@ export const applyStageSkip = (
 ): boolean => {
     const clip = clips[clipIdx];
     const stage = clip?.stages[stageIdx];
-    if (!clip || !stage) {
+    if (!clip || !stage || (stageIdx === 0 && stage.skipped !== true)) {
         return false;
     }
     stage.skipped = !stage.skipped;
@@ -107,6 +107,7 @@ export interface DetailSelectionDomainOperations {
     deleteWindowEntry(clipIdx: number, windowIdx: number): void;
     createRetake(clipIdx: number): void;
     removeRetake(clipIdx: number): void;
+    deleteClip(clipIdx: number): void;
     addStage(clipIdx: number): void;
     deleteStage(clipIdx: number, stageIdx: number): void;
     selectStage(clipIdx: number, stageIdx: number): void;
@@ -395,6 +396,32 @@ export const createDetailSelectionDomainOperations = (
         setSelection({ kind: "clip", clipIdx, stageIdx });
     };
 
+    const deleteClip = (clipIdx: number): void => {
+        structuralCommit(
+            (clips) => {
+                if (clipIdx <= 0 || clipIdx >= clips.length) {
+                    return null;
+                }
+                clips.splice(clipIdx, 1);
+                reconcileArchitectureIncomingIcLoraDrives(
+                    clips,
+                    getGeneratedEntryMode(),
+                );
+                return selectionAfterRemoval(
+                    clipIdx,
+                    clips.length,
+                    (index) => ({
+                        kind: "clip",
+                        clipIdx: index,
+                        stageIdx: 0,
+                    }),
+                    { kind: "none" },
+                );
+            },
+            { rebuildAfterSelect: true },
+        );
+    };
+
     const addStage = (clipIdx: number): void => {
         structuralCommit(
             (clips) => {
@@ -488,8 +515,7 @@ export const createDetailSelectionDomainOperations = (
                 if (
                     !clip ||
                     clip.stages.length === 0 ||
-                    (clip.stages.length === 1 && clip.sourceVideo === null) ||
-                    stageIdx < 0 ||
+                    stageIdx <= 0 ||
                     stageIdx >= clip.stages.length
                 ) {
                     return null;
@@ -622,6 +648,7 @@ export const createDetailSelectionDomainOperations = (
         deleteWindowEntry,
         createRetake,
         removeRetake,
+        deleteClip,
         addStage,
         deleteStage,
         selectStage,

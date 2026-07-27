@@ -24,6 +24,7 @@ import { getSelection, setSelection } from "../selection";
 import { createTimelineHistory } from "../timelineHistory";
 import type { Clip, TimelineSelection } from "../types";
 import type { StructuralCommand } from "./draftQueue";
+import { applyClipSkip, applyStageSkip } from "./selectionDomainOperations";
 import { createDetailSelectionOperations } from "./selectionOperations";
 
 type StructuralOutcome =
@@ -33,7 +34,25 @@ type StructuralOutcome =
     | StructuralCommand;
 
 describe("detail structural stage operations", () => {
-    it("allows a sourced clip to remove its final stage and become source-only", () => {
+    it("allows legacy skipped first items to be restored, but not skipped again", () => {
+        const clip = minimalClip({ skipped: true });
+        clip.stages[0].skipped = true;
+        const clips = [clip];
+        const catalog = testArchitectureCatalog();
+
+        expect(applyClipSkip(clips, 0, "text-to-video")).toBe(true);
+        expect(clips[0].skipped).toBe(false);
+        expect(applyClipSkip(clips, 0, "text-to-video")).toBe(false);
+        expect(applyStageSkip(clips, 0, 0, catalog, "text-to-video")).toBe(
+            true,
+        );
+        expect(clips[0].stages[0].skipped).toBe(false);
+        expect(applyStageSkip(clips, 0, 0, catalog, "text-to-video")).toBe(
+            false,
+        );
+    });
+
+    it("does not remove the first stage, even from a sourced clip", () => {
         const clips: Clip[] = [
             minimalClip({
                 sourceVideo: {
@@ -59,12 +78,12 @@ describe("detail structural stage operations", () => {
 
         operations.deleteStage(0, 0);
 
-        expect(clips[0].stages).toEqual([]);
+        expect(clips[0].stages).toHaveLength(1);
         expect(clips[0]).toMatchObject({
-            architecture: "none",
-            modelProfileId: "none",
+            architecture: "ltx2",
+            modelProfileId: "ltx-2.3",
         });
-        expect(selection).toEqual({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        expect(selection).toBeNull();
     });
 
     it("does not add a later stage when the architecture lacks multi-stage support", () => {

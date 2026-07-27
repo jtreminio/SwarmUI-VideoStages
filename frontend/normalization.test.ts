@@ -351,6 +351,22 @@ describe("normalization", () => {
         ).toBeNull();
     });
 
+    it("repairs legacy Custom + [AUTO] entries to the stable default preset", () => {
+        expect(
+            normalizeIcLora({
+                lora: "[AUTO]",
+                preset: "custom",
+                strength: 2,
+                controlType: "none",
+            }),
+        ).toMatchObject({
+            lora: "[AUTO]",
+            preset: "union-control",
+            strength: 1,
+            controlType: "depth",
+        });
+    });
+
     it("preserves explicit LipDub audio data and Incoming source", () => {
         expect(
             normalizeIcLora(

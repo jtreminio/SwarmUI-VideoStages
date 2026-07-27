@@ -48,6 +48,7 @@ import {
 } from "./icLoraNormalization";
 import {
     findIcLoraPreset,
+    IC_LORA_DEFAULT_PRESET_ID,
     IC_LORA_PRESET_CUSTOM_ID,
     IC_LORA_PRESETS,
     icLoraDriveMediaContract,
@@ -127,8 +128,12 @@ export const buildIcLorasSection = (
                 onClick: () => {
                     context.structuralCommit((clips) => {
                         const target = clips[clipIdx];
+                        const defaultPreset = findIcLoraPreset(
+                            IC_LORA_DEFAULT_PRESET_ID,
+                        );
                         if (
                             !target ||
+                            !defaultPreset ||
                             !context
                                 .capabilities()
                                 .forClip(target)
@@ -136,9 +141,19 @@ export const buildIcLorasSection = (
                         ) {
                             return null;
                         }
+                        const defaultContract =
+                            icLoraDriveMediaContract(defaultPreset);
                         target.icLoras.push(
                             defaultIcLora({
                                 lora: IC_LORA_AUTO,
+                                preset: defaultPreset.id,
+                                strength: defaultPreset.strength,
+                                controlType: defaultPreset.controlType,
+                                hdr: defaultPreset.hdr === true,
+                                driveData: defaultContract.driveData,
+                                driveMediaKinds: [
+                                    ...defaultContract.acceptedKinds,
+                                ],
                             }),
                         );
                         appendIcLoraStrengthToClip(
@@ -201,7 +216,13 @@ export const buildIcLorasSection = (
                 (preset) => hdrDecision.supported || preset.hdr !== true,
             );
             const presetSpecs = [
-                { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
+                {
+                    value: IC_LORA_PRESET_CUSTOM_ID,
+                    label: "Custom",
+                    disabled:
+                        defaults.loraValues.length === 0 &&
+                        entry.preset !== IC_LORA_PRESET_CUSTOM_ID,
+                },
                 ...presetOptions.map((preset) => ({
                     value: preset.id,
                     label: preset.displayName,
@@ -232,6 +253,22 @@ export const buildIcLorasSection = (
                             target.lora = IC_LORA_AUTO;
                             target.strength = preset.strength;
                             target.controlType = preset.controlType;
+                        } else if (value === IC_LORA_PRESET_CUSTOM_ID) {
+                            const customLora = defaults.loraValues[0];
+                            if (customLora) {
+                                target.lora = customLora;
+                                const initialStrength = defaultLoraWeight(
+                                    defaults,
+                                    customLora,
+                                );
+                                const targetClip = clips[clipIdx];
+                                for (const stage of targetClip?.stages ?? []) {
+                                    stage.icLoraStrengths[entryIdx] =
+                                        normalizeStageControlNetStrengthValue(
+                                            initialStrength,
+                                        );
+                                }
+                            }
                         }
                         // The preset table is the only thing that declares HDR intent; picking a
                         // non-HDR preset clears it rather than leaving a stale flag behind.
@@ -284,55 +321,59 @@ export const buildIcLorasSection = (
                 ),
             );
 
-            const loraSpecs = [
-                { value: IC_LORA_AUTO, label: IC_LORA_AUTO },
-                ...defaults.loraValues.map((value, optionIdx) => ({
-                    value,
-                    label: defaults.loraLabels[optionIdx] ?? value,
-                })),
-            ];
-            preserveSelectedOption(loraSpecs, entry.lora, "start", (value) => ({
-                value,
-                label: `${value} (unsupported persisted value)`,
-                disabled: true,
-            }));
-            const loraSelect = buildOptionSelect(
-                loraSpecs,
-                entry.lora,
-                (value) => {
-                    context.commit((clips) => {
-                        const target = entryAt(clips, entryIdx);
-                        if (target) {
-                            target.lora = value;
-                            const initialStrength = defaultLoraWeight(
-                                defaults,
-                                value,
-                            );
-                            const targetClip = clips[clipIdx];
-                            for (const stage of targetClip?.stages ?? []) {
-                                stage.icLoraStrengths[entryIdx] =
-                                    normalizeStageControlNetStrengthValue(
-                                        initialStrength,
-                                    );
+            if (entry.preset === IC_LORA_PRESET_CUSTOM_ID) {
+                const loraSpecs = defaults.loraValues.map(
+                    (value, optionIdx) => ({
+                        value,
+                        label: defaults.loraLabels[optionIdx] ?? value,
+                    }),
+                );
+                if (entry.lora !== IC_LORA_AUTO) {
+                    preserveSelectedOption(
+                        loraSpecs,
+                        entry.lora,
+                        "start",
+                        (value) => ({
+                            value,
+                            label: `${value} (unsupported persisted value)`,
+                            disabled: true,
+                        }),
+                    );
+                }
+                const loraSelect = buildOptionSelect(
+                    loraSpecs,
+                    entry.lora,
+                    (value) => {
+                        context.commit((clips) => {
+                            const target = entryAt(clips, entryIdx);
+                            if (target) {
+                                target.lora = value;
+                                const initialStrength = defaultLoraWeight(
+                                    defaults,
+                                    value,
+                                );
+                                const targetClip = clips[clipIdx];
+                                for (const stage of targetClip?.stages ?? []) {
+                                    stage.icLoraStrengths[entryIdx] =
+                                        normalizeStageControlNetStrengthValue(
+                                            initialStrength,
+                                        );
+                                }
                             }
-                        }
-                    });
-                    if (value === IC_LORA_AUTO) {
-                        clearIcLoraAutoFailure(entry.preset);
-                    }
-                    context.render();
-                },
-            );
-            fields.appendChild(
-                buildField(
-                    "LoRA",
-                    loraSelect,
-                    undefined,
-                    "The in-context LoRA weights that turn the drive media into " +
-                        "conditioning. [AUTO] downloads the preset's recommended " +
-                        "weights when they are not installed.",
-                ),
-            );
+                        });
+                        context.render();
+                    },
+                );
+                fields.appendChild(
+                    buildField(
+                        "LoRA",
+                        loraSelect,
+                        undefined,
+                        "The in-context LoRA weights that turn the drive media into " +
+                            "conditioning.",
+                    ),
+                );
+            }
 
             const strength = context.buildClampedNumber({
                 key: `iclora-${entryIdx}-strength`,

@@ -18,6 +18,7 @@ export interface ArchitectureBehavior {
     ): boolean;
     hasSlotSourcedIcLora(entries: IcLora[]): boolean;
     isHdrFeature(entry: IcLora): boolean;
+    icLoraDisplayName(entry: IcLora): string;
 }
 
 const behaviors = new Map<string, ArchitectureBehavior>(
@@ -90,6 +91,13 @@ export const isArchitectureHdrFeature = (
     entry: IcLora,
 ): boolean =>
     architectureBehavior(architectureId)?.isHdrFeature(entry) ?? false;
+
+export const architectureIcLoraDisplayName = (
+    architectureId: string,
+    entry: IcLora,
+): string =>
+    architectureBehavior(architectureId)?.icLoraDisplayName(entry) ??
+    entry.lora;
 
 /** True when the clip has an HDR IC-LoRA bound to at least one active stage. */
 export const clipHasActiveHdr = (clip: Clip): boolean =>

@@ -713,6 +713,7 @@
 
   // frontend/architectures/ltx2/icLoraPresets.ts
   var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
+  var IC_LORA_AUTO = "[AUTO]";
   var DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT = {
     acceptedKinds: ["image", "video"],
     driveData: "visual"
@@ -731,6 +732,7 @@
     return { acceptedKinds: [], driveData: "none" };
   };
   var IC_LORA_PRESET_CUSTOM_ID = "custom";
+  var IC_LORA_DEFAULT_PRESET_ID = "union-control";
   var HF = "https://huggingface.co";
   var IC_LORA_PRESETS = [
     {
@@ -934,6 +936,12 @@
     }
     return IC_LORA_PRESETS.find((preset) => preset.id === wanted) ?? null;
   };
+  var icLoraDisplayName = (entry) => {
+    if (entry.preset === IC_LORA_PRESET_CUSTOM_ID) {
+      return entry.lora;
+    }
+    return findIcLoraPreset(entry.preset)?.displayName ?? entry.preset;
+  };
   var icLoraDriveMediaContract = (preset) => preset?.driveMedia ?? DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
   var icLoraAutoModelName = (preset) => {
     const file = preset.weightsUrl.slice(
@@ -1041,7 +1049,9 @@
       return null;
     }
     const preset = `${raw.preset ?? ""}`.trim();
-    const normalizedPreset = preset || IC_LORA_PRESET_CUSTOM_ID;
+    const repairsLegacyCustomAuto = lora === IC_LORA_AUTO && (!preset || preset === IC_LORA_PRESET_CUSTOM_ID);
+    const normalizedPreset = repairsLegacyCustomAuto ? IC_LORA_DEFAULT_PRESET_ID : preset || IC_LORA_PRESET_CUSTOM_ID;
+    const repairedPreset = repairsLegacyCustomAuto ? findIcLoraPreset(normalizedPreset) : null;
     const driveData = normalizeIcLoraDriveData(raw.driveData);
     const driveMediaKinds = normalizeIcLoraDriveMediaKinds(
       raw.driveMediaKinds,
@@ -1063,7 +1073,7 @@
       driveData,
       driveMediaKinds,
       stage,
-      strength: snapValueToStep(
+      strength: repairsLegacyCustomAuto ? repairedPreset?.strength ?? IC_LORA_STRENGTH_DEFAULT : snapValueToStep(
         raw.strength,
         IC_LORA_STRENGTH_DEFAULT,
         IC_LORA_STRENGTH_MIN,
@@ -1077,7 +1087,7 @@
         IC_LORA_ATTENTION_MAX,
         IC_LORA_ATTENTION_STEP
       ),
-      controlType: driveData !== "visual" ? "none" : normalizeIcLoraControlType(raw.controlType),
+      controlType: driveData !== "visual" ? "none" : repairsLegacyCustomAuto ? repairedPreset?.controlType ?? "none" : normalizeIcLoraControlType(raw.controlType),
       // Documents authored before the flag existed carry only the preset id; the preset table
       // (not a name match) seeds the intent, so those documents keep working.
       hdr: typeof raw.hdr === "boolean" ? raw.hdr : findIcLoraPreset(normalizedPreset)?.hdr ?? false,
@@ -1111,7 +1121,8 @@
     canonicalizeIcLoraFields,
     reconcileIncomingIcLoraDrives,
     hasSlotSourcedIcLora,
-    isHdrFeature
+    isHdrFeature,
+    icLoraDisplayName
   };
 
   // frontend/architectures/ltx2/definition.ts
@@ -1373,6 +1384,7 @@
   };
   var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => architectureBehavior(architectureId)?.hasSlotSourcedIcLora(entries) ?? false;
   var isArchitectureHdrFeature = (architectureId, entry) => architectureBehavior(architectureId)?.isHdrFeature(entry) ?? false;
+  var architectureIcLoraDisplayName = (architectureId, entry) => architectureBehavior(architectureId)?.icLoraDisplayName(entry) ?? entry.lora;
   var clipHasActiveHdr = (clip) => clip.icLoras.some(
     (entry) => isArchitectureHdrFeature(clip.architecture, entry) && clip.stages.some(
       (stage, rawStageIdx) => stage.skipped !== true && (entry.stage < 0 || entry.stage === rawStageIdx)
@@ -7541,12 +7553,14 @@
   var appendSectionHeaderAction = (target, actionSpec) => {
     const action = document.createElement("button");
     action.type = "button";
-    action.className = `basic-button vst-btn-tiny vst-detail-repeating-group-action ${actionSpec.className ?? ""}`.trim();
+    action.className = `${actionSpec.variant === "interrupt" ? "interrupt-button" : "basic-button"} vst-btn-tiny vst-detail-repeating-group-action ${actionSpec.className ?? ""}`.trim();
     action.textContent = actionSpec.label;
     action.title = actionSpec.title;
     action.setAttribute("aria-label", actionSpec.title);
-    action.setAttribute("aria-pressed", `${actionSpec.active === true}`);
-    action.classList.toggle("vst-btn-skip-active", actionSpec.active === true);
+    if (actionSpec.active !== void 0) {
+      action.setAttribute("aria-pressed", `${actionSpec.active}`);
+      action.classList.toggle("vst-btn-skip-active", actionSpec.active);
+    }
     action.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -7575,10 +7589,13 @@
     const spacer = document.createElement("span");
     spacer.className = "header-label-spacer";
     labelWrap.append(heading, spacer);
-    if (spec.headerAction) {
+    const headerActions = spec.headerActions ?? (spec.headerAction === void 0 ? [] : [spec.headerAction]);
+    if (headerActions.length > 0) {
       const actions = document.createElement("span");
       actions.className = "vst-detail-repeating-group-actions";
-      appendSectionHeaderAction(actions, spec.headerAction);
+      for (const action of headerActions) {
+        appendSectionHeaderAction(actions, action);
+      }
       labelWrap.appendChild(actions);
     }
     header.appendChild(labelWrap);
@@ -9092,7 +9109,7 @@
   var renderStageChips = (clip, clipIdx) => (clip.stages ?? []).map((stage, stageIdx) => {
     const skipped = stage?.skipped === true;
     const skippedClass = skipped ? " vst-stage-chip-skipped" : "";
-    const title = `${stageChipTitle(stage, stageIdx)}${skipped ? " (skipped)" : ""} · click to edit · Shift+click to delete`;
+    const title = `${stageChipTitle(stage, stageIdx)}${skipped ? " (skipped)" : ""} · click to edit${stageIdx === 0 ? "" : " · Shift+click to delete"}`;
     const label = `${skipped ? "⊘ " : ""}${stageChipLabel(stageIdx)}`;
     return `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeAttr(title)}">${escapeAttr(label)}</span>`;
   }).join("");
@@ -9139,14 +9156,15 @@
     );
     const skipLabel = skipTitle("clip", layout.skipped);
     const skipMark = skipGlyph(layout.skipped);
-    const controls = `<div class="vst-region-controls"><button type="button" class="vst-region-btn${layout.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipLabel}" aria-label="${skipLabel}">${skipMark}</button></div>`;
+    const firstClip = layout.index === 0;
+    const controls = firstClip ? "" : `<div class="vst-region-controls"><button type="button" class="vst-region-btn${layout.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipLabel}" aria-label="${skipLabel}">${skipMark}</button></div>`;
     const resizeGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
     const width = clipInnerWidth(layout.widthPx);
     const retakeSupported = capabilities?.forClip(clip).decision("retake").supported ?? true;
     const canAddRetake = retakeSupported && !clip.retake;
     const retakeLaneAttrs = canAddRetake ? " data-vst-retake-add" : retakeSupported ? " data-vst-retake-full" : ' data-vst-capability-disabled="retake"';
     const retakeLaneTitle = canAddRetake ? "Click empty space to add a retake window" : retakeSupported ? "This clip already has a retake window" : "Retakes are not supported by this clip architecture";
-    return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index} · ${duration} · Click to edit · Shift+click to delete">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
+    return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index} · ${duration} · Click to edit${firstClip ? "" : " · Shift+click to delete"}">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
       clip,
       layout.index,
       layout.durationSeconds,
@@ -9891,7 +9909,6 @@
   };
 
   // frontend/architectures/ltx2/icLoraAutoDownload.ts
-  var IC_LORA_AUTO = "[AUTO]";
   var IC_LORA_AUTO_HINT_ATTR = "data-vst-iclora-auto";
   var statuses = /* @__PURE__ */ new Map();
   var clearIcLoraAutoFailure = (presetId) => {
@@ -10034,12 +10051,24 @@
           onClick: () => {
             context.structuralCommit((clips) => {
               const target = clips[clipIdx];
-              if (!target || !context.capabilities().forClip(target).decision("icLora").supported) {
+              const defaultPreset = findIcLoraPreset(
+                IC_LORA_DEFAULT_PRESET_ID
+              );
+              if (!target || !defaultPreset || !context.capabilities().forClip(target).decision("icLora").supported) {
                 return null;
               }
+              const defaultContract = icLoraDriveMediaContract(defaultPreset);
               target.icLoras.push(
                 defaultIcLora({
-                  lora: IC_LORA_AUTO
+                  lora: IC_LORA_AUTO,
+                  preset: defaultPreset.id,
+                  strength: defaultPreset.strength,
+                  controlType: defaultPreset.controlType,
+                  hdr: defaultPreset.hdr === true,
+                  driveData: defaultContract.driveData,
+                  driveMediaKinds: [
+                    ...defaultContract.acceptedKinds
+                  ]
                 })
               );
               appendIcLoraStrengthToClip(
@@ -10092,7 +10121,11 @@
           (preset2) => hdrDecision.supported || preset2.hdr !== true
         );
         const presetSpecs = [
-          { value: IC_LORA_PRESET_CUSTOM_ID, label: "Custom" },
+          {
+            value: IC_LORA_PRESET_CUSTOM_ID,
+            label: "Custom",
+            disabled: defaults.loraValues.length === 0 && entry.preset !== IC_LORA_PRESET_CUSTOM_ID
+          },
           ...presetOptions.map((preset2) => ({
             value: preset2.id,
             label: preset2.displayName
@@ -10123,6 +10156,21 @@
                 target.lora = IC_LORA_AUTO;
                 target.strength = preset2.strength;
                 target.controlType = preset2.controlType;
+              } else if (value === IC_LORA_PRESET_CUSTOM_ID) {
+                const customLora = defaults.loraValues[0];
+                if (customLora) {
+                  target.lora = customLora;
+                  const initialStrength = defaultLoraWeight(
+                    defaults,
+                    customLora
+                  );
+                  const targetClip2 = clips[clipIdx];
+                  for (const stage of targetClip2?.stages ?? []) {
+                    stage.icLoraStrengths[entryIdx2] = normalizeStageControlNetStrengthValue(
+                      initialStrength
+                    );
+                  }
+                }
               }
               target.hdr = preset2?.hdr === true;
               const nextContract = icLoraDriveMediaContract(preset2);
@@ -10162,52 +10210,57 @@
             "A curated IC-LoRA setup — picking one fills in the LoRA, strength, and control type for a known effect (pose, depth, style, etc.). Choose Custom to set everything yourself."
           )
         );
-        const loraSpecs = [
-          { value: IC_LORA_AUTO, label: IC_LORA_AUTO },
-          ...defaults.loraValues.map((value, optionIdx) => ({
-            value,
-            label: defaults.loraLabels[optionIdx] ?? value
-          }))
-        ];
-        preserveSelectedOption(loraSpecs, entry.lora, "start", (value) => ({
-          value,
-          label: `${value} (unsupported persisted value)`,
-          disabled: true
-        }));
-        const loraSelect = buildOptionSelect(
-          loraSpecs,
-          entry.lora,
-          (value) => {
-            context.commit((clips) => {
-              const target = entryAt(clips, entryIdx2);
-              if (target) {
-                target.lora = value;
-                const initialStrength = defaultLoraWeight(
-                  defaults,
-                  value
-                );
-                const targetClip = clips[clipIdx];
-                for (const stage of targetClip?.stages ?? []) {
-                  stage.icLoraStrengths[entryIdx2] = normalizeStageControlNetStrengthValue(
-                    initialStrength
-                  );
-                }
-              }
-            });
-            if (value === IC_LORA_AUTO) {
-              clearIcLoraAutoFailure(entry.preset);
-            }
-            context.render();
+        if (entry.preset === IC_LORA_PRESET_CUSTOM_ID) {
+          const loraSpecs = defaults.loraValues.map(
+            (value, optionIdx) => ({
+              value,
+              label: defaults.loraLabels[optionIdx] ?? value
+            })
+          );
+          if (entry.lora !== IC_LORA_AUTO) {
+            preserveSelectedOption(
+              loraSpecs,
+              entry.lora,
+              "start",
+              (value) => ({
+                value,
+                label: `${value} (unsupported persisted value)`,
+                disabled: true
+              })
+            );
           }
-        );
-        fields.appendChild(
-          buildField(
-            "LoRA",
-            loraSelect,
-            void 0,
-            "The in-context LoRA weights that turn the drive media into conditioning. [AUTO] downloads the preset's recommended weights when they are not installed."
-          )
-        );
+          const loraSelect = buildOptionSelect(
+            loraSpecs,
+            entry.lora,
+            (value) => {
+              context.commit((clips) => {
+                const target = entryAt(clips, entryIdx2);
+                if (target) {
+                  target.lora = value;
+                  const initialStrength = defaultLoraWeight(
+                    defaults,
+                    value
+                  );
+                  const targetClip = clips[clipIdx];
+                  for (const stage of targetClip?.stages ?? []) {
+                    stage.icLoraStrengths[entryIdx2] = normalizeStageControlNetStrengthValue(
+                      initialStrength
+                    );
+                  }
+                }
+              });
+              context.render();
+            }
+          );
+          fields.appendChild(
+            buildField(
+              "LoRA",
+              loraSelect,
+              void 0,
+              "The in-context LoRA weights that turn the drive media into conditioning."
+            )
+          );
+        }
         const strength = context.buildClampedNumber({
           key: `iclora-${entryIdx2}-strength`,
           value: entry.strength,
@@ -11648,6 +11701,10 @@ The conversion is one undoable change.`;
     const icDecision = context.capabilities().forClip(clip).decision("icLora");
     const icGroup = document.createDocumentFragment();
     applicableIcLoras.forEach(({ entry, entryIdx }) => {
+      const displayName = architectureIcLoraDisplayName(
+        clip.architecture,
+        entry
+      );
       const guideStrength = tagFocus(
         buildNumber(
           stage.icLoraStrengths[entryIdx] ?? 1,
@@ -11669,9 +11726,9 @@ The conversion is one undoable change.`;
         "lora-weight-input",
         "vst-stage-iclora-strength"
       );
-      const row = buildField(shortModelName2(entry.lora), guideStrength);
+      const row = buildField(shortModelName2(displayName), guideStrength);
       row.classList.add("vst-stage-iclora-strength-row");
-      row.title = entry.lora;
+      row.title = displayName;
       icGroup.appendChild(row);
     });
     if (!icDecision.supported) {
@@ -11935,33 +11992,34 @@ The conversion is one undoable change.`;
   var buildStageRail = (context, clip, clipIdx, stageIdx, editorForStage, open = true) => {
     const canAdd = clip.stages.length === 0 || context.capabilities().forClip(clip).decision("multiStage").supported;
     const addTitle = canAdd ? clip.stages.length === 0 ? "Add the first stage and choose its architecture" : "Add a refine stage" : context.capabilities().forClip(clip).decision("multiStage").reason;
-    const cannotDelete = clip.stages.length === 0 || clip.stages.length === 1 && clip.sourceVideo === null;
     return buildRepeatingEditor({
       key: "stages",
       label: "Stages",
       sectionClass: "vst-detail-stage-groups",
       open,
-      items: clip.stages.map((stage, index) => ({
-        label: `Stage ${stageChipLabel(index)}`,
-        focusKey: `stage-group-${index}`,
-        title: stageChipTitle(stage, index),
-        active: index === stageIdx,
-        className: `vst-stage-tab${stage.skipped ? " vst-stage-tab-skipped" : ""}`,
-        onSelect: () => context.selectStage(clipIdx, index),
-        onDelete: () => context.deleteStage(clipIdx, index),
-        deleteDisabled: cannotDelete,
-        deleteTitle: cannotDelete ? clip.stages.length === 0 ? "This source-only clip has no generation stage" : "Add a source video before removing the only generation stage" : `Delete stage ${stageChipLabel(index)}`,
-        headerAction: {
-          label: skipGlyph(stage.skipped === true),
-          title: skipTitle(
-            `stage ${stageChipLabel(index)}`,
-            stage.skipped === true
-          ),
-          className: "vst-detail-skip-stage",
-          active: stage.skipped,
-          onClick: () => context.toggleStageSkip(clipIdx, index)
-        }
-      })),
+      items: clip.stages.map((stage, index) => {
+        const firstStage = index === 0;
+        return {
+          label: `Stage ${stageChipLabel(index)}`,
+          focusKey: `stage-group-${index}`,
+          title: stageChipTitle(stage, index),
+          active: index === stageIdx,
+          className: `vst-stage-tab${stage.skipped ? " vst-stage-tab-skipped" : ""}`,
+          onSelect: () => context.selectStage(clipIdx, index),
+          onDelete: firstStage ? void 0 : () => context.deleteStage(clipIdx, index),
+          deleteTitle: firstStage ? void 0 : `Delete stage ${stageChipLabel(index)}`,
+          headerAction: firstStage ? void 0 : {
+            label: skipGlyph(stage.skipped === true),
+            title: skipTitle(
+              `stage ${stageChipLabel(index)}`,
+              stage.skipped === true
+            ),
+            className: "vst-detail-skip-stage",
+            active: stage.skipped,
+            onClick: () => context.toggleStageSkip(clipIdx, index)
+          }
+        };
+      }),
       editorForItem: editorForStage,
       add: {
         title: addTitle,
@@ -11994,7 +12052,16 @@ The conversion is one undoable change.`;
         className: "vst-detail-clip-section",
         content: buildClipColumn(context, clip, clipIdx),
         flattenContent: true,
-        headerAction: buildClipSkipAction(context, clip, clipIdx)
+        headerActions: clipIdx === 0 ? [] : [
+          buildClipSkipAction(context, clip, clipIdx),
+          {
+            label: "×",
+            title: `Delete clip ${clipIdx}`,
+            className: "vst-detail-delete vst-detail-repeating-group-delete vst-detail-delete-clip",
+            variant: "interrupt",
+            onClick: () => context.deleteClip?.(clipIdx)
+          }
+        ]
       }).section
     );
     const stages = buildStageRail(
@@ -12817,7 +12884,7 @@ The conversion is one undoable change.`;
   );
   var applyClipSkip = (clips, clipIdx, generatedEntryMode) => {
     const clip = clips[clipIdx];
-    if (!clip) {
+    if (!clip || clipIdx === 0 && clip.skipped !== true) {
       return false;
     }
     clip.skipped = !clip.skipped;
@@ -12827,7 +12894,7 @@ The conversion is one undoable change.`;
   var applyStageSkip = (clips, clipIdx, stageIdx, catalog, generatedEntryMode) => {
     const clip = clips[clipIdx];
     const stage = clip?.stages[stageIdx];
-    if (!clip || !stage) {
+    if (!clip || !stage || stageIdx === 0 && stage.skipped !== true) {
       return false;
     }
     stage.skipped = !stage.skipped;
@@ -13072,6 +13139,31 @@ The conversion is one undoable change.`;
     const selectStage = (clipIdx, stageIdx) => {
       setSelection({ kind: "clip", clipIdx, stageIdx });
     };
+    const deleteClip = (clipIdx) => {
+      structuralCommit(
+        (clips) => {
+          if (clipIdx <= 0 || clipIdx >= clips.length) {
+            return null;
+          }
+          clips.splice(clipIdx, 1);
+          reconcileArchitectureIncomingIcLoraDrives(
+            clips,
+            getGeneratedEntryMode()
+          );
+          return selectionAfterRemoval(
+            clipIdx,
+            clips.length,
+            (index) => ({
+              kind: "clip",
+              clipIdx: index,
+              stageIdx: 0
+            }),
+            { kind: "none" }
+          );
+        },
+        { rebuildAfterSelect: true }
+      );
+    };
     const addStage = (clipIdx) => {
       structuralCommit(
         (clips) => {
@@ -13148,7 +13240,7 @@ The conversion is one undoable change.`;
       structuralCommit(
         (clips) => {
           const clip = clips[clipIdx];
-          if (!clip || clip.stages.length === 0 || clip.stages.length === 1 && clip.sourceVideo === null || stageIdx < 0 || stageIdx >= clip.stages.length) {
+          if (!clip || clip.stages.length === 0 || stageIdx <= 0 || stageIdx >= clip.stages.length) {
             return null;
           }
           clip.stages.splice(stageIdx, 1);
@@ -13252,6 +13344,7 @@ The conversion is one undoable change.`;
       deleteWindowEntry,
       createRetake,
       removeRetake,
+      deleteClip,
       addStage,
       deleteStage,
       selectStage,
@@ -13389,6 +13482,7 @@ The conversion is one undoable change.`;
       deleteWindowEntry: selectionOperations.deleteWindowEntry,
       createRetake: selectionOperations.createRetake,
       removeRetake: selectionOperations.removeRetake,
+      deleteClip: selectionOperations.deleteClip,
       addStage: selectionOperations.addStage,
       deleteStage: selectionOperations.deleteStage,
       selectStage: selectionOperations.selectStage,
@@ -13881,7 +13975,7 @@ The conversion is one undoable change.`;
     };
     const applyDelete = (idx) => {
       const clips = getClips();
-      if (idx < 0 || idx >= clips.length) {
+      if (idx <= 0 || idx >= clips.length) {
         return;
       }
       clips.splice(idx, 1);
@@ -14824,6 +14918,11 @@ The conversion is one undoable change.`;
           )
         );
         saveClips(clips, { origin: "timeline" });
+        setSelection({
+          kind: "clip",
+          clipIdx: clips.length - 1,
+          stageIdx: 0
+        });
       } catch (error) {
         console.warn("VideoStages: failed to add clip", error);
         getVideoStagesHostBridge().showError(

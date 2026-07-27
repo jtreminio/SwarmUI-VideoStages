@@ -182,7 +182,7 @@ export const createTimelineLinking = (): TimelineLinking => {
 
     const applyDelete = (idx: number): void => {
         const clips = getClips();
-        if (idx < 0 || idx >= clips.length) {
+        if (idx <= 0 || idx >= clips.length) {
             return;
         }
         clips.splice(idx, 1);

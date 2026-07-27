@@ -41,6 +41,7 @@ export interface DetailStripContext {
     deleteWindowEntry(clipIdx: number, windowIdx: number): void;
     createRetake(clipIdx: number): void;
     removeRetake(clipIdx: number): void;
+    deleteClip?(clipIdx: number): void;
     addStage(clipIdx: number): void;
     deleteStage(clipIdx: number, stageIdx: number): void;
     selectStage(clipIdx: number, stageIdx: number): void;

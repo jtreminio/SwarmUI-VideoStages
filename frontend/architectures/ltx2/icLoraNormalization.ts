@@ -22,6 +22,8 @@ import type {
 import { isRecord } from "../../utils";
 import {
     findIcLoraPreset,
+    IC_LORA_AUTO,
+    IC_LORA_DEFAULT_PRESET_ID,
     IC_LORA_PRESET_CUSTOM_ID,
     icLoraDriveMediaContractForData,
 } from "./icLoraPresets";
@@ -148,7 +150,15 @@ export const normalizeIcLora = (
         return null;
     }
     const preset = `${raw.preset ?? ""}`.trim();
-    const normalizedPreset = preset || IC_LORA_PRESET_CUSTOM_ID;
+    const repairsLegacyCustomAuto =
+        lora === IC_LORA_AUTO &&
+        (!preset || preset === IC_LORA_PRESET_CUSTOM_ID);
+    const normalizedPreset = repairsLegacyCustomAuto
+        ? IC_LORA_DEFAULT_PRESET_ID
+        : preset || IC_LORA_PRESET_CUSTOM_ID;
+    const repairedPreset = repairsLegacyCustomAuto
+        ? findIcLoraPreset(normalizedPreset)
+        : null;
     const driveData = normalizeIcLoraDriveData(raw.driveData);
     const driveMediaKinds = normalizeIcLoraDriveMediaKinds(
         raw.driveMediaKinds,
@@ -176,13 +186,15 @@ export const normalizeIcLora = (
         driveData,
         driveMediaKinds,
         stage,
-        strength: snapValueToStep(
-            raw.strength,
-            IC_LORA_STRENGTH_DEFAULT,
-            IC_LORA_STRENGTH_MIN,
-            IC_LORA_STRENGTH_MAX,
-            IC_LORA_STRENGTH_STEP,
-        ),
+        strength: repairsLegacyCustomAuto
+            ? (repairedPreset?.strength ?? IC_LORA_STRENGTH_DEFAULT)
+            : snapValueToStep(
+                  raw.strength,
+                  IC_LORA_STRENGTH_DEFAULT,
+                  IC_LORA_STRENGTH_MIN,
+                  IC_LORA_STRENGTH_MAX,
+                  IC_LORA_STRENGTH_STEP,
+              ),
         attentionStrength: snapValueToStep(
             raw.attentionStrength,
             IC_LORA_ATTENTION_DEFAULT,
@@ -193,7 +205,9 @@ export const normalizeIcLora = (
         controlType:
             driveData !== "visual"
                 ? "none"
-                : normalizeIcLoraControlType(raw.controlType),
+                : repairsLegacyCustomAuto
+                  ? (repairedPreset?.controlType ?? "none")
+                  : normalizeIcLoraControlType(raw.controlType),
         // Documents authored before the flag existed carry only the preset id; the preset table
         // (not a name match) seeds the intent, so those documents keep working.
         hdr:

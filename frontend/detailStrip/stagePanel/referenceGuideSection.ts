@@ -1,3 +1,4 @@
+import { architectureIcLoraDisplayName } from "../../architectures/behaviorRegistry";
 import {
     STAGE_REF_STRENGTH_MAX,
     STAGE_REF_STRENGTH_MIN,
@@ -143,6 +144,10 @@ export const appendStageReferenceGuideSection = ({
     const icDecision = context.capabilities().forClip(clip).decision("icLora");
     const icGroup = document.createDocumentFragment();
     applicableIcLoras.forEach(({ entry, entryIdx }) => {
+        const displayName = architectureIcLoraDisplayName(
+            clip.architecture,
+            entry,
+        );
         const guideStrength = tagFocus(
             buildNumber(
                 stage.icLoraStrengths[entryIdx] ?? 1,
@@ -164,9 +169,9 @@ export const appendStageReferenceGuideSection = ({
             "lora-weight-input",
             "vst-stage-iclora-strength",
         );
-        const row = buildField(shortModelName(entry.lora), guideStrength);
+        const row = buildField(shortModelName(displayName), guideStrength);
         row.classList.add("vst-stage-iclora-strength-row");
-        row.title = entry.lora;
+        row.title = displayName;
         icGroup.appendChild(row);
     });
     if (!icDecision.supported) {

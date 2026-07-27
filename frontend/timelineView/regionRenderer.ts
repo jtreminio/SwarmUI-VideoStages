@@ -165,7 +165,7 @@ const renderStageChips = (clip: Clip, clipIdx: number): string =>
         .map((stage, stageIdx) => {
             const skipped = stage?.skipped === true;
             const skippedClass = skipped ? " vst-stage-chip-skipped" : "";
-            const title = `${stageChipTitle(stage, stageIdx)}${skipped ? " (skipped)" : ""} · click to edit · Shift+click to delete`;
+            const title = `${stageChipTitle(stage, stageIdx)}${skipped ? " (skipped)" : ""} · click to edit${stageIdx === 0 ? "" : " · Shift+click to delete"}`;
             const label = `${skipped ? "⊘ " : ""}${stageChipLabel(stageIdx)}`;
             return (
                 `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeHtml(title)}">` +
@@ -249,10 +249,12 @@ const renderRegions = (
             );
             const skipLabel = skipTitle("clip", layout.skipped);
             const skipMark = skipGlyph(layout.skipped);
-            const controls =
-                `<div class="vst-region-controls">` +
-                `<button type="button" class="vst-region-btn${layout.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipLabel}" aria-label="${skipLabel}">${skipMark}</button>` +
-                `</div>`;
+            const firstClip = layout.index === 0;
+            const controls = firstClip
+                ? ""
+                : `<div class="vst-region-controls">` +
+                  `<button type="button" class="vst-region-btn${layout.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipLabel}" aria-label="${skipLabel}">${skipMark}</button>` +
+                  `</div>`;
             const resizeGrip = lengthDerived(clip)
                 ? ""
                 : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
@@ -272,7 +274,7 @@ const renderRegions = (
                   ? "This clip already has a retake window"
                   : "Retakes are not supported by this clip architecture";
             return (
-                `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index} · ${duration} · Click to edit · Shift+click to delete">` +
+                `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" title="Clip ${layout.index} · ${duration} · Click to edit${firstClip ? "" : " · Shift+click to delete"}">` +
                 renderRegionThumb(clip) +
                 renderRetakeRegionShade(clip, layout.durationSeconds) +
                 renderKeyframes(

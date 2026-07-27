@@ -189,6 +189,11 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 ),
             );
             saveClips(clips, { origin: "timeline" });
+            setSelection({
+                kind: "clip",
+                clipIdx: clips.length - 1,
+                stageIdx: 0,
+            });
         } catch (error) {
             console.warn("VideoStages: failed to add clip", error);
             getVideoStagesHostBridge().showError(

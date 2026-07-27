@@ -523,6 +523,7 @@ export interface SectionHeaderAction {
     title: string;
     className?: string;
     active?: boolean;
+    variant?: "basic" | "interrupt";
     onClick: () => void;
 }
 
@@ -533,12 +534,14 @@ const appendSectionHeaderAction = (
     const action = document.createElement("button");
     action.type = "button";
     action.className =
-        `basic-button vst-btn-tiny vst-detail-repeating-group-action ${actionSpec.className ?? ""}`.trim();
+        `${actionSpec.variant === "interrupt" ? "interrupt-button" : "basic-button"} vst-btn-tiny vst-detail-repeating-group-action ${actionSpec.className ?? ""}`.trim();
     action.textContent = actionSpec.label;
     action.title = actionSpec.title;
     action.setAttribute("aria-label", actionSpec.title);
-    action.setAttribute("aria-pressed", `${actionSpec.active === true}`);
-    action.classList.toggle("vst-btn-skip-active", actionSpec.active === true);
+    if (actionSpec.active !== undefined) {
+        action.setAttribute("aria-pressed", `${actionSpec.active}`);
+        action.classList.toggle("vst-btn-skip-active", actionSpec.active);
+    }
     action.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -554,6 +557,7 @@ export interface StaticSectionSpec {
     className?: string;
     flattenContent?: boolean;
     headerAction?: SectionHeaderAction;
+    headerActions?: SectionHeaderAction[];
 }
 
 const rememberedAccordionSections = new Set<string>();
@@ -593,10 +597,15 @@ export const buildStaticSection = (
     const spacer = document.createElement("span");
     spacer.className = "header-label-spacer";
     labelWrap.append(heading, spacer);
-    if (spec.headerAction) {
+    const headerActions =
+        spec.headerActions ??
+        (spec.headerAction === undefined ? [] : [spec.headerAction]);
+    if (headerActions.length > 0) {
         const actions = document.createElement("span");
         actions.className = "vst-detail-repeating-group-actions";
-        appendSectionHeaderAction(actions, spec.headerAction);
+        for (const action of headerActions) {
+            appendSectionHeaderAction(actions, action);
+        }
         labelWrap.appendChild(actions);
     }
     header.appendChild(labelWrap);

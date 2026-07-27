@@ -607,6 +607,33 @@ describe("createTimelineDetailStrip", () => {
         }
     });
 
+    it("labels IC-LoRA guide strengths by preset, or by model for Custom", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [
+                    {
+                        lora: IC_LORA_AUTO,
+                        preset: "deblur",
+                        driveData: "visual",
+                    },
+                    {
+                        lora: "LTX-2/custom-guide.safetensors",
+                        preset: "custom",
+                        driveData: "visual",
+                    },
+                ],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+
+        expect(controlNetLabels()).toEqual(
+            expect.arrayContaining(["Deblur", "custom-guide.safetensors"]),
+        );
+        expect(controlNetLabels()).not.toContain(IC_LORA_AUTO);
+    });
+
     it("persists IC-LoRA strengths independently by zero-based entry index", () => {
         setup([
             {
@@ -647,23 +674,24 @@ describe("createTimelineDetailStrip", () => {
         expect(clips[0].icLoras).toHaveLength(1);
         expect(clips[0].icLoras[0]).toEqual({
             lora: IC_LORA_AUTO,
-            preset: "custom",
+            preset: "union-control",
             driveSource: "Upload",
             driveData: "visual",
             driveMediaKinds: ["image", "video"],
             stage: -1,
             strength: 1,
             attentionStrength: 1,
-            controlType: "none",
+            controlType: "depth",
             hdr: false,
             driveMedia: null,
         });
         expect(clips[0].stages[0].icLoraStrengths).toEqual([1]);
         expect(document.querySelector(".vst-detail-iclora")).not.toBeNull();
+        expect(controlNetLabels()).not.toContain("LoRA");
         expect(controlNetLabels()).toContain("Drive Media");
     });
 
-    it("add IC-LoRA starts at [AUTO] instead of an unrelated installed LoRA", () => {
+    it("add IC-LoRA starts on a curated preset and hides its internal model", () => {
         setup(
             [{ duration: 4, stages: [{}] }],
             ["(None)", "lora-x.safetensors"],
@@ -679,6 +707,8 @@ describe("createTimelineDetailStrip", () => {
         const clips = savedClips(saveSpy);
         expect(clips[0].icLoras).toHaveLength(1);
         expect(clips[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
+        expect(clips[0].icLoras[0].preset).toBe("union-control");
+        expect(controlNetLabels()).not.toContain("LoRA");
         // The row survives the rebuild (the original bug: it vanished).
         expect(document.querySelectorAll(".vst-detail-iclora")).toHaveLength(1);
     });
@@ -705,6 +735,7 @@ describe("createTimelineDetailStrip", () => {
         expect(clips[0].icLoras[0].controlType).toBe("depth");
         expect(clips[0].icLoras[0].strength).toBe(1);
         expect(clips[0].icLoras[0].driveMediaKinds).toEqual(["image", "video"]);
+        expect(controlNetLabels()).not.toContain("LoRA");
     });
 
     it("shows the Control select only for Custom and Union Control presets", () => {
@@ -1085,7 +1116,7 @@ describe("createTimelineDetailStrip", () => {
         expect(icLoraSelect("source").options[1].disabled).toBe(true);
     });
 
-    it("repairs Incoming to Upload when skipping its supplying stage", () => {
+    it("repairs Incoming to Upload when skipping its targeted later stage", () => {
         setup([
             {
                 duration: 4,
@@ -1100,7 +1131,7 @@ describe("createTimelineDetailStrip", () => {
                 ],
             },
         ]);
-        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
         document
             .querySelector<HTMLButtonElement>(
                 '.vst-stage-tab[aria-pressed="true"] .vst-detail-skip-stage',
@@ -1117,6 +1148,7 @@ describe("createTimelineDetailStrip", () => {
 
     it("repairs a later clip's Incoming source when its prior clip is skipped", () => {
         setup([
+            { duration: 4, skipped: true, stages: [{}] },
             { duration: 4, stages: [{}] },
             {
                 duration: 4,
@@ -1131,12 +1163,12 @@ describe("createTimelineDetailStrip", () => {
                 ],
             },
         ]);
-        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
         document
             .querySelector<HTMLButtonElement>(".vst-detail-skip-clip")
             ?.click();
 
-        expect(committedClips()[1].icLoras[0].driveSource).toBe("Upload");
+        expect(committedClips()[2].icLoras[0].driveSource).toBe("Upload");
     });
 
     it("uses the nearest executable earlier clip for Incoming availability", () => {
@@ -1178,7 +1210,7 @@ describe("createTimelineDetailStrip", () => {
         expect(icLoraSelect("source").options[1].disabled).toBe(true);
     });
 
-    it("leads the IC-LoRA LoRA dropdown with [AUTO]", () => {
+    it("shows only actual models in the Custom IC-LoRA dropdown", () => {
         setup([
             {
                 duration: 4,
@@ -1190,24 +1222,49 @@ describe("createTimelineDetailStrip", () => {
         const options = Array.from(icLoraSelect("lora").options).map(
             (o) => o.value,
         );
-        expect(options).toEqual([IC_LORA_AUTO, "lora-x.safetensors"]);
+        expect(options).toEqual(["lora-x.safetensors"]);
+        expect(options).not.toContain(IC_LORA_AUTO);
     });
 
-    it("selecting [AUTO] with a preset starts the preset weights download", () => {
+    it("shows the model dropdown only after choosing Custom", () => {
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [{ lora: IC_LORA_AUTO, preset: "deblur" }],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        expect(controlNetLabels()).not.toContain("LoRA");
+
+        const presetSelect = icLoraSelect("preset");
+        presetSelect.value = "custom";
+        presetSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+        expect(controlNetLabels()).toContain("LoRA");
+        expect(icLoraSelect("lora").value).toBe("lora-x.safetensors");
+        expect(savedClips(saveSpy)[0].icLoras[0]).toMatchObject({
+            preset: "custom",
+            lora: "lora-x.safetensors",
+        });
+    });
+
+    it("selecting a preset hides the model dropdown and starts its download", () => {
         swarmGlobals.makeWSRequest = jest.fn();
         setup([
             {
                 duration: 4,
                 stages: [{}],
-                icLoras: [{ lora: "lora-x.safetensors", preset: "deblur" }],
+                icLoras: [{ lora: "lora-x.safetensors" }],
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        const loraSelect = icLoraSelect("lora");
-        loraSelect.value = IC_LORA_AUTO;
-        loraSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        const presetSelect = icLoraSelect("preset");
+        presetSelect.value = "deblur";
+        presetSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
         expect(savedClips(saveSpy)[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
+        expect(controlNetLabels()).not.toContain("LoRA");
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledWith(
             "VideoStagesDownloadIcLoraWS",
@@ -1222,7 +1279,7 @@ describe("createTimelineDetailStrip", () => {
         ).toContain("Downloading Deblur weights");
     });
 
-    it("selecting a preset while on [AUTO] starts the download and refreshes on success", () => {
+    it("repairs legacy Custom + [AUTO] and downloads the default preset", () => {
         swarmGlobals.makeWSRequest = jest.fn();
         swarmGlobals.refreshParameterValues = jest.fn();
         setup([
@@ -1233,13 +1290,16 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(swarmGlobals.makeWSRequest).not.toHaveBeenCalled();
-        expect(detail()?.textContent).toContain("[AUTO] needs a preset");
-
-        const presetSelect = icLoraSelect("preset");
-        presetSelect.value = "deblur";
-        presetSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        expect(icLoraSelect("preset").value).toBe("union-control");
+        expect(controlNetLabels()).not.toContain("LoRA");
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
+        expect(swarmGlobals.makeWSRequest).toHaveBeenCalledWith(
+            "VideoStagesDownloadIcLoraWS",
+            { presetId: "union-control" },
+            expect.any(Function),
+            0,
+            expect.any(Function),
+        );
 
         // Completion refreshes the host's model lists and settles the hint.
         const onData = swarmGlobals.makeWSRequest.mock.calls[0][2] as (
@@ -1248,7 +1308,7 @@ describe("createTimelineDetailStrip", () => {
         onData({ success: true });
         expect(swarmGlobals.refreshParameterValues).toHaveBeenCalledWith(true);
         expect(detail()?.textContent).toContain(
-            "Downloaded to LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-deblur-0.9",
+            "Downloaded to LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-union-control-ref0.5",
         );
     });
 
@@ -1435,13 +1495,11 @@ describe("createTimelineDetailStrip", () => {
     it("adds a stage from the rail's Add button and selects it", () => {
         setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        // Delete is present but DISABLED with a single stage (never hidden).
+        // Stage 0 is permanent, so it has no delete affordance.
         const del = document.querySelector<HTMLButtonElement>(
             ".vst-detail-delete-stage",
         );
-        expect(del).not.toBeNull();
-        expect(del?.textContent).toBe("×");
-        expect(del?.disabled).toBe(true);
+        expect(del).toBeNull();
         const add = document.querySelector<HTMLElement>(
             ".vst-detail-add-stage",
         );
@@ -1453,7 +1511,7 @@ describe("createTimelineDetailStrip", () => {
         expect(crumbText()).toBe("Clip 0 · S1");
         expect(
             document.querySelector<HTMLButtonElement>(
-                ".vst-detail-delete-stage",
+                '.vst-stage-tab[aria-pressed="true"] .vst-detail-delete-stage',
             )?.disabled,
         ).toBe(false);
     });
@@ -1484,6 +1542,86 @@ describe("createTimelineDetailStrip", () => {
         expect(persistence.getClips()[0].stages).toHaveLength(1);
         expect(persistence.getClips()[0].architecture).not.toBe("none");
         expect(activeRailLabel()).toBe("S0");
+    });
+
+    it("omits skip and delete controls for the first clip and first stage", () => {
+        setup([
+            { duration: 4, stages: [{}, {}] },
+            { duration: 4, stages: [{}, {}] },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+
+        const clipSkip = document.querySelector<HTMLButtonElement>(
+            ".vst-detail-skip-clip",
+        );
+        const clipDelete = document.querySelector<HTMLButtonElement>(
+            ".vst-detail-delete-clip",
+        );
+        const stageSkip = document.querySelector<HTMLButtonElement>(
+            '.vst-stage-tab[aria-pressed="true"] .vst-detail-skip-stage',
+        );
+        const stageDelete = document.querySelector<HTMLButtonElement>(
+            '.vst-stage-tab[aria-pressed="true"] .vst-detail-delete-stage',
+        );
+        expect(clipSkip).toBeNull();
+        expect(clipDelete).toBeNull();
+        expect(stageSkip).toBeNull();
+        expect(stageDelete).toBeNull();
+
+        expect(saveSpy).not.toHaveBeenCalled();
+        expect(committedClips()[0].skipped).toBe(false);
+        expect(committedClips()[0].stages).toHaveLength(2);
+        expect(committedClips()[0].stages[0].skipped).toBe(false);
+
+        setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
+        expect(document.querySelector(".vst-detail-skip-clip")).not.toBeNull();
+        expect(
+            document.querySelector(
+                '.vst-stage-tab[aria-pressed="true"] .vst-detail-skip-stage',
+            ),
+        ).toBeNull();
+        expect(
+            document.querySelector(
+                '.vst-stage-tab[aria-pressed="true"] .vst-detail-delete-stage',
+            ),
+        ).toBeNull();
+    });
+
+    it("shows adjacent skip/delete actions for Clip 1+ and selects a survivor after delete", () => {
+        setup([
+            { duration: 2, stages: [{}] },
+            { duration: 3, stages: [{}] },
+            { duration: 4, stages: [{}] },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
+
+        const header = document.querySelector<HTMLElement>(
+            ".vst-detail-clip-section > .input-group-header",
+        );
+        const skip = header?.querySelector<HTMLButtonElement>(
+            ".vst-detail-skip-clip",
+        );
+        const remove = header?.querySelector<HTMLButtonElement>(
+            ".vst-detail-delete-clip",
+        );
+        expect(skip).not.toBeNull();
+        expect(remove).not.toBeNull();
+        expect(skip?.parentElement).toBe(remove?.parentElement);
+        expect(remove?.classList.contains("interrupt-button")).toBe(true);
+        expect(remove?.textContent).toBe("×");
+        expect(remove?.hasAttribute("aria-pressed")).toBe(false);
+
+        remove?.click();
+
+        expect(savedClips(saveSpy).map((clip) => clip.duration)).toEqual([
+            2, 4,
+        ]);
+        expect(crumbText()).toBe("Clip 1 · S0");
+        expect(getSelection()).toEqual({
+            kind: "clip",
+            clipIdx: 1,
+            stageIdx: 0,
+        });
     });
 
     it("mutes the stage params and persists Skip this stage", () => {
@@ -1660,7 +1798,8 @@ describe("createTimelineDetailStrip", () => {
                 ?.textContent,
         ).toContain("Applies when refining a base video");
         expect(
-            detailBody()?.querySelector(".vst-detail-delete")?.textContent,
+            detailBody()?.querySelector(".vst-detail-delete-retake")
+                ?.textContent,
         ).toBe("×");
     });
 
@@ -3443,7 +3582,7 @@ describe("createTimelineDetailStrip", () => {
                 clipCol
                     ?.closest(".vst-detail-clip-section")
                     ?.querySelector(".vst-detail-skip-clip"),
-            ).not.toBeNull();
+            ).toBeNull();
             const clipSection = clipCol?.closest<HTMLElement>(
                 '[data-vst-static-key="clip"]',
             );
@@ -3785,8 +3924,11 @@ describe("createTimelineDetailStrip", () => {
         });
 
         it("keeps the permanent Clip fields visible when its skip button changes", () => {
-            setup([{ duration: 4, stages: [{}] }]);
-            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            setup([
+                { duration: 4, stages: [{}] },
+                { duration: 4, stages: [{}] },
+            ]);
+            setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
             const clip =
                 detailBody()?.querySelector<HTMLElement>(".vst-detail-clip");
             expect(clip).not.toBeNull();
@@ -3799,7 +3941,7 @@ describe("createTimelineDetailStrip", () => {
             expect(skip?.getAttribute("aria-pressed")).toBe("false");
             skip?.click();
 
-            expect(committedClips()[0].skipped).toBe(true);
+            expect(committedClips()[1].skipped).toBe(true);
             expect(
                 detailBody()?.querySelector(".vst-detail-clip"),
             ).not.toBeNull();
