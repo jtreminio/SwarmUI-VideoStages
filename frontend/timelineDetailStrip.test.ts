@@ -4044,16 +4044,14 @@ describe("createTimelineDetailStrip", () => {
             style.textContent = css;
             document.head.appendChild(style);
         };
-        // Host site.css + the default theme (modern_dark = modern.css + vars)
-        // load before the extension sheet, matching production.
-        const injectHostCss = (): void => {
+        const injectHostCss = (theme = "modern.css"): void => {
             injectCss(
                 "vst-probe-host-css",
                 path.join(wwwrootDir, "css", "site.css"),
             );
             injectCss(
                 "vst-probe-theme-css",
-                path.join(wwwrootDir, "css", "themes", "modern.css"),
+                path.join(wwwrootDir, "css", "themes", theme),
             );
         };
         const injectDockCss = (): void =>
@@ -4112,7 +4110,7 @@ describe("createTimelineDetailStrip", () => {
             expect(editor?.classList.contains("auto-text-block")).toBe(true);
         });
 
-        it("(b) leaves field geometry to the host's native classes", () => {
+        it("(b) leaves field geometry native while adding the scoped outline", () => {
             injectHostCss();
             injectDockCss();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
@@ -4130,8 +4128,14 @@ describe("createTimelineDetailStrip", () => {
             );
             expect(source).not.toMatch(/\.vst-detail\s+\.auto-input\s*\{/);
             expect(source).not.toMatch(/\.vst-detail\s+\.auto-dropdown/);
+            expect(source).toMatch(
+                /\.vst-detail\s+\.input-group\.vst-stage-loras\s*\{/,
+            );
+            expect(source).toMatch(
+                /\.vst-detail\s+\.input-group\.input-group-open\s*\{[^}]*min-width:\s*0\s*!important;/s,
+            );
             expect(computed(detailBody() as HTMLElement).marginBottom).toBe(
-                "10px",
+                "6px",
             );
             const activeStage = document.querySelector<HTMLElement>(
                 '[data-vst-repeater-key="stages"] > .input-group-content > .input-group-open',
@@ -4139,7 +4143,54 @@ describe("createTimelineDetailStrip", () => {
             expect(activeStage).not.toBeNull();
             if (activeStage) {
                 expect(computed(activeStage).marginBottom).toBe("0px");
+                expect(Number.parseFloat(computed(activeStage).minWidth)).toBe(
+                    0,
+                );
+                expect(computed(activeStage).borderLeftWidth).toBe("2px");
+                const headerWrap = activeStage.querySelector<HTMLElement>(
+                    ":scope > .vst-detail-repeating-group-header > .header-label-wrap",
+                );
+                expect(headerWrap).not.toBeNull();
+                if (headerWrap) {
+                    expect(computed(headerWrap).minHeight).toBe("26px");
+                }
+                const content = activeStage.querySelector<HTMLElement>(
+                    ":scope > .vst-detail-repeating-group-content",
+                );
+                expect(content).not.toBeNull();
+                if (content) {
+                    expect(computed(content).paddingLeft).toBe("7px");
+                    const stageLoras =
+                        content.querySelector<HTMLElement>(".vst-stage-loras");
+                    expect(stageLoras).not.toBeNull();
+                    if (stageLoras) {
+                        expect(computed(stageLoras).borderLeftWidth).toBe(
+                            "2px",
+                        );
+                    }
+                }
             }
+        });
+
+        it("contains Punked's open-group minimum width inside the detail dock", () => {
+            injectHostCss("punked.css");
+            injectDockCss();
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
+
+            const activeStage = document.querySelector<HTMLElement>(
+                '[data-vst-repeater-key="stages"] > .input-group-content > .input-group-open',
+            );
+            expect(activeStage).not.toBeNull();
+            if (activeStage) {
+                expect(Number.parseFloat(computed(activeStage).minWidth)).toBe(
+                    0,
+                );
+            }
+
+            const outsideDock = document.createElement("div");
+            outsideDock.className = "input-group input-group-open";
+            document.body.appendChild(outsideDock);
+            expect(computed(outsideDock).minWidth).toBe("280px");
         });
 
         it("(d) wraps prompt textareas in the host's wide text-field row", () => {

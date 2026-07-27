@@ -1554,6 +1554,27 @@
     --vst-font-2xs: 0.86em;
     --vst-font-xs: 0.92em;
     --vst-font-sm: 0.97em;
+    --vst-detail-guide: color-mix(
+        in srgb,
+        var(--emphasis) 38%,
+        var(--vst-border-strong)
+    );
+    --vst-detail-guide-soft: color-mix(
+        in srgb,
+        var(--emphasis) 22%,
+        var(--vst-hairline)
+    );
+    --vst-detail-row: color-mix(in srgb, var(--text) 4%, transparent);
+    --vst-detail-row-open: color-mix(
+        in srgb,
+        var(--emphasis) 10%,
+        var(--vst-panel)
+    );
+    --vst-detail-row-active: color-mix(
+        in srgb,
+        var(--emphasis) 16%,
+        var(--vst-panel)
+    );
 }
 .vst-detail-head {
     flex: none;
@@ -1597,8 +1618,31 @@
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    margin-bottom: 10px;
-    padding: 0 10px 10px;
+    margin-bottom: 6px;
+    padding: 0 8px 8px;
+}
+
+/* Native outline: retain SwarmUI's input-group DOM and controls, but tighten
+   its page-form spacing for the 352px dock. The scoped min-width override is
+   required by themes such as Punked that otherwise force nested open groups
+   wider than the dock. */
+.vst-detail .input-group {
+    min-width: 0;
+    max-width: 100%;
+    margin-top: 10px;
+    margin-bottom: 8px;
+}
+.vst-detail .input-group.input-group-open {
+    min-width: 0 !important;
+}
+.vst-detail .input-group.input-group-closed {
+    margin-top: 8px;
+    margin-bottom: 4px;
+}
+.vst-detail .input-group > .input-group-content {
+    box-sizing: border-box;
+    max-width: 100%;
+    margin-top: 5px;
 }
 .vst-detail-clip-skipped > * {
     opacity: 0.45;
@@ -1616,7 +1660,7 @@
 .vst-detail-repeating-group-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
 }
 .vst-detail-repeating-group-actions > button {
     margin: 0;
@@ -1624,8 +1668,126 @@
 }
 .vst-detail-repeating-add {
     align-self: stretch;
-    width: calc(100% - 20px);
-    margin: 12px 10px;
+    width: calc(100% - 10px);
+    margin: 6px 5px;
+}
+
+/* The stage rail is the first outline depth. Its content stays transparent so
+   native controls remain the visual surface instead of accumulating cards. */
+.vst-detail
+    .vst-detail-stage-groups.input-group-open
+    > .vst-detail-section-content,
+.vst-detail
+    .vst-stage-loras.input-group-open
+    > .vst-detail-section-content {
+    border-radius: 0 !important;
+    background: transparent;
+}
+.vst-detail
+    .vst-detail-stage-groups
+    > .vst-detail-section-content
+    > .vst-detail-repeating-group {
+    box-sizing: border-box;
+    padding: 2px 0 2px 8px;
+    border: 0;
+    border-left-width: 2px;
+    border-left-style: solid;
+    border-left-color: var(--vst-detail-guide);
+    border-radius: 0;
+    background: transparent;
+}
+.vst-detail
+    .vst-detail-stage-groups
+    > .vst-detail-section-content
+    > .vst-detail-repeating-group
+    > .vst-detail-repeating-group-header
+    > .header-label-wrap {
+    box-sizing: border-box;
+    min-height: 26px;
+    padding: 3px 6px;
+    border-radius: 5px;
+    background: var(--vst-detail-row);
+}
+.vst-detail
+    .vst-detail-stage-groups
+    > .vst-detail-section-content
+    > .vst-detail-repeating-group.input-group-open
+    > .vst-detail-repeating-group-header
+    > .header-label-wrap {
+    background: var(--vst-detail-row-open);
+}
+.vst-detail
+    .vst-detail-stage-groups
+    > .vst-detail-section-content
+    > .vst-detail-repeating-group
+    > .vst-detail-repeating-group-header[aria-pressed="true"]
+    > .header-label-wrap {
+    background: var(--vst-detail-row-active);
+}
+.vst-detail
+    .vst-detail-stage-groups
+    > .vst-detail-section-content
+    > .vst-detail-repeating-group
+    > .vst-detail-repeating-group-header[aria-pressed="true"]
+    .header-label {
+    color: var(--emphasis);
+}
+.vst-detail
+    .vst-detail-stage-groups
+    > .vst-detail-section-content
+    > .vst-detail-repeating-group
+    > .vst-detail-repeating-group-content {
+    box-sizing: border-box;
+    padding: 2px 0 2px 7px;
+    border-left: 1px solid var(--vst-hairline);
+    border-radius: 0 !important;
+    background: transparent;
+}
+.vst-detail
+    .vst-detail-stage-groups
+    > .vst-detail-section-content
+    > .vst-detail-repeating-group
+    > .vst-detail-repeating-group-content
+    > .vst-detail-params {
+    width: 100%;
+    padding: 2px 4px 4px 0;
+}
+
+/* Stage LoRAs form the second outline depth. Their existing group class gives
+   the hierarchy a stable hook without changing generated HTML. */
+.vst-detail .input-group.vst-stage-loras {
+    box-sizing: border-box;
+    padding-left: 7px;
+    border: 0;
+    border-left-width: 2px;
+    border-left-style: solid;
+    border-left-color: var(--vst-detail-guide-soft);
+    border-radius: 0;
+    background: transparent;
+}
+.vst-detail
+    .vst-stage-loras
+    > .vst-detail-section-header
+    > .header-label-wrap {
+    min-height: 25px;
+    color: var(--emphasis);
+}
+.vst-detail
+    .vst-stage-loras
+    > .vst-detail-section-content
+    > .vst-stage-lora-entry {
+    box-sizing: border-box;
+    padding: 3px 5px;
+    border: 1px solid var(--vst-hairline);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--text) 3%, var(--vst-panel));
+}
+.vst-detail
+    .vst-stage-lora-entry
+    > .vst-detail-repeating-group-content {
+    padding-left: 5px;
+    border-radius: 0 !important;
+    background: transparent;
 }
 
 /* --- boundary (seam) chips ------------------------------------------------ */
