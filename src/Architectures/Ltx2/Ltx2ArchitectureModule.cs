@@ -11,7 +11,6 @@ internal sealed class Ltx2ArchitectureModule :
 {
     internal static ArchitectureId ArchitectureId { get; } = new("ltx2");
 
-    /// <summary>The one declaration of the LTX frame grid; every other use reads it from here.</summary>
     internal const int FrameGrid = 8;
 
     /// <summary>

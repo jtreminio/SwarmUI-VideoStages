@@ -10,7 +10,6 @@ using System.Net.WebSockets;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>API routes owned by the LTX architecture integration.</summary>
 internal static class Ltx2ApiRoutes
 {
     internal static void Register() =>

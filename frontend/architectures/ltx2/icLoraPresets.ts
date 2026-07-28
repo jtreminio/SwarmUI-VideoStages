@@ -6,34 +6,18 @@ import type {
 } from "../../types";
 
 const IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
-/** Internal preset-model sentinel; never offered as a Custom model option. */
 export const IC_LORA_AUTO = "[AUTO]";
 
-// Curated LTX-2.3 IC-LoRA presets for the IC-LoRAs section's Preset dropdown: picking one seeds
-// strength / control-type defaults and surfaces a trigger-phrase hint. Most presets are guidance only;
-// the media contract is an LTX runtime behavior declaration (any installed LoRA still works via
-// "Custom"). Curated presets store an internal "[AUTO]" model sentinel, which downloads weights
-// to `LTX-2/IC-LoRA/<original upstream filename>` and resolves the entry to that model by
-// convention (see icLoraAutoModelName). The sentinel is not an author-selectable model.
-
 export interface IcLoraPreset {
-    /** Stable id used as the Preset dropdown value AND the backend IcLoraWeights key — never rename. */
     id: string;
     displayName: string;
-    /** Prompt phrase to prepend by hand; "" when none. */
     triggerPhrase: string;
-    /** Seeds the strength input when applied. */
     strength: number;
-    /** Control signal the drive video should be rendered into. */
     controlType: IcLoraControlType;
-    /** Preset-authorized alternatives; omitted when its seeded control is fixed. */
     allowedControlTypes?: readonly IcLoraControlType[];
-    /** Direct safetensors URL for the [AUTO] download. */
     weightsUrl: string;
     note: string;
-    /** LTX-owned declaration of which part of a drive source this preset consumes. */
     driveMedia?: IcLoraDriveMediaContract;
-    /** Seeds the entry's typed `hdr` flag; only the HDR preset declares it. */
     hdr?: boolean;
 }
 
@@ -64,9 +48,7 @@ export const icLoraDriveMediaContractForData = (
     return { acceptedKinds: [], driveData: "none" };
 };
 
-/** Sentinel id for the "Custom" (no preset) choice. */
 export const IC_LORA_PRESET_CUSTOM_ID = "custom";
-/** Stable initial preset for newly authored IC-LoRAs. */
 export const IC_LORA_DEFAULT_PRESET_ID = "union-control";
 
 const HF = "https://huggingface.co";
