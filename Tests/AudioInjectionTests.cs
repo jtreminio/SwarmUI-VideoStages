@@ -143,7 +143,7 @@ public class AudioInjectionTests
             bridge.AddNode(emptyVideoLatent, "108");
 
             LTXVEmptyLatentAudioNode emptyAudioLatent = new LTXVEmptyLatentAudioNode()
-                .With(FramesNumber: 16, FrameRate: 24, BatchSize: 1);
+                .With(FramesNumber: 16, FrameRate: "24", BatchSize: 1);
             emptyAudioLatent.AudioVae.ConnectToUntyped(audioVaeNode.GetOutput(0));
             bridge.AddNode(emptyAudioLatent, "109");
 
@@ -218,7 +218,7 @@ public class AudioInjectionTests
             buildBridge.AddNode(emptyVideoNode, "108");
 
             LTXVEmptyLatentAudioNode emptyAudioNode = new LTXVEmptyLatentAudioNode()
-                .With(FramesNumber: 16, FrameRate: 24, BatchSize: 1);
+                .With(FramesNumber: 16, FrameRate: "24", BatchSize: 1);
             emptyAudioNode.AudioVae.ConnectToUntyped(audioVae.GetOutput(0));
             buildBridge.AddNode(emptyAudioNode, "109");
 
@@ -272,7 +272,7 @@ public class AudioInjectionTests
             buildBridge.AddNode(emptyVideoNode, "108");
 
             LTXVEmptyLatentAudioNode emptyAudioNode = new LTXVEmptyLatentAudioNode()
-                .With(FramesNumber: 16, FrameRate: 24, BatchSize: 1);
+                .With(FramesNumber: 16, FrameRate: "24", BatchSize: 1);
             emptyAudioNode.AudioVae.ConnectToUntyped(audioVae.GetOutput(0));
             buildBridge.AddNode(emptyAudioNode, "109");
 
