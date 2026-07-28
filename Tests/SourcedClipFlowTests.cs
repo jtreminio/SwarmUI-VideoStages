@@ -1199,7 +1199,8 @@ public partial class StageFlowTests
         // guard in ResolveStageClipRefs the implicit image-to-video default ref would become the
         // primary guide and inplace-merge the init image into the encoded footage latent.
         Assert.True(
-            g.NodeHelpers.ContainsKey("videostages.refiner.media"),
+            g.NodeHelpers.ContainsKey(
+                "videostages.arch.ltx2.stage-ref.refiner.media"),
             "Harness precondition: the refiner init image was not captured.");
         Assert.Empty(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
         Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());

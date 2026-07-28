@@ -86,27 +86,33 @@ public class DecisionOwnerRegressionTests
         Dictionary<string, string> nodeHelpers = new()
         {
             // Pipe-delimited StageRefStore marker.
-            ["videostages.generated.media"] = "103|0|VIDEO|512|512|97|24|ltxv2",
+            ["videostages.arch.ltx2.stage-ref.generated.media"] =
+                "103|0|VIDEO|512|512|97|24|ltxv2",
             // JArray [nodeId, slot] ControlNet capture key.
             ["videostages.controlnet.fullimage.0"] = new JArray("103", 1).ToString(
                 Formatting.None),
             // SwarmUI's own bare-node-id convention.
             ["__generic_node__UnitTest___{}"] = "103",
             // Same encodings pointing at a surviving node.
-            ["videostages.base.media"] = "104|0|VIDEO|512|512|97|24|ltxv2",
+            ["videostages.arch.ltx2.stage-ref.base.media"] =
+                "104|0|VIDEO|512|512|97|24|ltxv2",
             ["videostages.controlnet.audio.1"] = new JArray("104", 0).ToString(Formatting.None),
             // Not a node reference: the pre-core id snapshot.
-            ["videostages.precore.ids"] = "103,104,105",
+            ["videostages.arch.ltx2.pre-core-node-ids"] = "103,104,105",
         };
 
         VideoGraphHelpers.InvalidateForRemovedNodes(nodeHelpers, ["103"]);
 
-        Assert.False(nodeHelpers.ContainsKey("videostages.generated.media"));
+        Assert.False(nodeHelpers.ContainsKey(
+            "videostages.arch.ltx2.stage-ref.generated.media"));
         Assert.False(nodeHelpers.ContainsKey("videostages.controlnet.fullimage.0"));
         Assert.False(nodeHelpers.ContainsKey("__generic_node__UnitTest___{}"));
-        Assert.True(nodeHelpers.ContainsKey("videostages.base.media"));
+        Assert.True(nodeHelpers.ContainsKey(
+            "videostages.arch.ltx2.stage-ref.base.media"));
         Assert.True(nodeHelpers.ContainsKey("videostages.controlnet.audio.1"));
-        Assert.Equal("103,104,105", nodeHelpers["videostages.precore.ids"]);
+        Assert.Equal(
+            "103,104,105",
+            nodeHelpers["videostages.arch.ltx2.pre-core-node-ids"]);
     }
 
     [Fact]

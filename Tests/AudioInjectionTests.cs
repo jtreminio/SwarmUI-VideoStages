@@ -27,7 +27,9 @@ public class AudioInjectionTests
                 generator,
                 new RootVideoStageHandoff(
                     generator,
-                    new StageRefStore(generator))))
+                    new StageRefStore(
+                        generator,
+                        Ltx2ArchitectureModule.ArchitectureId))))
         .TryInject(audio, matchVideoLengthToAudio, preserveWindows);
 
     // Local override of Fixtures.MakeStage: pins Steps=10 and ImageReference="Generated" for audio-injection tests.

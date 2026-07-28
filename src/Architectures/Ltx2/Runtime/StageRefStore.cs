@@ -2,12 +2,15 @@ using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal class StageRefStore(WorkflowGenerator g)
+internal class StageRefStore(
+    WorkflowGenerator g,
+    ArchitectureId architectureId)
 {
-    private const string Prefix = "videostages.";
+    private readonly LtxRuntimeKeyScope _keys = new(architectureId);
 
     public enum StageKind
     {
@@ -22,18 +25,16 @@ internal class StageRefStore(WorkflowGenerator g)
         WGNodeData Vae
     );
 
-    private static string StageName(StageKind kind) => kind switch
-    {
-        StageKind.Base => "base",
-        StageKind.Refiner => "refiner",
-        StageKind.Generated => "generated",
-        StageKind.PreRootVideo => "preroot",
-        _ => throw new SwarmReadableErrorException($"Unhandled StageKind value: {kind}")
-    };
+    private string MediaKey(StageKind kind) =>
+        _keys.StageRef(kind, LtxRuntimeKeyScope.StageRefComponent.Media);
 
-    private static string MediaKey(StageKind kind) => $"{Prefix}{StageName(kind)}.media";
-    private static string VaeKey(StageKind kind) => $"{Prefix}{StageName(kind)}.vae";
-    private static string AudioKey(StageKind kind) => $"{Prefix}{StageName(kind)}.media.audio";
+    private string VaeKey(StageKind kind) =>
+        _keys.StageRef(kind, LtxRuntimeKeyScope.StageRefComponent.Vae);
+
+    private string AudioKey(StageKind kind) =>
+        _keys.StageRef(kind, LtxRuntimeKeyScope.StageRefComponent.Audio);
+
+    internal string PreCoreNodeIdsKey => _keys.PreCoreNodeIds;
 
     public StageRef Base => GetIfCaptured(StageKind.Base);
 

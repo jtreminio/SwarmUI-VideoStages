@@ -24,7 +24,9 @@ public partial class StageFlowTests
             input,
             BuildNativeStepsWithLatentBaseCaptureAndDownstreamRefinerPreprocess(attachAudioToCurrentMedia: false));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        StageRefStore store = new(generator);
+        StageRefStore store = new(
+            generator,
+            Ltx2ArchitectureModule.ArchitectureId);
 
         LTXVImgToVideoInplaceNode imgToVideoNode = bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>()
             .Single(node => node.Id != "111");

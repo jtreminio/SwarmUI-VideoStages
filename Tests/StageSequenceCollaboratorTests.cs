@@ -169,7 +169,9 @@ public class StageSequenceCollaboratorTests
             WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             WorkflowTestHarness.Template_BaseOnlyImage());
-        StageRefStore store = new(generator);
+        StageRefStore store = new(
+            generator,
+            Ltx2ArchitectureModule.ArchitectureId);
         Base2EditPublishedStageRefs base2Edit = new(generator);
         StageGuideReferenceState state = new(generator, store, base2Edit);
         StagePlan stage = Assert.Single(

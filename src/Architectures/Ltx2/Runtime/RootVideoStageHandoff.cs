@@ -6,8 +6,6 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class RootVideoStageHandoff(WorkflowGenerator g, StageRefStore stageRefStore)
 {
-    private const string PreCoreNodeIdsKey = "videostages.pre-core-node-ids";
-
     public RootExecutionPolicy CreatePolicy() =>
         new(g.RequireVideoExecutionPlanContext().Plan);
 
@@ -24,7 +22,8 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, StageRefStore s
         }
         stageRefStore.Capture(StageRefStore.StageKind.PreRootVideo);
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        g.NodeHelpers[PreCoreNodeIdsKey] = string.Join(",", bridge.Graph.Nodes.Keys);
+        g.NodeHelpers[stageRefStore.PreCoreNodeIdsKey] =
+            string.Join(",", bridge.Graph.Nodes.Keys);
     }
 
     public void DropCoreImageToVideoOutput()
@@ -47,13 +46,15 @@ internal sealed class RootVideoStageHandoff(WorkflowGenerator g, StageRefStore s
         finally
         {
             stageRefStore.DiscardPreRootVideo();
-            g.NodeHelpers.Remove(PreCoreNodeIdsKey);
+            g.NodeHelpers.Remove(stageRefStore.PreCoreNodeIdsKey);
         }
     }
 
     private void PruneCoreImageToVideoNodes()
     {
-        if (!g.NodeHelpers.TryGetValue(PreCoreNodeIdsKey, out string snapshot))
+        if (!g.NodeHelpers.TryGetValue(
+                stageRefStore.PreCoreNodeIdsKey,
+                out string snapshot))
         {
             return;
         }
