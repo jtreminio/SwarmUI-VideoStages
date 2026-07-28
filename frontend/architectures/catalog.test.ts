@@ -50,6 +50,7 @@ const dto = {
 afterEach(() => {
     invalidateArchitectureCatalog();
     setVideoStagesHostBridgeForTests(null);
+    jest.restoreAllMocks();
     document.body.innerHTML = "";
 });
 
@@ -405,6 +406,36 @@ describe("architecture catalog", () => {
         ).toBe("bootstrap");
         expect(await loadAuthoritativeArchitectureCatalog()).toEqual(dto);
         expect(requestJson).toHaveBeenCalledTimes(2);
+    });
+
+    it("clears a failed request so a later retry can become authoritative", async () => {
+        const failure = new Error("catalog route unavailable");
+        const requestJson = jest
+            .fn<VideoStagesHostBridge["requestJson"]>()
+            .mockRejectedValueOnce(failure)
+            .mockResolvedValueOnce(dto);
+        const warning = jest
+            .spyOn(console, "warn")
+            .mockImplementation(() => undefined);
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson,
+        });
+
+        expect(await loadAuthoritativeArchitectureCatalog()).toBeNull();
+
+        expect(await loadAuthoritativeArchitectureCatalog()).toEqual(dto);
+        expect(
+            buildArchitectureModelCatalog(
+                dto.models.map((model) => model.modelName),
+                dto.models.map((model) => model.modelName),
+            ).source,
+        ).toBe("backend");
+        expect(requestJson).toHaveBeenCalledTimes(2);
+        expect(warning).toHaveBeenCalledWith(
+            expect.stringContaining("architecture catalog unavailable"),
+            failure,
+        );
     });
 
     it("recognizes any cataloged text-to-video root architecture", async () => {
