@@ -230,6 +230,7 @@ describe("persistence", () => {
                     boundaryOutCarryAudio: false,
                     boundaryOutOverlap: 8,
                     duration: 3,
+                    refFraming: "crop",
                     audioSource: "Native",
                     loras: [{ name: "detail.safetensors" }],
                     icLoras: [

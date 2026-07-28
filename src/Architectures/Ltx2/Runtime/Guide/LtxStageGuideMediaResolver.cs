@@ -1,13 +1,13 @@
 using ComfyTyped.Core;
 using ComfyTyped.Families;
-using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
+/// <summary>Resolves LTX stage references across post-video-chain and latent boundaries.</summary>
+internal sealed class LtxStageGuideMediaResolver(WorkflowGenerator g)
 {
     internal WGNodeData ResolveGuideMedia(
         StageRefStore.StageRef guideReference,
@@ -64,54 +64,5 @@ internal sealed class StageGuideMediaHelper(WorkflowGenerator g)
         return JToken.DeepEquals(guidePath, postVideoChain.CurrentOutputMedia?.Path)
             || JToken.DeepEquals(guidePath, postVideoChain.DecodeOutputPath)
             || JToken.DeepEquals(guidePath, postVideoChain.AvLatentPath);
-    }
-
-    internal WGNodeData PrepareGuideMedia(
-        WGNodeData guideMedia,
-        WGNodeData sourceMedia,
-        bool scaleToSourceSize)
-    {
-        WGNodeData resolvedGuideMedia = guideMedia ?? sourceMedia;
-        if (!scaleToSourceSize)
-        {
-            return resolvedGuideMedia;
-        }
-
-        int targetWidth = sourceMedia.Width ?? g.UserInput.GetImageWidth();
-        int targetHeight = sourceMedia.Height ?? g.UserInput.GetImageHeight();
-        int currentWidth = resolvedGuideMedia.Width ?? targetWidth;
-        int currentHeight = resolvedGuideMedia.Height ?? targetHeight;
-
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        if (currentWidth != targetWidth || currentHeight != targetHeight)
-        {
-            if (ImageScaleReuse.TryFind(
-                bridge,
-                resolvedGuideMedia.Path,
-                targetWidth,
-                targetHeight,
-                out ImageScaleNode reusable,
-                match =>
-                {
-                    match.Crop.Set("center");
-                }))
-            {
-                resolvedGuideMedia = resolvedGuideMedia.WithPath([reusable.Id, 0]);
-            }
-            else
-            {
-                ImageScaleNode scale = ImageScaleReuse.Create(
-                    bridge,
-                    resolvedGuideMedia.Path,
-                    targetWidth,
-                    targetHeight,
-                    "center");
-                resolvedGuideMedia = resolvedGuideMedia.WithPath(scale.IMAGE);
-            }
-        }
-
-        resolvedGuideMedia.Width = targetWidth;
-        resolvedGuideMedia.Height = targetHeight;
-        return resolvedGuideMedia;
     }
 }

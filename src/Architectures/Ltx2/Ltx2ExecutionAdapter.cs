@@ -58,7 +58,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         StageRunner stageRunner = new(
             generator,
             pipeline.StageExecutor,
-            pipeline.GuideMediaHelper,
+            pipeline.GuideMediaResolver,
             pipeline.ClipRefResolver);
         StageSequenceRootSetup rootSetup = new(
             generator,
@@ -93,14 +93,14 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         StageRefStore stageRefStore = new(generator);
         RootVideoStageHandoff handoff = new(generator, stageRefStore);
         RootVideoStageResizer resizer = new(generator, handoff);
-        StageGuideMediaHelper guideMediaHelper = new(generator);
+        LtxStageGuideMediaResolver guideMediaResolver = new(generator);
         Base2EditPublishedStageRefs base2Edit = new(generator);
         LtxAudioInjector audioInjector = new(generator, resizer);
         LtxAudioMaskResizer audioMaskResizer = new(generator, resizer);
         LtxStageExecutor stageExecutor = new(generator, resizer);
         LtxClipRefResolver clipRefResolver = new(
             generator,
-            guideMediaHelper,
+            guideMediaResolver,
             base2Edit);
         return new(
             stageRefStore,
@@ -110,7 +110,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             audioInjector,
             audioMaskResizer,
             stageExecutor,
-            guideMediaHelper,
+            guideMediaResolver,
             clipRefResolver);
     }
 
@@ -122,6 +122,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         LtxAudioInjector AudioInjector,
         LtxAudioMaskResizer AudioMaskResizer,
         LtxStageExecutor StageExecutor,
-        StageGuideMediaHelper GuideMediaHelper,
+        LtxStageGuideMediaResolver GuideMediaResolver,
         LtxClipRefResolver ClipRefResolver);
 }

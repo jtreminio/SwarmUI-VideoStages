@@ -104,6 +104,8 @@ export const architectureFeatureSupport = (
                 capability.clip.includes("references") &&
                 capability.stage.includes("frame-references")
             );
+        case "referenceFraming":
+            return capability.clip.includes("reference-framing");
         case "retake":
             return capability.clip.includes("retake");
         case "majorPrompt":

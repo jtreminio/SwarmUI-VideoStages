@@ -12,6 +12,36 @@ namespace VideoStages.Tests;
 
 public partial class StageFlowTests
 {
+    [Fact]
+    public void Authored_guide_uses_the_clips_green_fit_framing()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Base", steps: 8));
+        clip["refFraming"] = Constants.ReferenceFramingFitGreen;
+
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            new JArray(clip).ToString());
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: false));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        LTXVImgToVideoInplaceNode guide =
+            Assert.Single(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
+        LTXVPreprocessNode preprocess =
+            Assert.IsType<LTXVPreprocessNode>(guide.Image.Connection?.Node);
+        SwarmFrameImageNode frame =
+            Assert.IsType<SwarmFrameImageNode>(preprocess.Image.Connection?.Node);
+        Assert.Equal(
+            Constants.ReferenceFramingFitGreen,
+            frame.Method.LiteralAsString());
+    }
+
     [Theory]
     [InlineData("Base")]
     [InlineData("Refiner")]

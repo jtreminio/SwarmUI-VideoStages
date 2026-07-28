@@ -73,7 +73,9 @@ internal static class VideoClipSpecParser
             BoundaryOutCarryAudio: VideoStagesJsonReader.GetOptionalBool(
                 clipObject,
                 "boundaryOutCarryAudio",
-                false))
+                false),
+            ReferenceFraming: ReferenceFraming.Parse(
+                VideoStagesJsonReader.GetString(clipObject, "refFraming")))
         {
             AuthoredArchitectureId = VideoStagesJsonReader.GetString(
                 clipObject,

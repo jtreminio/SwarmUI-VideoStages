@@ -119,6 +119,26 @@ public class VideoStagesSpecParserClipsTests
         return Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json)).Clips);
     }
 
+    [Theory]
+    [InlineData(null, ReferenceFramingMode.Crop)]
+    [InlineData("crop", ReferenceFramingMode.Crop)]
+    [InlineData("stretch", ReferenceFramingMode.Stretch)]
+    [InlineData("fit", ReferenceFramingMode.Fit)]
+    [InlineData("fit-green", ReferenceFramingMode.FitGreen)]
+    [InlineData("future", ReferenceFramingMode.Crop)]
+    public void ParseClips_ReferenceFraming_IsTypedAndDefaultsToCrop(
+        string raw,
+        ReferenceFramingMode expected)
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        if (raw is not null)
+        {
+            clip["refFraming"] = raw;
+        }
+
+        Assert.Equal(expected, ParseSingleClip(clip).ReferenceFraming);
+    }
+
     [Fact]
     public void ParseClips_PromptWindows_ParsesStartAndDuration()
     {

@@ -40,6 +40,7 @@ export const STORED_CLIP_KEYS = [
     "boundaryOutCarryAudio",
     "boundaryOutOverlap",
     "duration",
+    "refFraming",
     "audioSource",
     "loras",
     "icLoras",

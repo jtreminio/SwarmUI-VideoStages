@@ -5,7 +5,6 @@ public static class Constants
     public static class WorkflowStepPriority
     {
         public const double CoreImageToVideo = 11;
-        // Must stay below every other VideoStages priority: nothing may mutate before preflight.
         public const double PreflightRequest = -6;
         public const double ControlNetPreprocessors = -5.9;
         public const double CaptureBase = -4.2;
@@ -31,20 +30,17 @@ public static class Constants
     public const string ControlNetSourceTwo = "ControlNet 2";
     public const string ControlNetSourceThree = "ControlNet 3";
 
-    // IC-LoRA drive sources: an embedded per-entry upload, contextual media entering the stage,
-    // or one of the legacy captured core "ControlNet N" branches above.
     public const string IcLoraSourceUpload = "Upload";
     public const string IcLoraSourceIncoming = "Incoming";
     internal const string IcLoraLegacySourceStageInput = "Stage Input";
-    // IC-LoRA control-signal renderings of the drive video. "none" feeds the raw frames (the common
-    // case for v2v effect/restoration LoRAs); the rest target Union-Control-style structural LoRAs.
     public const string IcLoraControlNone = "none";
     public const string IcLoraControlCanny = "canny";
     public const string IcLoraControlDepth = "depth";
     public const string IcLoraControlNormal = "normal";
-    // Outgoing boundary between clip N and N+1; mirrors the frontend BoundaryOut union.
-    // "continue" = architecture-owned generation continuity; the architecture policy defines its
-    // target requirements, context window, and frame grid.
+    public const string ReferenceFramingCrop = "crop";
+    public const string ReferenceFramingStretch = "stretch";
+    public const string ReferenceFramingFit = "fit";
+    public const string ReferenceFramingFitGreen = "fit-green";
     public const string BoundaryOutCut = "cut";
     public const string BoundaryOutContinue = "continue";
     public const string BoundaryOutCrossfade = "crossfade";

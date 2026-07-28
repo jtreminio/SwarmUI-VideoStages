@@ -150,23 +150,22 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
     internal JArray ResizeToStageDimensions(
         WorkflowBridge bridge,
         JArray images,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        ReferenceFramingMode referenceFraming)
     {
         if (genInfo.Width is null || genInfo.Height is null)
         {
             return images;
         }
-        ResizeImageMaskNodeNode resize =
-            bridge.AddNode(new ResizeImageMaskNodeNode()).With(
-                ResizeType: "scale dimensions",
-                ScaleMethod: "lanczos");
-        resize.Input.TryConnectFromPath(bridge, images);
-        resize.ExtraInputs["resize_type.width"] = genInfo.Width.DeepClone();
-        resize.ExtraInputs["resize_type.height"] = genInfo.Height.DeepClone();
-        resize.ExtraInputs["resize_type.crop"] = "center";
-        // Raw ExtraInputs edits are not auto-synced by the bridge.
-        bridge.SyncNode(resize);
-        return WorkflowBridge.ToPath(resize.Resized);
+        int width = Math.Max(1, genInfo.Width.Value<int>());
+        int height = Math.Max(1, genInfo.Height.Value<int>());
+        return ReferenceFramingGraph.Frame(
+            bridge,
+            images,
+            width,
+            height,
+            referenceFraming,
+            unwrapExistingFraming: false);
     }
 
     private static bool IsImageStream(WGNodeData media) =>

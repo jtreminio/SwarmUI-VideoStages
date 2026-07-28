@@ -9,6 +9,7 @@ export type AuthoringFeature =
     | "multiStage"
     | "sourceVideo"
     | "frameReferences"
+    | "referenceFraming"
     | "retake"
     | "majorPrompt"
     | "promptRelay"

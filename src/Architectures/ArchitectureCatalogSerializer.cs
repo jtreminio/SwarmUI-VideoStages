@@ -163,6 +163,10 @@ internal static class ArchitectureCatalogSerializer
         {
             yield return "references";
         }
+        if (Has(value, ClipCapability.ReferenceFraming))
+        {
+            yield return "reference-framing";
+        }
         if (Has(value, ClipCapability.Retake))
         {
             yield return "retake";

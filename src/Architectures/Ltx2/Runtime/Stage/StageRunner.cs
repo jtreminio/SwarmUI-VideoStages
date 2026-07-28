@@ -17,7 +17,7 @@ internal class StageRunner
 {
     private readonly WorkflowGenerator _generator;
     private readonly LtxStageExecutor _stageExecutor;
-    private readonly StageGuideMediaHelper _guideMediaHelper;
+    private readonly LtxStageGuideMediaResolver _guideMediaResolver;
     private readonly LtxClipRefResolver _clipRefResolver;
     private readonly StageUpscaleGraphBuilder _upscaleGraphBuilder;
     private readonly StageFramePreparer _framePreparer;
@@ -27,13 +27,13 @@ internal class StageRunner
     public StageRunner(
         WorkflowGenerator generator,
         LtxStageExecutor stageExecutor,
-        StageGuideMediaHelper guideMediaHelper,
+        LtxStageGuideMediaResolver guideMediaResolver,
         LtxClipRefResolver clipRefResolver)
     {
         _generator = generator ?? throw new ArgumentNullException(nameof(generator));
         _stageExecutor = stageExecutor ?? throw new ArgumentNullException(nameof(stageExecutor));
-        _guideMediaHelper = guideMediaHelper
-            ?? throw new ArgumentNullException(nameof(guideMediaHelper));
+        _guideMediaResolver = guideMediaResolver
+            ?? throw new ArgumentNullException(nameof(guideMediaResolver));
         _clipRefResolver = clipRefResolver
             ?? throw new ArgumentNullException(nameof(clipRefResolver));
         _upscaleGraphBuilder = new StageUpscaleGraphBuilder(generator);
@@ -128,6 +128,8 @@ internal class StageRunner
         StagePlan stage = stageFrame.Stage;
         ClipContext clipContext = stageFrame.ClipContext;
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
+        ReferenceFramingMode referenceFraming =
+            clipContext.PlannedClip.RequireLtx2Payload().ReferenceFraming;
         List<ResolvedClipRef> clipRefs = _clipRefResolver.ResolveStageClipRefs(
             clipContext.PlannedClip,
             stage,
@@ -166,10 +168,12 @@ internal class StageRunner
             // Every later stage regenerates the head too, and the direct latent handoff pins nothing:
             // re-freeze the tail here as well, conformed to THIS stage's resolution so the seam is
             // anchored to the previous clip's own frames rather than to the opening stage's downscale.
-            stageFrame.ContinuityAnchor = _guideMediaHelper.PrepareGuideMedia(
+            stageFrame.ContinuityAnchor = GuideMediaPreparation.Prepare(
+                _generator,
                 clipContext.ContinuityFrame.Duplicate(),
                 sourceMedia,
-                scaleToSourceSize: true);
+                scaleToSourceSize: true,
+                referenceFraming: referenceFraming);
         }
 
         StageInputCase inputCase = StageInputDispatcher.Resolve(new StageInputFacts(
@@ -205,7 +209,12 @@ internal class StageRunner
             genInfo,
             stageFrame,
             sourceMedia,
-            ResolveGuideMedia(inputCase, primaryGuideClipRef, guideReference, stageFrame),
+            ResolveGuideMedia(
+                inputCase,
+                primaryGuideClipRef,
+                guideReference,
+                stageFrame,
+                referenceFraming),
             StageInputDispatcher.SkipsGuideReinjection(inputCase),
             postVideoChain,
             clipRefs,
@@ -216,17 +225,23 @@ internal class StageRunner
         StageInputCase inputCase,
         ResolvedClipRef primaryGuideClipRef,
         StageRefStore.StageRef guideReference,
-        StageFrame stageFrame) => inputCase switch
+        StageFrame stageFrame,
+        ReferenceFramingMode referenceFraming) => inputCase switch
         {
             StageInputCase.PrimaryGuideIsStageInput =>
                 ResolveDefaultLocalGuideMedia(stageFrame.SourceMedia, stageFrame.PostVideoChain),
             StageInputCase.ContinuationTail or StageInputCase.AuthoredGuideReference =>
-                _guideMediaHelper.PrepareGuideMedia(
+                GuideMediaPreparation.Prepare(
+                    _generator,
                     primaryGuideClipRef.Image,
                     stageFrame.SourceMedia,
-                    scaleToSourceSize: true),
+                    scaleToSourceSize: true,
+                    referenceFraming: referenceFraming),
             StageInputCase.GuideReinjection =>
-                ResolveReinjectedGuideMedia(guideReference, stageFrame),
+                ResolveReinjectedGuideMedia(
+                    guideReference,
+                    stageFrame,
+                    referenceFraming),
             _ => null,
         };
 
@@ -251,7 +266,8 @@ internal class StageRunner
 
     private WGNodeData ResolveReinjectedGuideMedia(
         StageRefStore.StageRef guideReference,
-        StageFrame stageFrame)
+        StageFrame stageFrame,
+        ReferenceFramingMode referenceFraming)
     {
         WGNodeData sourceMedia = stageFrame.SourceMedia;
         Ltx2StagePayload payload = stageFrame.Stage.RequireLtx2Payload();
@@ -261,12 +277,12 @@ internal class StageRunner
             payload.Guide.Kind,
             payload.Core.ImageReferenceWasExplicit,
             stageFrame.PostVideoChain);
-        bool guideIsLiveOutput = _guideMediaHelper.IsLiveCurrentOutputReference(
+        bool guideIsLiveOutput = _guideMediaResolver.IsLiveCurrentOutputReference(
             guideReference?.Media,
             stageFrame.PostVideoChain);
         WGNodeData authoredGuide = guideIsStageInput && !guideIsLiveOutput
             ? sourceMedia
-            : _guideMediaHelper.ResolveGuideMedia(guideReference, stageFrame.PostVideoChain);
+            : _guideMediaResolver.ResolveGuideMedia(guideReference, stageFrame.PostVideoChain);
         if (guideIsStageInput && authoredGuide is not null)
         {
             // A detached decode of the stage-input latent has the same rendered dimensions as
@@ -274,10 +290,12 @@ internal class StageRunner
             authoredGuide.Width = sourceMedia.Width;
             authoredGuide.Height = sourceMedia.Height;
         }
-        return _guideMediaHelper.PrepareGuideMedia(
+        return GuideMediaPreparation.Prepare(
+            _generator,
             authoredGuide,
             sourceMedia,
-            scaleToSourceSize: true);
+            scaleToSourceSize: true,
+            referenceFraming: referenceFraming);
     }
 
     private bool GuideReferenceIsStageInput(
@@ -293,7 +311,7 @@ internal class StageRunner
         }
         return guideKind == GuideReferenceKind.Generated && !guideWasExplicit
             || priorOutputPath is not null && JToken.DeepEquals(guidePath, priorOutputPath)
-            || _guideMediaHelper.IsLiveCurrentOutputReference(
+            || _guideMediaResolver.IsLiveCurrentOutputReference(
                 guideReference.Media,
                 postVideoChain);
     }
@@ -303,7 +321,7 @@ internal class StageRunner
         LtxPostVideoChainCapture postVideoChain)
     {
         if (postVideoChain is not null
-            && _guideMediaHelper.IsLiveCurrentOutputReference(sourceMedia, postVideoChain))
+            && _guideMediaResolver.IsLiveCurrentOutputReference(sourceMedia, postVideoChain))
         {
             WGNodeData detachedGuideVae = postVideoChain.CreateStageInputVae();
             return postVideoChain.CreateDetachedGuideMedia(detachedGuideVae);
@@ -320,7 +338,7 @@ internal class StageRunner
         LtxPostVideoChainCapture postVideoChain) =>
         stage.RequireLtx2Payload().Guide.Kind == GuideReferenceKind.Generated
         && postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true
-        && _guideMediaHelper.IsLiveCurrentOutputReference(guideReference?.Media, postVideoChain)
+        && _guideMediaResolver.IsLiveCurrentOutputReference(guideReference?.Media, postVideoChain)
         && !string.IsNullOrWhiteSpace(guideReference?.Vae?.Compat?.ID)
         && guideReference.Vae.Compat.ID == genInfo.VideoModel?.ModelClass?.CompatClass?.ID;
 

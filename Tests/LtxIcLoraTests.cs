@@ -278,9 +278,9 @@ public sealed class LtxIcLoraTests
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
         LTXAddVideoICLoRAGuideNode guide =
             Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
-        ResizeImageMaskNodeNode resize = Assert.Single(
-            bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>(),
-            n => n.ResizeType.LiteralAsString() == "scale dimensions");
+        ImageScaleNode resize =
+            Assert.IsType<ImageScaleNode>(NearestGuideImageFramingNode(guide));
+        Assert.Equal("center", resize.Crop.LiteralAsString());
         Assert.True(
             GuideImageTracesTo(bridge, guide, resize),
             "Expected the guide image to trace through the stage-dims resize.");
@@ -356,12 +356,37 @@ public sealed class LtxIcLoraTests
 
         LTXAddVideoICLoRAGuideNode guide =
             Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
-        ResizeImageMaskNodeNode resize = Assert.Single(
-            bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>(),
-            n => n.ResizeType.LiteralAsString() == "scale dimensions");
+        ImageScaleNode resize =
+            Assert.IsType<ImageScaleNode>(NearestGuideImageFramingNode(guide));
+        Assert.Equal("center", resize.Crop.LiteralAsString());
         Assert.True(
             GuideImageTracesTo(bridge, guide, resize),
             "Expected the uploaded drive media to pass through the stage-dims resize.");
+    }
+
+    [Fact]
+    public void Uploaded_drive_media_uses_the_clips_green_fit_method()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+
+        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["refFraming"] = Constants.ReferenceFramingFitGreen;
+        clip["icLoras"] = new JArray(
+            MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD"));
+
+        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
+        using WorkflowBridge _ = bridge;
+
+        LTXAddVideoICLoRAGuideNode guide =
+            Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
+        SwarmFrameImageNode frame =
+            Assert.IsType<SwarmFrameImageNode>(NearestGuideImageFramingNode(guide));
+        Assert.Equal(Constants.ReferenceFramingFitGreen, frame.Method.LiteralAsString());
+        Assert.True(
+            GuideImageTracesTo(bridge, guide, frame),
+            "Expected the IC-LoRA guide to use the clip's green-fit framing node.");
     }
 
     [Fact]
@@ -1067,5 +1092,22 @@ public sealed class LtxIcLoraTests
             return true;
         }
         return bridge.Graph.FindNearestUpstream(start, node => node.Id == wanted.Id) is not null;
+    }
+
+    private static ComfyNode NearestGuideImageFramingNode(ComfyNode guide)
+    {
+        ComfyNode current = guide.FindInput("image")?.Connection?.Node;
+        HashSet<string> visited = [];
+        while (current is not null && visited.Add(current.Id))
+        {
+            if (current is ImageScaleNode or SwarmFrameImageNode)
+            {
+                return current;
+            }
+            current =
+                current.FindInput("image")?.Connection?.Node
+                ?? current.FindInput("images")?.Connection?.Node;
+        }
+        return null;
     }
 }

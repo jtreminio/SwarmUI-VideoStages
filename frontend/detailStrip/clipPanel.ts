@@ -32,13 +32,22 @@ export const buildClipBody = (
     body.classList.toggle("vst-detail-clip-skipped", clip.skipped === true);
     const defaults = getRootDefaults();
     const capabilityView = context.capabilities().forClip(clip);
+    const referenceFramingState = capabilityView.authoringState(
+        "referenceFraming",
+        clip.refFraming !== "crop",
+    );
 
     body.appendChild(
         buildStaticSection({
             key: "clip",
             label: "Clip",
             className: "vst-detail-clip-section",
-            content: buildClipColumn(context, clip, clipIdx),
+            content: buildClipColumn(
+                context,
+                clip,
+                clipIdx,
+                referenceFramingState,
+            ),
             flattenContent: true,
             headerActions:
                 clipIdx === 0

@@ -7,6 +7,7 @@ re-exports it lazily so the pure helper modules stay importable without ComfyUI.
 from comfy_api.latest import ComfyExtension, io
 
 from .SwarmAudioLengthToFrames import SwarmAudioLengthToFrames
+from .SwarmFrameImage import SwarmFrameImage
 from .SwarmFrameWindow import SwarmFrameWindow
 from .SwarmPromptRelayEncode import SwarmPromptRelayEncode
 from .SwarmRampMaskBatch import SwarmRampMaskBatch
@@ -16,6 +17,7 @@ from .SwarmSetAudioMaskWindows import SwarmSetAudioMaskWindows
 
 NODES: list[tuple[type[io.ComfyNode], str]] = [
     (SwarmAudioLengthToFrames, "Swarm Audio Length To Frames"),
+    (SwarmFrameImage, "Swarm Frame Image"),
     (SwarmFrameWindow, "Swarm Frame Window"),
     (SwarmPromptRelayEncode, "Swarm Prompt Relay Encode"),
     (SwarmRampMaskBatch, "Swarm Ramp Mask Batch"),

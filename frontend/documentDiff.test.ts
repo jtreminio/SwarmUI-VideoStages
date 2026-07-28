@@ -73,6 +73,7 @@ const clip = (id: string): CanonicalClip => ({
     boundaryOutCarryAudio: false,
     boundaryOutOverlap: 8,
     duration: 4,
+    refFraming: "crop",
     audioSource: "Native",
     loras: [],
     icLoras: [],

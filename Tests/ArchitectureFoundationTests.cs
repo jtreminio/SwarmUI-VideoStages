@@ -358,6 +358,25 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
+    public void Capability_validation_rejects_nondefault_reference_framing()
+    {
+        FakeRegistry registry = new();
+        ClipSpec clip = GeneratedClip(0, Stage(10, "fake-model")) with
+        {
+            ReferenceFraming = ReferenceFramingMode.FitGreen,
+            AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
+        };
+
+        VideoExecutionPlan plan = Compile(clip, registry);
+
+        Assert.Contains(
+            plan.Diagnostics,
+            item => item.Code == "architecture-capability-unsupported"
+                && item.Message.Contains("reference framing"));
+        Assert.Equal(0, registry.CompileCounts[new("fake")]);
+    }
+
+    [Fact]
     public void Capability_validation_rejects_multiple_active_stages_before_fake_module()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor();
@@ -1175,6 +1194,7 @@ public class ArchitectureFoundationTests
             ],
             capabilities["architecture"].Values<string>());
         Assert.Contains("prompt-relay", capabilities["clip"].Values<string>());
+        Assert.Contains("reference-framing", capabilities["clip"].Values<string>());
         Assert.Contains("frame-references", capabilities["stage"].Values<string>());
         Assert.Equal(
             ["pixel", "model", "latent", "latent-model"],

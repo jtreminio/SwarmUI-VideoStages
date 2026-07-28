@@ -70,6 +70,7 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     boundaryOutCarryAudio: false,
     boundaryOutOverlap: 8,
     duration: 2,
+    refFraming: "crop",
     audioSource: "Native",
     loras: [],
     icLoras: [],

@@ -370,7 +370,7 @@ public class BackendConsolidationTests
             [
                 typeof(WorkflowGenerator),
                 typeof(LtxStageExecutor),
-                typeof(StageGuideMediaHelper),
+                typeof(LtxStageGuideMediaResolver),
                 typeof(LtxClipRefResolver),
             ],
             Assert.Single(typeof(StageRunner).GetConstructors())

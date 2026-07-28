@@ -43,7 +43,13 @@ import {
     normalizeStageLoras,
 } from "./normalizationStage";
 import { snapDurationToFps } from "./renderUtils";
-import type { BoundaryOut, Clip, RootDefaults, Stage } from "./types";
+import type {
+    BoundaryOut,
+    Clip,
+    ReferenceFraming,
+    RootDefaults,
+    Stage,
+} from "./types";
 import { isRecord } from "./utils";
 
 export const normalizeBoundaryOut = (value: unknown): BoundaryOut => {
@@ -65,6 +71,11 @@ export const normalizeContinueOverlap = (
         ? numeric
         : normalizeBoundaryOverlap(value, constraints);
 };
+
+const normalizeReferenceFraming = (value: unknown): ReferenceFraming =>
+    value === "stretch" || value === "fit" || value === "fit-green"
+        ? value
+        : "crop";
 
 export const buildDefaultClip = (
     getRootDefaults: () => RootDefaults,
@@ -128,6 +139,7 @@ export const buildDefaultClip = (
                   Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
                   defaults.fps,
               ),
+        refFraming: "crop",
         audioSource: AUDIO_SOURCE_NATIVE,
         loras,
         icLoras: [],
@@ -307,6 +319,7 @@ export const normalizeClip = (
             boundaryOverlapConstraints(boundaryRule),
         ),
         duration,
+        refFraming: normalizeReferenceFraming(rawClip.refFraming),
         audioSource,
         loras,
         icLoras,

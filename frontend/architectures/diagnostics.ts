@@ -64,6 +64,11 @@ const persistedCapabilityIssues = (
         "Frame references",
     );
     unsupported(
+        !supports("referenceFraming") && clip.refFraming !== "crop",
+        "reference-framing",
+        "Reference framing",
+    );
+    unsupported(
         !supports("icLora") && clip.icLoras.length > 0,
         "ic-lora",
         "IC-LoRA",

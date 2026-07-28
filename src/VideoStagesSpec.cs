@@ -49,14 +49,10 @@ public sealed record StageSpec(
     IReadOnlyList<double> ImageRefStrengths = null,
     bool ImageRefWasExplicit = false,
     IReadOnlyList<LoraRef> Loras = null,
-    // When present, weights aligned with the owning clip's LoRA definitions.
-    // Null preserves legacy uniform clip-wide LoRAs; [] applies no definitions.
     IReadOnlyList<double> LoraWeights = null,
     RetakeWindowSpec RetakeWindow = null
 )
 {
-    // Intentional read-only workflow projections: the upscale-method prefix dispatch below encodes
-    // generation policy but is colocated with the data it reads, by design (no behavior, no host state).
     public bool IsLatentModelUpscale => HasUpscaleMethodPrefix("latentmodel-");
     public bool IsLatentUpscale => HasUpscaleMethodPrefix("latent-");
     public bool IsPixelUpscale => HasUpscaleMethodPrefix("pixel-");
@@ -202,7 +198,8 @@ public sealed record ClipSpec(
     SourceVideoSpec SourceVideo = null,
     // When true on a non-cut boundary, the next generated clip receives the outgoing audio tail
     // as preserved opening context and generates the continuation after that window.
-    bool BoundaryOutCarryAudio = false
+    bool BoundaryOutCarryAudio = false,
+    ReferenceFramingMode ReferenceFraming = ReferenceFramingMode.Crop
 )
 {
     public string AuthoredArchitectureId { get; init; }

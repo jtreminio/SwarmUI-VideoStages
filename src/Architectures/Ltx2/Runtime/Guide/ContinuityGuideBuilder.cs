@@ -15,7 +15,7 @@ namespace VideoStages.Architectures.Ltx2;
 /// is clip-level and runs once: the tail slice and the frame-rate conform depend only on timeline
 /// properties, so they cannot change between the next clip's stages. The tail keeps the previous
 /// clip's native resolution; each stage that re-applies it conforms it to that stage's own
-/// resolution (<see cref="StageGuideMediaHelper.PrepareGuideMedia"/>), so the final stage anchors on
+/// resolution (<see cref="GuideMediaPreparation.Prepare"/>), so the final stage anchors on
 /// full-fidelity frames instead of a downscale the first stage happened to need.
 /// </summary>
 internal sealed class ContinuityGuideBuilder(WorkflowGenerator g)

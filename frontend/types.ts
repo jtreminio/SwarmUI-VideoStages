@@ -149,6 +149,7 @@ export type BoundaryOut = "cut" | "continue" | "crossfade";
 export type IcLoraControlType = "none" | "canny" | "depth" | "normal";
 export type IcLoraDriveData = "none" | "visual" | "audio";
 export type IcLoraDriveMediaKind = "image" | "video" | "audio";
+export type ReferenceFraming = "crop" | "stretch" | "fit" | "fit-green";
 
 /**
  * One in-context LoRA on a clip. `lora` is the LoRA model name; `preset` is a
@@ -206,6 +207,8 @@ export interface Clip {
      */
     boundaryOutOverlap: number;
     duration: number;
+    /** How reference media is fitted to this clip's generation dimensions. */
+    refFraming: ReferenceFraming;
     audioSource: string;
     /** Normal LoRA model definitions shared by every stage in this clip. */
     loras: ClipLora[];

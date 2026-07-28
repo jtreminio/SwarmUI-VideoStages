@@ -150,6 +150,7 @@ public class AuthoringDocumentContractTests
         Assert.Equal(Constants.BoundaryOutContinue, clip.BoundaryOut);
         Assert.Equal(8, clip.BoundaryOutOverlap);
         Assert.True(clip.BoundaryOutCarryAudio);
+        Assert.Equal(ReferenceFramingMode.FitGreen, clip.ReferenceFraming);
         Assert.Equal("ltx2", clip.AuthoredArchitectureId);
         Assert.Equal("ltx-2.3", clip.AuthoredModelProfileId);
         Assert.Equal("data:audio/wav;base64,QUJD", clip.UploadedAudio.Data);

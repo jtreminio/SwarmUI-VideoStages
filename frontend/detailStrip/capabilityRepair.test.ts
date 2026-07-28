@@ -135,4 +135,54 @@ describe("persisted-but-unsupported repair contract", () => {
         reset?.click();
         expect(clips[0].stages[1].upscale).toBe(1);
     });
+
+    it("keeps unsupported green framing visible with an operable reset", () => {
+        const models = restrictedCatalog();
+        const clip = minimalClip({ refFraming: "fit-green" });
+        const clips = [clip];
+        const ctx = context(models, clips);
+
+        const body = buildClipBody(
+            ctx,
+            { kind: "clip", clipIdx: 0, stageIdx: 0 },
+            clips,
+        );
+
+        const select = body.querySelector<HTMLSelectElement>(
+            "[data-vst-reference-framing]",
+        );
+        expect(select?.value).toBe("fit-green");
+        expect(select?.disabled).toBe(true);
+        expect(body.querySelector(".sui-popover")?.textContent).toContain(
+            "#66FF00",
+        );
+        const reset = body.querySelector<HTMLButtonElement>(
+            ".vst-reset-unsupported-reference-framing",
+        );
+        expect(keyboardOperable(reset)).toBe(true);
+        reset?.click();
+        expect(clips[0].refFraming).toBe("crop");
+    });
+
+    it("commits a supported clip-level reference framing selection", () => {
+        const models = testArchitectureCatalog();
+        const clip = minimalClip();
+        const clips = [clip];
+        const ctx = context(models, clips);
+        const body = buildClipBody(
+            ctx,
+            { kind: "clip", clipIdx: 0, stageIdx: 0 },
+            clips,
+        );
+        const select = body.querySelector<HTMLSelectElement>(
+            "[data-vst-reference-framing]",
+        );
+
+        expect(select?.disabled).toBe(false);
+        if (!select) throw new Error("reference framing select missing");
+        select.value = "fit";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+
+        expect(clips[0].refFraming).toBe("fit");
+    });
 });

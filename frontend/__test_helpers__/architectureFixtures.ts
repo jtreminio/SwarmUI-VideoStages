@@ -19,6 +19,7 @@ export const testArchitectureCapabilities = (
         "prompts",
         "prompt-relay",
         "references",
+        "reference-framing",
         "retake",
         "audio-sources",
         "audio-segments",

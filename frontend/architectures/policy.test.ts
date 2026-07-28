@@ -64,6 +64,7 @@ describe("catalog-backed authoring policy", () => {
 
         expect(view.decision("majorPrompt").supported).toBe(true);
         expect(view.decision("frameReferences").supported).toBe(false);
+        expect(view.decision("referenceFraming").supported).toBe(false);
         expect(view.decision("clipAudio").supported).toBe(false);
         expect(view.authoringState("frameReferences", false)).toMatchObject({
             visible: false,
@@ -73,6 +74,11 @@ describe("catalog-backed authoring policy", () => {
             visible: true,
             enabled: false,
         });
+        expect(
+            createCapabilityViewResolver(catalog())
+                .forClip(minimalClip())
+                .decision("referenceFraming").supported,
+        ).toBe(true);
     });
 
     it("normalizes all-skipped sourced clips to the cataloged none identity", () => {

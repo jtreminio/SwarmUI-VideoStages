@@ -91,6 +91,10 @@ internal static class ArchitectureCapabilityValidator
             Has(descriptor.Capabilities.Stage, StageCapability.FrameReferences),
             "frame references");
         Require(
+            clip.ReferenceFraming != ReferenceFramingMode.Crop,
+            Has(descriptor.Capabilities.Clip, ClipCapability.ReferenceFraming),
+            "reference framing");
+        Require(
             clip.Stages?.Any(stage => stage.RetakeWindow is not null) == true,
             Has(descriptor.Capabilities.Clip, ClipCapability.Retake),
             "retake");

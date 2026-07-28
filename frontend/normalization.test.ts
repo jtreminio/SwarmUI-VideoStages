@@ -165,6 +165,22 @@ describe("normalization", () => {
         expect(clip.boundaryOut).toBe(expected);
     });
 
+    it.each([
+        [undefined, "crop"],
+        ["crop", "crop"],
+        ["stretch", "stretch"],
+        ["fit", "fit"],
+        ["fit-green", "fit-green"],
+        ["future", "crop"],
+    ])("normalizeClip normalizes refFraming %s -> %s", (raw, expected) => {
+        const clip = normalizeClip(
+            { stages: [{ model: "ltx" }], refFraming: raw },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+        expect(clip.refFraming).toBe(expected);
+    });
+
     it("normalizeClip ignores a noncanonical PascalCase boundary key", () => {
         const clip = normalizeClip(
             { stages: [{ model: "ltx" }], BoundaryOut: "continue" },

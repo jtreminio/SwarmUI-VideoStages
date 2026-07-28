@@ -1,13 +1,16 @@
+import type { AuthoringState } from "../architectures/policy";
 import { CLIP_DURATION_MAX, CLIP_DURATION_MIN } from "../constants";
 import {
     buildField,
     buildNumber,
+    buildOptionSelect,
     type SectionHeaderAction,
 } from "../detailWidgets";
 import { getRootDefaults } from "../rootDefaults";
 import { skipGlyph, skipTitle } from "../skipVocabulary";
 import { applyClipDurationResize } from "../timelineEdit";
-import type { Clip } from "../types";
+import type { Clip, ReferenceFraming } from "../types";
+import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
 const DURATION_STEP = 0.1;
@@ -16,6 +19,7 @@ export const buildClipColumn = (
     context: DetailStripContext,
     clip: Clip,
     clipIdx: number,
+    referenceFramingState?: AuthoringState,
 ): HTMLElement => {
     const column = document.createElement("div");
     column.className =
@@ -55,6 +59,49 @@ export const buildClipColumn = (
         durationField.classList.add("vst-field-disabled");
     }
     column.appendChild(durationField);
+    if (referenceFramingState?.visible) {
+        const framing = buildOptionSelect(
+            [
+                { value: "crop", label: "Crop" },
+                { value: "stretch", label: "Stretch" },
+                { value: "fit", label: "Fit (black padding)" },
+                { value: "fit-green", label: "Fit (green padding)" },
+            ],
+            clip.refFraming,
+            (value) => {
+                context.commit((clips) => {
+                    const target = clips[clipIdx];
+                    if (target) {
+                        target.refFraming = value as ReferenceFraming;
+                    }
+                });
+            },
+        );
+        framing.dataset.vstReferenceFraming = "true";
+        const field = buildField(
+            "Reference resize",
+            framing,
+            undefined,
+            "Fit (green padding) preserves aspect ratio and pads with #66FF00 so outpainting IC-LoRAs treat the padded area as empty.",
+        );
+        if (!referenceFramingState.enabled) {
+            applyPersistedCapabilityRepair(field, referenceFramingState, {
+                repair: {
+                    label: "Reset reference resize",
+                    className: "vst-reset-unsupported-reference-framing",
+                    onRepair: () => {
+                        context.commit((clips) => {
+                            const target = clips[clipIdx];
+                            if (target) {
+                                target.refFraming = "crop";
+                            }
+                        });
+                    },
+                },
+            });
+        }
+        column.appendChild(field);
+    }
     return column;
 };
 

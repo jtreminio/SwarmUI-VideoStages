@@ -32,6 +32,7 @@ describe("architecture conversion policy", () => {
         const clip = minimalClip({
             loras: [{ name: "detail" }],
             refs: [minimalRef()],
+            refFraming: "fit-green",
             promptWindows: [{ prompt: "relay", start: 0, duration: 1 }],
             stages: [minimalStage({ loraWeights: [1] }), minimalStage()],
         });
@@ -49,12 +50,14 @@ describe("architecture conversion policy", () => {
             expect.arrayContaining([
                 "1 later authored stage",
                 "1 frame reference",
+                "reference framing setting",
                 "1 clip LoRA",
                 "1 relay prompt",
             ]),
         );
         expect(message).toContain("one undoable change");
         expect(message).toContain("This removes:");
+        expect(conversion?.clip.refFraming).toBe("crop");
     });
 
     it("does not apply on cancel and applies exactly once on confirm", () => {

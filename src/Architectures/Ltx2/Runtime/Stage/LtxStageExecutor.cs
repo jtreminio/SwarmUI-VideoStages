@@ -75,7 +75,12 @@ internal sealed class LtxStageExecutor
                         genInfo,
                         stageFrame,
                         runtimeSettings,
-                        new LtxGuidePreprocessReuse(g, rootVideoStageResizer))
+                        new LtxGuidePreprocessReuse(
+                            g,
+                            rootVideoStageResizer,
+                            stageFrame.ClipContext.PlannedClip
+                                .RequireLtx2Payload()
+                                .ReferenceFraming))
                     .WithLatent(stageLatent, effectiveSourceMedia)
                     .WithUpscaleIfNeeded(effectiveSourceMedia)
                     .WithInplaceMerges(clipRefs ?? [])

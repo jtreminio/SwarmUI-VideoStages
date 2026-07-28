@@ -5,6 +5,7 @@ const FEATURE_LABEL: Record<AuthoringFeature, string> = {
     multiStage: "Multiple stages",
     sourceVideo: "Source video",
     frameReferences: "Frame references",
+    referenceFraming: "Reference framing",
     retake: "Retakes",
     majorPrompt: "Major prompts",
     promptRelay: "Relay prompts",

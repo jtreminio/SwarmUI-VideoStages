@@ -56,7 +56,8 @@ internal sealed class Ltx2ArchitectureModule :
                 | ClipCapability.References
                 | ClipCapability.Retake
                 | ClipCapability.AudioSources
-                | ClipCapability.AudioSegments,
+                | ClipCapability.AudioSegments
+                | ClipCapability.ReferenceFraming,
             StageCapability.ImageInput
                 | StageCapability.VideoInput
                 | StageCapability.PixelUpscale
@@ -130,7 +131,8 @@ internal sealed record Ltx2ClipPayload(
     IReadOnlyDictionary<int, Ltx2StagePayload> Stages,
     AudioReusePlan AudioReuse,
     Ltx2AudioInjectionPlan AudioInjection,
-    int? ControlNetSourceIndex) :
+    int? ControlNetSourceIndex,
+    ReferenceFramingMode ReferenceFraming) :
     IArchitectureClipPayload,
     IArchitectureStagePayloadSource,
     IArchitectureControlNetSourcePlan,

@@ -99,7 +99,8 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
                 controlImages = driveResolver.ResizeToStageDimensions(
                     bridge,
                     controlImages,
-                    genInfo);
+                    genInfo,
+                    clip.RequireLtx2Payload().ReferenceFraming);
             }
             JToken guideFrames = ResolveGuideFrameCount(
                 genInfo,

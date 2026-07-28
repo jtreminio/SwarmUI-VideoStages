@@ -50,6 +50,7 @@ const contractState = (): VideoStagesConfig => ({
             boundaryOutCarryAudio: true,
             boundaryOutOverlap: 8,
             duration: 3,
+            refFraming: "fit-green",
             audioSource: "Native",
             loras: [{ name: "style.safetensors" }],
             icLoras: [
@@ -156,6 +157,7 @@ const contractState = (): VideoStagesConfig => ({
             boundaryOutCarryAudio: false,
             boundaryOutOverlap: 1,
             duration: 2,
+            refFraming: "crop",
             audioSource: "Native",
             loras: [],
             icLoras: [],

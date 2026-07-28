@@ -87,6 +87,7 @@ describe("architecture diagnostics", () => {
             modelProfileId: "test-profile",
             loras: [{ name: "detail" }],
             prompt: "persisted major prompt",
+            refFraming: "fit",
             refs: [
                 {
                     source: "Base",
@@ -116,6 +117,7 @@ describe("architecture diagnostics", () => {
         expect(codes).toEqual(
             expect.arrayContaining([
                 "architecture.unsupported.frame-references",
+                "architecture.unsupported.reference-framing",
                 "architecture.unsupported.major-prompt",
                 "architecture.unsupported.prompt-relay",
                 "architecture.unsupported.stage-loras",

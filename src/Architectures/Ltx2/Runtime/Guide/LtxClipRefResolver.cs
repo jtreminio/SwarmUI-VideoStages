@@ -11,7 +11,7 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class LtxClipRefResolver(
     WorkflowGenerator g,
-    StageGuideMediaHelper stageGuideMediaHelper,
+    LtxStageGuideMediaResolver guideMediaResolver,
     Base2EditPublishedStageRefs base2EditPublishedStageRefs)
 {
     internal List<ResolvedClipRef> ResolveStageClipRefs(
@@ -43,15 +43,9 @@ internal sealed class LtxClipRefResolver(
                 continue;
             }
 
-            WGNodeData prepared;
-            if (PrimaryGuideMatchesScaledSource(g, raw, sourceMedia))
-            {
-                prepared = sourceMedia;
-            }
-            else
-            {
-                prepared = stageGuideMediaHelper.PrepareGuideMedia(raw, sourceMedia, scaleToSourceSize: false);
-            }
+            WGNodeData prepared = PrimaryGuideMatchesScaledSource(g, raw, sourceMedia)
+                ? sourceMedia
+                : raw;
             resolved.Add(new ResolvedClipRef(prepared, reference, reference.Strength));
         }
 
@@ -150,7 +144,7 @@ internal sealed class LtxClipRefResolver(
             return null;
         }
 
-        return stageGuideMediaHelper.ResolveGuideMedia(stageRef, postVideoChain);
+        return guideMediaResolver.ResolveGuideMedia(stageRef, postVideoChain);
     }
 
     private WGNodeData MaterializeUploadedRefImage(ImageReferencePlan reference)

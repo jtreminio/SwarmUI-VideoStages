@@ -116,6 +116,7 @@ const CLIP_ENTITY = defineList<CanonicalVideoStagesConfig, CanonicalClip>()({
         "boundaryOutCarryAudio",
         "boundaryOutOverlap",
         "duration",
+        "refFraming",
         "audioSource",
         "loras",
         "icLoras",

@@ -131,6 +131,10 @@ export const planArchitectureConversion = (
         removedEntityIds.push(...collectIds(clip.refs));
         clip.refs = [];
     }
+    if (!supports("referenceFraming") && clip.refFraming !== "crop") {
+        removals.push("reference framing setting");
+        clip.refFraming = "crop";
+    }
 
     const removedClipLoras = !supportsNormalLoras ? clip.loras.length : 0;
     if (removedClipLoras > 0) {

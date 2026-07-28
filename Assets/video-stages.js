@@ -1186,6 +1186,7 @@
         "prompts",
         "prompt-relay",
         "references",
+        "reference-framing",
         "retake",
         "audio-sources",
         "audio-segments"
@@ -2329,6 +2330,7 @@
     const numeric = Math.trunc(Number(value));
     return Number.isFinite(numeric) && numeric > 0 ? numeric : normalizeBoundaryOverlap(value, constraints);
   };
+  var normalizeReferenceFraming = (value) => value === "stretch" || value === "fit" || value === "fit-green" ? value : "crop";
   var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
     const defaults = getRootDefaults2();
     const refs = includeDefaultRef ? [buildDefaultRef()] : [];
@@ -2366,6 +2368,7 @@
         Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
         defaults.fps
       ),
+      refFraming: "crop",
       audioSource: AUDIO_SOURCE_NATIVE,
       loras,
       icLoras: [],
@@ -2511,6 +2514,7 @@
         boundaryOverlapConstraints(boundaryRule)
       ),
       duration,
+      refFraming: normalizeReferenceFraming(rawClip.refFraming),
       audioSource,
       loras,
       icLoras,
@@ -3308,6 +3312,7 @@
         boundaryOutCarryAudio: clip.boundaryOutCarryAudio,
         boundaryOutOverlap: clip.boundaryOutOverlap,
         duration: clip.duration,
+        refFraming: clip.refFraming,
         audioSource: clip.audioSource,
         loras: clip.loras.map((entry) => ({
           name: entry.name
@@ -3801,6 +3806,7 @@
     multiStage: "Multiple stages",
     sourceVideo: "Source video",
     frameReferences: "Frame references",
+    referenceFraming: "Reference framing",
     retake: "Retakes",
     majorPrompt: "Major prompts",
     promptRelay: "Relay prompts",
@@ -3856,6 +3862,8 @@
         return capability.clip.includes("source-video");
       case "frameReferences":
         return capability.clip.includes("references") && capability.stage.includes("frame-references");
+      case "referenceFraming":
+        return capability.clip.includes("reference-framing");
       case "retake":
         return capability.clip.includes("retake");
       case "majorPrompt":
@@ -4028,6 +4036,10 @@
       removals.push(countLabel(clip.refs.length, "frame reference"));
       removedEntityIds.push(...collectIds(clip.refs));
       clip.refs = [];
+    }
+    if (!supports("referenceFraming") && clip.refFraming !== "crop") {
+      removals.push("reference framing setting");
+      clip.refFraming = "crop";
     }
     const removedClipLoras = !supportsNormalLoras ? clip.loras.length : 0;
     if (removedClipLoras > 0) {
@@ -4245,6 +4257,7 @@
       "boundaryOutCarryAudio",
       "boundaryOutOverlap",
       "duration",
+      "refFraming",
       "audioSource",
       "loras",
       "icLoras",
@@ -5815,6 +5828,11 @@
       !supports("frameReferences") && clip.refs.length > 0,
       "frame-references",
       "Frame references"
+    );
+    unsupported(
+      !supports("referenceFraming") && clip.refFraming !== "crop",
+      "reference-framing",
+      "Reference framing"
     );
     unsupported(
       !supports("icLora") && clip.icLoras.length > 0,
@@ -11104,7 +11122,7 @@
 
   // frontend/detailStrip/clipBasics.ts
   var DURATION_STEP = 0.1;
-  var buildClipColumn = (context, clip, clipIdx) => {
+  var buildClipColumn = (context, clip, clipIdx, referenceFramingState) => {
     const column = document.createElement("div");
     column.className = "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
     const sourced = !!clip.sourceVideo;
@@ -11134,6 +11152,49 @@
       durationField.classList.add("vst-field-disabled");
     }
     column.appendChild(durationField);
+    if (referenceFramingState?.visible) {
+      const framing = buildOptionSelect(
+        [
+          { value: "crop", label: "Crop" },
+          { value: "stretch", label: "Stretch" },
+          { value: "fit", label: "Fit (black padding)" },
+          { value: "fit-green", label: "Fit (green padding)" }
+        ],
+        clip.refFraming,
+        (value) => {
+          context.commit((clips) => {
+            const target = clips[clipIdx];
+            if (target) {
+              target.refFraming = value;
+            }
+          });
+        }
+      );
+      framing.dataset.vstReferenceFraming = "true";
+      const field = buildField(
+        "Reference resize",
+        framing,
+        void 0,
+        "Fit (green padding) preserves aspect ratio and pads with #66FF00 so outpainting IC-LoRAs treat the padded area as empty."
+      );
+      if (!referenceFramingState.enabled) {
+        applyPersistedCapabilityRepair(field, referenceFramingState, {
+          repair: {
+            label: "Reset reference resize",
+            className: "vst-reset-unsupported-reference-framing",
+            onRepair: () => {
+              context.commit((clips) => {
+                const target = clips[clipIdx];
+                if (target) {
+                  target.refFraming = "crop";
+                }
+              });
+            }
+          }
+        });
+      }
+      column.appendChild(field);
+    }
     return column;
   };
   var buildClipSkipAction = (context, clip, clipIdx) => ({
@@ -12465,12 +12526,21 @@ The conversion is one undoable change.`;
     body.classList.toggle("vst-detail-clip-skipped", clip.skipped === true);
     const defaults = getRootDefaults();
     const capabilityView = context.capabilities().forClip(clip);
+    const referenceFramingState = capabilityView.authoringState(
+      "referenceFraming",
+      clip.refFraming !== "crop"
+    );
     body.appendChild(
       buildStaticSection({
         key: "clip",
         label: "Clip",
         className: "vst-detail-clip-section",
-        content: buildClipColumn(context, clip, clipIdx),
+        content: buildClipColumn(
+          context,
+          clip,
+          clipIdx,
+          referenceFramingState
+        ),
         flattenContent: true,
         headerActions: clipIdx === 0 ? [] : [
           buildClipSkipAction(context, clip, clipIdx),

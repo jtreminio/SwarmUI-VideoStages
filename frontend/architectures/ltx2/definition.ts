@@ -22,6 +22,7 @@ export const ltx2Architecture: VideoArchitectureDefinition = {
             "prompts",
             "prompt-relay",
             "references",
+            "reference-framing",
             "retake",
             "audio-sources",
             "audio-segments",

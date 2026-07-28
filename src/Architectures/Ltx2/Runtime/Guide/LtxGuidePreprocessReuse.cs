@@ -4,12 +4,14 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Generated;
 
 namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class LtxGuidePreprocessReuse(
     WorkflowGenerator g,
-    IArchitectureRootMediaResizer rootVideoStageResizer)
+    IArchitectureRootMediaResizer rootVideoStageResizer,
+    ReferenceFramingMode referenceFraming)
 {
     private const int ImgCompression = 25;
 
@@ -49,68 +51,12 @@ internal sealed class LtxGuidePreprocessReuse(
         }
 
         using WorkflowBridge bridge = BridgeSync.For(g);
-        if (TryGetExistingScaleAtTargetDimensions(
-                bridge,
-                guideImagePath,
-                targetW,
-                targetH,
-                out ImageScaleNode existing))
-        {
-            existing.Crop.Set("center");
-            return guideImagePath;
-        }
-
-        JArray scaleSourcePath = ResolveImageScaleBaseSource(bridge, guideImagePath);
-        if (ImageScaleReuse.TryFind(bridge, scaleSourcePath, targetW, targetH, out ImageScaleNode reusable))
-        {
-            reusable.Crop.Set("center");
-            return reusable.IMAGE.ToPath();
-        }
-
-        ImageScaleNode scale = bridge.AddNode(new ImageScaleNode().With(
-            Width: targetW,
-            Height: targetH,
-            UpscaleMethod: "lanczos",
-            Crop: "center"));
-        scale.Image.TryConnectFromPath(bridge, scaleSourcePath);
-
-        return scale.IMAGE.ToPath();
-    }
-
-    private static bool TryGetExistingScaleAtTargetDimensions(
-        WorkflowBridge bridge,
-        JArray imagePath,
-        int targetW,
-        int targetH,
-        out ImageScaleNode scale)
-    {
-        scale = bridge.NodeAt<ImageScaleNode>(imagePath);
-        return scale is not null
-            && scale.Width.LiteralAsInt() == targetW
-            && scale.Height.LiteralAsInt() == targetH;
-    }
-
-    private static JArray ResolveImageScaleBaseSource(WorkflowBridge bridge, JArray imagePath)
-    {
-        if (NodeRef.From(imagePath) is not { } start)
-        {
-            return imagePath;
-        }
-
-        ComfyNode current = bridge.Graph.GetNode(start.NodeId);
-        int currentSlot = start.SlotIndex;
-        HashSet<string> visited = [];
-        while (current is ImageScaleNode scale && visited.Add($"{scale.Id}::{currentSlot}"))
-        {
-            INodeOutput upstream = scale.Image.Connection;
-            if (upstream is null)
-            {
-                break;
-            }
-            current = upstream.Node;
-            currentSlot = upstream.SlotIndex;
-        }
-        return current is null ? imagePath : new NodeRef(current.Id, currentSlot).ToJArray();
+        return ReferenceFramingGraph.Frame(
+            bridge,
+            guideImagePath,
+            targetW,
+            targetH,
+            referenceFraming);
     }
 
     private bool TryFindReusablePreprocessOutput(JArray guideImagePath, out JArray preprocessOutputPath)
@@ -159,7 +105,8 @@ internal sealed class LtxGuidePreprocessReuse(
                     return true;
                 }
 
-                if (consumer is ImageScaleNode && consumer.Outputs.Count > 0)
+                if (consumer is ImageScaleNode or SwarmFrameImageNode
+                    && consumer.Outputs.Count > 0)
                 {
                     pending.Enqueue(consumer.Outputs[0]);
                 }

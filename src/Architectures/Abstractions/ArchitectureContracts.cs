@@ -71,8 +71,8 @@ internal enum ClipCapability
     References = 1 << 3,
     Retake = 1 << 4,
     AudioSources = 1 << 5,
-    /// <summary>The clip can execute timeline audio spans projected onto it.</summary>
     AudioSegments = 1 << 6,
+    ReferenceFraming = 1 << 7,
 }
 
 [Flags]

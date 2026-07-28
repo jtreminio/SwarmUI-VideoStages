@@ -82,6 +82,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
             boundaryOutCarryAudio: clip.boundaryOutCarryAudio,
             boundaryOutOverlap: clip.boundaryOutOverlap,
             duration: clip.duration,
+            refFraming: clip.refFraming,
             audioSource: clip.audioSource,
             loras: clip.loras.map((entry) => ({
                 name: entry.name,

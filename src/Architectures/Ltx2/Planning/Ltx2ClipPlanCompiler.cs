@@ -61,7 +61,8 @@ internal static class Ltx2ClipPlanCompiler
                 stages,
                 audio.Reuse,
                 audio.Injection,
-                audio.ControlNetSourceIndex),
+                audio.ControlNetSourceIndex,
+                clip.ReferenceFraming),
             diagnostics.AsReadOnly());
     }
 

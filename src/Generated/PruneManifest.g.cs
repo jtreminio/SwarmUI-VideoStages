@@ -41,6 +41,8 @@ public static class PruneManifest
         "LTXVAddLatentGuideNode",
         "LTXVAddLatentsNode",
         "LTXVApplySTGNode",
+        "LTXVAudioOnlyEmptyVideoLatentNode",
+        "LTXVAudioOnlyModelNode",
         "LTXVBaseSamplerNode",
         "LTXVDilateLatentNode",
         "LTXVDilateVideoMaskNode",
@@ -88,6 +90,7 @@ public static class PruneManifest
         "STGGuiderNode",
         "STGGuiderNodeNode",
         "SetVAEDecoderNoiseNode",
+        "SwarmFrameImageNode",
     };
     // PRUNE-MANIFEST-END
 }
