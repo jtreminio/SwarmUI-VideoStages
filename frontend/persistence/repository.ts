@@ -1,7 +1,10 @@
 import { assignMissingHues } from "../clipColor";
+import { ROOT_DIMENSION_STEP } from "../constants";
 import { videoStagesDebugLog } from "../debugLog";
 import type { DocumentCommand } from "../documentCommands";
 import { diffDocuments } from "../documentDiff";
+import { snapExplicitDocumentDimensions } from "../documentDimensionSnap";
+import { getVideoStagesHostBridge } from "../host";
 import { ensureAuthoringDocumentIdentity } from "../identity";
 import { getRootDefaults } from "../rootDefaults";
 import {
@@ -69,6 +72,7 @@ const saveRequestedState = (
     const requested = structuredClone(requestedInput);
     ensureAuthoringDocumentIdentity(requested);
     assignMissingHues(requested.clips);
+    const dimensionSnap = snapExplicitDocumentDimensions(requested);
 
     const before = structuredClone(snapshot.state);
     ensureAuthoringDocumentIdentity(before);
@@ -106,6 +110,15 @@ const saveRequestedState = (
     );
     if (!result.applied) {
         throwSaveFailure("dispatch", result.failure ?? "unknown failure");
+    }
+    if (dimensionSnap.changed) {
+        const gridReason =
+            dimensionSnap.multiple > ROOT_DIMENSION_STEP
+                ? ` Active architecture features require multiples of ${dimensionSnap.multiple}.`
+                : ` VideoStages dimensions use multiples of ${ROOT_DIMENSION_STEP}.`;
+        getVideoStagesHostBridge().showError(
+            `VideoStages adjusted the timeline resolution from ${dimensionSnap.before.width}×${dimensionSnap.before.height} to ${dimensionSnap.after.width}×${dimensionSnap.after.height}.${gridReason}`,
+        );
     }
     videoStagesDebugLog("persistence", "saveState", {
         notifyDomChange: options?.notifyDomChange,

@@ -18,6 +18,8 @@ import {
 } from "./architectures/ltx2/icLoraPresets";
 import type { ArchitectureCatalogEntryDto } from "./architectures/types";
 import { crossfadePlanForClips } from "./boundaryPlan";
+import { dimensionsFor } from "./dimensionPresets";
+import { snapDimensions } from "./dimensionSnap";
 import { framesForClip } from "./renderUtils";
 import type { BoundaryOut, Clip } from "./types";
 
@@ -35,6 +37,37 @@ const ltxBoundaryConstraints = (
     boundaryOverlapConstraints(
         testArchitectureCatalog().architectures[0].boundaryRules[mode],
     );
+
+describe("cross-language mirror: dimension snapping", () => {
+    interface DimensionCase {
+        name: string;
+        ratio: string;
+        sideLength: number;
+        factor: number;
+        rawWidth: number;
+        rawHeight: number;
+        expectedWidth: number;
+        expectedHeight: number;
+    }
+    const cases = loadFixture<DimensionCase[]>("dimension-snap-cases.json");
+
+    it.each(cases)("$name", ({
+        ratio,
+        sideLength,
+        factor,
+        rawWidth,
+        rawHeight,
+        expectedWidth,
+        expectedHeight,
+    }) => {
+        const raw = dimensionsFor(ratio, sideLength);
+        expect(raw).toEqual({ width: rawWidth, height: rawHeight });
+        expect(snapDimensions(rawWidth, rawHeight, 32 * factor)).toEqual({
+            width: expectedWidth,
+            height: expectedHeight,
+        });
+    });
+});
 
 describe("cross-language mirror: M2 frame alignment (renderUtils.framesForClip)", () => {
     interface FrameCase {

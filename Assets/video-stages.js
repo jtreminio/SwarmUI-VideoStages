@@ -52,7 +52,7 @@
     spec.viewMin ?? spec.min,
     spec.viewMax ?? spec.max,
     spec.step,
-    false,
+    spec.isPot ?? false,
     false,
     false
   );
@@ -667,60 +667,6 @@
     return tracks;
   };
 
-  // frontend/icLoraAuthoring.ts
-  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
-  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
-  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
-  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
-  var IC_LORA_SOURCE_UPLOAD = "Upload";
-  var IC_LORA_SOURCE_INCOMING = "Incoming";
-  var IC_LORA_STAGE_ALL = -1;
-  var IC_LORA_STRENGTH_MIN = 0;
-  var IC_LORA_STRENGTH_MAX = 2;
-  var IC_LORA_STRENGTH_STEP = 0.05;
-  var IC_LORA_STRENGTH_DEFAULT = 1;
-  var IC_LORA_ATTENTION_MIN = 0;
-  var IC_LORA_ATTENTION_MAX = 1;
-  var IC_LORA_ATTENTION_STEP = 0.05;
-  var IC_LORA_ATTENTION_DEFAULT = 1;
-
-  // frontend/architectures/ltx2/icLoraDriveAvailability.ts
-  var canUseIncomingIcLoraDrive = (entry, clip, clipIdx, clips, generatedEntryMode) => {
-    const executable = executableClipIndexes(clips);
-    if (entry.driveData === "none" || !executable.includes(clipIdx)) {
-      return false;
-    }
-    const acceptedKinds = entry.driveMediaKinds;
-    const activeStageIndexes = clip.stages.slice(0, activeStageCount(clip)).map((_stage, rawIndex) => rawIndex);
-    const targetedStages = entry.stage >= 0 ? activeStageIndexes.includes(entry.stage) ? [entry.stage] : [] : activeStageIndexes;
-    const hasPreviousClipOutput = executable.some((index) => index < clipIdx);
-    return targetedStages.length > 0 && targetedStages.every((targetStage) => {
-      const activeStageIndex = activeStageIndexes.indexOf(targetStage);
-      const incomingKind = activeStageIndex > 0 || clip.sourceVideo ? "video" : hasPreviousClipOutput ? "video" : generatedEntryMode === "image-to-video" ? "image" : null;
-      return incomingKind !== null && acceptedKinds.includes(incomingKind);
-    });
-  };
-  var reconcileIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode) => {
-    const clip = clips[clipIdx];
-    if (!clip) {
-      return false;
-    }
-    let changed = false;
-    for (const entry of clip.icLoras) {
-      if (entry.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
-        entry,
-        clip,
-        clipIdx,
-        clips,
-        generatedEntryMode
-      )) {
-        entry.driveSource = IC_LORA_SOURCE_UPLOAD;
-        changed = true;
-      }
-    }
-    return changed;
-  };
-
   // frontend/architectures/ltx2/icLoraPresets.ts
   var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
   var IC_LORA_AUTO = "[AUTO]";
@@ -967,6 +913,90 @@
     return `Prepend "${preset.triggerPhrase}" to your prompt`;
   };
 
+  // frontend/architectures/ltx2/dimensionPolicy.ts
+  var presetFactors = /* @__PURE__ */ new Map([
+    ["union-control", 2],
+    ["motion-track-control", 2],
+    ["pixel-spatial-upscaler-x2", 2],
+    ["pixel-spatial-upscaler-x4", 4]
+  ]);
+  var normalizeModelName = (value) => {
+    const normalized = `${value ?? ""}`.trim().replaceAll("\\", "/");
+    const basename = normalized.slice(normalized.lastIndexOf("/") + 1);
+    return basename.replace(/\.safetensors$/i, "").toLowerCase();
+  };
+  var curatedModelFactors = new Map(
+    [...presetFactors].flatMap(([presetId, factor]) => {
+      const preset = findIcLoraPreset(presetId);
+      return preset ? [[normalizeModelName(icLoraAutoModelName(preset)), factor]] : [];
+    })
+  );
+  var icLoraDimensionFactor = (entry) => {
+    const presetFactor = presetFactors.get(
+      `${entry.preset ?? ""}`.trim().toLowerCase()
+    );
+    if (presetFactor) {
+      return presetFactor;
+    }
+    return curatedModelFactors.get(normalizeModelName(entry.lora)) ?? 1;
+  };
+  var ltx2DimensionFactor = (clip) => Math.max(1, ...clip.icLoras.map((entry) => icLoraDimensionFactor(entry)));
+  var ltx2DimensionMultiple = (clip) => ROOT_DIMENSION_STEP * ltx2DimensionFactor(clip);
+
+  // frontend/icLoraAuthoring.ts
+  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
+  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
+  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
+  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
+  var IC_LORA_SOURCE_UPLOAD = "Upload";
+  var IC_LORA_SOURCE_INCOMING = "Incoming";
+  var IC_LORA_STAGE_ALL = -1;
+  var IC_LORA_STRENGTH_MIN = 0;
+  var IC_LORA_STRENGTH_MAX = 2;
+  var IC_LORA_STRENGTH_STEP = 0.05;
+  var IC_LORA_STRENGTH_DEFAULT = 1;
+  var IC_LORA_ATTENTION_MIN = 0;
+  var IC_LORA_ATTENTION_MAX = 1;
+  var IC_LORA_ATTENTION_STEP = 0.05;
+  var IC_LORA_ATTENTION_DEFAULT = 1;
+
+  // frontend/architectures/ltx2/icLoraDriveAvailability.ts
+  var canUseIncomingIcLoraDrive = (entry, clip, clipIdx, clips, generatedEntryMode) => {
+    const executable = executableClipIndexes(clips);
+    if (entry.driveData === "none" || !executable.includes(clipIdx)) {
+      return false;
+    }
+    const acceptedKinds = entry.driveMediaKinds;
+    const activeStageIndexes = clip.stages.slice(0, activeStageCount(clip)).map((_stage, rawIndex) => rawIndex);
+    const targetedStages = entry.stage >= 0 ? activeStageIndexes.includes(entry.stage) ? [entry.stage] : [] : activeStageIndexes;
+    const hasPreviousClipOutput = executable.some((index) => index < clipIdx);
+    return targetedStages.length > 0 && targetedStages.every((targetStage) => {
+      const activeStageIndex = activeStageIndexes.indexOf(targetStage);
+      const incomingKind = activeStageIndex > 0 || clip.sourceVideo ? "video" : hasPreviousClipOutput ? "video" : generatedEntryMode === "image-to-video" ? "image" : null;
+      return incomingKind !== null && acceptedKinds.includes(incomingKind);
+    });
+  };
+  var reconcileIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode) => {
+    const clip = clips[clipIdx];
+    if (!clip) {
+      return false;
+    }
+    let changed = false;
+    for (const entry of clip.icLoras) {
+      if (entry.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+        entry,
+        clip,
+        clipIdx,
+        clips,
+        generatedEntryMode
+      )) {
+        entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+        changed = true;
+      }
+    }
+    return changed;
+  };
+
   // frontend/architectures/ltx2/icLoraNormalization.ts
   var CONTROLNET_SOURCE_OPTIONS = [
     "ControlNet 1",
@@ -1127,6 +1157,7 @@
 
   // frontend/architectures/ltx2/behavior.ts
   var ltx2Behavior = {
+    dimensionMultiple: ltx2DimensionMultiple,
     normalizeIcLoras,
     canonicalizeIcLoraFields,
     reconcileIncomingIcLoraDrives,
@@ -1369,6 +1400,16 @@
     )
   );
   var architectureBehavior = (architectureId) => behaviors.get(architectureId) ?? null;
+  var architectureDimensionMultiple = (clip) => {
+    const requested = architectureBehavior(clip.architecture)?.dimensionMultiple(clip) ?? ROOT_DIMENSION_STEP;
+    if (!Number.isFinite(requested)) {
+      return ROOT_DIMENSION_STEP;
+    }
+    return Math.max(
+      ROOT_DIMENSION_STEP,
+      Math.ceil(requested / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP
+    );
+  };
   var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, sourcedClip, allowPersistedLtxFallback = false) => {
     const behavior = architectureBehavior(architectureId);
     if (behavior) {
@@ -2626,6 +2667,194 @@
     return ids;
   };
 
+  // frontend/dimensionSnap.ts
+  var AREA_DRIFT_WEIGHT = 0.15;
+  var SCORE_EPSILON = 1e-12;
+  var clampToSnapRange = (value, multiple) => Math.min(ROOT_DIMENSION_MAX, Math.max(multiple, value));
+  var snapDimensions = (width, height, multiple = ROOT_DIMENSION_STEP) => {
+    const requestedWidth = Math.max(1, Number.isFinite(width) ? width : 1);
+    const requestedHeight = Math.max(1, Number.isFinite(height) ? height : 1);
+    const grid = Math.min(
+      ROOT_DIMENSION_MAX,
+      Math.max(
+        ROOT_DIMENSION_STEP,
+        Math.round(Number.isFinite(multiple) ? multiple : 0)
+      )
+    );
+    const floorWidth = clampToSnapRange(
+      Math.floor(requestedWidth / grid) * grid,
+      grid
+    );
+    const ceilWidth = clampToSnapRange(
+      Math.ceil(requestedWidth / grid) * grid,
+      grid
+    );
+    const floorHeight = clampToSnapRange(
+      Math.floor(requestedHeight / grid) * grid,
+      grid
+    );
+    const ceilHeight = clampToSnapRange(
+      Math.ceil(requestedHeight / grid) * grid,
+      grid
+    );
+    const candidates = [
+      { width: floorWidth, height: floorHeight },
+      { width: ceilWidth, height: floorHeight },
+      { width: floorWidth, height: ceilHeight },
+      { width: ceilWidth, height: ceilHeight }
+    ];
+    const targetAspect = requestedWidth / requestedHeight;
+    const targetArea = requestedWidth * requestedHeight;
+    const score = (candidate) => Math.abs(
+      Math.log(candidate.width / candidate.height) - Math.log(targetAspect)
+    ) + AREA_DRIFT_WEIGHT * Math.abs(
+      Math.log(candidate.width * candidate.height / targetArea)
+    );
+    let best = candidates[0];
+    let bestScore = score(best);
+    for (const candidate of candidates.slice(1)) {
+      const candidateScore = score(candidate);
+      const candidateArea = candidate.width * candidate.height;
+      const bestArea = best.width * best.height;
+      if (candidateScore < bestScore - SCORE_EPSILON || Math.abs(candidateScore - bestScore) <= SCORE_EPSILON && candidateArea > bestArea) {
+        best = candidate;
+        bestScore = candidateScore;
+      }
+    }
+    return best;
+  };
+
+  // frontend/dimensionPresets.ts
+  var ASPECT_RATIOS = [
+    {
+      id: "1:1",
+      label: "1:1 (Square)",
+      reference: { width: 512, height: 512 }
+    },
+    {
+      id: "4:3",
+      label: "4:3 (Old PC)",
+      reference: { width: 576, height: 448 }
+    },
+    {
+      id: "3:2",
+      label: "3:2 (Semi-wide)",
+      reference: { width: 608, height: 416 }
+    },
+    {
+      id: "8:5",
+      label: "8:5",
+      reference: { width: 608, height: 384 }
+    },
+    {
+      id: "16:9",
+      label: "16:9 (Standard Widescreen)",
+      reference: { width: 672, height: 384 }
+    },
+    {
+      id: "21:9",
+      label: "21:9 (Ultra-Widescreen)",
+      reference: { width: 768, height: 320 }
+    },
+    { id: "3:4", label: "3:4", reference: null },
+    {
+      id: "2:3",
+      label: "2:3 (Semi-tall)",
+      reference: { width: 416, height: 608 }
+    },
+    {
+      id: "5:8",
+      label: "5:8",
+      reference: { width: 384, height: 608 }
+    },
+    {
+      id: "9:16",
+      label: "9:16 (Tall)",
+      reference: { width: 384, height: 672 }
+    },
+    {
+      id: "9:21",
+      label: "9:21 (Ultra-Tall)",
+      reference: { width: 320, height: 768 }
+    }
+  ];
+  var roundHalfToEven = (value) => {
+    const floor = Math.floor(value);
+    const fraction = value - floor;
+    if (Math.abs(fraction - 0.5) <= Number.EPSILON * Math.abs(value) * 2) {
+      return floor % 2 === 0 ? floor : floor + 1;
+    }
+    return Math.round(value);
+  };
+  var dimensionsFor = (ratioId, sideLength) => {
+    const ratio = ASPECT_RATIOS.find((candidate) => candidate.id === ratioId);
+    if (!ratio?.reference) {
+      return null;
+    }
+    const side = Math.max(1, Number.isFinite(sideLength) ? sideLength : 1);
+    return {
+      width: roundHalfToEven(ratio.reference.width * side / 512 / 16) * 16,
+      height: roundHalfToEven(ratio.reference.height * side / 512 / 16) * 16
+    };
+  };
+  var declaredRatioMatches = (ratioId, width, height) => {
+    const [numerator, denominator] = ratioId.split(":").map(Number);
+    return Number.isFinite(numerator) && Number.isFinite(denominator) && Math.abs(width * denominator - height * numerator) < 0.5;
+  };
+  var sideLengthForDimensions = (ratioId, width, height) => {
+    const ratio = ASPECT_RATIOS.find((candidate) => candidate.id === ratioId);
+    if (!ratio?.reference) {
+      return Math.min(
+        ROOT_DIMENSION_MAX,
+        Math.max(
+          ROOT_DIMENSION_MIN,
+          Math.round(Math.sqrt(width * height) / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP
+        )
+      );
+    }
+    const scale = Math.sqrt(
+      Math.max(1, width) * Math.max(1, height) / (ratio.reference.width * ratio.reference.height)
+    );
+    return Math.min(
+      ROOT_DIMENSION_MAX,
+      Math.max(
+        ROOT_DIMENSION_MIN,
+        Math.round(scale * 512 / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP
+      )
+    );
+  };
+  var matchAspectRatio = (width, height, multiple = ROOT_DIMENSION_STEP) => {
+    const roundedWidth = Math.round(width);
+    const roundedHeight = Math.round(height);
+    const exact = ASPECT_RATIOS.find(
+      (ratio) => declaredRatioMatches(ratio.id, roundedWidth, roundedHeight)
+    );
+    if (exact) {
+      return exact.id;
+    }
+    for (const ratio of ASPECT_RATIOS) {
+      if (!ratio.reference) {
+        continue;
+      }
+      const estimated = sideLengthForDimensions(
+        ratio.id,
+        roundedWidth,
+        roundedHeight
+      );
+      for (const offset of [-64, -32, 0, 32, 64]) {
+        const raw = dimensionsFor(ratio.id, estimated + offset);
+        if (!raw) {
+          continue;
+        }
+        const snapped = snapDimensions(raw.width, raw.height, multiple);
+        if (snapped.width === roundedWidth && snapped.height === roundedHeight) {
+          return ratio.id;
+        }
+      }
+    }
+    return null;
+  };
+
   // frontend/promptSegments.ts
   var BOUNDARY_RE = /<videoclip(?=[>[])|<videostages\[/gi;
   var TAG_RE = /^<videoclip(?:\[([^\]]*)\])?(?::([^>]*))?>$/i;
@@ -2885,6 +3114,9 @@
   var trimDomValue = (el) => `${el?.value ?? ""}`.trim();
   var WIDTH_INPUT_IDS = ["input_width", "input_aspectratiowidth"];
   var HEIGHT_INPUT_IDS = ["input_height", "input_aspectratioheight"];
+  var ASPECT_RATIO_INPUT_ID = "input_aspectratio";
+  var SIDE_LENGTH_INPUT_ID = "input_sidelength";
+  var SIDE_LENGTH_TOGGLE_ID = "input_sidelength_toggle";
   var rootVideoFpsInput = () => getVideoStagesHostBridge().getRootVideoFpsInput();
   var firstPresentInput = (...ids) => {
     for (let i = 0; i < ids.length; i++) {
@@ -2918,8 +3150,17 @@
   var readInheritedDimsSignature = () => {
     const width = trimDomValue(firstPresentInput(...WIDTH_INPUT_IDS));
     const height = trimDomValue(firstPresentInput(...HEIGHT_INPUT_IDS));
+    const aspectRatio = trimDomValue(
+      getVideoStagesHostBridge().getSelect(ASPECT_RATIO_INPUT_ID)
+    );
+    const sideLength = trimDomValue(
+      getVideoStagesHostBridge().getInput(SIDE_LENGTH_INPUT_ID)
+    );
+    const sideLengthToggle = getVideoStagesHostBridge().getInput(
+      SIDE_LENGTH_TOGGLE_ID
+    );
     const fps = trimDomValue(rootVideoFpsInput());
-    return `${width}|${height}|${fps}`;
+    return `${width}|${height}|${aspectRatio}|${sideLength}|${sideLengthToggle?.checked ?? ""}|${fps}`;
   };
   var getRootDefaults = () => {
     let model = getVideoStagesHostBridge().getSelect("input_videomodel");
@@ -2955,6 +3196,13 @@
     const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
     const widthInput = firstPresentInput(...WIDTH_INPUT_IDS);
     const heightInput = firstPresentInput(...HEIGHT_INPUT_IDS);
+    const aspectRatioInput = getVideoStagesHostBridge().getSelect(
+      ASPECT_RATIO_INPUT_ID
+    );
+    const sideLengthInput = getVideoStagesHostBridge().getInput(SIDE_LENGTH_INPUT_ID);
+    const sideLengthToggle = getVideoStagesHostBridge().getInput(
+      SIDE_LENGTH_TOGGLE_ID
+    );
     const fpsInput = rootVideoFpsInput();
     const framesInput = firstPresentInput(
       "input_videoframes",
@@ -2962,6 +3210,21 @@
     );
     const fps = Math.max(1, Math.round(toNumber(fpsInput?.value, 24)));
     const frames = Math.max(1, Math.round(toNumber(framesInput?.value, 24)));
+    const hostWidth = Math.max(
+      ROOT_DIMENSION_MIN,
+      Math.round(toNumber(widthInput?.value, 1024))
+    );
+    const hostHeight = Math.max(
+      ROOT_DIMENSION_MIN,
+      Math.round(toNumber(heightInput?.value, 1024))
+    );
+    const aspectRatio = trimDomValue(aspectRatioInput);
+    const sideLengthEnabled = sideLengthInput !== null && (sideLengthToggle === null || sideLengthToggle.checked);
+    const sideLength = sideLengthEnabled ? Math.max(
+      ROOT_DIMENSION_MIN,
+      Math.round(toNumber(sideLengthInput.value, 1024))
+    ) : null;
+    const aspectDimensions = aspectRatio && aspectRatio !== "Custom" && sideLength !== null ? dimensionsFor(aspectRatio, sideLength) : null;
     return {
       modelValues: models.values,
       modelLabels: models.labels,
@@ -2977,14 +3240,10 @@
       schedulerLabels: scheduler.labels,
       upscaleMethodValues,
       upscaleMethodLabels,
-      width: Math.max(
-        ROOT_DIMENSION_MIN,
-        Math.round(toNumber(widthInput?.value, 1024))
-      ),
-      height: Math.max(
-        ROOT_DIMENSION_MIN,
-        Math.round(toNumber(heightInput?.value, 1024))
-      ),
+      width: aspectDimensions?.width ?? hostWidth,
+      height: aspectDimensions?.height ?? hostHeight,
+      aspectRatio: aspectRatio || void 0,
+      sideLength,
       fps,
       frames,
       control: 0.5,
@@ -4432,6 +4691,35 @@
     };
   };
 
+  // frontend/documentDimensionSnap.ts
+  var greatestCommonDivisor = (left, right) => {
+    let a = Math.abs(Math.round(left));
+    let b = Math.abs(Math.round(right));
+    while (b !== 0) {
+      [a, b] = [b, a % b];
+    }
+    return a || 1;
+  };
+  var leastCommonMultiple = (left, right) => Math.abs(left * right) / greatestCommonDivisor(left, right);
+  var activeDocumentDimensionMultiple = (clips) => clips.reduce(
+    (multiple, clip) => leastCommonMultiple(multiple, architectureDimensionMultiple(clip)),
+    ROOT_DIMENSION_STEP
+  );
+  var snapExplicitDocumentDimensions = (state) => {
+    const before = {
+      width: Math.round(state.width),
+      height: Math.round(state.height)
+    };
+    const multiple = activeDocumentDimensionMultiple(state.clips);
+    const after = state.dimsExplicit ? snapDimensions(before.width, before.height, multiple) : before;
+    const changed = after.width !== before.width || after.height !== before.height;
+    if (changed) {
+      state.width = after.width;
+      state.height = after.height;
+    }
+    return { changed, before, after, multiple };
+  };
+
   // frontend/documentCommands/helpers.ts
   var clone2 = (value) => structuredClone(value);
   var findClip = (document2, clipId) => document2.clips.find((clip) => clip.id === clipId) ?? null;
@@ -5302,6 +5590,7 @@
     const requested = structuredClone(requestedInput);
     ensureAuthoringDocumentIdentity(requested);
     assignMissingHues(requested.clips);
+    const dimensionSnap = snapExplicitDocumentDimensions(requested);
     const before = structuredClone(snapshot.state);
     ensureAuthoringDocumentIdentity(before);
     assignMissingHues(before.clips);
@@ -5333,6 +5622,12 @@
     );
     if (!result.applied) {
       throwSaveFailure("dispatch", result.failure ?? "unknown failure");
+    }
+    if (dimensionSnap.changed) {
+      const gridReason = dimensionSnap.multiple > ROOT_DIMENSION_STEP ? ` Active architecture features require multiples of ${dimensionSnap.multiple}.` : ` VideoStages dimensions use multiples of ${ROOT_DIMENSION_STEP}.`;
+      getVideoStagesHostBridge().showError(
+        `VideoStages adjusted the timeline resolution from ${dimensionSnap.before.width}×${dimensionSnap.before.height} to ${dimensionSnap.after.width}×${dimensionSnap.after.height}.${gridReason}`
+      );
     }
     videoStagesDebugLog("persistence", "saveState", {
       notifyDomChange: options?.notifyDomChange,
@@ -7578,7 +7873,8 @@
       max,
       viewMin: opts?.sliderMin,
       viewMax: opts?.sliderMax,
-      step
+      step,
+      isPot: opts?.isPot
     });
     const number = holder.querySelector(
       "input.auto-slider-number"
@@ -9369,130 +9665,6 @@
     ) + renderBoundarySeams(clips, layouts, capabilities, timing, pxPerSecond) + `</div></div>`;
   };
 
-  // frontend/dimensionPresets.ts
-  var DIMENSION_PRESET_METADATA = {
-    "256x384": [
-      "384x576,1.5",
-      "576x864,1.5,1.5",
-      "*768x1152,1.5,2",
-      "1152x1728,1.5,1.5,2"
-    ],
-    "384x512": [
-      "576x768,1.5",
-      "864x1152,1.5,1.5",
-      "*1152x1536,1.5,2",
-      "1728x2304,1.5,1.5,2"
-    ],
-    "384x640": [
-      "576x960,1.5",
-      "864x1440,1.5,1.5",
-      "1152x1920,1.5,2",
-      "1728x2880,1.5,1.5,2"
-    ],
-    "512x768": [
-      "768x1152,1.5",
-      "*1152x1728,1.5,1.5",
-      "*1536x2304,1.5,2",
-      "2304x3456,1.5,1.5,2"
-    ],
-    "512x896": ["*1536x2688,1.5,2"],
-    "512x1024": ["*1152x2304,1.5,1.5", "*1536x3072,1.5,2"],
-    "768x1024": ["*1728x2304,1.5,1.5", "*2304x3072,1.5,2"],
-    "384x256": [
-      "576x384,1.5",
-      "864x576,1.5,1.5",
-      "*1152x768,1.5,2",
-      "1728x1152,1.5,1.5,2"
-    ],
-    "512x384": [
-      "768x576,1.5",
-      "1152x864,1.5,1.5",
-      "*1536x1152,1.5,2",
-      "2304x1728,1.5,1.5,2"
-    ],
-    "640x384": [
-      "960x576,1.5",
-      "1440x864,1.5,1.5",
-      "1920x1152,1.5,2",
-      "2880x1728,1.5,1.5,2"
-    ],
-    "768x512": [
-      "1152x768,1.5",
-      "*1728x1152,1.5,1.5",
-      "*2304x1536,1.5,2",
-      "3456x2304,1.5,1.5,2"
-    ],
-    "896x512": ["*2688x1536,1.5,2"],
-    "1024x512": ["*2304x1152,1.5,1.5", "*3072x1536,1.5,2"],
-    "1024x768": ["*2304x1728,1.5,1.5", "*3072x2304,1.5,2"]
-  };
-  var DIMENSION_PRESET_KEYS = Object.keys(
-    DIMENSION_PRESET_METADATA
-  );
-  var splitDimensionLabel = (label) => {
-    const [w, h] = label.replace("*", "").split("x");
-    return { width: Math.round(Number(w)), height: Math.round(Number(h)) };
-  };
-  var presetDimensions = (presetKey) => {
-    if (!presetKey || !DIMENSION_PRESET_METADATA[presetKey]) {
-      return null;
-    }
-    return splitDimensionLabel(presetKey);
-  };
-  var matchPresetKey = (width, height) => {
-    const w = Math.round(width);
-    const h = Math.round(height);
-    for (const key of DIMENSION_PRESET_KEYS) {
-      const dims = splitDimensionLabel(key);
-      if (dims.width === w && dims.height === h) {
-        return key;
-      }
-    }
-    return null;
-  };
-  var parsePresetStops = (presetKey) => {
-    const presetLines = DIMENSION_PRESET_METADATA[presetKey];
-    if (!presetLines || presetLines.length === 0) {
-      return [];
-    }
-    const out = [];
-    for (let i = 0; i < presetLines.length; i++) {
-      let line = presetLines[i].trim();
-      let controlNetFriendly = false;
-      if (line.startsWith("*")) {
-        controlNetFriendly = true;
-        line = line.slice(1);
-      }
-      const parts = line.split(",");
-      const { width, height } = splitDimensionLabel(parts[0]);
-      out.push({
-        width,
-        height,
-        controlNetFriendly,
-        steps: parts.slice(1)
-      });
-    }
-    return out;
-  };
-  var upscaleBadgeElement = (stop) => {
-    const badge = document.createElement("span");
-    badge.className = "param_view_block tag-text tag-type-8";
-    const resolution = `${stop.width}x${stop.height}`;
-    const stepCount = stop.steps.length;
-    const timesWord = stepCount === 1 ? "time" : "times";
-    let altText = `The chosen resolution can be scaled to ${stepCount} ${timesWord} for a resolution of ${resolution}`;
-    if (stop.controlNetFriendly) {
-      altText += ". It is also ControlNet-friendly";
-    }
-    badge.title = altText;
-    badge.setAttribute("aria-label", altText);
-    const star = stop.controlNetFriendly ? `<span class="controlnet-friendly">*</span> ` : "";
-    const stops = stop.steps.map((s) => `${s}x`).join(" ⇒ ");
-    badge.innerHTML = `${star}${resolution}, ${stops}`;
-    return badge;
-  };
-  var presetBadgeElements = (presetKey) => parsePresetStops(presetKey).map((stop) => upscaleBadgeElement(stop));
-
   // frontend/timelineView/toolbar.ts
   var renderDiagnosticPanel = (diagnostics = []) => {
     const content = diagnostics.map(
@@ -9517,8 +9689,8 @@
     const width = Math.max(0, Math.round(options?.width ?? 0));
     const height = Math.max(0, Math.round(options?.height ?? 0));
     const dimsExplicit = options?.dimsExplicit === true;
-    const presetKey = dimsExplicit && width > 0 && height > 0 ? matchPresetKey(width, height) : null;
-    const dimsSource = dimsExplicit ? presetKey ? `${presetKey} preset` : "custom" : "inherited from image resolution";
+    const ratioId = dimsExplicit && width > 0 && height > 0 ? matchAspectRatio(width, height) : null;
+    const dimsSource = dimsExplicit ? ratioId ? `${ratioId} aspect ratio` : "custom" : "inherited from image resolution";
     const fpsSource = "synced with Video FPS";
     const settingsTip = `Resolution: ${dimsSource}; FPS: ${fpsSource}. Click to edit.`;
     const settingsChip = `<button type="button" class="basic-button small-button vst-settings-chip" data-vst-settings title="${escapeAttr(settingsTip)}" aria-label="${escapeAttr(settingsTip)}"><span class="vst-settings-dims">${width}×${height}</span><span class="vst-settings-chip-sep" aria-hidden="true">·</span><span class="vst-settings-fps">${fps} fps</span></button>`;
@@ -12765,6 +12937,20 @@ The conversion is one undoable change.`;
     ROOT_DIMENSION_MAX
   );
   var clampFps = (value) => clamp(Math.round(value) || ROOT_FPS_MIN, ROOT_FPS_MIN, ROOT_FPS_MAX);
+  var clampSideLength = (value) => clamp(
+    Math.round((Math.round(value) || 1024) / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP,
+    ROOT_DIMENSION_MIN,
+    ROOT_DIMENSION_MAX
+  );
+  var setSliderDisabled = (slider, disabled) => {
+    slider.querySelectorAll("input").forEach((input2) => {
+      input2.disabled = disabled;
+    });
+    const box = slider.querySelector(".auto-slider-box");
+    if (box) {
+      box.dataset.disabled = `${disabled}`;
+    }
+  };
   var FPS_WRITE_DEBOUNCE_MS = 300;
   var fpsWriteTimer = null;
   var scheduleCoreFpsWrite = (value) => {
@@ -12792,95 +12978,159 @@ The conversion is one undoable change.`;
       height: defaults.height,
       fps: defaults.fps
     };
-    const defaultMode = !state.dimsExplicit ? SETTINGS_INHERIT : matchPresetKey(state.width, state.height) ?? SETTINGS_CUSTOM;
+    const multiple = activeDocumentDimensionMultiple(state.clips);
+    const defaultMode = !state.dimsExplicit ? SETTINGS_INHERIT : matchAspectRatio(state.width, state.height, multiple) ?? SETTINGS_CUSTOM;
     const mode = ctx.getSettingsMode() ?? defaultMode;
     const isCustom = mode === SETTINGS_CUSTOM;
-    const displayed = mode === SETTINGS_CUSTOM ? {
-      width: clampDimension(state.width),
-      height: clampDimension(state.height)
-    } : mode === SETTINGS_INHERIT ? { width: core.width, height: core.height } : presetDimensions(mode) ?? {
+    const isInherited = mode === SETTINGS_INHERIT;
+    const fallbackSideLength = defaults.sideLength ?? (defaults.aspectRatio ? sideLengthForDimensions(
+      defaults.aspectRatio,
+      core.width,
+      core.height
+    ) : 1024);
+    const selectedSideLength = !isInherited && !isCustom ? sideLengthForDimensions(mode, state.width, state.height) : clampSideLength(fallbackSideLength);
+    const rawDimensions = isInherited || isCustom ? {
+      width: clampDimension(isInherited ? core.width : state.width),
+      height: clampDimension(
+        isInherited ? core.height : state.height
+      )
+    } : dimensionsFor(mode, selectedSideLength) ?? {
       width: clampDimension(state.width),
       height: clampDimension(state.height)
     };
+    const effectiveDimensions = snapDimensions(
+      rawDimensions.width,
+      rawDimensions.height,
+      multiple
+    );
     const body = document.createElement("div");
     body.className = "vst-detail-form-body vst-detail-settings";
-    const resSpecs = [
+    const ratioSpecs = [
       {
         value: SETTINGS_INHERIT,
         label: `Use image resolution (${core.width}×${core.height})`
       },
-      ...DIMENSION_PRESET_KEYS.map((key) => ({
-        value: key,
-        label: key.replace("x", " × ")
+      ...ASPECT_RATIOS.map((ratio) => ({
+        value: ratio.id,
+        label: ratio.label
       })),
       { value: SETTINGS_CUSTOM, label: "Custom" }
     ];
-    const resSelect = buildOptionSelect(resSpecs, mode, (value) => {
+    const ratioSelect = buildOptionSelect(ratioSpecs, mode, (value) => {
       ctx.setSettingsMode(value);
       ctx.commitState((next) => {
         if (value === SETTINGS_INHERIT) {
           next.dimsExplicit = false;
         } else if (value === SETTINGS_CUSTOM) {
           next.dimsExplicit = true;
-          next.width = clampDimension(displayed.width);
-          next.height = clampDimension(displayed.height);
+          next.width = effectiveDimensions.width;
+          next.height = effectiveDimensions.height;
         } else {
-          const dims = presetDimensions(value);
-          if (dims) {
-            next.dimsExplicit = true;
-            next.width = dims.width;
-            next.height = dims.height;
-          }
+          const raw = dimensionsFor(value, fallbackSideLength) ?? {
+            width: effectiveDimensions.width,
+            height: effectiveDimensions.height
+          };
+          const snapped = snapDimensions(raw.width, raw.height, multiple);
+          next.dimsExplicit = true;
+          next.width = snapped.width;
+          next.height = snapped.height;
         }
       });
       ctx.render();
     });
-    body.appendChild(buildField("Resolution", resSelect));
+    body.appendChild(buildField("Aspect Ratio", ratioSelect));
     if (isCustom) {
-      const widthInput = buildNumber(
-        displayed.width,
-        ROOT_DIMENSION_MIN,
-        ROOT_DIMENSION_MAX,
-        ROOT_DIMENSION_STEP,
-        (value) => {
-          ctx.debouncedCommitState("settings-width", (next) => {
-            next.dimsExplicit = true;
-            next.width = clampDimension(value);
-          });
-        }
+      const widthSlider = tagFocus(
+        buildSlider(
+          "Width",
+          rawDimensions.width,
+          ROOT_DIMENSION_MIN,
+          ROOT_DIMENSION_MAX,
+          ROOT_DIMENSION_STEP,
+          (value) => {
+            ctx.debouncedCommitState("settings-width", (next) => {
+              const snapped = snapDimensions(
+                clampDimension(value),
+                clampDimension(next.height),
+                multiple
+              );
+              next.dimsExplicit = true;
+              next.width = snapped.width;
+              next.height = snapped.height;
+            });
+          }
+        ),
+        "settings-width"
       );
-      widthInput.setAttribute("data-vst-focus-key", "settings-width");
-      const heightInput = buildNumber(
-        displayed.height,
-        ROOT_DIMENSION_MIN,
-        ROOT_DIMENSION_MAX,
-        ROOT_DIMENSION_STEP,
-        (value) => {
-          ctx.debouncedCommitState("settings-height", (next) => {
-            next.dimsExplicit = true;
-            next.height = clampDimension(value);
-          });
-        }
+      const heightSlider = tagFocus(
+        buildSlider(
+          "Height",
+          rawDimensions.height,
+          ROOT_DIMENSION_MIN,
+          ROOT_DIMENSION_MAX,
+          ROOT_DIMENSION_STEP,
+          (value) => {
+            ctx.debouncedCommitState("settings-height", (next) => {
+              const snapped = snapDimensions(
+                clampDimension(next.width),
+                clampDimension(value),
+                multiple
+              );
+              next.dimsExplicit = true;
+              next.width = snapped.width;
+              next.height = snapped.height;
+            });
+          }
+        ),
+        "settings-height"
       );
-      heightInput.setAttribute("data-vst-focus-key", "settings-height");
-      const dimsPair = document.createElement("div");
-      dimsPair.className = "vst-settings-dims";
-      const dimsSep = document.createElement("span");
-      dimsSep.className = "vst-settings-dims-sep";
-      dimsSep.textContent = "×";
-      dimsPair.append(widthInput, dimsSep, heightInput);
-      body.appendChild(buildField("Dimensions", dimsPair));
+      body.append(widthSlider, heightSlider);
+    } else if (!isInherited) {
+      const ratioHasReference = dimensionsFor(mode, selectedSideLength) !== null;
+      let calculatedDimensions = null;
+      const sideLengthSlider = tagFocus(
+        buildSlider(
+          "Side Length",
+          selectedSideLength,
+          ROOT_DIMENSION_MIN,
+          ROOT_DIMENSION_MAX,
+          ROOT_DIMENSION_STEP,
+          (value) => {
+            if (isInherited) {
+              return;
+            }
+            const raw = dimensionsFor(mode, clampSideLength(value));
+            if (!raw) {
+              return;
+            }
+            const snapped = snapDimensions(
+              raw.width,
+              raw.height,
+              multiple
+            );
+            if (calculatedDimensions) {
+              calculatedDimensions.textContent = `${snapped.width} × ${snapped.height}`;
+            }
+            ctx.debouncedCommitState("settings-side-length", (next) => {
+              next.dimsExplicit = true;
+              next.width = snapped.width;
+              next.height = snapped.height;
+            });
+          },
+          {
+            hint: !ratioHasReference ? "(the host has no 3:4 reference; current dimensions are retained)" : void 0,
+            isPot: true
+          }
+        ),
+        "settings-side-length"
+      );
+      calculatedDimensions = document.createElement("span");
+      calculatedDimensions.className = "vst-settings-calculated-dims";
+      calculatedDimensions.textContent = `${effectiveDimensions.width} × ${effectiveDimensions.height}`;
+      sideLengthSlider.querySelector("label")?.appendChild(calculatedDimensions);
+      setSliderDisabled(sideLengthSlider, !ratioHasReference);
+      body.appendChild(sideLengthSlider);
     }
-    const badges = document.createElement("div");
-    badges.className = "vst-settings-badges";
-    if (mode !== SETTINGS_CUSTOM && mode !== SETTINGS_INHERIT) {
-      const els = presetBadgeElements(mode);
-      if (els.length > 0) {
-        badges.append(...els);
-      }
-    }
-    badges.hidden = badges.childElementCount === 0;
-    body.appendChild(badges);
     const hasCoreFps = getVideoStagesHostBridge().getRootVideoFpsInput() !== null;
     const fpsInput = buildNumber(
       clampFps(state.fps),

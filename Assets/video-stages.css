@@ -1540,6 +1540,11 @@
     color: var(--emphasis);
     font-weight: 700;
 }
+.vst-settings-calculated-dims {
+    margin-left: 0.45em;
+    color: var(--text-soft);
+    font-variant-numeric: tabular-nums;
+}
 
 @media (prefers-reduced-motion: reduce) {
     .vst-timeline * {

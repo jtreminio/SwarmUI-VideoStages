@@ -158,7 +158,7 @@ public class StageRunnerCollaboratorTests
     }
 
     [Fact]
-    public void Stage_dimension_rules_leave_unconstrained_stage_dimensions_unchanged()
+    public void Stage_dimension_rules_apply_the_default_ltx_grid_without_an_ic_lora()
     {
         StagePlan stage = MakePlan().Stage;
         stage = stage with
@@ -169,7 +169,7 @@ public class StageRunnerCollaboratorTests
             }
         };
 
-        Assert.Equal((638, 359), StageDimensionRules.SnapForIcLora(stage, 638, 359));
+        Assert.Equal((640, 352), StageDimensionRules.SnapForIcLora(stage, 638, 359));
     }
 
     [Fact]
@@ -188,7 +188,22 @@ public class StageRunnerCollaboratorTests
             }
         };
 
-        Assert.Equal((1264, 704), StageDimensionRules.ResolveUpscaled(stage, 638, 359));
+        Assert.Equal((1280, 704), StageDimensionRules.ResolveUpscaled(stage, 638, 359));
+    }
+
+    [Fact]
+    public void Dimension_snap_prefers_aspect_and_clamps_its_candidate_grid()
+    {
+        Assert.Equal((1280, 704), DimensionSnap.Snap(1232, 688, 64));
+        Assert.Equal((32, 32), DimensionSnap.Snap(20, 10));
+        Assert.Equal((4096, 2976), DimensionSnap.Snap(5000, 3000));
+    }
+
+    [Fact]
+    public void Dimension_snap_ties_prefer_the_larger_area()
+    {
+        double midpoint = Math.Sqrt(32 * 64);
+        Assert.Equal((64, 64), DimensionSnap.Snap(midpoint, midpoint));
     }
 
     private static void AssertTypedMethod(Type type, string name, params Type[] parameters)

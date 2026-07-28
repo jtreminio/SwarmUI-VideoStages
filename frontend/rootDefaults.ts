@@ -5,6 +5,7 @@ import {
 } from "./architectures/catalog";
 import type { VideoArchitectureId } from "./architectures/types";
 import { ROOT_DIMENSION_MIN } from "./constants";
+import { dimensionsFor } from "./dimensionPresets";
 import { getVideoStagesHostBridge } from "./host";
 import {
     getDropdownOptions,
@@ -20,6 +21,9 @@ const trimDomValue = (el: { value: string } | null | undefined): string =>
 /** Core input ids that carry the inherited dims/fps, in probe order. */
 const WIDTH_INPUT_IDS = ["input_width", "input_aspectratiowidth"];
 const HEIGHT_INPUT_IDS = ["input_height", "input_aspectratioheight"];
+const ASPECT_RATIO_INPUT_ID = "input_aspectratio";
+const SIDE_LENGTH_INPUT_ID = "input_sidelength";
+const SIDE_LENGTH_TOGGLE_ID = "input_sidelength_toggle";
 const rootVideoFpsInput = (): HTMLInputElement | null =>
     getVideoStagesHostBridge().getRootVideoFpsInput();
 
@@ -67,8 +71,17 @@ export const getDefaultStageModel = (
 export const readInheritedDimsSignature = (): string => {
     const width = trimDomValue(firstPresentInput(...WIDTH_INPUT_IDS));
     const height = trimDomValue(firstPresentInput(...HEIGHT_INPUT_IDS));
+    const aspectRatio = trimDomValue(
+        getVideoStagesHostBridge().getSelect(ASPECT_RATIO_INPUT_ID),
+    );
+    const sideLength = trimDomValue(
+        getVideoStagesHostBridge().getInput(SIDE_LENGTH_INPUT_ID),
+    );
+    const sideLengthToggle = getVideoStagesHostBridge().getInput(
+        SIDE_LENGTH_TOGGLE_ID,
+    );
     const fps = trimDomValue(rootVideoFpsInput());
-    return `${width}|${height}|${fps}`;
+    return `${width}|${height}|${aspectRatio}|${sideLength}|${sideLengthToggle?.checked ?? ""}|${fps}`;
 };
 
 export const getRootDefaults = (): RootDefaults => {
@@ -111,6 +124,14 @@ export const getRootDefaults = (): RootDefaults => {
     const cfgScale = firstPresentInput("input_videocfg", "input_cfgscale");
     const widthInput = firstPresentInput(...WIDTH_INPUT_IDS);
     const heightInput = firstPresentInput(...HEIGHT_INPUT_IDS);
+    const aspectRatioInput = getVideoStagesHostBridge().getSelect(
+        ASPECT_RATIO_INPUT_ID,
+    );
+    const sideLengthInput =
+        getVideoStagesHostBridge().getInput(SIDE_LENGTH_INPUT_ID);
+    const sideLengthToggle = getVideoStagesHostBridge().getInput(
+        SIDE_LENGTH_TOGGLE_ID,
+    );
     const fpsInput = rootVideoFpsInput();
     const framesInput = firstPresentInput(
         "input_videoframes",
@@ -119,6 +140,28 @@ export const getRootDefaults = (): RootDefaults => {
 
     const fps = Math.max(1, Math.round(toNumber(fpsInput?.value, 24)));
     const frames = Math.max(1, Math.round(toNumber(framesInput?.value, 24)));
+    const hostWidth = Math.max(
+        ROOT_DIMENSION_MIN,
+        Math.round(toNumber(widthInput?.value, 1024)),
+    );
+    const hostHeight = Math.max(
+        ROOT_DIMENSION_MIN,
+        Math.round(toNumber(heightInput?.value, 1024)),
+    );
+    const aspectRatio = trimDomValue(aspectRatioInput);
+    const sideLengthEnabled =
+        sideLengthInput !== null &&
+        (sideLengthToggle === null || sideLengthToggle.checked);
+    const sideLength = sideLengthEnabled
+        ? Math.max(
+              ROOT_DIMENSION_MIN,
+              Math.round(toNumber(sideLengthInput.value, 1024)),
+          )
+        : null;
+    const aspectDimensions =
+        aspectRatio && aspectRatio !== "Custom" && sideLength !== null
+            ? dimensionsFor(aspectRatio, sideLength)
+            : null;
 
     return {
         modelValues: models.values,
@@ -135,14 +178,10 @@ export const getRootDefaults = (): RootDefaults => {
         schedulerLabels: scheduler.labels,
         upscaleMethodValues,
         upscaleMethodLabels,
-        width: Math.max(
-            ROOT_DIMENSION_MIN,
-            Math.round(toNumber(widthInput?.value, 1024)),
-        ),
-        height: Math.max(
-            ROOT_DIMENSION_MIN,
-            Math.round(toNumber(heightInput?.value, 1024)),
-        ),
+        width: aspectDimensions?.width ?? hostWidth,
+        height: aspectDimensions?.height ?? hostHeight,
+        aspectRatio: aspectRatio || undefined,
+        sideLength,
         fps,
         frames,
         control: 0.5,

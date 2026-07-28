@@ -1,6 +1,6 @@
 import type { CapabilityViewResolver } from "../architectures/policy";
 import type { AuthoringDiagnostic } from "../authoringDiagnostics";
-import { matchPresetKey } from "../dimensionPresets";
+import { matchAspectRatio } from "../dimensionPresets";
 import {
     escapeHtml,
     formatSecondsTenth,
@@ -101,13 +101,13 @@ export const renderTimelineHeader = (
     const width = Math.max(0, Math.round(options?.width ?? 0));
     const height = Math.max(0, Math.round(options?.height ?? 0));
     const dimsExplicit = options?.dimsExplicit === true;
-    const presetKey =
+    const ratioId =
         dimsExplicit && width > 0 && height > 0
-            ? matchPresetKey(width, height)
+            ? matchAspectRatio(width, height)
             : null;
     const dimsSource = dimsExplicit
-        ? presetKey
-            ? `${presetKey} preset`
+        ? ratioId
+            ? `${ratioId} aspect ratio`
             : "custom"
         : "inherited from image resolution";
     const fpsSource = "synced with Video FPS";

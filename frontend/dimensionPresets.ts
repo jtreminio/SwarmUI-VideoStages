@@ -1,148 +1,178 @@
-export const DIMENSION_PRESET_METADATA: Readonly<Record<string, string[]>> = {
-    "256x384": [
-        "384x576,1.5",
-        "576x864,1.5,1.5",
-        "*768x1152,1.5,2",
-        "1152x1728,1.5,1.5,2",
-    ],
-    "384x512": [
-        "576x768,1.5",
-        "864x1152,1.5,1.5",
-        "*1152x1536,1.5,2",
-        "1728x2304,1.5,1.5,2",
-    ],
-    "384x640": [
-        "576x960,1.5",
-        "864x1440,1.5,1.5",
-        "1152x1920,1.5,2",
-        "1728x2880,1.5,1.5,2",
-    ],
-    "512x768": [
-        "768x1152,1.5",
-        "*1152x1728,1.5,1.5",
-        "*1536x2304,1.5,2",
-        "2304x3456,1.5,1.5,2",
-    ],
-    "512x896": ["*1536x2688,1.5,2"],
-    "512x1024": ["*1152x2304,1.5,1.5", "*1536x3072,1.5,2"],
-    "768x1024": ["*1728x2304,1.5,1.5", "*2304x3072,1.5,2"],
-    "384x256": [
-        "576x384,1.5",
-        "864x576,1.5,1.5",
-        "*1152x768,1.5,2",
-        "1728x1152,1.5,1.5,2",
-    ],
-    "512x384": [
-        "768x576,1.5",
-        "1152x864,1.5,1.5",
-        "*1536x1152,1.5,2",
-        "2304x1728,1.5,1.5,2",
-    ],
-    "640x384": [
-        "960x576,1.5",
-        "1440x864,1.5,1.5",
-        "1920x1152,1.5,2",
-        "2880x1728,1.5,1.5,2",
-    ],
-    "768x512": [
-        "1152x768,1.5",
-        "*1728x1152,1.5,1.5",
-        "*2304x1536,1.5,2",
-        "3456x2304,1.5,1.5,2",
-    ],
-    "896x512": ["*2688x1536,1.5,2"],
-    "1024x512": ["*2304x1152,1.5,1.5", "*3072x1536,1.5,2"],
-    "1024x768": ["*2304x1728,1.5,1.5", "*3072x2304,1.5,2"],
-};
-
-/** Preset keys in display order (the metadata object's insertion order). */
-export const DIMENSION_PRESET_KEYS: readonly string[] = Object.keys(
-    DIMENSION_PRESET_METADATA,
-);
+import {
+    ROOT_DIMENSION_MAX,
+    ROOT_DIMENSION_MIN,
+    ROOT_DIMENSION_STEP,
+} from "./constants";
+import { snapDimensions } from "./dimensionSnap";
 
 export interface WidthHeight {
     width: number;
     height: number;
 }
 
-export interface UpscaleStop {
-    width: number;
-    height: number;
-    controlNetFriendly: boolean;
-    steps: readonly string[];
+export interface AspectRatio {
+    id: string;
+    label: string;
+    reference: WidthHeight | null;
 }
 
-const splitDimensionLabel = (label: string): WidthHeight => {
-    const [w, h] = label.replace("*", "").split("x");
-    return { width: Math.round(Number(w)), height: Math.round(Number(h)) };
+export const ASPECT_RATIOS: readonly AspectRatio[] = [
+    {
+        id: "1:1",
+        label: "1:1 (Square)",
+        reference: { width: 512, height: 512 },
+    },
+    {
+        id: "4:3",
+        label: "4:3 (Old PC)",
+        reference: { width: 576, height: 448 },
+    },
+    {
+        id: "3:2",
+        label: "3:2 (Semi-wide)",
+        reference: { width: 608, height: 416 },
+    },
+    {
+        id: "8:5",
+        label: "8:5",
+        reference: { width: 608, height: 384 },
+    },
+    {
+        id: "16:9",
+        label: "16:9 (Standard Widescreen)",
+        reference: { width: 672, height: 384 },
+    },
+    {
+        id: "21:9",
+        label: "21:9 (Ultra-Widescreen)",
+        reference: { width: 768, height: 320 },
+    },
+    { id: "3:4", label: "3:4", reference: null },
+    {
+        id: "2:3",
+        label: "2:3 (Semi-tall)",
+        reference: { width: 416, height: 608 },
+    },
+    {
+        id: "5:8",
+        label: "5:8",
+        reference: { width: 384, height: 608 },
+    },
+    {
+        id: "9:16",
+        label: "9:16 (Tall)",
+        reference: { width: 384, height: 672 },
+    },
+    {
+        id: "9:21",
+        label: "9:21 (Ultra-Tall)",
+        reference: { width: 320, height: 768 },
+    },
+];
+
+const roundHalfToEven = (value: number): number => {
+    const floor = Math.floor(value);
+    const fraction = value - floor;
+    if (Math.abs(fraction - 0.5) <= Number.EPSILON * Math.abs(value) * 2) {
+        return floor % 2 === 0 ? floor : floor + 1;
+    }
+    return Math.round(value);
 };
 
-export const presetDimensions = (presetKey: string): WidthHeight | null => {
-    if (!presetKey || !DIMENSION_PRESET_METADATA[presetKey]) {
+export const dimensionsFor = (
+    ratioId: string,
+    sideLength: number,
+): WidthHeight | null => {
+    const ratio = ASPECT_RATIOS.find((candidate) => candidate.id === ratioId);
+    if (!ratio?.reference) {
         return null;
     }
-    return splitDimensionLabel(presetKey);
+    const side = Math.max(1, Number.isFinite(sideLength) ? sideLength : 1);
+    return {
+        width: roundHalfToEven((ratio.reference.width * side) / 512 / 16) * 16,
+        height:
+            roundHalfToEven((ratio.reference.height * side) / 512 / 16) * 16,
+    };
 };
 
-export const matchPresetKey = (
+const declaredRatioMatches = (
+    ratioId: string,
     width: number,
     height: number,
+): boolean => {
+    const [numerator, denominator] = ratioId.split(":").map(Number);
+    return (
+        Number.isFinite(numerator) &&
+        Number.isFinite(denominator) &&
+        Math.abs(width * denominator - height * numerator) < 0.5
+    );
+};
+
+export const sideLengthForDimensions = (
+    ratioId: string,
+    width: number,
+    height: number,
+): number => {
+    const ratio = ASPECT_RATIOS.find((candidate) => candidate.id === ratioId);
+    if (!ratio?.reference) {
+        return Math.min(
+            ROOT_DIMENSION_MAX,
+            Math.max(
+                ROOT_DIMENSION_MIN,
+                Math.round(Math.sqrt(width * height) / ROOT_DIMENSION_STEP) *
+                    ROOT_DIMENSION_STEP,
+            ),
+        );
+    }
+    const scale = Math.sqrt(
+        (Math.max(1, width) * Math.max(1, height)) /
+            (ratio.reference.width * ratio.reference.height),
+    );
+    return Math.min(
+        ROOT_DIMENSION_MAX,
+        Math.max(
+            ROOT_DIMENSION_MIN,
+            Math.round((scale * 512) / ROOT_DIMENSION_STEP) *
+                ROOT_DIMENSION_STEP,
+        ),
+    );
+};
+
+export const matchAspectRatio = (
+    width: number,
+    height: number,
+    multiple = ROOT_DIMENSION_STEP,
 ): string | null => {
-    const w = Math.round(width);
-    const h = Math.round(height);
-    for (const key of DIMENSION_PRESET_KEYS) {
-        const dims = splitDimensionLabel(key);
-        if (dims.width === w && dims.height === h) {
-            return key;
+    const roundedWidth = Math.round(width);
+    const roundedHeight = Math.round(height);
+    const exact = ASPECT_RATIOS.find((ratio) =>
+        declaredRatioMatches(ratio.id, roundedWidth, roundedHeight),
+    );
+    if (exact) {
+        return exact.id;
+    }
+    for (const ratio of ASPECT_RATIOS) {
+        if (!ratio.reference) {
+            continue;
+        }
+        const estimated = sideLengthForDimensions(
+            ratio.id,
+            roundedWidth,
+            roundedHeight,
+        );
+        for (const offset of [-64, -32, 0, 32, 64]) {
+            const raw = dimensionsFor(ratio.id, estimated + offset);
+            if (!raw) {
+                continue;
+            }
+            const snapped = snapDimensions(raw.width, raw.height, multiple);
+            if (
+                snapped.width === roundedWidth &&
+                snapped.height === roundedHeight
+            ) {
+                return ratio.id;
+            }
         }
     }
     return null;
 };
-
-export const parsePresetStops = (presetKey: string): UpscaleStop[] => {
-    const presetLines = DIMENSION_PRESET_METADATA[presetKey];
-    if (!presetLines || presetLines.length === 0) {
-        return [];
-    }
-    const out: UpscaleStop[] = [];
-    for (let i = 0; i < presetLines.length; i++) {
-        let line = presetLines[i].trim();
-        let controlNetFriendly = false;
-        if (line.startsWith("*")) {
-            controlNetFriendly = true;
-            line = line.slice(1);
-        }
-        const parts = line.split(",");
-        const { width, height } = splitDimensionLabel(parts[0]);
-        out.push({
-            width,
-            height,
-            controlNetFriendly,
-            steps: parts.slice(1),
-        });
-    }
-    return out;
-};
-
-const upscaleBadgeElement = (stop: UpscaleStop): HTMLSpanElement => {
-    const badge = document.createElement("span");
-    badge.className = "param_view_block tag-text tag-type-8";
-    const resolution = `${stop.width}x${stop.height}`;
-    const stepCount = stop.steps.length;
-    const timesWord = stepCount === 1 ? "time" : "times";
-    let altText = `The chosen resolution can be scaled to ${stepCount} ${timesWord} for a resolution of ${resolution}`;
-    if (stop.controlNetFriendly) {
-        altText += ". It is also ControlNet-friendly";
-    }
-    badge.title = altText;
-    badge.setAttribute("aria-label", altText);
-    const star = stop.controlNetFriendly
-        ? `<span class="controlnet-friendly">*</span> `
-        : "";
-    const stops = stop.steps.map((s) => `${s}x`).join(" ⇒ ");
-    badge.innerHTML = `${star}${resolution}, ${stops}`;
-    return badge;
-};
-
-export const presetBadgeElements = (presetKey: string): HTMLSpanElement[] =>
-    parsePresetStops(presetKey).map((stop) => upscaleBadgeElement(stop));

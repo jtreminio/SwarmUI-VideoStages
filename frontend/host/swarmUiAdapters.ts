@@ -66,6 +66,7 @@ export interface HostSliderSpec {
     viewMin?: number;
     viewMax?: number;
     step: number;
+    isPot?: boolean;
 }
 
 export const renderHostSlider = (spec: HostSliderSpec): string =>
@@ -81,7 +82,7 @@ export const renderHostSlider = (spec: HostSliderSpec): string =>
         spec.viewMin ?? spec.min,
         spec.viewMax ?? spec.max,
         spec.step,
-        false,
+        spec.isPot ?? false,
         false,
         false,
     );

@@ -1,0 +1,82 @@
+[
+  {
+    "name": "square-default-grid",
+    "ratio": "1:1",
+    "sideLength": 1024,
+    "factor": 1,
+    "rawWidth": 1024,
+    "rawHeight": 1024,
+    "expectedWidth": 1024,
+    "expectedHeight": 1024
+  },
+  {
+    "name": "host-approximate-four-three",
+    "ratio": "4:3",
+    "sideLength": 1024,
+    "factor": 1,
+    "rawWidth": 1152,
+    "rawHeight": 896,
+    "expectedWidth": 1152,
+    "expectedHeight": 896
+  },
+  {
+    "name": "widescreen-default-grid",
+    "ratio": "16:9",
+    "sideLength": 1024,
+    "factor": 1,
+    "rawWidth": 1344,
+    "rawHeight": 768,
+    "expectedWidth": 1344,
+    "expectedHeight": 768
+  },
+  {
+    "name": "semi-wide-factor-four",
+    "ratio": "3:2",
+    "sideLength": 1024,
+    "factor": 4,
+    "rawWidth": 1216,
+    "rawHeight": 832,
+    "expectedWidth": 1280,
+    "expectedHeight": 896
+  },
+  {
+    "name": "widescreen-factor-four",
+    "ratio": "16:9",
+    "sideLength": 1024,
+    "factor": 4,
+    "rawWidth": 1344,
+    "rawHeight": 768,
+    "expectedWidth": 1408,
+    "expectedHeight": 768
+  },
+  {
+    "name": "ultra-tall-factor-two",
+    "ratio": "9:21",
+    "sideLength": 1024,
+    "factor": 2,
+    "rawWidth": 640,
+    "rawHeight": 1536,
+    "expectedWidth": 640,
+    "expectedHeight": 1536
+  },
+  {
+    "name": "ultra-wide-small-factor-two",
+    "ratio": "21:9",
+    "sideLength": 544,
+    "factor": 2,
+    "rawWidth": 816,
+    "rawHeight": 336,
+    "expectedWidth": 768,
+    "expectedHeight": 320
+  },
+  {
+    "name": "tall-non-native-side",
+    "ratio": "5:8",
+    "sideLength": 736,
+    "factor": 1,
+    "rawWidth": 544,
+    "rawHeight": 880,
+    "expectedWidth": 544,
+    "expectedHeight": 896
+  }
+]

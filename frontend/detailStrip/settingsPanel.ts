@@ -10,15 +10,19 @@ import {
     buildField,
     buildNumber,
     buildOptionSelect,
+    buildSlider,
     type OptionSpec,
+    tagFocus,
     wrapForm,
 } from "../detailWidgets";
 import {
-    DIMENSION_PRESET_KEYS,
-    matchPresetKey,
-    presetBadgeElements,
-    presetDimensions,
+    ASPECT_RATIOS,
+    dimensionsFor,
+    matchAspectRatio,
+    sideLengthForDimensions,
 } from "../dimensionPresets";
+import { snapDimensions } from "../dimensionSnap";
+import { activeDocumentDimensionMultiple } from "../documentDimensionSnap";
 import { getVideoStagesHostBridge } from "../host";
 import { getState } from "../persistence";
 import { getRootDefaults } from "../rootDefaults";
@@ -37,6 +41,24 @@ const clampDimension = (value: number): number =>
 
 const clampFps = (value: number): number =>
     clamp(Math.round(value) || ROOT_FPS_MIN, ROOT_FPS_MIN, ROOT_FPS_MAX);
+
+const clampSideLength = (value: number): number =>
+    clamp(
+        Math.round((Math.round(value) || 1024) / ROOT_DIMENSION_STEP) *
+            ROOT_DIMENSION_STEP,
+        ROOT_DIMENSION_MIN,
+        ROOT_DIMENSION_MAX,
+    );
+
+const setSliderDisabled = (slider: HTMLElement, disabled: boolean): void => {
+    slider.querySelectorAll<HTMLInputElement>("input").forEach((input) => {
+        input.disabled = disabled;
+    });
+    const box = slider.querySelector<HTMLElement>(".auto-slider-box");
+    if (box) {
+        box.dataset.disabled = `${disabled}`;
+    }
+};
 
 const FPS_WRITE_DEBOUNCE_MS = 300;
 let fpsWriteTimer: ReturnType<typeof setTimeout> | null = null;
@@ -75,112 +97,180 @@ export const buildSettingsBody = (
         height: defaults.height,
         fps: defaults.fps,
     };
+    const multiple = activeDocumentDimensionMultiple(state.clips);
     const defaultMode = !state.dimsExplicit
         ? SETTINGS_INHERIT
-        : (matchPresetKey(state.width, state.height) ?? SETTINGS_CUSTOM);
+        : (matchAspectRatio(state.width, state.height, multiple) ??
+          SETTINGS_CUSTOM);
     const mode = ctx.getSettingsMode() ?? defaultMode;
     const isCustom = mode === SETTINGS_CUSTOM;
-    const displayed =
-        mode === SETTINGS_CUSTOM
+    const isInherited = mode === SETTINGS_INHERIT;
+    const fallbackSideLength =
+        defaults.sideLength ??
+        (defaults.aspectRatio
+            ? sideLengthForDimensions(
+                  defaults.aspectRatio,
+                  core.width,
+                  core.height,
+              )
+            : 1024);
+    const selectedSideLength =
+        !isInherited && !isCustom
+            ? sideLengthForDimensions(mode, state.width, state.height)
+            : clampSideLength(fallbackSideLength);
+    const rawDimensions =
+        isInherited || isCustom
             ? {
+                  width: clampDimension(isInherited ? core.width : state.width),
+                  height: clampDimension(
+                      isInherited ? core.height : state.height,
+                  ),
+              }
+            : (dimensionsFor(mode, selectedSideLength) ?? {
                   width: clampDimension(state.width),
                   height: clampDimension(state.height),
-              }
-            : mode === SETTINGS_INHERIT
-              ? { width: core.width, height: core.height }
-              : (presetDimensions(mode) ?? {
-                    width: clampDimension(state.width),
-                    height: clampDimension(state.height),
-                });
+              });
+    const effectiveDimensions = snapDimensions(
+        rawDimensions.width,
+        rawDimensions.height,
+        multiple,
+    );
 
     const body = document.createElement("div");
     body.className = "vst-detail-form-body vst-detail-settings";
 
-    const resSpecs: OptionSpec[] = [
+    const ratioSpecs: OptionSpec[] = [
         {
             value: SETTINGS_INHERIT,
             label: `Use image resolution (${core.width}×${core.height})`,
         },
-        ...DIMENSION_PRESET_KEYS.map((key) => ({
-            value: key,
-            label: key.replace("x", " × "),
+        ...ASPECT_RATIOS.map((ratio) => ({
+            value: ratio.id,
+            label: ratio.label,
         })),
         { value: SETTINGS_CUSTOM, label: "Custom" },
     ];
-    const resSelect = buildOptionSelect(resSpecs, mode, (value) => {
+    const ratioSelect = buildOptionSelect(ratioSpecs, mode, (value) => {
         ctx.setSettingsMode(value);
         ctx.commitState((next) => {
             if (value === SETTINGS_INHERIT) {
                 next.dimsExplicit = false;
             } else if (value === SETTINGS_CUSTOM) {
                 next.dimsExplicit = true;
-                next.width = clampDimension(displayed.width);
-                next.height = clampDimension(displayed.height);
+                next.width = effectiveDimensions.width;
+                next.height = effectiveDimensions.height;
             } else {
-                const dims = presetDimensions(value);
-                if (dims) {
-                    next.dimsExplicit = true;
-                    next.width = dims.width;
-                    next.height = dims.height;
-                }
+                const raw = dimensionsFor(value, fallbackSideLength) ?? {
+                    width: effectiveDimensions.width,
+                    height: effectiveDimensions.height,
+                };
+                const snapped = snapDimensions(raw.width, raw.height, multiple);
+                next.dimsExplicit = true;
+                next.width = snapped.width;
+                next.height = snapped.height;
             }
         });
         ctx.render();
     });
-    body.appendChild(buildField("Resolution", resSelect));
+    body.appendChild(buildField("Aspect Ratio", ratioSelect));
 
-    // Width and Height only exist as inputs while the resolution is Custom;
-    // presets and inherit modes fully determine the dimensions.
     if (isCustom) {
-        const widthInput = buildNumber(
-            displayed.width,
-            ROOT_DIMENSION_MIN,
-            ROOT_DIMENSION_MAX,
-            ROOT_DIMENSION_STEP,
-            (value) => {
-                ctx.debouncedCommitState("settings-width", (next) => {
-                    next.dimsExplicit = true;
-                    next.width = clampDimension(value);
-                });
-            },
+        const widthSlider = tagFocus(
+            buildSlider(
+                "Width",
+                rawDimensions.width,
+                ROOT_DIMENSION_MIN,
+                ROOT_DIMENSION_MAX,
+                ROOT_DIMENSION_STEP,
+                (value) => {
+                    ctx.debouncedCommitState("settings-width", (next) => {
+                        const snapped = snapDimensions(
+                            clampDimension(value),
+                            clampDimension(next.height),
+                            multiple,
+                        );
+                        next.dimsExplicit = true;
+                        next.width = snapped.width;
+                        next.height = snapped.height;
+                    });
+                },
+            ),
+            "settings-width",
         );
-        widthInput.setAttribute("data-vst-focus-key", "settings-width");
-
-        const heightInput = buildNumber(
-            displayed.height,
-            ROOT_DIMENSION_MIN,
-            ROOT_DIMENSION_MAX,
-            ROOT_DIMENSION_STEP,
-            (value) => {
-                ctx.debouncedCommitState("settings-height", (next) => {
-                    next.dimsExplicit = true;
-                    next.height = clampDimension(value);
-                });
-            },
+        const heightSlider = tagFocus(
+            buildSlider(
+                "Height",
+                rawDimensions.height,
+                ROOT_DIMENSION_MIN,
+                ROOT_DIMENSION_MAX,
+                ROOT_DIMENSION_STEP,
+                (value) => {
+                    ctx.debouncedCommitState("settings-height", (next) => {
+                        const snapped = snapDimensions(
+                            clampDimension(next.width),
+                            clampDimension(value),
+                            multiple,
+                        );
+                        next.dimsExplicit = true;
+                        next.width = snapped.width;
+                        next.height = snapped.height;
+                    });
+                },
+            ),
+            "settings-height",
         );
-        heightInput.setAttribute("data-vst-focus-key", "settings-height");
-
-        // Width and Height share one "Dimensions" row (W × H) to keep the
-        // wrapping settings flow dense.
-        const dimsPair = document.createElement("div");
-        dimsPair.className = "vst-settings-dims";
-        const dimsSep = document.createElement("span");
-        dimsSep.className = "vst-settings-dims-sep";
-        dimsSep.textContent = "×";
-        dimsPair.append(widthInput, dimsSep, heightInput);
-        body.appendChild(buildField("Dimensions", dimsPair));
+        body.append(widthSlider, heightSlider);
+    } else if (!isInherited) {
+        const ratioHasReference =
+            dimensionsFor(mode, selectedSideLength) !== null;
+        let calculatedDimensions: HTMLSpanElement | null = null;
+        const sideLengthSlider = tagFocus(
+            buildSlider(
+                "Side Length",
+                selectedSideLength,
+                ROOT_DIMENSION_MIN,
+                ROOT_DIMENSION_MAX,
+                ROOT_DIMENSION_STEP,
+                (value) => {
+                    if (isInherited) {
+                        return;
+                    }
+                    const raw = dimensionsFor(mode, clampSideLength(value));
+                    if (!raw) {
+                        return;
+                    }
+                    const snapped = snapDimensions(
+                        raw.width,
+                        raw.height,
+                        multiple,
+                    );
+                    if (calculatedDimensions) {
+                        calculatedDimensions.textContent = `${snapped.width} × ${snapped.height}`;
+                    }
+                    ctx.debouncedCommitState("settings-side-length", (next) => {
+                        next.dimsExplicit = true;
+                        next.width = snapped.width;
+                        next.height = snapped.height;
+                    });
+                },
+                {
+                    hint: !ratioHasReference
+                        ? "(the host has no 3:4 reference; current dimensions are retained)"
+                        : undefined,
+                    isPot: true,
+                },
+            ),
+            "settings-side-length",
+        );
+        calculatedDimensions = document.createElement("span");
+        calculatedDimensions.className = "vst-settings-calculated-dims";
+        calculatedDimensions.textContent = `${effectiveDimensions.width} × ${effectiveDimensions.height}`;
+        sideLengthSlider
+            .querySelector("label")
+            ?.appendChild(calculatedDimensions);
+        setSliderDisabled(sideLengthSlider, !ratioHasReference);
+        body.appendChild(sideLengthSlider);
     }
-
-    const badges = document.createElement("div");
-    badges.className = "vst-settings-badges";
-    if (mode !== SETTINGS_CUSTOM && mode !== SETTINGS_INHERIT) {
-        const els = presetBadgeElements(mode);
-        if (els.length > 0) {
-            badges.append(...els);
-        }
-    }
-    badges.hidden = badges.childElementCount === 0;
-    body.appendChild(badges);
 
     const hasCoreFps =
         getVideoStagesHostBridge().getRootVideoFpsInput() !== null;
@@ -205,5 +295,6 @@ export const buildSettingsBody = (
                 "updates both.",
         ),
     );
+
     return wrapForm("timeline-settings", "Timeline", body);
 };

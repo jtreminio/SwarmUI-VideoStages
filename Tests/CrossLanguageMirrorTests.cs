@@ -61,6 +61,28 @@ public class CrossLanguageMirrorTests
         }
     }
 
+    [Fact]
+    public void DimensionSnap_MatchesSharedFixture()
+    {
+        foreach (JObject c in LoadFixture("dimension-snap-cases.json").OfType<JObject>())
+        {
+            Assert.True(DimensionSnap.TryDimensionsFor(
+                c.Value<string>("ratio"),
+                c.Value<int>("sideLength"),
+                out (int Width, int Height) raw));
+            Assert.Equal(c.Value<int>("rawWidth"), raw.Width);
+            Assert.Equal(c.Value<int>("rawHeight"), raw.Height);
+            Assert.Equal(
+                (
+                    c.Value<int>("expectedWidth"),
+                    c.Value<int>("expectedHeight")),
+                DimensionSnap.Snap(
+                    raw.Width,
+                    raw.Height,
+                    DimensionSnap.MinimumMultiple * c.Value<int>("factor")));
+        }
+    }
+
     /// <summary>
     /// M5 — LTX pixel→latent frame mapping: <see cref="Ltx2ArchitectureModule.LatentFrameCount"/> vs
     /// the Comfy node's <c>pixel_to_latent_frames</c>, which asserts the same fixture in pytest.
@@ -144,6 +166,12 @@ public class CrossLanguageMirrorTests
                 $"IcLoraWeights is missing preset '{id}' present in the shared fixture.");
             Assert.Equal(url, actualUrl);
             Assert.Equal(modelName, IcLoraWeights.ModelNameFor(id));
+            JObject expected = Assert.Single(
+                LoadFixture("ic-lora-presets.json").OfType<JObject>(),
+                entry => entry.Value<string>("id") == id);
+            Assert.Equal(
+                expected.Value<int?>("dimensionDownscaleFactor") ?? 1,
+                IcLoraDimensionPolicyResolver.Resolve(id, modelName));
         }
     }
 

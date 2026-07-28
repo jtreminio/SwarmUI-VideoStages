@@ -25,7 +25,7 @@ internal static class Ltx2ClipPlanCompiler
         Dictionary<int, Ltx2StagePayload> stages = [];
         foreach (StageSpec stage in clip.Stages ?? [])
         {
-            stages.Add(stage.ClipStageRawIndex, new(
+            Ltx2StagePayload payload = new(
                 new StageCorePlan(
                     stage.Model,
                     stage.Control,
@@ -42,7 +42,18 @@ internal static class Ltx2ClipPlanCompiler
                 CompileRetake(stage.RetakeWindow),
                 relay,
                 ImageReferencePlanCompiler.Compile(clip, stage),
-                CompileAudioAction(audio, stage)));
+                CompileAudioAction(audio, stage));
+            stages.Add(stage.ClipStageRawIndex, payload);
+            PlanDiagnostic dimensionDiagnostic = StageDimensionRules.SnapDiagnostic(
+                clip.Id,
+                stage.Id,
+                payload.IcLoras,
+                context.Width,
+                context.Height);
+            if (dimensionDiagnostic is not null)
+            {
+                diagnostics.Add(dimensionDiagnostic);
+            }
         }
         return new(
             new Ltx2ClipPayload(

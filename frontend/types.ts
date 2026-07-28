@@ -10,7 +10,6 @@ export interface RootDefaults {
     modelCatalog: ArchitectureModelCatalog;
     loraValues: string[];
     loraLabels: string[];
-    /** Host model-metadata defaults aligned with loraValues; null means 1. */
     loraDefaultWeights: (number | null)[];
     samplerValues: string[];
     samplerLabels: string[];
@@ -20,6 +19,8 @@ export interface RootDefaults {
     upscaleMethodLabels: string[];
     width: number;
     height: number;
+    aspectRatio?: string;
+    sideLength?: number | null;
     fps: number;
     frames: number;
     control: number;
@@ -48,18 +49,9 @@ export interface VideoStagesConfig {
     schemaVersion?: number;
     width: number;
     height: number;
-    /**
-     * Always mirrors the core Video FPS param: the panel's FPS field writes
-     * through to the core input and re-reads it as the inherited value, so
-     * fps is never serialized into the authoring document.
-     */
     fps: number;
     dimsExplicit: boolean;
     clips: Clip[];
-    /**
-     * Timeline-wide overlay audio. Each logical track is one independently
-     * movable audio segment lane; its timeline window may cross clip seams.
-     */
     audioTracks?: AudioTrack[];
 }
 

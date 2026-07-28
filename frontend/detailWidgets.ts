@@ -244,6 +244,7 @@ export const buildSlider = (
         sliderMax?: number;
         numberStep?: number | "any";
         allowNumberOutOfRange?: boolean;
+        isPot?: boolean;
     },
 ): HTMLElement => {
     const holder = document.createElement("div");
@@ -258,6 +259,7 @@ export const buildSlider = (
         viewMin: opts?.sliderMin,
         viewMax: opts?.sliderMax,
         step,
+        isPot: opts?.isPot,
     });
     const number = holder.querySelector<HTMLInputElement>(
         "input.auto-slider-number",

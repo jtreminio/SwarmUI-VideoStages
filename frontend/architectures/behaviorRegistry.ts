@@ -1,4 +1,5 @@
 import { activeStageCount } from "../clipSemantics";
+import { ROOT_DIMENSION_STEP } from "../constants";
 import type { Clip, IcLora } from "../types";
 import { ltx2Behavior } from "./ltx2/behavior";
 import type { GeneratedEntryMode } from "./ltx2/icLoraDriveAvailability";
@@ -6,6 +7,11 @@ import { VIDEO_ARCHITECTURE_MODULES } from "./modules";
 
 /** Pure architecture-owned authoring behavior with no DOM dependencies. */
 export interface ArchitectureBehavior {
+    /**
+     * Architecture-owned grid requirement for this clip. The document layer
+     * always applies its global /32 grid in addition to this requirement.
+     */
+    dimensionMultiple(clip: Clip): number;
     normalizeIcLoras(
         rawClip: Record<string, unknown>,
         stageCount: number,
@@ -31,6 +37,19 @@ const behaviors = new Map<string, ArchitectureBehavior>(
 export const architectureBehavior = (
     architectureId: string,
 ): ArchitectureBehavior | null => behaviors.get(architectureId) ?? null;
+
+export const architectureDimensionMultiple = (clip: Clip): number => {
+    const requested =
+        architectureBehavior(clip.architecture)?.dimensionMultiple(clip) ??
+        ROOT_DIMENSION_STEP;
+    if (!Number.isFinite(requested)) {
+        return ROOT_DIMENSION_STEP;
+    }
+    return Math.max(
+        ROOT_DIMENSION_STEP,
+        Math.ceil(requested / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP,
+    );
+};
 
 /**
  * The LTX fallback exists only to preserve already-authored IC values for

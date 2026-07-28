@@ -448,12 +448,13 @@ public class PlanningCompilerComponentTests
         {
             ClipArchitectureAssignment assignment =
                 architecture.Clips.GetValueOrDefault(clips[i].Id);
-            IArchitectureClipPayload payload = assignment?.Module
+            ArchitectureClipCompilation compilation = assignment?.Module
                 .ValidateAndCompileClip(
                     clips[i],
                     assignment.StageModels,
-                    new(spec.Width, spec.Height, spec.FPS))
-                .Payload;
+                    new(spec.Width, spec.Height, spec.FPS));
+            IArchitectureClipPayload payload = compilation?.Payload;
+            diagnostics.AddRange(compilation?.Diagnostics ?? []);
             plans.Add(ClipPlanCompiler.Compile(clips[i], new ClipPlanCompilationContext(
                 spec.IsTextToVideo,
                 spec.Width,

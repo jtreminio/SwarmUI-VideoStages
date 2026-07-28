@@ -2,12 +2,14 @@
   {
     "id": "union-control",
     "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
-    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-union-control-ref0.5"
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-union-control-ref0.5",
+    "dimensionDownscaleFactor": 2
   },
   {
     "id": "motion-track-control",
     "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control/resolve/main/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors",
-    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5"
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5",
+    "dimensionDownscaleFactor": 2
   },
   {
     "id": "in-outpainting",
@@ -32,12 +34,14 @@
   {
     "id": "pixel-spatial-upscaler-x2",
     "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors",
-    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9"
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9",
+    "dimensionDownscaleFactor": 2
   },
   {
     "id": "pixel-spatial-upscaler-x4",
     "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors",
-    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9"
+    "autoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9",
+    "dimensionDownscaleFactor": 4
   },
   {
     "id": "deblur",

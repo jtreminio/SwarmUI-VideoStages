@@ -304,6 +304,33 @@ public class IcLoraDriveMediaContractTests
     }
 
     [Fact]
+    public void Planning_reports_the_runtime_dimension_snap_through_normal_diagnostics()
+    {
+        ClipSpec clip = Clip([
+            new(
+                IcLoraWeights.AutoModelToken,
+                Constants.IcLoraSourceUpload,
+                1,
+                1,
+                Constants.IcLoraControlNone,
+                null,
+                DriveData: IcLoraDriveData.None,
+                Preset: "union-control"),
+        ]);
+
+        VideoExecutionPlan execution = TestPlanCompiler.Compile(
+            new VideoStagesSpec(1232, 688, 24, false, [clip]));
+
+        PlanDiagnostic diagnostic = Assert.Single(
+            execution.Diagnostics,
+            item => item.Code == "ltx.dimension_snapped");
+        Assert.Equal(PlanDiagnosticSeverity.Info, diagnostic.Severity);
+        Assert.Contains("1280x704", diagnostic.Message);
+        Assert.Equal(clip.Id, diagnostic.ClipId);
+        Assert.Equal(clip.Stages[0].Id, diagnostic.StageId);
+    }
+
+    [Fact]
     public void Incoming_visual_uses_the_image_entry_for_image_to_video()
     {
         ClipSpec clip = Clip([
