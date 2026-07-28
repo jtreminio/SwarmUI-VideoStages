@@ -16,10 +16,18 @@ internal static class IcLoraDimensionPolicyResolver
         };
 
     private static readonly IReadOnlyDictionary<string, int> CuratedModelFactors =
-        PresetFactors.ToDictionary(
-            entry => NormalizeModelName(IcLoraWeights.ModelNameFor(entry.Key)),
-            entry => entry.Value,
-            StringComparer.OrdinalIgnoreCase);
+        BuildCuratedModelFactors();
+
+    private static Dictionary<string, int> BuildCuratedModelFactors()
+    {
+        Dictionary<string, int> factors = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string preset, int factor) in PresetFactors)
+        {
+            factors[NormalizeModelName(IcLoraWeights.ModelNameFor(preset))] = factor;
+            factors[NormalizeModelName(IcLoraWeights.LegacyModelNameFor(preset))] = factor;
+        }
+        return factors;
+    }
 
     internal static int Resolve(string preset, string modelName)
     {

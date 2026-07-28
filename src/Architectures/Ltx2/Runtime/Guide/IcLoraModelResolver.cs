@@ -62,7 +62,8 @@ internal static class IcLoraModelResolver
                 + "Pick a curated preset or choose a specific LoRA.";
             return false;
         }
-        model = ResolveLoraModel(autoName);
+        model = FindLoraModel(autoName)
+            ?? FindLoraModel(IcLoraWeights.LegacyModelNameFor(plan.Preset));
         if (model is null)
         {
             error = $"IC-LoRA [AUTO] weights '{autoName}' are not installed. The automatic download "
@@ -76,6 +77,20 @@ internal static class IcLoraModelResolver
 
     internal static T2IModel ResolveLoraModel(string loraName)
     {
+        T2IModel lora = FindLoraModel(loraName);
+        if (lora is null)
+        {
+            Logs.Error($"LoRA Model '{loraName}' not found in the model set.");
+        }
+        return lora;
+    }
+
+    private static T2IModel FindLoraModel(string loraName)
+    {
+        if (loraName is null)
+        {
+            return null;
+        }
         if (!Program.T2IModelSets.TryGetValue(
                 "LoRA",
                 out T2IModelHandler loraHandler))
@@ -83,14 +98,11 @@ internal static class IcLoraModelResolver
             Logs.Error("LoRA models are not available.");
             return null;
         }
-        if (!loraHandler.Models.TryGetValue(
+        return loraHandler.Models.TryGetValue(
                 loraName + ".safetensors",
                 out T2IModel lora)
-            && !loraHandler.Models.TryGetValue(loraName, out lora))
-        {
-            Logs.Error($"LoRA Model '{loraName}' not found in the model set.");
-            return null;
-        }
-        return lora;
+            || loraHandler.Models.TryGetValue(loraName, out lora)
+            ? lora
+            : null;
     }
 }

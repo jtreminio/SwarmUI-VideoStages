@@ -899,12 +899,9 @@
     return findIcLoraPreset(entry.preset)?.displayName ?? entry.preset;
   };
   var icLoraDriveMediaContract = (preset) => preset?.driveMedia ?? DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
-  var icLoraAutoModelName = (preset) => {
-    const file = preset.weightsUrl.slice(
-      preset.weightsUrl.lastIndexOf("/") + 1
-    );
-    return `${IC_LORA_AUTO_FOLDER}/${file.replace(/\.safetensors$/i, "")}`;
-  };
+  var icLoraWeightsStem = (preset) => preset.weightsUrl.slice(preset.weightsUrl.lastIndexOf("/") + 1).replace(/\.safetensors$/i, "");
+  var icLoraAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset).replaceAll(".", "_")}`;
+  var icLoraLegacyAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset)}`;
   var icLoraRepoUrl = (preset) => preset.weightsUrl.split("/resolve/")[0];
   var icLoraTriggerHint = (preset) => {
     if (!preset?.triggerPhrase) {
@@ -925,12 +922,13 @@
     const basename = normalized.slice(normalized.lastIndexOf("/") + 1);
     return basename.replace(/\.safetensors$/i, "").toLowerCase();
   };
-  var curatedModelFactors = new Map(
-    [...presetFactors].flatMap(([presetId, factor]) => {
-      const preset = findIcLoraPreset(presetId);
-      return preset ? [[normalizeModelName(icLoraAutoModelName(preset)), factor]] : [];
-    })
-  );
+  var curatedModelFactors = /* @__PURE__ */ new Map();
+  for (const [presetId, factor] of presetFactors) {
+    const preset = findIcLoraPreset(presetId);
+    for (const name of preset ? [icLoraAutoModelName(preset), icLoraLegacyAutoModelName(preset)] : []) {
+      curatedModelFactors.set(normalizeModelName(name), factor);
+    }
+  }
   var icLoraDimensionFactor = (entry) => {
     const presetFactor = presetFactors.get(
       `${entry.preset ?? ""}`.trim().toLowerCase()
@@ -10354,9 +10352,14 @@
       statuses.delete(`${presetId ?? ""}`.trim());
     }
   };
-  var hasAutoWeights = (preset, installedLoras) => {
-    const wanted = icLoraAutoModelName(preset).toLowerCase();
-    return installedLoras.some((name) => `${name}`.toLowerCase() === wanted);
+  var installedAutoWeights = (preset, installedLoras) => {
+    const wanted = [
+      icLoraAutoModelName(preset).toLowerCase(),
+      icLoraLegacyAutoModelName(preset).toLowerCase()
+    ];
+    return installedLoras.find(
+      (name) => wanted.includes(`${name}`.toLowerCase())
+    ) ?? null;
   };
   var statusTextFor = (preset, status) => {
     switch (status.state) {
@@ -10385,7 +10388,7 @@
       return;
     }
     const preset = findIcLoraPreset(entry.preset);
-    if (!preset || hasAutoWeights(preset, installedLoras) || statuses.has(preset.id)) {
+    if (!preset || installedAutoWeights(preset, installedLoras) || statuses.has(preset.id)) {
       return;
     }
     if (!canRequestHostWs()) {
@@ -10427,8 +10430,9 @@
     if (!preset) {
       return "[AUTO] needs a preset — pick one to download its weights.";
     }
-    if (hasAutoWeights(preset, installedLoras)) {
-      return `Using ${icLoraAutoModelName(preset)}.`;
+    const installed = installedAutoWeights(preset, installedLoras);
+    if (installed) {
+      return `Using ${installed}.`;
     }
     const status = statuses.get(preset.id);
     return status ? statusTextFor(preset, status) : "Preparing preset weights download…";

@@ -1356,7 +1356,7 @@ describe("createTimelineDetailStrip", () => {
         onData({ success: true });
         expect(swarmGlobals.refreshParameterValues).toHaveBeenCalledWith(true);
         expect(detail()?.textContent).toContain(
-            "Downloaded to LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-union-control-ref0.5",
+            "Downloaded to LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-union-control-ref0_5",
         );
     });
 
@@ -1394,8 +1394,27 @@ describe("createTimelineDetailStrip", () => {
             ],
             [
                 "lora-x.safetensors",
-                "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-deblur-0.9",
+                "LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-deblur-0_9",
             ],
+        );
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        expect(swarmGlobals.makeWSRequest).not.toHaveBeenCalled();
+        expect(detail()?.textContent).toContain(
+            "Using LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-deblur-0_9",
+        );
+    });
+
+    it("accepts weights installed under the legacy dotted download name", () => {
+        swarmGlobals.makeWSRequest = jest.fn();
+        setup(
+            [
+                {
+                    duration: 4,
+                    stages: [{}],
+                    icLoras: [{ lora: IC_LORA_AUTO, preset: "deblur" }],
+                },
+            ],
+            ["LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-deblur-0.9"],
         );
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(swarmGlobals.makeWSRequest).not.toHaveBeenCalled();

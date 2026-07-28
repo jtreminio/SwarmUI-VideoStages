@@ -9,15 +9,15 @@ import {
     IC_LORA_AUTO,
     type IcLoraPreset,
     icLoraAutoModelName,
+    icLoraLegacyAutoModelName,
 } from "./icLoraPresets";
 
 export { IC_LORA_AUTO } from "./icLoraPresets";
 
 // Fulfills "[AUTO]" IC-LoRA entries: kicks off the extension's VideoStagesDownloadIcLoraWS to fetch
-// the preset's safetensors into LTX-2/IC-LoRA/ under the upstream filename (the core downloader
-// would strip the dots out of names like "ltx-2.3-...-ref0.5"). Download state is tracked per
-// preset id (module-level, shared by every entry using that preset); progress repaints only the
-// tagged hint elements, not the full strip.
+// the preset's safetensors into LTX-2/IC-LoRA/. Download state is tracked per preset id
+// (module-level, shared by every entry using that preset); progress repaints only the tagged hint
+// elements, not the full strip.
 
 /** Attribute the detail strip puts on an entry's auto-status hint element (value = preset id). */
 export const IC_LORA_AUTO_HINT_ATTR = "data-vst-iclora-auto";
@@ -41,12 +41,20 @@ export const clearIcLoraAutoFailure = (presetId: string): void => {
     }
 };
 
-const hasAutoWeights = (
+/** The installed LoRA fulfilling this preset's [AUTO] entry, or null. */
+const installedAutoWeights = (
     preset: IcLoraPreset,
     installedLoras: readonly string[],
-): boolean => {
-    const wanted = icLoraAutoModelName(preset).toLowerCase();
-    return installedLoras.some((name) => `${name}`.toLowerCase() === wanted);
+): string | null => {
+    const wanted = [
+        icLoraAutoModelName(preset).toLowerCase(),
+        icLoraLegacyAutoModelName(preset).toLowerCase(),
+    ];
+    return (
+        installedLoras.find((name) =>
+            wanted.includes(`${name}`.toLowerCase()),
+        ) ?? null
+    );
 };
 
 const statusTextFor = (
@@ -98,7 +106,7 @@ export const ensureIcLoraAutoWeights = (
     const preset = findIcLoraPreset(entry.preset);
     if (
         !preset ||
-        hasAutoWeights(preset, installedLoras) ||
+        installedAutoWeights(preset, installedLoras) ||
         statuses.has(preset.id)
     ) {
         return;
@@ -149,8 +157,9 @@ export const icLoraAutoHint = (
     if (!preset) {
         return "[AUTO] needs a preset — pick one to download its weights.";
     }
-    if (hasAutoWeights(preset, installedLoras)) {
-        return `Using ${icLoraAutoModelName(preset)}.`;
+    const installed = installedAutoWeights(preset, installedLoras);
+    if (installed) {
+        return `Using ${installed}.`;
     }
     const status = statuses.get(preset.id);
     return status

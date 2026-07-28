@@ -150,28 +150,52 @@ public class CrossLanguageMirrorTests
     [Fact]
     public void IcLoraPresets_MatchSharedFixture()
     {
-        Dictionary<string, (string Url, string ModelName)> fixture = LoadFixture("ic-lora-presets.json")
+        Dictionary<string, (string Url, string ModelName, string LegacyModelName)> fixture =
+            LoadFixture("ic-lora-presets.json")
             .OfType<JObject>()
             .ToDictionary(
                 e => e.Value<string>("id"),
-                e => (e.Value<string>("weightsUrl"), e.Value<string>("autoModelName")));
+                e => (
+                    e.Value<string>("weightsUrl"),
+                    e.Value<string>("autoModelName"),
+                    e.Value<string>("legacyAutoModelName")));
 
         Assert.Equal(
             fixture.Keys.OrderBy(k => k),
             IcLoraWeights.Urls.Keys.OrderBy(k => k));
 
-        foreach ((string id, (string url, string modelName)) in fixture)
+        foreach ((string id, (string url, string modelName, string legacyModelName)) in fixture)
         {
             Assert.True(IcLoraWeights.Urls.TryGetValue(id, out string actualUrl),
                 $"IcLoraWeights is missing preset '{id}' present in the shared fixture.");
             Assert.Equal(url, actualUrl);
             Assert.Equal(modelName, IcLoraWeights.ModelNameFor(id));
+            Assert.Equal(legacyModelName, IcLoraWeights.LegacyModelNameFor(id));
             JObject expected = Assert.Single(
                 LoadFixture("ic-lora-presets.json").OfType<JObject>(),
                 entry => entry.Value<string>("id") == id);
             Assert.Equal(
                 expected.Value<int?>("dimensionDownscaleFactor") ?? 1,
                 IcLoraDimensionPolicyResolver.Resolve(id, modelName));
+        }
+    }
+
+    /// <summary>
+    /// The auto-download names are handed to core's downloader verbatim, so they must survive its
+    /// filename cleaning untouched and stay distinct from each other once cleaned.
+    /// </summary>
+    [Fact]
+    public void IcLoraAutoModelNames_SurviveCoreFilenameCleaning()
+    {
+        HashSet<string> names = new(StringComparer.OrdinalIgnoreCase);
+        foreach (string id in IcLoraWeights.Urls.Keys)
+        {
+            string name = IcLoraWeights.ModelNameFor(id);
+            Assert.Equal(
+                name,
+                SwarmUI.Utils.Utilities.StrictFilenameClean(name.Replace(' ', '_')));
+            Assert.True(names.Add(name),
+                $"IC-LoRA preset '{id}' shares its download name '{name}' with another preset.");
         }
     }
 

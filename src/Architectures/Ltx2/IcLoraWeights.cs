@@ -47,6 +47,11 @@ public static class IcLoraWeights
 
     public static string ModelNameFor(string presetId)
         => Urls.TryGetValue($"{presetId}".Trim(), out string url)
+            ? $"{AutoModelFolder}/{FileStem(url).Replace('.', '_')}"
+            : null;
+
+    public static string LegacyModelNameFor(string presetId)
+        => Urls.TryGetValue($"{presetId}".Trim(), out string url)
             ? $"{AutoModelFolder}/{FileStem(url)}"
             : null;
 }

@@ -1,6 +1,10 @@
 import { ROOT_DIMENSION_STEP } from "../../constants";
 import type { Clip, IcLora } from "../../types";
-import { findIcLoraPreset, icLoraAutoModelName } from "./icLoraPresets";
+import {
+    findIcLoraPreset,
+    icLoraAutoModelName,
+    icLoraLegacyAutoModelName,
+} from "./icLoraPresets";
 
 const presetFactors = new Map<string, number>([
     ["union-control", 2],
@@ -15,14 +19,15 @@ const normalizeModelName = (value: string): string => {
     return basename.replace(/\.safetensors$/i, "").toLowerCase();
 };
 
-const curatedModelFactors = new Map<string, number>(
-    [...presetFactors].flatMap(([presetId, factor]) => {
-        const preset = findIcLoraPreset(presetId);
-        return preset
-            ? [[normalizeModelName(icLoraAutoModelName(preset)), factor]]
-            : [];
-    }),
-);
+const curatedModelFactors = new Map<string, number>();
+for (const [presetId, factor] of presetFactors) {
+    const preset = findIcLoraPreset(presetId);
+    for (const name of preset
+        ? [icLoraAutoModelName(preset), icLoraLegacyAutoModelName(preset)]
+        : []) {
+        curatedModelFactors.set(normalizeModelName(name), factor);
+    }
+}
 
 export const icLoraDimensionFactor = (
     entry: Pick<IcLora, "preset" | "lora">,

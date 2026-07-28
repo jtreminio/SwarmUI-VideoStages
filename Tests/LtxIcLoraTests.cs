@@ -148,7 +148,7 @@ public sealed class LtxIcLoraTests
             models.BaseModel, models.VideoModel, new JArray(clip).ToString());
         SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
             WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps()));
-        Assert.Contains("LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-deblur-0.9", ex.Message);
+        Assert.Contains("LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-deblur-0_9", ex.Message);
     }
 
     [Fact]

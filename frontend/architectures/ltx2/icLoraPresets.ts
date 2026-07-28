@@ -274,17 +274,23 @@ export const icLoraDriveMediaContract = (
 ): IcLoraDriveMediaContract =>
     preset?.driveMedia ?? DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
 
+const icLoraWeightsStem = (preset: IcLoraPreset): string =>
+    preset.weightsUrl
+        .slice(preset.weightsUrl.lastIndexOf("/") + 1)
+        .replace(/\.safetensors$/i, "");
+
 /**
  * The model name an [AUTO] entry resolves to — where the preset's weights land in the LoRA
- * folder, keeping the upstream filename. Mirrored by the backend's IcLoraWeights, which
- * derives the same name from the same URL.
+ * folder. Dots become underscores because the core downloader that fetches them strips dots out
+ * of model names. Mirrored by the backend's IcLoraWeights, which derives the same name from the
+ * same URL.
  */
-export const icLoraAutoModelName = (preset: IcLoraPreset): string => {
-    const file = preset.weightsUrl.slice(
-        preset.weightsUrl.lastIndexOf("/") + 1,
-    );
-    return `${IC_LORA_AUTO_FOLDER}/${file.replace(/\.safetensors$/i, "")}`;
-};
+export const icLoraAutoModelName = (preset: IcLoraPreset): string =>
+    `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset).replaceAll(".", "_")}`;
+
+/** The dotted name auto-downloads used before core owned the transfer; still accepted, never written. */
+export const icLoraLegacyAutoModelName = (preset: IcLoraPreset): string =>
+    `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset)}`;
 
 /** The Hugging Face repo page a preset's weights come from. */
 export const icLoraRepoUrl = (preset: IcLoraPreset): string =>

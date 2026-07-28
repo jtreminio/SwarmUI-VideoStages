@@ -15,6 +15,7 @@ import {
     icLoraAutoModelName,
     icLoraDriveMediaContract,
     icLoraDriveMediaContractForData,
+    icLoraLegacyAutoModelName,
 } from "./architectures/ltx2/icLoraPresets";
 import type { ArchitectureCatalogEntryDto } from "./architectures/types";
 import { crossfadePlanForClips } from "./boundaryPlan";
@@ -138,6 +139,7 @@ describe("cross-language mirror: M4 IC-LoRA auto-model naming (icLoraPresets)", 
         id: string;
         weightsUrl: string;
         autoModelName: string;
+        legacyAutoModelName: string;
     }
     const cases = loadFixture<PresetCase[]>("ic-lora-presets.json");
 
@@ -151,6 +153,7 @@ describe("cross-language mirror: M4 IC-LoRA auto-model naming (icLoraPresets)", 
         id,
         weightsUrl,
         autoModelName,
+        legacyAutoModelName,
     }) => {
         const preset = IC_LORA_PRESETS.find((p) => p.id === id);
         if (!preset) {
@@ -158,6 +161,7 @@ describe("cross-language mirror: M4 IC-LoRA auto-model naming (icLoraPresets)", 
         }
         expect(preset.weightsUrl).toBe(weightsUrl);
         expect(icLoraAutoModelName(preset)).toBe(autoModelName);
+        expect(icLoraLegacyAutoModelName(preset)).toBe(legacyAutoModelName);
     });
 });
 
