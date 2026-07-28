@@ -10,7 +10,8 @@ namespace VideoStages;
 // #  Pri    Phase                                         Reads                                          Writes / clears
 // -  -----  --------------------------------------------  ---------------------------------------------  ----------------------------------------------------
 // 1  -6.0   PreflightRequest                              compiled plan, backend features               — (must stay non-mutating)
-// 2  -5.9   CaptureCoreVideoControlNetPreprocessors       —                                              writes videostages.controlnet.fullimage.{i}
+// 2  -5.9   CaptureCoreVideoControlNetPreprocessors       core ControlNet graph                          captures raw image/audio/apply facts,
+//                                                                                                        then fans out architecture interpretation
 // 3  -4.2   CaptureBase                                   —                                              architecture reference capture
 // 4   5.9   CaptureRefiner                                —                                              architecture reference capture
 // 5  10.95  CapturePreCoreVideoMedia                      —                                              architecture pre-core capture,

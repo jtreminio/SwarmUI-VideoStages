@@ -63,7 +63,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
                 return true;
             case IcLoraMediaSourceKind.ControlNet:
                 if (entry.MediaInput.ControlNetIndex is not int index
-                    || !new ControlNetCapture(g).TryGetCapturedCoreControlImage(
+                    || !new LtxControlNetMediaNormalizer(g).TryGetNormalizedControlImage(
                         index,
                         out WGNodeData controlImage))
                 {

@@ -155,13 +155,112 @@ public class DecisionOwnerRegressionTests
             ArchitectureHostPhase.CaptureControlNetPreprocessors,
             SourcedOnlyPlan());
 
-        // Before the fix the None adapter implemented no host-phase participation at all, so a
-        // sourced-only timeline never captured, and a clip selecting ControlNet audio planned
-        // cleanly and then threw a user error mid-execution.
-        Assert.IsAssignableFrom<IArchitectureHostPhaseParticipant>(
-            new SourceOnlyExecutionAdapter(generator));
+        // Common orchestration owns capture, so source-only execution gets its audio facts without
+        // pretending that the None adapter has architecture-specific host work.
         Assert.False(generator.NodeHelpers.ContainsKey(ControlNetCaptureKeys.Image(0)));
         Assert.False(generator.NodeHelpers.ContainsKey(ControlNetCaptureKeys.Audio(0)));
+    }
+
+    [Fact]
+    public void Source_only_controlnet_capture_preserves_raw_host_media()
+    {
+        using SwarmUiTestContext _ = new();
+        WorkflowGenerator generator = GeneratorWithVideoControlNet();
+
+        new VideoArchitectureExecutionHost(generator).DispatchHostPhase(
+            ArchitectureHostPhase.CaptureControlNetPreprocessors,
+            PlanWithArchitectures(NoneArchitecture.Descriptor));
+
+        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        ResizeImageMaskNodeNode hostResize =
+            bridge.Graph.GetNode<ResizeImageMaskNodeNode>("304");
+        ControlNetApplyAdvancedNode apply =
+            bridge.Graph.GetNode<ControlNetApplyAdvancedNode>("308");
+
+        Assert.NotNull(hostResize);
+        Assert.NotNull(apply);
+        Assert.Equal(8, hostResize.ExtraInputs["resize_type.multiple"]?.Value<int>());
+        Assert.Equal(hostResize.Id, apply.Image.Connection?.Node.Id);
+        Assert.Empty(bridge.Graph.NodesOfType<ImageFromBatchNode>());
+        Assert.True(
+            ControlNetCoreMediaCapture.TryGetCapturedControlImage(
+                generator,
+                0,
+                out WGNodeData raw));
+        Assert.True(JToken.DeepEquals(raw.Path, new JArray(hostResize.Id, 0)));
+        Assert.True(
+            new ControlNetAudioCapture(generator).TryGetCapturedAudio(
+                0,
+                out WGNodeData audio));
+        Assert.True(JToken.DeepEquals(audio.Path, new JArray("301", 1)));
+        Assert.False(
+            new LtxControlNetMediaNormalizer(generator)
+                .TryGetNormalizedControlImage(
+                    0,
+                    out WGNodeData unusedNormalized));
+        Assert.Null(unusedNormalized);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Mixed_timeline_ltx_normalizes_captured_media_once(
+        bool ltxFirst)
+    {
+        using SwarmUiTestContext _ = new();
+        WorkflowGenerator generator = GeneratorWithVideoControlNet();
+        VideoArchitectureDescriptor[] architectures = ltxFirst
+            ? [Ltx2ArchitectureModule.Instance.Descriptor, NoneArchitecture.Descriptor]
+            : [NoneArchitecture.Descriptor, Ltx2ArchitectureModule.Instance.Descriptor];
+        VideoArchitectureExecutionHost host = new(generator);
+        VideoExecutionPlan plan = PlanWithArchitectures(architectures);
+
+        host.DispatchHostPhase(
+            ArchitectureHostPhase.CaptureControlNetPreprocessors,
+            plan);
+        host.DispatchHostPhase(
+            ArchitectureHostPhase.CaptureControlNetPreprocessors,
+            plan);
+
+        Assert.True(
+            ControlNetCoreMediaCapture.TryGetCapturedControlImage(
+                generator,
+                0,
+                out WGNodeData raw));
+        LtxControlNetMediaNormalizer normalizer = new(generator);
+        Assert.True(
+            normalizer.TryGetNormalizedControlImage(
+                0,
+                out WGNodeData normalized));
+        Assert.True(normalizer.TryCreateFrameCount(0, out JArray frames));
+
+        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        ResizeImageMaskNodeNode hostResize =
+            bridge.Graph.GetNode<ResizeImageMaskNodeNode>("304");
+        ResizeImageMaskNodeNode ltxResize = Assert.Single(
+            bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>(),
+            node => node.Id != hostResize.Id);
+        ControlNetApplyAdvancedNode apply =
+            bridge.Graph.GetNode<ControlNetApplyAdvancedNode>("308");
+        ImageFromBatchNode wrapper = Assert.Single(
+            bridge.Graph.NodesOfType<ImageFromBatchNode>());
+
+        Assert.True(JToken.DeepEquals(raw.Path, new JArray(hostResize.Id, 0)));
+        Assert.True(JToken.DeepEquals(normalized.Path, new JArray(ltxResize.Id, 0)));
+        Assert.Equal(8, hostResize.ExtraInputs["resize_type.multiple"]?.Value<int>());
+        Assert.Equal(64, ltxResize.ExtraInputs["resize_type.multiple"]?.Value<int>());
+        Assert.Equal(hostResize.Id, ltxResize.Input.Connection?.Node.Id);
+        Assert.Equal(0, wrapper.BatchIndex.LiteralAsInt());
+        Assert.Equal(1, wrapper.Length.LiteralAsInt());
+        Assert.Equal(ltxResize.Id, wrapper.Image.Connection?.Node.Id);
+        Assert.Equal(wrapper.Id, apply.Image.Connection?.Node.Id);
+
+        GetImageSizeNode size = Assert.Single(
+            bridge.Graph.NodesOfType<GetImageSizeNode>());
+        Assert.Equal(ltxResize.Id, size.Image.Connection?.Node.Id);
+        Assert.True(JToken.DeepEquals(
+            frames,
+            WorkflowBridge.ToPath(size.BatchSize)));
     }
 
     // ---- 4f: one clip-audio bed duration rule ----------------------------------------------
@@ -216,6 +315,96 @@ public class DecisionOwnerRegressionTests
                 TimelineOutputDisposition.PublishTimelineOutput,
                 NativeAudioDisposition.DiscardWithRoot),
             [clip],
+            [],
+            []);
+    }
+
+    private static WorkflowGenerator GeneratorWithVideoControlNet()
+    {
+        UnitTestStubs.EnsureComfyControlNetParamsRegistered();
+        T2IModelHandler handler = new() { ModelType = "ControlNet" };
+        T2IModel model = new(
+            handler,
+            "/tmp",
+            "/tmp/UnitTest_ControlNet.safetensors",
+            "UnitTest_ControlNet.safetensors");
+        WorkflowGenerator generator = Generator();
+        generator.UserInput.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
+        generator.UserInput.Set(T2IParamTypes.Controlnets[0].Model, model);
+
+        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        SwarmLoadVideoB64Node load =
+            bridge.AddNode(new SwarmLoadVideoB64Node().With(
+                VideoBase64: "unit-test-video"), "300");
+        GetVideoComponentsNode components =
+            bridge.AddNode(new GetVideoComponentsNode(), "301");
+        components.Video.ConnectTo(load.VIDEO);
+        UnknownNode preprocessor = bridge.AddStub(
+            "UnitTestPreprocessor",
+            "303").WithOutputs(WGNodeData.DT_IMAGE);
+        preprocessor.GetInput("image").ConnectToUntyped(components.Images);
+        ResizeImageMaskNodeNode resize = new()
+        {
+            ExtraInputs = new JObject
+            {
+                ["resize_type.multiple"] = 8,
+            },
+        };
+        resize.With(
+            ResizeType: "scale to multiple",
+            ScaleMethod: "lanczos");
+        resize.Input.ConnectToUntyped(preprocessor.GetOutput(0));
+        bridge.AddNode(resize, "304");
+        ControlNetLoaderNode loader =
+            bridge.AddNode(new ControlNetLoaderNode().With(
+                ControlNetName: model.ToString(
+                    generator.ModelFolderFormat)), "305");
+        UnknownNode positive = bridge.AddStub(
+            "UnitTest_Positive",
+            "306").WithOutputs("CONDITIONING");
+        UnknownNode negative = bridge.AddStub(
+            "UnitTest_Negative",
+            "307").WithOutputs("CONDITIONING");
+        ControlNetApplyAdvancedNode apply = new();
+        apply.With(Strength: 0.8, StartPercent: 0, EndPercent: 1);
+        apply.PositiveInput.ConnectToUntyped(positive.GetOutput(0));
+        apply.NegativeInput.ConnectToUntyped(negative.GetOutput(0));
+        apply.ControlNet.ConnectTo(loader.CONTROLNET);
+        apply.Image.ConnectToUntyped(resize.Resized);
+        bridge.AddNode(apply, "308");
+        return generator;
+    }
+
+    private static VideoExecutionPlan PlanWithArchitectures(
+        params VideoArchitectureDescriptor[] architectures)
+    {
+        ClipPlan[] clips = [.. architectures.Select(
+            (architecture, index) => new ClipPlan(
+                index,
+                25,
+                architecture.Id == NoneArchitecture.Id
+                    ? ClipInputKind.SourceVideo
+                    : ClipInputKind.RootMedia,
+                IsSourced: architecture.Id == NoneArchitecture.Id,
+                SourceVideo: architecture.Id == NoneArchitecture.Id
+                    ? new("data", $"source-{index}.mp4", 0, 512, 512, 24)
+                    : null,
+                Stages: [],
+                Audio: null)
+            {
+                Architecture = architecture,
+            })];
+        return new(
+            512,
+            512,
+            24,
+            new(
+                HostRootKind.TextToVideoRoot,
+                RootUse.Discard,
+                HostCoreDisposition.Handoff,
+                TimelineOutputDisposition.PublishTimelineOutput,
+                NativeAudioDisposition.DiscardWithRoot),
+            clips,
             [],
             []);
     }

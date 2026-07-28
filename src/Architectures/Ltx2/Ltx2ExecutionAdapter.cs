@@ -24,12 +24,14 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
     public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
+        if (context.Phase == ArchitectureHostPhase.CaptureControlNetPreprocessors)
+        {
+            new LtxControlNetMediaNormalizer(generator).Normalize();
+            return;
+        }
         Pipeline pipeline = BuildPipeline();
         switch (context.Phase)
         {
-            case ArchitectureHostPhase.CaptureControlNetPreprocessors:
-                new ControlNetCapture(generator).CaptureCoreVideoControlNetPreprocessors();
-                break;
             case ArchitectureHostPhase.CaptureBaseReference:
                 pipeline.StageRefStore.Capture(StageRefStore.StageKind.Base);
                 break;

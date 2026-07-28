@@ -143,7 +143,8 @@ public partial class StageFlowTests
             g.FinalNegativePrompt = new JArray("305", 1);
         }, -6.1);
 
-    private static void AssertCoreVideoControlNetResizeBumped(JObject workflow)
+    private static ResizeImageMaskNodeNode AssertLtxControlNetResizeDerived(
+        JObject workflow)
     {
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         ImageScaleNode scaleNode = RequireTypedNode<ImageScaleNode>(bridge, "302");
@@ -160,8 +161,14 @@ public partial class StageFlowTests
         Assert.Equal("303", resizeNode.Input.Connection!.Node.Id);
         Assert.Equal(0, resizeNode.Input.Connection.SlotIndex);
         Assert.Equal("scale to multiple", resizeNode.ResizeType.LiteralAsString());
-        Assert.Equal(64, resizeNode.ExtraInputs?["resize_type.multiple"]?.Value<int>());
+        Assert.Equal(8, resizeNode.ExtraInputs?["resize_type.multiple"]?.Value<int>());
         Assert.Equal("lanczos", resizeNode.ScaleMethod.LiteralAsString());
+        ResizeImageMaskNodeNode ltxResize = Assert.Single(
+            bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>(),
+            node => node.Id != resizeNode.Id);
+        Assert.Equal(64, ltxResize.ExtraInputs?["resize_type.multiple"]?.Value<int>());
+        Assert.Equal(resizeNode.Id, ltxResize.Input.Connection?.Node.Id);
+        return ltxResize;
     }
 
     private static ComfyNode AssertCropGuidesLatentUsesVideoTensor(JObject workflow, WorkflowNode cropGuidesNode)
@@ -288,12 +295,14 @@ public partial class StageFlowTests
             BuildCoreVideoWorkflowStepsWithVideoControlNet(controlNetModel));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        AssertCoreVideoControlNetResizeBumped(workflow);
+        ResizeImageMaskNodeNode ltxResize =
+            AssertLtxControlNetResizeDerived(workflow);
         ComfyNode preprocessor = Assert.Single(bridge.Graph.NodesOfType("UnitTestPreprocessor"));
         ResizeImageMaskNodeNode resize = RequireTypedNode<ResizeImageMaskNodeNode>(bridge, "304");
         ImageFromBatchNode imageFromBatch = Assert.Single(
             bridge.Graph.NodesOfType<ImageFromBatchNode>(),
-            node => node.Image.Connection?.Node.Id == resize.Id && node.Image.Connection.SlotIndex == 0);
+            node => node.Image.Connection?.Node.Id == ltxResize.Id
+                && node.Image.Connection.SlotIndex == 0);
         Assert.Equal(0, imageFromBatch.BatchIndex.LiteralAsInt());
         Assert.Equal(1, imageFromBatch.Length.LiteralAsInt());
 
@@ -379,10 +388,14 @@ public partial class StageFlowTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Single(bridge.Graph.NodesOfType("UnitTestPreprocessor"));
-        ResizeImageMaskNodeNode resize = RequireTypedNode<ResizeImageMaskNodeNode>(bridge, "304");
+        ResizeImageMaskNodeNode hostResize =
+            RequireTypedNode<ResizeImageMaskNodeNode>(bridge, "304");
+        ResizeImageMaskNodeNode scaleToMultipleNode = Assert.Single(
+            bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>(),
+            node => node.Id != hostResize.Id);
         GetImageSizeNode sizeNode = Assert.Single(bridge.Graph.NodesOfType<GetImageSizeNode>());
         JArray controlNetFrameCount = new(sizeNode.Id, 2);
-        Assert.Equal(resize.Id, sizeNode.Image.Connection!.Node.Id);
+        Assert.Equal(scaleToMultipleNode.Id, sizeNode.Image.Connection!.Node.Id);
         Assert.Equal(0, sizeNode.Image.Connection.SlotIndex);
 
         EmptyLTXVLatentVideoNode emptyLatent = Assert.Single(bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>());
@@ -391,11 +404,9 @@ public partial class StageFlowTests
         LTXVEmptyLatentAudioNode emptyAudio = Assert.Single(bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());
         Assert.Same(sizeNode.BatchSize, emptyAudio.FramesNumber.Connection);
 
-        ResizeImageMaskNodeNode scaleToMultipleNode = Assert.Single(
-            bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>(),
-            n => n.ResizeType.LiteralAsString() == "scale to multiple");
-        Assert.Equal(resize.Id, scaleToMultipleNode.Id);
+        Assert.Equal(8, hostResize.ExtraInputs?["resize_type.multiple"]?.Value<int>());
         Assert.Equal(64, scaleToMultipleNode.ExtraInputs?["resize_type.multiple"]?.Value<int>());
+        Assert.Equal(hostResize.Id, scaleToMultipleNode.Input.Connection?.Node.Id);
         ImageFromBatchNode videoGuideFrames = Assert.Single(
             bridge.Graph.NodesOfType<ImageFromBatchNode>(),
             node => node.Image.Connection?.Node.Id == scaleToMultipleNode.Id && node.Image.Connection.SlotIndex == 0
@@ -499,18 +510,15 @@ public partial class StageFlowTests
             BuildCoreVideoWorkflowStepsWithVideoControlNetFirstFrame(controlNetModel));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        AssertCoreVideoControlNetResizeBumped(workflow);
-        ComfyNode preprocessor = Assert.Single(bridge.Graph.NodesOfType("UnitTestPreprocessor"));
+        ResizeImageMaskNodeNode scaleToMultipleNode =
+            AssertLtxControlNetResizeDerived(workflow);
         ResizeImageMaskNodeNode resize = RequireTypedNode<ResizeImageMaskNodeNode>(bridge, "304");
         ImageFromBatchNode firstFrame = Assert.Single(
             bridge.Graph.NodesOfType<ImageFromBatchNode>(),
-            node => node.Image.Connection?.Node.Id == resize.Id && node.Image.Connection.SlotIndex == 0
+            node => node.Image.Connection?.Node.Id == scaleToMultipleNode.Id
+                && node.Image.Connection.SlotIndex == 0
                 && node.Length.LiteralAsInt() == 1);
-        ResizeImageMaskNodeNode scaleToMultipleNode = Assert.Single(
-            bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>(),
-            n => n.ResizeType.LiteralAsString() == "scale to multiple");
-        Assert.Equal(resize.Id, scaleToMultipleNode.Id);
-        Assert.Equal(preprocessor.Id, scaleToMultipleNode.Input.Connection!.Node.Id);
+        Assert.Equal(resize.Id, scaleToMultipleNode.Input.Connection!.Node.Id);
         Assert.Equal(0, scaleToMultipleNode.Input.Connection.SlotIndex);
         ImageFromBatchNode videoGuideFrames = Assert.Single(
             bridge.Graph.NodesOfType<ImageFromBatchNode>(),

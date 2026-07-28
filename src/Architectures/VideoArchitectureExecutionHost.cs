@@ -72,6 +72,10 @@ internal sealed class VideoArchitectureExecutionHost
     internal void DispatchHostPhase(ArchitectureHostPhase phase, VideoExecutionPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        if (phase == ArchitectureHostPhase.CaptureControlNetPreprocessors)
+        {
+            new ControlNetCoreMediaCapture(_generator).Capture();
+        }
         ArchitectureHostPhaseScope scope = ArchitectureHostPhasePolicy.Scope(phase);
         ArchitectureId? rootOwner = ArchitectureRootOwnerResolver.Resolve(plan);
         IEnumerable<IArchitectureGenerationSessionFactoryProvider> providers =

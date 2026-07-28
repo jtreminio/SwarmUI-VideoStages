@@ -33,7 +33,7 @@ internal sealed class ControlNetClipLengthApplicator(WorkflowGenerator g)
 
     private bool TryApplyControlNetFrameCount(int controlNetSourceIndex)
     {
-        if (!new ControlNetCapture(g).TryCreateCapturedControlImageFrameCount(
+        if (!new LtxControlNetMediaNormalizer(g).TryCreateFrameCount(
                 controlNetSourceIndex,
                 out JArray framesConnection))
         {

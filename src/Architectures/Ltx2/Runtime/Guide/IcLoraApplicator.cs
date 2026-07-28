@@ -129,7 +129,7 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
     {
         if (clipLengthFromControlNet
             && controlNetIndex is int index
-            && new ControlNetCapture(g).TryCreateCapturedControlImageFrameCount(
+            && new LtxControlNetMediaNormalizer(g).TryCreateFrameCount(
                 index,
                 out JArray framesConnection))
         {

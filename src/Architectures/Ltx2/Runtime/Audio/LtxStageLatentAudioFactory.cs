@@ -190,7 +190,7 @@ internal sealed class LtxStageLatentAudioFactory(
                 "VideoStages: ControlNet owns clip length, but the compiled plan has no valid "
                 + "ControlNet 1-3 source.");
         }
-        return new ControlNetCapture(g).TryCreateCapturedControlImageFrameCount(
+        return new LtxControlNetMediaNormalizer(g).TryCreateFrameCount(
             sourceIndex,
             out JArray framesConnection)
             ? framesConnection

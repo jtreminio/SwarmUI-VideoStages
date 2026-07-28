@@ -110,7 +110,9 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
         }
 
         JArray guideSource =
-            ControlNetCapture.PeelSingleFrameWrap(bridge, controlImagePath);
+            LtxControlNetMediaNormalizer.PeelSingleFrameWrap(
+                bridge,
+                controlImagePath);
         ImageFromBatchNode trim =
             bridge.AddNode(new ImageFromBatchNode().With(BatchIndex: 0));
         trim.Image.TryConnectFromPath(bridge, guideSource);
