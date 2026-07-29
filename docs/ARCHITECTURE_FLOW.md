@@ -25,6 +25,7 @@ generating architecture.
 | Catalog transport | Common backend | `VideoStagesApi.VideoStagesGetArchitectureCatalog`, `ArchitectureCatalogSerializer.Serialize` |
 | Catalog loading and feature policy | Common frontend | `getArchitectureCatalogSnapshot`, `loadAuthoritativeArchitectureCatalog`, `refreshAuthoritativeArchitectureCatalog`, `parseVideoArchitectureCatalog`, `createCapabilityViewResolver` |
 | Architecture-specific authoring behavior | Frontend local behavior maps | `architectureBehavior`, `ltx2Behavior`, `authoringPanels.ts`, architecture ID identity modules |
+| Curated IC-LoRA download route | LTX backend adapter + SwarmUI core | `Ltx2ApiRoutes`, `ModelsAPI.DoModelDownloadWS` |
 | Document parsing and product planning | Common backend | `VideoStagesSpecParser`, `ArchitecturePlanResolver`, `VideoExecutionPlanCompiler` |
 | Model-family planning and execution | Selected backend module | `IVideoArchitectureModule.ValidateAndCompileClip`, `IVideoGenerationSession` |
 | Runtime dispatch and timeline assembly | Common backend | `StageSequenceRunner`, `ArchitectureRuntimeDispatcher`, `TimelineAssemblySession` |
@@ -34,6 +35,14 @@ The boundary in one sentence:
 
 > Common code owns VideoStages product semantics; architecture code owns
 > model-family semantics; SwarmUI owns host policy and lifecycle.
+
+For curated IC-LoRA downloads, `Ltx2ApiRoutes` owns the preset ID-to-URL/name
+mapping and route permission, and refuses unknown preset IDs locally. It
+delegates transfer, core model-refusal policy, cancellation, and temporary-file
+handling to SwarmUI's `ModelsAPI.DoModelDownloadWS`. Extension tests
+characterize the local mapping/refusal and the frontend's handling of core
+refusal and cancellation outcomes; they do not test the core transfer
+mechanics.
 
 ## Flow A: model selection to frontend features
 
@@ -254,22 +263,19 @@ Later `Runner` phases dispatch through
 `ArchitectureRootOwnerResolver` selects the one architecture allowed to
 transform host-root media.
 
-`Ltx2ExecutionAdapter.ExecuteHostPhase` currently handles ControlNet
-preprocessor capture, base/refiner references, pre-core handoff, core-output
-drop, and root audio-mask sizing.
+For the ControlNet preprocessor phase,
+`VideoArchitectureExecutionHost` invokes common
+`ControlNetCoreMediaCapture` once to capture raw host media. It then fans out
+to active architecture participants. `Ltx2ExecutionAdapter` applies LTX-owned
+multiple-of-64 and one-frame normalization through
+`LtxControlNetMediaNormalizer`; the source-only path retains the raw capture.
+The remaining LTX host phases handle base/refiner references, pre-core handoff,
+core-output drop, and root audio-mask sizing.
 
 `StageRefStore` keys are architecture-scoped by `LtxRuntimeKeyScope`:
 `videostages.arch.{id}.stage-ref.{kind}.{media|vae|audio}`. The same store owns
 the pre-core snapshot key used by `RootVideoStageHandoff`, so the handoff
 cannot be constructed with a mismatched architecture scope.
-
-One current pre-WAN risk remains important:
-
-- `ControlNetCoreMediaCapture` is called by both LTX and
-  `SourceOnlyExecutionAdapter`, but it also enforces a multiple-of-64 resize and
-  one-frame wrapping. Those are LTX rules in common capture code, so even a
-  source-only timeline can receive LTX normalization. The intended split is
-  common raw capture followed by LTX-owned normalization.
 
 ### B5. Dispatch a clip by architecture
 
@@ -386,7 +392,6 @@ exclusive finalization only for an all-LTX HDR timeline.
 11. Timeline edits remain commands/diffs with undo semantics.
 12. Source-only and generated execution follow the same ownership rules.
 
-Known current exceptions or transition seams are the IC-LoRA-shaped local
-behavior interface and LTX normalization inside common ControlNet capture.
-The frontend ID maps are behavior dispatch only, not a second catalog
-authority. Do not copy the remaining seams into a new architecture.
+The main current transition seam is the IC-LoRA-shaped local behavior
+interface. The frontend ID maps are behavior dispatch only, not a second
+catalog authority. Do not copy that remaining seam into a new architecture.

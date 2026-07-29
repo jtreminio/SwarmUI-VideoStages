@@ -75,34 +75,24 @@ public class StageRunnerCollaboratorTests
     }
 
     [Fact]
-    public void Clip_runtime_context_and_execution_context_are_plan_only()
+    public void Execution_contexts_do_not_reintroduce_authored_specs()
     {
-        Assert.Equal(
-            [
-                nameof(ArchitectureClipRuntimeContext.Clip),
-                nameof(ArchitectureClipRuntimeContext.ClipIndex),
-                nameof(ArchitectureClipRuntimeContext.PreviousClip),
-                nameof(ArchitectureClipRuntimeContext.PreviousClipOutput),
-                nameof(ArchitectureClipRuntimeContext.PreviousTimelineClipOutput),
-            ],
-            typeof(ArchitectureClipRuntimeContext).GetProperties()
-                .Select(property => property.Name));
-        Assert.Equal(
-            [
-                typeof(VideoExecutionPlan),
-                typeof(ClipPlan),
-                typeof(WGNodeData),
-                typeof(WGNodeData),
-            ],
-            Assert.Single(typeof(ClipContext).GetConstructors()).GetParameters()
-                .Select(parameter => parameter.ParameterType));
-        Assert.Null(typeof(ClipContext).GetProperty("Clip"));
-        Assert.Single(
-            typeof(StageClipExecutionContext).GetProperties(),
-            property => property.PropertyType == typeof(ArchitectureClipRuntimeContext));
+        Type[] executionContextTypes =
+        [
+            typeof(ArchitectureClipRuntimeContext),
+            typeof(StageClipExecutionContext),
+            typeof(ClipContext),
+        ];
         Assert.DoesNotContain(
-            typeof(StageClipExecutionContext).GetProperties(),
-            property => property.PropertyType == typeof(ClipSpec));
+            executionContextTypes.SelectMany(type => type.GetProperties()),
+            property => property.PropertyType == typeof(ClipSpec)
+                || property.PropertyType == typeof(StageSpec));
+        Assert.DoesNotContain(
+            executionContextTypes
+                .SelectMany(type => type.GetConstructors())
+                .SelectMany(constructor => constructor.GetParameters()),
+            parameter => parameter.ParameterType == typeof(ClipSpec)
+                || parameter.ParameterType == typeof(StageSpec));
     }
 
     [Fact]

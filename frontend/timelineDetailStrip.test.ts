@@ -1397,6 +1397,42 @@ describe("createTimelineDetailStrip", () => {
         ).toContain("Downloading Deblur weights… 57%");
     });
 
+    it.each([
+        "Model not found.",
+        "Download was cancelled.",
+    ])("shows terminal downloader failure %s and retries only after preset reselection", (message) => {
+        swarmGlobals.makeWSRequest = jest.fn();
+        setup([
+            {
+                duration: 4,
+                stages: [{}],
+                icLoras: [{ lora: "lora-x.safetensors" }],
+            },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        changeIcLoraSelect("preset", "deblur");
+
+        const onError = swarmGlobals.makeWSRequest.mock.calls[0][4] as (
+            error: unknown,
+        ) => void;
+        onError(message);
+
+        expect(
+            document.querySelector('[data-vst-iclora-auto="deblur"]')
+                ?.textContent,
+        ).toContain(`Download failed: ${message}`);
+        expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
+
+        renderStrip();
+        expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
+
+        changeIcLoraSelect("preset", "custom");
+        expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
+
+        changeIcLoraSelect("preset", "deblur");
+        expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(2);
+    });
+
     it("skips the [AUTO] download when the preset weights are already installed", () => {
         swarmGlobals.makeWSRequest = jest.fn();
         setup(

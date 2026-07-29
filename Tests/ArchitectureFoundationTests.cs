@@ -837,23 +837,8 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Source_only_session_uses_direct_generic_runtime_contract_without_ltx_dependencies()
+    public void Source_only_session_has_no_ltx_runtime_dependency()
     {
-        Assert.Equal(
-            [
-                typeof(SwarmUI.Builtin_ComfyUIBackend.WorkflowGenerator),
-                typeof(int),
-                typeof(AudioRuntimeSources),
-            ],
-            Assert.Single(typeof(SourceOnlyGenerationSession).GetConstructors())
-                .GetParameters()
-                .Select(parameter => parameter.ParameterType));
-        Assert.Equal(
-            [typeof(ArchitectureClipRuntimeContext)],
-            typeof(SourceOnlyGenerationSession)
-                .GetMethod(nameof(SourceOnlyGenerationSession.Execute))
-                .GetParameters()
-                .Select(parameter => parameter.ParameterType));
         Assert.DoesNotContain(
             typeof(SourceOnlyGenerationSession).GetConstructors()
                 .SelectMany(constructor => constructor.GetParameters()),

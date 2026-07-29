@@ -251,4 +251,96 @@ describe("authoring document contract fixture", () => {
         );
         expect(JSON.parse(reencoded)).toEqual(fixture());
     });
+
+    it("round-trips current typed authored data for an unknown architecture", () => {
+        const unknown = fixture();
+        const clips = unknown.clips as Record<string, unknown>[];
+        const populatedClip = clips[0];
+        populatedClip.architecture = "future-video";
+        populatedClip.modelProfileId = "future-video-v1";
+        for (const [index, stage] of (
+            populatedClip.stages as Record<string, unknown>[]
+        ).entries()) {
+            stage.model = `removed-video-stage-${index}.safetensors`;
+            stage.modelProfileId = `removed-video-profile-${index}`;
+        }
+
+        const decoded = decodeStoredDocument(JSON.stringify(unknown), {
+            width: 1024,
+            height: 1024,
+            fps: 24,
+        });
+        expect(decoded).not.toBeNull();
+        if (!decoded) {
+            return;
+        }
+        const serialized = serializeStateForStorage(
+            createRootConfig(decoded.dims, decoded.clips, decoded.audioTracks),
+        );
+        const decodedAgain = decodeStoredDocument(serialized, {
+            width: 1024,
+            height: 1024,
+            fps: 24,
+        });
+        expect(decodedAgain).not.toBeNull();
+        if (!decodedAgain) {
+            return;
+        }
+        const serializedAgain = serializeStateForStorage(
+            createRootConfig(
+                decodedAgain.dims,
+                decodedAgain.clips,
+                decodedAgain.audioTracks,
+            ),
+        );
+
+        expect(serializedAgain).toBe(serialized);
+        const roundTripped = JSON.parse(serialized) as {
+            clips: {
+                architecture: string;
+                modelProfileId: string;
+                stages: {
+                    model: string;
+                    modelProfileId: string;
+                    icLoraStrengths: number[];
+                }[];
+                icLoras: {
+                    driveSource: string;
+                    driveData: string;
+                    driveMediaKinds: string[];
+                    controlType: string;
+                    hdr: boolean;
+                    driveMedia: { data: string; fileName: string } | null;
+                }[];
+            }[];
+        };
+        expect(roundTripped.clips[0]).toMatchObject({
+            architecture: "future-video",
+            modelProfileId: "future-video-v1",
+            stages: [
+                {
+                    model: "removed-video-stage-0.safetensors",
+                    modelProfileId: "removed-video-profile-0",
+                },
+                {
+                    model: "removed-video-stage-1.safetensors",
+                    modelProfileId: "removed-video-profile-1",
+                },
+            ],
+        });
+        expect(roundTripped.clips[0].icLoras[0]).toEqual(
+            expect.objectContaining({
+                driveSource: "Upload",
+                driveData: "visual",
+                driveMediaKinds: ["video"],
+                controlType: "canny",
+                hdr: true,
+                driveMedia: {
+                    data: "data:video/mp4;base64,QUJD",
+                    fileName: "drive.mp4",
+                },
+            }),
+        );
+        expect(roundTripped.clips[0].stages[0].icLoraStrengths).toEqual([0.8]);
+    });
 });
