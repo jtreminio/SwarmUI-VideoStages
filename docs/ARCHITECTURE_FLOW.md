@@ -333,9 +333,10 @@ path retains the raw capture.
 The remaining LTX host phases handle base/refiner references, pre-core handoff,
 core-output drop, and root audio-mask sizing.
 When Wan owns the image-to-video root, `WanRootMediaHandoff` captures the
-resolvable root image/VAE and a node snapshot, then restores them and prunes the
-host core video pass. Missing or corrupt handoff state fails closed and clears
-all `videostages.arch.wan22.*` handoff keys.
+resolvable root image, its VAE state (which may be explicitly absent), and a
+node snapshot, then restores them and prunes the host core video pass. Missing
+or corrupt handoff state fails closed and clears all
+`videostages.arch.wan22.*` handoff keys.
 
 All LTX-owned `NodeHelpers` keys are architecture-scoped by
 `LtxRuntimeKeyScope` under `videostages.arch.ltx2.*`. This LTX-private formatter
