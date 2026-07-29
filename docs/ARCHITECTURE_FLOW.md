@@ -70,7 +70,10 @@ and planning wrap that registry in `AuthorizedArchitectureRegistry`, which
 removes models the requesting SwarmUI session is not allowed to see. It
 authorizes the canonical resolved model name rather than the authored spelling,
 because core resolves both `name` and `name.safetensors` while blacklist and
-whitelist prefixes match the exact string they are given.
+whitelist prefixes match the exact string they are given. A session with no user
+carries no authorization context and is left unfiltered — the same convention
+session-owned media uses; both production entry points, the catalog route and
+plan compilation, always carry a request session.
 
 `Ltx2ArchitectureModule.TryResolveModel` accepts a model only when:
 

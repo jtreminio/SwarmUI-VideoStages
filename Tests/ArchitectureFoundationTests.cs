@@ -89,6 +89,27 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
+    public void Registry_authorization_is_skipped_only_without_a_request_user()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        IVideoArchitectureRegistry production = VideoArchitectureRegistry.Production;
+        IVideoArchitectureRegistry restricted =
+            production.ForSession(RestrictedSession(models.VideoModel.Name));
+
+        // Pinning the documented policy: no user means no authorization context to
+        // apply, not an unauthenticated request to refuse.
+        Assert.Same(production, production.ForSession(null));
+        Assert.Same(production, production.ForSession(new Session()));
+        Assert.Contains(
+            production.ResolvedModels,
+            resolved => resolved.ModelName == models.VideoModel.Name);
+        Assert.DoesNotContain(
+            restricted.ResolvedModels,
+            resolved => resolved.ModelName == models.VideoModel.Name);
+    }
+
+    [Fact]
     public void Resolver_refuses_the_extensionless_spelling_of_a_forbidden_model()
     {
         using SwarmUiTestContext _ = new();
