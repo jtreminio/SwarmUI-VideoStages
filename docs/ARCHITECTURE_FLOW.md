@@ -25,7 +25,7 @@ generating architecture.
 | Catalog transport | Common backend + SwarmUI authorization | `VideoStagesApi.VideoStagesGetArchitectureCatalog`, `AuthorizedArchitectureRegistry`, `ArchitectureCatalogSerializer.Serialize` |
 | Catalog loading and feature policy | Common frontend | `getArchitectureCatalogSnapshot`, `loadAuthoritativeArchitectureCatalog`, `refreshAuthoritativeArchitectureCatalog`, `parseVideoArchitectureCatalog`, `createCapabilityViewResolver` |
 | Architecture-specific authoring behavior | Frontend local behavior maps | `architectureBehavior`, `ltx2Behavior`, `authoringPanels.ts`, architecture ID identity modules |
-| Curated IC-LoRA download route | LTX backend adapter + SwarmUI core | `Ltx2ApiRoutes`, `ModelsAPI.DoModelDownloadWS` |
+| Curated IC-LoRA download route | LTX backend adapter + SwarmUI core | `Ltx2ApiRoutes`, `IcLoraModelDownloadService`, `ModelsAPI.DoModelDownloadWS` |
 | Document parsing and product planning | Common backend | `VideoStagesSpecParser`, `ArchitecturePlanResolver`, `VideoExecutionPlanCompiler` |
 | Model-family planning and execution | Selected backend module | `IVideoArchitectureModule.ValidateAndCompileClip`, `IVideoGenerationSession` |
 | Runtime dispatch and timeline assembly | Common backend | `StageSequenceRunner`, `ArchitectureRuntimeDispatcher`, `TimelineAssemblySession` |
@@ -37,12 +37,13 @@ The boundary in one sentence:
 > model-family semantics; SwarmUI owns host policy and lifecycle.
 
 For curated IC-LoRA downloads, `Ltx2ApiRoutes` owns the preset ID-to-URL/name
-mapping and route permission, and refuses unknown preset IDs locally. It
-delegates transfer, core model-refusal policy, cancellation, and temporary-file
-handling to SwarmUI's `ModelsAPI.DoModelDownloadWS`. Extension tests
-characterize the local mapping/refusal and the frontend's handling of core
-refusal and cancellation outcomes; they do not test the core transfer
-mechanics.
+mapping and route permission, and refuses unknown preset IDs locally.
+`IcLoraModelDownloadService` serializes transfers targeting the same file,
+delegates transfer, model-refusal policy, cancellation, refresh, and resave to
+SwarmUI's `ModelsAPI.DoModelDownloadWS`, then removes the deterministic
+`.download.tmp` file in a terminal cleanup path. Extension tests cover local
+refusal, cancellation propagation, failure cleanup, and successful final-file
+preservation without duplicating core's transfer implementation.
 
 ## Flow A: model selection to frontend features
 

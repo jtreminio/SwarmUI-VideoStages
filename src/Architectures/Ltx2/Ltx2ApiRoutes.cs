@@ -17,14 +17,25 @@ internal static class Ltx2ApiRoutes
     /// <summary>
     /// Downloads a curated IC-LoRA preset's weights. This route exists only to keep the URL
     /// choice server-side (the client sends a preset id, never a URL); the transfer itself is
-    /// core's, so model-refusal policy, cancellation, temp-file handling, refresh, and resave all
-    /// stay owned by SwarmUI.
+    /// core's, while the extension wrapper guarantees failed or canceled transfers do not retain
+    /// core's deterministic temporary file.
     /// </summary>
-    public static async Task<JObject> VideoStagesDownloadIcLoraWS(
+    public static Task<JObject> VideoStagesDownloadIcLoraWS(
         Session session,
         WebSocket ws,
         [API.APIParameter("Preset id from the curated LTX IC-LoRA preset list.")]
-        string presetId)
+        string presetId) =>
+        DownloadIcLora(
+            session,
+            ws,
+            presetId,
+            IcLoraModelDownloadService.Production);
+
+    internal static async Task<JObject> DownloadIcLora(
+        Session session,
+        WebSocket ws,
+        string presetId,
+        IIcLoraModelDownloadService downloader)
     {
         string cleanPresetId = $"{presetId}".Trim();
         if (!IcLoraWeights.Urls.TryGetValue(cleanPresetId, out string url))
@@ -34,11 +45,10 @@ internal static class Ltx2ApiRoutes
                 API.WebsocketTimeout);
             return null;
         }
-        return await ModelsAPI.DoModelDownloadWS(
+        return await downloader.Download(
             session,
             ws,
             url,
-            "LoRA",
             IcLoraWeights.ModelNameFor(cleanPresetId));
     }
 }
