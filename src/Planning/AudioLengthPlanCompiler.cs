@@ -28,7 +28,8 @@ internal static class AudioLengthPlanCompiler
         else if (clip.ClipLengthFromAudio)
         {
             owner = AudioLengthOwner.Audio;
-            if (!baseSource.HasConfiguredTrack)
+            if (baseSource.Kind != AudioSourceKind.Unknown
+                && !baseSource.HasConfiguredTrack)
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Warning,

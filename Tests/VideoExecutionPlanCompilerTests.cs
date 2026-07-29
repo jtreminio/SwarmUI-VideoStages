@@ -94,9 +94,10 @@ public class VideoExecutionPlanCompilerTests
     public void Compile_OptionsAreExpressedAtStageAndClipHooks()
     {
         ClipSpec clip = new(
-            4, 49, Constants.AudioSourceNative,
+            4, 49, Constants.AudioSourceUpload,
             [new IcLoraSpec("drive", Constants.IcLoraSourceUpload, 1, 1, Constants.IcLoraControlNone, null, Stage: 0)],
-            false, true, false, true, null,
+            false, true, false, true,
+            new UploadedMediaSpec("data:audio/wav;base64,AA==", "track.wav"),
             [new ImageRefSpec("Upload", 1, false, "ref.png")],
             [Stage(10, loras: [new LoraRef("stage")]), Stage(11)],
             Loras: [new LoraRef("clip")],

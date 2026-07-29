@@ -20,7 +20,8 @@
         "retake",
         "audio-sources",
         "audio-segments",
-        "audio-reuse"
+        "audio-reuse",
+        "audio-derived-duration"
       ],
       "stage": [
         "image-input",

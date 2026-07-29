@@ -34,9 +34,8 @@ internal static class WanClipPlanCompiler
             }
         }
 
-        // Wan produces no audio, so these length policies have no source to read. Captured-stage
-        // reuse is already rejected by the common capability validator.
-        Refuse(clip.ClipLengthFromAudio, "clip length from audio");
+        // Wan has no ControlNet duration source. Audio-derived duration and captured-stage reuse
+        // are already rejected by the common capability validator.
         Refuse(clip.ClipLengthFromControlNet, "clip length from ControlNet");
 
         Dictionary<int, WanStagePayload> stages = [];

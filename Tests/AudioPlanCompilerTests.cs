@@ -70,6 +70,24 @@ public class AudioPlanCompilerTests
         }
     }
 
+    [Theory]
+    [InlineData((int)AudioSourceKind.Upload, true)]
+    [InlineData((int)AudioSourceKind.ControlNet, true)]
+    [InlineData((int)AudioSourceKind.AceStepFun, true)]
+    [InlineData((int)AudioSourceKind.Native, false)]
+    [InlineData((int)AudioSourceKind.Disabled, false)]
+    [InlineData((int)AudioSourceKind.Unknown, false)]
+    [InlineData((int)AudioSourceKind.External, false)]
+    public void Audio_duration_source_policy_matches_the_external_source_contract(
+        int sourceValue,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            AudioSourceKindPolicy.CanDriveClipDuration(
+                (AudioSourceKind)sourceValue));
+    }
+
     [Fact]
     public void Compile_makes_controlnet_length_precedence_explicit()
     {

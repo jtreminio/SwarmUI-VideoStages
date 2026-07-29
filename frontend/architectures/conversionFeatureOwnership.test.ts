@@ -162,4 +162,63 @@ describe("conversion feature-state ownership", () => {
             "captured stage audio reuse",
         );
     });
+
+    it("drops audio-derived duration without dropping a supported uploaded source", () => {
+        const catalog = icLoraOnlyCatalog();
+        catalog.architectures[0].capabilities.audioSourceKinds = ["Upload"];
+        const clip = minimalClip({
+            audioSource: "Upload",
+            uploadedAudio: {
+                data: "data:audio/wav;base64,AA==",
+                fileName: "voice.wav",
+            },
+            clipLengthFromAudio: true,
+        });
+
+        const conversion = planArchitectureConversion(
+            clip,
+            targetFor(catalog),
+            catalog,
+        );
+
+        expect(conversion?.clip.audioSource).toBe("Upload");
+        expect(conversion?.clip.uploadedAudio).toEqual(clip.uploadedAudio);
+        expect(conversion?.clip.clipLengthFromAudio).toBe(false);
+        expect(conversion?.removals).toContain("audio-derived clip duration");
+        expect(conversion?.removals).not.toContain(
+            "clip audio source settings",
+        );
+    });
+
+    it("attributes duration cleanup to its owner after audio source normalization", () => {
+        const catalog = icLoraOnlyCatalog();
+        catalog.architectures[0].capabilities.clip = [
+            "audio-sources",
+            "audio-derived-duration",
+        ];
+        catalog.architectures[0].capabilities.audioSourceKinds = [
+            "Native",
+            "Upload",
+        ];
+        const clip = minimalClip({
+            audioSource: "ControlNet",
+            clipLengthFromAudio: true,
+        });
+
+        const conversion = planArchitectureConversion(
+            clip,
+            targetFor(catalog),
+            catalog,
+        );
+
+        expect(conversion?.clip.audioSource).toBe("Native");
+        expect(conversion?.clip.uploadedAudio).toBeNull();
+        expect(conversion?.clip.clipLengthFromAudio).toBe(false);
+        expect(conversion?.removals).toEqual(
+            expect.arrayContaining([
+                "clip audio source settings",
+                "audio-derived clip duration",
+            ]),
+        );
+    });
 });

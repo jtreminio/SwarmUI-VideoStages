@@ -121,17 +121,24 @@ const persistedCapabilityIssues = (
         "Stage upscaling",
     );
     const sourceKind = audioSourceKind(clip.audioSource);
+    const selectedAudioSourceSupported = supports("clipAudio", {
+        audioSource: clip.audioSource,
+    });
     unsupported(
         !supports("audioReuse") && clip.reuseAudio,
         "audio-reuse",
         "Captured stage audio reuse",
     );
     unsupported(
-        !supports("clipAudio", { audioSource: clip.audioSource }) &&
+        !supports("audioDerivedDuration") && clip.clipLengthFromAudio,
+        "audio-derived-duration",
+        "Audio-derived clip duration",
+    );
+    unsupported(
+        !selectedAudioSourceSupported &&
             (sourceKind !== "Native" ||
                 clip.uploadedAudio !== null ||
                 clip.saveAudioTrack ||
-                clip.clipLengthFromAudio ||
                 clip.clipLengthFromControlNet),
         "audio-source",
         `Audio source '${sourceKind}'`,
@@ -140,6 +147,8 @@ const persistedCapabilityIssues = (
     // state is what makes an authored flag unusable here.
     if (
         clip.clipLengthFromAudio &&
+        supports("audioDerivedDuration") &&
+        selectedAudioSourceSupported &&
         !canUseClipLengthFromAudio(clip.audioSource)
     ) {
         diagnostics.push(

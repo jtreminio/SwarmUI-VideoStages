@@ -182,6 +182,10 @@ internal static class ArchitectureCatalogSerializer
         {
             yield return "audio-reuse";
         }
+        if (Has(value, ClipCapability.AudioDerivedDuration))
+        {
+            yield return "audio-derived-duration";
+        }
     }
 
     private static IEnumerable<string> StageCapabilities(StageCapability value)

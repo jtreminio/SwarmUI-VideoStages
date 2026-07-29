@@ -123,6 +123,8 @@ export const architectureFeatureSupport = (
             );
         case "audioReuse":
             return capability.clip.includes("audio-reuse");
+        case "audioDerivedDuration":
+            return capability.clip.includes("audio-derived-duration");
         case "stageLoras":
             return (
                 capability.stage.includes("lora") &&

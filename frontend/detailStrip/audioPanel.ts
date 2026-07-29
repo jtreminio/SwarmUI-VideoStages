@@ -3,7 +3,9 @@ import {
     AUDIO_SOURCE_UPLOAD,
     buildAudioSourceOptions,
     canUseClipLengthFromAudio,
+    defaultAuthoringAudioSource,
     isAceStepFunAudioSource,
+    isAllowedAudioSource,
 } from "../audioSource";
 import {
     buildAccordionSection,
@@ -35,8 +37,9 @@ export const buildAudioBody = (
     const { clipIdx } = sel;
     const clip = clips[clipIdx];
     const capabilityView = ctx.capabilities().forClip(clip);
-    const audioDecision = capabilityView.decision("clipAudio");
+    const audioCapabilityDecision = capabilityView.decision("clipAudio");
     const reuseDecision = capabilityView.decision("audioReuse");
+    const durationDecision = capabilityView.decision("audioDerivedDuration");
     const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
         clip.architecture,
         clip.icLoras,
@@ -49,7 +52,33 @@ export const buildAudioBody = (
         options.find((option) => option.value === clip.audioSource)?.value ??
         clip.audioSource ??
         "";
+    const selectedAudioSourceAllowed = isAllowedAudioSource(
+        capabilityView.audioSourceKinds,
+        source,
+    );
+    const audioDecision =
+        audioCapabilityDecision.supported && !selectedAudioSourceAllowed
+            ? {
+                  ...audioCapabilityDecision,
+                  supported: false,
+                  reason: `Audio source '${source}' is not supported by ${capabilityView.architectureLabel}.`,
+              }
+            : audioCapabilityDecision;
     const canLength = canUseClipLengthFromAudio(source);
+    const canDeriveDuration = durationDecision.supported && canLength;
+    const durationIssueDecision =
+        selectedAudioSourceAllowed && !canDeriveDuration
+            ? durationDecision.supported
+                ? {
+                      ...durationDecision,
+                      supported: false,
+                      reason: `Audio source '${source}' cannot determine video duration.`,
+                  }
+                : durationDecision
+            : null;
+    const durationUnavailableReason =
+        durationIssueDecision?.reason ??
+        (!audioDecision.supported ? audioDecision.reason : "");
     const isAce = isAceStepFunAudioSource(source);
 
     const commitAudio = (mutate: (clip: Clip) => void): void => {
@@ -137,21 +166,43 @@ export const buildAudioBody = (
 
     const lengthRow = buildCheckbox(
         "Clip Length from Audio",
-        clip.clipLengthFromAudio === true && canLength,
+        clip.clipLengthFromAudio === true,
         (value) => {
             commitAudio((c) => {
                 c.clipLengthFromAudio = value;
             });
         },
         {
-            disabled: !canLength,
+            disabled: !canDeriveDuration,
             help:
                 "Set the clip's duration to match the length of its audio " +
                 "instead of a fixed value. Available only for sources with a " +
-                "known length.",
+                "known length." +
+                (durationUnavailableReason
+                    ? ` ${durationUnavailableReason}`
+                    : ""),
         },
     );
+    lengthRow.classList.add("vst-detail-audio-derived-duration");
     base.appendChild(lengthRow);
+    if (clip.clipLengthFromAudio && durationIssueDecision) {
+        lengthRow.appendChild(buildCapabilityNotice(durationIssueDecision));
+        lengthRow.appendChild(
+            buildCapabilityRepairButton({
+                label: "Remove unsupported audio-derived duration",
+                className: "vst-detail-delete",
+                onRepair: () => {
+                    ctx.commit((items) => {
+                        const target = items[clipIdx];
+                        if (target) {
+                            target.clipLengthFromAudio = false;
+                        }
+                    });
+                    ctx.render();
+                },
+            }),
+        );
+    }
 
     const saveRow = buildCheckbox(
         "Save Audio Track",
@@ -194,7 +245,11 @@ export const buildAudioBody = (
     }
     if (!audioDecision.supported) {
         applyPersistedCapabilityRepair(base, audioDecision, {
-            keep: [...CAPABILITY_REPAIR_SELECTORS, ".vst-detail-audio-reuse"],
+            keep: [
+                ...CAPABILITY_REPAIR_SELECTORS,
+                ".vst-detail-audio-reuse",
+                ".vst-detail-audio-derived-duration",
+            ],
             repair: {
                 label: "Remove unsupported clip audio",
                 className: "vst-remove-unsupported-audio",
@@ -204,9 +259,10 @@ export const buildAudioBody = (
                         if (!target) {
                             return null;
                         }
-                        target.audioSource = "Native";
+                        target.audioSource = defaultAuthoringAudioSource(
+                            capabilityView.audioSourceKinds,
+                        );
                         target.uploadedAudio = null;
-                        target.clipLengthFromAudio = false;
                         target.saveAudioTrack = false;
                         return "render";
                     });

@@ -22,6 +22,19 @@ internal enum AudioSourceKind
     External,
 }
 
+/// <summary>Shared source-kind prerequisites for architecture capability validation.</summary>
+internal static class AudioSourceKindPolicy
+{
+    /// <summary>
+    /// Only an external clip source can own video duration. Native audio is generated with the
+    /// video, so asking it to determine that video's duration would be circular.
+    /// </summary>
+    internal static bool CanDriveClipDuration(AudioSourceKind kind) =>
+        kind is AudioSourceKind.Upload
+            or AudioSourceKind.ControlNet
+            or AudioSourceKind.AceStepFun;
+}
+
 /// <summary>One parsed authored audio-source string.</summary>
 internal sealed record AudioSourceSelection(
     AudioSourceKind Kind,

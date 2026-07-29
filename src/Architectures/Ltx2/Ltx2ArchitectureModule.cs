@@ -57,6 +57,7 @@ internal sealed class Ltx2ArchitectureModule :
                 | ClipCapability.AudioSources
                 | ClipCapability.AudioReuse
                 | ClipCapability.AudioSegments
+                | ClipCapability.AudioDerivedDuration
                 | ClipCapability.ReferenceFraming,
             StageCapability.ImageInput
                 | StageCapability.VideoInput

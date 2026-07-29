@@ -106,6 +106,17 @@ internal static class ArchitectureCapabilityValidator
                     StringComparison.OrdinalIgnoreCase),
             Has(descriptor.Capabilities.Clip, ClipCapability.AudioSources),
             "clip audio source");
+        bool supportsAudioDerivedDuration = Has(
+            descriptor.Capabilities.Clip,
+            ClipCapability.AudioDerivedDuration);
+        Require(
+            clip.ClipLengthFromAudio,
+            supportsAudioDerivedDuration,
+            "audio-derived clip duration");
+        ValidateAudioDerivedDurationSource(
+            clip,
+            supportsAudioDerivedDuration,
+            diagnostics);
         Require(
             clip.ReuseAudio,
             Has(descriptor.Capabilities.Clip, ClipCapability.AudioReuse),
@@ -122,6 +133,30 @@ internal static class ArchitectureCapabilityValidator
         ValidateAudioSourceKind(clip, descriptor, diagnostics);
         ValidateStages(clip, descriptor, stageModels, diagnostics);
         return diagnostics.AsReadOnly();
+    }
+
+    private static void ValidateAudioDerivedDurationSource(
+        ClipSpec clip,
+        bool capabilitySupported,
+        ICollection<PlanDiagnostic> diagnostics)
+    {
+        if (!clip.ClipLengthFromAudio || !capabilitySupported)
+        {
+            return;
+        }
+        AudioSourceKind kind = AudioSourceParser.Parse(clip.AudioSource).Kind;
+        if (kind == AudioSourceKind.Unknown
+            || AudioSourceKindPolicy.CanDriveClipDuration(kind))
+        {
+            // AudioBaseSourcePlanCompiler remains the sole owner of unknown-source diagnostics.
+            return;
+        }
+        diagnostics.Add(new(
+            PlanDiagnosticSeverity.Error,
+            "audio.length.source_cannot_drive_duration",
+            $"Clip {clip.Id} configures audio-derived duration, but audio source kind "
+                + $"'{kind}' cannot determine video duration.",
+            clip.Id));
     }
 
     /// <summary>

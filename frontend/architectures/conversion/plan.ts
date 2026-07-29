@@ -1,4 +1,7 @@
-import { defaultAuthoringAudioSource } from "../../audioSource";
+import {
+    canUseClipLengthFromAudio,
+    defaultAuthoringAudioSource,
+} from "../../audioSource";
 import {
     IC_LORA_SOURCE_UPLOAD,
     IC_LORA_STAGE_ALL,
@@ -269,7 +272,6 @@ export const planArchitectureConversion = (
             clip.audioSource !== "Native" ||
             clip.uploadedAudio !== null ||
             clip.saveAudioTrack ||
-            clip.clipLengthFromAudio ||
             clip.clipLengthFromControlNet;
         if (hasAudioSettings) {
             removals.push("clip audio source settings");
@@ -279,8 +281,15 @@ export const planArchitectureConversion = (
         );
         clip.uploadedAudio = null;
         clip.saveAudioTrack = false;
-        clip.clipLengthFromAudio = false;
         clip.clipLengthFromControlNet = false;
+    }
+    if (
+        clip.clipLengthFromAudio &&
+        (!supports("audioDerivedDuration") ||
+            !canUseClipLengthFromAudio(clip.audioSource))
+    ) {
+        removals.push("audio-derived clip duration");
+        clip.clipLengthFromAudio = false;
     }
 
     return {

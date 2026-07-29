@@ -68,6 +68,9 @@ public class WanArchitectureTests
             GeneratedClip(0, stage) with { ReuseAudio = true },
             "captured stage audio reuse");
         AssertRejected(
+            GeneratedClip(0, stage) with { ClipLengthFromAudio = true },
+            "audio-derived clip duration");
+        AssertRejected(
             GeneratedClip(0, stage) with
             {
                 IcLoras = [new("wan-ic.safetensors", "Upload", 1, 1, "canny", null)],
@@ -122,23 +125,31 @@ public class WanArchitectureTests
             GeneratedClip(0, stage with { ImageReference = "Base" }),
             "stage image reference 'Base'");
         AssertRefused(
-            GeneratedClip(0, stage) with { ClipLengthFromAudio = true },
-            "clip length from audio");
-        AssertRefused(
             GeneratedClip(0, stage) with { ClipLengthFromControlNet = true },
             "clip length from ControlNet");
     }
 
-    private static void AssertRejected(ClipSpec clip, string expectedOption) =>
-        AssertBlocked(clip, "architecture-capability-unsupported", expectedOption);
-
-    private static void AssertRefused(ClipSpec clip, string expectedOption) =>
-        AssertBlocked(clip, "wan22.option.unsupported", expectedOption);
-
-    private static void AssertBlocked(ClipSpec clip, string code, string expectedOption)
+    private static void AssertRejected(ClipSpec clip, string expectedOption)
     {
         VideoExecutionPlan plan = Compile(clip);
+        AssertBlocked(
+            plan,
+            "architecture-capability-unsupported",
+            expectedOption);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            item => item.Code == "wan22.option.unsupported"
+                && item.Message.Contains(expectedOption));
+    }
 
+    private static void AssertRefused(ClipSpec clip, string expectedOption) =>
+        AssertBlocked(Compile(clip), "wan22.option.unsupported", expectedOption);
+
+    private static void AssertBlocked(
+        VideoExecutionPlan plan,
+        string code,
+        string expectedOption)
+    {
         Assert.Contains(
             plan.Diagnostics,
             item => item.Code == code

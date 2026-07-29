@@ -77,6 +77,9 @@ describe("architecture diagnostics", () => {
                 "architecture.unusable.clip-length-from-control-net",
             ]),
         );
+        expect(codes).not.toContain(
+            "architecture.unsupported.audio-derived-duration",
+        );
         expect(clip).toEqual(before);
     });
 
@@ -98,6 +101,56 @@ describe("architecture diagnostics", () => {
         expect(codes).toContain("architecture.unsupported.audio-reuse");
         expect(codes).not.toContain("architecture.unsupported.audio-source");
         expect(clip).toEqual(before);
+    });
+
+    it("reports unsupported audio-derived duration without rejecting None upload audio", () => {
+        const clip = minimalClip({
+            architecture: "none",
+            modelProfileId: "none",
+            sourceVideo: sourceVideoFixture(),
+            stages: [],
+            audioSource: "Upload",
+            uploadedAudio: {
+                data: "data:audio/wav;base64,AA==",
+                fileName: "voice.wav",
+            },
+            clipLengthFromAudio: true,
+        });
+        const before = structuredClone(clip);
+
+        const codes = deriveArchitectureDiagnostics(
+            [clip],
+            combinedCatalog(),
+        ).map(({ code }) => code);
+
+        expect(codes).toContain(
+            "architecture.unsupported.audio-derived-duration",
+        );
+        expect(codes).not.toContain("architecture.unsupported.audio-source");
+        expect(codes).not.toContain(
+            "architecture.unusable.clip-length-from-audio",
+        );
+        expect(clip).toEqual(before);
+    });
+
+    it("reports an unknown LTX source before evaluating its duration usability", () => {
+        const clip = minimalClip({
+            audioSource: "future-audio-source",
+            clipLengthFromAudio: true,
+        });
+
+        const codes = deriveArchitectureDiagnostics(
+            [clip],
+            combinedCatalog(),
+        ).map(({ code }) => code);
+
+        expect(codes).toContain("architecture.unsupported.audio-source");
+        expect(codes).not.toContain(
+            "architecture.unusable.clip-length-from-audio",
+        );
+        expect(codes).not.toContain(
+            "architecture.unsupported.audio-derived-duration",
+        );
     });
 
     it("reports persisted unsupported settings without stripping them", () => {
@@ -147,8 +200,11 @@ describe("architecture diagnostics", () => {
                 "architecture.unsupported.prompt-relay",
                 "architecture.unsupported.stage-loras",
                 "architecture.unsupported.upscale",
-                "architecture.unsupported.audio-source",
+                "architecture.unsupported.audio-derived-duration",
             ]),
+        );
+        expect(codes).not.toContain(
+            "architecture.unusable.clip-length-from-audio",
         );
         expect(clip).toEqual(before);
     });

@@ -554,6 +554,153 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
+    public void Source_only_none_rejects_audio_derived_duration_but_accepts_uploaded_audio()
+    {
+        ClipSpec clip = SourcedClip(0) with
+        {
+            AudioSource = Constants.AudioSourceUpload,
+            UploadedAudio = new("data:audio/wav;base64,AA==", "voice.wav"),
+            ClipLengthFromAudio = true,
+            AuthoredArchitectureId = "none",
+            AuthoredModelProfileId = "none",
+        };
+
+        VideoExecutionPlan plan = Compile(clip, new FakeRegistry());
+
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
+                && diagnostic.Message.Contains("audio-derived clip duration"));
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
+                && diagnostic.Message.Contains("clip audio source"));
+        Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
+    }
+
+    [Theory]
+    [InlineData(Constants.AudioSourceUpload)]
+    [InlineData(Constants.AudioSourceControlNet)]
+    [InlineData("audio3")]
+    public void Ltx_accepts_audio_derived_duration_from_external_source_kinds(
+        string audioSource)
+    {
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor;
+        StageSpec stage = Stage(10, "ltx-model");
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            AudioSource = audioSource,
+            UploadedAudio = audioSource == Constants.AudioSourceUpload
+                ? new("data:audio/wav;base64,AA==", "voice.wav")
+                : null,
+            ClipLengthFromAudio = true,
+        };
+        Dictionary<int, ResolvedVideoModel> stageModels = new()
+        {
+            [stage.ClipStageRawIndex] = new(
+                stage.Model,
+                descriptor.Id,
+                descriptor.DefaultProfileId,
+                descriptor),
+        };
+
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                clip,
+                descriptor,
+                ArchitectureEntryMode.ImageToVideo,
+                stageModels);
+
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void Ltx_rejects_native_audio_as_audio_derived_duration_source()
+    {
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor;
+        StageSpec stage = Stage(10, "ltx-model");
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            ClipLengthFromAudio = true,
+        };
+        Dictionary<int, ResolvedVideoModel> stageModels = new()
+        {
+            [stage.ClipStageRawIndex] = new(
+                stage.Model,
+                descriptor.Id,
+                descriptor.DefaultProfileId,
+                descriptor),
+        };
+
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                clip,
+                descriptor,
+                ArchitectureEntryMode.ImageToVideo,
+                stageModels);
+
+        Assert.Contains(
+            diagnostics,
+            diagnostic => diagnostic.Code
+                    == "audio.length.source_cannot_drive_duration"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
+                && diagnostic.Message.Contains("audio-derived clip duration"));
+    }
+
+    [Fact]
+    public void Audio_derived_duration_leaves_unknown_source_diagnostics_to_audio_planning()
+    {
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor;
+        StageSpec stage = Stage(10, "ltx-model");
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            AudioSource = "future-audio-source",
+            ClipLengthFromAudio = true,
+        };
+        Dictionary<int, ResolvedVideoModel> stageModels = new()
+        {
+            [stage.ClipStageRawIndex] = new(
+                stage.Model,
+                descriptor.Id,
+                descriptor.DefaultProfileId,
+                descriptor),
+        };
+
+        VideoStagesSpec spec = Spec(clip);
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            new(
+                new Dictionary<int, ClipArchitectureAssignment>
+                {
+                    [clip.Id] = new(
+                        clip.Id,
+                        Ltx2ArchitectureModule.Instance,
+                        descriptor,
+                        stageModels),
+                },
+                []));
+
+        Assert.Single(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == AudioBaseSourcePlanCompiler.UnknownSourceCode);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code.StartsWith(
+                "audio.length.",
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Capability_validation_requires_video_input_for_every_later_stage()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
@@ -1286,6 +1433,7 @@ public class ArchitectureFoundationTests
                 "audio-sources",
                 "audio-segments",
                 "audio-reuse",
+                "audio-derived-duration",
             ],
             capabilities["clip"].Values<string>());
         Assert.Contains("frame-references", capabilities["stage"].Values<string>());

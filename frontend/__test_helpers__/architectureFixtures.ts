@@ -26,6 +26,7 @@ export const testArchitectureCapabilities = (
         "audio-sources",
         "audio-segments",
         "audio-reuse",
+        "audio-derived-duration",
     ],
     stage: [
         "image-input",
