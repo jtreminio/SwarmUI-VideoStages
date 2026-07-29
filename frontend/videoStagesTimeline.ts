@@ -342,6 +342,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             currentCatalog.catalog &&
             currentCatalog.status !== "refreshing"
         ) {
+            renderAll();
             return Promise.resolve();
         }
         const request = forceRefresh
@@ -351,8 +352,9 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         if (existingAdoption) {
             return existingAdoption;
         }
-        // Both initial loading and retained-data refreshing are visible
-        // immediately; neither path reads or mutates document state here.
+        // Catalog adoption owns the initial paint. Both initial loading and
+        // retained-data refreshing are visible immediately; neither path
+        // reads or mutates document state here.
         renderAll();
         const adoption = request
             .then((catalog) => {
@@ -423,7 +425,6 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         });
         rebaseHistoryIfReady();
         hostLifecycle.bind();
-        refresh();
         void adoptArchitectureCatalog();
     };
 

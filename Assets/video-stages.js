@@ -15488,6 +15488,7 @@ The conversion is one undoable change.`;
     const adoptArchitectureCatalog = (forceRefresh = false) => {
       const currentCatalog = getArchitectureCatalogSnapshot();
       if (!forceRefresh && currentCatalog.catalog && currentCatalog.status !== "refreshing") {
+        renderAll();
         return Promise.resolve();
       }
       const request = forceRefresh ? refreshAuthoritativeArchitectureCatalog() : loadAuthoritativeArchitectureCatalog();
@@ -15547,7 +15548,6 @@ The conversion is one undoable change.`;
       });
       rebaseHistoryIfReady();
       hostLifecycle.bind();
-      refresh();
       void adoptArchitectureCatalog();
     };
     const dispose = () => {

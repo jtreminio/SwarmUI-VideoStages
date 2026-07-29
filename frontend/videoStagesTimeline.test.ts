@@ -430,7 +430,7 @@ describe("videoStagesTimeline", () => {
         ).toContain("Clip 2");
     });
 
-    it("shows loading without authoring controls, then renders after authoritative success", async () => {
+    it("paints loading once without authoring controls, then renders after authoritative success", async () => {
         document.getElementById("input_videomodel")?.remove();
         mountState(JSON.stringify({ schemaVersion: 5, clips: [] }));
         resetArchitectureCatalogForTests();
@@ -465,10 +465,21 @@ describe("videoStagesTimeline", () => {
             getTimelineStore(),
             "syncFromCarrier",
         );
+        const replaceChildren = jest.spyOn(
+            Element.prototype,
+            "replaceChildren",
+        );
         timeline.init();
         await Promise.resolve();
         jest.advanceTimersByTime(POLL_ADVANCE_MS);
 
+        const loadingPaints = replaceChildren.mock.contexts.filter(
+            (context) =>
+                context instanceof HTMLElement &&
+                context.id === TIMELINE_BODY_ID,
+        ).length;
+        replaceChildren.mockRestore();
+        expect(loadingPaints).toBe(1);
         expect(requestJson).toHaveBeenCalledTimes(1);
         expect(requestJson).toHaveBeenCalledWith(ARCHITECTURE_CATALOG_API);
         expect(
