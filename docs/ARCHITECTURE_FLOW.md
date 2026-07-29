@@ -345,9 +345,15 @@ graph.
 slice cannot honor. A compatible 14B swap model is delegated to the host adapter,
 but every decoded partial input — sourced stage 0 or a later stage — must retain
 a non-empty high-noise interval under the request-global swap split. Global
-end-frame is limited to one 14B ImageToVideo clip. Any active 5B stage refuses
-request-global swap and end-frame before mutation. Global creativity remains
-refused in favor of the authored clip-local controls.
+end-frame is limited to exactly one pure generated 14B ImageToVideo clip. Its
+immutable stage payload assigns sole ownership to the last non-passthrough
+stage, so earlier generators receive no final-frame input and trailing
+passthrough does not consume it. A terminal swap stage applies that owned frame
+to both its high- and low-noise conditioning branches. Multi-clip,
+mixed-family, sourced, refine, text, active or forged 5B/cross-profile, and
+missing or forged ownership contracts refuse the option before mutation.
+Global creativity remains refused in favor of the authored clip-local
+controls.
 
 “Before mutation” here means before **VideoStages** mutation. SwarmUI may
 already have built host graph state that VideoStages captures or replaces.
@@ -462,15 +468,17 @@ partial control conditions from frame 0 and VAE-encodes a distinct full
 conformed-batch selector. Each later stage uses the same passthrough/full/
 partial rules over the preceding decoded batch. The session validates the
 immutable clip, entry, source, stage input, payload, and canonical per-clip
-profile contract before graph mutation. A 14B pass uses the host's
-`WanImageToVideo`; a 5B pass uses `Wan22ImageToVideoLatent`. Full 5B generation
-feeds that latent directly to the sampler. Partial 5B refinement samples from
-the VAE encoding of the conformed decoded input, so after the host switches to
-that path the session removes only the newly created, consumerless 5B latent
-preparation node and its otherwise-unused upstream nodes. This pruning also
-runs when the host builder throws. If pruning then fails, the original host
-failure remains authoritative; without a host failure, a pruning failure is
-surfaced.
+profile contract before graph mutation. For the one permitted request-global
+end-frame path, `BuildGenInfo` exposes the frame only while executing the stage
+whose immutable WAN payload owns it; every earlier generating stage receives
+`null`. A 14B pass uses the host's `WanImageToVideo`; a 5B pass uses
+`Wan22ImageToVideoLatent`. Full 5B generation feeds that latent directly to the
+sampler. Partial 5B refinement samples from the VAE encoding of the conformed
+decoded input, so after the host switches to that path the session removes only
+the newly created, consumerless 5B latent preparation node and its
+otherwise-unused upstream nodes. This pruning also runs when the host builder
+throws. If pruning then fails, the original host failure remains authoritative;
+without a host failure, a pruning failure is surfaced.
 
 For every generating pass, `PromptParser.ApplyLoraScope` first projects the
 matching bare, clip, and stage prompt-section rows into host

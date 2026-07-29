@@ -20,6 +20,12 @@ internal sealed record WanStagePayload(
     ImmutableArray<NormalLoraPlan> Loras) : IArchitectureStagePayload
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
+
+    /// <summary>
+    /// True only for the last generating stage of a pure generated 14B clip. The request-global
+    /// end image, when configured, belongs exclusively to this stage.
+    /// </summary>
+    public bool OwnsVideoEndFrame { get; init; }
 }
 
 internal sealed record WanClipPayload(

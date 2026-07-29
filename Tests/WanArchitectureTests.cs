@@ -222,6 +222,8 @@ public class WanArchitectureTests
             compiled.RequireWanPayload().ProfileId);
         Assert.Equal(WanArchitectureModule.ImageToVideoProfileId, firstPayload.ProfileId);
         Assert.Equal(WanArchitectureModule.ImageToVideoProfileId, secondPayload.ProfileId);
+        Assert.False(firstPayload.OwnsVideoEndFrame);
+        Assert.True(secondPayload.OwnsVideoEndFrame);
         Assert.Equal("wan-model", firstPayload.Model);
         Assert.Equal(1, firstPayload.Control);
         Assert.Equal(12, firstPayload.Steps);
@@ -369,6 +371,9 @@ public class WanArchitectureTests
             stage => Assert.Equal(
                 WanArchitectureModule.Ti2v5bProfileId,
                 stage.RequireWanPayload().ProfileId));
+        Assert.All(
+            compiledFive.Stages,
+            stage => Assert.False(stage.RequireWanPayload().OwnsVideoEndFrame));
 
         StageSpec mixedSecond = secondFive with { Model = "wan-fourteen" };
         ClipSpec mixedClip = GeneratedClip(0, firstFive, mixedSecond);
@@ -472,7 +477,8 @@ public class WanArchitectureTests
             new Dictionary<int, ResolvedVideoModel>
             {
                 [stage.ClipStageRawIndex] = resolved,
-            });
+            },
+            new(512, 512, 24));
 
         Assert.DoesNotContain(
             compilation.Diagnostics,
@@ -491,7 +497,8 @@ public class WanArchitectureTests
             new Dictionary<int, ResolvedVideoModel>
             {
                 [stage.ClipStageRawIndex] = null,
-            });
+            },
+            new(512, 512, 24));
 
         PlanDiagnostic diagnostic = Assert.Single(
             compilation.Diagnostics,
@@ -507,6 +514,7 @@ public class WanArchitectureTests
         Assert.Equal(
             WanArchitectureModule.ImageToVideoProfileId,
             fallback.ProfileId);
+        Assert.False(fallback.OwnsVideoEndFrame);
     }
 
     [Fact]
@@ -530,6 +538,92 @@ public class WanArchitectureTests
         Assert.All(
             compiled.Stages,
             stage => Assert.Equal(0, stage.RequireWanPayload().Control));
+    }
+
+    [Fact]
+    public void Compilation_assigns_end_frame_ownership_to_the_last_generating_stage()
+    {
+        StageSpec first = Stage(10, "wan-model");
+        StageSpec second = Stage(11, "wan-model") with
+        {
+            Control = 0.5,
+            ImageReference = "PreviousStage",
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+        };
+        StageSpec trailingPassthrough = Stage(12, "wan-model") with
+        {
+            Control = 0,
+            ImageReference = "PreviousStage",
+            ClipStageIndex = 2,
+            ClipStageRawIndex = 2,
+        };
+
+        WanClipPlanCompilation compiled = CompileDirect(
+            GeneratedClip(0, first, second, trailingPassthrough));
+
+        Assert.Equal(
+            [false, true, false],
+            compiled.Stages
+                .OrderBy(pair => pair.Key)
+                .Select(pair => pair.Value.OwnsVideoEndFrame));
+    }
+
+    [Theory]
+    [InlineData("text")]
+    [InlineData("refine")]
+    public void Direct_compilation_assigns_no_end_frame_owner_to_non_image_entries(
+        string entry)
+    {
+        StageSpec stage = Stage(10, "wan-model");
+        ArchitectureEntryMode entryMode = entry == "text"
+            ? ArchitectureEntryMode.TextToVideo
+            : ArchitectureEntryMode.RefineVideo;
+
+        WanClipPlanCompilation compiled = CompileDirect(
+            GeneratedClip(0, stage),
+            entryMode);
+
+        Assert.All(
+            compiled.Stages.Values,
+            payload => Assert.False(payload.OwnsVideoEndFrame));
+    }
+
+    [Fact]
+    public void Direct_compilation_assigns_no_end_frame_owner_to_ineligible_clip_shapes()
+    {
+        StageSpec first = Stage(10, "wan-fourteen");
+        StageSpec second = Stage(11, "wan-five") with
+        {
+            Control = 0.5,
+            ImageReference = "PreviousStage",
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+        };
+
+        WanClipPlanCompilation five = CompileDirect(
+            GeneratedClip(0, Stage(10, "wan-five")),
+            profilesByModel: new Dictionary<string, ModelProfileId>
+            {
+                ["wan-five"] = WanArchitectureModule.Ti2v5bProfileId,
+            });
+        WanClipPlanCompilation mixed = CompileDirect(
+            GeneratedClip(0, first, second),
+            profilesByModel: new Dictionary<string, ModelProfileId>
+            {
+                ["wan-fourteen"] = WanArchitectureModule.ImageToVideoProfileId,
+                ["wan-five"] = WanArchitectureModule.Ti2v5bProfileId,
+            });
+        WanClipPlanCompilation sourced = CompileDirect(
+            SourcedClip(0, first),
+            ArchitectureEntryMode.SourceVideo);
+
+        Assert.All(five.Stages.Values, stage => Assert.False(stage.OwnsVideoEndFrame));
+        Assert.All(mixed.Stages.Values, stage => Assert.False(stage.OwnsVideoEndFrame));
+        Assert.All(sourced.Stages.Values, stage => Assert.False(stage.OwnsVideoEndFrame));
+        Assert.Contains(
+            mixed.Diagnostics,
+            diagnostic => diagnostic.Code == "wan22.clip-profile.mixed");
     }
 
     [Fact]
@@ -864,6 +958,34 @@ public class WanArchitectureTests
             spec,
             RootEnvironment.FromSpec(spec),
             ResolveWan(spec));
+    }
+
+    private static WanClipPlanCompilation CompileDirect(
+        ClipSpec clip,
+        ArchitectureEntryMode entryMode = ArchitectureEntryMode.ImageToVideo,
+        IReadOnlyDictionary<string, ModelProfileId> profilesByModel = null)
+    {
+        VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
+        Dictionary<int, ResolvedVideoModel> stageModels = [];
+        foreach (StageSpec stage in clip.Stages ?? [])
+        {
+            stageModels.Add(
+                stage.ClipStageRawIndex,
+                new(
+                    stage.Model,
+                    descriptor.Id,
+                    profilesByModel is not null
+                        && profilesByModel.TryGetValue(
+                            stage.Model,
+                            out ModelProfileId profileId)
+                            ? profileId
+                            : WanArchitectureModule.ImageToVideoProfileId,
+                    descriptor));
+        }
+        return WanClipPlanCompiler.Compile(
+            clip,
+            stageModels,
+            new(512, 512, 24, entryMode));
     }
 
     /// <summary>Assigns Wan to every clip without needing host model metadata installed.</summary>

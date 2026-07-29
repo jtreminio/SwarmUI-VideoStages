@@ -167,11 +167,16 @@ host's generic loader. Both supported WAN compatibility classes select its
 existing model-only variant, so model-zero rows are omitted before planning or
 prompt-scope projection.
 
-Wan preflight preserves the narrow existing 14B swap and single-clip end-frame
-paths. Any active 5B stage refuses request-global swap and end-frame before
-VideoStages mutation. Native 5B text roots, Wan 2.1/VACE/FLF, same-clip
-cross-profile switching, transition expansion, advanced references, audio,
-refine-source, and HDR remain unsupported rather than silently omitted.
+Wan preflight preserves the narrow existing 14B swap path. A request-global
+end-frame is accepted only for exactly one pure generated 14B ImageToVideo
+clip. The compiled plan assigns it structurally to the last non-passthrough
+stage: earlier generating stages receive no end-frame, a trailing passthrough
+does not take ownership, and a terminal swap pass applies the same final-frame
+conditioning to both noise branches. Multi-clip, mixed-family, sourced,
+refine, text, active or forged 5B/cross-profile, and ownerless timelines refuse
+the option before VideoStages mutation. Native 5B text roots, Wan 2.1/VACE/FLF,
+same-clip cross-profile switching, transition expansion, advanced references,
+audio, refine-source, and HDR remain unsupported rather than silently omitted.
 
 ## Capability catalog
 

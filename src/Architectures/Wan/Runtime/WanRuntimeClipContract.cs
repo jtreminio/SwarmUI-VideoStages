@@ -63,6 +63,12 @@ internal static class WanRuntimeClipContract
         }
 
         HashSet<int> rawIndices = [];
+        int terminalGeneratingIndex = clip.Stages
+            .Select((stage, index) => (stage, index))
+            .Where(item => !item.stage.IsPassthrough)
+            .Select(item => item.index)
+            .DefaultIfEmpty(-1)
+            .Last();
         for (int index = 0; index < clip.Stages.Count; index++)
         {
             StagePlan stage = clip.Stages[index];
@@ -83,6 +89,17 @@ internal static class WanRuntimeClipContract
             bool decodedInput =
                 stage.Input is StageInputKind.SourceVideo or StageInputKind.PreviousStage;
             bool passthrough = decodedInput && payload.Control == 0;
+            bool expectedEndFrameOwner =
+                generatedEntry
+                && clipPayload.ProfileId
+                    == WanArchitectureModule.ImageToVideoProfileId
+                && index == terminalGeneratingIndex;
+            if (payload.OwnsVideoEndFrame != expectedEndFrameOwner)
+            {
+                throw Invalid(
+                    clip,
+                    $"stage {stage.StageId} has invalid request-global end-frame ownership");
+            }
             if (payload.Loras.IsDefault
                 || payload.Loras.Any(lora =>
                     lora is null

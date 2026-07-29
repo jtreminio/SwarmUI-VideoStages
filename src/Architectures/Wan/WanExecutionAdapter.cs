@@ -133,16 +133,46 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
             ClipPlan onlyClip = context.Plan.Clips.Count == 1
                 ? context.Plan.Clips[0]
                 : null;
-            StagePlan[] activeStages = onlyClip?.Stages
+            bool hasValidRuntimeContract = false;
+            if (onlyClip is not null)
+            {
+                try
+                {
+                    WanRuntimeClipContract.Validate(context.Plan, onlyClip);
+                    hasValidRuntimeContract = true;
+                }
+                catch (InvalidOperationException)
+                {
+                    // The request-global option reports malformed immutable plans through the
+                    // same user-facing refusal as all other ineligible timeline shapes.
+                }
+            }
+            StagePlan[] generatingStages = onlyClip?.Stages
                 .Where(stage => !stage.IsPassthrough)
                 .ToArray() ?? [];
-            bool isSingleCurrentWan =
-                onlyClip?.Architecture?.Id == ArchitectureId
+            bool isPureGenerated14b =
+                hasValidRuntimeContract
                 && onlyClip.EntryMode == ArchitectureEntryMode.ImageToVideo
-                && activeStages.Length == 1
-                && activeStages[0].ResolvedModel?.ArchitectureId == ArchitectureId
-                && activeStages[0].ResolvedModel?.ModelProfileId
-                    == WanArchitectureModule.ImageToVideoProfileId;
+                && onlyClip.ArchitecturePayload is WanClipPayload
+                {
+                    ProfileId: var clipProfile,
+                }
+                && clipProfile == WanArchitectureModule.ImageToVideoProfileId;
+            bool hasExactlyOneTerminalOwner =
+                hasValidRuntimeContract
+                && generatingStages.Length > 0
+                && onlyClip.Stages.Count(
+                    stage => stage.ArchitecturePayload is WanStagePayload
+                    {
+                        OwnsVideoEndFrame: true,
+                    }) == 1
+                && generatingStages[^1].ArchitecturePayload is WanStagePayload
+                {
+                    OwnsVideoEndFrame: true,
+                };
+            bool isSingleCurrentWan =
+                isPureGenerated14b
+                && hasExactlyOneTerminalOwner;
             if (!isSingleCurrentWan)
             {
                 string families = string.Join(
@@ -152,8 +182,8 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
                         .Distinct());
                 diagnostics.Add(Refuse(
                     "'Video End Frame' is request-global and is ambiguous unless the timeline "
-                    + "contains exactly one Wan 2.2 ImageToVideo clip using the current "
-                    + "image-to-video "
+                    + "contains exactly one generated Wan 2.2 ImageToVideo clip with at least "
+                    + "one generating stage, canonical 14B ownership, and the current image-to-video "
                     + $"profile. This request has {context.Plan.Clips.Count} clip(s) across "
                     + $"architecture(s): {families}."));
             }

@@ -281,7 +281,9 @@ internal sealed class WanGenerationSession(
             Steps = payload.Steps,
             Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.StageId,
             ContextID = sectionId,
-            VideoEndFrame = g.UserInput.Get(T2IParamTypes.VideoEndFrame, null),
+            VideoEndFrame = payload.OwnsVideoEndFrame
+                ? g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
+                : null,
         };
     }
 

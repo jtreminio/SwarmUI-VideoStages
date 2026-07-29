@@ -2574,8 +2574,237 @@ public class WanRuntimeFlowTests
         AssertPreflightRefusalBeforeMutation(input, expectedReason);
     }
 
+    [Theory]
+    [InlineData("stage-payload-5b")]
+    [InlineData("resolved-5b-cross-profile")]
+    [InlineData("clip-payload-5b")]
+    [InlineData("owner-missing")]
+    [InlineData("no-generating-stage")]
+    [InlineData("control-passthrough-mismatch")]
+    [InlineData("model-payload-mismatch")]
+    [InlineData("input-position-mismatch")]
+    public void Global_end_image_preflight_rejects_forged_profile_and_owner_contracts(
+        string corruption)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        (VideoExecutionPlan plan, ClipPlan validClip) =
+            MakeGeneratedWanRuntimeContractPlan(models);
+        StagePlan validStage = Assert.Single(validClip.Stages);
+        ClipPlan forgedClip;
+        if (corruption == "stage-payload-5b")
+        {
+            forgedClip = validClip with
+            {
+                Stages =
+                [
+                    validStage with
+                    {
+                        ArchitecturePayload = validStage.RequireWanPayload() with
+                        {
+                            ProfileId = WanArchitectureModule.Ti2v5bProfileId,
+                        },
+                    },
+                ],
+            };
+        }
+        else if (corruption == "resolved-5b-cross-profile")
+        {
+            forgedClip = validClip with
+            {
+                Stages =
+                [
+                    validStage with
+                    {
+                        ResolvedModel = validStage.ResolvedModel with
+                        {
+                            ModelProfileId = WanArchitectureModule.Ti2v5bProfileId,
+                        },
+                    },
+                ],
+            };
+        }
+        else if (corruption == "clip-payload-5b")
+        {
+            forgedClip = validClip with
+            {
+                ArchitecturePayload = validClip.RequireWanPayload() with
+                {
+                    ProfileId = WanArchitectureModule.Ti2v5bProfileId,
+                },
+            };
+        }
+        else if (corruption == "owner-missing")
+        {
+            forgedClip = validClip with
+            {
+                Stages =
+                [
+                    validStage with
+                    {
+                        ArchitecturePayload = validStage.RequireWanPayload() with
+                        {
+                            OwnsVideoEndFrame = false,
+                        },
+                    },
+                ],
+            };
+        }
+        else if (corruption == "no-generating-stage")
+        {
+            forgedClip = validClip with
+            {
+                Stages =
+                [
+                    validStage with
+                    {
+                        Input = StageInputKind.PreviousStage,
+                        IsPassthrough = true,
+                        ArchitecturePayload = validStage.RequireWanPayload() with
+                        {
+                            Control = 0,
+                            OwnsVideoEndFrame = false,
+                        },
+                    },
+                ],
+            };
+        }
+        else if (corruption == "control-passthrough-mismatch")
+        {
+            forgedClip = validClip with
+            {
+                Stages =
+                [
+                    validStage with
+                    {
+                        IsPassthrough = false,
+                        ArchitecturePayload = validStage.RequireWanPayload() with
+                        {
+                            Control = 0,
+                            OwnsVideoEndFrame = true,
+                        },
+                    },
+                ],
+            };
+        }
+        else if (corruption == "model-payload-mismatch")
+        {
+            forgedClip = validClip with
+            {
+                Stages =
+                [
+                    validStage with
+                    {
+                        ResolvedModel = validStage.ResolvedModel with
+                        {
+                            ModelName = "forged-model-name.safetensors",
+                        },
+                    },
+                ],
+            };
+        }
+        else
+        {
+            forgedClip = validClip with
+            {
+                Stages =
+                [
+                    validStage with
+                    {
+                        ClipStageIndex = 1,
+                        Input = StageInputKind.PreviousStage,
+                    },
+                ],
+            };
+        }
+        VideoExecutionPlan forgedPlan = plan with { Clips = [forgedClip] };
+        WorkflowGenerator generator = new()
+        {
+            Workflow = new JObject
+            {
+                ["sentinel"] = new JObject
+                {
+                    ["class_type"] = "UnitTest_Sentinel",
+                    ["inputs"] = new JObject(),
+                },
+            },
+            UserInput = new(null),
+        };
+        generator.UserInput.Set(
+            T2IParamTypes.VideoEndFrame,
+            new Image([0x06], MediaType.ImagePng));
+        JObject before = (JObject)generator.Workflow.DeepClone();
+
+        PlanDiagnostic refusal = Assert.Single(
+            new WanExecutionAdapter(generator)
+                .PreflightRequest(new(forgedPlan)),
+            diagnostic =>
+                diagnostic.Severity == PlanDiagnosticSeverity.Error
+                && diagnostic.Message.Contains("'Video End Frame'"));
+
+        Assert.Contains("canonical 14B ownership", refusal.Message);
+        Assert.True(JToken.DeepEquals(before, generator.Workflow));
+        Assert.Null(generator.CurrentMedia);
+        Assert.Empty(generator.NodeHelpers);
+        Assert.Empty(generator.UserInput.SectionParamOverrides);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(0.5)]
+    public void Global_end_image_belongs_only_to_the_final_generating_Wan_stage(
+        double terminalControl)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 10),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    control: terminalControl,
+                    steps: 12)));
+        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode firstConditioning = Assert.Single(
+            NodesOfClass(bridge, "WanImageToVideo"));
+        ComfyNode terminalConditioning = Assert.Single(
+            NodesOfClass(bridge, "WanFirstLastFrameToVideo"));
+        ComfyNode firstSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 10);
+        ComfyNode terminalSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 12);
+        Assert.True(ReachesUpstream(bridge, firstSampler, firstConditioning.Id));
+        Assert.True(ReachesUpstream(bridge, terminalSampler, terminalConditioning.Id));
+        if (terminalControl < 1)
+        {
+            VAEEncodeNode terminalInput = Assert.IsType<VAEEncodeNode>(
+                terminalSampler.FindInput("latent_image").Connection?.Node);
+            Assert.True(ReachesUpstream(bridge, terminalInput, firstSampler.Id));
+            Assert.False(ReachesUpstream(
+                bridge,
+                terminalInput,
+                terminalConditioning.Id));
+        }
+        Assert.NotNull(terminalConditioning.FindInput("end_image").Connection);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+        INodeOutput terminalArtifact = bridge.ResolvePath(generator.CurrentMedia.Path);
+        Assert.NotNull(terminalArtifact);
+        Assert.True(ReachesUpstream(bridge, terminalArtifact.Node, terminalSampler.Id));
+    }
+
     [Fact]
-    public void Global_end_image_is_refused_before_mutation_for_multi_stage_Wan_clip()
+    public void Global_end_image_owner_precedes_a_trailing_Wan_passthrough()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
@@ -2588,10 +2817,99 @@ public class WanRuntimeFlowTests
                     models.VideoModel.Name,
                     "PreviousStage",
                     control: 0.5,
-                    steps: 12)));
-        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
+                    steps: 12),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    control: 0,
+                    steps: 13)));
+        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x02], MediaType.ImagePng));
 
-        AssertPreflightRefusalBeforeMutation(input, "request-global and is ambiguous");
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Single(NodesOfClass(bridge, "WanImageToVideo"));
+        Assert.Single(NodesOfClass(bridge, "WanFirstLastFrameToVideo"));
+        Assert.Equal(2, SamplerNodes(bridge).Count());
+        Assert.DoesNotContain(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 13);
+        ComfyNode terminalSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 12);
+        INodeOutput finalOutput = bridge.ResolvePath(generator.CurrentMedia.Path);
+        Assert.NotNull(finalOutput);
+        Assert.True(ReachesUpstream(bridge, finalOutput.Node, terminalSampler.Id));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Terminal_Wan_stage_swap_owns_both_Flf_branches_and_restores_host_scopes()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        T2IModel lowNoiseModel =
+            AddDistinctWanModel(models.VideoModel, "UnitTest_Wan22_Terminal_Low.safetensors");
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 10),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    control: 1,
+                    steps: 12)));
+        ConfigureSwap(input, lowNoiseModel, percent: 0.6);
+        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x03], MediaType.ImagePng));
+        string highLoaderKey = $"modelloader_{models.VideoModel.Name}_image2video";
+        string lowLoaderKey = $"modelloader_{lowNoiseModel.Name}_image2video";
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Single(NodesOfClass(bridge, "WanImageToVideo"));
+        Assert.Equal(2, NodesOfClass(bridge, "WanFirstLastFrameToVideo").Count());
+        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
+        Assert.Equal(4, samplers.Length);
+        ComfyNode firstHigh = Assert.Single(
+            samplers,
+            sampler => IsHighNoiseSampler(sampler)
+                && sampler.FindInput("steps").LiteralAsInt() == 10);
+        ComfyNode terminalHigh = Assert.Single(
+            samplers,
+            sampler => IsHighNoiseSampler(sampler)
+                && sampler.FindInput("steps").LiteralAsInt() == 12);
+        ComfyNode firstLow = AssertLowNoiseForHigh(samplers, firstHigh);
+        ComfyNode terminalLow = AssertLowNoiseForHigh(samplers, terminalHigh);
+        Assert.Equal(
+            "WanImageToVideo",
+            firstHigh.FindInput("positive").Connection?.Node?.ClassTypeName);
+        Assert.Same(
+            firstHigh.FindInput("positive").Connection?.Node,
+            firstLow.FindInput("positive").Connection?.Node);
+        Assert.Equal(
+            "WanFirstLastFrameToVideo",
+            terminalHigh.FindInput("positive").Connection?.Node?.ClassTypeName);
+        Assert.Equal(
+            "WanFirstLastFrameToVideo",
+            terminalLow.FindInput("positive").Connection?.Node?.ClassTypeName);
+        AssertLoaderTupleIsLive(workflow, generator.NodeHelpers[highLoaderKey]);
+        AssertLoaderTupleIsLive(workflow, generator.NodeHelpers[lowLoaderKey]);
+        Assert.DoesNotContain(
+            VideoStagesExtension.SectionIdForStage(0),
+            generator.UserInput.SectionParamOverrides.Keys);
+        Assert.DoesNotContain(
+            VideoStagesExtension.SectionIdForStage(1),
+            generator.UserInput.SectionParamOverrides.Keys);
+        Assert.True(
+            generator.UserInput.SectionParamOverrides.ContainsKey(
+                T2IParamInput.SectionID_VideoSwap));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
     }
 
     [Fact]
@@ -2620,8 +2938,23 @@ public class WanRuntimeFlowTests
         input.Set(
             VideoStagesExtension.RefineSourceVideo,
             new Image([0x01, 0x02], MediaType.VideoMp4));
+        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x03], MediaType.ImagePng));
 
         AssertPreflightRefusalBeforeMutation(input, "entry mode 'RefineVideo'");
+    }
+
+    [Fact]
+    public void Global_end_image_is_refused_before_mutation_for_Wan_text_entry()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 10)));
+        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x04], MediaType.ImagePng));
+
+        AssertPreflightRefusalBeforeMutation(input, "entry mode 'TextToVideo'");
     }
 
     [Fact]
@@ -2866,6 +3199,7 @@ public class WanRuntimeFlowTests
     [InlineData("loras-default", "invalid immutable normal-LoRA payload")]
     [InlineData("loras-no-op", "invalid immutable normal-LoRA payload")]
     [InlineData("passthrough-loras", "samplerless passthrough with a normal-LoRA plan")]
+    [InlineData("end-frame-owner", "invalid request-global end-frame ownership")]
     public void Wan_runtime_clip_contract_rejects_stale_sourced_plans_before_graph_mutation(
         string corruption,
         string expectedReason)
@@ -2944,6 +3278,18 @@ public class WanRuntimeFlowTests
             WanStagePayload stalePayload = validStage.RequireWanPayload() with
             {
                 Loras = [new("forged-no-op-lora", 0, 0)],
+            };
+            invalidClip = validClip with
+            {
+                Stages = [validStage with { ArchitecturePayload = stalePayload }],
+            };
+        }
+        else if (corruption == "end-frame-owner")
+        {
+            StagePlan validStage = Assert.Single(validClip.Stages);
+            WanStagePayload stalePayload = validStage.RequireWanPayload() with
+            {
+                OwnsVideoEndFrame = true,
             };
             invalidClip = validClip with
             {
@@ -3245,6 +3591,32 @@ public class WanRuntimeFlowTests
             Boundaries: [],
             Diagnostics: []);
         return (plan, clip);
+    }
+
+    private static (VideoExecutionPlan Plan, ClipPlan Clip)
+        MakeGeneratedWanRuntimeContractPlan(TestModelBundle models)
+    {
+        (VideoExecutionPlan plan, ClipPlan sourcedClip) =
+            MakeSourcedWanRuntimeContractPlan(models);
+        StagePlan sourcedStage = Assert.Single(sourcedClip.Stages);
+        StagePlan generatedStage = sourcedStage with
+        {
+            Input = StageInputKind.RootMedia,
+            ArchitecturePayload = sourcedStage.RequireWanPayload() with
+            {
+                Control = 1,
+                OwnsVideoEndFrame = true,
+            },
+        };
+        ClipPlan generatedClip = sourcedClip with
+        {
+            Input = ClipInputKind.RootMedia,
+            IsSourced = false,
+            SourceVideo = null,
+            Stages = [generatedStage],
+            EntryMode = ArchitectureEntryMode.ImageToVideo,
+        };
+        return (plan with { Clips = [generatedClip] }, generatedClip);
     }
 
     private static SwarmFrameWindowNode AssertWanSourceConformChain(
