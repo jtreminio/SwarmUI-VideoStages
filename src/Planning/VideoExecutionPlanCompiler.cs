@@ -59,7 +59,7 @@ internal static class VideoExecutionPlanCompiler
             ClipArchitectureAssignment assignment =
                 architecturePlanning.Clips.GetValueOrDefault(activeClips[i].Id);
             ArchitectureEntryMode entryMode = ResolveEntryMode(spec, rootEnvironment, activeClips[i]);
-            IArchitectureClipPayload architecturePayload = null;
+            ArchitectureClipCompilation acceptedArchitectureCompilation = null;
             if (assignment is not null)
             {
                 IReadOnlyList<PlanDiagnostic> capabilityDiagnostics =
@@ -86,7 +86,7 @@ internal static class VideoExecutionPlanCompiler
                     if (!architectureCompilation.Diagnostics.Any(diagnostic =>
                         diagnostic.Severity == PlanDiagnosticSeverity.Error))
                     {
-                        architecturePayload = architectureCompilation.Payload;
+                        acceptedArchitectureCompilation = architectureCompilation;
                     }
                 }
             }
@@ -103,7 +103,7 @@ internal static class VideoExecutionPlanCompiler
                     firstStageOrdinal,
                     entryMode,
                     assignment,
-                    architecturePayload)));
+                    acceptedArchitectureCompilation)));
             firstStageOrdinal += activeClips[i].Stages?.Count ?? 0;
         }
         diagnostics.AddRange(ClipGeometryProjection.Validate(clips, spec.Width, spec.Height));

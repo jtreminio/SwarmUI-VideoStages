@@ -1747,18 +1747,17 @@ public class ArchitectureFoundationTests
                 ArchitectureClipCompileContext context)
             {
                 compiled();
-                return new(new FakeClipPayload(descriptor.Id), []);
+                return new(
+                    new FakeClipPayload(descriptor.Id),
+                    (clip.Stages ?? []).ToDictionary(
+                        stage => stage.ClipStageRawIndex,
+                        _ => (IArchitectureStagePayload)new FakeStagePayload(descriptor.Id)),
+                    []);
             }
         }
 
         private sealed record FakeClipPayload(
-            ArchitectureId ArchitectureId) :
-            IArchitectureClipPayload,
-            IArchitectureStagePayloadSource
-        {
-            public IArchitectureStagePayload GetStagePayload(int rawStageIndex) =>
-                new FakeStagePayload(ArchitectureId);
-        }
+            ArchitectureId ArchitectureId) : IArchitectureClipPayload;
     }
 
     private static VideoArchitectureDescriptor Descriptor(string id, string profile) =>
@@ -1838,17 +1837,16 @@ public class ArchitectureFoundationTests
             ClipSpec clip,
             IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
             ArchitectureClipCompileContext context) =>
-            new(new FakePayload(descriptor.Id), []);
+            new(
+                new FakePayload(descriptor.Id),
+                (clip.Stages ?? []).ToDictionary(
+                    stage => stage.ClipStageRawIndex,
+                    _ => (IArchitectureStagePayload)new FakeStagePayload(descriptor.Id)),
+                []);
     }
 
     private sealed record FakePayload(
-        ArchitectureId ArchitectureId) :
-        IArchitectureClipPayload,
-        IArchitectureStagePayloadSource
-    {
-        public IArchitectureStagePayload GetStagePayload(int rawStageIndex) =>
-            new FakeStagePayload(ArchitectureId);
-    }
+        ArchitectureId ArchitectureId) : IArchitectureClipPayload;
 
     private sealed record FakeStagePayload(
         ArchitectureId ArchitectureId) : IArchitectureStagePayload;

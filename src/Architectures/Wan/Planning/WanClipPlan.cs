@@ -19,17 +19,10 @@ internal sealed record WanStagePayload(
 }
 
 internal sealed record WanClipPayload(
-    int ClipId,
-    IReadOnlyDictionary<int, WanStagePayload> Stages) :
-    IArchitectureClipPayload,
-    IArchitectureStagePayloadSource
+    int ClipId) :
+    IArchitectureClipPayload
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
-
-    public IArchitectureStagePayload GetStagePayload(int rawStageIndex) =>
-        Stages.GetValueOrDefault(rawStageIndex)
-        ?? throw new InvalidOperationException(
-            $"Clip {ClipId} has no Wan payload for raw stage {rawStageIndex}.");
 }
 
 internal static class WanClipPlanExtensions

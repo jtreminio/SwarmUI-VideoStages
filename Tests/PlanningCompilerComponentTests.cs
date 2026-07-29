@@ -324,6 +324,9 @@ public class PlanningCompilerComponentTests
     public void ClipPlanCompiler_PlansSourcedStageChainAndOutputOwnership()
     {
         ClipSpec clip = SourcedClip(7, Stage(10, control: 0), Stage(11, rawIndex: 1));
+        Ltx2ClipPlanCompilation compilation = Ltx2ClipPlanCompiler.Compile(
+            clip,
+            new(640, 360, 30));
 
         ClipPlan plan = ClipPlanCompiler.Compile(
             clip,
@@ -337,9 +340,12 @@ public class PlanningCompilerComponentTests
                 TotalStageCount: 2,
                 FirstStageOrdinal: 0,
                 EntryMode: ArchitectureEntryMode.SourceVideo,
-                ArchitecturePayload: Ltx2ClipPlanCompiler.Compile(
-                    clip,
-                    new(640, 360, 30)).Payload));
+                ArchitectureCompilation: new(
+                    compilation.Payload,
+                    compilation.Stages.ToDictionary(
+                        pair => pair.Key,
+                        pair => (IArchitectureStagePayload)pair.Value),
+                    compilation.Diagnostics)));
 
         Assert.Equal(ClipInputKind.SourceVideo, plan.Input);
         Assert.True(plan.Stages[0].IsPassthrough);
@@ -347,6 +353,185 @@ public class PlanningCompilerComponentTests
         Assert.False(plan.Stages[1].IsPassthrough);
         Assert.Equal(640, plan.SourceVideo.TargetWidth);
         Assert.True(plan.Stages[1].Output.IsTimelineTerminal);
+    }
+
+    [Fact]
+    public void ClipPlanCompiler_FailsClosedWhenRawStagePayloadIsMissing()
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10, rawIndex: 3));
+        TestClipPayload clipPayload = new(new("test"));
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => ClipPlanCompiler.Compile(
+                clip,
+                Context(
+                    clipPayload,
+                    new Dictionary<int, IArchitectureStagePayload>())));
+
+        Assert.Equal(
+            "Clip stage 3 has no architecture stage payload.",
+            error.Message);
+    }
+
+    [Fact]
+    public void ClipPlanCompiler_AcceptsSparseAuthoredRawStagePayloadKeys()
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10, rawIndex: 3));
+        TestClipPayload clipPayload = new(new("test"));
+        TestStagePayload stagePayload = new(clipPayload.ArchitectureId);
+
+        ClipPlan plan = ClipPlanCompiler.Compile(
+            clip,
+            Context(
+                clipPayload,
+                new Dictionary<int, IArchitectureStagePayload>
+                {
+                    [3] = stagePayload,
+                }));
+
+        Assert.Equal(3, Assert.Single(plan.Stages).ClipStageRawIndex);
+        Assert.Same(stagePayload, Assert.Single(plan.Stages).ArchitecturePayload);
+    }
+
+    [Fact]
+    public void ClipPlanCompiler_FailsClosedWhenStagePayloadArchitectureDiffers()
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10, rawIndex: 3));
+        TestClipPayload clipPayload = new(new("clip-architecture"));
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => ClipPlanCompiler.Compile(
+                clip,
+                Context(
+                    clipPayload,
+                    new Dictionary<int, IArchitectureStagePayload>
+                    {
+                        [3] = new TestStagePayload(new("stage-architecture")),
+                    })));
+
+        Assert.Equal(
+            "Clip stage 3 payload architecture 'stage-architecture' does not match clip "
+                + "architecture 'clip-architecture'.",
+            error.Message);
+    }
+
+    [Fact]
+    public void ClipPlanCompiler_FailsClosedWhenStagePayloadMapHasAnExtraRawIndex()
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10, rawIndex: 3));
+        ArchitectureId architectureId = new("test");
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => ClipPlanCompiler.Compile(
+                clip,
+                Context(
+                    new TestClipPayload(architectureId),
+                    new Dictionary<int, IArchitectureStagePayload>
+                    {
+                        [3] = new TestStagePayload(architectureId),
+                        [7] = new TestStagePayload(architectureId),
+                    })));
+
+        Assert.Equal(
+            "Clip architecture compilation has a payload for unauthored raw stage 7.",
+            error.Message);
+    }
+
+    [Fact]
+    public void ClipPlanCompiler_FailsClosedWhenClipPayloadDiffersFromAssignedArchitecture()
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10, rawIndex: 3));
+        ArchitectureId payloadArchitectureId = new("wrong-architecture");
+        ClipArchitectureAssignment assignment = new(
+            clip.Id,
+            Ltx2ArchitectureModule.Instance,
+            Ltx2ArchitectureModule.Instance.Descriptor,
+            new Dictionary<int, ResolvedVideoModel>());
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => ClipPlanCompiler.Compile(
+                clip,
+                Context(
+                    new TestClipPayload(payloadArchitectureId),
+                    new Dictionary<int, IArchitectureStagePayload>
+                    {
+                        [3] = new TestStagePayload(payloadArchitectureId),
+                    },
+                    assignment)));
+
+        Assert.Equal(
+            "Clip payload architecture 'wrong-architecture' does not match assigned architecture "
+                + "'ltx2'.",
+            error.Message);
+    }
+
+    [Fact]
+    public void ArchitectureClipCompilation_RejectsNullInputsAndNullStageValues()
+    {
+        TestClipPayload payload = new(new("test"));
+        TestStagePayload stagePayload = new(payload.ArchitectureId);
+
+        Assert.Equal(
+            "payload",
+            Assert.Throws<ArgumentNullException>(
+                () => new ArchitectureClipCompilation(
+                    null,
+                    new Dictionary<int, IArchitectureStagePayload>(),
+                    [])).ParamName);
+        Assert.Equal(
+            "stagePayloads",
+            Assert.Throws<ArgumentNullException>(
+                () => new ArchitectureClipCompilation(payload, null, [])).ParamName);
+        Assert.Equal(
+            "diagnostics",
+            Assert.Throws<ArgumentNullException>(
+                () => new ArchitectureClipCompilation(
+                    payload,
+                    new Dictionary<int, IArchitectureStagePayload> { [3] = stagePayload },
+                    null)).ParamName);
+        ArgumentException nullValueError = Assert.Throws<ArgumentException>(
+            () => new ArchitectureClipCompilation(
+                payload,
+                new Dictionary<int, IArchitectureStagePayload> { [3] = null },
+                []));
+        Assert.Equal("stagePayloads", nullValueError.ParamName);
+        Assert.Contains("raw stage 3", nullValueError.Message);
+    }
+
+    [Fact]
+    public void ArchitectureClipCompilation_SnapshotsStagePayloadMap()
+    {
+        TestClipPayload payload = new(new("test"));
+        TestStagePayload original = new(payload.ArchitectureId);
+        TestStagePayload replacement = new(payload.ArchitectureId);
+        Dictionary<int, IArchitectureStagePayload> stagePayloads = new()
+        {
+            [3] = original,
+        };
+        ArchitectureClipCompilation compilation = new(payload, stagePayloads, []);
+
+        stagePayloads[3] = replacement;
+        stagePayloads[7] = replacement;
+
+        KeyValuePair<int, IArchitectureStagePayload> entry =
+            Assert.Single(compilation.StagePayloads);
+        Assert.Equal(3, entry.Key);
+        Assert.Same(original, entry.Value);
+    }
+
+    [Fact]
+    public void SourceOnlyCompilationPublishesAnEmptyStagePayloadMap()
+    {
+        ClipSpec clip = SourcedClip(7);
+
+        ArchitectureClipCompilation compilation =
+            NoneArchitectureModule.Instance.ValidateAndCompileClip(
+                clip,
+                new Dictionary<int, ResolvedVideoModel>(),
+                new(640, 360, 30, ArchitectureEntryMode.SourceVideo));
+
+        Assert.IsType<NoneClipPayload>(compilation.Payload);
+        Assert.Empty(compilation.StagePayloads);
     }
 
     [Theory]
@@ -455,8 +640,13 @@ public class PlanningCompilerComponentTests
                     clips[i],
                     assignment.StageModels,
                     new(spec.Width, spec.Height, spec.FPS));
-            IArchitectureClipPayload payload = compilation?.Payload;
             diagnostics.AddRange(compilation?.Diagnostics ?? []);
+            ArchitectureClipCompilation acceptedCompilation =
+                compilation is not null
+                && !compilation.Diagnostics.Any(diagnostic =>
+                    diagnostic.Severity == PlanDiagnosticSeverity.Error)
+                    ? compilation
+                    : null;
             plans.Add(ClipPlanCompiler.Compile(clips[i], new ClipPlanCompilationContext(
                 spec.IsTextToVideo,
                 spec.Width,
@@ -472,7 +662,7 @@ public class PlanningCompilerComponentTests
                         ? ArchitectureEntryMode.TextToVideo
                         : ArchitectureEntryMode.ImageToVideo,
                 assignment,
-                payload)));
+                acceptedCompilation)));
             diagnostics.AddRange(plans[^1].Audio.Diagnostics.Select(audioDiagnostic =>
                 new PlanDiagnostic(
                     PlanDiagnosticSeverity.Warning,
@@ -574,6 +764,29 @@ public class PlanningCompilerComponentTests
         new(id, control, 1, "pixel-lanczos", "ltx-2", 12, 4.5, "euler", "normal", "Generated",
             ClipStageIndex: id - 10,
             ClipStageRawIndex: rawIndex ?? id - 10);
+
+    private static ClipPlanCompilationContext Context(
+        IArchitectureClipPayload clipPayload,
+        IReadOnlyDictionary<int, IArchitectureStagePayload> stagePayloads,
+        ClipArchitectureAssignment architecture = null) =>
+        new(
+            IsTextToVideo: false,
+            Width: 512,
+            Height: 512,
+            FramesPerSecond: 24,
+            IsLastClip: true,
+            IsMultiClip: false,
+            TotalStageCount: 1,
+            FirstStageOrdinal: 0,
+            EntryMode: ArchitectureEntryMode.ImageToVideo,
+            Architecture: architecture,
+            ArchitectureCompilation: new(clipPayload, stagePayloads, []));
+
+    private sealed record TestClipPayload(
+        ArchitectureId ArchitectureId) : IArchitectureClipPayload;
+
+    private sealed record TestStagePayload(
+        ArchitectureId ArchitectureId) : IArchitectureStagePayload;
 
     private static readonly IArchitectureBoundaryPolicy FakeBoundaryPolicy =
         new ArchitectureBoundaryPolicy(

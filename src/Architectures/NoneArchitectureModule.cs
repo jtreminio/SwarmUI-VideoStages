@@ -90,7 +90,10 @@ internal sealed class NoneArchitectureModule : IVideoArchitectureModule
         ClipSpec clip,
         IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
         ArchitectureClipCompileContext context) =>
-        new(new NoneClipPayload(clip.Id), []);
+        new(
+            new NoneClipPayload(clip.Id),
+            new Dictionary<int, IArchitectureStagePayload>(),
+            []);
 }
 
 internal sealed record NoneClipPayload(int ClipId) : IArchitectureClipPayload

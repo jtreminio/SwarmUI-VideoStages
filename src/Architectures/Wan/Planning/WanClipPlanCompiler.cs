@@ -4,6 +4,7 @@ namespace VideoStages.Architectures.Wan.Planning;
 
 internal sealed record WanClipPlanCompilation(
     WanClipPayload Payload,
+    IReadOnlyDictionary<int, WanStagePayload> Stages,
     IReadOnlyList<PlanDiagnostic> Diagnostics);
 
 /// <summary>
@@ -53,6 +54,6 @@ internal static class WanClipPlanCompiler
                     stage.Sampler,
                     stage.Scheduler));
         }
-        return new(new WanClipPayload(clip.Id, stages), diagnostics.AsReadOnly());
+        return new(new WanClipPayload(clip.Id), stages, diagnostics.AsReadOnly());
     }
 }

@@ -110,7 +110,12 @@ internal sealed class Ltx2ArchitectureModule :
         ArchitectureClipCompileContext context)
     {
         Ltx2ClipPlanCompilation compilation = Ltx2ClipPlanCompiler.Compile(clip, context);
-        return new(compilation.Payload, compilation.Diagnostics);
+        return new(
+            compilation.Payload,
+            compilation.Stages.ToDictionary(
+                pair => pair.Key,
+                pair => (IArchitectureStagePayload)pair.Value),
+            compilation.Diagnostics);
     }
 
     public IReadOnlyList<PlanDiagnostic> ValidatePlan(
@@ -136,13 +141,11 @@ internal sealed class Ltx2ArchitectureModule :
 
 internal sealed record Ltx2ClipPayload(
     int ClipId,
-    IReadOnlyDictionary<int, Ltx2StagePayload> Stages,
     AudioReusePlan AudioReuse,
     Ltx2AudioInjectionPlan AudioInjection,
     int? ControlNetSourceIndex,
     ReferenceFramingMode ReferenceFraming) :
     IArchitectureClipPayload,
-    IArchitectureStagePayloadSource,
     IArchitectureControlNetSourcePlan,
     IArchitectureClipGeometryProjection
 {
@@ -174,10 +177,4 @@ internal sealed record Ltx2ClipPayload(
         }
         return (width, height);
     }
-
-    public IArchitectureStagePayload GetStagePayload(int rawStageIndex) =>
-        Stages.GetValueOrDefault(rawStageIndex)
-        ?? throw new InvalidOperationException(
-            $"Clip {ClipId} has no LTX payload for raw stage {rawStageIndex}.");
-
 }

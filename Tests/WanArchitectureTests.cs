@@ -103,7 +103,6 @@ public class WanArchitectureTests
         WanClipPayload payload = compiled.RequireWanPayload();
         Assert.Equal(WanArchitectureModule.ArchitectureId, payload.ArchitectureId);
         WanStagePayload stagePayload = Assert.Single(compiled.Stages).RequireWanPayload();
-        Assert.Same(stagePayload, Assert.Single(payload.Stages).Value);
         Assert.Equal("wan-model", stagePayload.Model);
         Assert.Equal(1, stagePayload.Control);
         Assert.Equal(12, stagePayload.Steps);

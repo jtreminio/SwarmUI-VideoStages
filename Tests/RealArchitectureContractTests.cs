@@ -8,6 +8,7 @@ using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.Wan;
+using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Generated;
 using VideoStages.Planning;
 using Xunit;
@@ -145,10 +146,42 @@ public class RealArchitectureContractTests
         FamilyFixture fixture = CreateFixture(family);
         ClipSpec clip = fixture.MinimalClip();
         VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
+        ArchitecturePlanningResult planning =
+            ArchitecturePlanResolver.Resolve(spec, RealRegistry());
+        ClipArchitectureAssignment assignment = planning.Clips[clip.Id];
+        ArchitectureClipCompilation architectureCompilation =
+            fixture.Module.ValidateAndCompileClip(
+                clip,
+                assignment.StageModels,
+                new(512, 512, 24, ArchitectureEntryMode.ImageToVideo));
+        KeyValuePair<int, IArchitectureStagePayload> compiledEntry =
+            Assert.Single(architectureCompilation.StagePayloads);
+        Assert.Equal(0, compiledEntry.Key);
+        Assert.True(
+            architectureCompilation.Payload is Ltx2ClipPayload or WanClipPayload,
+            $"Unexpected real payload type '{architectureCompilation.Payload.GetType()}'.");
+        ClipPlan directlyCompiledClip = ClipPlanCompiler.Compile(
+            clip,
+            new(
+                IsTextToVideo: false,
+                Width: 512,
+                Height: 512,
+                FramesPerSecond: 24,
+                IsLastClip: true,
+                IsMultiClip: false,
+                TotalStageCount: 1,
+                FirstStageOrdinal: 0,
+                EntryMode: ArchitectureEntryMode.ImageToVideo,
+                Architecture: assignment,
+                ArchitectureCompilation: architectureCompilation));
+        Assert.Same(
+            compiledEntry.Value,
+            Assert.Single(directlyCompiledClip.Stages).ArchitecturePayload);
+
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
             RootEnvironment.FromSpec(spec),
-            ArchitecturePlanResolver.Resolve(spec, RealRegistry()));
+            planning);
 
         Assert.DoesNotContain(
             plan.Diagnostics,
@@ -160,12 +193,9 @@ public class RealArchitectureContractTests
         Assert.NotNull(compiledStage.ArchitecturePayload);
         Assert.Equal(compiledClip.Architecture.Id, compiledClip.ArchitecturePayload.ArchitectureId);
         Assert.Equal(compiledClip.Architecture.Id, compiledStage.ArchitecturePayload.ArchitectureId);
-        IArchitectureStagePayloadSource payloadSource =
-            Assert.IsAssignableFrom<IArchitectureStagePayloadSource>(
-                compiledClip.ArchitecturePayload);
-        Assert.Same(
-            compiledStage.ArchitecturePayload,
-            payloadSource.GetStagePayload(compiledStage.ClipStageRawIndex));
+        Assert.True(
+            compiledClip.ArchitecturePayload is Ltx2ClipPayload or WanClipPayload,
+            $"Unexpected real payload type '{compiledClip.ArchitecturePayload.GetType()}'.");
     }
 
     [Theory]

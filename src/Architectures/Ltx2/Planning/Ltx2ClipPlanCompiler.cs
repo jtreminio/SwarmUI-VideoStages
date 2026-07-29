@@ -6,6 +6,7 @@ namespace VideoStages.Architectures.Ltx2.Planning;
 /// <summary>Compiles all LTX-owned settings before the common clip plan is assembled.</summary>
 internal sealed record Ltx2ClipPlanCompilation(
     Ltx2ClipPayload Payload,
+    IReadOnlyDictionary<int, Ltx2StagePayload> Stages,
     IReadOnlyList<PlanDiagnostic> Diagnostics);
 
 internal static class Ltx2ClipPlanCompiler
@@ -58,11 +59,11 @@ internal static class Ltx2ClipPlanCompiler
         return new(
             new Ltx2ClipPayload(
                 clip.Id,
-                stages,
                 audio.Reuse,
                 audio.Injection,
                 audio.ControlNetSourceIndex,
                 clip.ReferenceFraming),
+            stages,
             diagnostics.AsReadOnly());
     }
 

@@ -31,14 +31,44 @@ internal interface IArchitectureStagePayload
     ArchitectureId ArchitectureId { get; }
 }
 
-internal interface IArchitectureStagePayloadSource
+internal sealed record ArchitectureClipCompilation
 {
-    IArchitectureStagePayload GetStagePayload(int rawStageIndex);
-}
+    internal ArchitectureClipCompilation(
+        IArchitectureClipPayload payload,
+        IReadOnlyDictionary<int, IArchitectureStagePayload> stagePayloads,
+        IReadOnlyList<PlanDiagnostic> diagnostics)
+    {
+        ArgumentNullException.ThrowIfNull(payload);
+        ArgumentNullException.ThrowIfNull(stagePayloads);
+        ArgumentNullException.ThrowIfNull(diagnostics);
+        foreach ((int rawStageIndex, IArchitectureStagePayload stagePayload) in stagePayloads)
+        {
+            if (stagePayload is null)
+            {
+                throw new ArgumentException(
+                    $"Stage payload map contains a null value for raw stage {rawStageIndex}.",
+                    nameof(stagePayloads));
+            }
+        }
 
-internal sealed record ArchitectureClipCompilation(
-    IArchitectureClipPayload Payload,
-    IReadOnlyList<PlanDiagnostic> Diagnostics);
+        Payload = payload;
+        StagePayloads = new System.Collections.ObjectModel.ReadOnlyDictionary<
+            int,
+            IArchitectureStagePayload>(
+                new Dictionary<int, IArchitectureStagePayload>(stagePayloads));
+        Diagnostics = Array.AsReadOnly(diagnostics.ToArray());
+    }
+
+    public IArchitectureClipPayload Payload { get; }
+
+    /// <summary>
+    /// Architecture-owned stage instructions keyed by authored raw stage index. Common planning
+    /// attaches them to generic stage plans without interpreting their concrete types.
+    /// </summary>
+    public IReadOnlyDictionary<int, IArchitectureStagePayload> StagePayloads { get; }
+
+    public IReadOnlyList<PlanDiagnostic> Diagnostics { get; }
+}
 
 /// <summary>One architecture session executes clips from only its own architecture.</summary>
 internal interface IVideoGenerationSession : IDisposable

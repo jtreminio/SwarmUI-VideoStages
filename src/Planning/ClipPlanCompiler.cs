@@ -10,6 +10,8 @@ internal static class ClipPlanCompiler
     {
         bool sourced = clip.SourceVideo is not null;
         AudioPlan audio = AudioPlanCompiler.Compile(clip);
+        ArchitectureClipCompilation architectureCompilation =
+            ValidateArchitectureCompilation(clip, context);
         ClipInputKind clipInput = sourced
             ? ClipInputKind.SourceVideo
             : context.IsTextToVideo ? ClipInputKind.EmptyLatent : ClipInputKind.RootMedia;
@@ -26,7 +28,7 @@ internal static class ClipPlanCompiler
                 stage.ClipStageRawIndex,
                 ResolveStageInput(clipInput, i),
                 stage.IsPassthrough,
-                RequireStagePayload(context.ArchitecturePayload, stage),
+                architectureCompilation?.StagePayloads[stage.ClipStageRawIndex],
                 new StageOutputPlan(
                     IsTimelineTerminal: isClipTerminal && context.IsLastClip && !context.IsMultiClip,
                     context.FirstStageOrdinal + i < context.TotalStageCount - 1
@@ -52,7 +54,7 @@ internal static class ClipPlanCompiler
             audio)
         {
             Architecture = context.Architecture?.Architecture,
-            ArchitecturePayload = context.ArchitecturePayload,
+            ArchitecturePayload = architectureCompilation?.Payload,
             EntryMode = context.EntryMode,
         };
     }
@@ -85,30 +87,57 @@ internal static class ClipPlanCompiler
         };
     }
 
-    private static IArchitectureStagePayload RequireStagePayload(
-        IArchitectureClipPayload clipPayload,
-        StageSpec stage)
+    private static ArchitectureClipCompilation ValidateArchitectureCompilation(
+        ClipSpec clip,
+        ClipPlanCompilationContext context)
     {
         // Invalid plans deliberately remain inspectable with diagnostics. Runtime execution rejects
         // those plans before it can reach a stage with no architecture compilation.
-        if (clipPayload is null)
+        ArchitectureClipCompilation compilation = context.ArchitectureCompilation;
+        if (compilation is null)
         {
             return null;
         }
-        if (clipPayload is not IArchitectureStagePayloadSource source)
+
+        ArchitectureId clipArchitectureId = compilation.Payload.ArchitectureId;
+        ArchitectureId? assignedArchitectureId = context.Architecture?.Architecture.Id;
+        if (assignedArchitectureId.HasValue
+            && clipArchitectureId != assignedArchitectureId.Value)
         {
             throw new InvalidOperationException(
-                $"Clip stage {stage.ClipStageRawIndex} has no architecture stage payload source.");
+                $"Clip payload architecture '{clipArchitectureId}' does not match assigned "
+                    + $"architecture '{assignedArchitectureId.Value}'.");
         }
-        IArchitectureStagePayload payload = source.GetStagePayload(stage.ClipStageRawIndex);
-        if (payload.ArchitectureId != clipPayload.ArchitectureId)
+
+        HashSet<int> authoredRawStageIndices = [
+            .. (clip.Stages ?? []).Select(stage => stage.ClipStageRawIndex),
+        ];
+        foreach (int rawStageIndex in authoredRawStageIndices)
         {
-            throw new InvalidOperationException(
-                $"Clip stage {stage.ClipStageRawIndex} payload architecture "
-                    + $"'{payload.ArchitectureId}' does not match clip architecture "
-                    + $"'{clipPayload.ArchitectureId}'.");
+            if (!compilation.StagePayloads.ContainsKey(rawStageIndex))
+            {
+                throw new InvalidOperationException(
+                    $"Clip stage {rawStageIndex} has no architecture stage payload.");
+            }
         }
-        return payload;
+        foreach ((int rawStageIndex, IArchitectureStagePayload payload) in
+                 compilation.StagePayloads)
+        {
+            if (!authoredRawStageIndices.Contains(rawStageIndex))
+            {
+                throw new InvalidOperationException(
+                    $"Clip architecture compilation has a payload for unauthored raw stage "
+                        + $"{rawStageIndex}.");
+            }
+            if (payload.ArchitectureId != clipArchitectureId)
+            {
+                throw new InvalidOperationException(
+                    $"Clip stage {rawStageIndex} payload architecture "
+                        + $"'{payload.ArchitectureId}' does not match clip architecture "
+                        + $"'{clipArchitectureId}'.");
+            }
+        }
+        return compilation;
     }
 }
 
@@ -123,4 +152,4 @@ internal sealed record ClipPlanCompilationContext(
     int FirstStageOrdinal,
     ArchitectureEntryMode EntryMode,
     ClipArchitectureAssignment Architecture = null,
-    IArchitectureClipPayload ArchitecturePayload = null);
+    ArchitectureClipCompilation ArchitectureCompilation = null);

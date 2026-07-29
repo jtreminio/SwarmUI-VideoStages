@@ -84,6 +84,11 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         ArchitectureClipCompileContext context)
     {
         WanClipPlanCompilation compilation = WanClipPlanCompiler.Compile(clip);
-        return new(compilation.Payload, compilation.Diagnostics);
+        return new(
+            compilation.Payload,
+            compilation.Stages.ToDictionary(
+                pair => pair.Key,
+                pair => (IArchitectureStagePayload)pair.Value),
+            compilation.Diagnostics);
     }
 }
