@@ -1,4 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Planning;
 
 namespace VideoStages.Execution;
 
@@ -9,24 +10,26 @@ namespace VideoStages.Execution;
 internal sealed class SourceOnlyClipAudioPreparer(WorkflowGenerator generator)
 {
     internal void Prepare(
-        SourceOnlyClipExecutionContext context,
+        ClipPlan clip,
+        int framesPerSecond,
+        AudioRuntimeSources audioSources,
         WGNodeData sourcedMedia)
     {
         AudioRuntimeSources sources = sourcedMedia.AttachedAudio is WGNodeData nativeAudio
-            ? context.AudioSources with { NativeAudio = nativeAudio }
-            : context.AudioSources;
+            ? audioSources with { NativeAudio = nativeAudio }
+            : audioSources;
         WGNodeData baseAudio = PlannedAudioSourceSelector.Select(
-            context.Clip.ClipId,
-            context.Clip.Audio.Base,
+            clip.ClipId,
+            clip.Audio.Base,
             sources,
             suppressNative: false);
         double duration = ClipAudioBedDuration.Seconds(
-            context.Clip,
-            context.FramesPerSecond,
+            clip,
+            framesPerSecond,
             sourcedMedia);
         WGNodeData combinedAudio = new AudioSegmentCombiner(generator).Combine(
-            context.Clip.ClipId,
-            context.Clip.Audio.Segments,
+            clip.ClipId,
+            clip.Audio.Segments,
             baseAudio,
             duration,
             out _);

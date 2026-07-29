@@ -27,21 +27,7 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
     {
         ArgumentNullException.ThrowIfNull(context);
         IVideoGenerationSession session = ResolveSession(context.Clip);
-        ArchitectureClipExecutionRequest request = session.CreateExecutionRequest(context);
-        if (request is null
-            || !ReferenceEquals(request.Clip, context.Clip)
-            || request.ClipIndex != context.ClipIndex)
-        {
-            throw new InvalidOperationException(
-                $"Architecture '{session.ArchitectureId}' created an invalid clip execution request.");
-        }
-        return Execute(session, request);
-    }
-
-    internal DecodedClipArtifact Execute(ArchitectureClipExecutionRequest request)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        return Execute(ResolveSession(request.Clip), request);
+        return Execute(session, context);
     }
 
     private IVideoGenerationSession ResolveSession(ClipPlan clip)
@@ -60,19 +46,19 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
 
     private static DecodedClipArtifact Execute(
         IVideoGenerationSession session,
-        ArchitectureClipExecutionRequest request)
+        ArchitectureClipRuntimeContext context)
     {
-        DecodedClipArtifact output = session.Execute(request)
+        DecodedClipArtifact output = session.Execute(context)
             ?? throw new InvalidOperationException(
                 $"Architecture '{session.ArchitectureId}' returned no decoded clip artifact.");
-        ArchitectureId plannedArchitecture = request.Clip.Architecture.Id;
+        ArchitectureId plannedArchitecture = context.Clip.Architecture.Id;
         if (output.ArchitectureId != plannedArchitecture
-            || output.ClipId != request.Clip.ClipId)
+            || output.ClipId != context.Clip.ClipId)
         {
             throw new InvalidOperationException(
                 $"Architecture '{session.ArchitectureId}' returned artifact identity "
                 + $"'{output.ArchitectureId}/{output.ClipId}' for planned clip "
-                + $"'{plannedArchitecture}/{request.Clip.ClipId}'.");
+                + $"'{plannedArchitecture}/{context.Clip.ClipId}'.");
         }
         output.ValidateDecoded();
         return output;

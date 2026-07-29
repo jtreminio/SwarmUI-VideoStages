@@ -56,7 +56,10 @@ internal sealed class Ltx2GenerationSessionFactory(
             new StageHostExecutionScope(
                 generator,
                 context.Plan,
-                context.Plan.Clips.Count > 1));
+                context.Plan.Clips.Count > 1),
+            context.Plan,
+            context.Assembly,
+            context.RootPolicy);
     }
 
     public void FinalizeTimeline(ArchitectureTimelineFinalizationContext context)

@@ -704,15 +704,10 @@ public class ArchitectureFoundationTests
         DecodedClipArtifact[] outputs = [
             .. plan.Clips.Select((clip, index) => dispatcher.Execute(new ArchitectureClipRuntimeContext(
                 clip,
-                plan,
                 index,
-                ParallelMultiClip: true,
-                HasPreviousTimelineClip: index > 0,
-                PreviousClip: index > 0 ? plan.Clips[index - 1] : null,
+                PreviousClip: null,
                 PreviousClipOutput: null,
-                AudioSources: null,
-                Assembly: null,
-                RootPolicy: null)))
+                PreviousTimelineClipOutput: null)))
         ];
 
         Assert.All(plan.Boundaries, boundary =>
@@ -735,7 +730,7 @@ public class ArchitectureFoundationTests
         [
             new ProjectingSession(
                 new("ltx2"),
-                request => ValidArtifact(request.Clip) with
+                context => ValidArtifact(context.Clip) with
                 {
                     ArchitectureId = new("fake"),
                     ClipId = 88,
@@ -743,10 +738,12 @@ public class ArchitectureFoundationTests
         ]);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            dispatcher.Execute(new ArchitectureClipExecutionRequest(
+            dispatcher.Execute(new ArchitectureClipRuntimeContext(
                 clip,
                 0,
-                RuntimePayload: null)));
+                PreviousClip: null,
+                PreviousClipOutput: null,
+                PreviousTimelineClipOutput: null)));
 
         Assert.Contains("artifact identity 'fake/88'", error.Message);
         Assert.Contains("planned clip 'ltx2/7'", error.Message);
@@ -771,7 +768,7 @@ public class ArchitectureFoundationTests
         [
             new ProjectingSession(
                 new("ltx2"),
-                request => ValidArtifact(request.Clip) with
+                context => ValidArtifact(context.Clip) with
                 {
                     Video = new("invalid", 0, (DecodedMediaKind)rawVideoKind),
                     Width = width,
@@ -782,10 +779,12 @@ public class ArchitectureFoundationTests
         ]);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            dispatcher.Execute(new ArchitectureClipExecutionRequest(
+            dispatcher.Execute(new ArchitectureClipRuntimeContext(
                 clip,
                 0,
-                RuntimePayload: null)));
+                PreviousClip: null,
+                PreviousClipOutput: null,
+                PreviousTimelineClipOutput: null)));
 
         Assert.Contains("invalid decoded media artifact", error.Message);
     }
@@ -799,54 +798,62 @@ public class ArchitectureFoundationTests
         [
             new ProjectingSession(
                 new("ltx2"),
-                request => ValidArtifact(request.Clip) with
+                context => ValidArtifact(context.Clip) with
                 {
                     Audio = new("mistyped-audio", 0, DecodedMediaKind.Video),
                 }),
         ]);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            dispatcher.Execute(new ArchitectureClipExecutionRequest(
+            dispatcher.Execute(new ArchitectureClipRuntimeContext(
                 clip,
                 0,
-                RuntimePayload: null)));
+                PreviousClip: null,
+                PreviousClipOutput: null,
+                PreviousTimelineClipOutput: null)));
 
         Assert.Contains("invalid decoded media artifact", error.Message);
     }
 
     [Fact]
-    public void Source_only_session_projects_a_non_ltx_runtime_payload()
+    public void Runtime_dispatcher_rejects_null_session_result()
     {
-        SwarmUI.Builtin_ComfyUIBackend.WorkflowGenerator generator = new()
-        {
-            UserInput = new T2IParamInput(null),
-            Features = [],
-            Workflow = [],
-        };
-        ClipSpec clip = SourcedClip(0);
-        VideoStagesSpec spec = Spec(clip);
-        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
-            spec,
-            RootEnvironment.FromSpec(spec),
-            ArchitecturePlanResolver.Resolve(spec, new FakeRegistry()));
-        ClipPlan plannedClip = Assert.Single(plan.Clips);
-        SourceOnlyGenerationSession session = new(generator);
-        ArchitectureClipExecutionRequest request = session.CreateExecutionRequest(new(
-            plannedClip,
-            plan,
-            0,
-            ParallelMultiClip: false,
-            HasPreviousTimelineClip: false,
-            PreviousClip: null,
-            PreviousClipOutput: null,
-            AudioSources: new AudioRuntimeSources(
-                null,
-                new Dictionary<int, SwarmUI.Builtin_ComfyUIBackend.WGNodeData>(),
-                new Dictionary<int, SwarmUI.Builtin_ComfyUIBackend.WGNodeData>()),
-            Assembly: null,
-            RootPolicy: null));
+        VideoExecutionPlan plan = Plan(GeneratedClip(7, Stage(10, "ltx-model")));
+        ClipPlan clip = Assert.Single(plan.Clips);
+        using ArchitectureRuntimeDispatcher dispatcher = new(
+        [
+            new ProjectingSession(new("ltx2"), _ => null),
+        ]);
 
-        Assert.IsType<SourceOnlyClipExecutionContext>(request.RuntimePayload);
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            dispatcher.Execute(new ArchitectureClipRuntimeContext(
+                clip,
+                0,
+                PreviousClip: null,
+                PreviousClipOutput: null,
+                PreviousTimelineClipOutput: null)));
+
+        Assert.Contains("returned no decoded clip artifact", error.Message);
+    }
+
+    [Fact]
+    public void Source_only_session_uses_direct_generic_runtime_contract_without_ltx_dependencies()
+    {
+        Assert.Equal(
+            [
+                typeof(SwarmUI.Builtin_ComfyUIBackend.WorkflowGenerator),
+                typeof(int),
+                typeof(AudioRuntimeSources),
+            ],
+            Assert.Single(typeof(SourceOnlyGenerationSession).GetConstructors())
+                .GetParameters()
+                .Select(parameter => parameter.ParameterType));
+        Assert.Equal(
+            [typeof(ArchitectureClipRuntimeContext)],
+            typeof(SourceOnlyGenerationSession)
+                .GetMethod(nameof(SourceOnlyGenerationSession.Execute))
+                .GetParameters()
+                .Select(parameter => parameter.ParameterType));
         Assert.DoesNotContain(
             typeof(SourceOnlyGenerationSession).GetConstructors()
                 .SelectMany(constructor => constructor.GetParameters()),
@@ -887,15 +894,10 @@ public class ArchitectureFoundationTests
 
         _ = dispatcher.Execute(new ArchitectureClipRuntimeContext(
             plan.Clips[0],
-            plan,
             0,
-            ParallelMultiClip: false,
-            HasPreviousTimelineClip: false,
             PreviousClip: null,
             PreviousClipOutput: null,
-            audio,
-            Assembly: null,
-            policy));
+            PreviousTimelineClipOutput: null));
 
         Assert.Equal(["fake"], calls);
     }
@@ -1031,7 +1033,7 @@ public class ArchitectureFoundationTests
         Assert.Equal(ids, calls);
         Assert.All(runtimeContexts.Skip(1), context =>
         {
-            Assert.True(context.HasPreviousTimelineClip);
+            Assert.NotNull(context.PreviousTimelineClipOutput);
             Assert.Null(context.PreviousClip);
             Assert.Null(context.PreviousClipOutput);
         });
@@ -1603,19 +1605,13 @@ public class ArchitectureFoundationTests
     {
         public ArchitectureId ArchitectureId => architectureId;
 
-        public ArchitectureClipExecutionRequest CreateExecutionRequest(
-            ArchitectureClipRuntimeContext context)
+        public DecodedClipArtifact Execute(ArchitectureClipRuntimeContext context)
         {
             contexts?.Add(context);
-            return new(context.Clip, context.ClipIndex, RuntimePayload: architectureId);
-        }
-
-        public DecodedClipArtifact Execute(ArchitectureClipExecutionRequest request)
-        {
             calls.Add(architectureId.Value);
             return new(
                 new(
-                    $"{architectureId}-{request.Clip.ClipId}",
+                    $"{architectureId}-{context.Clip.ClipId}",
                     0,
                     DecodedMediaKind.Video),
                 null,
@@ -1624,7 +1620,7 @@ public class ArchitectureFoundationTests
                 24,
                 25,
                 architectureId,
-                request.Clip.ClipId);
+                context.Clip.ClipId);
         }
 
         public void Dispose()
@@ -1634,17 +1630,13 @@ public class ArchitectureFoundationTests
 
     private sealed class ProjectingSession(
         ArchitectureId architectureId,
-        Func<ArchitectureClipExecutionRequest, DecodedClipArtifact> project)
+        Func<ArchitectureClipRuntimeContext, DecodedClipArtifact> project)
         : IVideoGenerationSession
     {
         public ArchitectureId ArchitectureId => architectureId;
 
-        public ArchitectureClipExecutionRequest CreateExecutionRequest(
-            ArchitectureClipRuntimeContext context) =>
-            new(context.Clip, context.ClipIndex, RuntimePayload: null);
-
-        public DecodedClipArtifact Execute(ArchitectureClipExecutionRequest request) =>
-            project(request);
+        public DecodedClipArtifact Execute(ArchitectureClipRuntimeContext context) =>
+            project(context);
 
         public void Dispose()
         {

@@ -1,6 +1,7 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
+using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
@@ -9,44 +10,32 @@ internal sealed class Ltx2GenerationSession(
     WorkflowGenerator generator,
     StageClipExecutor executor,
     StageSequenceRootSources rootSources,
-    StageHostExecutionScope hostScope) : IVideoGenerationSession
+    StageHostExecutionScope hostScope,
+    VideoExecutionPlan plan,
+    TimelineAssemblySession assembly,
+    RootExecutionPolicy rootPolicy) : IVideoGenerationSession
 {
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
 
-    public ArchitectureClipExecutionRequest CreateExecutionRequest(
-        ArchitectureClipRuntimeContext context)
+    public DecodedClipArtifact Execute(ArchitectureClipRuntimeContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return new(
-            context.Clip,
-            context.ClipIndex,
-            new StageClipExecutionContext(
-                context.Clip,
-                context.Plan,
-                context.ClipIndex,
-                context.ParallelMultiClip,
-                context.HasPreviousTimelineClip,
-                context.PreviousClip,
-                ToNodeData(context.PreviousClipOutput),
-                ToNodeData(context.PreviousTimelineClipOutput),
-                rootSources,
-                context.Assembly,
-                hostScope,
-                context.RootPolicy));
-    }
-
-    public DecodedClipArtifact Execute(ArchitectureClipExecutionRequest request)
-    {
-        if (request.Clip.ArchitecturePayload is not Ltx2ClipPayload)
+        if (context.Clip.ArchitecturePayload is not Ltx2ClipPayload)
         {
             throw new InvalidOperationException(
-                $"Clip {request.Clip.ClipId} has no LTX architecture payload.");
+                $"Clip {context.Clip.ClipId} has no LTX architecture payload.");
         }
-        StageClipExecutionContext context =
-            request.RuntimePayload as StageClipExecutionContext
-            ?? throw new InvalidOperationException("LTX execution payload is invalid.");
-        RuntimeArtifact output = executor.Execute(context);
-        return DecodedClipArtifact.FromRuntime(output, request.Clip);
+        StageClipExecutionContext stageContext = new(
+            context,
+            plan,
+            ToNodeData(context.PreviousClipOutput),
+            ToNodeData(context.PreviousTimelineClipOutput),
+            rootSources,
+            assembly,
+            hostScope,
+            rootPolicy);
+        RuntimeArtifact output = executor.Execute(stageContext);
+        return DecodedClipArtifact.FromRuntime(output, context.Clip);
     }
 
     public void Dispose()

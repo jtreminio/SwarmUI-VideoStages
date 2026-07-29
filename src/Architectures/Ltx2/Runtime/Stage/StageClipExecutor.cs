@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -8,13 +9,13 @@ using VideoStages.Architectures.Ltx2.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
+/// <summary>
+/// LTX execution state composed from the common per-clip facts, timeline-scoped LTX collaborators,
+/// and decoded continuity media projected into host node data.
+/// </summary>
 internal sealed record StageClipExecutionContext(
-    ClipPlan PlannedClip,
+    ArchitectureClipRuntimeContext Runtime,
     VideoExecutionPlan Plan,
-    int ClipIndex,
-    bool ParallelMultiClip,
-    bool HasPreviousTimelineClip,
-    ClipPlan PreviousClip,
     WGNodeData PreviousClipOutput,
     WGNodeData PreviousTimelineClipOutput,
     StageSequenceRootSources RootSources,
@@ -37,7 +38,7 @@ internal sealed class StageClipExecutor(
     {
         ArgumentNullException.ThrowIfNull(context);
         guideReferences.BeginClip();
-        ClipPlan plannedClip = context.PlannedClip;
+        ClipPlan plannedClip = context.Runtime.Clip;
         ClipContext clipContext = new(
             context.Plan,
             plannedClip,
@@ -94,7 +95,7 @@ internal sealed class StageClipExecutor(
         WGNodeData sourcedMedia,
         ClipContext clipContext)
     {
-        if (!context.ParallelMultiClip || !context.HasPreviousTimelineClip)
+        if (context.Plan.Clips.Count <= 1 || context.Runtime.ClipIndex == 0)
         {
             return null;
         }
@@ -104,7 +105,7 @@ internal sealed class StageClipExecutor(
             if (clipContext.SourceMedia is null)
             {
                 throw new SwarmUserErrorException(
-                    $"VideoStages: clip {context.PlannedClip.ClipId} requires root media before its first stage.");
+                    $"VideoStages: clip {context.Runtime.Clip.ClipId} requires root media before its first stage.");
             }
             g.CurrentMedia = clipContext.SourceMedia.Duplicate();
             if (clipContext.SourceVae is not null)
@@ -113,16 +114,16 @@ internal sealed class StageClipExecutor(
             }
         }
 
-        if (context.PreviousClip is null)
+        if (context.Runtime.PreviousClip is null)
         {
             return null;
         }
 
         return boundaryHandoffResolver.Resolve(
             context.Assembly,
-            context.PreviousClip,
+            context.Runtime.PreviousClip,
             context.PreviousClipOutput,
-            context.PlannedClip,
+            context.Runtime.Clip,
             nextClipIsSourced: sourcedMedia is not null,
             clipContext);
     }
@@ -133,7 +134,7 @@ internal sealed class StageClipExecutor(
         WGNodeData sourcedMedia,
         LtxBoundaryAudioCarry boundaryAudioCarry)
     {
-        ClipPlan plannedClip = context.PlannedClip;
+        ClipPlan plannedClip = context.Runtime.Clip;
         StagePlan firstStage = plannedClip.Stages.FirstOrDefault();
         audioTimelineExecutor.ApplyControlNetClipLength(plannedClip);
         AudioRuntimeSources clipAudioSources =
@@ -144,7 +145,7 @@ internal sealed class StageClipExecutor(
             firstStage,
             plannedClip,
             context.Plan.FramesPerSecond,
-            IsFirstClip: context.ClipIndex == 0,
+            IsFirstClip: context.Runtime.ClipIndex == 0,
             clipAudioSources,
             context.RootPolicy),
             clipContext,
@@ -162,16 +163,16 @@ internal sealed class StageClipExecutor(
         {
             Ltx2StagePayload payload = plannedStage.RequireLtx2Payload();
             throw new SwarmUserErrorException(
-                $"VideoStages: Clip {context.PlannedClip.ClipId} stage {plannedStage.ClipStageIndex} "
+                $"VideoStages: Clip {context.Runtime.Clip.ClipId} stage {plannedStage.ClipStageIndex} "
                 + $"could not resolve ImageReference '{payload.Guide.RawValue}'.");
         }
 
         int sectionId = context.HostScope.ApplyStageOverrides(
             clipContext,
-            context.PlannedClip,
+            context.Runtime.Clip,
             plannedStage);
         RuntimeArtifact inputArtifact = priorArtifact ?? CaptureStageInputArtifact(
-            context.PlannedClip.IsSourced
+            context.Runtime.Clip.IsSourced
                 ? ArtifactOrigin.SourceVideo
                 : ArtifactOrigin.HostRoot);
         context.HostScope.PublishStageInput(inputArtifact);

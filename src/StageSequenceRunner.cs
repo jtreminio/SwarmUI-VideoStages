@@ -40,18 +40,10 @@ internal sealed class StageSequenceRunner(
                 && previousClip?.Architecture.Id == plannedClip.Architecture.Id;
             ArchitectureClipRuntimeContext runtimeContext = new(
                 plannedClip,
-                plan,
                 clipIndex,
-                parallelMultiClip,
-                HasPreviousTimelineClip: clipIndex > 0,
                 PreviousClip: exposesPrevious ? previousClip : null,
                 PreviousClipOutput: exposesPrevious ? previousClipOutput : null,
-                preparedAudioSources,
-                assembly,
-                rootPolicy)
-            {
-                PreviousTimelineClipOutput = clipIndex > 0 ? previousClipOutput : null,
-            };
+                PreviousTimelineClipOutput: clipIndex > 0 ? previousClipOutput : null);
             DecodedClipArtifact output = runtimeDispatcher.Execute(runtimeContext);
             clipOutputs.Add(output);
             previousClipOutput = output;

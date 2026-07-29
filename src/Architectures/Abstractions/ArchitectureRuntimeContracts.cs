@@ -1,5 +1,4 @@
 using ComfyTyped.Core;
-using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -46,39 +45,21 @@ internal interface IVideoGenerationSession : IDisposable
 {
     ArchitectureId ArchitectureId { get; }
 
-    ArchitectureClipExecutionRequest CreateExecutionRequest(
-        ArchitectureClipRuntimeContext context);
-
-    DecodedClipArtifact Execute(ArchitectureClipExecutionRequest request);
+    DecodedClipArtifact Execute(ArchitectureClipRuntimeContext context);
 }
 
 /// <summary>
-/// Architecture-neutral timeline state supplied by the common runner. Each session projects this
-/// into its own private runtime payload before execution.
+/// Architecture-neutral per-clip facts supplied by the common runner. Timeline-scoped state is
+/// captured by each architecture session when the session is created. Previous clip fields are
+/// restricted to same-architecture, non-cut continuity; previous timeline output remains available
+/// as contextual media regardless of boundary mode.
 /// </summary>
 internal sealed record ArchitectureClipRuntimeContext(
     ClipPlan Clip,
-    VideoExecutionPlan Plan,
     int ClipIndex,
-    bool ParallelMultiClip,
-    bool HasPreviousTimelineClip,
     ClipPlan PreviousClip,
     DecodedClipArtifact PreviousClipOutput,
-    AudioRuntimeSources AudioSources,
-    TimelineAssemblySession Assembly,
-    RootExecutionPolicy RootPolicy)
-{
-    /// <summary>
-    /// The prior timeline clip's decoded output regardless of boundary mode. This is contextual
-    /// media only; <see cref="PreviousClipOutput"/> remains restricted to non-cut continuity.
-    /// </summary>
-    internal DecodedClipArtifact PreviousTimelineClipOutput { get; init; }
-}
-
-internal sealed record ArchitectureClipExecutionRequest(
-    ClipPlan Clip,
-    int ClipIndex,
-    object RuntimePayload);
+    DecodedClipArtifact PreviousTimelineClipOutput);
 
 /// <summary>Architecture-owned graph construction for non-cut boundaries.</summary>
 internal interface IArchitectureBoundaryAssembler

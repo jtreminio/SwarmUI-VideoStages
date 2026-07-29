@@ -286,15 +286,19 @@ The coordinator captures the host root, resolves audio, prepares active
 architecture factories, and begins the clip sequence.
 `StageSequenceRunner` creates `ArchitectureClipRuntimeContext` for each planned
 clip. It exposes previous output as continuity input only for a non-cut,
-same-architecture boundary.
+same-architecture boundary, while separately exposing the previous timeline
+output as contextual media across cuts and architecture changes.
 
 `ArchitectureRuntimeDispatcher.ResolveSession` selects a session solely from
-`clip.Architecture.Id`. It does not repeat model-name checks.
+`clip.Architecture.Id`, passes the narrow per-clip context directly to that
+session, and validates the returned artifact's architecture identity, clip
+identity, and decoded-media shape. It does not repeat model-name checks.
 
-Current sessions copy most of that context into
-`ArchitectureClipExecutionRequest.RuntimePayload` (`StageClipExecutionContext`
-for LTX, `SourceOnlyClipExecutionContext` for `none`) and execute immediately.
-That field-for-field repack is current ceremony, not a required boundary.
+Timeline state such as the plan, prepared audio, assembly session, and root
+policy is captured when each architecture session is created. LTX composes the
+per-clip context with its private root and host state in
+`StageClipExecutionContext`; the sourced-only session captures only frame rate
+and audio sources.
 
 ### B6. LTX graph execution
 
@@ -383,7 +387,6 @@ exclusive finalization only for an all-LTX HDR timeline.
 12. Source-only and generated execution follow the same ownership rules.
 
 Known current exceptions or transition seams are the IC-LoRA-shaped local
-behavior interface, LTX normalization inside common ControlNet capture, and
-the redundant runtime-request repack. The frontend ID maps are behavior
-dispatch only, not a second catalog authority. Do not copy the remaining seams
-into a new architecture.
+behavior interface and LTX normalization inside common ControlNet capture.
+The frontend ID maps are behavior dispatch only, not a second catalog
+authority. Do not copy the remaining seams into a new architecture.

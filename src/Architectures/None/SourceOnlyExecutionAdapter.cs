@@ -27,7 +27,10 @@ internal sealed class SourceOnlyGenerationSessionFactory(
     }
 
     public IVideoGenerationSession CreateSession(ArchitectureTimelineSessionContext context) =>
-        new SourceOnlyGenerationSession(generator);
+        new SourceOnlyGenerationSession(
+            generator,
+            context.Plan.FramesPerSecond,
+            context.AudioSources);
 
     public void FinalizeTimeline(ArchitectureTimelineFinalizationContext context)
     {

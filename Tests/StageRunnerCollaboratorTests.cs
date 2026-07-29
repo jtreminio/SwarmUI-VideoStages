@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
 using VideoStages.Architectures.Ltx2;
 using VideoStages.Planning;
@@ -78,6 +79,16 @@ public class StageRunnerCollaboratorTests
     {
         Assert.Equal(
             [
+                nameof(ArchitectureClipRuntimeContext.Clip),
+                nameof(ArchitectureClipRuntimeContext.ClipIndex),
+                nameof(ArchitectureClipRuntimeContext.PreviousClip),
+                nameof(ArchitectureClipRuntimeContext.PreviousClipOutput),
+                nameof(ArchitectureClipRuntimeContext.PreviousTimelineClipOutput),
+            ],
+            typeof(ArchitectureClipRuntimeContext).GetProperties()
+                .Select(property => property.Name));
+        Assert.Equal(
+            [
                 typeof(VideoExecutionPlan),
                 typeof(ClipPlan),
                 typeof(WGNodeData),
@@ -86,6 +97,9 @@ public class StageRunnerCollaboratorTests
             Assert.Single(typeof(ClipContext).GetConstructors()).GetParameters()
                 .Select(parameter => parameter.ParameterType));
         Assert.Null(typeof(ClipContext).GetProperty("Clip"));
+        Assert.Single(
+            typeof(StageClipExecutionContext).GetProperties(),
+            property => property.PropertyType == typeof(ArchitectureClipRuntimeContext));
         Assert.DoesNotContain(
             typeof(StageClipExecutionContext).GetProperties(),
             property => property.PropertyType == typeof(ClipSpec));
