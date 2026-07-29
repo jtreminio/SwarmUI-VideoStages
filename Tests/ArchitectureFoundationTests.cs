@@ -89,6 +89,36 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
+    public void Resolver_refuses_the_extensionless_spelling_of_a_forbidden_model()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        // Core resolves both spellings; the blacklist only matches the string it is given.
+        string canonicalName = models.VideoModel.Name;
+        string authoredName = Path.GetFileNameWithoutExtension(canonicalName);
+        ClipSpec clip = GeneratedClip(0, Stage(10, authoredName)) with
+        {
+            AuthoredArchitectureId = "ltx2",
+            AuthoredStages = [new(0, authoredName, "ltx-2.3", Skipped: false)],
+        };
+
+        Assert.True(ArchitecturePlanResolver.Resolve(
+            Spec(clip),
+            VideoArchitectureRegistry.Production,
+            RestrictedSession("unrelated-model")).Clips.ContainsKey(clip.Id));
+
+        ArchitecturePlanningResult restricted = ArchitecturePlanResolver.Resolve(
+            Spec(clip),
+            VideoArchitectureRegistry.Production,
+            RestrictedSession(canonicalName));
+
+        Assert.Contains(
+            restricted.Diagnostics,
+            item => item.Code == "architecture-stage0-model-unresolved");
+        Assert.False(restricted.Clips.ContainsKey(clip.Id));
+    }
+
+    [Fact]
     public void Resolver_validates_profile_ids_for_skipped_raw_stage_positions()
     {
         ClipSpec inactive = GeneratedClip(0) with

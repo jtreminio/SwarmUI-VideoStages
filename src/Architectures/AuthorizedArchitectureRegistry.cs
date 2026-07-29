@@ -18,16 +18,35 @@ internal sealed class AuthorizedArchitectureRegistry(
     public IVideoArchitectureModule GetModule(ArchitectureId architectureId) =>
         registry.GetModule(architectureId);
 
+    /// <summary>
+    /// Authorizes the canonical resolved name, never the authored spelling: core resolves both
+    /// <c>name</c> and <c>name.safetensors</c>, while blacklist/whitelist prefixes match the exact
+    /// string they are given. Refusal is reported as an unresolved model so the caller cannot use
+    /// this boundary to enumerate models it may not have.
+    /// </summary>
     public bool TryResolveModel(string modelName, out ResolvedVideoModel resolved)
     {
         resolved = null;
-        return IsAllowed(modelName) && registry.TryResolveModel(modelName, out resolved);
+        if (!registry.TryResolveModel(modelName, out ResolvedVideoModel match)
+            || !IsAllowed(match.ModelName))
+        {
+            return false;
+        }
+        resolved = match;
+        return true;
     }
 
+    /// <inheritdoc cref="TryResolveModel(string, out ResolvedVideoModel)"/>
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
     {
         resolved = null;
-        return IsAllowed(model?.Name) && registry.TryResolveModel(model, out resolved);
+        if (!registry.TryResolveModel(model, out ResolvedVideoModel match)
+            || !IsAllowed(match.ModelName))
+        {
+            return false;
+        }
+        resolved = match;
+        return true;
     }
 
     private bool IsAllowed(string modelName) =>

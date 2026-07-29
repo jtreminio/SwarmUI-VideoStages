@@ -66,8 +66,11 @@ together.
 `IVideoArchitectureModule.TryResolveModel` to recognize each installed model.
 The registry rejects duplicate architecture/profile IDs, invalid module
 results, ambiguous model matches, and invalid default profiles. API projection
-wraps that registry in `AuthorizedArchitectureRegistry`, which removes models
-the requesting SwarmUI session is not allowed to see.
+and planning wrap that registry in `AuthorizedArchitectureRegistry`, which
+removes models the requesting SwarmUI session is not allowed to see. It
+authorizes the canonical resolved model name rather than the authored spelling,
+because core resolves both `name` and `name.safetensors` while blacklist and
+whitelist prefixes match the exact string they are given.
 
 `Ltx2ArchitectureModule.TryResolveModel` accepts a model only when:
 
