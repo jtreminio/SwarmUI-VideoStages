@@ -269,6 +269,57 @@ public class DecisionOwnerRegressionTests
             WorkflowBridge.ToPath(size.BatchSize)));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Ltx_normalizes_the_capture_and_leaves_a_foreign_root_untouched(bool ltxRunsFirst)
+    {
+        using SwarmUiTestContext _ = new();
+        WorkflowGenerator generator = GeneratorWithVideoControlNet();
+        VideoArchitectureDescriptor foreign = ForeignArchitecture();
+        VideoArchitectureDescriptor ltx = Ltx2ArchitectureModule.Instance.Descriptor;
+        // Host phases run in clip order, so LTX runs first only as a sourced clip: the root belongs
+        // to the foreign generated clip either way.
+        ClipPlan[] clips = ltxRunsFirst
+            ? [SourcedClip(0, ltx), GeneratedClip(1, foreign)]
+            : [GeneratedClip(0, foreign), GeneratedClip(1, ltx)];
+        VideoArchitectureExecutionHost host = new(
+            generator,
+            [new ForeignRootAdapter(generator, foreign.Id), new Ltx2ExecutionAdapter(generator)]);
+
+        host.DispatchHostPhase(
+            ArchitectureHostPhase.CaptureControlNetPreprocessors,
+            Plan(clips));
+
+        Assert.True(
+            ControlNetCoreMediaCapture.TryGetCapturedControlImage(
+                generator,
+                0,
+                out WGNodeData raw));
+        Assert.True(
+            new LtxControlNetMediaNormalizer(generator).TryGetNormalizedControlImage(
+                0,
+                out WGNodeData normalized));
+
+        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        ResizeImageMaskNodeNode hostResize =
+            bridge.Graph.GetNode<ResizeImageMaskNodeNode>("304");
+        ResizeImageMaskNodeNode ltxResize = Assert.Single(
+            bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>(),
+            node => node.Id != hostResize.Id);
+        ControlNetApplyAdvancedNode apply =
+            bridge.Graph.GetNode<ControlNetApplyAdvancedNode>("308");
+
+        // Both adapters read the same immutable capture, whichever ran first.
+        Assert.True(JToken.DeepEquals(raw.Path, new JArray(hostResize.Id, 0)));
+        Assert.Equal(hostResize.Id, ltxResize.Input.Connection?.Node.Id);
+        // LTX still caches its own normalized branch while inactive on the root.
+        Assert.True(JToken.DeepEquals(normalized.Path, new JArray(ltxResize.Id, 0)));
+        // The root it does not own keeps the foreign adapter's branch and no LTX frame wrapper.
+        Assert.Equal("400", apply.Image.Connection?.Node.Id);
+        Assert.Empty(bridge.Graph.NodesOfType<ImageFromBatchNode>());
+    }
+
     // ---- 4f: one clip-audio bed duration rule ----------------------------------------------
 
     [Fact]
@@ -382,36 +433,112 @@ public class DecisionOwnerRegressionTests
     }
 
     private static VideoExecutionPlan PlanWithArchitectures(
-        params VideoArchitectureDescriptor[] architectures)
+        params VideoArchitectureDescriptor[] architectures) =>
+        Plan([.. architectures.Select((architecture, index) =>
+            architecture.Id == NoneArchitecture.Id
+                ? SourcedClip(index, architecture)
+                : GeneratedClip(index, architecture))]);
+
+    private static VideoExecutionPlan Plan(ClipPlan[] clips) => new(
+        512,
+        512,
+        24,
+        new(
+            HostRootKind.TextToVideoRoot,
+            RootUse.Discard,
+            HostCoreDisposition.Handoff,
+            TimelineOutputDisposition.PublishTimelineOutput,
+            NativeAudioDisposition.DiscardWithRoot),
+        clips,
+        [],
+        []);
+
+    private static ClipPlan SourcedClip(
+        int id,
+        VideoArchitectureDescriptor architecture) => new(
+        id,
+        25,
+        ClipInputKind.SourceVideo,
+        IsSourced: true,
+        new("data", $"source-{id}.mp4", 0, 512, 512, 24),
+        Stages: [],
+        Audio: null)
     {
-        ClipPlan[] clips = [.. architectures.Select(
-            (architecture, index) => new ClipPlan(
-                index,
-                25,
-                architecture.Id == NoneArchitecture.Id
-                    ? ClipInputKind.SourceVideo
-                    : ClipInputKind.RootMedia,
-                IsSourced: architecture.Id == NoneArchitecture.Id,
-                SourceVideo: architecture.Id == NoneArchitecture.Id
-                    ? new("data", $"source-{index}.mp4", 0, 512, 512, 24)
-                    : null,
-                Stages: [],
-                Audio: null)
-            {
-                Architecture = architecture,
-            })];
+        Architecture = architecture,
+    };
+
+    /// <summary>Root media plus a stage: the shape <see cref="ArchitectureRootOwnerResolver"/>
+    /// accepts as a host-root owner.</summary>
+    private static ClipPlan GeneratedClip(
+        int id,
+        VideoArchitectureDescriptor architecture) => new(
+        id,
+        25,
+        ClipInputKind.RootMedia,
+        IsSourced: false,
+        SourceVideo: null,
+        [
+            new StagePlan(
+                id,
+                0,
+                0,
+                StageInputKind.RootMedia,
+                IsPassthrough: false,
+                ArchitecturePayload: null,
+                new(
+                    IsTimelineTerminal: true,
+                    IntermediateOutputPolicy.NotEligible,
+                    PreserveConfiguredAudioTrackSave: false))
+        ],
+        Audio: null)
+    {
+        Architecture = architecture,
+    };
+
+    private static VideoArchitectureDescriptor ForeignArchitecture()
+    {
+        ArchitectureId id = new("unit-test-foreign");
+        ModelProfileId profileId = new("unit-test-foreign-profile");
         return new(
-            512,
-            512,
-            24,
+            id,
+            "Unit Test Foreign",
+            profileId,
+            [ArchitectureEntryMode.ImageToVideo],
+            [AudioSourceKind.Native],
+            [new(profileId, profileId.Value, ModelProfileCapability.None, [])],
             new(
-                HostRootKind.TextToVideoRoot,
-                RootUse.Discard,
-                HostCoreDisposition.Handoff,
-                TimelineOutputDisposition.PublishTimelineOutput,
-                NativeAudioDisposition.DiscardWithRoot),
-            clips,
-            [],
-            []);
+                ArchitectureCapability.GeneratedEntry,
+                ClipCapability.None,
+                StageCapability.ImageInput,
+                OutputCapability.Video),
+            new ArchitectureBoundaryPolicy(
+                new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>()));
+    }
+
+    /// <summary>
+    /// Stands in for a future architecture that owns the host root and normalizes the shared
+    /// ControlNet apply input its own way.
+    /// </summary>
+    private sealed class ForeignRootAdapter(
+        WorkflowGenerator generator,
+        ArchitectureId architectureId) :
+        IArchitectureGenerationSessionFactoryProvider,
+        IArchitectureHostPhaseParticipant
+    {
+        public ArchitectureId ArchitectureId => architectureId;
+
+        public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
+        {
+            using WorkflowBridge bridge = BridgeSync.For(generator);
+            ControlNetApplyAdvancedNode apply =
+                bridge.Graph.GetNode<ControlNetApplyAdvancedNode>("308");
+            UnknownNode branch = bridge.AddStub("UnitTest_ForeignControlBranch", "400")
+                .WithOutputs(WGNodeData.DT_IMAGE);
+            branch.GetInput("image").ConnectToUntyped(apply.Image.Connection);
+            apply.Image.ConnectToUntyped(branch.GetOutput(0));
+        }
+
+        public IArchitectureGenerationSessionFactory CreateFactory() =>
+            throw new NotSupportedException();
     }
 }

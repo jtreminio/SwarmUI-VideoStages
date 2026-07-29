@@ -26,7 +26,8 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         ArgumentNullException.ThrowIfNull(context);
         if (context.Phase == ArchitectureHostPhase.CaptureControlNetPreprocessors)
         {
-            new LtxControlNetMediaNormalizer(generator).Normalize();
+            new LtxControlNetMediaNormalizer(generator).Normalize(
+                ownsHostRoot: context.RootOwnerArchitectureId == ArchitectureId);
             return;
         }
         Pipeline pipeline = BuildPipeline();

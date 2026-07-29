@@ -8,13 +8,16 @@ namespace VideoStages.Architectures.Ltx2;
 
 /// <summary>
 /// Derives the LTX-specific ControlNet media branch from the architecture-neutral host capture.
-/// The full normalized batch is cached before the core apply input is wrapped to one frame.
+/// The branch is always derived from the immutable capture, never from whatever the shared apply
+/// input currently points at, so it does not depend on which architectures ran before LTX. Wrapping
+/// the host apply input down to one frame is LTX root policy, so it happens only when LTX owns the
+/// host root.
 /// </summary>
 internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
 {
     private readonly LtxRuntimeKeyScope _keys = new();
 
-    internal void Normalize()
+    internal void Normalize(bool ownsHostRoot)
     {
         if (!g.NodeHelpers.TryAdd(_keys.ControlNetNormalized, "normalized"))
         {
@@ -23,17 +26,24 @@ internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
         using WorkflowBridge bridge = BridgeSync.For(g);
         for (int index = 0; index <= 2; index++)
         {
-            if (!TryGetRawApplyImage(bridge, index, out JArray controlImage))
+            if (!ControlNetCoreMediaCapture.TryGetCapturedControlImage(
+                    g,
+                    index,
+                    out WGNodeData captured)
+                || captured.Path is not JArray { Count: 2 } capturedPath)
             {
                 Clear(index);
                 continue;
             }
-            JArray normalized = EnsureResizeMultiple(bridge, controlImage);
+            JArray normalized = EnsureResizeMultiple(bridge, capturedPath);
             VideoGraphHelpers.CachePath(
                 g,
                 ImageKey(index),
                 normalized);
-            EnsureSingleFrameWrap(bridge, controlImage, normalized);
+            if (ownsHostRoot && TryGetApplyImageInput(bridge, index, out JArray applyImage))
+            {
+                EnsureSingleFrameWrap(bridge, applyImage, normalized);
+            }
         }
     }
 
@@ -105,14 +115,15 @@ internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
         return new JArray(imagePath[0], imagePath[1]);
     }
 
-    private bool TryGetRawApplyImage(
+    /// <summary>The live apply input, which is rewired in place; the caller must already have
+    /// established that LTX owns the host root.</summary>
+    private bool TryGetApplyImageInput(
         WorkflowBridge bridge,
         int index,
         out JArray controlImage)
     {
         controlImage = null;
-        return ControlNetCoreMediaCapture.TryGetCapturedControlImage(g, index, out _)
-            && g.NodeHelpers.TryGetValue(
+        return g.NodeHelpers.TryGetValue(
                 ControlNetCaptureKeys.Apply(index),
                 out string applyId)
             && bridge.Graph.GetNode(applyId) is not null

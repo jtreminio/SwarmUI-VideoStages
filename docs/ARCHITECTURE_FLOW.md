@@ -285,9 +285,12 @@ transform host-root media.
 For the ControlNet preprocessor phase,
 `VideoArchitectureExecutionHost` invokes common
 `ControlNetCoreMediaCapture` once to capture raw host media. It then fans out
-to active architecture participants. `Ltx2ExecutionAdapter` applies LTX-owned
-multiple-of-64 and one-frame normalization through
-`LtxControlNetMediaNormalizer`; the source-only path retains the raw capture.
+to active architecture participants. `Ltx2ExecutionAdapter` derives its private
+multiple-of-64 branch from that capture through `LtxControlNetMediaNormalizer`,
+never from the current shared apply input, so the result does not depend on which
+architectures ran before it. Wrapping the shared apply input down to one frame is
+LTX root policy, so it happens only when LTX owns the host root; the source-only
+path retains the raw capture.
 The remaining LTX host phases handle base/refiner references, pre-core handoff,
 core-output drop, and root audio-mask sizing.
 
