@@ -25,7 +25,7 @@ generating architecture.
 | Catalog transport | Common backend + SwarmUI authorization | `VideoStagesApi.VideoStagesGetArchitectureCatalog`, `AuthorizedArchitectureRegistry`, `ArchitectureCatalogSerializer.Serialize` |
 | Catalog loading and feature policy | Common frontend | `getArchitectureCatalogSnapshot`, `loadAuthoritativeArchitectureCatalog`, `refreshAuthoritativeArchitectureCatalog`, `parseVideoArchitectureCatalog`, `createCapabilityViewResolver` |
 | Architecture-specific authoring behavior | Frontend local behavior maps | `architectureBehavior`, `ltx2Behavior`, `authoringPanels.ts`, architecture ID identity modules |
-| Curated IC-LoRA download route | LTX backend adapter + SwarmUI core | `Ltx2ApiRoutes`, `IcLoraModelDownloadService`, `ModelsAPI.DoModelDownloadWS` |
+| Curated IC-LoRA download route | LTX backend adapter + SwarmUI core | `Ltx2ApiRoutes`, `ModelsAPI.DoModelDownloadWS` |
 | Document parsing and product planning | Common backend | `VideoStagesSpecParser`, `ArchitecturePlanResolver`, `VideoExecutionPlanCompiler` |
 | Model-family planning and execution | Selected backend module | `IVideoArchitectureModule.ValidateAndCompileClip`, `IVideoGenerationSession` |
 | Runtime dispatch and timeline assembly | Common backend | `StageSequenceRunner`, `ArchitectureRuntimeDispatcher`, `TimelineAssemblySession` |
@@ -37,13 +37,19 @@ The boundary in one sentence:
 > model-family semantics; SwarmUI owns host policy and lifecycle.
 
 For curated IC-LoRA downloads, `Ltx2ApiRoutes` owns the preset ID-to-URL/name
-mapping and route permission, and refuses unknown preset IDs locally.
-`IcLoraModelDownloadService` serializes transfers targeting the same file,
-delegates transfer, model-refusal policy, cancellation, refresh, and resave to
-SwarmUI's `ModelsAPI.DoModelDownloadWS`, then removes the deterministic
-`.download.tmp` file in a terminal cleanup path. Extension tests cover local
-refusal, cancellation propagation, failure cleanup, and successful final-file
-preservation without duplicating core's transfer implementation.
+mapping and route permission, refuses unknown preset IDs and already-in-flight
+preset IDs locally, and delegates everything else — transfer, model-refusal
+policy, cancellation, temporary-file lifecycle, refresh, and resave — to
+SwarmUI's `ModelsAPI.DoModelDownloadWS`. Extension tests cover both local
+refusals, the delegated URL/model name, and core's terminal error shape; they do
+not duplicate core's transfer implementation.
+
+Open host dependency: core keys an unlocked `<name>.download.tmp` by model name
+and leaves it behind after a failed or canceled transfer, until the next attempt
+for that name deletes it. The route's in-flight refusal covers only its own
+traffic; a curated download and a model-browser download of the same name can
+still collide, and the extension does not clean core's temporary file. Closing
+that belongs to core or to a shared safe-download service, not to this route.
 
 ## Flow A: model selection to frontend features
 

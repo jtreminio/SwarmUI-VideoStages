@@ -27,157 +27,90 @@ public class Ltx2ApiRoutesTests
     }
 
     [Fact]
-    public async Task Core_refusal_cleans_a_stale_partial_file()
+    public async Task Known_preset_hands_core_the_curated_url_and_model_name()
     {
-        using TemporaryDownloadDirectory directory = new();
         using RecordingWebSocket socket = new();
-        string modelName = IcLoraWeights.ModelNameFor("deblur");
-        string partialPath = directory.PartialPath(modelName);
-        directory.WritePartial(modelName);
-        IcLoraModelDownloadService service = new(
-            async (_, actualSocket, _, _) =>
-            {
-                await actualSocket.SendJson(
-                    new JObject { ["error"] = "Model not found." },
-                    API.WebsocketTimeout);
-                return null;
-            },
-            () => directory.Root);
-
-        JObject result = await service.Download(
-            null,
-            socket,
-            IcLoraWeights.Urls["deblur"],
-            modelName);
-
-        Assert.Null(result);
-        Assert.False(File.Exists(partialPath));
-        Assert.Equal(
-            "Model not found.",
-            (string)JObject.Parse(Assert.Single(socket.Messages))["error"]);
-    }
-
-    [Fact]
-    public async Task Cancellation_is_propagated_after_partial_cleanup()
-    {
-        using TemporaryDownloadDirectory directory = new();
-        using RecordingWebSocket socket = new();
-        string modelName = IcLoraWeights.ModelNameFor("deblur");
-        string partialPath = directory.PartialPath(modelName);
-        IcLoraModelDownloadService service = new(
-            (_, actualSocket, _, _) =>
-            {
-                Assert.Same(socket, actualSocket);
-                directory.WritePartial(modelName);
-                return Task.FromException<JObject>(
-                    new TaskCanceledException("download canceled"));
-            },
-            () => directory.Root);
-
-        TaskCanceledException error = await Assert.ThrowsAsync<TaskCanceledException>(
-            () => service.Download(
-                null,
-                socket,
-                IcLoraWeights.Urls["deblur"],
-                modelName));
-
-        Assert.Contains("download canceled", error.Message);
-        Assert.False(File.Exists(partialPath));
-    }
-
-    [Fact]
-    public async Task Transfer_failure_is_propagated_after_partial_cleanup()
-    {
-        using TemporaryDownloadDirectory directory = new();
-        using RecordingWebSocket socket = new();
-        string modelName = IcLoraWeights.ModelNameFor("deblur");
-        string partialPath = directory.PartialPath(modelName);
-        IcLoraModelDownloadService service = new(
-            (_, _, _, _) =>
-            {
-                directory.WritePartial(modelName);
-                return Task.FromException<JObject>(
-                    new InvalidOperationException("transfer failed"));
-            },
-            () => directory.Root);
-
-        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => service.Download(
-                null,
-                socket,
-                IcLoraWeights.Urls["deblur"],
-                modelName));
-
-        Assert.Equal("transfer failed", error.Message);
-        Assert.False(File.Exists(partialPath));
-    }
-
-    [Fact]
-    public async Task Successful_route_download_preserves_the_final_file()
-    {
-        using TemporaryDownloadDirectory directory = new();
-        using RecordingWebSocket socket = new();
-        string modelName = IcLoraWeights.ModelNameFor("deblur");
-        string partialPath = directory.PartialPath(modelName);
-        string finalPath = directory.FinalPath(modelName);
         string receivedUrl = null;
         string receivedModelName = null;
-        IcLoraModelDownloadService service = new(
-            (_, _, url, actualModelName) =>
-            {
-                receivedUrl = url;
-                receivedModelName = actualModelName;
-                directory.WritePartial(actualModelName);
-                File.Move(
-                    directory.PartialPath(actualModelName),
-                    directory.FinalPath(actualModelName));
-                return Task.FromResult(new JObject { ["success"] = true });
-            },
-            () => directory.Root);
 
         JObject result = await Ltx2ApiRoutes.DownloadIcLora(
             null,
             socket,
             " deblur ",
-            service);
+            (_, actualSocket, url, modelName) =>
+            {
+                Assert.Same(socket, actualSocket);
+                receivedUrl = url;
+                receivedModelName = modelName;
+                return Task.FromResult(new JObject { ["success"] = true });
+            });
 
         Assert.True((bool)result["success"]);
         Assert.Equal(IcLoraWeights.Urls["deblur"], receivedUrl);
-        Assert.Equal(modelName, receivedModelName);
-        Assert.False(File.Exists(partialPath));
-        Assert.True(File.Exists(finalPath));
-        Assert.Equal("partial model data", File.ReadAllText(finalPath));
+        Assert.Equal(IcLoraWeights.ModelNameFor("deblur"), receivedModelName);
+        Assert.Empty(socket.Messages);
     }
 
-    private sealed class TemporaryDownloadDirectory : IDisposable
+    [Fact]
+    public async Task Second_request_for_an_in_flight_preset_is_refused_locally()
     {
-        internal string Root { get; } = Path.Combine(
-            Path.GetTempPath(),
-            $"video-stages-download-test-{Guid.NewGuid():N}");
+        using RecordingWebSocket firstSocket = new();
+        using RecordingWebSocket secondSocket = new();
+        TaskCompletionSource<JObject> firstTransfer = new();
+        Task<JObject> first = Ltx2ApiRoutes.DownloadIcLora(
+            null,
+            firstSocket,
+            "deblur",
+            (_, _, _, _) => firstTransfer.Task);
 
-        internal string PartialPath(string modelName) =>
-            Path.Combine(Root, $"{CleanName(modelName)}.download.tmp");
+        // Core would give both transfers the same unlocked temporary file.
+        JObject second = await Ltx2ApiRoutes.DownloadIcLora(
+            null,
+            secondSocket,
+            "deblur",
+            (_, _, _, _) => throw new InvalidOperationException(
+                "the second request must not reach core"));
 
-        internal string FinalPath(string modelName) =>
-            Path.Combine(Root, $"{CleanName(modelName)}.safetensors");
+        Assert.Null(second);
+        Assert.Contains(
+            "already in progress",
+            (string)JObject.Parse(Assert.Single(secondSocket.Messages))["error"]);
+        firstTransfer.SetResult(new JObject { ["success"] = true });
+        Assert.True((bool)(await first)["success"]);
 
-        internal void WritePartial(string modelName)
-        {
-            string path = PartialPath(modelName);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, "partial model data");
-        }
+        // The name is released once the first transfer ends.
+        JObject third = await Ltx2ApiRoutes.DownloadIcLora(
+            null,
+            secondSocket,
+            "deblur",
+            (_, _, _, _) => Task.FromResult(new JObject { ["success"] = true }));
 
-        public void Dispose()
-        {
-            if (Directory.Exists(Root))
+        Assert.True((bool)third["success"]);
+    }
+
+    [Fact]
+    public async Task Core_refusal_reaches_the_caller_as_core_reported_it()
+    {
+        using RecordingWebSocket socket = new();
+
+        // Core's terminal shape for every refusal, failure and cancellation: an error frame on the
+        // socket and a null return. The route adds nothing to it.
+        JObject result = await Ltx2ApiRoutes.DownloadIcLora(
+            null,
+            socket,
+            "deblur",
+            async (_, actualSocket, _, _) =>
             {
-                Directory.Delete(Root, recursive: true);
-            }
-        }
+                await actualSocket.SendJson(
+                    new JObject { ["error"] = "Download was cancelled." },
+                    API.WebsocketTimeout);
+                return null;
+            });
 
-        private static string CleanName(string modelName) =>
-            Utilities.StrictFilenameClean(modelName.Replace(' ', '_'));
+        Assert.Null(result);
+        Assert.Equal(
+            "Download was cancelled.",
+            (string)JObject.Parse(Assert.Single(socket.Messages))["error"]);
     }
 
     private sealed class RecordingWebSocket : WebSocket
