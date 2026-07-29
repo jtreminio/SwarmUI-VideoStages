@@ -67,9 +67,10 @@ export interface ClipLora {
 }
 
 /**
- * Opaque JSON owned by the clip's architecture adapter. Common authoring,
- * normalization, and persistence code may carry this envelope but must not
- * interpret or project its nested fields.
+ * Opaque JSON owned by the clip's architecture. Common authoring, normalization,
+ * and persistence code carry this envelope but must not interpret or project its
+ * nested fields. Nothing parses it today: it exists so a document written by a
+ * future architecture survives a round trip through this one.
  */
 export type ArchitecturePayload = Record<string, unknown>;
 

@@ -199,10 +199,25 @@ generating architecture supplies another concrete use case.
 Each persisted clip has an `architecturePayload` envelope containing either
 `null` or an opaque JSON object. Common normalization and persistence preserve
 that object structurally without projecting, defaulting, or interpreting its
-nested fields. The architecture adapter named by the clip's `architecture` ID
-owns any typed parsing of the envelope. Unknown architecture IDs therefore
-retain future architecture data through decode, normalization, save, and
-reload even when common code does not understand that data.
+nested fields. Unknown architecture IDs therefore retain future architecture
+data through decode, normalization, save, and reload even when common code does
+not understand that data.
+
+In Stage 0 the envelope is preservation-only: it is frontend state, no adapter
+parses it, and the backend never reads it (`documentCodec.ts` emits it,
+`AuthoringDocumentContractTests` classifies it as backend-unread). Typed parsing
+would belong to the adapter named by the clip's `architecture` ID, and giving it
+one means surfacing raw JSON on `ClipSpec` first. Do not confuse this envelope
+with the backend's `IArchitectureClipPayload`, which is a runtime compilation
+produced from the already-parsed common `ClipSpec` and shares only the name.
+
+Because the envelope's owner is the clip's architecture, converting a clip to a
+different architecture clears it (`planArchitectureConversion`), and the
+whole-document save path refuses a state that changes owner while keeping one.
+
+`documentCodec` writes the key for every clip, including `null`, so resaving an
+older document adds it without a schema-version change: an added optional key
+that decodes to the same document is deliberately not a version bump.
 
 ### Flow A failures
 
