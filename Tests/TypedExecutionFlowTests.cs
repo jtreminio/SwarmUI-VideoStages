@@ -17,7 +17,7 @@ namespace VideoStages.Tests;
 public partial class StageFlowTests
 {
     [Fact]
-    public void Active_Wan_configuration_fails_before_execution()
+    public void Active_unregistered_SVD_configuration_fails_before_execution()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();

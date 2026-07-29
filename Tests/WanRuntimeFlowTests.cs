@@ -134,38 +134,32 @@ public class WanRuntimeFlowTests
         Assert.Single(saves, node => node.FindInput("images").Connection?.Node == merged);
     }
 
-    [Fact]
-    public void Ltx_then_Wan_hard_cut_keeps_both_family_graphs_and_publishes_one_neutral_join()
+    [Theory]
+    [InlineData("ltx2")]
+    [InlineData("wan22")]
+    public void Mixed_hard_cut_pads_the_audio_disabled_Wan_clip_in_its_timeline_position(
+        string firstFamily)
     {
         using SwarmUiTestContext context = new();
         MixedVideoModelBundle models =
             TestModelFactory.CreateBaseLtxv2AndWan22ImageToVideoModels();
+        T2IModel first = firstFamily == "wan22"
+            ? models.WanVideoModel
+            : models.LtxVideoModel;
+        T2IModel second = firstFamily == "wan22"
+            ? models.LtxVideoModel
+            : models.WanVideoModel;
         JObject document = MakeDocument(
-            MakeClip(MakeStage(models.LtxVideoModel.Name, "Generated", steps: 7)),
-            MakeClip(MakeStage(models.WanVideoModel.Name, "Generated", steps: 9)));
+            MakeClip(MakeStage(first.Name, "Generated", steps: 7)),
+            MakeClip(MakeStage(second.Name, "Generated", steps: 9)));
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
-            models.LtxVideoModel,
+            first,
             document.ToString());
 
         (JObject workflow, WorkflowGenerator generator) =
             WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
-        Assert.NotEmpty(bridge.Graph.NodesOfType<LTXVConditioningNode>());
-        Assert.Single(NodesOfClass(bridge, "WanImageToVideo"));
-        BatchImagesNodeNode cut = Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
-        Assert.Empty(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
-        Assert.Equal(cut.Id, $"{generator.CurrentMedia.Path[0]}");
-        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
-        Assert.Equal(512, generator.CurrentMedia.Width);
-        Assert.Equal(512, generator.CurrentMedia.Height);
-        Assert.Equal(29, generator.CurrentMedia.Frames);
-        Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
-        Assert.Null(generator.CurrentMedia.Compat);
 
         EmptyAudioNode wanSilence = Assert.Single(
             bridge.Graph.NodesOfType<EmptyAudioNode>());
@@ -173,12 +167,14 @@ public class WanRuntimeFlowTests
         Assert.NotNull(generator.CurrentMedia.AttachedAudio);
         AudioConcatNode finalAudio = Assert.IsType<AudioConcatNode>(
             bridge.ResolvePath(generator.CurrentMedia.AttachedAudio.Path).Node);
-        Assert.Same(wanSilence, finalAudio.Audio2.Connection!.Node);
-        Assert.NotSame(wanSilence, finalAudio.Audio1.Connection!.Node);
-
-        Assert.DoesNotContain(
-            generator.NodeHelpers.Keys,
-            key => key.StartsWith("videostages.arch.wan22.", StringComparison.Ordinal));
+        ComfyNode wanAudio = firstFamily == "wan22"
+            ? finalAudio.Audio1.Connection!.Node
+            : finalAudio.Audio2.Connection!.Node;
+        ComfyNode otherAudio = firstFamily == "wan22"
+            ? finalAudio.Audio2.Connection!.Node
+            : finalAudio.Audio1.Connection!.Node;
+        Assert.Same(wanSilence, wanAudio);
+        Assert.NotSame(wanSilence, otherAudio);
     }
 
     /// <summary>

@@ -9,49 +9,29 @@ using Xunit;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// The Wan module's own contract: exact recognition, a coherent capability profile, and opaque clip
-/// compilation. Execution is covered separately; nothing here builds a graph.
+/// The Wan module's own capability and payload contract. Shared recognition and descriptor
+/// invariants live in <see cref="RealArchitectureContractTests"/>.
 /// </summary>
 [Collection("VideoStagesTests")]
 public class WanArchitectureTests
 {
     [Fact]
-    public void Recognizes_only_the_wan_2_2_image_to_video_model_class()
+    public void Does_not_claim_base_or_cross_family_models()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle wan = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         T2IModel ltxVideo = TestModelFactory.CreateBaseAndLtxv2VideoModels().VideoModel;
 
-        Assert.True(WanArchitectureModule.Instance.TryResolveModel(
-            wan.VideoModel,
-            out ResolvedVideoModel resolved));
-        Assert.Equal(WanArchitectureModule.ArchitectureId, resolved.ArchitectureId);
-        Assert.Equal(WanArchitectureModule.ImageToVideoProfileId, resolved.ModelProfileId);
-        Assert.Equal(wan.VideoModel.Name, resolved.ModelName);
-
         Assert.False(WanArchitectureModule.Instance.TryResolveModel(wan.BaseModel, out _));
         Assert.False(WanArchitectureModule.Instance.TryResolveModel(ltxVideo, out _));
         Assert.False(Ltx2ArchitectureModule.Instance.TryResolveModel(wan.VideoModel, out _));
-
-        // Sharing Wan's compat class is not enough; another class in it is another architecture.
-        wan.VideoModel.ModelClass = wan.VideoModel.ModelClass with
-        {
-            ID = "wan-2_1-image2video-14b",
-        };
-        Assert.False(WanArchitectureModule.Instance.TryResolveModel(wan.VideoModel, out _));
     }
 
     [Fact]
-    public void Descriptor_is_a_valid_registration_that_publishes_cut_only_joins()
+    public void Boundary_policy_is_cut_only_on_the_Wan_frame_grid()
     {
-        // Construction is the registration contract: profiles, default profile, and a rule for
-        // every boundary mode are all validated here.
-        IVideoArchitectureRegistry registry = new VideoArchitectureRegistry(
-            [NoneArchitectureModule.Instance, WanArchitectureModule.Instance]);
+        VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
 
-        VideoArchitectureDescriptor descriptor = Assert.Single(
-            registry.Catalog,
-            candidate => candidate.Id == WanArchitectureModule.ArchitectureId);
         Assert.Equal(
             RuleSupport.Supported,
             descriptor.BoundaryRules[BoundaryExecutionMode.Cut].Support);

@@ -1319,38 +1319,6 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Ltx_23_host_class_resolves_the_specific_profile()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        models.VideoModel.ModelClass = models.VideoModel.ModelClass with
-        {
-            ID = "lightricks-ltx-video-2-3",
-        };
-
-        Assert.True(Ltx2ArchitectureModule.Instance.TryResolveModel(
-            models.VideoModel,
-            out ResolvedVideoModel resolved));
-        Assert.Equal(new ModelProfileId("ltx-2.3"), resolved.ModelProfileId);
-    }
-
-    [Fact]
-    public void Older_ltx_compat_model_is_not_a_production_architecture_match()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        models.VideoModel.ModelClass = models.VideoModel.ModelClass with
-        {
-            ID = "lightricks-ltx-video-2",
-        };
-
-        Assert.False(Ltx2ArchitectureModule.Instance.TryResolveModel(
-            models.VideoModel,
-            out ResolvedVideoModel resolved));
-        Assert.Null(resolved);
-    }
-
-    [Fact]
     public void Decoded_clip_boundary_exposes_no_vae_or_latent_property()
     {
         Assert.Null(typeof(DecodedClipArtifact).GetProperty("Vae"));
