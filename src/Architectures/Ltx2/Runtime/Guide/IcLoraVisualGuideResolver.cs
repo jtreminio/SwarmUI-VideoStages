@@ -16,7 +16,8 @@ internal sealed record ResolvedIcLoraDrive(
 /// <summary>Resolves planned drive identities into graph media and materializes embedded uploads.</summary>
 internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
 {
-    private const string UploadedDriveImagesKeyPrefix = "videostages.iclora.upload.";
+    private readonly LtxRuntimeKeyScope _keys =
+        new(Ltx2ArchitectureModule.ArchitectureId);
 
     internal bool TryResolve(
         WorkflowBridge bridge,
@@ -105,7 +106,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         IcLoraDriveMediaKind mediaKind,
         string data)
     {
-        string key = $"{UploadedDriveImagesKeyPrefix}{clipId}.{entryIndex}";
+        string key = _keys.IcLoraUploadedDriveImages(clipId, entryIndex);
         if (VideoGraphHelpers.TryGetCachedPath(g, bridge, key, out JArray cached))
         {
             return cached;

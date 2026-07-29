@@ -21,6 +21,32 @@ internal sealed class LtxRuntimeKeyScope(ArchitectureId architectureId)
 
     internal string PreCoreNodeIds => $"{Prefix}.pre-core-node-ids";
 
+    internal string ControlNetNormalized => $"{Prefix}.controlnet.normalized";
+
+    internal string ControlNetFullImage(int index) =>
+        $"{Prefix}.controlnet.fullimage.{index}";
+
+    internal string ControlNetFrameCount(int index) =>
+        $"{Prefix}.controlnet.framecount.{index}";
+
+    internal string IcLoraAudioReference(
+        int clipId,
+        int entryIndex,
+        int? rawStageIndex = null)
+    {
+        string key =
+            $"{Prefix}.iclora.audio-reference.{clipId}.{entryIndex}";
+        return rawStageIndex is int stageIndex
+            ? $"{key}.{stageIndex}"
+            : key;
+    }
+
+    internal string IcLoraControlSignal(int clipId, int entryIndex) =>
+        $"{Prefix}.iclora.control.{clipId}.{entryIndex}";
+
+    internal string IcLoraUploadedDriveImages(int clipId, int entryIndex) =>
+        $"{Prefix}.iclora.upload.{clipId}.{entryIndex}";
+
     private static string BuildPrefix(ArchitectureId architectureId)
     {
         if (string.IsNullOrWhiteSpace(architectureId.Value))

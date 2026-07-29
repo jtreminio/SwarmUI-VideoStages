@@ -12,13 +12,12 @@ namespace VideoStages.Architectures.Ltx2;
 /// </summary>
 internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
 {
-    private const string NormalizedMarkerKey = "videostages.ltx2.controlnet.normalized";
-    private const string ImagePrefix = "videostages.ltx2.controlnet.fullimage.";
-    private const string FrameCountPrefix = "videostages.ltx2.controlnet.framecount.";
+    private readonly LtxRuntimeKeyScope _keys =
+        new(Ltx2ArchitectureModule.ArchitectureId);
 
     internal void Normalize()
     {
-        if (!g.NodeHelpers.TryAdd(NormalizedMarkerKey, "normalized"))
+        if (!g.NodeHelpers.TryAdd(_keys.ControlNetNormalized, "normalized"))
         {
             return;
         }
@@ -131,9 +130,9 @@ internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
         VideoGraphHelpers.RemoveCached(g, FrameCountKey(index));
     }
 
-    private static string ImageKey(int index) => $"{ImagePrefix}{index}";
+    private string ImageKey(int index) => _keys.ControlNetFullImage(index);
 
-    private static string FrameCountKey(int index) => $"{FrameCountPrefix}{index}";
+    private string FrameCountKey(int index) => _keys.ControlNetFrameCount(index);
 
     private static JArray EnsureResizeMultiple(
         WorkflowBridge bridge,

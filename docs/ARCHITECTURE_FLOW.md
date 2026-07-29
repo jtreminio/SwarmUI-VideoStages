@@ -292,10 +292,12 @@ multiple-of-64 and one-frame normalization through
 The remaining LTX host phases handle base/refiner references, pre-core handoff,
 core-output drop, and root audio-mask sizing.
 
-`StageRefStore` keys are architecture-scoped by `LtxRuntimeKeyScope`:
-`videostages.arch.{id}.stage-ref.{kind}.{media|vae|audio}`. The same store owns
-the pre-core snapshot key used by `RootVideoStageHandoff`, so the handoff
-cannot be constructed with a mismatched architecture scope.
+All LTX-owned `NodeHelpers` keys are architecture-scoped by
+`LtxRuntimeKeyScope` under `videostages.arch.{id}.*`. The scope formats stage
+references, the pre-core snapshot, normalized ControlNet media, and IC-LoRA
+audio-reference, control-signal, and uploaded-drive caches. `StageRefStore` owns
+the scoped pre-core key used by `RootVideoStageHandoff`, so the handoff cannot
+be constructed with a mismatched architecture scope.
 
 ### B5. Dispatch a clip by architecture
 

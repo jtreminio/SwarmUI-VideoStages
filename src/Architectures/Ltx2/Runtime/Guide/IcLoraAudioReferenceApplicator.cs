@@ -18,7 +18,8 @@ namespace VideoStages.Architectures.Ltx2;
 /// </summary>
 internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
 {
-    private const string SampleKeyPrefix = "videostages.iclora.audio-reference.";
+    private readonly LtxRuntimeKeyScope _keys =
+        new(Ltx2ArchitectureModule.ArchitectureId);
 
     internal void ApplyAudioReferenceTokens(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -65,9 +66,12 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         WGNodeData incomingMedia,
         int rawStageIndex)
     {
-        string sampleKey = entry.MediaInput.Source == IcLoraMediaSourceKind.Incoming
-            ? $"{SampleKeyPrefix}{clip.ClipId}.{entry.EntryIndex}.{rawStageIndex}"
-            : $"{SampleKeyPrefix}{clip.ClipId}.{entry.EntryIndex}";
+        string sampleKey = _keys.IcLoraAudioReference(
+            clip.ClipId,
+            entry.EntryIndex,
+            entry.MediaInput.Source == IcLoraMediaSourceKind.Incoming
+                ? rawStageIndex
+                : null);
         if (VideoGraphHelpers.TryGetCachedPath(g, null, sampleKey, out JArray cached))
         {
             return cached;

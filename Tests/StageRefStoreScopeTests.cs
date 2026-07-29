@@ -26,6 +26,33 @@ public sealed class StageRefStoreScopeTests
     }
 
     [Fact]
+    public void Every_owned_runtime_key_family_uses_the_selected_architecture_prefix()
+    {
+        LtxRuntimeKeyScope keys = new(Ltx);
+        List<string> runtimeKeys =
+        [
+            keys.PreCoreNodeIds,
+            keys.ControlNetNormalized,
+            keys.ControlNetFullImage(2),
+            keys.ControlNetFrameCount(2),
+            keys.IcLoraAudioReference(3, 4),
+            keys.IcLoraAudioReference(3, 4, 5),
+            keys.IcLoraControlSignal(3, 4),
+            keys.IcLoraUploadedDriveImages(3, 4),
+        ];
+        runtimeKeys.AddRange(
+            from StageRefStore.StageKind kind in Enum.GetValues<StageRefStore.StageKind>()
+            from LtxRuntimeKeyScope.StageRefComponent component
+                in Enum.GetValues<LtxRuntimeKeyScope.StageRefComponent>()
+            select keys.StageRef(kind, component));
+
+        Assert.All(
+            runtimeKeys,
+            key => Assert.StartsWith("videostages.arch.ltx2.", key));
+        Assert.Equal(runtimeKeys.Count, runtimeKeys.Distinct().Count());
+    }
+
+    [Fact]
     public void Architecture_scopes_capture_same_kind_independently()
     {
         WorkflowGenerator generator = Generator();
