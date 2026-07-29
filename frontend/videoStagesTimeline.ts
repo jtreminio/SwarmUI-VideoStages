@@ -361,6 +361,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 }
                 if (catalog) {
                     getTimelineStore().invalidate();
+                    historyNeedsRebase = true;
                     rebaseHistoryIfReady();
                 }
                 renderAll();

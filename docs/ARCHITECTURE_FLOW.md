@@ -124,12 +124,14 @@ newer result or clear its promise.
 
 Every response is validated all-or-nothing by
 `parseVideoArchitectureCatalog`. Initial failure or malformed data enters
-`unavailable`; the status view offers Retry and no authoring controls. A
-successful initial request or retry invalidates the parsed timeline-store
-cache, rebases history, and renders normally. During refresh the last-known
-catalog remains active. Refresh failure enters `stale`, retains that exact DTO
-and its rendered capability-backed UI, and shows a nonblocking warning with
-Retry.
+`unavailable`; the status view offers Retry and no authoring controls. Every
+successful catalog adoption invalidates the parsed timeline-store cache and
+rebases history against the newly normalized document before rendering. The
+history implementation retains its stacks when normalization is unchanged and
+clears them when catalog interpretation changed. During refresh the
+last-known catalog remains active. Refresh failure enters `stale`, retains
+that exact DTO and its rendered capability-backed UI, and shows a nonblocking
+warning with Retry.
 
 The host param-refresh hook uses forced refresh, so newly installed models can
 appear without a page reload and without a temporary loss of authority.

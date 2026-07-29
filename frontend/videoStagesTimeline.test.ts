@@ -756,6 +756,69 @@ describe("videoStagesTimeline", () => {
         expect(regionCount()).toBe(2);
     });
 
+    it("rebases history when catalog refresh changes canonical model identity", async () => {
+        const installedModel = "newly-installed-video.safetensors";
+        invalidateArchitectureCatalog();
+        const requestJson = jest
+            .fn<VideoStagesHostBridge["requestJson"]>()
+            .mockResolvedValueOnce(authoritativeDto([]))
+            .mockResolvedValueOnce(authoritativeDto([installedModel]));
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson,
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        mountState(
+            JSON.stringify({
+                schemaVersion: 5,
+                clips: [
+                    {
+                        duration: 2,
+                        stages: [{ model: installedModel }],
+                        refs: [],
+                    },
+                ],
+            }),
+        );
+
+        timeline = videoStagesTimeline();
+        timeline.init();
+        expect(getClips()[0]).toMatchObject({
+            architecture: "unsupported",
+            modelProfileId: "unsupported",
+            stages: [{ modelProfileId: "unsupported" }],
+        });
+
+        const extras = refreshParamsExtra as (() => unknown)[];
+        expect(extras).toHaveLength(1);
+        extras[0]();
+        await Promise.resolve();
+        jest.advanceTimersByTime(1);
+        await flushMicrotasks();
+
+        const adopted = getClips()[0];
+        expect(adopted).toMatchObject({
+            architecture: "ltx2",
+            modelProfileId: "ltx-2.3",
+            stages: [{ modelProfileId: "ltx-2.3" }],
+        });
+        const adoptedDuration = adopted.duration;
+        const changed = getClips();
+        changed[0].duration = adoptedDuration + 1;
+        saveClips(changed, { notifyDomChange: false });
+
+        const body = document.getElementById(TIMELINE_BODY_ID) as HTMLElement;
+        body.querySelector<HTMLButtonElement>("[data-vst-undo]")?.click();
+
+        expect(getClips()[0]).toMatchObject({
+            architecture: "ltx2",
+            modelProfileId: "ltx-2.3",
+            duration: adoptedDuration,
+            stages: [{ modelProfileId: "ltx-2.3" }],
+        });
+        expect(requestJson).toHaveBeenCalledTimes(2);
+    });
+
     it("undoes and redoes hues and prompt-window IDs through the repository", () => {
         mountEnabledToggle();
         mountState(JSON.stringify({ schemaVersion: 5, clips: [] }));

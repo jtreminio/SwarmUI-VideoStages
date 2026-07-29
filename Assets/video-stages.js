@@ -15478,6 +15478,7 @@ The conversion is one undoable change.`;
         }
         if (catalog) {
           getTimelineStore().invalidate();
+          historyNeedsRebase = true;
           rebaseHistoryIfReady();
         }
         renderAll();
