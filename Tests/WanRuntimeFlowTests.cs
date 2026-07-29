@@ -189,6 +189,55 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
+    public void Failed_Wan_prompt_LoRA_restores_nested_params_cache_and_stage_section()
+    {
+        using SwarmUiTestContext context = new();
+        EnableHostLoraLoading();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        AddLoraModel("UnitTest_Wan_Prompt_Before_Failure.safetensors");
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        stage["loras"] = new JArray(new JObject
+        {
+            ["name"] = "UnitTest_Wan_Missing_After_Prompt",
+            ["weight"] = 0.45,
+        });
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(stage),
+            prompt:
+                "global <videoclip[0,0]><lora:UnitTest_Wan_Prompt_Before_Failure:0.4>");
+        WorkflowGenerator captured = null;
+        LoraParamState original = null;
+        WorkflowGenerator.WorkflowGenStep capture = new(
+            g =>
+            {
+                captured = g;
+                original = CaptureLoraParams(g.UserInput);
+            },
+            Constants.WorkflowStepPriority.RunConfiguredStages - 0.01);
+
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(() =>
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WanSteps().Append(capture)));
+
+        Assert.Contains("UnitTest_Wan_Missing_After_Prompt", error.Message);
+        Assert.NotNull(captured);
+        Assert.NotNull(original);
+        AssertLoraParamsEqual(original, CaptureLoraParams(input));
+        Assert.DoesNotContain(
+            $"modelloader_{models.VideoModel.Name}_image2video",
+            captured.NodeHelpers.Keys);
+        Assert.DoesNotContain(
+            VideoStagesExtension.SectionIdForStage(0),
+            captured.UserInput.SectionParamOverrides.Keys);
+        using WorkflowBridge bridge = WorkflowBridge.Create(captured.Workflow);
+        AssertNoDanglingNodeRefs(captured.Workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void Sourced_generating_Wan_stage_applies_its_clip_LoRA()
     {
         using SwarmUiTestContext context = new();
@@ -297,6 +346,203 @@ public class WanRuntimeFlowTests
             thirdSampler.FindInput("model").Connection?.Node?.Id,
             liveTuple.Split(':')[0]);
         Assert.False(input.TryGet(T2IParamTypes.Loras, out List<string> _));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Wan_prompt_LoRA_clip_stage_and_bare_confinements_select_exact_generating_passes()
+    {
+        using SwarmUiTestContext context = new();
+        EnableHostLoraLoading();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        AddLoraModel("UnitTest_Wan_Prompt_Bare.safetensors");
+        AddLoraModel("UnitTest_Wan_Prompt_Stage.safetensors");
+        AddLoraModel("UnitTest_Wan_Prompt_Clip.safetensors");
+        JObject first = MakeStage(
+            models.VideoModel.Name,
+            "Generated",
+            steps: 10);
+        JObject second = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            control: 0.5,
+            steps: 11);
+        JObject third = MakeStage(
+            models.VideoModel.Name,
+            "Generated",
+            steps: 12);
+        string prompt =
+            "global <videoclip><lora:UnitTest_Wan_Prompt_Bare:0.2>"
+            + " <videoclip[0,1]><lora:UnitTest_Wan_Prompt_Stage:0.3>"
+            + " <videoclip[1]><lora:UnitTest_Wan_Prompt_Clip:0.4>";
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(MakeClip(first, second), MakeClip(third)).ToString(),
+            prompt: prompt);
+
+        (JObject workflow, _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode firstSampler = Assert.Single(
+            SamplerNodes(bridge),
+            node => node.FindInput("steps").LiteralAsInt() == 10);
+        ComfyNode secondSampler = Assert.Single(
+            SamplerNodes(bridge),
+            node => node.FindInput("steps").LiteralAsInt() == 11);
+        ComfyNode thirdSampler = Assert.Single(
+            SamplerNodes(bridge),
+            node => node.FindInput("steps").LiteralAsInt() == 12);
+        ComfyNode[] bare =
+        [
+            .. LoraLoaderNodesOf(bridge).Where(
+                node => node.FindInput("lora_name").LiteralAsString()
+                    == "UnitTest_Wan_Prompt_Bare.safetensors"),
+        ];
+        Assert.NotEmpty(bare);
+        Assert.Single(bare, node => ModelBranchReaches(bridge, firstSampler, node));
+        Assert.Single(bare, node => ModelBranchReaches(bridge, secondSampler, node));
+        Assert.Single(bare, node => ModelBranchReaches(bridge, thirdSampler, node));
+        Assert.All(
+            bare,
+            node => Assert.Contains(
+                new[] { firstSampler, secondSampler, thirdSampler },
+                sampler => ModelBranchReaches(bridge, sampler, node)));
+
+        ComfyNode stageScoped = Assert.Single(
+            LoraLoaderNodesOf(bridge),
+            node => node.FindInput("lora_name").LiteralAsString()
+                == "UnitTest_Wan_Prompt_Stage.safetensors");
+        Assert.False(ModelBranchReaches(bridge, firstSampler, stageScoped));
+        Assert.True(ModelBranchReaches(bridge, secondSampler, stageScoped));
+        Assert.False(ModelBranchReaches(bridge, thirdSampler, stageScoped));
+
+        ComfyNode clipScoped = Assert.Single(
+            LoraLoaderNodesOf(bridge),
+            node => node.FindInput("lora_name").LiteralAsString()
+                == "UnitTest_Wan_Prompt_Clip.safetensors");
+        Assert.False(ModelBranchReaches(bridge, firstSampler, clipScoped));
+        Assert.False(ModelBranchReaches(bridge, secondSampler, clipScoped));
+        Assert.True(ModelBranchReaches(bridge, thirdSampler, clipScoped));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Wan_prompt_LoRA_passthrough_scope_is_inert_and_later_unscoped_loader_is_durable()
+    {
+        using SwarmUiTestContext context = new();
+        EnableHostLoraLoading();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        AddLoraModel("UnitTest_Wan_Prompt_Generating.safetensors");
+        AddLoraModel("UnitTest_Wan_Prompt_Passthrough.safetensors");
+        JObject first = MakeStage(
+            models.VideoModel.Name,
+            "Generated",
+            steps: 10);
+        JObject passthrough = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            control: 0,
+            steps: 11);
+        JObject third = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            control: 0.5,
+            steps: 12);
+        string prompt =
+            "global <videoclip[0,0]><lora:UnitTest_Wan_Prompt_Generating:0.3>"
+            + " <videoclip[0,1]><lora:UnitTest_Wan_Prompt_Passthrough:0.4>";
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(first, passthrough, third),
+            prompt: prompt);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode firstSampler = Assert.Single(
+            SamplerNodes(bridge),
+            node => node.FindInput("steps").LiteralAsInt() == 10);
+        ComfyNode thirdSampler = Assert.Single(
+            SamplerNodes(bridge),
+            node => node.FindInput("steps").LiteralAsInt() == 12);
+        ComfyNode generating = Assert.Single(
+            LoraLoaderNodesOf(bridge),
+            node => node.FindInput("lora_name").LiteralAsString()
+                == "UnitTest_Wan_Prompt_Generating.safetensors");
+        Assert.True(ModelBranchReaches(bridge, firstSampler, generating));
+        Assert.False(ModelBranchReaches(bridge, thirdSampler, generating));
+        Assert.DoesNotContain(
+            LoraLoaderNodesOf(bridge),
+            node => node.FindInput("lora_name").LiteralAsString()
+                == "UnitTest_Wan_Prompt_Passthrough.safetensors");
+        string liveTuple =
+            generator.NodeHelpers[$"modelloader_{models.VideoModel.Name}_image2video"];
+        AssertLoaderTupleIsLive(workflow, liveTuple);
+        Assert.Equal(
+            thirdSampler.FindInput("model").Connection?.Node?.Id,
+            liveTuple.Split(':')[0]);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Wan_prompt_and_persisted_LoRAs_compose_in_order_and_restore_host_lists()
+    {
+        using SwarmUiTestContext context = new();
+        EnableHostLoraLoading();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        AddLoraModel("UnitTest_Wan_Prompt_Composed.safetensors");
+        AddLoraModel("UnitTest_Wan_Persisted_Composed.safetensors");
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        stage["loras"] = new JArray(new JObject
+        {
+            ["name"] = "UnitTest_Wan_Persisted_Composed",
+            ["weight"] = 0.6,
+            ["textEncoderWeight"] = 0.5,
+        });
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(stage),
+            prompt:
+                "global <videoclip[0,0]><lora:UnitTest_Wan_Prompt_Composed:0.35>");
+        LoraParamState original = null;
+        WorkflowGenerator.WorkflowGenStep snapshot = new(
+            g => original = CaptureLoraParams(g.UserInput),
+            Constants.WorkflowStepPriority.RunConfiguredStages - 0.01);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WanSteps().Append(snapshot));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode promptLora = Assert.Single(
+            LoraLoaderNodesOf(bridge),
+            node => node.FindInput("lora_name").LiteralAsString()
+                == "UnitTest_Wan_Prompt_Composed.safetensors");
+        ComfyNode persistedLora = Assert.Single(
+            LoraLoaderNodesOf(bridge),
+            node => node.FindInput("lora_name").LiteralAsString()
+                == "UnitTest_Wan_Persisted_Composed.safetensors");
+        Assert.Equal(
+            promptLora.Id,
+            persistedLora.FindInput("model").Connection?.Node?.Id);
+        Assert.True(ModelBranchReaches(
+            bridge,
+            Assert.Single(SamplerNodes(bridge)),
+            persistedLora));
+        Assert.NotNull(original);
+        AssertLoraParamsEqual(original, CaptureLoraParams(input));
+        Assert.DoesNotContain(
+            $"modelloader_{models.VideoModel.Name}_image2video",
+            generator.NodeHelpers.Keys);
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
     }
@@ -1277,6 +1523,69 @@ public class WanRuntimeFlowTests
         Assert.Equal(
             [$"{T2IParamInput.SectionID_VideoSwap}"],
             input.Get(T2IParamTypes.LoraSectionConfinement));
+        Assert.DoesNotContain(
+            $"modelloader_{models.VideoModel.Name}_image2video",
+            generator.NodeHelpers.Keys);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Wan_prompt_LoRA_is_high_only_and_same_model_host_swap_LoRA_is_low_only()
+    {
+        using SwarmUiTestContext context = new();
+        EnableHostLoraLoading();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        AddLoraModel("UnitTest_Wan_High_Prompt.safetensors");
+        AddLoraModel("UnitTest_Wan_Low_Prompt_Test.safetensors");
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 11);
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(stage),
+            prompt:
+                "global <videoclip[0,0]><lora:UnitTest_Wan_High_Prompt:0.4>");
+        ConfigureSwap(input, models.VideoModel, percent: 0.6);
+        input.Set(
+            T2IParamTypes.Loras,
+            new List<string> { "UnitTest_Wan_Low_Prompt_Test" });
+        input.Set(
+            T2IParamTypes.LoraWeights,
+            new List<string> { "0.9" });
+        input.Set(
+            T2IParamTypes.LoraTencWeights,
+            new List<string> { "0.7" });
+        input.Set(
+            T2IParamTypes.LoraSectionConfinement,
+            new List<string> { $"{T2IParamInput.SectionID_VideoSwap}" });
+        LoraParamState original = null;
+        WorkflowGenerator.WorkflowGenStep snapshot = new(
+            g => original = CaptureLoraParams(g.UserInput),
+            Constants.WorkflowStepPriority.RunConfiguredStages - 0.01);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WanSteps().Append(snapshot));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
+        ComfyNode high = Assert.Single(samplers, IsHighNoiseSampler);
+        ComfyNode low = AssertLowNoiseForHigh(samplers, high);
+        ComfyNode promptLora = Assert.Single(
+            LoraLoaderNodesOf(bridge),
+            node => node.FindInput("lora_name").LiteralAsString()
+                == "UnitTest_Wan_High_Prompt.safetensors");
+        ComfyNode hostSwap = Assert.Single(
+            LoraLoaderNodesOf(bridge),
+            node => node.FindInput("lora_name").LiteralAsString()
+                == "UnitTest_Wan_Low_Prompt_Test.safetensors");
+        Assert.True(ModelBranchReaches(bridge, high, promptLora));
+        Assert.False(ModelBranchReaches(bridge, high, hostSwap));
+        Assert.True(ModelBranchReaches(bridge, low, hostSwap));
+        Assert.False(ModelBranchReaches(bridge, low, promptLora));
+        Assert.NotNull(original);
+        AssertLoraParamsEqual(original, CaptureLoraParams(input));
         Assert.DoesNotContain(
             $"modelloader_{models.VideoModel.Name}_image2video",
             generator.NodeHelpers.Keys);
@@ -2533,6 +2842,29 @@ public class WanRuntimeFlowTests
             ComfyUIBackendExtension.SchedulerParam,
             "karras",
             T2IParamInput.SectionID_VideoSwap);
+    }
+
+    private sealed record LoraParamState(
+        IReadOnlyList<string> Loras,
+        IReadOnlyList<string> Weights,
+        IReadOnlyList<string> TextEncoderWeights,
+        IReadOnlyList<string> Confinements);
+
+    private static LoraParamState CaptureLoraParams(T2IParamInput input) =>
+        new(
+            [.. input.Get(T2IParamTypes.Loras) ?? []],
+            [.. input.Get(T2IParamTypes.LoraWeights) ?? []],
+            [.. input.Get(T2IParamTypes.LoraTencWeights) ?? []],
+            [.. input.Get(T2IParamTypes.LoraSectionConfinement) ?? []]);
+
+    private static void AssertLoraParamsEqual(
+        LoraParamState expected,
+        LoraParamState actual)
+    {
+        Assert.Equal(expected.Loras, actual.Loras);
+        Assert.Equal(expected.Weights, actual.Weights);
+        Assert.Equal(expected.TextEncoderWeights, actual.TextEncoderWeights);
+        Assert.Equal(expected.Confinements, actual.Confinements);
     }
 
     private static void EnableHostLoraLoading()

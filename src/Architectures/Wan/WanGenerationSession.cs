@@ -114,13 +114,19 @@ internal sealed class WanGenerationSession(
         WanDecodedVideoStageInput stageInput)
     {
         WanStagePayload payload = stage.RequireWanPayload();
+        int sectionId = hostScope.ApplyStageOverrides(clip, stage);
+        using (ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
+            g.UserInput,
+            clip.ClipId,
+            sectionId))
         using (ParamSnapshot loraScope =
             LoraParams.ApplyNormalLoras(g.UserInput, payload.Loras))
         {
             string highLoaderKey = $"modelloader_{payload.Model}_image2video";
             T2IModel swapModel = g.UserInput.Get(T2IParamTypes.VideoSwapModel, null);
             bool transientHighLoader =
-                !payload.Loras.IsDefaultOrEmpty
+                promptLoraScope is not null
+                || !payload.Loras.IsDefaultOrEmpty
                 || swapModel is not null
                     && string.Equals(
                         swapModel.Name,
@@ -132,7 +138,6 @@ internal sealed class WanGenerationSession(
             VideoGraphHelpers.RemoveCached(g, highLoaderKey);
             try
             {
-                int sectionId = hostScope.ApplyStageOverrides(clip, stage);
                 WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
                     clip,
                     stage,

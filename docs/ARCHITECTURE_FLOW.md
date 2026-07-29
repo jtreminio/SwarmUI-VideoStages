@@ -446,23 +446,27 @@ partial rules over the preceding decoded batch. The session validates the
 immutable clip, entry, source, stage input, payload, and canonical profile
 contract before graph mutation.
 
-For every generating pass, `LoraParams.ApplyNormalLoras` temporarily projects
-the compiled persisted rows into host `SectionID_Video`. The scope is absent
-for passthrough stages and is restored on success or failure. Before the host
-builder runs, Wan evicts the high-pass
+For every generating pass, `PromptParser.ApplyLoraScope` first projects the
+matching bare, clip, and stage prompt-section rows into host
+`SectionID_Video`; nested inside it, `LoraParams.ApplyNormalLoras` appends the
+compiled persisted rows. That prompt-before-persisted order is deterministic.
+Both scopes are absent for passthrough stages and restore the original four
+host LoRA parameter lists in reverse nesting order on success or failure.
+Before the host builder runs, Wan evicts the high-pass
 `modelloader_{model}_image2video` cache marker even when the compiled list is
 empty, because that marker does not encode scoped LoRA state; existing live
 graph nodes are not pruned. With VideoSwap, stage-authored rows therefore
-belong only to the high branch. The low branch remains owned by the host's
+belong only to the high branch. Prompt-scoped rows have the same high-only
+ownership. The low branch remains owned by the host's
 `SectionID_VideoSwap` LoRAs and is never injected from the stage payload. If
 both branches select the same model, Wan drops that shared marker again after
 high model preparation so the swap loader still runs under the host's low-pass
 scope. A loader tuple built under nonempty planned LoRAs, or left under that
-same-model swap scope, is transient: Wan removes its marker in a `finally`
-before the parameter snapshot is restored, including when construction or
-normalization fails. An empty final high pass with a distinct or absent swap
-keeps its durable unscoped tuple. Marker eviction never removes live graph
-nodes.
+same-model swap scope, is transient. A tuple built under a nonempty prompt
+scope is transient too: Wan removes its marker in a `finally` before either
+parameter snapshot is restored, including when construction or normalization
+fails. An empty final high pass with a distinct or absent swap keeps its
+durable unscoped tuple. Marker eviction never removes live graph nodes.
 
 The session publishes authored intermediates and
 removes every host per-pass trim. For a terminal single-clip session it applies
