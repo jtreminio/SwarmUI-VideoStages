@@ -126,6 +126,29 @@ public class VideoExecutionPlanCompilerTests
             && diagnostic.ClipId == clip.Id);
     }
 
+    [Fact]
+    public void Compile_Ltx_OmitsNoOpStageLoraAndRetainsTextEncoderOnlyLora()
+    {
+        StageSpec stage = Stage(
+            10,
+            loras:
+            [
+                new("stage-no-op", 0, 0),
+                new("stage-text-only", 0, 0.8),
+            ]);
+
+        Ltx2StagePayload payload = Assert.Single(
+            Assert.Single(
+                TestPlanCompiler.Compile(
+                    Spec(false, GeneratedClip(0, stage))).Clips).Stages)
+            .RequireLtx2Payload();
+        NormalLoraPlan lora = Assert.Single(payload.Loras);
+
+        Assert.Equal("stage-text-only", lora.Name);
+        Assert.Equal(0, lora.ModelWeight);
+        Assert.Equal(0.8, lora.TextEncoderWeight);
+    }
+
     [Theory]
     [InlineData("Base", (int)StageGuideReferenceKind.Base, -1)]
     [InlineData("Refiner", (int)StageGuideReferenceKind.Refiner, -1)]

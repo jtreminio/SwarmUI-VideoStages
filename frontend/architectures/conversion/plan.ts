@@ -11,12 +11,18 @@ import type { Clip, IcLora } from "../../types";
 import { isArchitectureHdrFeature } from "../behaviorRegistry";
 import { architectureDescriptor, modelCatalogEntry } from "../catalogQueries";
 import { modelIdentityFromCatalog } from "../clipIdentity";
+import {
+    CONDITIONAL_RULE_CODES,
+    conditionalRule,
+    evaluateConditionalRule,
+} from "../conditionalRules";
 import { NONE_ARCHITECTURE_ID } from "../none/identity";
 import { architectureFeatureSupport } from "../policy/clipStageViews";
 import type { AuthoringFeature } from "../policy/types";
 import type {
     ArchitectureModelCatalog,
     ArchitectureRetargetPlan,
+    CapabilityRuleDecision,
 } from "../types";
 
 const countLabel = (count: number, singular: string): string =>
@@ -34,6 +40,7 @@ export interface ArchitectureConversionPlan {
 
 interface ResolvedArchitectureRetarget extends ArchitectureRetargetPlan {
     profileCapabilities: string[];
+    profileRules: CapabilityRuleDecision[];
 }
 
 const ownId = (value: unknown): string | null =>
@@ -83,6 +90,7 @@ export const resolveArchitectureRetarget = (
         model: model.value,
         capabilities: structuredClone(descriptor.capabilities),
         profileCapabilities: [...profile.capabilities],
+        profileRules: structuredClone(profile.rules),
     };
 };
 
@@ -117,6 +125,10 @@ export const planArchitectureConversion = (
     const supportsMultipleStages = supports("multiStage");
     const supportsReferences = supports("frameReferences");
     const supportsNormalLoras = supports("stageLoras");
+    const samplingStageRule = conditionalRule(
+        target.profileRules,
+        CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
+    );
 
     clip.architecture = target.architectureId;
     clip.modelProfileId = target.modelProfileId;
@@ -168,6 +180,7 @@ export const planArchitectureConversion = (
         clip.loras = [];
     }
     let removedUpscaleSettings = 0;
+    let repairedNormalLoraWeights = 0;
     for (const stage of clip.stages) {
         stage.model = target.model;
         stage.modelProfileId = target.modelProfileId;
@@ -176,6 +189,16 @@ export const planArchitectureConversion = (
         }
         if (!supportsNormalLoras) {
             stage.loraWeights = [];
+        } else if (
+            samplingStageRule &&
+            evaluateConditionalRule(samplingStageRule, { clip, stage })
+        ) {
+            for (let index = 0; index < clip.loras.length; index++) {
+                if ((stage.loraWeights[index] ?? 1) !== 0) {
+                    stage.loraWeights[index] = 0;
+                    repairedNormalLoraWeights++;
+                }
+            }
         }
         if (
             stage.upscale !== 1 &&
@@ -187,6 +210,13 @@ export const planArchitectureConversion = (
     }
     if (removedClipLoras > 0) {
         removals.push(countLabel(removedClipLoras, "clip LoRA"));
+    }
+    if (repairedNormalLoraWeights > 0) {
+        removals.push(
+            `${repairedNormalLoraWeights} normal LoRA ${
+                repairedNormalLoraWeights === 1 ? "weight" : "weights"
+            } disabled on samplerless stages`,
+        );
     }
     if (removedUpscaleSettings > 0) {
         removals.push("stage upscale settings");

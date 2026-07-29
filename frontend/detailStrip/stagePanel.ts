@@ -24,6 +24,11 @@ export const buildStageParamsColumn = (
         stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
     const isRefine = stageIdx >= 1 || sourcedStage0;
     const stageCapabilities = context.capabilities().forStage(clip, stage);
+    if (clip.loras.length > 0) {
+        column.dataset.vstStageLorasSupported = `${
+            stageCapabilities.decision("stageLoras").supported
+        }`;
+    }
 
     const commit = (mutate: (target: Stage) => void): void => {
         context.commit((clips) => {

@@ -9,6 +9,7 @@ import {
     minimalStage,
 } from "../__test_helpers__/clipFixtures";
 import { createTimelineHistory } from "../timelineHistory";
+import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
 import { architectureSupportsClipStart } from "./conversion/entryModePolicy";
 import { planArchitectureConversion } from "./conversion/plan";
 import {
@@ -175,6 +176,45 @@ describe("architecture conversion policy", () => {
                 "text-to-video",
             ),
         ).toBe(true);
+    });
+
+    it("retains clip LoRAs and selectively disables target-rule violations", () => {
+        const catalog = testArchitectureCatalog();
+        catalog.architectures[0].profiles[0].rules = [
+            {
+                support: "conditional",
+                code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
+                reason: "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.",
+                scope: "stage",
+                entityId: null,
+                constraints: { exclusiveMinimumControl: 0 },
+            },
+        ];
+        const source = minimalClip({
+            loras: [{ name: "detail" }, { name: "motion" }],
+            stages: [
+                minimalStage({ control: 0, loraWeights: [1, 0.4] }),
+                minimalStage({ control: 0.5, loraWeights: [0.7, 0] }),
+            ],
+        });
+        const conversion = planArchitectureConversion(
+            source,
+            {
+                architectureId: "ltx2",
+                modelProfileId: "ltx-2.3",
+                model: "ltx",
+                capabilities: catalog.architectures[0].capabilities,
+            },
+            catalog,
+        );
+
+        expect(conversion?.clip.loras).toEqual(source.loras);
+        expect(conversion?.clip.stages[0].loraWeights).toEqual([0, 0]);
+        expect(conversion?.clip.stages[1].loraWeights).toEqual([0.7, 0]);
+        expect(conversion?.removals).toContain(
+            "2 normal LoRA weights disabled on samplerless stages",
+        );
+        expect(source.stages[0].loraWeights).toEqual([1, 0.4]);
     });
 
     it("round-trips one destructive conversion through one exact undo/redo point", () => {

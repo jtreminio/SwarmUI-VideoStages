@@ -1,9 +1,10 @@
 import { activeStageCount } from "../clipSemantics";
-import type { Clip } from "../types";
+import type { Clip, Stage } from "../types";
 import type { CapabilityRuleDecision } from "./types";
 
 export const CONDITIONAL_RULE_CODES = {
     audioReuseRequiresStages: "audio.reuse.requires_three_stages",
+    normalLoraRequiresSamplingStage: "normal-lora-requires-sampling-stage",
     promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
     retakeExcludesReferences: "retake-frame-references-unsupported",
     retakeRequiresSource: "retake-source-required",
@@ -15,6 +16,7 @@ export type ConditionalRuleCode =
 
 export interface ConditionalRuleContext {
     clip?: Clip;
+    stage?: Stage;
     globalRefineMode?: boolean;
     timelineClips?: readonly Clip[];
     hasActiveHdr?: (clip: Clip) => boolean;
@@ -63,6 +65,12 @@ export const evaluateConditionalRule = (
             return (
                 clip !== undefined &&
                 activeStageCount(clip) < audioReuseMinimumActiveStages(rule)
+            );
+        case CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage:
+            return (
+                context.stage !== undefined &&
+                context.stage.control <=
+                    finiteConstraint(rule, "exclusiveMinimumControl", 0)
             );
         case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
             return (

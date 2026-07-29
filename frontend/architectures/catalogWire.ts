@@ -1,8 +1,10 @@
+import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
 import type {
     ArchitectureCapabilities,
     ArchitectureCatalogEntryDto,
     CapabilityRuleDecision,
     CapabilityRuleScope,
+    MinimumStageControlRuleConstraints,
     VideoArchitectureCatalogDto,
 } from "./types";
 
@@ -56,6 +58,27 @@ const isRuleDecision = (
     return true;
 };
 
+const isMinimumStageControlRule = (value: CapabilityRuleDecision): boolean => {
+    if (value.code !== CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage) {
+        return true;
+    }
+    if (
+        value.support !== "conditional" ||
+        value.scope !== "stage" ||
+        value.entityId !== null ||
+        !isRecord(value.constraints)
+    ) {
+        return false;
+    }
+    const constraints =
+        value.constraints as Partial<MinimumStageControlRuleConstraints>;
+    return (
+        Object.keys(value.constraints).length === 1 &&
+        typeof constraints.exclusiveMinimumControl === "number" &&
+        Number.isFinite(constraints.exclusiveMinimumControl)
+    );
+};
+
 const isBoundaryRule = (value: unknown): value is CapabilityRuleDecision => {
     if (!isRuleDecision(value, ["boundary"]) || value.entityId !== null) {
         return false;
@@ -104,7 +127,11 @@ const isRuleArray = (
     allowedScopes: readonly CapabilityRuleScope[],
 ): value is CapabilityRuleDecision[] =>
     Array.isArray(value) &&
-    value.every((rule) => isRuleDecision(rule, allowedScopes)) &&
+    value.every(
+        (rule) =>
+            isRuleDecision(rule, allowedScopes) &&
+            isMinimumStageControlRule(rule),
+    ) &&
     new Set(value.map((rule) => rule.code)).size === value.length;
 
 const isProfile = (
@@ -114,7 +141,7 @@ const isProfile = (
     isTrimmedNonEmpty(value.id) &&
     isTrimmedNonEmpty(value.label) &&
     isUniqueStringArray(value.capabilities) &&
-    isRuleArray(value.rules, ["model-profile"]);
+    isRuleArray(value.rules, ["model-profile", "stage"]);
 
 const isCapabilities = (value: unknown): value is ArchitectureCapabilities => {
     if (!isRecord(value)) {

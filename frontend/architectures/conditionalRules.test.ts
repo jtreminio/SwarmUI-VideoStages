@@ -60,6 +60,30 @@ describe("typed conditional-rule evaluator", () => {
         ).toBe(true);
     });
 
+    it("reads the advertised exclusive stage-control minimum", () => {
+        const samplingRule = {
+            ...rule(CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage, {
+                exclusiveMinimumControl: 0,
+            }),
+            scope: "stage" as const,
+        };
+        expect(
+            evaluateConditionalRule(samplingRule, {
+                stage: minimalStage({ control: 0 }),
+            }),
+        ).toBe(true);
+        expect(
+            evaluateConditionalRule(samplingRule, {
+                stage: minimalStage({ control: -0.1 }),
+            }),
+        ).toBe(true);
+        expect(
+            evaluateConditionalRule(samplingRule, {
+                stage: minimalStage({ control: 0.01 }),
+            }),
+        ).toBe(false);
+    });
+
     it("evaluates retake entry and reference conditions", () => {
         const generated = minimalClip();
         expect(

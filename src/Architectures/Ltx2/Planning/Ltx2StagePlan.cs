@@ -93,11 +93,6 @@ internal sealed record GuideReferencePlan(
     string RawValue,
     int? ReferencedStageIndex);
 
-internal sealed record NormalLoraPlan(
-    string Name,
-    double ModelWeight,
-    double TextEncoderWeight);
-
 internal enum IcLoraMediaSourceKind
 {
     Upload,

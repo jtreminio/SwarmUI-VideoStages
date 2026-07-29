@@ -19,6 +19,10 @@ export interface CapabilityRuleDecision {
     constraints: Record<string, unknown> | null;
 }
 
+export interface MinimumStageControlRuleConstraints {
+    exclusiveMinimumControl: number;
+}
+
 export interface ArchitectureCapabilities {
     architecture: string[];
     clip: string[];

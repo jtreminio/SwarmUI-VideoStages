@@ -79,6 +79,10 @@ internal static class ArchitectureCatalogSerializer
                 ["failureSeverity"] = SerializeFailureSeverity(value.FailureSeverity),
                 ["failureEffect"] = SerializeFailureEffect(value.FailureEffect),
             },
+            MinimumStageControlRuleConstraints value => new()
+            {
+                ["exclusiveMinimumControl"] = value.ExclusiveMinimumControl,
+            },
             FixedFrameCountRuleConstraints value => new()
             {
                 ["requiresFixedFrameCount"] = value.RequiresFixedFrameCount,

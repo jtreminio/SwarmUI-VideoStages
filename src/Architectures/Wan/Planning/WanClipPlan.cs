@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
@@ -14,7 +15,8 @@ internal sealed record WanStagePayload(
     int Steps,
     double CfgScale,
     string Sampler,
-    string Scheduler) : IArchitectureStagePayload
+    string Scheduler,
+    ImmutableArray<NormalLoraPlan> Loras) : IArchitectureStagePayload
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
 }

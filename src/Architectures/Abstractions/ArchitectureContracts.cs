@@ -147,6 +147,9 @@ internal sealed record MinimumActiveStagesRuleConstraints(
     RuleFailureSeverity FailureSeverity,
     RuleFailureEffect FailureEffect) : RuleConstraints;
 
+internal sealed record MinimumStageControlRuleConstraints(
+    double ExclusiveMinimumControl) : RuleConstraints;
+
 internal sealed record FixedFrameCountRuleConstraints(
     bool RequiresFixedFrameCount) : RuleConstraints;
 

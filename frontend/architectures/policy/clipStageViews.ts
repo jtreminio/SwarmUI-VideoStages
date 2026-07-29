@@ -231,12 +231,25 @@ export const createClipStageCapabilityViews = (
                 const supported =
                     descriptor.capabilities.stage.includes("lora") &&
                     profile?.capabilities.includes("normal-lora") === true;
+                const profileRule = supported
+                    ? conditionalRule(
+                          profile.rules,
+                          CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
+                      )
+                    : null;
+                const violatedRule =
+                    profileRule &&
+                    evaluateConditionalRule(profileRule, { clip, stage })
+                        ? profileRule
+                        : null;
                 return {
-                    supported,
-                    reason: supported
-                        ? ""
-                        : `LoRAs require normal-LoRA support in ${descriptor.label}.`,
-                    rule: null,
+                    supported: supported && !violatedRule,
+                    reason:
+                        supported && !violatedRule
+                            ? ""
+                            : (violatedRule?.reason ??
+                              `LoRAs require normal-LoRA support in ${descriptor.label}.`),
+                    rule: violatedRule,
                 };
             }
             if (feature === "sampler" || feature === "scheduler") {

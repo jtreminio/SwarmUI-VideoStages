@@ -76,7 +76,9 @@ internal class StageRunner
             _generator.UserInput,
             clip.ClipId,
             sectionId);
-        using ParamSnapshot loraScope = ApplyStageLoras(_generator.UserInput, stage);
+        using ParamSnapshot loraScope = LoraParams.ApplyNormalLoras(
+            _generator.UserInput,
+            stage.RequireLtx2Payload().Loras);
 
         StageFrame stageFrame = _framePreparer.Prepare(
             stage,
@@ -354,28 +356,4 @@ internal class StageRunner
         _ = _upscaleGraphBuilder.Apply(clipContext, stage, sectionId, postVideoChain);
     }
 
-    private static ParamSnapshot ApplyStageLoras(T2IParamInput input, StagePlan stage)
-    {
-        Ltx2StagePayload payload = stage.RequireLtx2Payload();
-        if (payload.Loras.IsDefaultOrEmpty)
-        {
-            return null;
-        }
-
-        List<string> loras = [.. input.Get(T2IParamTypes.Loras) ?? []];
-        List<string> weights = [.. input.Get(T2IParamTypes.LoraWeights) ?? []];
-        List<string> tencWeights = [.. input.Get(T2IParamTypes.LoraTencWeights) ?? []];
-        List<string> confinements = [.. input.Get(T2IParamTypes.LoraSectionConfinement) ?? []];
-        List<(string, string, string)> rows = [.. payload.Loras.Select(lora => (
-            lora.Name,
-            LoraParams.FormatWeight(lora.ModelWeight),
-            LoraParams.FormatWeight(lora.TextEncoderWeight)))];
-        return LoraParams.AppendVideoScoped(
-            input,
-            loras,
-            weights,
-            tencWeights,
-            confinements,
-            rows);
-    }
 }

@@ -66,13 +66,37 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         if (!selection || !dockEl || !renderedSelection) {
             return;
         }
+        const clips = getClips();
+        const renderedStageParams = dockEl.querySelector<HTMLElement>(
+            "[data-vst-stage-loras-supported]",
+        );
+        if (
+            selection.kind === "clip" &&
+            renderedStageParams?.dataset.vstStageLorasSupported !== undefined
+        ) {
+            const clip = clips[selection.clipIdx];
+            const stage = clip?.stages[selection.stageIdx];
+            const currentSupported =
+                clip && stage
+                    ? createCapabilityViewResolver(
+                          getRootDefaults().modelCatalog,
+                      )
+                          .forStage(clip, stage)
+                          .decision("stageLoras").supported
+                    : null;
+            if (
+                currentSupported !== null &&
+                `${currentSupported}` !==
+                    renderedStageParams.dataset.vstStageLorasSupported
+            ) {
+                render();
+                return;
+            }
+        }
         const breadcrumb =
             dockEl.querySelector<HTMLElement>(".vst-detail-crumb");
         if (breadcrumb) {
-            breadcrumb.textContent = detailBreadcrumb(
-                renderedSelection,
-                getClips(),
-            );
+            breadcrumb.textContent = detailBreadcrumb(renderedSelection, clips);
         }
     };
     draftQueue = createDetailDraftQueue({

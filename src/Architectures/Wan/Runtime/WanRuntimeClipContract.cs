@@ -78,6 +78,25 @@ internal static class WanRuntimeClipContract
             bool decodedInput =
                 stage.Input is StageInputKind.SourceVideo or StageInputKind.PreviousStage;
             bool passthrough = decodedInput && payload.Control == 0;
+            if (payload.Loras.IsDefault
+                || payload.Loras.Any(lora =>
+                    lora is null
+                    || string.IsNullOrWhiteSpace(lora.Name)
+                    || !double.IsFinite(lora.ModelWeight)
+                    || !double.IsFinite(lora.TextEncoderWeight)
+                    || lora.ModelWeight == 0
+                        && lora.TextEncoderWeight == 0))
+            {
+                throw Invalid(
+                    clip,
+                    $"stage {stage.StageId} has an invalid immutable normal-LoRA payload");
+            }
+            if (passthrough && !payload.Loras.IsDefaultOrEmpty)
+            {
+                throw Invalid(
+                    clip,
+                    $"stage {stage.StageId} is a samplerless passthrough with a normal-LoRA plan");
+            }
             if (!double.IsFinite(payload.Control)
                 || decodedInput && (payload.Control < 0 || payload.Control > 1)
                 || !decodedInput && payload.Control != 1

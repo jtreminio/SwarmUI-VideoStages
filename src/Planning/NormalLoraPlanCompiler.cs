@@ -1,22 +1,23 @@
 using System.Collections.Immutable;
 
-namespace VideoStages.Architectures.Ltx2.Planning;
+namespace VideoStages.Planning;
 
 /// <summary>Orders clip and stage LoRAs for one stage.</summary>
 internal static class NormalLoraPlanCompiler
 {
     internal static ImmutableArray<NormalLoraPlan> Compile(ClipSpec clip, StageSpec stage)
     {
-        ImmutableArray<NormalLoraPlan>.Builder plans = ImmutableArray.CreateBuilder<NormalLoraPlan>();
+        ImmutableArray<NormalLoraPlan>.Builder plans =
+            ImmutableArray.CreateBuilder<NormalLoraPlan>();
         if (stage.LoraWeights is null)
         {
-            Append(plans, clip.Loras);
+            AppendDirectDefinitions(plans, clip.Loras);
         }
         else
         {
             AppendClipDefinitions(plans, clip.Loras, stage.LoraWeights);
         }
-        Append(plans, stage.Loras);
+        AppendDirectDefinitions(plans, stage.Loras);
         return plans.ToImmutable();
     }
 
@@ -46,16 +47,21 @@ internal static class NormalLoraPlanCompiler
         }
     }
 
-    private static void Append(
+    private static void AppendDirectDefinitions(
         ImmutableArray<NormalLoraPlan>.Builder plans,
         IReadOnlyList<LoraRef> entries)
     {
         foreach (LoraRef entry in entries ?? [])
         {
+            double textEncoderWeight = entry.TencWeight ?? entry.Weight;
+            if (entry.Weight == 0 && textEncoderWeight == 0)
+            {
+                continue;
+            }
             plans.Add(new NormalLoraPlan(
                 entry.Name,
                 entry.Weight,
-                entry.TencWeight ?? entry.Weight));
+                textEncoderWeight));
         }
     }
 }

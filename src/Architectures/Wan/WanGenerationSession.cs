@@ -92,26 +92,7 @@ internal sealed class WanGenerationSession(
                 hostScope.PublishIntermediate(stage);
                 continue;
             }
-            int sectionId = hostScope.ApplyStageOverrides(clip, stage);
-            WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
-                clip,
-                stage,
-                sectionId);
-            stageInput.Configure(clip, stage, genInfo);
-            // SwarmUI's generic builder creates latent audio whenever CurrentAudioVae is set.
-            // Another architecture can leave one ambient on a mixed timeline, but Wan's declared
-            // output is video-only, so isolate every pass and restore the shared host value.
-            WGNodeData ambientAudioVae = g.CurrentAudioVae;
-            try
-            {
-                g.CurrentAudioVae = null;
-                g.CreateImageToVideo(genInfo);
-            }
-            finally
-            {
-                g.CurrentAudioVae = ambientAudioVae;
-            }
-            stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
+            ExecuteGeneratingStage(clip, stage, stageInput);
             hostScope.PublishIntermediate(stage);
         }
         StagePlan finalStage = clip.Stages[^1];
@@ -126,6 +107,76 @@ internal sealed class WanGenerationSession(
     }
 
     public void Dispose() => hostScope.Dispose();
+
+    private void ExecuteGeneratingStage(
+        ClipPlan clip,
+        StagePlan stage,
+        WanDecodedVideoStageInput stageInput)
+    {
+        WanStagePayload payload = stage.RequireWanPayload();
+        using (ParamSnapshot loraScope =
+            LoraParams.ApplyNormalLoras(g.UserInput, payload.Loras))
+        {
+            string highLoaderKey = $"modelloader_{payload.Model}_image2video";
+            T2IModel swapModel = g.UserInput.Get(T2IParamTypes.VideoSwapModel, null);
+            bool transientHighLoader =
+                !payload.Loras.IsDefaultOrEmpty
+                || swapModel is not null
+                    && string.Equals(
+                        swapModel.Name,
+                        payload.Model,
+                        StringComparison.Ordinal);
+            // The host cache key does not encode the active LoRA parameter scope. Always make
+            // the high-noise branch reload under this stage's effective plan, including an
+            // empty plan after a prior scoped stage. Existing graph nodes stay live.
+            VideoGraphHelpers.RemoveCached(g, highLoaderKey);
+            try
+            {
+                int sectionId = hostScope.ApplyStageOverrides(clip, stage);
+                WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
+                    clip,
+                    stage,
+                    sectionId);
+                stageInput.Configure(clip, stage, genInfo);
+                using IDisposable sameModelSwapCacheScope =
+                    transientHighLoader
+                    && genInfo.VideoSwapModel is not null
+                    && string.Equals(
+                        genInfo.VideoSwapModel.Name,
+                        payload.Model,
+                        StringComparison.Ordinal)
+                        ? AltImageToVideoScope.Post(
+                            genInfo,
+                            _ => VideoGraphHelpers.RemoveCached(g, highLoaderKey))
+                        : null;
+                // SwarmUI's generic builder creates latent audio whenever CurrentAudioVae is
+                // set. Another architecture can leave one ambient on a mixed timeline, but
+                // Wan's declared output is video-only, so isolate every pass and restore the
+                // shared host value.
+                WGNodeData ambientAudioVae = g.CurrentAudioVae;
+                try
+                {
+                    g.CurrentAudioVae = null;
+                    g.CreateImageToVideo(genInfo);
+                }
+                finally
+                {
+                    g.CurrentAudioVae = ambientAudioVae;
+                }
+                stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
+            }
+            finally
+            {
+                // A tuple built under temporary stage LoRAs cannot outlive their ParamSnapshot.
+                // A same-model swap tuple is low-section state under the shared high key and is
+                // transient for the same reason. Removing the marker never prunes live nodes.
+                if (transientHighLoader)
+                {
+                    VideoGraphHelpers.RemoveCached(g, highLoaderKey);
+                }
+            }
+        }
+    }
 
     private WorkflowGenerator.ImageToVideoGenInfo BuildGenInfo(
         ClipPlan clip,

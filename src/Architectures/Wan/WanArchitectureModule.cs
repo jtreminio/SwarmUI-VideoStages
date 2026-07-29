@@ -29,6 +29,19 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
 
     internal static ModelProfileId ImageToVideoProfileId { get; } = new("wan-2.2-i2v-14b");
 
+    internal const string NormalLoraRequiresSamplingStageCode =
+        "normal-lora-requires-sampling-stage";
+
+    internal const string NormalLoraRequiresSamplingStageReason =
+        "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.";
+
+    internal static RuleDecision NormalLoraRequiresSamplingStageRule { get; } =
+        RuleDecision.Conditional(
+            NormalLoraRequiresSamplingStageCode,
+            NormalLoraRequiresSamplingStageReason,
+            RuleScope.Stage,
+            new MinimumStageControlRuleConstraints(0));
+
     internal static WanArchitectureModule Instance { get; } = new();
 
     public VideoArchitectureDescriptor Descriptor { get; } = new(
@@ -44,8 +57,9 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
                 ModelProfileCapability.SamplerSelection
                     | ModelProfileCapability.SchedulerSelection
                     | ModelProfileCapability.DimensionRules
-                    | ModelProfileCapability.FrameRules,
-                [])
+                    | ModelProfileCapability.FrameRules
+                    | ModelProfileCapability.NormalLora,
+                [NormalLoraRequiresSamplingStageRule])
             {
                 FrameGrid = FrameGrid,
             },
@@ -56,7 +70,7 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
                 | ArchitectureCapability.MultiStage
                 | ArchitectureCapability.DecodedOutput,
             ClipCapability.Prompts | ClipCapability.SourceVideo,
-            StageCapability.ImageInput | StageCapability.VideoInput,
+            StageCapability.ImageInput | StageCapability.VideoInput | StageCapability.Lora,
             OutputCapability.Video),
         WanBoundaryPolicy.Instance)
     {

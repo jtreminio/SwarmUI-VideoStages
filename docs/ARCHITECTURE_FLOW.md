@@ -97,7 +97,8 @@ or frontend classification cannot authorize an unsupported model.
 `NoneArchitecture.Descriptor` are typed `VideoArchitectureDescriptor` values.
 Wan publishes image-to-video and clip-local source-video entry, same-profile
 multi-stage chaining, video-only output, a four-frame profile grid, and
-cut-only boundaries. Generated stage 0 uses the host root at full control.
+cut-only boundaries. Its current profile also publishes ordinary persisted
+clip/stage LoRAs. Generated stage 0 uses the host root at full control.
 Sourced stage 0 uses its conformed source at finite control in `[0, 1]`; each
 later stage uses `PreviousStage` with the same bound. Exact control `0` is a
 samplerless decoded-video passthrough for those two decoded inputs, while
@@ -295,11 +296,19 @@ For LTX, `Ltx2ClipPlanCompiler.Compile` produces `Ltx2ClipPayload` and
 `Ltx2StagePayload` instructions for LTX audio, prompt relay, guides, upscale,
 LoRA, IC-LoRA, retake, frame references, and stage audio actions. Common
 orchestration carries these values; it must not interpret their graph meaning.
+`NormalLoraPlanCompiler` is common graph-free planning shared by LTX and Wan:
+it resolves each stage's effective clip rows, keeps clip-before-stage ordering,
+and leaves the resulting immutable array inside the selected architecture's
+stage payload rather than common `StagePlan`.
 For Wan, `WanClipPlanCompiler.Compile` produces the smaller `WanClipPayload`
 and `WanStagePayload`. It requires every active stage to resolve to the exact
 `wan22` / `wan-2.2-i2v-14b` profile, enforces the generated-root /
-source-video / previous-stage chain, and refuses unsupported or empty integer
-schedules that the common capability validator cannot yet see.
+source-video / previous-stage chain, refuses an effective LoRA plan on a
+samplerless passthrough, and refuses unsupported or empty integer schedules
+that the common capability validator cannot yet see. A clip-LoRA weight of
+zero is the supported per-stage disable path. Direct/default clip and stage
+rows whose model and text-encoder weights are both zero are omitted; a
+model-zero, text-encoder-nonzero row remains effectful and is retained.
 
 Blocking `PlanDiagnostic` values are thrown by
 `RequireVideoExecutionPlanContext` before a VideoStages mutation phase.
@@ -435,7 +444,27 @@ partial control conditions from frame 0 and VAE-encodes a distinct full
 conformed-batch selector. Each later stage uses the same passthrough/full/
 partial rules over the preceding decoded batch. The session validates the
 immutable clip, entry, source, stage input, payload, and canonical profile
-contract before graph mutation. It publishes authored intermediates and
+contract before graph mutation.
+
+For every generating pass, `LoraParams.ApplyNormalLoras` temporarily projects
+the compiled persisted rows into host `SectionID_Video`. The scope is absent
+for passthrough stages and is restored on success or failure. Before the host
+builder runs, Wan evicts the high-pass
+`modelloader_{model}_image2video` cache marker even when the compiled list is
+empty, because that marker does not encode scoped LoRA state; existing live
+graph nodes are not pruned. With VideoSwap, stage-authored rows therefore
+belong only to the high branch. The low branch remains owned by the host's
+`SectionID_VideoSwap` LoRAs and is never injected from the stage payload. If
+both branches select the same model, Wan drops that shared marker again after
+high model preparation so the swap loader still runs under the host's low-pass
+scope. A loader tuple built under nonempty planned LoRAs, or left under that
+same-model swap scope, is transient: Wan removes its marker in a `finally`
+before the parameter snapshot is restored, including when construction or
+normalization fails. An empty final high pass with a distinct or absent swap
+keeps its durable unscoped tuple. Marker eviction never removes live graph
+nodes.
+
+The session publishes authored intermediates and
 removes every host per-pass trim. For a terminal single-clip session it applies
 the global trim after the final stage; for a multi-clip timeline, common
 assembly applies that trim once over the joined timeline. The session returns

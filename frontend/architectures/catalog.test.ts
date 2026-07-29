@@ -16,7 +16,9 @@ import {
     parseVideoArchitectureCatalog,
     refreshAuthoritativeArchitectureCatalog,
 } from "./catalog";
+import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
 import { createCapabilityViewResolver } from "./policy";
+import type { CapabilityRuleDecision } from "./types";
 
 const dto = {
     architectures: [
@@ -170,6 +172,35 @@ describe("architecture catalog wire contract", () => {
         duplicateCode.architectures[0].rules[0].code =
             duplicateCode.architectures[0].boundaryRules.continue.code;
         expect(parseVideoArchitectureCatalog(duplicateCode)).toBeNull();
+    });
+
+    it("validates typed stage-control rules on model profiles", () => {
+        const samplingRule: CapabilityRuleDecision = {
+            support: "conditional",
+            code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
+            reason: "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.",
+            scope: "stage",
+            entityId: null,
+            constraints: { exclusiveMinimumControl: 0 },
+        };
+        const valid = structuredClone(dto);
+        (
+            valid.architectures[0].profiles[0] as {
+                rules: CapabilityRuleDecision[];
+            }
+        ).rules = [samplingRule];
+        expect(parseVideoArchitectureCatalog(valid)).toEqual(valid);
+
+        const wrongType = structuredClone(valid);
+        const constraints = wrongType.architectures[0].profiles[0].rules[0]
+            .constraints as Record<string, unknown>;
+        constraints.exclusiveMinimumControl = "0";
+        expect(parseVideoArchitectureCatalog(wrongType)).toBeNull();
+
+        const wrongScope = structuredClone(valid);
+        wrongScope.architectures[0].profiles[0].rules[0].scope =
+            "model-profile";
+        expect(parseVideoArchitectureCatalog(wrongScope)).toBeNull();
     });
 
     it("uses exact authoritative boundary constraints", () => {

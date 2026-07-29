@@ -12,6 +12,7 @@ import {
     sourceVideoFixture,
 } from "../__test_helpers__/clipFixtures";
 import type { Clip } from "../types";
+import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
 import { deriveArchitectureDiagnostics } from "./diagnostics";
 import type { ArchitectureModelCatalog } from "./types";
 
@@ -475,6 +476,50 @@ describe("architecture diagnostics", () => {
             "architecture.unsupported.stage-loras-profile",
         );
         expect(codes).not.toContain("architecture.unsupported.stage-loras");
+    });
+
+    it("diagnoses the sampling-stage LoRA rule only on active effective stages", () => {
+        const models = combinedCatalog();
+        const profile = models.architectures[0].profiles[0];
+        profile.rules = [
+            {
+                support: "conditional",
+                code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
+                reason: "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.",
+                scope: "stage",
+                entityId: null,
+                constraints: { exclusiveMinimumControl: 0 },
+            },
+        ];
+        const clip = minimalClip({
+            loras: [{ name: "normal-lora.safetensors" }],
+            stages: [
+                minimalStage({ control: 0, loraWeights: [1] }),
+                minimalStage({
+                    skipped: true,
+                    control: 0,
+                    loraWeights: [1],
+                }),
+                minimalStage({ control: 0, loraWeights: [1] }),
+                minimalStage({ control: 0, loraWeights: [0] }),
+            ],
+        });
+
+        const matching = deriveArchitectureDiagnostics([clip], models).filter(
+            ({ code }) =>
+                code === CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
+        );
+        expect(matching).toHaveLength(1);
+        expect(matching[0].message).toContain("Stage 0");
+
+        clip.skipped = true;
+        expect(
+            deriveArchitectureDiagnostics([clip], models).some(
+                ({ code }) =>
+                    code ===
+                    CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
+            ),
+        ).toBe(false);
     });
 
     it("diagnoses a persisted upscale method whose exact mode is unsupported", () => {

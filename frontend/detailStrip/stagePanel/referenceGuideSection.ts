@@ -19,6 +19,7 @@ import {
 import { LORA_WEIGHT_STEP } from "../../loraAuthoring";
 import { refSourceLabel } from "../../timelineDetail";
 import {
+    applyPersistedCapabilityRepair,
     buildCapabilityNotice,
     disableCapabilityControls,
 } from "../capabilityUi";
@@ -47,6 +48,7 @@ export const appendStageReferenceGuideSection = ({
     stageIdx,
     fields,
     stageCapabilities,
+    commit,
     debouncedCommit,
 }: StagePanelBindings): void => {
     if (clip.refs.length > 0) {
@@ -130,7 +132,23 @@ export const appendStageReferenceGuideSection = ({
             group.appendChild(row);
         });
         if (!loraState.enabled) {
-            disableCapabilityControls(group, loraState);
+            const hasEffectiveWeight = clip.loras.some(
+                (_, entryIdx) => (stage.loraWeights[entryIdx] ?? 1) !== 0,
+            );
+            applyPersistedCapabilityRepair(group, loraState, {
+                repair: hasEffectiveWeight
+                    ? {
+                          label: "Set this stage's LoRA weights to 0",
+                          className: "vst-reset-unsupported-stage-loras",
+                          onRepair: () => {
+                              commit((target) => {
+                                  target.loraWeights = clip.loras.map(() => 0);
+                              });
+                              context.render();
+                          },
+                      }
+                    : undefined,
+            });
         }
         fields.appendChild(group);
     }

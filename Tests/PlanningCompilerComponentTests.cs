@@ -202,6 +202,42 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
+    public void NormalLoraPlanCompiler_OmitsNoOpDirectDefinitionsAndRetainsTextOnlyDefinitions()
+    {
+        StageSpec stage = Stage(10) with
+        {
+            Loras =
+            [
+                new("stage-no-op", 0, 0),
+                new("stage-text-only", 0, 0.8),
+            ],
+        };
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            Loras =
+            [
+                new("clip-no-op", 0, 0),
+                new("clip-text-only", 0, 0.6),
+            ],
+        };
+
+        Assert.Collection(
+            NormalLoraPlanCompiler.Compile(clip, stage),
+            plan =>
+            {
+                Assert.Equal("clip-text-only", plan.Name);
+                Assert.Equal(0, plan.ModelWeight);
+                Assert.Equal(0.6, plan.TextEncoderWeight);
+            },
+            plan =>
+            {
+                Assert.Equal("stage-text-only", plan.Name);
+                Assert.Equal(0, plan.ModelWeight);
+                Assert.Equal(0.8, plan.TextEncoderWeight);
+            });
+    }
+
+    [Fact]
     public void IcLoraPlanCompiler_UsesPerEntryStageStrengths()
     {
         StageSpec stage = Stage(11) with

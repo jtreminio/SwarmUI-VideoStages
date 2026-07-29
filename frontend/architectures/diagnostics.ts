@@ -1,10 +1,19 @@
 import { audioSourceKind, canUseClipLengthFromAudio } from "../audioSource";
-import { activeStageCount, executableBoundaries } from "../clipSemantics";
+import {
+    activeStageCount,
+    executableBoundaries,
+    executableClipIndexes,
+} from "../clipSemantics";
 import type { Clip } from "../types";
 import {
     hasArchitectureSlotSourcedIcLora,
     isArchitectureHdrFeature,
 } from "./behaviorRegistry";
+import {
+    CONDITIONAL_RULE_CODES,
+    conditionalRule,
+    evaluateConditionalRule,
+} from "./conditionalRules";
 import { architectureSupportsClipStart } from "./conversion/entryModePolicy";
 import { NONE_ARCHITECTURE_ID } from "./none/identity";
 import { createBoundaryCapabilityViews } from "./policy/boundaryPolicy";
@@ -202,6 +211,7 @@ export const deriveArchitectureDiagnostics = (
     const modelByName = new Map(
         catalog.entries.map((entry) => [entry.value, entry]),
     );
+    const executableClipIndexSet = new Set(executableClipIndexes(clips));
 
     clips.forEach((clip, clipIdx) => {
         const sourceOnly =
@@ -312,10 +322,11 @@ export const deriveArchitectureDiagnostics = (
                 ?.profiles.find(
                     (profile) => profile.id === resolved.modelProfileId,
                 );
+            const hasEffectiveNormalLora = clip.loras.some(
+                (_, index) => (stage.loraWeights[index] ?? 1) !== 0,
+            );
             if (
-                clip.loras.some(
-                    (_, index) => (stage.loraWeights[index] ?? 1) !== 0,
-                ) &&
+                hasEffectiveNormalLora &&
                 resolvedProfile &&
                 !resolvedProfile.capabilities.includes("normal-lora")
             ) {
@@ -323,6 +334,27 @@ export const deriveArchitectureDiagnostics = (
                     issue(
                         "architecture.unsupported.stage-loras-profile",
                         `Clip ${clipIdx} Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} has normal LoRAs, but model profile '${resolvedProfile.id}' does not support them.`,
+                        clipIdx,
+                    ),
+                );
+            }
+            const samplingStageRule = resolvedProfile
+                ? conditionalRule(
+                      resolvedProfile.rules,
+                      CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
+                  )
+                : null;
+            if (
+                executableClipIndexSet.has(clipIdx) &&
+                stageIdx < activeStageCount(clip) &&
+                hasEffectiveNormalLora &&
+                samplingStageRule &&
+                evaluateConditionalRule(samplingStageRule, { clip, stage })
+            ) {
+                diagnostics.push(
+                    issue(
+                        samplingStageRule.code,
+                        `Clip ${clipIdx} Stage ${stageIdx}: ${samplingStageRule.reason}`,
                         clipIdx,
                     ),
                 );

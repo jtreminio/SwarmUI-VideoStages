@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
@@ -61,10 +62,26 @@ internal static class WanClipPlanCompiler
             }
             bool firstStage = stageIndex == 0;
             bool decodedStageInput = sourcedEntry || !firstStage;
+            ImmutableArray<NormalLoraPlan> loras =
+                NormalLoraPlanCompiler.Compile(clip, stage);
             Refuse(
                 stage.IsPassthrough && !decodedStageInput,
                 "a generated-root stage that generates nothing",
                 stage.Id);
+            if (decodedStageInput
+                && stage.Control <= WanArchitectureModule
+                    .NormalLoraRequiresSamplingStageRule
+                    .Require<MinimumStageControlRuleConstraints>()
+                    .ExclusiveMinimumControl
+                && !loras.IsDefaultOrEmpty)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
+                    WanArchitectureModule.NormalLoraRequiresSamplingStageReason,
+                    clip.Id,
+                    stage.Id));
+            }
             Refuse(
                 firstStage
                     && !StringUtils.Equals(stage.ImageReference, "Generated"),
@@ -105,7 +122,8 @@ internal static class WanClipPlanCompiler
                     stage.Steps,
                     stage.CfgScale,
                     stage.Sampler,
-                    stage.Scheduler));
+                    stage.Scheduler,
+                    loras));
         }
         return new(new WanClipPayload(clip.Id), stages, diagnostics.AsReadOnly());
     }

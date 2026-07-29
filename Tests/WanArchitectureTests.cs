@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
@@ -60,6 +61,9 @@ public class WanArchitectureTests
         Assert.DoesNotContain(ArchitectureEntryMode.RefineVideo, descriptor.EntryModes);
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.ImageInput));
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.VideoInput));
+        Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.Lora));
+        Assert.True(Assert.Single(descriptor.Profiles).Capabilities.HasFlag(
+            ModelProfileCapability.NormalLora));
         Assert.True(descriptor.StageGuideReferences.Allows(
             StageGuideReferencePolicy.Classify("Generated")));
         Assert.True(descriptor.StageGuideReferences.Allows(
@@ -106,9 +110,6 @@ public class WanArchitectureTests
         AssertRejected(
             GeneratedClip(0, stage with { RetakeWindow = new(0, 8, 1) }),
             "retake");
-        AssertRejected(
-            GeneratedClip(0, stage with { Loras = [new LoraRef("wan-lora.safetensors")] }),
-            "normal LoRA");
         AssertRejected(
             GeneratedClip(0, stage) with { ImageRefs = [new("Generated", 1, false, null)] },
             "image references");
@@ -166,6 +167,73 @@ public class WanArchitectureTests
         Assert.Equal("normal", firstPayload.Scheduler);
         Assert.Equal(0.35, secondPayload.Control);
         Assert.Equal(17, secondPayload.Steps);
+        Assert.Empty(firstPayload.Loras);
+        Assert.Empty(secondPayload.Loras);
+    }
+
+    [Fact]
+    public void Catalog_and_profile_advertise_normal_LoRA_support()
+    {
+        JObject catalog = ArchitectureCatalogSerializer.Serialize(new WanCatalogRegistry());
+        JObject wan = Assert.Single(
+            catalog["architectures"].Values<JObject>(),
+            item => item.Value<string>("id") == "wan22");
+        JObject profile = Assert.Single(wan["profiles"].Values<JObject>());
+        JObject rule = Assert.Single(profile["rules"].Values<JObject>());
+
+        Assert.Contains("lora", wan["capabilities"]["stage"].Values<string>());
+        Assert.Contains(
+            "normal-lora",
+            profile["capabilities"].Values<string>());
+        Assert.Equal(
+            WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
+            rule.Value<string>("code"));
+        Assert.Equal("conditional", rule.Value<string>("support"));
+        Assert.Equal("stage", rule.Value<string>("scope"));
+        Assert.Equal(
+            0,
+            rule["constraints"].Value<double>("exclusiveMinimumControl"));
+        Assert.Equal(
+            0,
+            WanArchitectureModule.NormalLoraRequiresSamplingStageRule
+                .Require<MinimumStageControlRuleConstraints>()
+                .ExclusiveMinimumControl);
+    }
+
+    [Fact]
+    public void Compilation_plans_clip_then_stage_LoRAs_with_effective_weights()
+    {
+        StageSpec stage = Stage(10, "wan-model") with
+        {
+            LoraWeights = [0.35, 0],
+            Loras = [new("stage-zero", 0, 0.8)],
+        };
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            Loras =
+            [
+                new("clip-active", 1, 0.25),
+                new("clip-disabled", 0.9, 0.7),
+            ],
+        };
+
+        WanStagePayload payload = Assert.Single(
+            Assert.Single(Compile(clip).Clips).Stages).RequireWanPayload();
+
+        Assert.Collection(
+            payload.Loras,
+            lora =>
+            {
+                Assert.Equal("clip-active", lora.Name);
+                Assert.Equal(0.35, lora.ModelWeight);
+                Assert.Equal(0.25, lora.TextEncoderWeight);
+            },
+            lora =>
+            {
+                Assert.Equal("stage-zero", lora.Name);
+                Assert.Equal(0, lora.ModelWeight);
+                Assert.Equal(0.8, lora.TextEncoderWeight);
+            });
     }
 
     [Fact]
@@ -237,6 +305,80 @@ public class WanArchitectureTests
         Assert.All(
             compiled.Stages,
             stage => Assert.Equal(0, stage.RequireWanPayload().Control));
+    }
+
+    [Fact]
+    public void Compilation_refuses_effective_LoRAs_on_samplerless_passthrough()
+    {
+        StageSpec passthrough = Stage(10, "wan-model") with { Control = 0 };
+
+        AssertBlocked(
+            Compile(
+                SourcedClip(0, passthrough) with
+                {
+                    Loras = [new("clip-active", 0.5)],
+                }),
+            WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
+            WanArchitectureModule.NormalLoraRequiresSamplingStageReason);
+        AssertBlocked(
+            Compile(
+                SourcedClip(
+                    0,
+                    passthrough with
+                    {
+                        Loras = [new("stage-text-only", 0, 0.8)],
+                    })),
+            WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
+            WanArchitectureModule.NormalLoraRequiresSamplingStageReason);
+        AssertBlocked(
+            Compile(
+                SourcedClip(
+                    0,
+                    passthrough with
+                    {
+                        Control = -0.1,
+                        Loras = [new("stage-negative-control", 1)],
+                    })),
+            WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
+            WanArchitectureModule.NormalLoraRequiresSamplingStageReason);
+
+        ClipSpec disabled = SourcedClip(
+            0,
+            passthrough with { LoraWeights = [0] }) with
+        {
+            Loras = [new("clip-disabled", 1)],
+        };
+        ClipPlan compiled = Assert.Single(Compile(disabled).Clips);
+        Assert.True(Assert.Single(compiled.Stages).IsPassthrough);
+        Assert.Empty(compiled.Stages[0].RequireWanPayload().Loras);
+
+        VideoExecutionPlan stageNoOp = Compile(
+            SourcedClip(
+                0,
+                passthrough with
+                {
+                    Loras = [new("stage-no-op", 0, 0)],
+                }));
+        Assert.DoesNotContain(
+            stageNoOp.Diagnostics,
+            diagnostic =>
+                diagnostic.Code
+                    == WanArchitectureModule.NormalLoraRequiresSamplingStageCode);
+        Assert.Empty(
+            Assert.Single(stageNoOp.Clips).Stages[0].RequireWanPayload().Loras);
+
+        VideoExecutionPlan sampled = Compile(
+            SourcedClip(0, passthrough with { Control = 0.5 }) with
+            {
+                Loras = [new("clip-active", 0.5)],
+            });
+        Assert.DoesNotContain(
+            sampled.Diagnostics,
+            diagnostic =>
+                diagnostic.Code
+                    == WanArchitectureModule.NormalLoraRequiresSamplingStageCode);
+        Assert.Single(
+            Assert.Single(sampled.Clips).Stages[0].RequireWanPayload().Loras);
     }
 
     [Fact]
@@ -538,4 +680,26 @@ public class WanArchitectureTests
 
     private static StageSpec Stage(int id, string model) =>
         new(id, 1, 1, "pixel-lanczos", model, 12, 4.5, "euler", "normal", "Generated");
+
+    private sealed class WanCatalogRegistry : IVideoArchitectureRegistry
+    {
+        public IReadOnlyList<VideoArchitectureDescriptor> Catalog =>
+            [WanArchitectureModule.Instance.Descriptor];
+
+        public IReadOnlyList<ResolvedVideoModel> ResolvedModels => [];
+
+        public IVideoArchitectureModule GetModule(ArchitectureId architectureId) =>
+            architectureId == WanArchitectureModule.ArchitectureId
+                ? WanArchitectureModule.Instance
+                : throw new KeyNotFoundException();
+
+        public bool TryResolveModel(string modelName, out ResolvedVideoModel resolved)
+        {
+            resolved = null;
+            return false;
+        }
+
+        public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved) =>
+            WanArchitectureModule.Instance.TryResolveModel(model, out resolved);
+    }
 }
