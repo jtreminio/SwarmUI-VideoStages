@@ -1439,6 +1439,7 @@
   var snapshotError = null;
   var requestGeneration = 0;
   var activeRequest = null;
+  var trailingRequest = null;
   var cloneCatalog = (catalog) => structuredClone(catalog);
   var errorMessage = (error) => error instanceof Error ? error.message : `${error}`;
   var getArchitectureCatalogSnapshot = () => ({
@@ -1502,7 +1503,30 @@
     }
     return requestAuthoritativeCatalog();
   };
-  var refreshAuthoritativeArchitectureCatalog = () => requestAuthoritativeCatalog();
+  var refreshAuthoritativeArchitectureCatalog = () => {
+    if (!activeRequest) {
+      return requestAuthoritativeCatalog();
+    }
+    if (trailingRequest?.after === activeRequest) {
+      return trailingRequest.promise;
+    }
+    const precedingRequest = activeRequest;
+    let request;
+    const promise = precedingRequest.promise.then(() => {
+      if (trailingRequest !== request || requestGeneration !== precedingRequest.generation) {
+        return null;
+      }
+      trailingRequest = null;
+      return requestAuthoritativeCatalog();
+    }).finally(() => {
+      if (trailingRequest === request) {
+        trailingRequest = null;
+      }
+    });
+    request = { after: precedingRequest, promise };
+    trailingRequest = request;
+    return promise;
+  };
   var buildArchitectureModelCatalog = (values, labels) => {
     const backend = authoritativeCatalog;
     const hostLabels = /* @__PURE__ */ new Map();
@@ -15258,7 +15282,7 @@ The conversion is one undoable change.`;
     const boundaryTrack = createTimelineBoundaryTrack();
     const referencesTrack = createTimelineReferencesTrack(capabilities);
     let addClipInFlight = false;
-    let catalogAdoption = null;
+    const catalogAdoptions = /* @__PURE__ */ new WeakMap();
     let disposed = false;
     let historyNeedsRebase = true;
     const hasAuthoritativeCatalog = () => getArchitectureCatalogSnapshot().catalog !== null;
@@ -15466,13 +15490,13 @@ The conversion is one undoable change.`;
       if (!forceRefresh && currentCatalog.catalog && currentCatalog.status !== "refreshing") {
         return Promise.resolve();
       }
-      if (catalogAdoption) {
-        return catalogAdoption;
-      }
       const request = forceRefresh ? refreshAuthoritativeArchitectureCatalog() : loadAuthoritativeArchitectureCatalog();
+      const existingAdoption = catalogAdoptions.get(request);
+      if (existingAdoption) {
+        return existingAdoption;
+      }
       renderAll();
-      let adoption;
-      adoption = request.then((catalog) => {
+      const adoption = request.then((catalog) => {
         if (disposed) {
           return;
         }
@@ -15483,11 +15507,9 @@ The conversion is one undoable change.`;
         }
         renderAll();
       }).finally(() => {
-        if (catalogAdoption === adoption) {
-          catalogAdoption = null;
-        }
+        catalogAdoptions.delete(request);
       });
-      catalogAdoption = adoption;
+      catalogAdoptions.set(request, adoption);
       return adoption;
     };
     const init = () => {

@@ -509,6 +509,59 @@ describe("videoStagesTimeline", () => {
         expect(document.querySelector(".vst-detail-clip")).not.toBeNull();
     });
 
+    it("adopts a trailing forced refresh when the host signal arrives during initial loading", async () => {
+        mountState(makeClipsJson(1));
+        invalidateArchitectureCatalog();
+        let resolveInitial!: (value: unknown) => void;
+        let resolveTrailing!: (value: unknown) => void;
+        const requestJson = jest
+            .fn<VideoStagesHostBridge["requestJson"]>()
+            .mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        resolveInitial = resolve;
+                    }),
+            )
+            .mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        resolveTrailing = resolve;
+                    }),
+            );
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson,
+        });
+
+        timeline = videoStagesTimeline();
+        timeline.init();
+        await Promise.resolve();
+        expect(requestJson).toHaveBeenCalledTimes(1);
+
+        const extras = refreshParamsExtra as (() => unknown)[];
+        expect(extras).toHaveLength(1);
+        extras[0]();
+        await Promise.resolve();
+        expect(requestJson).toHaveBeenCalledTimes(1);
+
+        resolveInitial(authoritativeDto());
+        await flushMicrotasks();
+        expect(requestJson).toHaveBeenCalledTimes(2);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        expect(document.querySelector(".vst-detail-add-iclora")).not.toBeNull();
+
+        const replacement = authoritativeDto();
+        replacement.architectures[0].capabilities.stage =
+            replacement.architectures[0].capabilities.stage.filter(
+                (capability) => capability !== "ic-lora",
+            );
+        resolveTrailing(replacement);
+        await flushMicrotasks();
+
+        expect(document.querySelector(".vst-detail-add-iclora")).toBeNull();
+        expect(requestJson).toHaveBeenCalledTimes(2);
+    });
+
     it("shows unavailable with Retry and recovers without touching the document", async () => {
         mountState(makeClipsJson(1));
         invalidateArchitectureCatalog();

@@ -350,13 +350,15 @@ describe("authoritative catalog repository", () => {
         expect(requestJson).toHaveBeenCalledTimes(2);
     });
 
-    it("coalesces repeated load and refresh calls within a request generation", async () => {
+    it("coalesces loads while forced callers share one trailing refresh", async () => {
         const initial = deferred<unknown>();
-        const refresh = deferred<unknown>();
+        const trailing = deferred<unknown>();
+        const replacement = structuredClone(dto);
+        replacement.models = replacement.models.slice(0, 1);
         const requestJson = jest
             .fn<VideoStagesHostBridge["requestJson"]>()
             .mockImplementationOnce(() => initial.promise)
-            .mockImplementationOnce(() => refresh.promise);
+            .mockImplementationOnce(() => trailing.promise);
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson,
@@ -364,15 +366,21 @@ describe("authoritative catalog repository", () => {
 
         const firstLoad = loadAuthoritativeArchitectureCatalog();
         expect(loadAuthoritativeArchitectureCatalog()).toBe(firstLoad);
-        expect(refreshAuthoritativeArchitectureCatalog()).toBe(firstLoad);
+        const forcedRefresh = refreshAuthoritativeArchitectureCatalog();
+        expect(forcedRefresh).not.toBe(firstLoad);
+        expect(refreshAuthoritativeArchitectureCatalog()).toBe(forcedRefresh);
+
         initial.resolve(dto);
         await firstLoad;
+        await Promise.resolve();
+        expect(requestJson).toHaveBeenCalledTimes(2);
+        expect(getArchitectureCatalogSnapshot()).toMatchObject({
+            status: "refreshing",
+            catalog: dto,
+        });
 
-        const firstRefresh = refreshAuthoritativeArchitectureCatalog();
-        expect(refreshAuthoritativeArchitectureCatalog()).toBe(firstRefresh);
-        expect(loadAuthoritativeArchitectureCatalog()).toBe(firstRefresh);
-        refresh.resolve(dto);
-        await firstRefresh;
+        trailing.resolve(replacement);
+        await expect(forcedRefresh).resolves.toEqual(replacement);
 
         expect(requestJson).toHaveBeenCalledTimes(2);
         expect(requestJson).toHaveBeenNthCalledWith(

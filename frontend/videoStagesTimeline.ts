@@ -91,7 +91,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const boundaryTrack = createTimelineBoundaryTrack();
     const referencesTrack = createTimelineReferencesTrack(capabilities);
     let addClipInFlight = false;
-    let catalogAdoption: Promise<void> | null = null;
+    const catalogAdoptions = new WeakMap<Promise<unknown>, Promise<void>>();
     let disposed = false;
     let historyNeedsRebase = true;
     const hasAuthoritativeCatalog = (): boolean =>
@@ -344,17 +344,17 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         ) {
             return Promise.resolve();
         }
-        if (catalogAdoption) {
-            return catalogAdoption;
-        }
         const request = forceRefresh
             ? refreshAuthoritativeArchitectureCatalog()
             : loadAuthoritativeArchitectureCatalog();
+        const existingAdoption = catalogAdoptions.get(request);
+        if (existingAdoption) {
+            return existingAdoption;
+        }
         // Both initial loading and retained-data refreshing are visible
         // immediately; neither path reads or mutates document state here.
         renderAll();
-        let adoption!: Promise<void>;
-        adoption = request
+        const adoption = request
             .then((catalog) => {
                 if (disposed) {
                     return;
@@ -367,11 +367,9 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 renderAll();
             })
             .finally(() => {
-                if (catalogAdoption === adoption) {
-                    catalogAdoption = null;
-                }
+                catalogAdoptions.delete(request);
             });
-        catalogAdoption = adoption;
+        catalogAdoptions.set(request, adoption);
         return adoption;
     };
 

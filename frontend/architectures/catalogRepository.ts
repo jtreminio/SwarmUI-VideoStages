@@ -13,11 +13,17 @@ interface CatalogRequest {
     promise: Promise<VideoArchitectureCatalogDto | null>;
 }
 
+interface TrailingCatalogRequest {
+    after: CatalogRequest;
+    promise: Promise<VideoArchitectureCatalogDto | null>;
+}
+
 let authoritativeCatalog: VideoArchitectureCatalogDto | null = null;
 let snapshotStatus: ArchitectureCatalogSnapshot["status"] = "loading";
 let snapshotError: string | null = null;
 let requestGeneration = 0;
 let activeRequest: CatalogRequest | null = null;
+let trailingRequest: TrailingCatalogRequest | null = null;
 
 const cloneCatalog = (
     catalog: VideoArchitectureCatalogDto,
@@ -108,11 +114,41 @@ export const loadAuthoritativeArchitectureCatalog =
 
 /**
  * Re-requests the backend catalog without dropping the last-known-good DTO.
- * Calls made while the current generation is already loading coalesce.
+ * Forced calls during one active generation share a fresh trailing request.
  */
 export const refreshAuthoritativeArchitectureCatalog =
-    (): Promise<VideoArchitectureCatalogDto | null> =>
-        requestAuthoritativeCatalog();
+    (): Promise<VideoArchitectureCatalogDto | null> => {
+        if (!activeRequest) {
+            return requestAuthoritativeCatalog();
+        }
+        if (trailingRequest?.after === activeRequest) {
+            return trailingRequest.promise;
+        }
+
+        const precedingRequest = activeRequest;
+        let request!: TrailingCatalogRequest;
+        const promise = precedingRequest.promise
+            .then(() => {
+                if (
+                    trailingRequest !== request ||
+                    requestGeneration !== precedingRequest.generation
+                ) {
+                    return null;
+                }
+                // The trailing request is now the active generation. Clear its
+                // slot so a later forced signal can schedule after this one.
+                trailingRequest = null;
+                return requestAuthoritativeCatalog();
+            })
+            .finally(() => {
+                if (trailingRequest === request) {
+                    trailingRequest = null;
+                }
+            });
+        request = { after: precedingRequest, promise };
+        trailingRequest = request;
+        return promise;
+    };
 
 /**
  * Test/process reset and explicit supersession boundary. Older requests may
@@ -122,6 +158,7 @@ export const refreshAuthoritativeArchitectureCatalog =
 export const invalidateArchitectureCatalog = (): void => {
     requestGeneration++;
     activeRequest = null;
+    trailingRequest = null;
     authoritativeCatalog = null;
     snapshotStatus = "loading";
     snapshotError = null;
