@@ -7,6 +7,7 @@ import {
     testSourceOnlyArchitecture,
 } from "../__test_helpers__/architectureFixtures";
 import {
+    hdrIcLoraFixture,
     minimalClip,
     minimalRef,
     minimalStage,
@@ -419,5 +420,125 @@ describe("persisted-but-unsupported repair contract", () => {
 
         expect(clip.clipLengthFromAudio).toBe(false);
         expect(clip.audioSource).toBe("Native");
+    });
+
+    it("shows persisted control-signal duration as repair-only state", () => {
+        const models = testArchitectureCatalog();
+        const clip = minimalClip({
+            clipLengthFromControlNet: true,
+            icLoras: [
+                hdrIcLoraFixture({
+                    hdr: false,
+                    driveSource: "ControlNet 2",
+                }),
+            ],
+        });
+        const clips = [clip];
+        const body = buildAudioBody(
+            context(models, clips),
+            { kind: "audio", clipIdx: 0 },
+            clips,
+        );
+        const status = body.querySelector<HTMLElement>(
+            ".vst-detail-control-signal-derived-duration",
+        );
+        const repair = status?.querySelector<HTMLButtonElement>(
+            ".vst-remove-control-signal-derived-duration",
+        );
+
+        expect(status?.textContent).toContain(
+            "Control-signal-derived clip duration is active",
+        );
+        expect(status?.querySelector("input")).toBeNull();
+        expect(
+            status?.querySelector("[data-vst-capability-unsupported]"),
+        ).toBeNull();
+        expect(keyboardOperable(repair ?? null)).toBe(true);
+
+        repair?.click();
+
+        expect(clip.clipLengthFromControlNet).toBe(false);
+    });
+
+    it("explains and repairs a missing LTX control-signal source", () => {
+        const models = testArchitectureCatalog();
+        const clip = minimalClip({ clipLengthFromControlNet: true });
+        const clips = [clip];
+        const body = buildAudioBody(
+            context(models, clips),
+            { kind: "audio", clipIdx: 0 },
+            clips,
+        );
+        const status = body.querySelector<HTMLElement>(
+            ".vst-detail-control-signal-derived-duration",
+        );
+        const repair = status?.querySelector<HTMLButtonElement>(
+            ".vst-remove-control-signal-derived-duration",
+        );
+
+        expect(status?.textContent).toContain(
+            "No IC-LoRA supplies a ControlNet 1-3 drive source",
+        );
+        expect(keyboardOperable(repair ?? null)).toBe(true);
+    });
+
+    it("explains unsupported persisted control-signal duration through the capability", () => {
+        const models = testArchitectureCatalog();
+        models.architectures.push(testSourceOnlyArchitecture());
+        const clip = minimalClip({
+            architecture: "none",
+            modelProfileId: "none",
+            sourceVideo: sourceVideoFixture(),
+            stages: [],
+            clipLengthFromControlNet: true,
+        });
+        const clips = [clip];
+        const body = buildAudioBody(
+            context(models, clips),
+            { kind: "audio", clipIdx: 0 },
+            clips,
+        );
+        const status = body.querySelector<HTMLElement>(
+            ".vst-detail-control-signal-derived-duration",
+        );
+        const repair = status?.querySelector<HTMLButtonElement>(
+            ".vst-remove-control-signal-derived-duration",
+        );
+
+        expect(status?.textContent).toContain(
+            "Control-signal-derived clip duration is not supported by Decoded source only",
+        );
+        expect(keyboardOperable(repair ?? null)).toBe(true);
+    });
+
+    it("keeps control-signal duration repair operable when clip audio is read-only", () => {
+        const models = testArchitectureCatalog();
+        models.architectures[0].capabilities = testArchitectureCapabilities({
+            clip: ["control-signal-derived-duration"],
+            audioSourceKinds: ["Disabled"],
+        });
+        const clip = minimalClip({
+            clipLengthFromControlNet: true,
+            icLoras: [
+                hdrIcLoraFixture({
+                    hdr: false,
+                    driveSource: "ControlNet 1",
+                }),
+            ],
+        });
+        const clips = [clip];
+        const ctx = context(models, clips);
+        ctx.structuralCommit = (apply) => {
+            apply(clips);
+        };
+        const body = buildAudioBody(ctx, { kind: "audio", clipIdx: 0 }, clips);
+        const repair = body.querySelector<HTMLButtonElement>(
+            ".vst-remove-control-signal-derived-duration",
+        );
+
+        expect(body.querySelector<HTMLSelectElement>("select")?.disabled).toBe(
+            true,
+        );
+        expect(keyboardOperable(repair)).toBe(true);
     });
 });

@@ -34,14 +34,28 @@ const CONTROLNET_SOURCE_OPTIONS = [
     "ControlNet 3",
 ] as const;
 
-export const normalizeControlNetSource = (value: unknown): string => {
+const controlNetSourceIndex = (value: unknown): number | null => {
     const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
-    for (const option of CONTROLNET_SOURCE_OPTIONS) {
-        if (option.replace(/\s+/g, "").toLowerCase() === compact) {
-            return option;
-        }
+    if (!compact.startsWith("controlnet")) {
+        return null;
     }
-    return CONTROLNET_SOURCE_OPTIONS[0];
+    const rawIndex = compact.slice("controlnet".length);
+    if (!/^[+-]?\d+$/.test(rawIndex)) {
+        return null;
+    }
+    const oneBased = Number(rawIndex);
+    return Number.isSafeInteger(oneBased) && oneBased >= 1 && oneBased <= 3
+        ? oneBased - 1
+        : null;
+};
+
+const canonicalControlNetSource = (value: unknown): string | null => {
+    const index = controlNetSourceIndex(value);
+    return index === null ? null : CONTROLNET_SOURCE_OPTIONS[index];
+};
+
+export const normalizeControlNetSource = (value: unknown): string => {
+    return canonicalControlNetSource(value) ?? CONTROLNET_SOURCE_OPTIONS[0];
 };
 
 export const defaultIcLora = (overrides: Partial<IcLora> = {}): IcLora => ({
@@ -81,14 +95,15 @@ export const normalizeIcLoraControlType = (
 };
 
 const normalizeIcLoraDriveSource = (value: unknown): string => {
-    const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
+    const authored = `${value ?? ""}`.trim();
+    const compact = authored.replace(/\s+/g, "").toLowerCase();
     if (!compact || compact === "upload") {
         return IC_LORA_SOURCE_UPLOAD;
     }
     if (compact === "incoming" || compact === "stageinput") {
         return IC_LORA_SOURCE_INCOMING;
     }
-    return normalizeControlNetSource(value);
+    return canonicalControlNetSource(authored) ?? authored;
 };
 
 const normalizeIcLoraDriveData = (value: unknown): IcLoraDriveData => {
@@ -248,8 +263,4 @@ export const isHdrFeature = (entry: IcLora): boolean => entry.hdr === true;
 
 /** True when any entry is driven by a captured core "ControlNet N" branch. */
 export const hasSlotSourcedIcLora = (icLoras: IcLora[]): boolean =>
-    icLoras.some(
-        (entry) =>
-            entry.driveSource !== IC_LORA_SOURCE_UPLOAD &&
-            entry.driveSource !== IC_LORA_SOURCE_INCOMING,
-    );
+    icLoras.some((entry) => controlNetSourceIndex(entry.driveSource) !== null);

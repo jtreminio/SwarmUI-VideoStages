@@ -3,6 +3,7 @@ import { describe, expect, it } from "@jest/globals";
 import {
     fakeArchitectureCatalog,
     testArchitectureCapabilities,
+    testArchitectureCatalog,
 } from "../__test_helpers__/architectureFixtures";
 import {
     hdrIcLoraFixture,
@@ -11,6 +12,7 @@ import {
     minimalStage,
 } from "../__test_helpers__/clipFixtures";
 import { planArchitectureConversion } from "./conversion/plan";
+import { deriveArchitectureDiagnostics } from "./diagnostics";
 
 /** Supports IC-LoRAs (and HDR) but not frame references. */
 const icLoraOnlyCatalog = () => {
@@ -188,6 +190,96 @@ describe("conversion feature-state ownership", () => {
         expect(conversion?.removals).not.toContain(
             "clip audio source settings",
         );
+    });
+
+    it("drops control-signal duration only when its dedicated capability is absent", () => {
+        const catalog = icLoraOnlyCatalog();
+        const clip = minimalClip({
+            clipLengthFromControlNet: true,
+            icLoras: [
+                hdrIcLoraFixture({
+                    hdr: false,
+                    driveSource: "ControlNet 1",
+                }),
+            ],
+            stages: [minimalStage({ icLoraStrengths: [0.4] })],
+        });
+
+        const conversion = planArchitectureConversion(
+            clip,
+            targetFor(catalog),
+            catalog,
+        );
+
+        expect(conversion?.clip.clipLengthFromControlNet).toBe(false);
+        expect(conversion?.clip.icLoras).toHaveLength(1);
+        expect(conversion?.clip.stages[0].icLoraStrengths).toEqual([0.4]);
+        expect(conversion?.removals).toContain(
+            "control-signal-derived clip duration",
+        );
+    });
+
+    it("retains supported control-signal duration when unrelated LTX features are removed", () => {
+        const catalog = testArchitectureCatalog();
+        catalog.architectures[0].capabilities = testArchitectureCapabilities({
+            clip: ["control-signal-derived-duration"],
+            stage: ["ic-lora"],
+            upscaleModes: [],
+            audioSourceKinds: ["Disabled"],
+        });
+        const clip = minimalClip({
+            audioSource: "Upload",
+            uploadedAudio: {
+                data: "data:audio/wav;base64,AA==",
+                fileName: "voice.wav",
+            },
+            clipLengthFromControlNet: true,
+            icLoras: [
+                hdrIcLoraFixture({ driveSource: "Upload" }),
+                hdrIcLoraFixture({
+                    hdr: false,
+                    preset: "pose",
+                    driveSource: "ControlNet 1",
+                }),
+            ],
+            stages: [minimalStage({ icLoraStrengths: [0.2, 0.4] })],
+        });
+
+        const conversion = planArchitectureConversion(
+            clip,
+            {
+                architectureId: "ltx2",
+                modelProfileId: "ltx-2.3",
+                model: "ltx",
+                capabilities: catalog.architectures[0].capabilities,
+            },
+            catalog,
+        );
+
+        expect(conversion?.clip.audioSource).toBe("Native");
+        expect(conversion?.clip.uploadedAudio).toBeNull();
+        expect(conversion?.clip.icLoras).toHaveLength(1);
+        expect(conversion?.clip.icLoras[0]).toMatchObject({
+            hdr: false,
+            driveSource: "ControlNet 1",
+        });
+        expect(conversion?.clip.stages[0].icLoraStrengths).toEqual([0.4]);
+        expect(conversion?.clip.clipLengthFromControlNet).toBe(true);
+        expect(conversion?.removals).toEqual(
+            expect.arrayContaining([
+                "1 HDR IC-LoRA",
+                "clip audio source settings",
+            ]),
+        );
+        expect(conversion?.removals).not.toContain(
+            "control-signal-derived clip duration",
+        );
+        expect(
+            deriveArchitectureDiagnostics(
+                conversion ? [conversion.clip] : [],
+                catalog,
+            ).map(({ code }) => code),
+        ).not.toContain("architecture.unusable.clip-length-from-control-net");
     });
 
     it("attributes duration cleanup to its owner after audio source normalization", () => {

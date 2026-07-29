@@ -75,6 +75,7 @@ internal enum ClipCapability
     ReferenceFraming = 1 << 7,
     AudioReuse = 1 << 8,
     AudioDerivedDuration = 1 << 9,
+    ControlSignalDerivedDuration = 1 << 10,
 }
 
 [Flags]

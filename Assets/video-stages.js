@@ -978,14 +978,21 @@
     "ControlNet 2",
     "ControlNet 3"
   ];
-  var normalizeControlNetSource = (value) => {
+  var controlNetSourceIndex = (value) => {
     const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
-    for (const option of CONTROLNET_SOURCE_OPTIONS) {
-      if (option.replace(/\s+/g, "").toLowerCase() === compact) {
-        return option;
-      }
+    if (!compact.startsWith("controlnet")) {
+      return null;
     }
-    return CONTROLNET_SOURCE_OPTIONS[0];
+    const rawIndex = compact.slice("controlnet".length);
+    if (!/^[+-]?\d+$/.test(rawIndex)) {
+      return null;
+    }
+    const oneBased = Number(rawIndex);
+    return Number.isSafeInteger(oneBased) && oneBased >= 1 && oneBased <= 3 ? oneBased - 1 : null;
+  };
+  var canonicalControlNetSource = (value) => {
+    const index = controlNetSourceIndex(value);
+    return index === null ? null : CONTROLNET_SOURCE_OPTIONS[index];
   };
   var defaultIcLora = (overrides = {}) => ({
     lora: "",
@@ -1017,14 +1024,15 @@
     return raw === "canny" || raw === "depth" || raw === "normal" ? raw : "none";
   };
   var normalizeIcLoraDriveSource = (value) => {
-    const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
+    const authored = `${value ?? ""}`.trim();
+    const compact = authored.replace(/\s+/g, "").toLowerCase();
     if (!compact || compact === "upload") {
       return IC_LORA_SOURCE_UPLOAD;
     }
     if (compact === "incoming" || compact === "stageinput") {
       return IC_LORA_SOURCE_INCOMING;
     }
-    return normalizeControlNetSource(value);
+    return canonicalControlNetSource(authored) ?? authored;
   };
   var normalizeIcLoraDriveData = (value) => {
     const compact = `${value ?? ""}`.trim().toLowerCase();
@@ -1126,9 +1134,7 @@
     );
   };
   var isHdrFeature = (entry) => entry.hdr === true;
-  var hasSlotSourcedIcLora = (icLoras) => icLoras.some(
-    (entry) => entry.driveSource !== IC_LORA_SOURCE_UPLOAD && entry.driveSource !== IC_LORA_SOURCE_INCOMING
-  );
+  var hasSlotSourcedIcLora = (icLoras) => icLoras.some((entry) => controlNetSourceIndex(entry.driveSource) !== null);
 
   // frontend/architectures/ltx2/behavior.ts
   var ltx2Behavior = {
@@ -2256,8 +2262,8 @@
         hasLegacyControlNetStrength ? [] : stages[index - 1]?.icLoraStrengths ?? icLoraDefaultStrengths
       );
     }
-    const clipLengthFromAudio = !!rawClip.clipLengthFromAudio;
-    const clipLengthFromControlNet = !clipLengthFromAudio && !!rawClip.clipLengthFromControlNet;
+    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
+    const clipLengthFromAudio = !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
     const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
     const boundaryRule = architectureDescriptor(
       defaults.modelCatalog,
@@ -3578,6 +3584,8 @@
     promptRelay: "Relay prompts",
     clipAudio: "Clip audio",
     audioReuse: "Captured stage audio reuse",
+    audioDerivedDuration: "Audio-derived clip duration",
+    controlSignalDerivedDuration: "Control-signal-derived clip duration",
     stageLoras: "LoRAs",
     icLora: "IC-LoRA",
     hdr: "HDR",
@@ -3637,11 +3645,16 @@
       case "promptRelay":
         return capability.clip.includes("prompt-relay");
       case "clipAudio":
-      case "audioReuse":
         return capability.clip.includes("audio-sources") && (scope.audioSource === void 0 || isAllowedAudioSource(
           capability.audioSourceKinds,
           scope.audioSource
         ));
+      case "audioReuse":
+        return capability.clip.includes("audio-reuse");
+      case "audioDerivedDuration":
+        return capability.clip.includes("audio-derived-duration");
+      case "controlSignalDerivedDuration":
+        return capability.clip.includes("control-signal-derived-duration");
       case "stageLoras":
         return capability.stage.includes("lora") && (scope.profileCapabilities === void 0 || scope.profileCapabilities.includes("normal-lora"));
       case "icLora":
@@ -3858,7 +3871,6 @@
           "IC-LoRA"
         )
       );
-      clip.clipLengthFromControlNet = false;
     } else if (supports("icLora")) {
       if (!supports("hdr")) {
         const hdrCount = removeIcLoras(
@@ -3902,8 +3914,16 @@
       removals.push("source video");
       clip.sourceVideo = null;
     }
+    if (!supports("audioReuse") && clip.reuseAudio) {
+      removals.push("captured stage audio reuse");
+      clip.reuseAudio = false;
+    }
+    if (!supports("controlSignalDerivedDuration") && clip.clipLengthFromControlNet) {
+      removals.push("control-signal-derived clip duration");
+      clip.clipLengthFromControlNet = false;
+    }
     if (!supports("clipAudio", { audioSource: clip.audioSource })) {
-      const hasAudioSettings = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.saveAudioTrack || clip.clipLengthFromAudio || clip.reuseAudio || clip.clipLengthFromControlNet;
+      const hasAudioSettings = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.saveAudioTrack;
       if (hasAudioSettings) {
         removals.push("clip audio source settings");
       }
@@ -3912,9 +3932,10 @@
       );
       clip.uploadedAudio = null;
       clip.saveAudioTrack = false;
+    }
+    if (clip.clipLengthFromAudio && (!supports("audioDerivedDuration") || !canUseClipLengthFromAudio(clip.audioSource))) {
+      removals.push("audio-derived clip duration");
       clip.clipLengthFromAudio = false;
-      clip.reuseAudio = false;
-      clip.clipLengthFromControlNet = false;
     }
     return {
       clip,
@@ -5719,12 +5740,33 @@
       "Stage upscaling"
     );
     const sourceKind = audioSourceKind(clip.audioSource);
+    const selectedAudioSourceSupported = supports("clipAudio", {
+      audioSource: clip.audioSource
+    });
     unsupported(
-      !supports("clipAudio", { audioSource: clip.audioSource }) && (sourceKind !== "Native" || clip.uploadedAudio !== null || clip.saveAudioTrack || clip.reuseAudio || clip.clipLengthFromAudio || clip.clipLengthFromControlNet),
+      !supports("audioReuse") && clip.reuseAudio,
+      "audio-reuse",
+      "Captured stage audio reuse"
+    );
+    unsupported(
+      !supports("audioDerivedDuration") && clip.clipLengthFromAudio,
+      "audio-derived-duration",
+      "Audio-derived clip duration"
+    );
+    const supportsControlSignalDerivedDuration = supports(
+      "controlSignalDerivedDuration"
+    );
+    unsupported(
+      !supportsControlSignalDerivedDuration && clip.clipLengthFromControlNet,
+      "control-signal-derived-duration",
+      "Control-signal-derived clip duration"
+    );
+    unsupported(
+      !selectedAudioSourceSupported && (sourceKind !== "Native" || clip.uploadedAudio !== null || clip.saveAudioTrack),
       "audio-source",
       `Audio source '${sourceKind}'`
     );
-    if (clip.clipLengthFromAudio && !canUseClipLengthFromAudio(clip.audioSource)) {
+    if (clip.clipLengthFromAudio && supports("audioDerivedDuration") && selectedAudioSourceSupported && !canUseClipLengthFromAudio(clip.audioSource)) {
       diagnostics.push(
         issue(
           "architecture.unusable.clip-length-from-audio",
@@ -5733,7 +5775,7 @@
         )
       );
     }
-    if (clip.clipLengthFromControlNet && !hasArchitectureSlotSourcedIcLora(clip.architecture, clip.icLoras)) {
+    if (clip.clipLengthFromControlNet && supportsControlSignalDerivedDuration && !hasArchitectureSlotSourcedIcLora(clip.architecture, clip.icLoras)) {
       diagnostics.push(
         issue(
           "architecture.unusable.clip-length-from-control-net",
@@ -9094,18 +9136,43 @@
     const { clipIdx } = sel;
     const clip = clips[clipIdx];
     const capabilityView = ctx.capabilities().forClip(clip);
-    const audioDecision = capabilityView.decision("clipAudio");
+    const audioCapabilityDecision = capabilityView.decision("clipAudio");
     const reuseDecision = capabilityView.decision("audioReuse");
+    const durationDecision = capabilityView.decision("audioDerivedDuration");
+    const controlDurationDecision = capabilityView.decision(
+      "controlSignalDerivedDuration"
+    );
     const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
       clip.architecture,
       clip.icLoras
     );
+    const controlDurationIssueDecision = clip.clipLengthFromControlNet && !controlDurationDecision.supported ? controlDurationDecision : clip.clipLengthFromControlNet && !controlNetEnabled ? {
+      ...controlDurationDecision,
+      supported: false,
+      reason: "No IC-LoRA supplies a ControlNet 1-3 drive source for clip duration."
+    } : null;
     const options = buildAudioSourceOptions(clip.audioSource ?? "", {
       controlNetEnabled,
       allowedKinds: capabilityView.audioSourceKinds
     });
     const source = options.find((option) => option.value === clip.audioSource)?.value ?? clip.audioSource ?? "";
+    const selectedAudioSourceAllowed = isAllowedAudioSource(
+      capabilityView.audioSourceKinds,
+      source
+    );
+    const audioDecision = audioCapabilityDecision.supported && !selectedAudioSourceAllowed ? {
+      ...audioCapabilityDecision,
+      supported: false,
+      reason: `Audio source '${source}' is not supported by ${capabilityView.architectureLabel}.`
+    } : audioCapabilityDecision;
     const canLength = canUseClipLengthFromAudio(source);
+    const canDeriveDuration = durationDecision.supported && canLength;
+    const durationIssueDecision = selectedAudioSourceAllowed && !canDeriveDuration ? durationDecision.supported ? {
+      ...durationDecision,
+      supported: false,
+      reason: `Audio source '${source}' cannot determine video duration.`
+    } : durationDecision : null;
+    const durationUnavailableReason = durationIssueDecision?.reason ?? (!audioDecision.supported ? audioDecision.reason : "");
     const isAce = isAceStepFunAudioSource(source);
     const commitAudio = (mutate) => {
       ctx.commit((cs) => {
@@ -9158,6 +9225,7 @@
         help: "Capture this clip's audio after its second active stage and reuse that captured audio from the third active stage onward. Requires at least three active stages." + (reuseDecision.reason ? ` ${reuseDecision.reason}` : "")
       }
     );
+    reuseRow.classList.add("vst-detail-audio-reuse");
     base.appendChild(reuseRow);
     if (clip.reuseAudio && !reuseDecision.supported) {
       reuseRow.appendChild(buildCapabilityNotice(reuseDecision));
@@ -9176,18 +9244,66 @@
     }
     const lengthRow = buildCheckbox(
       "Clip Length from Audio",
-      clip.clipLengthFromAudio === true && canLength,
+      clip.clipLengthFromAudio === true,
       (value) => {
         commitAudio((c) => {
           c.clipLengthFromAudio = value;
         });
       },
       {
-        disabled: !canLength,
-        help: "Set the clip's duration to match the length of its audio instead of a fixed value. Available only for sources with a known length."
+        disabled: !canDeriveDuration,
+        help: "Set the clip's duration to match the length of its audio instead of a fixed value. Available only for sources with a known length." + (durationUnavailableReason ? ` ${durationUnavailableReason}` : "")
       }
     );
+    lengthRow.classList.add("vst-detail-audio-derived-duration");
     base.appendChild(lengthRow);
+    if (clip.clipLengthFromAudio && durationIssueDecision) {
+      lengthRow.appendChild(buildCapabilityNotice(durationIssueDecision));
+      lengthRow.appendChild(
+        buildCapabilityRepairButton({
+          label: "Remove unsupported audio-derived duration",
+          className: "vst-detail-delete",
+          onRepair: () => {
+            ctx.commit((items) => {
+              const target = items[clipIdx];
+              if (target) {
+                target.clipLengthFromAudio = false;
+              }
+            });
+            ctx.render();
+          }
+        })
+      );
+    }
+    if (clip.clipLengthFromControlNet) {
+      const controlLengthStatus = document.createElement("div");
+      controlLengthStatus.className = "vst-detail-control-signal-derived-duration";
+      const status = document.createElement("p");
+      status.className = "vst-detail-note";
+      status.textContent = "Control-signal-derived clip duration is active.";
+      controlLengthStatus.appendChild(status);
+      if (controlDurationIssueDecision) {
+        controlLengthStatus.appendChild(
+          buildCapabilityNotice(controlDurationIssueDecision)
+        );
+      }
+      controlLengthStatus.appendChild(
+        buildCapabilityRepairButton({
+          label: "Remove control-signal-derived duration",
+          className: "vst-detail-delete vst-remove-control-signal-derived-duration",
+          onRepair: () => {
+            ctx.commit((items) => {
+              const target = items[clipIdx];
+              if (target) {
+                target.clipLengthFromControlNet = false;
+              }
+            });
+            ctx.render();
+          }
+        })
+      );
+      base.appendChild(controlLengthStatus);
+    }
     const saveRow = buildCheckbox(
       "Save Audio Track",
       clip.saveAudioTrack === true && isAce,
@@ -9226,6 +9342,12 @@
     }
     if (!audioDecision.supported) {
       applyPersistedCapabilityRepair(base, audioDecision, {
+        keep: [
+          ...CAPABILITY_REPAIR_SELECTORS,
+          ".vst-detail-audio-reuse",
+          ".vst-detail-audio-derived-duration",
+          ".vst-detail-control-signal-derived-duration"
+        ],
         repair: {
           label: "Remove unsupported clip audio",
           className: "vst-remove-unsupported-audio",
@@ -9235,10 +9357,10 @@
               if (!target) {
                 return null;
               }
-              target.audioSource = "Native";
+              target.audioSource = defaultAuthoringAudioSource(
+                capabilityView.audioSourceKinds
+              );
               target.uploadedAudio = null;
-              target.reuseAudio = false;
-              target.clipLengthFromAudio = false;
               target.saveAudioTrack = false;
               return "render";
             });

@@ -355,6 +355,54 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
+    public void Compile_ControlSignalDerivedDuration_StoresTheResolvedLtxSource()
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10)) with
+        {
+            ClipLengthFromControlNet = true,
+            IcLoras =
+            [
+                new(
+                    "control",
+                    Constants.ControlNetSourceTwo,
+                    1,
+                    1,
+                    Constants.IcLoraControlNone,
+                    null,
+                    DriveData: IcLoraDriveData.Visual),
+            ],
+        };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, clip));
+        Ltx2ClipPayload payload = Assert.IsType<Ltx2ClipPayload>(
+            Assert.Single(plan.Clips).ArchitecturePayload);
+
+        Assert.Equal(1, payload.ControlNetSourceIndex);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void Compile_ControlSignalDerivedDurationWithoutLtxSource_IsAPlanningError()
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10)) with
+        {
+            ClipLengthFromControlNet = true,
+        };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, clip));
+
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                    == "audio.length.controlnet_owner_has_no_source"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Error
+                && diagnostic.ClipId == clip.Id);
+        Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
+    }
+
+    [Fact]
     public void Compile_RetakeWithFrameReferences_IsRejected()
     {
         ClipSpec clip = GeneratedClip(

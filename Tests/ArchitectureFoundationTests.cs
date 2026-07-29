@@ -578,6 +578,25 @@ public class ArchitectureFoundationTests
         Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
+    [Fact]
+    public void Source_only_none_rejects_control_signal_derived_duration()
+    {
+        ClipSpec clip = SourcedClip(0) with
+        {
+            ClipLengthFromControlNet = true,
+            AuthoredArchitectureId = "none",
+            AuthoredModelProfileId = "none",
+        };
+
+        VideoExecutionPlan plan = Compile(clip, new FakeRegistry());
+
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
+                && diagnostic.Message.Contains("control-signal-derived clip duration"));
+        Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
+    }
+
     [Theory]
     [InlineData(Constants.AudioSourceUpload)]
     [InlineData(Constants.AudioSourceControlNet)]
@@ -1434,6 +1453,7 @@ public class ArchitectureFoundationTests
                 "audio-segments",
                 "audio-reuse",
                 "audio-derived-duration",
+                "control-signal-derived-duration",
             ],
             capabilities["clip"].Values<string>());
         Assert.Contains("frame-references", capabilities["stage"].Values<string>());

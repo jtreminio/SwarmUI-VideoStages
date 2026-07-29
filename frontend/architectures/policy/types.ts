@@ -16,6 +16,7 @@ export type AuthoringFeature =
     | "clipAudio"
     | "audioReuse"
     | "audioDerivedDuration"
+    | "controlSignalDerivedDuration"
     | "stageLoras"
     | "icLora"
     | "hdr"

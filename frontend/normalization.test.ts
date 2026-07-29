@@ -534,6 +534,24 @@ describe("normalization", () => {
         expect(clip.icLoras[0].driveSource).toBe("Incoming");
     });
 
+    it("normalizeClip preserves an unknown IC-LoRA source for fail-closed diagnostics", () => {
+        const clip = normalizeClip(
+            {
+                icLoras: [
+                    {
+                        lora: "drive.safetensors",
+                        driveSource: "  future-slot  ",
+                    },
+                ],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+
+        expect(clip.icLoras[0].driveSource).toBe("future-slot");
+        expect(hasSlotSourcedIcLora(clip.icLoras)).toBe(false);
+    });
+
     it("normalizeIcLora keeps Incoming independent of clip placement", () => {
         const raw = { lora: "a", stage: 0, driveSource: "Incoming" };
         expect(normalizeIcLora(raw, 0, false)?.driveSource).toBe("Incoming");
@@ -586,7 +604,7 @@ describe("normalization", () => {
         expect(clip.icLoras[0].driveSource).toBe("Upload");
     });
 
-    it("normalizeClip lets audio length override stored ControlNet length", () => {
+    it("normalizeClip lets stored ControlNet length override audio length", () => {
         const clip = normalizeClip(
             {
                 audioSource: "Upload",
@@ -597,8 +615,8 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(clip.clipLengthFromAudio).toBe(true);
-        expect(clip.clipLengthFromControlNet).toBe(false);
+        expect(clip.clipLengthFromAudio).toBe(false);
+        expect(clip.clipLengthFromControlNet).toBe(true);
     });
 
     it("normalizeClip preserves a length flag its current source cannot honor", () => {
@@ -626,7 +644,7 @@ describe("normalization", () => {
         expect(clip.clipLengthFromControlNet).toBe(true);
     });
 
-    it("normalizeClip drops ControlNet length when audio length wins", () => {
+    it("normalizeClip keeps ControlNet precedence without an IC-LoRA source", () => {
         const clip = normalizeClip(
             {
                 audioSource: "Upload",
@@ -638,8 +656,8 @@ describe("normalization", () => {
             getDefaultStageModel,
         );
         expect(clip.icLoras).toEqual([]);
-        expect(clip.clipLengthFromAudio).toBe(true);
-        expect(clip.clipLengthFromControlNet).toBe(false);
+        expect(clip.clipLengthFromAudio).toBe(false);
+        expect(clip.clipLengthFromControlNet).toBe(true);
     });
 
     it("normalizeClip preserves 'ControlNet' audio source when controlNetLora is set", () => {

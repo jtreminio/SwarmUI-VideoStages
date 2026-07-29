@@ -21,7 +21,8 @@
         "audio-sources",
         "audio-segments",
         "audio-reuse",
-        "audio-derived-duration"
+        "audio-derived-duration",
+        "control-signal-derived-duration"
       ],
       "stage": [
         "image-input",

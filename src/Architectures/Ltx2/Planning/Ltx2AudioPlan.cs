@@ -44,7 +44,7 @@ internal static class Ltx2AudioPlanCompiler
         if (clip.ClipLengthFromControlNet && controlNetSourceIndex is null)
         {
             diagnostics.Add(new(
-                PlanDiagnosticSeverity.Warning,
+                PlanDiagnosticSeverity.Error,
                 "audio.length.controlnet_owner_has_no_source",
                 "ControlNet owns clip length, but no valid LTX ControlNet 1-3 drive source is configured."));
         }

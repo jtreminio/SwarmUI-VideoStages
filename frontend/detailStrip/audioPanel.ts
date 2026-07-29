@@ -40,10 +40,23 @@ export const buildAudioBody = (
     const audioCapabilityDecision = capabilityView.decision("clipAudio");
     const reuseDecision = capabilityView.decision("audioReuse");
     const durationDecision = capabilityView.decision("audioDerivedDuration");
+    const controlDurationDecision = capabilityView.decision(
+        "controlSignalDerivedDuration",
+    );
     const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
         clip.architecture,
         clip.icLoras,
     );
+    const controlDurationIssueDecision =
+        clip.clipLengthFromControlNet && !controlDurationDecision.supported
+            ? controlDurationDecision
+            : clip.clipLengthFromControlNet && !controlNetEnabled
+              ? {
+                    ...controlDurationDecision,
+                    supported: false,
+                    reason: "No IC-LoRA supplies a ControlNet 1-3 drive source for clip duration.",
+                }
+              : null;
     const options = buildAudioSourceOptions(clip.audioSource ?? "", {
         controlNetEnabled,
         allowedKinds: capabilityView.audioSourceKinds,
@@ -203,6 +216,37 @@ export const buildAudioBody = (
             }),
         );
     }
+    if (clip.clipLengthFromControlNet) {
+        const controlLengthStatus = document.createElement("div");
+        controlLengthStatus.className =
+            "vst-detail-control-signal-derived-duration";
+        const status = document.createElement("p");
+        status.className = "vst-detail-note";
+        status.textContent = "Control-signal-derived clip duration is active.";
+        controlLengthStatus.appendChild(status);
+        if (controlDurationIssueDecision) {
+            controlLengthStatus.appendChild(
+                buildCapabilityNotice(controlDurationIssueDecision),
+            );
+        }
+        controlLengthStatus.appendChild(
+            buildCapabilityRepairButton({
+                label: "Remove control-signal-derived duration",
+                className:
+                    "vst-detail-delete vst-remove-control-signal-derived-duration",
+                onRepair: () => {
+                    ctx.commit((items) => {
+                        const target = items[clipIdx];
+                        if (target) {
+                            target.clipLengthFromControlNet = false;
+                        }
+                    });
+                    ctx.render();
+                },
+            }),
+        );
+        base.appendChild(controlLengthStatus);
+    }
 
     const saveRow = buildCheckbox(
         "Save Audio Track",
@@ -249,6 +293,7 @@ export const buildAudioBody = (
                 ...CAPABILITY_REPAIR_SELECTORS,
                 ".vst-detail-audio-reuse",
                 ".vst-detail-audio-derived-duration",
+                ".vst-detail-control-signal-derived-duration",
             ],
             repair: {
                 label: "Remove unsupported clip audio",

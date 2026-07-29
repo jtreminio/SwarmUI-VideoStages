@@ -118,6 +118,12 @@ internal static class ArchitectureCapabilityValidator
             supportsAudioDerivedDuration,
             diagnostics);
         Require(
+            clip.ClipLengthFromControlNet,
+            Has(
+                descriptor.Capabilities.Clip,
+                ClipCapability.ControlSignalDerivedDuration),
+            "control-signal-derived clip duration");
+        Require(
             clip.ReuseAudio,
             Has(descriptor.Capabilities.Clip, ClipCapability.AudioReuse),
             "captured stage audio reuse");

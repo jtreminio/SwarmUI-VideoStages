@@ -2,6 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import type { Clip, IcLora } from "../types";
 import {
     architectureBehavior,
+    hasArchitectureSlotSourcedIcLora,
     isArchitectureHdrFeature,
     normalizeArchitectureIcLoras,
     reconcileArchitectureIncomingIcLoraDrives,
@@ -47,6 +48,35 @@ describe("architecture behavior registry", () => {
 
         expect(isArchitectureHdrFeature("ltx2", namedButNotHdr)).toBe(false);
         expect(isArchitectureHdrFeature("ltx2", unnamedButHdr)).toBe(true);
+    });
+
+    it("recognizes the finite backend ControlNet source vocabulary", () => {
+        const entry = (driveSource: string): IcLora => ({
+            ...hdrEntry,
+            driveSource,
+        });
+
+        expect(
+            hasArchitectureSlotSourcedIcLora("ltx2", [
+                entry("  controlnet   2  "),
+            ]),
+        ).toBe(true);
+        expect(
+            hasArchitectureSlotSourcedIcLora("ltx2", [entry("CONTROL NET 03")]),
+        ).toBe(true);
+        expect(
+            hasArchitectureSlotSourcedIcLora("ltx2", [
+                entry("ControlNet 4"),
+                entry("future-slot"),
+                entry("Incoming"),
+                entry("Upload"),
+            ]),
+        ).toBe(false);
+        expect(
+            hasArchitectureSlotSourcedIcLora("future-video", [
+                entry("ControlNet 1"),
+            ]),
+        ).toBe(false);
     });
 
     it("does not silently apply LTX normalization to another architecture", () => {

@@ -186,6 +186,10 @@ internal static class ArchitectureCatalogSerializer
         {
             yield return "audio-derived-duration";
         }
+        if (Has(value, ClipCapability.ControlSignalDerivedDuration))
+        {
+            yield return "control-signal-derived-duration";
+        }
     }
 
     private static IEnumerable<string> StageCapabilities(StageCapability value)

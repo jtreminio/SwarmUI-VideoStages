@@ -5,6 +5,7 @@ import {
     testSourceOnlyArchitecture,
 } from "../__test_helpers__/architectureFixtures";
 import {
+    hdrIcLoraFixture,
     minimalClip,
     minimalRef,
     minimalStage,
@@ -131,6 +132,55 @@ describe("architecture diagnostics", () => {
             "architecture.unusable.clip-length-from-audio",
         );
         expect(clip).toEqual(before);
+    });
+
+    it("reports unsupported control-signal duration without inventing an audio-source issue", () => {
+        const clip = minimalClip({
+            architecture: "none",
+            modelProfileId: "none",
+            sourceVideo: sourceVideoFixture(),
+            stages: [],
+            clipLengthFromControlNet: true,
+        });
+        const before = structuredClone(clip);
+
+        const codes = deriveArchitectureDiagnostics(
+            [clip],
+            combinedCatalog(),
+        ).map(({ code }) => code);
+
+        expect(codes).toContain(
+            "architecture.unsupported.control-signal-derived-duration",
+        );
+        expect(codes).not.toContain("architecture.unsupported.audio-source");
+        expect(codes).not.toContain(
+            "architecture.unusable.clip-length-from-control-net",
+        );
+        expect(clip).toEqual(before);
+    });
+
+    it("accepts LTX control-signal duration only with a canonical slot source", () => {
+        const valid = minimalClip({
+            clipLengthFromControlNet: true,
+            icLoras: [
+                hdrIcLoraFixture({
+                    hdr: false,
+                    driveSource: "ControlNet 3",
+                }),
+            ],
+        });
+
+        const validCodes = deriveArchitectureDiagnostics(
+            [valid],
+            combinedCatalog(),
+        ).map(({ code }) => code);
+
+        expect(validCodes).not.toContain(
+            "architecture.unusable.clip-length-from-control-net",
+        );
+        expect(validCodes).not.toContain(
+            "architecture.unsupported.control-signal-derived-duration",
+        );
     });
 
     it("reports an unknown LTX source before evaluating its duration usability", () => {

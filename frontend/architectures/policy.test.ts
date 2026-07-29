@@ -100,10 +100,18 @@ describe("catalog-backed authoring policy", () => {
         expect(view.decision("clipAudio").supported).toBe(true);
         expect(view.decision("audioReuse").supported).toBe(false);
         expect(view.decision("audioDerivedDuration").supported).toBe(false);
+        expect(view.decision("controlSignalDerivedDuration").supported).toBe(
+            false,
+        );
         expect(view.authoringState("audioReuse", true)).toMatchObject({
             visible: true,
             enabled: false,
         });
+        expect(
+            createCapabilityViewResolver(models)
+                .forClip(minimalClip())
+                .decision("controlSignalDerivedDuration").supported,
+        ).toBe(true);
     });
 
     it("evaluates conditional prompt and audio-reuse rules", () => {

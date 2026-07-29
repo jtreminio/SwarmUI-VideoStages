@@ -134,12 +134,19 @@ const persistedCapabilityIssues = (
         "audio-derived-duration",
         "Audio-derived clip duration",
     );
+    const supportsControlSignalDerivedDuration = supports(
+        "controlSignalDerivedDuration",
+    );
+    unsupported(
+        !supportsControlSignalDerivedDuration && clip.clipLengthFromControlNet,
+        "control-signal-derived-duration",
+        "Control-signal-derived clip duration",
+    );
     unsupported(
         !selectedAudioSourceSupported &&
             (sourceKind !== "Native" ||
                 clip.uploadedAudio !== null ||
-                clip.saveAudioTrack ||
-                clip.clipLengthFromControlNet),
+                clip.saveAudioTrack),
         "audio-source",
         `Audio source '${sourceKind}'`,
     );
@@ -161,6 +168,7 @@ const persistedCapabilityIssues = (
     }
     if (
         clip.clipLengthFromControlNet &&
+        supportsControlSignalDerivedDuration &&
         !hasArchitectureSlotSourcedIcLora(clip.architecture, clip.icLoras)
     ) {
         diagnostics.push(

@@ -304,10 +304,11 @@ export const normalizeClip = (
     }
     // Preserved exactly as authored: a source that cannot supply a length is
     // reported by architecture diagnostics, never silently erased here. Only
-    // the mutual exclusion between the two flags is enforced.
-    const clipLengthFromAudio = !!rawClip.clipLengthFromAudio;
-    const clipLengthFromControlNet =
-        !clipLengthFromAudio && !!rawClip.clipLengthFromControlNet;
+    // the mutual exclusion between the two flags is enforced, with ControlNet
+    // precedence matching VideoClipSpecParser and AudioLengthPlanCompiler.
+    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
+    const clipLengthFromAudio =
+        !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
     const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
     const boundaryRule = architectureDescriptor(
         defaults.modelCatalog,

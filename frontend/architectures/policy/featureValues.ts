@@ -12,6 +12,7 @@ const FEATURE_LABEL: Record<AuthoringFeature, string> = {
     clipAudio: "Clip audio",
     audioReuse: "Captured stage audio reuse",
     audioDerivedDuration: "Audio-derived clip duration",
+    controlSignalDerivedDuration: "Control-signal-derived clip duration",
     stageLoras: "LoRAs",
     icLora: "IC-LoRA",
     hdr: "HDR",

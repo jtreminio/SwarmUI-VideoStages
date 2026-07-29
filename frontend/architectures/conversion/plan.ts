@@ -215,7 +215,6 @@ export const planArchitectureConversion = (
                 "IC-LoRA",
             ),
         );
-        clip.clipLengthFromControlNet = false;
     } else if (supports("icLora")) {
         if (!supports("hdr")) {
             const hdrCount = removeIcLoras((entry) =>
@@ -267,12 +266,18 @@ export const planArchitectureConversion = (
         removals.push("captured stage audio reuse");
         clip.reuseAudio = false;
     }
+    if (
+        !supports("controlSignalDerivedDuration") &&
+        clip.clipLengthFromControlNet
+    ) {
+        removals.push("control-signal-derived clip duration");
+        clip.clipLengthFromControlNet = false;
+    }
     if (!supports("clipAudio", { audioSource: clip.audioSource })) {
         const hasAudioSettings =
             clip.audioSource !== "Native" ||
             clip.uploadedAudio !== null ||
-            clip.saveAudioTrack ||
-            clip.clipLengthFromControlNet;
+            clip.saveAudioTrack;
         if (hasAudioSettings) {
             removals.push("clip audio source settings");
         }
@@ -281,7 +286,6 @@ export const planArchitectureConversion = (
         );
         clip.uploadedAudio = null;
         clip.saveAudioTrack = false;
-        clip.clipLengthFromControlNet = false;
     }
     if (
         clip.clipLengthFromAudio &&

@@ -71,6 +71,9 @@ public class WanArchitectureTests
             GeneratedClip(0, stage) with { ClipLengthFromAudio = true },
             "audio-derived clip duration");
         AssertRejected(
+            GeneratedClip(0, stage) with { ClipLengthFromControlNet = true },
+            "control-signal-derived clip duration");
+        AssertRejected(
             GeneratedClip(0, stage) with
             {
                 IcLoras = [new("wan-ic.safetensors", "Upload", 1, 1, "canny", null)],
@@ -124,9 +127,6 @@ public class WanArchitectureTests
         AssertRefused(
             GeneratedClip(0, stage with { ImageReference = "Base" }),
             "stage image reference 'Base'");
-        AssertRefused(
-            GeneratedClip(0, stage) with { ClipLengthFromControlNet = true },
-            "clip length from ControlNet");
     }
 
     private static void AssertRejected(ClipSpec clip, string expectedOption)
