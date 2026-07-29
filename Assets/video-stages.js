@@ -198,20 +198,6 @@
     },
     getBase2EditRegistry: () => registrySnapshot(window.base2editStageRegistry),
     getAceStepFunRegistry: () => registrySnapshot(window.acestepfunTrackRegistry),
-    getModelCompatId: (modelName) => {
-      if (typeof modelsHelpers === "undefined" || !modelsHelpers || typeof modelsHelpers.getDataFor !== "function") {
-        return null;
-      }
-      const id = modelsHelpers.getDataFor("Stable-Diffusion", modelName)?.modelClass?.compatClass?.id;
-      return typeof id === "string" && id.trim() ? id : null;
-    },
-    getModelClassId: (modelName) => {
-      if (typeof modelsHelpers === "undefined" || !modelsHelpers || typeof modelsHelpers.getDataFor !== "function") {
-        return null;
-      }
-      const id = modelsHelpers.getDataFor("Stable-Diffusion", modelName)?.modelClass?.id;
-      return typeof id === "string" && id.trim() ? id : null;
-    },
     getLoraDefaultWeight: (modelName) => {
       const browserModels = typeof sdLoraBrowser !== "undefined" ? sdLoraBrowser?.models : void 0;
       const browserModel = browserModels?.[modelName] ?? browserModels?.[`${modelName}.safetensors`];
@@ -223,15 +209,6 @@
         return Number.isFinite(value) ? value : null;
       };
       return finiteWeight(browserRaw) ?? finiteWeight(helperRaw) ?? finiteWeight(preferenceRaw);
-    },
-    getCurrentModelCompatId: () => {
-      if (typeof currentModelHelper === "undefined" || !currentModelHelper?.curCompatClass || typeof modelsHelpers === "undefined" || !modelsHelpers?.compatClasses) {
-        return null;
-      }
-      const key = currentModelHelper.curCompatClass;
-      const compat = modelsHelpers.compatClasses[key];
-      const id = compat?.id ?? key;
-      return typeof id === "string" && id.trim() ? id : null;
     },
     requestJson: (url, data = {}) => new Promise((resolve, reject) => {
       if (typeof genericRequest !== "function") {
@@ -1164,240 +1141,13 @@
     icLoraDisplayName
   };
 
-  // frontend/architectures/ltx2/definition.ts
+  // frontend/architectures/ltx2/identity.ts
   var LTX2_ARCHITECTURE_ID = "ltx2";
-  var LTX23_MODEL_NAME = /(^|[/\\_. -])ltx(?:[/\\_. -]*v?2)?[/\\_. -]*3($|[/\\_. -])/i;
-  var ltx2Architecture = {
-    id: LTX2_ARCHITECTURE_ID,
-    label: "LTX Video 2.3",
-    defaultProfileId: "ltx-2.3",
-    capabilities: {
-      architecture: [
-        "generated-entry",
-        "sourced-entry",
-        "multi-stage",
-        "native-audio",
-        "decoded-output"
-      ],
-      clip: [
-        "source-video",
-        "prompts",
-        "prompt-relay",
-        "references",
-        "reference-framing",
-        "retake",
-        "audio-sources",
-        "audio-segments"
-      ],
-      stage: [
-        "image-input",
-        "video-input",
-        "pixel-upscale",
-        "model-upscale",
-        "latent-upscale",
-        "latent-model-upscale",
-        "lora",
-        "ic-lora",
-        "hdr",
-        "frame-references"
-      ],
-      output: ["video", "attached-audio", "standalone-audio"],
-      upscaleModes: ["pixel", "model", "latent", "latent-model"],
-      entryModes: [
-        "text-to-video",
-        "image-to-video",
-        "source-video",
-        "refine-video"
-      ],
-      audioSourceKinds: ["Native", "Upload", "ControlNet", "AceStepFun"]
-    },
-    profiles: [
-      {
-        id: "ltx-2.3",
-        label: "LTX Video 2.3",
-        capabilities: [
-          "sampler-selection",
-          "scheduler-selection",
-          "dimension-rules",
-          "frame-rules",
-          "normal-lora"
-        ],
-        rules: []
-      }
-    ],
-    boundaryRules: {
-      cut: {
-        support: "supported",
-        code: "ltx2.boundary.cut",
-        reason: "Decoded LTX clips can be joined with a hard cut.",
-        scope: "boundary",
-        entityId: null,
-        constraints: null
-      },
-      continue: {
-        support: "conditional",
-        code: "ltx2.boundary.continue",
-        reason: "Continue requires adjacent LTX clips and a compatible generated target.",
-        scope: "boundary",
-        entityId: null,
-        constraints: {
-          sameArchitecture: true,
-          targetRequiresGeneratedEntry: true,
-          targetRequiresStage: true,
-          targetDisallowsInitialReference: true,
-          frameStep: 8,
-          minFrames: 8,
-          maxFrames: 48,
-          defaultFrames: 8,
-          continuityExtraFrames: 1
-        }
-      },
-      crossfade: {
-        support: "conditional",
-        code: "ltx2.boundary.crossfade",
-        reason: "Crossfade currently uses the LTX-owned decoded transition path.",
-        scope: "boundary",
-        entityId: null,
-        constraints: {
-          sameArchitecture: true,
-          targetRequiresGeneratedEntry: false,
-          targetRequiresStage: false,
-          targetDisallowsInitialReference: false,
-          frameStep: 8,
-          minFrames: 8,
-          maxFrames: 48,
-          defaultFrames: 8,
-          continuityExtraFrames: 0
-        }
-      }
-    },
-    rules: [
-      {
-        support: "conditional",
-        code: "audio.reuse.requires_three_stages",
-        reason: "Audio reuse needs at least three active stages: generate, capture, then reuse.",
-        scope: "clip",
-        entityId: null,
-        constraints: {
-          minimumActiveStages: 3,
-          failureSeverity: "warning",
-          failureEffect: "disable-feature"
-        }
-      },
-      {
-        support: "conditional",
-        code: "prompt-relay-dynamic-length-unsupported",
-        reason: "Prompt relay requires a fixed frame count and cannot be combined with audio-owned or ControlNet-owned clip length.",
-        scope: "clip",
-        entityId: null,
-        constraints: { requiresFixedFrameCount: true }
-      },
-      {
-        support: "conditional",
-        code: "retake-frame-references-unsupported",
-        reason: "Retake and frame references are mutually exclusive because guide merging would overwrite the retake mask.",
-        scope: "stage",
-        entityId: null,
-        constraints: {
-          mutuallyExclusive: ["retake", "frameReferences"]
-        }
-      },
-      {
-        support: "conditional",
-        code: "retake-source-required",
-        reason: "Retake requires a sourced clip or a global Refine Video source.",
-        scope: "clip",
-        entityId: null,
-        constraints: {
-          requiresAnyEntryMode: ["source-video", "refine-video"]
-        }
-      },
-      {
-        support: "conditional",
-        code: "mixed-hdr-timeline-unsupported",
-        reason: "HDR IC-LoRA activation must be uniform across the complete timeline.",
-        scope: "architecture",
-        entityId: null,
-        constraints: {
-          uniformTimelineFeature: "hdr",
-          minimumTimelineClips: 2
-        }
-      }
-    ],
-    resolveModelProfile: (model) => {
-      const classId = `${model.modelClassId ?? ""}`.trim().toLowerCase();
-      if (classId === "lightricks-ltx-video-2-3") {
-        return "ltx-2.3";
-      }
-      return LTX23_MODEL_NAME.test(model.value) ? "ltx-2.3" : null;
-    }
-  };
-
-  // frontend/architectures/none/definition.ts
-  var NONE_ARCHITECTURE_ID = "none";
-  var noneArchitecture = {
-    id: NONE_ARCHITECTURE_ID,
-    label: "Decoded source only",
-    defaultProfileId: NONE_ARCHITECTURE_ID,
-    capabilities: {
-      architecture: ["sourced-entry", "decoded-output"],
-      clip: ["source-video", "audio-sources", "audio-segments"],
-      stage: [],
-      output: ["video", "attached-audio"],
-      upscaleModes: [],
-      entryModes: ["source-video"],
-      audioSourceKinds: ["Disabled", "Upload"]
-    },
-    profiles: [
-      {
-        id: NONE_ARCHITECTURE_ID,
-        label: "Decoded source only",
-        capabilities: [],
-        rules: []
-      }
-    ],
-    boundaryRules: {
-      cut: {
-        support: "supported",
-        code: "none.boundary.cut",
-        reason: "Decoded sourced clips can be joined with a hard cut.",
-        scope: "boundary",
-        entityId: null,
-        constraints: null
-      },
-      continue: {
-        support: "unsupported",
-        code: "none.boundary.continue.unsupported",
-        reason: "A sourced-only clip has no architecture stage that can consume continuity.",
-        scope: "boundary",
-        entityId: null,
-        constraints: null
-      },
-      crossfade: {
-        support: "unsupported",
-        code: "none.boundary.crossfade.unsupported",
-        reason: "Architecture-neutral sourced clips currently support cut joins only.",
-        scope: "boundary",
-        entityId: null,
-        constraints: null
-      }
-    },
-    rules: [],
-    resolveModelProfile: () => null
-  };
-
-  // frontend/architectures/modules.ts
-  var VIDEO_ARCHITECTURE_MODULES = [
-    { definition: ltx2Architecture, behavior: ltx2Behavior },
-    { definition: noneArchitecture, behavior: null }
-  ];
 
   // frontend/architectures/behaviorRegistry.ts
-  var behaviors = new Map(
-    VIDEO_ARCHITECTURE_MODULES.flatMap(
-      (module) => module.behavior ? [[module.definition.id, module.behavior]] : []
-    )
-  );
+  var behaviors = /* @__PURE__ */ new Map([
+    [LTX2_ARCHITECTURE_ID, ltx2Behavior]
+  ]);
   var architectureBehavior = (architectureId) => behaviors.get(architectureId) ?? null;
   var architectureDimensionMultiple = (clip) => {
     const requested = architectureBehavior(clip.architecture)?.dimensionMultiple(clip) ?? ROOT_DIMENSION_STEP;
@@ -1505,45 +1255,17 @@
     return choices;
   };
 
-  // frontend/architectures/registry.ts
-  var createArchitectureRegistry = (initial = []) => {
-    const byId = /* @__PURE__ */ new Map();
-    for (const definition of initial) {
-      if (byId.has(definition.id)) {
-        throw new Error(`Duplicate video architecture '${definition.id}'.`);
-      }
-      byId.set(definition.id, definition);
-    }
-    return {
-      definitions: () => [...byId.values()],
-      get: (id) => byId.get(id) ?? null,
-      resolveModel: (model) => {
-        for (const definition of byId.values()) {
-          const profileId = definition.resolveModelProfile(model);
-          if (profileId) {
-            return { definition, profileId };
-          }
-        }
-        return null;
-      }
-    };
-  };
-  var videoArchitectureRegistry = createArchitectureRegistry(
-    VIDEO_ARCHITECTURE_MODULES.map((module) => module.definition)
-  );
-
   // frontend/architectures/catalogQueries.ts
   var architectureDescriptor = (catalog, architectureId) => (architectureId ? catalog?.architectures.find((entry) => entry.id === architectureId) : null) ?? null;
   var modelCatalogEntry = (catalog, model) => (model ? catalog?.entries.find((entry) => entry.value === model) : null) ?? null;
-  var architectureCatalogView = (catalog, architectureId, registry = videoArchitectureRegistry) => {
-    const definition = registry.get(architectureId);
+  var architectureCatalogView = (catalog, architectureId) => {
     const catalogArchitecture = architectureDescriptor(catalog, architectureId);
     const entries = catalog.entries.filter(
       (entry) => entry.architectureId === architectureId
     );
     return {
       architectureId,
-      architectureLabel: catalogArchitecture?.label ?? definition?.label ?? architectureId,
+      architectureLabel: catalogArchitecture?.label ?? architectureId,
       values: entries.map((entry) => entry.value),
       labels: entries.map((entry) => entry.label)
     };
@@ -1555,13 +1277,12 @@
   });
   var architectureForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.architectureId ?? null;
   var modelProfileForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.modelProfileId ?? null;
-  var buildArchitectureRetargetPlan = (catalog, model, registry = videoArchitectureRegistry) => {
+  var buildArchitectureRetargetPlan = (catalog, model) => {
     const entry = modelCatalogEntry(catalog, model);
     const architectureId = entry?.architectureId ?? null;
     const descriptor = architectureDescriptor(catalog, architectureId);
-    const fallback = architectureId ? registry.get(architectureId) : null;
     const profileId = entry?.modelProfileId ?? null;
-    const capabilities = descriptor?.capabilities ?? fallback?.capabilities;
+    const capabilities = descriptor?.capabilities;
     return architectureId && profileId && capabilities ? {
       architectureId,
       modelProfileId: profileId,
@@ -1714,84 +1435,105 @@
   // frontend/architectures/catalogRepository.ts
   var ARCHITECTURE_CATALOG_API = "VideoStagesGetArchitectureCatalog";
   var authoritativeCatalog = null;
-  var catalogRequest = null;
-  var loadAuthoritativeArchitectureCatalog = () => {
-    if (authoritativeCatalog) {
-      return Promise.resolve(structuredClone(authoritativeCatalog));
+  var snapshotStatus = "loading";
+  var snapshotError = null;
+  var requestGeneration = 0;
+  var activeRequest = null;
+  var cloneCatalog = (catalog) => structuredClone(catalog);
+  var errorMessage = (error) => error instanceof Error ? error.message : `${error}`;
+  var getArchitectureCatalogSnapshot = () => ({
+    status: snapshotStatus,
+    catalog: authoritativeCatalog ? cloneCatalog(authoritativeCatalog) : null,
+    error: snapshotError
+  });
+  var requestAuthoritativeCatalog = () => {
+    if (activeRequest) {
+      return activeRequest.promise;
     }
-    if (catalogRequest) {
-      return catalogRequest;
-    }
-    catalogRequest = getVideoStagesHostBridge().requestJson(ARCHITECTURE_CATALOG_API).then((response) => {
+    const generation = ++requestGeneration;
+    snapshotStatus = authoritativeCatalog ? "refreshing" : "loading";
+    snapshotError = null;
+    let request;
+    const ownsRequest = () => activeRequest === request && requestGeneration === generation;
+    const promise = Promise.resolve().then(
+      () => getVideoStagesHostBridge().requestJson(
+        ARCHITECTURE_CATALOG_API
+      )
+    ).then((response) => {
       const parsed = parseVideoArchitectureCatalog(response);
-      if (parsed) {
-        authoritativeCatalog = parsed;
+      if (!parsed) {
+        throw new Error(
+          "The architecture catalog response was malformed."
+        );
       }
-      return parsed ? structuredClone(parsed) : null;
+      if (!ownsRequest()) {
+        return null;
+      }
+      authoritativeCatalog = parsed;
+      snapshotStatus = "ready";
+      snapshotError = null;
+      return cloneCatalog(parsed);
     }).catch((error) => {
+      if (!ownsRequest()) {
+        return null;
+      }
+      snapshotStatus = authoritativeCatalog ? "stale" : "unavailable";
+      snapshotError = errorMessage(error);
       console.warn(
-        "VideoStages: architecture catalog unavailable; using registered frontend bootstrap",
+        "VideoStages: authoritative architecture catalog unavailable",
         error
       );
       return null;
     }).finally(() => {
-      catalogRequest = null;
+      if (ownsRequest()) {
+        activeRequest = null;
+      }
     });
-    return catalogRequest;
+    request = { generation, promise };
+    activeRequest = request;
+    return promise;
   };
-  var invalidateArchitectureCatalog = () => {
-    authoritativeCatalog = null;
-    catalogRequest = null;
+  var loadAuthoritativeArchitectureCatalog = () => {
+    if (activeRequest) {
+      return activeRequest.promise;
+    }
+    if (authoritativeCatalog) {
+      return Promise.resolve(cloneCatalog(authoritativeCatalog));
+    }
+    return requestAuthoritativeCatalog();
   };
-  var bootstrapArchitectures = (registry) => registry.definitions().map(
-    ({
-      id,
-      label,
-      defaultProfileId,
-      capabilities,
-      profiles,
-      boundaryRules,
-      rules
-    }) => ({
-      id,
-      label,
-      defaultProfileId,
-      capabilities: structuredClone(capabilities),
-      profiles: structuredClone(profiles),
-      boundaryRules: structuredClone(boundaryRules),
-      rules: structuredClone(rules)
-    })
-  );
-  var buildArchitectureModelCatalog = (values, labels, registry = videoArchitectureRegistry) => {
+  var refreshAuthoritativeArchitectureCatalog = () => requestAuthoritativeCatalog();
+  var buildArchitectureModelCatalog = (values, labels) => {
     const backend = authoritativeCatalog;
-    const modelNames = [...values];
-    if (backend) {
-      const seen = new Set(modelNames);
-      for (const model of backend.models) {
-        if (!seen.has(model.modelName)) {
-          seen.add(model.modelName);
-          modelNames.push(model.modelName);
-        }
+    const hostLabels = /* @__PURE__ */ new Map();
+    const modelNames = [];
+    const seen = /* @__PURE__ */ new Set();
+    values.forEach((value, index) => {
+      if (!seen.has(value)) {
+        seen.add(value);
+        modelNames.push(value);
+      }
+      hostLabels.set(value, labels[index] ?? value);
+    });
+    for (const model of backend?.models ?? []) {
+      if (!seen.has(model.modelName)) {
+        seen.add(model.modelName);
+        modelNames.push(model.modelName);
       }
     }
+    const backendModels = new Map(
+      backend?.models.map((model) => [model.modelName, model]) ?? []
+    );
     return {
-      architectures: backend?.architectures ?? bootstrapArchitectures(registry),
-      source: backend ? "backend" : "bootstrap",
-      entries: modelNames.map((value, index) => {
-        const backendModel = backend?.models.find(
-          (model) => model.modelName === value
-        );
-        const descriptor = {
-          value,
-          label: labels[index] ?? value,
-          compatId: backendModel?.compatId ?? getVideoStagesHostBridge().getModelCompatId(value),
-          modelClassId: getVideoStagesHostBridge().getModelClassId(value)
-        };
-        const bootstrap = backend ? null : registry.resolveModel(descriptor);
+      architectures: backend ? structuredClone(backend.architectures) : [],
+      source: backend ? "backend" : "unavailable",
+      entries: modelNames.map((value) => {
+        const backendModel = backendModels.get(value);
         return {
-          ...descriptor,
-          architectureId: backendModel?.architectureId ?? bootstrap?.definition.id ?? null,
-          modelProfileId: backendModel?.modelProfileId ?? bootstrap?.profileId ?? null
+          value,
+          label: hostLabels.get(value) ?? value,
+          architectureId: backendModel?.architectureId ?? null,
+          modelProfileId: backendModel?.modelProfileId ?? null
         };
       })
     };
@@ -1807,8 +1549,11 @@
     if (fromCatalog) {
       return fromCatalog;
     }
-    return videoArchitectureRegistry.definitions()[0]?.id ?? "unsupported";
+    return "unsupported";
   };
+
+  // frontend/architectures/none/identity.ts
+  var NONE_ARCHITECTURE_ID = "none";
 
   // frontend/selectOption.ts
   var preserveSelectedOption = (options, selectedValue, position, build) => {
@@ -5761,6 +5506,70 @@
       },
       description
     );
+  };
+
+  // frontend/architectureCatalogStatusView.ts
+  var detailDock = (body) => body.parentElement?.querySelector(":scope > .vst-detail") ?? null;
+  var setDockAvailable = (body, available) => {
+    const dock = detailDock(body);
+    if (dock) {
+      dock.hidden = !available;
+    }
+  };
+  var retryButton = (onRetry) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "basic-button vst-catalog-retry";
+    button.textContent = "Retry";
+    button.addEventListener("click", onRetry);
+    return button;
+  };
+  var renderBlockingArchitectureCatalogStatus = (body, snapshot, onRetry) => {
+    if (snapshot.catalog) {
+      setDockAvailable(body, true);
+      return false;
+    }
+    setDockAvailable(body, false);
+    body.replaceChildren();
+    const status = document.createElement("section");
+    status.className = "vst-catalog-status";
+    status.setAttribute("role", "status");
+    status.dataset.catalogStatus = snapshot.status;
+    const title = document.createElement("strong");
+    title.className = "vst-catalog-status-title";
+    if (snapshot.status === "loading") {
+      title.textContent = "Loading video model capabilities…";
+      status.setAttribute("aria-busy", "true");
+      status.appendChild(title);
+      body.appendChild(status);
+      return true;
+    }
+    title.textContent = "Video model capabilities are unavailable";
+    const explanation = document.createElement("p");
+    explanation.textContent = "VideoStages cannot safely author clips until the backend catalog is available.";
+    status.append(title, explanation, retryButton(onRetry));
+    body.appendChild(status);
+    return true;
+  };
+  var renderRetainedArchitectureCatalogStatus = (body, snapshot, onRetry) => {
+    body.querySelector(":scope > .vst-catalog-notice")?.remove();
+    if (snapshot.status !== "refreshing" && snapshot.status !== "stale") {
+      return;
+    }
+    const notice = document.createElement("div");
+    notice.className = `vst-catalog-notice vst-catalog-notice-${snapshot.status}`;
+    notice.dataset.catalogStatus = snapshot.status;
+    notice.setAttribute(
+      "role",
+      snapshot.status === "stale" ? "alert" : "status"
+    );
+    const text2 = document.createElement("span");
+    text2.textContent = snapshot.status === "refreshing" ? "Refreshing video model capabilities…" : "Using the last known video model capabilities; refresh failed.";
+    notice.appendChild(text2);
+    if (snapshot.status === "stale") {
+      notice.appendChild(retryButton(onRetry));
+    }
+    body.prepend(notice);
   };
 
   // frontend/architectures/policy/identity.ts
@@ -14024,10 +13833,14 @@ The conversion is one undoable change.`;
     let suppressSelectionRender = false;
     let settingsMode = null;
     let revealSelectionOnNextRender = false;
+    let renderEnabled = true;
     let draftQueue;
     let renderImplementation = () => {
     };
-    const render = (meta) => renderImplementation(meta);
+    const render = (meta) => {
+      renderEnabled = true;
+      renderImplementation(meta);
+    };
     let renderedSelection = null;
     const focus = createDetailFocusSession({
       getDock: () => dockEl,
@@ -14136,7 +13949,7 @@ The conversion is one undoable change.`;
       }
     };
     const onSelectionChanged = () => {
-      if (suppressSelectionRender) {
+      if (suppressSelectionRender || !renderEnabled) {
         return;
       }
       focus.beginSelectionSession();
@@ -14197,14 +14010,16 @@ The conversion is one undoable change.`;
         dockEl = null;
       }
       renderedSelection = null;
+      renderEnabled = false;
     };
-    const attach = (body, dock) => {
+    const attach = (body, dock, renderImmediately = true) => {
       if (boundBody === body && dockEl === dock) {
         return;
       }
       dispose();
       boundBody = body;
       dockEl = dock;
+      renderEnabled = renderImmediately;
       body.addEventListener(
         "mousedown",
         selectionOperations.onMouseDownCapture,
@@ -14236,7 +14051,9 @@ The conversion is one undoable change.`;
         true
       );
       unsubscribe = subscribeSelection(onSelectionChanged);
-      render();
+      if (renderImmediately) {
+        render();
+      }
     };
     return {
       attach,
@@ -15434,6 +15251,10 @@ The conversion is one undoable change.`;
     const boundaryTrack = createTimelineBoundaryTrack();
     const referencesTrack = createTimelineReferencesTrack(capabilities);
     let addClipInFlight = false;
+    let catalogAdoption = null;
+    let disposed = false;
+    let historyNeedsRebase = true;
+    const hasAuthoritativeCatalog = () => getArchitectureCatalogSnapshot().catalog !== null;
     const openSettings = () => {
       setSelection({ kind: "none" });
       detailStrip.render();
@@ -15453,16 +15274,35 @@ The conversion is one undoable change.`;
         });
       }
     });
+    const rebaseHistoryIfReady = () => {
+      if (!hasAuthoritativeCatalog()) {
+        historyNeedsRebase = true;
+        return;
+      }
+      if (historyNeedsRebase) {
+        history.rebase();
+        historyNeedsRebase = false;
+      }
+    };
     const hostLifecycle = createTimelineHostLifecycle({
       refresh: () => refresh(),
       refreshCatalog: () => {
-        invalidateArchitectureCatalog();
-        void adoptArchitectureCatalog();
+        void adoptArchitectureCatalog(true);
       },
-      syncFromCarrier: () => getTimelineStore().syncFromCarrier(),
-      flushPending: () => detailStrip.flushPending(),
-      undo: () => history.undo(),
-      redo: () => history.redo()
+      syncFromCarrier: () => {
+        if (!hasAuthoritativeCatalog()) {
+          return;
+        }
+        rebaseHistoryIfReady();
+        getTimelineStore().syncFromCarrier();
+      },
+      flushPending: () => {
+        if (hasAuthoritativeCatalog()) {
+          detailStrip.flushPending();
+        }
+      },
+      undo: () => hasAuthoritativeCatalog() && history.undo(),
+      redo: () => hasAuthoritativeCatalog() && history.redo()
     });
     const ensureDock = (body) => {
       const shell = body.parentElement;
@@ -15554,6 +15394,14 @@ The conversion is one undoable change.`;
       if (!body) {
         return;
       }
+      const catalogSnapshot = getArchitectureCatalogSnapshot();
+      if (renderBlockingArchitectureCatalogStatus(
+        body,
+        catalogSnapshot,
+        () => void adoptArchitectureCatalog(true)
+      )) {
+        return;
+      }
       const previousScrollElement = scrollEl();
       const previousScroll = meta?.origin === "external" ? { left: 0, top: 0 } : {
         left: previousScrollElement?.scrollLeft ?? 0,
@@ -15592,6 +15440,11 @@ The conversion is one undoable change.`;
           }),
           capabilities: capabilities()
         });
+        renderRetainedArchitectureCatalogStatus(
+          body,
+          catalogSnapshot,
+          () => void adoptArchitectureCatalog(true)
+        );
         viewport.restoreScroll(previousScroll);
         linking.reapplySelection(body, clips.length);
         detailStrip.render(meta);
@@ -15601,14 +15454,37 @@ The conversion is one undoable change.`;
       }
     };
     const refresh = () => renderAll();
-    const adoptArchitectureCatalog = () => loadAuthoritativeArchitectureCatalog().then((catalog) => {
-      if (!catalog) {
-        return;
+    const adoptArchitectureCatalog = (forceRefresh = false) => {
+      const currentCatalog = getArchitectureCatalogSnapshot();
+      if (!forceRefresh && currentCatalog.catalog && currentCatalog.status !== "refreshing") {
+        return Promise.resolve();
       }
-      getTimelineStore().invalidate();
-      refresh();
-    });
+      if (catalogAdoption) {
+        return catalogAdoption;
+      }
+      const request = forceRefresh ? refreshAuthoritativeArchitectureCatalog() : loadAuthoritativeArchitectureCatalog();
+      renderAll();
+      let adoption;
+      adoption = request.then((catalog) => {
+        if (disposed) {
+          return;
+        }
+        if (catalog) {
+          getTimelineStore().invalidate();
+          rebaseHistoryIfReady();
+        }
+        renderAll();
+      }).finally(() => {
+        if (catalogAdoption === adoption) {
+          catalogAdoption = null;
+        }
+      });
+      catalogAdoption = adoption;
+      return adoption;
+    };
     const init = () => {
+      disposed = false;
+      historyNeedsRebase = true;
       viewport.load();
       injectTimelineTab();
       const body = document.getElementById(TIMELINE_BODY_ID);
@@ -15620,7 +15496,7 @@ The conversion is one undoable change.`;
         audioTrack.attach(body);
         boundaryTrack.attach(body);
         referencesTrack.attach(body, gestures);
-        detailStrip.attach(body, ensureDock(body));
+        detailStrip.attach(body, ensureDock(body), false);
         gestures.attach(body);
         body.removeEventListener("click", onBodyClickSyncReadout);
         body.addEventListener("click", onBodyClickSyncReadout);
@@ -15639,12 +15515,13 @@ The conversion is one undoable change.`;
         history.capture();
         renderAll(meta);
       });
-      history.rebase();
+      rebaseHistoryIfReady();
       hostLifecycle.bind();
       refresh();
       void adoptArchitectureCatalog();
     };
     const dispose = () => {
+      disposed = true;
       hostLifecycle.dispose();
       retakeTrack.dispose();
       audioSegmentTrack.dispose();

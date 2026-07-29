@@ -3,7 +3,7 @@ import { ROOT_DIMENSION_STEP } from "../constants";
 import type { Clip, IcLora } from "../types";
 import { ltx2Behavior } from "./ltx2/behavior";
 import type { GeneratedEntryMode } from "./ltx2/icLoraDriveAvailability";
-import { VIDEO_ARCHITECTURE_MODULES } from "./modules";
+import { LTX2_ARCHITECTURE_ID } from "./ltx2/identity";
 
 /** Pure architecture-owned authoring behavior with no DOM dependencies. */
 export interface ArchitectureBehavior {
@@ -28,11 +28,9 @@ export interface ArchitectureBehavior {
     icLoraDisplayName(entry: IcLora): string;
 }
 
-const behaviors = new Map<string, ArchitectureBehavior>(
-    VIDEO_ARCHITECTURE_MODULES.flatMap((module) =>
-        module.behavior ? [[module.definition.id, module.behavior]] : [],
-    ),
-);
+const behaviors = new Map<string, ArchitectureBehavior>([
+    [LTX2_ARCHITECTURE_ID, ltx2Behavior],
+]);
 
 export const architectureBehavior = (
     architectureId: string,

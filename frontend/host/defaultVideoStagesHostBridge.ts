@@ -91,30 +91,6 @@ export const createDefaultVideoStagesHostBridge =
             registrySnapshot(window.base2editStageRegistry),
         getAceStepFunRegistry: () =>
             registrySnapshot(window.acestepfunTrackRegistry),
-        getModelCompatId: (modelName) => {
-            if (
-                typeof modelsHelpers === "undefined" ||
-                !modelsHelpers ||
-                typeof modelsHelpers.getDataFor !== "function"
-            ) {
-                return null;
-            }
-            const id = modelsHelpers.getDataFor("Stable-Diffusion", modelName)
-                ?.modelClass?.compatClass?.id;
-            return typeof id === "string" && id.trim() ? id : null;
-        },
-        getModelClassId: (modelName) => {
-            if (
-                typeof modelsHelpers === "undefined" ||
-                !modelsHelpers ||
-                typeof modelsHelpers.getDataFor !== "function"
-            ) {
-                return null;
-            }
-            const id = modelsHelpers.getDataFor("Stable-Diffusion", modelName)
-                ?.modelClass?.id;
-            return typeof id === "string" && id.trim() ? id : null;
-        },
         getLoraDefaultWeight: (modelName) => {
             const browserModels =
                 typeof sdLoraBrowser !== "undefined"
@@ -151,20 +127,6 @@ export const createDefaultVideoStagesHostBridge =
                 finiteWeight(helperRaw) ??
                 finiteWeight(preferenceRaw)
             );
-        },
-        getCurrentModelCompatId: () => {
-            if (
-                typeof currentModelHelper === "undefined" ||
-                !currentModelHelper?.curCompatClass ||
-                typeof modelsHelpers === "undefined" ||
-                !modelsHelpers?.compatClasses
-            ) {
-                return null;
-            }
-            const key = currentModelHelper.curCompatClass;
-            const compat = modelsHelpers.compatClasses[key];
-            const id = compat?.id ?? key;
-            return typeof id === "string" && id.trim() ? id : null;
         },
         requestJson: (url, data = {}) =>
             new Promise((resolve, reject) => {

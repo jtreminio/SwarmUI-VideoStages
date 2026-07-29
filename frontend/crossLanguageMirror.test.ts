@@ -7,7 +7,6 @@ import { describe, expect, it } from "@jest/globals";
 import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
 import { boundaryOverlapConstraints } from "./architectures/boundaryConstraints";
 import { parseVideoArchitectureCatalog } from "./architectures/catalog";
-import { ltx2Architecture } from "./architectures/ltx2/definition";
 import {
     DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT,
     findIcLoraPreset,
@@ -217,17 +216,8 @@ describe("cross-language mirror: architecture catalog rule contract", () => {
     const contract = loadFixture<ArchitectureDescriptorContract>(
         "architecture-catalog-rule-contract.json",
     );
-    const wireArchitecture = {
-        id: ltx2Architecture.id,
-        label: ltx2Architecture.label,
-        defaultProfileId: ltx2Architecture.defaultProfileId,
-        capabilities: ltx2Architecture.capabilities,
-        profiles: ltx2Architecture.profiles,
-        boundaryRules: ltx2Architecture.boundaryRules,
-        rules: ltx2Architecture.rules,
-    };
     const parsed = parseVideoArchitectureCatalog({
-        architectures: [wireArchitecture],
+        architectures: [contract.descriptor],
         models: [],
     });
 

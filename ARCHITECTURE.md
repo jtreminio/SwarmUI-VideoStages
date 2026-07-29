@@ -148,9 +148,10 @@ LTX compatibility IDs, or create LTX nodes.
 `VideoArchitectureManifest` is the production composition root. Each
 registration supplies its module, runtime factory, host integration, API
 routes, and dependency registration together. The backend maintains no parallel
-architecture list; the frontend keeps one deliberate mirror in its own
-architecture registry, and the shared catalog fixtures exist to keep the two
-honest.
+architecture list, and the frontend consumes the serialized backend catalog
+without a capability-definition mirror. Frontend architecture IDs may select
+local behavior or DOM panels, but those maps do not recognize models or declare
+profiles, labels, capabilities, or rules.
 
 ## Capability catalog
 
@@ -348,9 +349,12 @@ Adding another family should require:
    runtime-session factory owning preparation and optional exclusive finalization;
 6. same-architecture boundary assembly as soon as any non-cut join is declared
    supported or conditional;
-7. a matching frontend architecture definition and one entry in
-   `frontend/architectures/modules.ts`; and
-8. contract tests using the common dispatcher and timeline assembler.
+7. an optional frontend-local behavior and/or authoring-panel mapping keyed by
+   the backend architecture ID, only when the family has concrete custom UI
+   behavior; architectures with no custom frontend behavior need no frontend
+   registration; and
+8. contract tests using the common dispatcher, strict catalog parser, and
+   timeline assembler.
 
 It must not require changes to generic document parsing, clip ordering,
 history, cut assembly, output publication, or the frontend's generic panel

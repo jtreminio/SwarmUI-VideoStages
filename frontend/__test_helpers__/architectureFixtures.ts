@@ -1,6 +1,8 @@
 import type {
     ArchitectureCapabilities,
+    ArchitectureCatalogEntryDto,
     ArchitectureModelCatalog,
+    VideoArchitectureCatalogDto,
     VideoArchitectureId,
 } from "../architectures/types";
 import type { RootDefaults } from "../types";
@@ -43,7 +45,7 @@ export const testArchitectureCapabilities = (
 export const testArchitectureCatalog = (
     overrides: Partial<ArchitectureModelCatalog> = {},
 ): ArchitectureModelCatalog => ({
-    source: "bootstrap",
+    source: "backend",
     architectures: [
         {
             id: "ltx2",
@@ -169,21 +171,85 @@ export const testArchitectureCatalog = (
         {
             value: "ltx-2.3.safetensors",
             label: "LTX 2.3",
-            compatId: "ltxv2",
-            modelClassId: "lightricks-ltx-video-2-3",
             architectureId: "ltx2",
             modelProfileId: "ltx-2.3",
         },
         {
             value: "ltx",
             label: "Synthetic LTX 2.3 alias",
-            compatId: "ltxv2",
-            modelClassId: "lightricks-ltx-video-2-3",
             architectureId: "ltx2",
             modelProfileId: "ltx-2.3",
         },
     ],
     ...overrides,
+});
+
+export const testArchitectureCatalogDto = (
+    catalog: ArchitectureModelCatalog = testArchitectureCatalog(),
+): VideoArchitectureCatalogDto => ({
+    architectures: structuredClone(catalog.architectures),
+    models: catalog.entries.flatMap((entry) =>
+        entry.architectureId && entry.modelProfileId
+            ? [
+                  {
+                      modelName: entry.value,
+                      architectureId: entry.architectureId,
+                      modelProfileId: entry.modelProfileId,
+                      compatId: null,
+                  },
+              ]
+            : [],
+    ),
+});
+
+export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
+    id: "none",
+    label: "Decoded source only",
+    defaultProfileId: "none",
+    capabilities: testArchitectureCapabilities({
+        architecture: ["sourced-entry", "decoded-output"],
+        clip: ["source-video", "audio-sources", "audio-segments"],
+        stage: [],
+        output: ["video", "attached-audio"],
+        upscaleModes: [],
+        entryModes: ["source-video"],
+        audioSourceKinds: ["Disabled", "Upload"],
+    }),
+    profiles: [
+        {
+            id: "none",
+            label: "Decoded source only",
+            capabilities: [],
+            rules: [],
+        },
+    ],
+    boundaryRules: {
+        cut: {
+            support: "supported",
+            code: "none.boundary.cut",
+            reason: "Decoded sourced clips can be joined with a hard cut.",
+            scope: "boundary",
+            entityId: null,
+            constraints: null,
+        },
+        continue: {
+            support: "unsupported",
+            code: "none.boundary.continue.unsupported",
+            reason: "Sourced-only clips do not support continuation.",
+            scope: "boundary",
+            entityId: null,
+            constraints: null,
+        },
+        crossfade: {
+            support: "unsupported",
+            code: "none.boundary.crossfade.unsupported",
+            reason: "Sourced-only clips do not support crossfade.",
+            scope: "boundary",
+            entityId: null,
+            constraints: null,
+        },
+    },
+    rules: [],
 });
 
 export const fakeArchitectureCatalog = (
@@ -242,8 +308,6 @@ export const fakeArchitectureCatalog = (
         {
             value: "test-video.safetensors",
             label: "Test Video",
-            compatId: "test-video",
-            modelClassId: "test-video",
             architectureId,
             modelProfileId: "test-profile",
         },

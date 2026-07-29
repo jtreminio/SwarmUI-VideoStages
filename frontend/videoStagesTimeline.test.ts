@@ -16,6 +16,7 @@ import {
 import {
     ARCHITECTURE_CATALOG_API,
     invalidateArchitectureCatalog,
+    loadAuthoritativeArchitectureCatalog,
 } from "./architectures/catalog";
 import {
     setVideoStagesHostBridgeForTests,
@@ -44,17 +45,6 @@ import {
 const TIMELINE_BODY_ID = "videostages-timeline-body";
 // A little over the controller's 200ms poll interval, so one tick is guaranteed to fire.
 const POLL_ADVANCE_MS = 250;
-const modelGlobals = globalThis as unknown as {
-    modelsHelpers?: {
-        getDataFor: (
-            category: string,
-            modelName: string,
-        ) => {
-            modelClass: { compatClass: { id: string } };
-        };
-    };
-};
-
 const setupBottomBar = (): void => {
     const nav = document.createElement("ul");
     nav.id = "bottombartabcollection";
@@ -113,23 +103,31 @@ const notify = (): void => triggerChangeFor(promptInput);
 const regionCount = (): number =>
     document.querySelectorAll(`#${TIMELINE_BODY_ID} .vst-region`).length;
 const flushMicrotasks = async (): Promise<void> => {
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 12; i++) {
         await Promise.resolve();
     }
 };
+
+const authoritativeDto = (
+    modelNames: readonly string[] = ["ltx-2.3.safetensors"],
+) => ({
+    architectures: structuredClone(testArchitectureCatalog().architectures),
+    models: modelNames.map((modelName) => ({
+        modelName,
+        architectureId: "ltx2",
+        modelProfileId: "ltx-2.3",
+        compatId: "ltxv2",
+    })),
+});
+
 describe("videoStagesTimeline", () => {
     let timeline: VideoStagesTimeline | null = null;
 
-    beforeEach(() => {
-        modelGlobals.modelsHelpers = {
-            getDataFor: () => ({
-                modelClass: { compatClass: { id: "ltxv2" } },
-            }),
-        };
+    beforeEach(async () => {
         invalidateArchitectureCatalog();
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
-            requestJson: async () => null,
+            requestJson: async () => authoritativeDto(),
         });
         jest.useFakeTimers();
         __resetPersistenceForTests();
@@ -139,6 +137,7 @@ describe("videoStagesTimeline", () => {
         localStorage.clear();
         setupBottomBar();
         mountRootDefaults();
+        await loadAuthoritativeArchitectureCatalog();
     });
 
     afterEach(() => {
@@ -149,7 +148,6 @@ describe("videoStagesTimeline", () => {
         jest.useRealTimers();
         resetSelectionForTests();
         document.body.innerHTML = "";
-        delete modelGlobals.modelsHelpers;
     });
 
     // Group toggle must be present + checked so live-apply writes actually
@@ -433,14 +431,13 @@ describe("videoStagesTimeline", () => {
         ).toContain("Clip 2");
     });
 
-    it("adds the first clip after the backend catalog resolves even when the video-model dropdown is absent", async () => {
+    it("shows loading without authoring controls, then renders after authoritative success", async () => {
         document.getElementById("input_videomodel")?.remove();
         mountState(JSON.stringify({ schemaVersion: 5, clips: [] }));
         invalidateArchitectureCatalog();
 
-        const architecture = testArchitectureCatalog().architectures[0];
         const dto = {
-            architectures: [architecture],
+            architectures: testArchitectureCatalog().architectures,
             models: [
                 {
                     modelName: "server-ltx-model.safetensors",
@@ -465,18 +462,31 @@ describe("videoStagesTimeline", () => {
         });
 
         timeline = videoStagesTimeline();
+        const readState = jest.spyOn(getTimelineStore(), "getState");
+        const syncFromCarrier = jest.spyOn(
+            getTimelineStore(),
+            "syncFromCarrier",
+        );
         timeline.init();
+        await Promise.resolve();
+        jest.advanceTimersByTime(POLL_ADVANCE_MS);
+
+        expect(requestJson).toHaveBeenCalledTimes(1);
+        expect(requestJson).toHaveBeenCalledWith(ARCHITECTURE_CATALOG_API);
+        expect(
+            document.querySelector('[data-catalog-status="loading"]'),
+        ).not.toBeNull();
+        expect(document.querySelector("[data-vst-add-clip]")).toBeNull();
+        expect(readState).not.toHaveBeenCalled();
+        expect(syncFromCarrier).not.toHaveBeenCalled();
+
+        resolveCatalog(dto);
+        await flushMicrotasks();
         document
             .querySelector<HTMLButtonElement>(
                 ".vst-topbar-tools [data-vst-add-clip]",
             )
             ?.click();
-
-        expect(requestJson).toHaveBeenCalledTimes(1);
-        expect(requestJson).toHaveBeenCalledWith(ARCHITECTURE_CATALOG_API);
-        expect(getClips()).toHaveLength(0);
-
-        resolveCatalog(dto);
         await flushMicrotasks();
 
         expect(showError).not.toHaveBeenCalled();
@@ -497,6 +507,130 @@ describe("videoStagesTimeline", () => {
             stageIdx: 0,
         });
         expect(document.querySelector(".vst-detail-clip")).not.toBeNull();
+    });
+
+    it("shows unavailable with Retry and recovers without touching the document", async () => {
+        mountState(makeClipsJson(1));
+        invalidateArchitectureCatalog();
+        let resolveRetry!: (value: unknown) => void;
+        const requestJson = jest
+            .fn<VideoStagesHostBridge["requestJson"]>()
+            .mockRejectedValueOnce(new Error("catalog route failed"))
+            .mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        resolveRetry = resolve;
+                    }),
+            );
+        jest.spyOn(console, "warn").mockImplementation(() => undefined);
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson,
+        });
+        const before = dataInput.value;
+        const readState = jest.spyOn(getTimelineStore(), "getState");
+        const syncFromCarrier = jest.spyOn(
+            getTimelineStore(),
+            "syncFromCarrier",
+        );
+
+        timeline = videoStagesTimeline();
+        timeline.init();
+        await flushMicrotasks();
+        jest.advanceTimersByTime(POLL_ADVANCE_MS);
+
+        expect(
+            document.querySelector('[data-catalog-status="unavailable"]'),
+        ).not.toBeNull();
+        expect(regionCount()).toBe(0);
+        expect(dataInput.value).toBe(before);
+        expect(readState).not.toHaveBeenCalled();
+        expect(syncFromCarrier).not.toHaveBeenCalled();
+
+        document
+            .querySelector<HTMLButtonElement>(".vst-catalog-retry")
+            ?.click();
+        expect(
+            document.querySelector('[data-catalog-status="loading"]'),
+        ).not.toBeNull();
+        await Promise.resolve();
+        resolveRetry(authoritativeDto());
+        await flushMicrotasks();
+
+        expect(regionCount()).toBe(1);
+        expect(
+            document.querySelector('[data-catalog-status="unavailable"]'),
+        ).toBeNull();
+        expect(dataInput.value).toBe(before);
+    });
+
+    it("retains regions and capability-backed UI when refresh becomes stale, then accepts a replacement", async () => {
+        mountState(makeClipsJson(1));
+        mountEnabledToggle();
+        let rejectRefresh!: (reason?: unknown) => void;
+        let resolveRetry!: (value: unknown) => void;
+        const requestJson = jest
+            .fn<VideoStagesHostBridge["requestJson"]>()
+            .mockImplementationOnce(
+                () =>
+                    new Promise((_resolve, reject) => {
+                        rejectRefresh = reject;
+                    }),
+            )
+            .mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        resolveRetry = resolve;
+                    }),
+            );
+        jest.spyOn(console, "warn").mockImplementation(() => undefined);
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson,
+        });
+
+        timeline = videoStagesTimeline();
+        timeline.init();
+        await flushMicrotasks();
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        expect(regionCount()).toBe(1);
+        expect(document.querySelector(".vst-detail-clip")).not.toBeNull();
+        expect(document.querySelector(".vst-detail-add-iclora")).not.toBeNull();
+
+        const extras = refreshParamsExtra as (() => unknown)[];
+        extras[0]();
+        await Promise.resolve();
+        expect(
+            document.querySelector('[data-catalog-status="refreshing"]'),
+        ).not.toBeNull();
+        expect(regionCount()).toBe(1);
+
+        rejectRefresh(new Error("refresh failed"));
+        await flushMicrotasks();
+        expect(
+            document.querySelector('[data-catalog-status="stale"]'),
+        ).not.toBeNull();
+        expect(regionCount()).toBe(1);
+        expect(document.querySelector(".vst-detail-clip")).not.toBeNull();
+        expect(document.querySelector(".vst-detail-add-iclora")).not.toBeNull();
+
+        const replacement = authoritativeDto();
+        replacement.architectures[0].capabilities.stage =
+            replacement.architectures[0].capabilities.stage.filter(
+                (capability) => capability !== "ic-lora",
+            );
+        document
+            .querySelector<HTMLButtonElement>(".vst-catalog-retry")
+            ?.click();
+        await Promise.resolve();
+        resolveRetry(replacement);
+        await flushMicrotasks();
+
+        expect(
+            document.querySelector('[data-catalog-status="stale"]'),
+        ).toBeNull();
+        expect(regionCount()).toBe(1);
+        expect(document.querySelector(".vst-detail-add-iclora")).toBeNull();
     });
 
     it("keeps the region count stable when only surrounding prompt prose changes", () => {
@@ -830,7 +964,7 @@ describe("videoStagesTimeline", () => {
         expect(regionCount()).toBe(4);
     });
 
-    it("repaints stage dropdowns when the host refreshes models/loras", () => {
+    it("repaints stage dropdowns from a forced authoritative host refresh", async () => {
         mountState(makeClipsJson(1));
         mountEnabledToggle();
         const hostModel = document.getElementById(
@@ -840,9 +974,19 @@ describe("videoStagesTimeline", () => {
         alternate.value = "ltx-2.3-alt.safetensors";
         alternate.text = alternate.value;
         hostModel.appendChild(alternate);
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () =>
+                authoritativeDto([
+                    "ltx-2.3.safetensors",
+                    "ltx-2.3-alt.safetensors",
+                    "ltx-2.3-refreshed.safetensors",
+                ]),
+        });
 
         timeline = videoStagesTimeline();
         timeline.init();
+        await flushMicrotasks();
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
 
         const modelOptions = (): string[] => {
@@ -859,10 +1003,7 @@ describe("videoStagesTimeline", () => {
             return Array.from(model?.options ?? []).map((o) => o.value);
         };
 
-        expect(modelOptions()).toEqual([
-            "ltx-2.3.safetensors",
-            "ltx-2.3-alt.safetensors",
-        ]);
+        expect(modelOptions()).toEqual(["ltx-2.3.safetensors"]);
 
         // Host refresh button repopulates the core dropdown, then runs the
         // refreshParamsExtra callbacks. Our hook defers a repaint one tick.
@@ -876,8 +1017,11 @@ describe("videoStagesTimeline", () => {
         for (const cb of extras) {
             cb();
         }
+        await Promise.resolve();
         jest.advanceTimersByTime(1);
+        await flushMicrotasks();
 
+        expect(modelOptions()).toContain("ltx-2.3-alt.safetensors");
         expect(modelOptions()).toContain("ltx-2.3-refreshed.safetensors");
     });
 

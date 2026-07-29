@@ -10,9 +10,11 @@ import { isRootTextToVideoModel } from "../swarmInputs";
 import {
     ARCHITECTURE_CATALOG_API,
     buildArchitectureModelCatalog,
+    getArchitectureCatalogSnapshot,
     invalidateArchitectureCatalog,
     loadAuthoritativeArchitectureCatalog,
     parseVideoArchitectureCatalog,
+    refreshAuthoritativeArchitectureCatalog,
 } from "./catalog";
 import { createCapabilityViewResolver } from "./policy";
 
@@ -47,6 +49,16 @@ const dto = {
     ],
 };
 
+const deferred = <T>() => {
+    let resolve!: (value: T | PromiseLike<T>) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+        resolve = resolvePromise;
+        reject = rejectPromise;
+    });
+    return { promise, resolve, reject };
+};
+
 afterEach(() => {
     invalidateArchitectureCatalog();
     setVideoStagesHostBridgeForTests(null);
@@ -54,7 +66,7 @@ afterEach(() => {
     document.body.innerHTML = "";
 });
 
-describe("architecture catalog", () => {
+describe("architecture catalog wire contract", () => {
     it("strictly parses the backend DTO", () => {
         expect(parseVideoArchitectureCatalog(dto)).toEqual(dto);
         expect(
@@ -71,7 +83,7 @@ describe("architecture catalog", () => {
         ).toBeNull();
     });
 
-    it("rejects the complete catalog on duplicate or dangling identities", () => {
+    it("rejects duplicate and dangling identities", () => {
         expect(
             parseVideoArchitectureCatalog({
                 ...dto,
@@ -106,25 +118,9 @@ describe("architecture catalog", () => {
                 models: [dto.models[0], dto.models[0]],
             }),
         ).toBeNull();
-        expect(
-            parseVideoArchitectureCatalog({
-                ...dto,
-                architectures: [
-                    {
-                        ...dto.architectures[0],
-                        profiles: [
-                            {
-                                ...dto.architectures[0].profiles[0],
-                                id: " ltx-2 ",
-                            },
-                        ],
-                    },
-                ],
-            }),
-        ).toBeNull();
     });
 
-    it("requires the complete cut/continue/crossfade boundary contract", () => {
+    it("requires the complete boundary/rule contract and lossless metadata", () => {
         const missing = structuredClone(dto);
         delete missing.architectures[0].boundaryRules.cut;
         expect(parseVideoArchitectureCatalog(missing)).toBeNull();
@@ -139,12 +135,14 @@ describe("architecture catalog", () => {
         extra.architectures[0].boundaryRules.dissolve =
             extra.architectures[0].boundaryRules.cut;
         expect(parseVideoArchitectureCatalog(extra)).toBeNull();
-    });
 
-    it("rejects invalid rule scope, support semantics, codes, and boundary grids", () => {
         const wrongScope = structuredClone(dto);
         wrongScope.architectures[0].boundaryRules.continue.scope = "clip";
         expect(parseVideoArchitectureCatalog(wrongScope)).toBeNull();
+
+        const whitespaceProfileId = structuredClone(dto);
+        whitespaceProfileId.architectures[0].profiles[0].id = " ltx-2 ";
+        expect(parseVideoArchitectureCatalog(whitespaceProfileId)).toBeNull();
 
         const missingConditionalConstraints = structuredClone(dto);
         missingConditionalConstraints.architectures[0].boundaryRules.continue.constraints =
@@ -174,9 +172,7 @@ describe("architecture catalog", () => {
         duplicateCode.architectures[0].rules[0].code =
             duplicateCode.architectures[0].boundaryRules.continue.code;
         expect(parseVideoArchitectureCatalog(duplicateCode)).toBeNull();
-    });
 
-    it("rejects lossy model metadata instead of coercing it", () => {
         const malformed = structuredClone(dto) as unknown as {
             architectures: typeof dto.architectures;
             models: Array<Record<string, unknown>>;
@@ -185,7 +181,7 @@ describe("architecture catalog", () => {
         expect(parseVideoArchitectureCatalog(malformed)).toBeNull();
     });
 
-    it("uses exact authoritative boundary constraint keys for grid and target gates", () => {
+    it("uses exact authoritative boundary constraints", () => {
         const parsed = parseVideoArchitectureCatalog(dto);
         if (!parsed) throw new Error("catalog did not parse");
         const catalog = {
@@ -194,8 +190,6 @@ describe("architecture catalog", () => {
             entries: parsed.models.map((model) => ({
                 value: model.modelName,
                 label: model.modelName,
-                compatId: model.compatId ?? null,
-                modelClassId: null,
                 architectureId: model.architectureId,
                 modelProfileId: model.modelProfileId,
             })),
@@ -225,217 +219,201 @@ describe("architecture catalog", () => {
         });
         expect(boundary.effective("continue")).toBe("cut");
     });
+});
 
-    it("coalesces and caches the exact host route request", async () => {
-        const requestJson = jest.fn<VideoStagesHostBridge["requestJson"]>(
-            async () => dto,
-        );
-        setVideoStagesHostBridgeForTests({
-            ...createDefaultVideoStagesHostBridge(),
-            requestJson,
-        });
-
-        const [first, second] = await Promise.all([
-            loadAuthoritativeArchitectureCatalog(),
-            loadAuthoritativeArchitectureCatalog(),
-        ]);
-        const third = await loadAuthoritativeArchitectureCatalog();
-
-        expect(first).toEqual(dto);
-        expect(second).toEqual(dto);
-        expect(third).toEqual(dto);
-        expect(requestJson).toHaveBeenCalledTimes(1);
-        expect(requestJson).toHaveBeenCalledWith(ARCHITECTURE_CATALOG_API);
-        expect(ARCHITECTURE_CATALOG_API).toBe(
-            "VideoStagesGetArchitectureCatalog",
-        );
-    });
-
-    it("re-requests the catalog after an invalidation so new models resolve", async () => {
-        const newModel = {
-            modelName: "ltx-brand-new.safetensors",
-            architectureId: "ltx2",
-            modelProfileId: "ltx-2.3",
-            compatId: "ltxv2",
-        };
+describe("authoritative catalog repository", () => {
+    it("moves loading to unavailable, then retry to ready without inferred identity", async () => {
+        const first = deferred<unknown>();
+        const second = deferred<unknown>();
+        const failure = new Error("route unavailable");
         const requestJson = jest
             .fn<VideoStagesHostBridge["requestJson"]>()
-            .mockResolvedValueOnce(dto)
-            .mockResolvedValue({ ...dto, models: [...dto.models, newModel] });
+            .mockImplementationOnce(() => first.promise)
+            .mockImplementationOnce(() => second.promise);
+        jest.spyOn(console, "warn").mockImplementation(() => undefined);
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson,
         });
 
-        await loadAuthoritativeArchitectureCatalog();
-        expect(
-            buildArchitectureModelCatalog([newModel.modelName], ["Brand New"])
-                .entries[0].architectureId,
-        ).toBeNull();
-
-        invalidateArchitectureCatalog();
-        await loadAuthoritativeArchitectureCatalog();
-
-        expect(requestJson).toHaveBeenCalledTimes(2);
-        expect(
-            buildArchitectureModelCatalog([newModel.modelName], ["Brand New"])
-                .entries[0],
-        ).toMatchObject({
-            architectureId: "ltx2",
-            modelProfileId: "ltx-2.3",
+        const initial = loadAuthoritativeArchitectureCatalog();
+        expect(getArchitectureCatalogSnapshot()).toMatchObject({
+            status: "loading",
+            catalog: null,
         });
-    });
-
-    it("uses backend model profiles even when compat ids are identical", async () => {
-        setVideoStagesHostBridgeForTests({
-            ...createDefaultVideoStagesHostBridge(),
-            requestJson: async () => dto,
-            getModelCompatId: () => "ltxv2",
+        first.reject(failure);
+        await expect(initial).resolves.toBeNull();
+        expect(getArchitectureCatalogSnapshot()).toMatchObject({
+            status: "unavailable",
+            catalog: null,
+            error: "route unavailable",
         });
-        await loadAuthoritativeArchitectureCatalog();
-
-        const catalog = buildArchitectureModelCatalog(
-            dto.models.map((model) => model.modelName),
-            ["LTX 2.3", "Synthetic"],
-        );
-
-        expect(catalog.source).toBe("backend");
-        expect(catalog.entries.map((entry) => entry.modelProfileId)).toEqual([
-            "ltx-2.3",
-            "synthetic-profile",
-        ]);
-    });
-
-    it("retains authoritative backend models that are absent from the host dropdown", async () => {
-        setVideoStagesHostBridgeForTests({
-            ...createDefaultVideoStagesHostBridge(),
-            requestJson: async () => dto,
-        });
-        await loadAuthoritativeArchitectureCatalog();
-
-        const catalog = buildArchitectureModelCatalog([], []);
-
-        expect(catalog.source).toBe("backend");
-        expect(catalog.entries).toEqual([
-            expect.objectContaining({
-                value: "ltx-two.safetensors",
-                label: "ltx-two.safetensors",
-                compatId: "ltxv2",
-                architectureId: "ltx2",
-                modelProfileId: "ltx-2.3",
-            }),
-            expect.objectContaining({
-                value: "ltx-two-three.safetensors",
-                label: "ltx-two-three.safetensors",
-                compatId: "ltxv2",
-                architectureId: "ltx2",
-                modelProfileId: "synthetic-profile",
-            }),
-        ]);
-    });
-
-    it("distinguishes the LTX 2.3 bootstrap profile by model class", () => {
-        setVideoStagesHostBridgeForTests({
-            ...createDefaultVideoStagesHostBridge(),
-            getModelCompatId: () => "ltxv2",
-            getModelClassId: () => "lightricks-ltx-video-2-3",
-        });
-
-        expect(
-            buildArchitectureModelCatalog(
-                ["opaque-model.safetensors"],
-                ["Opaque Model"],
-            ).entries[0],
-        ).toMatchObject({
-            architectureId: "ltx2",
-            modelProfileId: "ltx-2.3",
-        });
-    });
-
-    it("does not bootstrap older LTX models from the broad compat id alone", () => {
-        setVideoStagesHostBridgeForTests({
-            ...createDefaultVideoStagesHostBridge(),
-            getModelCompatId: () => "ltxv2",
-            getModelClassId: () => null,
-        });
-
-        expect(
-            buildArchitectureModelCatalog(
-                ["ltx-two.safetensors"],
-                ["Older LTX"],
-            ).entries[0],
-        ).toMatchObject({
-            architectureId: null,
-            modelProfileId: null,
-        });
-    });
-
-    it("bootstraps a clearly named LTX 2.3 model without host metadata", () => {
-        setVideoStagesHostBridgeForTests({
-            ...createDefaultVideoStagesHostBridge(),
-            getModelCompatId: () => null,
-            getModelClassId: () => null,
-        });
-
         expect(
             buildArchitectureModelCatalog(
                 ["LTX-2.3-22b.safetensors"],
                 ["LTX 2.3"],
-            ).entries[0],
+            ),
         ).toMatchObject({
-            architectureId: "ltx2",
-            modelProfileId: "ltx-2.3",
+            source: "unavailable",
+            architectures: [],
+            entries: [
+                {
+                    architectureId: null,
+                    modelProfileId: null,
+                },
+            ],
+        });
+
+        const retry = loadAuthoritativeArchitectureCatalog();
+        expect(getArchitectureCatalogSnapshot().status).toBe("loading");
+        second.resolve(dto);
+        await expect(retry).resolves.toEqual(dto);
+        expect(getArchitectureCatalogSnapshot()).toMatchObject({
+            status: "ready",
+            catalog: dto,
+            error: null,
         });
     });
 
-    it("retries after an invalid response while retaining bootstrap support", async () => {
+    it("retains the exact ready DTO through a failed refresh and later replaces it", async () => {
+        const refreshFailure = deferred<unknown>();
+        const replacement = structuredClone(dto);
+        replacement.architectures[0].capabilities.stage =
+            replacement.architectures[0].capabilities.stage.filter(
+                (capability) => capability !== "ic-lora",
+            );
+        replacement.models = replacement.models.slice(0, 1);
         const requestJson = jest
             .fn<VideoStagesHostBridge["requestJson"]>()
-            .mockResolvedValueOnce({ architectures: [], models: [] })
-            .mockResolvedValueOnce(dto);
+            .mockResolvedValueOnce(dto)
+            .mockImplementationOnce(() => refreshFailure.promise)
+            .mockResolvedValueOnce(replacement);
+        jest.spyOn(console, "warn").mockImplementation(() => undefined);
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson,
-            getModelCompatId: () => "ltxv2",
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        const oldCatalog = getArchitectureCatalogSnapshot().catalog;
+
+        const refresh = refreshAuthoritativeArchitectureCatalog();
+        expect(getArchitectureCatalogSnapshot()).toEqual({
+            status: "refreshing",
+            catalog: oldCatalog,
+            error: null,
+        });
+        refreshFailure.reject(new Error("refresh failed"));
+        await expect(refresh).resolves.toBeNull();
+        expect(getArchitectureCatalogSnapshot()).toEqual({
+            status: "stale",
+            catalog: oldCatalog,
+            error: "refresh failed",
         });
 
-        expect(await loadAuthoritativeArchitectureCatalog()).toBeNull();
-        expect(
-            buildArchitectureModelCatalog(["ltx-two.safetensors"], ["LTX 2"])
-                .source,
-        ).toBe("bootstrap");
-        expect(await loadAuthoritativeArchitectureCatalog()).toEqual(dto);
+        await expect(
+            refreshAuthoritativeArchitectureCatalog(),
+        ).resolves.toEqual(replacement);
+        expect(getArchitectureCatalogSnapshot()).toEqual({
+            status: "ready",
+            catalog: replacement,
+            error: null,
+        });
+    });
+
+    it("keeps the newest generation when superseded requests settle out of order", async () => {
+        const requestA = deferred<unknown>();
+        const requestB = deferred<unknown>();
+        const newer = structuredClone(dto);
+        newer.models = newer.models.slice(0, 1);
+        const requestJson = jest
+            .fn<VideoStagesHostBridge["requestJson"]>()
+            .mockImplementationOnce(() => requestA.promise)
+            .mockImplementationOnce(() => requestB.promise);
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson,
+        });
+
+        const loadA = loadAuthoritativeArchitectureCatalog();
+        invalidateArchitectureCatalog();
+        const loadB = loadAuthoritativeArchitectureCatalog();
+        requestA.resolve(dto);
+        await expect(loadA).resolves.toBeNull();
+        expect(loadAuthoritativeArchitectureCatalog()).toBe(loadB);
+
+        requestB.resolve(newer);
+        await expect(loadB).resolves.toEqual(newer);
+        expect(getArchitectureCatalogSnapshot()).toMatchObject({
+            status: "ready",
+            catalog: newer,
+        });
         expect(requestJson).toHaveBeenCalledTimes(2);
     });
 
-    it("clears a failed request so a later retry can become authoritative", async () => {
-        const failure = new Error("catalog route unavailable");
+    it("coalesces repeated load and refresh calls within a request generation", async () => {
+        const initial = deferred<unknown>();
+        const refresh = deferred<unknown>();
         const requestJson = jest
             .fn<VideoStagesHostBridge["requestJson"]>()
-            .mockRejectedValueOnce(failure)
-            .mockResolvedValueOnce(dto);
-        const warning = jest
-            .spyOn(console, "warn")
-            .mockImplementation(() => undefined);
+            .mockImplementationOnce(() => initial.promise)
+            .mockImplementationOnce(() => refresh.promise);
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson,
         });
 
-        expect(await loadAuthoritativeArchitectureCatalog()).toBeNull();
+        const firstLoad = loadAuthoritativeArchitectureCatalog();
+        expect(loadAuthoritativeArchitectureCatalog()).toBe(firstLoad);
+        expect(refreshAuthoritativeArchitectureCatalog()).toBe(firstLoad);
+        initial.resolve(dto);
+        await firstLoad;
 
-        expect(await loadAuthoritativeArchitectureCatalog()).toEqual(dto);
-        expect(
-            buildArchitectureModelCatalog(
-                dto.models.map((model) => model.modelName),
-                dto.models.map((model) => model.modelName),
-            ).source,
-        ).toBe("backend");
+        const firstRefresh = refreshAuthoritativeArchitectureCatalog();
+        expect(refreshAuthoritativeArchitectureCatalog()).toBe(firstRefresh);
+        expect(loadAuthoritativeArchitectureCatalog()).toBe(firstRefresh);
+        refresh.resolve(dto);
+        await firstRefresh;
+
         expect(requestJson).toHaveBeenCalledTimes(2);
-        expect(warning).toHaveBeenCalledWith(
-            expect.stringContaining("architecture catalog unavailable"),
-            failure,
+        expect(requestJson).toHaveBeenNthCalledWith(
+            1,
+            ARCHITECTURE_CATALOG_API,
         );
+    });
+
+    it("decorates backend-known model labels and retains backend-only entries without inferring host-only identity", async () => {
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => dto,
+        });
+        await loadAuthoritativeArchitectureCatalog();
+
+        const catalog = buildArchitectureModelCatalog(
+            [dto.models[0].modelName, "LTX-2.3-host-only.safetensors"],
+            ["Current Host Label", "Looks Like LTX"],
+        );
+
+        expect(catalog.source).toBe("backend");
+        expect(catalog.entries).toEqual([
+            expect.objectContaining({
+                value: dto.models[0].modelName,
+                label: "Current Host Label",
+                architectureId: "ltx2",
+                modelProfileId: "ltx-2.3",
+            }),
+            expect.objectContaining({
+                value: "LTX-2.3-host-only.safetensors",
+                label: "Looks Like LTX",
+                architectureId: null,
+                modelProfileId: null,
+            }),
+            expect.objectContaining({
+                value: dto.models[1].modelName,
+                label: dto.models[1].modelName,
+                architectureId: "ltx2",
+                modelProfileId: "synthetic-profile",
+            }),
+        ]);
     });
 
     it("recognizes any cataloged text-to-video root architecture", async () => {

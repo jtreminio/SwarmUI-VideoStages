@@ -10,7 +10,7 @@ import {
 } from "./architectures/catalog";
 import { architectureDescriptor } from "./architectures/catalogQueries";
 import { normalizeClipArchitecture } from "./architectures/identity";
-import { NONE_ARCHITECTURE_ID } from "./architectures/none/definition";
+import { NONE_ARCHITECTURE_ID } from "./architectures/none/identity";
 import { AUDIO_SOURCE_NATIVE } from "./audioSource";
 import { normalizeStoredHue, UNASSIGNED_HUE } from "./clipColor";
 import {

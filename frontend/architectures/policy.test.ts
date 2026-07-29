@@ -2,6 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
+    testSourceOnlyArchitecture,
 } from "../__test_helpers__/architectureFixtures";
 import {
     hdrIcLoraFixture,
@@ -15,7 +16,6 @@ import {
     detailBreadcrumb,
 } from "../detailStrip/panelRouter";
 import { renderTimeline } from "../timelineView";
-import { noneArchitecture } from "./none/definition";
 import {
     createCapabilityViewResolver,
     reconcileSourcedClipIdentity,
@@ -30,15 +30,7 @@ const catalog = (): ArchitectureModelCatalog => {
         architectures: [
             ...ltx.architectures,
             ...fake.architectures,
-            {
-                id: noneArchitecture.id,
-                label: noneArchitecture.label,
-                defaultProfileId: noneArchitecture.defaultProfileId,
-                capabilities: structuredClone(noneArchitecture.capabilities),
-                profiles: structuredClone(noneArchitecture.profiles),
-                boundaryRules: structuredClone(noneArchitecture.boundaryRules),
-                rules: structuredClone(noneArchitecture.rules),
-            },
+            testSourceOnlyArchitecture(),
         ],
         entries: [...ltx.entries, ...fake.entries],
     };
@@ -377,8 +369,6 @@ describe("catalog-backed authoring policy", () => {
         models.entries.push({
             value: "ltx-alt-profile-model",
             label: "Synthetic alternate model",
-            compatId: "ltxv2",
-            modelClassId: "lightricks-ltx-video-2-3",
             architectureId: "ltx2",
             modelProfileId: "ltx-alt-profile",
         });

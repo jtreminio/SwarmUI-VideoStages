@@ -1,7 +1,12 @@
 import {
+    renderBlockingArchitectureCatalogStatus,
+    renderRetainedArchitectureCatalogStatus,
+} from "./architectureCatalogStatusView";
+import {
     architectureForModel,
-    invalidateArchitectureCatalog,
+    getArchitectureCatalogSnapshot,
     loadAuthoritativeArchitectureCatalog,
+    refreshAuthoritativeArchitectureCatalog,
 } from "./architectures/catalog";
 import { currentCapabilityViewResolver } from "./architectures/currentPolicy";
 import { deriveAuthoringDiagnostics } from "./authoringDiagnostics";
@@ -86,6 +91,11 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const boundaryTrack = createTimelineBoundaryTrack();
     const referencesTrack = createTimelineReferencesTrack(capabilities);
     let addClipInFlight = false;
+    let catalogAdoption: Promise<void> | null = null;
+    let disposed = false;
+    let historyNeedsRebase = true;
+    const hasAuthoritativeCatalog = (): boolean =>
+        getArchitectureCatalogSnapshot().catalog !== null;
 
     // Open the timeline settings panel (docked in the detail strip) from the
     // topbar dims/fps chip.
@@ -109,16 +119,35 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             });
         },
     });
+    const rebaseHistoryIfReady = (): void => {
+        if (!hasAuthoritativeCatalog()) {
+            historyNeedsRebase = true;
+            return;
+        }
+        if (historyNeedsRebase) {
+            history.rebase();
+            historyNeedsRebase = false;
+        }
+    };
     const hostLifecycle = createTimelineHostLifecycle({
         refresh: () => refresh(),
         refreshCatalog: () => {
-            invalidateArchitectureCatalog();
-            void adoptArchitectureCatalog();
+            void adoptArchitectureCatalog(true);
         },
-        syncFromCarrier: () => getTimelineStore().syncFromCarrier(),
-        flushPending: () => detailStrip.flushPending(),
-        undo: () => history.undo(),
-        redo: () => history.redo(),
+        syncFromCarrier: () => {
+            if (!hasAuthoritativeCatalog()) {
+                return;
+            }
+            rebaseHistoryIfReady();
+            getTimelineStore().syncFromCarrier();
+        },
+        flushPending: () => {
+            if (hasAuthoritativeCatalog()) {
+                detailStrip.flushPending();
+            }
+        },
+        undo: () => hasAuthoritativeCatalog() && history.undo(),
+        redo: () => hasAuthoritativeCatalog() && history.redo(),
     });
 
     // The left dock (`.vst-detail`) is a sibling of the tracks body inside the
@@ -233,6 +262,16 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         if (!body) {
             return;
         }
+        const catalogSnapshot = getArchitectureCatalogSnapshot();
+        if (
+            renderBlockingArchitectureCatalogStatus(
+                body,
+                catalogSnapshot,
+                () => void adoptArchitectureCatalog(true),
+            )
+        ) {
+            return;
+        }
         // renderTimeline wipes the body's innerHTML, destroying the scroll
         // container. Preserve both axes across internal commits (add, delete,
         // drag, edits); otherwise a tall timeline snaps to its first row while
@@ -279,6 +318,11 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 }),
                 capabilities: capabilities(),
             });
+            renderRetainedArchitectureCatalogStatus(
+                body,
+                catalogSnapshot,
+                () => void adoptArchitectureCatalog(true),
+            );
             viewport.restoreScroll(previousScroll);
             linking.reapplySelection(body, clips.length);
             detailStrip.render(meta);
@@ -290,17 +334,49 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
 
     const refresh = (): void => renderAll();
 
-    /** Adopts a freshly loaded backend catalog: reparse, then repaint. */
-    const adoptArchitectureCatalog = (): Promise<void> =>
-        loadAuthoritativeArchitectureCatalog().then((catalog) => {
-            if (!catalog) {
-                return;
-            }
-            getTimelineStore().invalidate();
-            refresh();
-        });
+    /** Adopts a freshly loaded backend catalog without dropping retained data. */
+    const adoptArchitectureCatalog = (forceRefresh = false): Promise<void> => {
+        const currentCatalog = getArchitectureCatalogSnapshot();
+        if (
+            !forceRefresh &&
+            currentCatalog.catalog &&
+            currentCatalog.status !== "refreshing"
+        ) {
+            return Promise.resolve();
+        }
+        if (catalogAdoption) {
+            return catalogAdoption;
+        }
+        const request = forceRefresh
+            ? refreshAuthoritativeArchitectureCatalog()
+            : loadAuthoritativeArchitectureCatalog();
+        // Both initial loading and retained-data refreshing are visible
+        // immediately; neither path reads or mutates document state here.
+        renderAll();
+        let adoption!: Promise<void>;
+        adoption = request
+            .then((catalog) => {
+                if (disposed) {
+                    return;
+                }
+                if (catalog) {
+                    getTimelineStore().invalidate();
+                    rebaseHistoryIfReady();
+                }
+                renderAll();
+            })
+            .finally(() => {
+                if (catalogAdoption === adoption) {
+                    catalogAdoption = null;
+                }
+            });
+        catalogAdoption = adoption;
+        return adoption;
+    };
 
     const init = (): void => {
+        disposed = false;
+        historyNeedsRebase = true;
         viewport.load();
         injectTimelineTab();
         const body = document.getElementById(TIMELINE_BODY_ID);
@@ -315,7 +391,10 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             audioTrack.attach(body);
             boundaryTrack.attach(body);
             referencesTrack.attach(body, gestures);
-            detailStrip.attach(body, ensureDock(body));
+            // Bind before the gesture router to preserve capture ordering, but
+            // do not read/normalize document state until catalog authority is
+            // ready. renderAll invokes the first detail render after success.
+            detailStrip.attach(body, ensureDock(body), false);
             // ORDER MATTERS: the router's capture-phase listeners must attach
             // AFTER the detail strip's, so the strip's chip handler runs first
             // and its stopPropagation claim is visible to the router.
@@ -343,13 +422,14 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             history.capture();
             renderAll(meta);
         });
-        history.rebase();
+        rebaseHistoryIfReady();
         hostLifecycle.bind();
         refresh();
         void adoptArchitectureCatalog();
     };
 
     const dispose = (): void => {
+        disposed = true;
         hostLifecycle.dispose();
         retakeTrack.dispose();
         audioSegmentTrack.dispose();

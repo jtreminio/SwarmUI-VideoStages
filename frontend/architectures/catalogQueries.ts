@@ -1,10 +1,8 @@
-import { videoArchitectureRegistry } from "./registry";
 import type {
     ArchitectureCatalogEntryDto,
     ArchitectureCatalogView,
     ArchitectureModelCatalog,
     ArchitectureModelEntry,
-    ArchitectureRegistry,
     ArchitectureRetargetPlan,
     VideoArchitectureId,
 } from "./types";
@@ -29,17 +27,14 @@ export const modelCatalogEntry = (
 export const architectureCatalogView = (
     catalog: ArchitectureModelCatalog,
     architectureId: VideoArchitectureId,
-    registry: ArchitectureRegistry = videoArchitectureRegistry,
 ): ArchitectureCatalogView => {
-    const definition = registry.get(architectureId);
     const catalogArchitecture = architectureDescriptor(catalog, architectureId);
     const entries = catalog.entries.filter(
         (entry) => entry.architectureId === architectureId,
     );
     return {
         architectureId,
-        architectureLabel:
-            catalogArchitecture?.label ?? definition?.label ?? architectureId,
+        architectureLabel: catalogArchitecture?.label ?? architectureId,
         values: entries.map((entry) => entry.value),
         labels: entries.map((entry) => entry.label),
     };
@@ -67,14 +62,12 @@ export const modelProfileForModel = (
 export const buildArchitectureRetargetPlan = (
     catalog: ArchitectureModelCatalog,
     model: string,
-    registry: ArchitectureRegistry = videoArchitectureRegistry,
 ): ArchitectureRetargetPlan | null => {
     const entry = modelCatalogEntry(catalog, model);
     const architectureId = entry?.architectureId ?? null;
     const descriptor = architectureDescriptor(catalog, architectureId);
-    const fallback = architectureId ? registry.get(architectureId) : null;
     const profileId = entry?.modelProfileId ?? null;
-    const capabilities = descriptor?.capabilities ?? fallback?.capabilities;
+    const capabilities = descriptor?.capabilities;
     return architectureId && profileId && capabilities
         ? {
               architectureId,

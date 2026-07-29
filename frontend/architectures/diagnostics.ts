@@ -6,7 +6,7 @@ import {
     isArchitectureHdrFeature,
 } from "./behaviorRegistry";
 import { architectureSupportsClipStart } from "./conversion/entryModePolicy";
-import { NONE_ARCHITECTURE_ID } from "./none/definition";
+import { NONE_ARCHITECTURE_ID } from "./none/identity";
 import { createBoundaryCapabilityViews } from "./policy/boundaryPolicy";
 import {
     architectureFeatureSupport,

@@ -7,7 +7,7 @@ import {
     conditionalRule,
     evaluateConditionalRule,
 } from "../conditionalRules";
-import { NONE_ARCHITECTURE_ID } from "../none/definition";
+import { NONE_ARCHITECTURE_ID } from "../none/identity";
 import type {
     ArchitectureCapabilities,
     ArchitectureCatalogEntryDto,

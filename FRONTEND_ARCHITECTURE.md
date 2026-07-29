@@ -132,11 +132,23 @@ cookie-backed params asynchronously and the first value observed can be blank.
 ## Catalog and capability views
 
 The backend catalog carries architecture/profile identities, scoped capability
-sets, boundary decisions, conditional rules, and constraints. The frontend uses
-its registered bootstrap descriptor while the catalog request is pending; the
-backend response becomes authoritative when it arrives, and a host model
-refresh invalidates the cache so a newly installed model does not stay missing
-from every stage select until reload.
+sets, labels, boundary decisions, conditional rules, and constraints. It is the
+frontend's sole authority for architecture/model identity and authoring policy;
+model names and host model-class metadata are never used to infer identity.
+
+`catalogRepository.ts` exposes five explicit states:
+
+- `loading` and `unavailable` have no catalog authority;
+- `ready` has the current authoritative DTO;
+- `refreshing` retains the last-known DTO while requesting a replacement; and
+- `stale` retains that exact DTO after refresh failure.
+
+Initial loading/unavailable states render a status view instead of reading or
+hydrating the authoring document. Unavailable offers Retry. Host model refresh
+uses a forced catalog request without clearing last-known data; stale renders a
+nonblocking warning and Retry while the existing capability-backed UI remains
+active. Generation-owned requests prevent superseded responses from
+overwriting newer state.
 
 Catalog decoding is all-or-nothing: duplicate architecture/profile/model IDs,
 dangling references, unknown capability values, or malformed rule constraints
@@ -144,9 +156,10 @@ reject the response instead of creating a partial capability view. Shared
 C#/TypeScript fixtures keep entry modes, boundary constraint keys, conditional
 rules, and model-profile gates aligned.
 
-`architectures/modules.ts` is the single registration point: one entry per
-architecture carrying both its catalog definition and its pure authoring
-behavior, consumed by the definition registry and the behavior registry.
+`buildArchitectureModelCatalog` may apply current host dropdown labels to
+backend-known model entries and retains backend-only models. A host model absent
+from the backend DTO has null architecture/profile identity and is not an
+authorable architecture model.
 
 Options resolve through one view:
 
@@ -384,16 +397,16 @@ the backend document, and tints regions, audio cells, and chips.
 
 LTX IC-LoRA normalization, HDR recognition, presets, drive availability, weight
 download, and the IC-LoRA editor section live behind the LTX adapter, reached
-through the panel-slot registry (`architectures/authoringPanels.ts`) and the
-pure behavior registry (`architectures/behaviorRegistry.ts`). HDR is a typed
+through ID-keyed local maps in `architectures/authoringPanels.ts` and
+`architectures/behaviorRegistry.ts`. HDR is a typed
 `hdr` flag on the persisted entry end to end — presets seed it, the preset
 filter reads it, and no name-matching predicate survives on either side.
 
 Architecture policy separates identity, feature values, clip/stage views, and
-boundary policy. The DOM panel slot deliberately stays out of
-`architectures/modules.ts`: panel modules import persistence, which resolves the
-catalog through that registry, so registering them together would make the
-module graph circular.
+boundary policy. These behavior/panel maps are optional implementation slots,
+not architecture definitions: add an entry only when an architecture has
+concrete custom frontend behavior or DOM. Labels, profiles, capabilities,
+rules, and model recognition always come from the backend DTO.
 
 ## Completion rules
 

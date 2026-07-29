@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 describe("VideoStagesHostBridge compatibility facades", () => {
-    it("routes carriers, registries, model metadata, and media paths through an injected bridge", () => {
+    it("routes carriers, registries, and media paths through an injected bridge", () => {
         const data = document.createElement("textarea");
         data.value = "before";
         const prompt = document.createElement("textarea");
@@ -39,8 +39,6 @@ describe("VideoStagesHostBridge compatibility facades", () => {
                 enabled: true,
                 refs: ["audio3"],
             }),
-            getModelCompatId: () => "ltxv2",
-            getModelClassId: () => "lightricks-ltx-video-2-3",
             getMediaOutputPrefix: () => "/host/output",
         };
         setVideoStagesHostBridgeForTests(fake);
@@ -63,8 +61,8 @@ describe("VideoStagesHostBridge compatibility facades", () => {
                 ["Metadata-backed model"],
             ).entries[0],
         ).toMatchObject({
-            architectureId: "ltx2",
-            modelProfileId: "ltx-2.3",
+            architectureId: null,
+            modelProfileId: null,
         });
         expect(mediaPreviewSrc("clip.mp4")).toBe("/host/output/clip.mp4");
     });

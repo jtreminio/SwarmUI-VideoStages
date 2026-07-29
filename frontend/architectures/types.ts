@@ -29,27 +29,9 @@ export interface ArchitectureCapabilities {
     audioSourceKinds: string[];
 }
 
-export interface ArchitectureModelDescriptor {
+export interface ArchitectureModelEntry {
     value: string;
     label: string;
-    compatId: string | null;
-    modelClassId: string | null;
-}
-
-export interface VideoArchitectureDefinition {
-    id: VideoArchitectureId;
-    label: string;
-    defaultProfileId: ModelProfileId;
-    capabilities: ArchitectureCapabilities;
-    profiles: VideoModelProfileDescriptor[];
-    boundaryRules: Record<string, CapabilityRuleDecision>;
-    rules: CapabilityRuleDecision[];
-    resolveModelProfile(
-        model: ArchitectureModelDescriptor,
-    ): ModelProfileId | null;
-}
-
-export interface ArchitectureModelEntry extends ArchitectureModelDescriptor {
     architectureId: VideoArchitectureId | null;
     modelProfileId: ModelProfileId | null;
 }
@@ -57,7 +39,7 @@ export interface ArchitectureModelEntry extends ArchitectureModelDescriptor {
 export interface ArchitectureModelCatalog {
     entries: ArchitectureModelEntry[];
     architectures: ArchitectureCatalogEntryDto[];
-    source: "backend" | "bootstrap";
+    source: "backend" | "unavailable";
 }
 
 export interface ArchitectureCatalogView {
@@ -104,11 +86,15 @@ export interface VideoArchitectureCatalogDto {
     models: ArchitectureCatalogModelDto[];
 }
 
-export interface ArchitectureRegistry {
-    definitions(): readonly VideoArchitectureDefinition[];
-    get(id: VideoArchitectureId): VideoArchitectureDefinition | null;
-    resolveModel(model: ArchitectureModelDescriptor): {
-        definition: VideoArchitectureDefinition;
-        profileId: ModelProfileId;
-    } | null;
+export type ArchitectureCatalogStatus =
+    | "loading"
+    | "unavailable"
+    | "ready"
+    | "refreshing"
+    | "stale";
+
+export interface ArchitectureCatalogSnapshot {
+    status: ArchitectureCatalogStatus;
+    catalog: VideoArchitectureCatalogDto | null;
+    error: string | null;
 }

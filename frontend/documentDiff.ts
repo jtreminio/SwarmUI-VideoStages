@@ -7,7 +7,7 @@ import {
     reconcileClipArchitectureIdentity,
 } from "./architectures/clipIdentity";
 import { planArchitectureConversion } from "./architectures/conversion/plan";
-import { NONE_ARCHITECTURE_ID } from "./architectures/none/definition";
+import { NONE_ARCHITECTURE_ID } from "./architectures/none/identity";
 import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
 import type { ArchitectureModelCatalog } from "./architectures/types";
 import type { CommandFailure, DocumentCommand } from "./documentCommands";

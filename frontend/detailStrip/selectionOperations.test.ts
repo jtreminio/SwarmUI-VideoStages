@@ -1,7 +1,15 @@
-import { describe, expect, it, jest } from "@jest/globals";
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    jest,
+} from "@jest/globals";
 import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
+    testArchitectureCatalogDto,
 } from "../__test_helpers__/architectureFixtures";
 import {
     hdrIcLoraFixture,
@@ -12,7 +20,13 @@ import {
     mountSelect,
     mountVideoStagesData,
 } from "../__test_helpers__/dom";
+import {
+    invalidateArchitectureCatalog,
+    loadAuthoritativeArchitectureCatalog,
+} from "../architectures/catalog";
 import { createCapabilityViewResolver } from "../architectures/policy";
+import { setVideoStagesHostBridgeForTests } from "../host";
+import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
 import {
     __resetPersistenceForTests,
     dispatchDocumentCommand,
@@ -34,6 +48,20 @@ type StructuralOutcome =
     | StructuralCommand;
 
 describe("detail structural stage operations", () => {
+    beforeEach(async () => {
+        invalidateArchitectureCatalog();
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => testArchitectureCatalogDto(),
+        });
+        await loadAuthoritativeArchitectureCatalog();
+    });
+
+    afterEach(() => {
+        invalidateArchitectureCatalog();
+        setVideoStagesHostBridgeForTests(null);
+    });
+
     it("cascades a clip skip marker through every later clip", () => {
         const clips = [minimalClip(), minimalClip(), minimalClip()];
 

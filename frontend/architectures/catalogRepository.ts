@@ -1,133 +1,167 @@
 import { getVideoStagesHostBridge } from "../host";
 import { parseVideoArchitectureCatalog } from "./catalogWire";
-import { videoArchitectureRegistry } from "./registry";
 import type {
-    ArchitectureCatalogEntryDto,
+    ArchitectureCatalogSnapshot,
     ArchitectureModelCatalog,
-    ArchitectureRegistry,
     VideoArchitectureCatalogDto,
 } from "./types";
 
 export const ARCHITECTURE_CATALOG_API = "VideoStagesGetArchitectureCatalog";
 
-let authoritativeCatalog: VideoArchitectureCatalogDto | null = null;
-let catalogRequest: Promise<VideoArchitectureCatalogDto | null> | null = null;
+interface CatalogRequest {
+    generation: number;
+    promise: Promise<VideoArchitectureCatalogDto | null>;
+}
 
-export const loadAuthoritativeArchitectureCatalog =
+let authoritativeCatalog: VideoArchitectureCatalogDto | null = null;
+let snapshotStatus: ArchitectureCatalogSnapshot["status"] = "loading";
+let snapshotError: string | null = null;
+let requestGeneration = 0;
+let activeRequest: CatalogRequest | null = null;
+
+const cloneCatalog = (
+    catalog: VideoArchitectureCatalogDto,
+): VideoArchitectureCatalogDto => structuredClone(catalog);
+
+const errorMessage = (error: unknown): string =>
+    error instanceof Error ? error.message : `${error}`;
+
+export const getArchitectureCatalogSnapshot =
+    (): ArchitectureCatalogSnapshot => ({
+        status: snapshotStatus,
+        catalog: authoritativeCatalog
+            ? cloneCatalog(authoritativeCatalog)
+            : null,
+        error: snapshotError,
+    });
+
+const requestAuthoritativeCatalog =
     (): Promise<VideoArchitectureCatalogDto | null> => {
-        if (authoritativeCatalog) {
-            return Promise.resolve(structuredClone(authoritativeCatalog));
+        if (activeRequest) {
+            return activeRequest.promise;
         }
-        if (catalogRequest) {
-            return catalogRequest;
-        }
-        catalogRequest = getVideoStagesHostBridge()
-            .requestJson(ARCHITECTURE_CATALOG_API)
+
+        const generation = ++requestGeneration;
+        snapshotStatus = authoritativeCatalog ? "refreshing" : "loading";
+        snapshotError = null;
+
+        let request!: CatalogRequest;
+        const ownsRequest = (): boolean =>
+            activeRequest === request && requestGeneration === generation;
+        const promise = Promise.resolve()
+            .then(() =>
+                getVideoStagesHostBridge().requestJson(
+                    ARCHITECTURE_CATALOG_API,
+                ),
+            )
             .then((response) => {
                 const parsed = parseVideoArchitectureCatalog(response);
-                if (parsed) {
-                    authoritativeCatalog = parsed;
+                if (!parsed) {
+                    throw new Error(
+                        "The architecture catalog response was malformed.",
+                    );
                 }
-                return parsed ? structuredClone(parsed) : null;
+                if (!ownsRequest()) {
+                    return null;
+                }
+                authoritativeCatalog = parsed;
+                snapshotStatus = "ready";
+                snapshotError = null;
+                return cloneCatalog(parsed);
             })
-            .catch((error) => {
+            .catch((error: unknown) => {
+                if (!ownsRequest()) {
+                    return null;
+                }
+                snapshotStatus = authoritativeCatalog ? "stale" : "unavailable";
+                snapshotError = errorMessage(error);
                 console.warn(
-                    "VideoStages: architecture catalog unavailable; using registered frontend bootstrap",
+                    "VideoStages: authoritative architecture catalog unavailable",
                     error,
                 );
                 return null;
             })
             .finally(() => {
-                catalogRequest = null;
+                if (ownsRequest()) {
+                    activeRequest = null;
+                }
             });
-        return catalogRequest;
+        request = { generation, promise };
+        activeRequest = request;
+        return promise;
     };
 
 /**
- * Drops the process-lifetime catalog cache. The host installs models while the
- * page lives, so a model refresh must be able to force a re-request instead of
- * resolving new models to a null architecture until reload.
+ * Loads the initial authoritative catalog. A retained ready/stale catalog is
+ * returned without a request; unavailable initial state can always retry.
+ */
+export const loadAuthoritativeArchitectureCatalog =
+    (): Promise<VideoArchitectureCatalogDto | null> => {
+        if (activeRequest) {
+            return activeRequest.promise;
+        }
+        if (authoritativeCatalog) {
+            return Promise.resolve(cloneCatalog(authoritativeCatalog));
+        }
+        return requestAuthoritativeCatalog();
+    };
+
+/**
+ * Re-requests the backend catalog without dropping the last-known-good DTO.
+ * Calls made while the current generation is already loading coalesce.
+ */
+export const refreshAuthoritativeArchitectureCatalog =
+    (): Promise<VideoArchitectureCatalogDto | null> =>
+        requestAuthoritativeCatalog();
+
+/**
+ * Test/process reset and explicit supersession boundary. Older requests may
+ * still settle, but generation ownership prevents them from publishing state
+ * or clearing a newer request handle.
  */
 export const invalidateArchitectureCatalog = (): void => {
+    requestGeneration++;
+    activeRequest = null;
     authoritativeCatalog = null;
-    catalogRequest = null;
+    snapshotStatus = "loading";
+    snapshotError = null;
 };
-
-const bootstrapArchitectures = (
-    registry: ArchitectureRegistry,
-): ArchitectureCatalogEntryDto[] =>
-    registry
-        .definitions()
-        .map(
-            ({
-                id,
-                label,
-                defaultProfileId,
-                capabilities,
-                profiles,
-                boundaryRules,
-                rules,
-            }) => ({
-                id,
-                label,
-                defaultProfileId,
-                capabilities: structuredClone(capabilities),
-                profiles: structuredClone(profiles),
-                boundaryRules: structuredClone(boundaryRules),
-                rules: structuredClone(rules),
-            }),
-        );
 
 export const buildArchitectureModelCatalog = (
     values: readonly string[],
     labels: readonly string[],
-    registry: ArchitectureRegistry = videoArchitectureRegistry,
 ): ArchitectureModelCatalog => {
     const backend = authoritativeCatalog;
-    // The host dropdown is a useful ordered view, but it is not guaranteed to
-    // exist yet when the timeline first renders. The backend catalog already
-    // contains every installed model that resolved through a production
-    // architecture module, so retain those backend-only models as valid
-    // authoring choices instead of dropping them during startup.
-    const modelNames = [...values];
-    if (backend) {
-        const seen = new Set(modelNames);
-        for (const model of backend.models) {
-            if (!seen.has(model.modelName)) {
-                seen.add(model.modelName);
-                modelNames.push(model.modelName);
-            }
+    const hostLabels = new Map<string, string>();
+    const modelNames: string[] = [];
+    const seen = new Set<string>();
+    values.forEach((value, index) => {
+        if (!seen.has(value)) {
+            seen.add(value);
+            modelNames.push(value);
+        }
+        hostLabels.set(value, labels[index] ?? value);
+    });
+    for (const model of backend?.models ?? []) {
+        if (!seen.has(model.modelName)) {
+            seen.add(model.modelName);
+            modelNames.push(model.modelName);
         }
     }
+
+    const backendModels = new Map(
+        backend?.models.map((model) => [model.modelName, model]) ?? [],
+    );
     return {
-        architectures:
-            backend?.architectures ?? bootstrapArchitectures(registry),
-        source: backend ? "backend" : "bootstrap",
-        entries: modelNames.map((value, index) => {
-            const backendModel = backend?.models.find(
-                (model) => model.modelName === value,
-            );
-            const descriptor = {
-                value,
-                label: labels[index] ?? value,
-                compatId:
-                    backendModel?.compatId ??
-                    getVideoStagesHostBridge().getModelCompatId(value),
-                modelClassId: getVideoStagesHostBridge().getModelClassId(value),
-            };
-            const bootstrap = backend
-                ? null
-                : registry.resolveModel(descriptor);
+        architectures: backend ? structuredClone(backend.architectures) : [],
+        source: backend ? "backend" : "unavailable",
+        entries: modelNames.map((value) => {
+            const backendModel = backendModels.get(value);
             return {
-                ...descriptor,
-                architectureId:
-                    backendModel?.architectureId ??
-                    bootstrap?.definition.id ??
-                    null,
-                modelProfileId:
-                    backendModel?.modelProfileId ??
-                    bootstrap?.profileId ??
-                    null,
+                value,
+                label: hostLabels.get(value) ?? value,
+                architectureId: backendModel?.architectureId ?? null,
+                modelProfileId: backendModel?.modelProfileId ?? null,
             };
         }),
     };

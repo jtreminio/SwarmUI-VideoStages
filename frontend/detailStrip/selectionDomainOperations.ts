@@ -4,7 +4,7 @@ import {
 } from "../architectures/behaviorRegistry";
 import { buildArchitectureRetargetPlan } from "../architectures/catalog";
 import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity";
-import { NONE_ARCHITECTURE_ID } from "../architectures/none/definition";
+import { NONE_ARCHITECTURE_ID } from "../architectures/none/identity";
 import type { CapabilityViewResolver } from "../architectures/policy";
 import { reconcileSourcedClipIdentity } from "../architectures/policy";
 import type { ArchitectureModelCatalog } from "../architectures/types";

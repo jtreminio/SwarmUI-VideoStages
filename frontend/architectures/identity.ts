@@ -1,5 +1,4 @@
 import { architectureForModel } from "./catalog";
-import { videoArchitectureRegistry } from "./registry";
 import type { ArchitectureModelCatalog, VideoArchitectureId } from "./types";
 
 export const normalizeClipArchitecture = (
@@ -18,5 +17,5 @@ export const normalizeClipArchitecture = (
     if (fromCatalog) {
         return fromCatalog;
     }
-    return videoArchitectureRegistry.definitions()[0]?.id ?? "unsupported";
+    return "unsupported";
 };

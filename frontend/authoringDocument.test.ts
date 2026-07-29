@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import { testArchitectureCatalogDto } from "./__test_helpers__/architectureFixtures";
 import {
     minimalClip,
     minimalRef,
@@ -9,6 +10,12 @@ import {
     mountSelect,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
+import {
+    invalidateArchitectureCatalog,
+    loadAuthoritativeArchitectureCatalog,
+} from "./architectures/catalog";
+import { setVideoStagesHostBridgeForTests } from "./host";
+import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import {
     collectAuthoringEntityIds,
     ensureAuthoringDocumentIdentity,
@@ -55,13 +62,24 @@ const mountRootDefaults = (): void => {
 };
 
 describe("versioned authoring document identity", () => {
-    beforeEach(() => {
+    beforeEach(async () => {
+        invalidateArchitectureCatalog();
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => testArchitectureCatalogDto(),
+        });
+        await loadAuthoritativeArchitectureCatalog();
         __resetPersistenceForTests();
         clearUiStateForTests();
         document.body.innerHTML = "";
         mountRootDefaults();
         mountVideoStagesData({ clips: [] });
         mountPromptBox("");
+    });
+
+    afterEach(() => {
+        invalidateArchitectureCatalog();
+        setVideoStagesHostBridgeForTests(null);
     });
 
     it.each([

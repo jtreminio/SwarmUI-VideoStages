@@ -7,6 +7,10 @@ import {
     jest,
 } from "@jest/globals";
 import {
+    testArchitectureCatalog,
+    testArchitectureCatalogDto,
+} from "./__test_helpers__/architectureFixtures";
+import {
     minimalClip,
     minimalRef,
     minimalStage,
@@ -17,7 +21,15 @@ import {
     mountVideoFps,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
-import { getVideoStagesHostBridge } from "./host";
+import {
+    invalidateArchitectureCatalog,
+    loadAuthoritativeArchitectureCatalog,
+} from "./architectures/catalog";
+import {
+    getVideoStagesHostBridge,
+    setVideoStagesHostBridgeForTests,
+} from "./host";
+import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import {
     __resetPersistenceForTests,
     dispatchDocumentCommand,
@@ -42,8 +54,25 @@ const promptEl = (): HTMLTextAreaElement =>
     document.getElementById("input_prompt") as HTMLTextAreaElement;
 
 describe("persistence", () => {
+    beforeEach(async () => {
+        const catalog = testArchitectureCatalog();
+        catalog.entries.push({
+            ...catalog.entries[0],
+            value: "ltx-2.3-alt.safetensors",
+            label: "LTX Alt",
+        });
+        invalidateArchitectureCatalog();
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => testArchitectureCatalogDto(catalog),
+        });
+        await loadAuthoritativeArchitectureCatalog();
+    });
+
     afterEach(() => {
         jest.restoreAllMocks();
+        invalidateArchitectureCatalog();
+        setVideoStagesHostBridgeForTests(null);
     });
 
     describe("strict collection decoding", () => {

@@ -30,7 +30,11 @@ export interface TimelineDetailStrip {
      * @param body listener-host carrying capture-phase timeline chip listeners.
      * @param dock render-host owned by the caller.
      */
-    attach(body: HTMLElement, dock: HTMLElement): void;
+    attach(
+        body: HTMLElement,
+        dock: HTMLElement,
+        renderImmediately?: boolean,
+    ): void;
     render(meta?: UpdateMeta): void;
     flushPending(): void;
     dispose(): void;
@@ -44,9 +48,13 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
     let suppressSelectionRender = false;
     let settingsMode: string | null = null;
     let revealSelectionOnNextRender = false;
+    let renderEnabled = true;
     let draftQueue: DetailDraftQueue;
     let renderImplementation: (meta?: UpdateMeta) => void = () => {};
-    const render = (meta?: UpdateMeta): void => renderImplementation(meta);
+    const render = (meta?: UpdateMeta): void => {
+        renderEnabled = true;
+        renderImplementation(meta);
+    };
 
     let renderedSelection: TimelineSelection | null = null;
     const focus = createDetailFocusSession({
@@ -171,7 +179,7 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
     };
 
     const onSelectionChanged = (): void => {
-        if (suppressSelectionRender) {
+        if (suppressSelectionRender || !renderEnabled) {
             return;
         }
         focus.beginSelectionSession();
@@ -235,15 +243,21 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
             dockEl = null;
         }
         renderedSelection = null;
+        renderEnabled = false;
     };
 
-    const attach = (body: HTMLElement, dock: HTMLElement): void => {
+    const attach = (
+        body: HTMLElement,
+        dock: HTMLElement,
+        renderImmediately = true,
+    ): void => {
         if (boundBody === body && dockEl === dock) {
             return;
         }
         dispose();
         boundBody = body;
         dockEl = dock;
+        renderEnabled = renderImmediately;
         body.addEventListener(
             "mousedown",
             selectionOperations.onMouseDownCapture,
@@ -275,7 +289,9 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
             true,
         );
         unsubscribe = subscribeSelection(onSelectionChanged);
-        render();
+        if (renderImmediately) {
+            render();
+        }
     };
 
     return {

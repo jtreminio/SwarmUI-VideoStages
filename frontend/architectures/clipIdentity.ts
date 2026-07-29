@@ -1,7 +1,7 @@
 import { activeStageCount } from "../clipSemantics";
 import type { Clip } from "../types";
 import { architectureDescriptor, modelCatalogEntry } from "./catalogQueries";
-import { NONE_ARCHITECTURE_ID } from "./none/definition";
+import { NONE_ARCHITECTURE_ID } from "./none/identity";
 import type { ArchitectureModelCatalog } from "./types";
 
 export interface StageModelIdentity {

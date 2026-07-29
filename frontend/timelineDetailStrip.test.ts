@@ -10,15 +10,25 @@ import {
     jest,
 } from "@jest/globals";
 import {
+    testArchitectureCatalog,
+    testArchitectureCatalogDto,
+} from "./__test_helpers__/architectureFixtures";
+import {
     mountPromptBox,
     mountSelect,
     mountVideoFps,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
 import {
+    invalidateArchitectureCatalog,
+    loadAuthoritativeArchitectureCatalog,
+} from "./architectures/catalog";
+import {
     IC_LORA_AUTO,
     resetIcLoraAutoDownloads,
 } from "./architectures/ltx2/icLoraAutoDownload";
+import { setVideoStagesHostBridgeForTests } from "./host";
+import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import * as persistence from "./persistence";
 import {
     activateSelection,
@@ -144,15 +154,6 @@ const modelGlobals = globalThis as unknown as {
     loraHelper?: {
         loraWeightPref: Record<string, string | number>;
     };
-    modelsHelpers?: {
-        getDataFor: (
-            category: string,
-            modelName: string,
-        ) => {
-            lora_default_weight?: string | number;
-            modelClass: { compatClass: { id: string } };
-        };
-    };
 };
 
 // The dock (`.vst-detail`, render-host) is a sibling of the tracks body
@@ -252,12 +253,25 @@ describe("createTimelineDetailStrip", () => {
     let strip: TimelineDetailStrip | null = null;
     let saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
 
-    beforeEach(() => {
-        modelGlobals.modelsHelpers = {
-            getDataFor: () => ({
-                modelClass: { compatClass: { id: "ltxv2" } },
-            }),
-        };
+    beforeEach(async () => {
+        const catalog = testArchitectureCatalog();
+        catalog.architectures[0].capabilities.audioSourceKinds = [
+            "Native",
+            "Upload",
+            "ControlNet",
+            "AceStepFun",
+        ];
+        catalog.entries.push({
+            ...catalog.entries[0],
+            value: "ltx-2.3-alt.safetensors",
+            label: "LTX 2.3 Alt",
+        });
+        invalidateArchitectureCatalog();
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => testArchitectureCatalogDto(catalog),
+        });
+        await loadAuthoritativeArchitectureCatalog();
         resetSelectionForTests();
         persistence.__resetPersistenceForTests();
         resetIcLoraAutoDownloads();
@@ -272,9 +286,10 @@ describe("createTimelineDetailStrip", () => {
         strip = null;
         jest.useRealTimers();
         jest.restoreAllMocks();
+        invalidateArchitectureCatalog();
+        setVideoStagesHostBridgeForTests(null);
         resetSelectionForTests();
         document.body.innerHTML = "";
-        delete modelGlobals.modelsHelpers;
         delete modelGlobals.sdLoraBrowser;
         delete modelGlobals.loraHelper;
         delete swarmGlobals.makeWSRequest;

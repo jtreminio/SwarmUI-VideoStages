@@ -23,8 +23,8 @@ generating architecture.
 | Exact model recognition | Backend architecture module | `VideoArchitectureRegistry.TryResolveModel`, `Ltx2ArchitectureModule.TryResolveModel` |
 | Capabilities and rules | Backend architecture module | `Ltx2ArchitectureModule.Descriptor`, `NoneArchitecture.Descriptor` |
 | Catalog transport | Common backend | `VideoStagesApi.VideoStagesGetArchitectureCatalog`, `ArchitectureCatalogSerializer.Serialize` |
-| Catalog loading and feature policy | Common frontend | `loadAuthoritativeArchitectureCatalog`, `parseVideoArchitectureCatalog`, `createCapabilityViewResolver` |
-| Architecture-specific authoring behavior | Frontend architecture module | `VIDEO_ARCHITECTURE_MODULES`, `ArchitectureBehavior`, `authoringPanels.ts` |
+| Catalog loading and feature policy | Common frontend | `getArchitectureCatalogSnapshot`, `loadAuthoritativeArchitectureCatalog`, `refreshAuthoritativeArchitectureCatalog`, `parseVideoArchitectureCatalog`, `createCapabilityViewResolver` |
+| Architecture-specific authoring behavior | Frontend local behavior maps | `architectureBehavior`, `ltx2Behavior`, `authoringPanels.ts`, architecture ID identity modules |
 | Document parsing and product planning | Common backend | `VideoStagesSpecParser`, `ArchitecturePlanResolver`, `VideoExecutionPlanCompiler` |
 | Model-family planning and execution | Selected backend module | `IVideoArchitectureModule.ValidateAndCompileClip`, `IVideoGenerationSession` |
 | Runtime dispatch and timeline assembly | Common backend | `StageSequenceRunner`, `ArchitectureRuntimeDispatcher`, `TimelineAssemblySession` |
@@ -89,41 +89,50 @@ the `VideoStagesGetArchitectureCatalog` API call.
 `initTimeline` after SwarmUI builds parameters. Initialization retries until
 the hidden `input_videostages` carrier exists.
 
-`videoStagesTimeline.init` binds timeline collaborators, renders immediately,
-then starts `adoptArchitectureCatalog()` asynchronously.
-`loadAuthoritativeArchitectureCatalog`:
+`videoStagesTimeline.init` binds its event collaborators, but the initial
+timeline render is a catalog status view. It does not read, normalize, hydrate,
+or render the authoring document until an authoritative catalog exists.
+History rebasing and the host carrier-sync poll use the same readiness gate.
 
-1. coalesces concurrent requests;
-2. calls the API through `VideoStagesHostBridge.requestJson`;
-3. validates the response all-or-nothing with
-   `parseVideoArchitectureCatalog`;
-4. caches a valid response until `invalidateArchitectureCatalog`.
+`catalogRepository.ts` exposes an explicit snapshot state machine:
 
-The host param-refresh hook in `createTimelineHostLifecycle` invalidates and
-reloads the catalog so newly installed models can appear without a page reload.
-Adding a new clip waits for the coalesced request before selecting its initial
-model, but the initial timeline render does not.
+```text
+loading    = no catalog, request in flight
+unavailable= no catalog, last request failed
+ready      = authoritative catalog
+refreshing = retained catalog, replacement request in flight
+stale      = retained catalog, replacement request failed
+```
 
-#### Current compromise: two frontend catalog authorities
+`loadAuthoritativeArchitectureCatalog` coalesces initial/cached loads.
+`refreshAuthoritativeArchitectureCatalog` forces a request without clearing the
+last-known DTO. Requests carry monotonically increasing generations and owned
+request handles, so an invalidated or superseded request cannot publish over a
+newer result or clear its promise.
 
-Until a backend response is cached, `buildArchitectureModelCatalog` calls
-`bootstrapArchitectures(videoArchitectureRegistry)`.
-`VIDEO_ARCHITECTURE_MODULES` registers bundled LTX and `none` descriptors, and
-`ltx2Architecture.resolveModelProfile` includes a model-name regex fallback.
-On API failure the UI logs a warning and continues with this bootstrap.
+Every response is validated all-or-nothing by
+`parseVideoArchitectureCatalog`. Initial failure or malformed data enters
+`unavailable`; the status view offers Retry and no authoring controls. A
+successful initial request or retry invalidates the parsed timeline-store
+cache, rebases history, and renders normally. During refresh the last-known
+catalog remains active. Refresh failure enters `stale`, retains that exact DTO
+and its rendered capability-backed UI, and shows a nonblocking warning with
+Retry.
 
-That is current behavior, not the intended boundary. The target is:
-
-- backend data is the only capability/model authority;
-- the UI has explicit loading, ready, and unavailable/retry states;
-- a refresh failure may keep the last valid in-memory catalog;
-- frontend modules own rendering behavior, not duplicate capabilities or
-  model recognition.
+The host param-refresh hook uses forced refresh, so newly installed models can
+appear without a page reload and without a temporary loss of authority.
+`buildArchitectureModelCatalog` uses backend DTO identity only: it may decorate
+backend-known models with current host dropdown labels and keeps backend-only
+models, but a host model absent from the backend catalog has null
+architecture/profile identity. Frontend identity modules contain only stable
+IDs used to select local LTX behavior and DOM panels; they declare no
+capabilities and perform no model recognition.
 
 ### A4. Selection, identity, and feature visibility
 
 `getRootDefaults` builds `RootDefaults.modelCatalog` from the current SwarmUI
-model dropdown and the active backend/bootstrap catalog.
+model dropdown and the authoritative backend catalog. Without that catalog the
+model catalog contains no capability or model-identity authority.
 `appendStageModelSection` uses it to build model options:
 
 - stage 0 may select a model whose architecture supports the clip's entry mode;
@@ -147,10 +156,12 @@ visibility, enablement, reason text, and repair behavior. Unsupported persisted
 data stays visible for removal rather than disappearing during normalization.
 
 Architecture-specific *how* behavior dispatches separately by architecture ID
-through `ArchitectureBehavior`. Only `ltx2Behavior` implements it today, and
-the interface is mostly IC-LoRA-shaped. LTX DOM rendering is registered
-separately in `authoringPanels.ts`. This abstraction should be reassessed after
-a second generating architecture supplies another concrete use case.
+through the local `ArchitectureBehavior` map. Only the `ltx2` ID selects
+`ltx2Behavior` today, and the interface is mostly IC-LoRA-shaped. LTX DOM
+rendering is keyed directly by the same ID in `authoringPanels.ts`. These maps
+own implementation behavior only; labels, profiles, capabilities, and rules
+remain backend DTO data. This abstraction should be reassessed after a second
+generating architecture supplies another concrete use case.
 
 ### Flow A failures
 
@@ -160,8 +171,9 @@ a second generating architecture supplies another concrete use case.
 | Backend registration is invalid | `VideoArchitectureRegistry` construction throws. |
 | Model matches no module | It is absent from the backend model catalog; planning later reports an unresolved model. |
 | Model matches multiple modules | `VideoArchitectureRegistry.TryResolveModel` throws. |
-| Catalog wire data is malformed | `parseVideoArchitectureCatalog` rejects the whole response. |
-| Initial API request fails | Current UI continues with frontend bootstrap; this is a known authority leak. |
+| Initial catalog request fails or wire data is malformed | The UI enters `unavailable`, renders no architecture-derived authoring controls, and offers Retry. |
+| Catalog refresh fails or is malformed | The UI enters `stale`, retains the exact last-known DTO and rendered controls, and offers nonblocking Retry. |
+| Host model is absent from the backend model catalog | It has null frontend architecture/profile identity and is unavailable for architecture authoring. |
 | Persisted identity is inconsistent | Frontend retains it for diagnosis/repair; backend planning blocks execution. |
 | Feature is unsupported | Frontend disables or offers repair; backend capability validation rechecks it. |
 
@@ -246,10 +258,13 @@ transform host-root media.
 preprocessor capture, base/refiner references, pre-core handoff, core-output
 drop, and root audio-mask sizing.
 
-Two current pre-WAN risks are important:
+`StageRefStore` keys are architecture-scoped by `LtxRuntimeKeyScope`:
+`videostages.arch.{id}.stage-ref.{kind}.{media|vae|audio}`. The same store owns
+the pre-core snapshot key used by `RootVideoStageHandoff`, so the handoff
+cannot be constructed with a mismatched architecture scope.
 
-- `StageRefStore` uses keys such as `base`, `refiner`, `generated`, and
-  `preroot` without `ArchitectureId` scope. Only LTX writes them today.
+One current pre-WAN risk remains important:
+
 - `ControlNetCoreMediaCapture` is called by both LTX and
   `SourceOnlyExecutionAdapter`, but it also enforces a multiple-of-64 resize and
   one-frame wrapping. Those are LTX rules in common capture code, so even a
@@ -367,7 +382,8 @@ exclusive finalization only for an all-LTX HDR timeline.
 11. Timeline edits remain commands/diffs with undo semantics.
 12. Source-only and generated execution follow the same ownership rules.
 
-Known current exceptions or transition seams are the frontend bootstrap
-authority, LTX normalization inside common ControlNet capture, unscoped runtime
-reference keys, and the redundant runtime-request repack. Do not copy those
-patterns into a new architecture.
+Known current exceptions or transition seams are the IC-LoRA-shaped local
+behavior interface, LTX normalization inside common ControlNet capture, and
+the redundant runtime-request repack. The frontend ID maps are behavior
+dispatch only, not a second catalog authority. Do not copy the remaining seams
+into a new architecture.

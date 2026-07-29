@@ -109,21 +109,7 @@ declare const modelsHelpers:
               modelName: string,
           ) => {
               lora_default_weight?: string | number;
-              modelClass?: {
-                  id?: string;
-                  compatClass?: { id?: string; isText2Video?: boolean };
-              };
           } | null;
-          compatClasses?: Record<
-              string,
-              { id?: string; isText2Video?: boolean }
-          >;
-      }
-    | undefined;
-
-declare const currentModelHelper:
-    | {
-          curCompatClass?: string;
       }
     | undefined;
 
