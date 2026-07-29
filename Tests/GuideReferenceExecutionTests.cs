@@ -64,9 +64,7 @@ public partial class StageFlowTests
             .NodesOfType<LTXVImgToVideoInplaceNode>()
             .OrderBy(node => int.Parse(node.Id))
             .Last();
-        StageRefStore store = new(
-            generator,
-            Ltx2ArchitectureModule.ArchitectureId);
+        StageRefStore store = new(generator);
         StageRefStore.StageRef expected = referenceName == "Base"
             ? store.Base
             : store.Refiner;
@@ -166,9 +164,7 @@ public partial class StageFlowTests
         AssertGuideReferenceResolvesToPreprocessInput(
             workflow,
             WorkflowBridge.ToPath(authoredGuide.Image.Connection!),
-            new StageRefStore(
-                generator,
-                Ltx2ArchitectureModule.ArchitectureId).Generated);
+            new StageRefStore(generator).Generated);
         Assert.False(
             ReachesUpstream(bridge, authoredGuide.Image.Connection!.Node, sourcedWindow.Id),
             "The explicit Generated guide was replaced by the sourced footage.");

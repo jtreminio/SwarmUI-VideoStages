@@ -92,9 +92,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
 
     private Pipeline BuildPipeline()
     {
-        StageRefStore stageRefStore = new(
-            generator,
-            Ltx2ArchitectureModule.ArchitectureId);
+        StageRefStore stageRefStore = new(generator);
         RootVideoStageHandoff handoff = new(generator, stageRefStore);
         RootVideoStageResizer resizer = new(generator, handoff);
         LtxStageGuideMediaResolver guideMediaResolver = new(generator);

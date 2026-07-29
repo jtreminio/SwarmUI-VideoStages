@@ -47,9 +47,7 @@ public partial class StageFlowTests
             BuildNativeStepsWithCurrentVaeMismatch(models.BaseModel, attachAudioToCurrentMedia: false));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        StageRefStore store = new(
-            generator,
-            Ltx2ArchitectureModule.ArchitectureId);
+        StageRefStore store = new(generator);
         Assert.Equal(T2IModelClassSorter.CompatLtxv2.ID, store.Generated.Vae.Compat?.ID);
 
         Assert.Empty(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
@@ -168,9 +166,7 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeSteps(attachAudioToCurrentMedia: false));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        StageRefStore store = new(
-            generator,
-            Ltx2ArchitectureModule.ArchitectureId);
+        StageRefStore store = new(generator);
 
         LTXVPreprocessNode preprocessNode = Assert.Single(
             bridge.Graph.NodesOfType<LTXVPreprocessNode>().OrderBy(node => int.Parse(node.Id)));
@@ -274,9 +270,7 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildNativeStepsWithTrimWrapper(attachAudioToCurrentMedia: false));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        StageRefStore store = new(
-            generator,
-            Ltx2ArchitectureModule.ArchitectureId);
+        StageRefStore store = new(generator);
 
         SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.Equal("9", saveNode.Id);

@@ -755,9 +755,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        StageRefStore store = new(
-            generator,
-            Ltx2ArchitectureModule.ArchitectureId);
+        StageRefStore store = new(generator);
         Assert.NotNull(store.Generated);
 
         LTXVImgToVideoInplaceNode imgToVideo = Assert.Single(
@@ -1000,9 +998,7 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<ImageScaleNode>(),
             node => node.Image.Connection?.Node.Id == "12" && node.Image.Connection.SlotIndex == 0);
         LTXVPreprocessNode preprocessNode = Assert.Single(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
-        StageRefStore store = new(
-            generator,
-            Ltx2ArchitectureModule.ArchitectureId);
+        StageRefStore store = new(generator);
         Assert.NotNull(store.Base);
         JArray preprocessImageIn = WorkflowBridge.ToPath(preprocessNode.Image.Connection!);
         AssertGuideReferenceResolvesToPreprocessInput(workflow, preprocessImageIn, store.Base);
@@ -1417,9 +1413,7 @@ public partial class StageFlowTests
         // captured from. Those captures must read as absent, not as dangling node references —
         // they used to survive because the helper-cache invalidation could not decode the
         // pipe-delimited marker encoding StageRefStore writes.
-        StageRefStore store = new(
-            generator,
-            Ltx2ArchitectureModule.ArchitectureId);
+        StageRefStore store = new(generator);
         Assert.Null(store.Generated);
         Assert.Null(store.Base);
         Assert.Null(store.Refiner);

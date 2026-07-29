@@ -9,8 +9,7 @@ namespace VideoStages.Architectures.Ltx2;
 /// <summary>Builds the optional Canny, depth, or normal control signal for one planned drive.</summary>
 internal sealed class IcLoraControlSignalBuilder(WorkflowGenerator g)
 {
-    private readonly LtxRuntimeKeyScope _keys =
-        new(Ltx2ArchitectureModule.ArchitectureId);
+    private readonly LtxRuntimeKeyScope _keys = new();
 
     internal JArray Apply(
         WorkflowBridge bridge,

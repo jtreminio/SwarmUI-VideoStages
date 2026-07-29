@@ -18,8 +18,7 @@ namespace VideoStages.Architectures.Ltx2;
 /// </summary>
 internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
 {
-    private readonly LtxRuntimeKeyScope _keys =
-        new(Ltx2ArchitectureModule.ArchitectureId);
+    private readonly LtxRuntimeKeyScope _keys = new();
 
     internal void ApplyAudioReferenceTokens(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,

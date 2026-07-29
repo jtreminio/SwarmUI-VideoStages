@@ -2,15 +2,12 @@ using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
-using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal class StageRefStore(
-    WorkflowGenerator g,
-    ArchitectureId architectureId)
+internal class StageRefStore(WorkflowGenerator g)
 {
-    private readonly LtxRuntimeKeyScope _keys = new(architectureId);
+    private readonly LtxRuntimeKeyScope _keys = new();
 
     public enum StageKind
     {

@@ -16,8 +16,7 @@ internal sealed record ResolvedIcLoraDrive(
 /// <summary>Resolves planned drive identities into graph media and materializes embedded uploads.</summary>
 internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
 {
-    private readonly LtxRuntimeKeyScope _keys =
-        new(Ltx2ArchitectureModule.ArchitectureId);
+    private readonly LtxRuntimeKeyScope _keys = new();
 
     internal bool TryResolve(
         WorkflowBridge bridge,

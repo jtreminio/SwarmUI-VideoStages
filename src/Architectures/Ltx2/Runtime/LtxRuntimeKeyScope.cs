@@ -1,9 +1,7 @@
-using VideoStages.Architectures.Abstractions;
-
 namespace VideoStages.Architectures.Ltx2;
 
 /// <summary>Formats the request-local runtime keys owned by one architecture adapter.</summary>
-internal sealed class LtxRuntimeKeyScope(ArchitectureId architectureId)
+internal sealed class LtxRuntimeKeyScope
 {
     internal enum StageRefComponent
     {
@@ -12,7 +10,8 @@ internal sealed class LtxRuntimeKeyScope(ArchitectureId architectureId)
         Audio,
     }
 
-    private string Prefix { get; } = BuildPrefix(architectureId);
+    private static string Prefix { get; } =
+        $"videostages.arch.{Ltx2ArchitectureModule.ArchitectureId}";
 
     internal string StageRef(
         StageRefStore.StageKind kind,
@@ -46,17 +45,6 @@ internal sealed class LtxRuntimeKeyScope(ArchitectureId architectureId)
 
     internal string IcLoraUploadedDriveImages(int clipId, int entryIndex) =>
         $"{Prefix}.iclora.upload.{clipId}.{entryIndex}";
-
-    private static string BuildPrefix(ArchitectureId architectureId)
-    {
-        if (string.IsNullOrWhiteSpace(architectureId.Value))
-        {
-            throw new ArgumentException(
-                "Architecture id cannot be empty.",
-                nameof(architectureId));
-        }
-        return $"videostages.arch.{architectureId}";
-    }
 
     private static string StageName(StageRefStore.StageKind kind) => kind switch
     {

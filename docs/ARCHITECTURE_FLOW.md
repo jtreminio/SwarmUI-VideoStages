@@ -293,11 +293,11 @@ The remaining LTX host phases handle base/refiner references, pre-core handoff,
 core-output drop, and root audio-mask sizing.
 
 All LTX-owned `NodeHelpers` keys are architecture-scoped by
-`LtxRuntimeKeyScope` under `videostages.arch.{id}.*`. The scope formats stage
-references, the pre-core snapshot, normalized ControlNet media, and IC-LoRA
-audio-reference, control-signal, and uploaded-drive caches. `StageRefStore` owns
-the scoped pre-core key used by `RootVideoStageHandoff`, so the handoff cannot
-be constructed with a mismatched architecture scope.
+`LtxRuntimeKeyScope` under `videostages.arch.ltx2.*`. This LTX-private formatter
+derives its fixed architecture ID from `Ltx2ArchitectureModule`; callers cannot
+inject an unrelated architecture identity. It formats stage references, the
+pre-core snapshot, normalized ControlNet media, and IC-LoRA audio-reference,
+control-signal, and uploaded-drive caches.
 
 ### B5. Dispatch a clip by architecture
 
