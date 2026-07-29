@@ -47,6 +47,21 @@ public class WanArchitectureTests
     }
 
     [Fact]
+    public void Descriptor_advertises_same_clip_stage_chaining_inputs()
+    {
+        VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
+
+        Assert.True(descriptor.Capabilities.Architecture.HasFlag(
+            ArchitectureCapability.MultiStage));
+        Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.ImageInput));
+        Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.VideoInput));
+        Assert.True(descriptor.StageGuideReferences.Allows(
+            StageGuideReferencePolicy.Classify("Generated")));
+        Assert.True(descriptor.StageGuideReferences.Allows(
+            StageGuideReferencePolicy.Classify("PreviousStage")));
+    }
+
+    [Fact]
     public void Swap_compatibility_requires_the_same_architecture_and_profile()
     {
         VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
@@ -116,30 +131,39 @@ public class WanArchitectureTests
         AssertRejected(
             GeneratedClip(0, stage) with { SourceVideo = new("data", "clip.mp4", 0) },
             "entry mode");
-        AssertRejected(
-            GeneratedClip(
-                0,
-                stage,
-                stage with { Id = 11, ClipStageIndex = 1, ClipStageRawIndex = 1 }),
-            "multiple active stages");
     }
 
     [Fact]
-    public void Compilation_attaches_one_opaque_stage_payload_per_authored_stage()
+    public void Compilation_attaches_typed_payloads_and_previous_stage_input()
     {
-        ClipSpec clip = GeneratedClip(0, Stage(10, "wan-model") with { Control = 1 });
+        StageSpec first = Stage(10, "wan-model") with { Control = 1 };
+        StageSpec second = Stage(11, "wan-model") with
+        {
+            Control = 0.35,
+            Steps = 17,
+            ImageReference = "PreviousStage",
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+        };
+        ClipSpec clip = GeneratedClip(0, first, second);
 
         ClipPlan compiled = Assert.Single(Compile(clip).Clips);
 
         WanClipPayload payload = compiled.RequireWanPayload();
         Assert.Equal(WanArchitectureModule.ArchitectureId, payload.ArchitectureId);
-        WanStagePayload stagePayload = Assert.Single(compiled.Stages).RequireWanPayload();
-        Assert.Equal("wan-model", stagePayload.Model);
-        Assert.Equal(1, stagePayload.Control);
-        Assert.Equal(12, stagePayload.Steps);
-        Assert.Equal(4.5, stagePayload.CfgScale);
-        Assert.Equal("euler", stagePayload.Sampler);
-        Assert.Equal("normal", stagePayload.Scheduler);
+        Assert.Equal(2, compiled.Stages.Count);
+        Assert.Equal(StageInputKind.RootMedia, compiled.Stages[0].Input);
+        Assert.Equal(StageInputKind.PreviousStage, compiled.Stages[1].Input);
+        WanStagePayload firstPayload = compiled.Stages[0].RequireWanPayload();
+        WanStagePayload secondPayload = compiled.Stages[1].RequireWanPayload();
+        Assert.Equal("wan-model", firstPayload.Model);
+        Assert.Equal(1, firstPayload.Control);
+        Assert.Equal(12, firstPayload.Steps);
+        Assert.Equal(4.5, firstPayload.CfgScale);
+        Assert.Equal("euler", firstPayload.Sampler);
+        Assert.Equal("normal", firstPayload.Scheduler);
+        Assert.Equal(0.35, secondPayload.Control);
+        Assert.Equal(17, secondPayload.Steps);
     }
 
     [Fact]
@@ -208,7 +232,7 @@ public class WanArchitectureTests
     /// into a payload that silently omits it.
     /// </summary>
     [Fact]
-    public void Compilation_refuses_settings_its_payload_cannot_carry()
+    public void Direct_compiler_refuses_invalid_stage_inputs_controls_and_quantized_schedules()
     {
         StageSpec stage = Stage(10, "wan-model");
 
@@ -217,7 +241,138 @@ public class WanArchitectureTests
             "a stage that generates nothing");
         AssertRefused(
             GeneratedClip(0, stage with { Control = 0.8 }),
-            "partial regeneration");
+            "first-stage control");
+        AssertRefused(
+            GeneratedClip(0, stage with { Control = double.NaN }),
+            "first-stage control");
+        AssertRefused(
+            GeneratedClip(
+                0,
+                stage,
+                stage with
+                {
+                    Id = 11,
+                    Control = 0,
+                    ImageReference = "PreviousStage",
+                    ClipStageIndex = 1,
+                    ClipStageRawIndex = 1,
+                }),
+            "a stage that generates nothing");
+        AssertRefused(
+            GeneratedClip(
+                0,
+                stage,
+                stage with
+                {
+                    Id = 11,
+                    Control = -0.1,
+                    ImageReference = "PreviousStage",
+                    ClipStageIndex = 1,
+                    ClipStageRawIndex = 1,
+                }),
+            "finite range (0, 1]");
+        AssertRefused(
+            GeneratedClip(
+                0,
+                stage,
+                stage with
+                {
+                    Id = 11,
+                    Control = 1.1,
+                    ImageReference = "PreviousStage",
+                    ClipStageIndex = 1,
+                    ClipStageRawIndex = 1,
+                }),
+            "finite range (0, 1]");
+        AssertRefused(
+            GeneratedClip(
+                0,
+                stage,
+                stage with
+                {
+                    Id = 11,
+                    Control = 0.5,
+                    ClipStageIndex = 1,
+                    ClipStageRawIndex = 1,
+                }),
+            "later-stage input");
+        AssertRefused(
+            GeneratedClip(
+                0,
+                stage,
+                stage with
+                {
+                    Id = 11,
+                    Control = 0.9,
+                    Steps = 8,
+                    ImageReference = "PreviousStage",
+                    ClipStageIndex = 1,
+                    ClipStageRawIndex = 1,
+                }),
+            "quantizes to sampler start step 0");
+    }
+
+    [Fact]
+    public void Compiler_refuses_a_declared_but_noncanonical_Wan_stage_profile()
+    {
+        StageSpec first = Stage(10, "wan-current");
+        StageSpec second = Stage(11, "wan-alternate") with
+        {
+            Control = 0.5,
+            ImageReference = "PreviousStage",
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+        };
+        ClipSpec clip = GeneratedClip(0, first, second);
+        VideoArchitectureDescriptor canonical =
+            WanArchitectureModule.Instance.Descriptor;
+        ModelProfileId alternateId = new("synthetic-wan-alternate");
+        VideoArchitectureDescriptor declaredAlternate = canonical with
+        {
+            Profiles =
+            [
+                .. canonical.Profiles,
+                Assert.Single(canonical.Profiles) with
+                {
+                    Id = alternateId,
+                    DisplayName = "Synthetic Wan alternate",
+                },
+            ],
+        };
+        Dictionary<int, ResolvedVideoModel> stageModels = new()
+        {
+            [0] = new(
+                first.Model,
+                canonical.Id,
+                WanArchitectureModule.ImageToVideoProfileId,
+                canonical),
+            [1] = new(
+                second.Model,
+                declaredAlternate.Id,
+                alternateId,
+                declaredAlternate),
+        };
+
+        ArchitectureClipCompilation compilation =
+            WanArchitectureModule.Instance.ValidateAndCompileClip(
+                clip,
+                stageModels,
+                new(512, 512, 24));
+
+        PlanDiagnostic diagnostic = Assert.Single(
+            compilation.Diagnostics,
+            item => item.Code == "wan22.stage-profile.unsupported");
+        Assert.Equal(11, diagnostic.StageId);
+        Assert.Contains("synthetic-wan-alternate", diagnostic.Message);
+        Assert.Contains(WanArchitectureModule.ImageToVideoProfileId.ToString(), diagnostic.Message);
+    }
+
+    [Fact]
+    public void Schedule_policy_preserves_one_step_partial_boundary()
+    {
+        Assert.True(WanStageSchedulePolicy.IsQuantizedZeroPartial(8, 0.9));
+        Assert.False(WanStageSchedulePolicy.IsQuantizedZeroPartial(8, 0.87));
+        Assert.Equal(1, WanStageSchedulePolicy.StartStep(8, 0.87));
     }
 
     private static void AssertRejected(ClipSpec clip, string expectedOption)

@@ -9,6 +9,7 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan;
+using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Generated;
 using VideoStages.Planning;
 using Xunit;
@@ -100,6 +101,281 @@ public class WanRuntimeFlowTests
         Assert.DoesNotContain(
             generator.NodeHelpers.Keys,
             key => key.StartsWith("videostages.arch.wan22.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Two_Wan_stages_use_previous_decoded_video_and_exact_control_start_step()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        T2IModel secondModel =
+            AddDistinctWanModel(models.VideoModel, "UnitTest_Wan22_Second.safetensors");
+        JObject first = MakeStage(
+            models.VideoModel.Name,
+            "Generated",
+            control: 1,
+            steps: 10,
+            cfgScale: 4);
+        first.Remove("imageReference");
+        JObject second = MakeStage(
+            secondModel.Name,
+            "PreviousStage",
+            control: 0.35,
+            steps: 12,
+            cfgScale: 6.5,
+            sampler: "dpmpp_2m",
+            scheduler: "karras");
+        second.Remove("imageReference");
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(first, second),
+            prompt: "global <videoclip[0,0]>first-stage-prompt "
+                + "<videoclip[0,1]>second-stage-prompt");
+        VideoStagesSpec parsed = VideoStagesContext.GetVideoStagesSpecForPromptParse(input);
+        Assert.Equal("Generated", parsed.Clips[0].Stages[0].ImageReference);
+        Assert.Equal("PreviousStage", parsed.Clips[0].Stages[1].ImageReference);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
+        Assert.Equal(2, samplers.Length);
+        ComfyNode firstSampler = Assert.Single(
+            samplers,
+            node => node.FindInput("noise_seed").LiteralAsLong() == 43);
+        ComfyNode secondSampler = Assert.Single(
+            samplers,
+            node => node.FindInput("noise_seed").LiteralAsLong() == 44);
+        AssertSamplerSettings(firstSampler, 10, 4, "euler", "normal");
+        AssertSamplerSettings(secondSampler, 12, 6.5, "dpmpp_2m", "karras");
+        Assert.Equal(0, firstSampler.FindInput("start_at_step").LiteralAsInt());
+        Assert.Equal(
+            WanStageSchedulePolicy.StartStep(12, 0.35),
+            secondSampler.FindInput("start_at_step").LiteralAsInt());
+        AssertSamplerModelSource(bridge, firstSampler, models.VideoModel.Name);
+        AssertSamplerModelSource(bridge, secondSampler, secondModel.Name);
+
+        VAEEncodeNode previousVideoEncode = Assert.IsType<VAEEncodeNode>(
+            secondSampler.FindInput("latent_image").Connection?.Node);
+        VAEDecodeNode previousStageDecode = Assert.Single(
+            bridge.Graph.NodesOfType<VAEDecodeNode>(),
+            decode => ReachesUpstream(bridge, previousVideoEncode, decode.Id)
+                && ReachesUpstream(bridge, decode, firstSampler.Id));
+        ComfyNode secondConditioning = secondSampler.FindInput("positive").Connection?.Node;
+        Assert.Equal("WanImageToVideo", secondConditioning?.ClassTypeName);
+        Assert.True(ReachesUpstream(
+            bridge,
+            secondConditioning.FindInput("start_image").Connection!.Node,
+            previousStageDecode.Id));
+        Assert.True(ReachesUpstream(bridge, previousStageDecode, firstSampler.Id));
+        ComfyNode firstConditioning = firstSampler.FindInput("positive").Connection?.Node;
+        Assert.Equal("WanImageToVideo", firstConditioning?.ClassTypeName);
+        Assert.Contains(
+            "first-stage-prompt",
+            NodeText(firstConditioning.FindInput("positive").Connection?.Node));
+        Assert.Contains(
+            "second-stage-prompt",
+            NodeText(secondConditioning.FindInput("positive").Connection?.Node));
+
+        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
+        Assert.Equal(13, generator.CurrentMedia.Frames);
+        Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
+        Assert.Equal(512, generator.CurrentMedia.Width);
+        Assert.Equal(512, generator.CurrentMedia.Height);
+        Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Later_full_generation_uses_previous_first_frame_without_a_dead_source_encode()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 8),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    control: 1,
+                    steps: 10)));
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
+        ComfyNode first = SamplerBySeed(samplers, 43);
+        ComfyNode second = SamplerBySeed(samplers, 44);
+        Assert.Equal(0, second.FindInput("start_at_step").LiteralAsInt());
+        Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeNode>());
+        ComfyNode secondConditioning = Assert.IsType<WanImageToVideoNode>(
+            second.FindInput("latent_image").Connection?.Node);
+        Assert.True(ReachesUpstream(
+            bridge,
+            secondConditioning.FindInput("start_image").Connection!.Node,
+            first.Id));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Json_partial_control_at_one_step_boundary_encodes_the_previous_decoded_video()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject first = MakeStage(models.VideoModel.Name, steps: 8);
+        JObject second = MakeStage(models.VideoModel.Name, control: 0.87, steps: 8);
+        first.Remove("imageReference");
+        second.Remove("imageReference");
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(first, second));
+
+        VideoStagesSpec parsed = VideoStagesContext.GetVideoStagesSpecForPromptParse(input);
+        Assert.Equal("Generated", parsed.Clips[0].Stages[0].ImageReference);
+        Assert.Equal("PreviousStage", parsed.Clips[0].Stages[1].ImageReference);
+        Assert.Equal(1, WanStageSchedulePolicy.StartStep(
+            parsed.Clips[0].Stages[1].Steps,
+            parsed.Clips[0].Stages[1].Control));
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
+        ComfyNode firstSampler = SamplerBySeed(samplers, 43);
+        ComfyNode secondSampler = SamplerBySeed(samplers, 44);
+        Assert.Equal(1, secondSampler.FindInput("start_at_step").LiteralAsInt());
+        VAEEncodeNode encodedPrevious = Assert.IsType<VAEEncodeNode>(
+            secondSampler.FindInput("latent_image").Connection?.Node);
+        Assert.True(ReachesUpstream(bridge, encodedPrevious, firstSampler.Id));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Three_Wan_stages_publish_intermediates_and_trim_only_the_final_output()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 8),
+                MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: 10),
+                MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.25, steps: 12)));
+        input.Set(T2IParamTypes.OutputIntermediateImages, true);
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 4);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
+        Assert.Equal(3, samplers.Length);
+        ComfyNode first = SamplerBySeed(samplers, 43);
+        ComfyNode second = SamplerBySeed(samplers, 44);
+        ComfyNode third = SamplerBySeed(samplers, 45);
+        Assert.Equal(2, bridge.Graph.NodesOfType<VAEEncodeNode>().Count());
+        Assert.Equal(
+            WanStageSchedulePolicy.StartStep(10, 0.5),
+            second.FindInput("start_at_step").LiteralAsInt());
+        Assert.Equal(
+            WanStageSchedulePolicy.StartStep(12, 0.25),
+            third.FindInput("start_at_step").LiteralAsInt());
+        Assert.True(ReachesUpstream(
+            bridge,
+            Assert.IsType<VAEEncodeNode>(
+                second.FindInput("latent_image").Connection?.Node),
+            first.Id));
+        Assert.True(ReachesUpstream(
+            bridge,
+            Assert.IsType<VAEEncodeNode>(
+                third.FindInput("latent_image").Connection?.Node),
+            second.Id));
+
+        SwarmTrimFramesNode trim = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
+        Assert.Equal(4, trim.TrimStart.LiteralAsInt());
+        SwarmSaveAnimationWSNode[] saves =
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().ToArray();
+        Assert.Equal(3, saves.Length);
+        Assert.Single(saves, save => ReferenceEquals(trim, save.Images.Connection?.Node));
+        Assert.Equal(
+            2,
+            saves.Count(save => save.Images.Connection?.Node is VAEDecodeNode));
+        Assert.All(saves, save => Assert.Equal(24.0, save.Fps.LiteralAsDouble()));
+        Assert.Equal(new JArray(trim.Id, 0), generator.CurrentMedia.Path);
+        Assert.Equal(9, generator.CurrentMedia.Frames);
+        Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Wan_swap_stage_chain_feeds_each_next_stage_from_the_prior_low_pass()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        T2IModel lowNoiseModel =
+            AddDistinctWanModel(models.VideoModel, "UnitTest_Wan22_Low.safetensors");
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 11),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    control: 0.8,
+                    steps: 17)));
+        ConfigureSwap(input, lowNoiseModel, percent: 0.6);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
+        Assert.Equal(4, samplers.Length);
+        ComfyNode firstHigh = Assert.Single(
+            samplers,
+            node => IsHighNoiseSampler(node)
+                && node.FindInput("steps").LiteralAsInt() == 11);
+        ComfyNode secondHigh = Assert.Single(
+            samplers,
+            node => IsHighNoiseSampler(node)
+                && node.FindInput("steps").LiteralAsInt() == 17);
+        ComfyNode firstLow = AssertLowNoiseForHigh(samplers, firstHigh);
+        ComfyNode secondLow = AssertLowNoiseForHigh(samplers, secondHigh);
+        int secondStart = WanStageSchedulePolicy.StartStep(17, 0.8);
+        int secondHighEnd = WanStageSchedulePolicy.HostHighEndStep(17, 0.6);
+        Assert.True(secondStart < secondHighEnd);
+        Assert.Equal(secondStart, secondHigh.FindInput("start_at_step").LiteralAsInt());
+        Assert.Equal(secondHighEnd, secondHigh.FindInput("end_at_step").LiteralAsInt());
+        AssertSamplerSettings(firstLow, 14, 8.25, "dpmpp_2m", "karras");
+        AssertSamplerSettings(secondLow, 14, 8.25, "dpmpp_2m", "karras");
+        VAEEncodeNode secondInput = Assert.IsType<VAEEncodeNode>(
+            secondHigh.FindInput("latent_image").Connection?.Node);
+        Assert.True(ReachesUpstream(bridge, secondInput, firstLow.Id));
+        Assert.False(ReachesUpstream(bridge, secondInput, secondLow.Id));
+        ComfyNode secondConditioning = secondHigh.FindInput("positive").Connection?.Node;
+        Assert.Equal("WanImageToVideo", secondConditioning?.ClassTypeName);
+        Assert.True(ReachesUpstream(
+            bridge,
+            secondConditioning.FindInput("start_image").Connection!.Node,
+            firstLow.Id));
+        INodeOutput finalOutput = bridge.ResolvePath(generator.CurrentMedia.Path);
+        Assert.NotNull(finalOutput);
+        Assert.True(ReachesUpstream(bridge, finalOutput.Node, secondLow.Id));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
     }
 
     [Fact]
@@ -231,7 +507,9 @@ public class WanRuntimeFlowTests
         Assert.Equal("euler", high.FindInput("sampler_name").LiteralAsString());
         Assert.Equal("normal", high.FindInput("scheduler").LiteralAsString());
         Assert.Equal(0, high.FindInput("start_at_step").LiteralAsInt());
-        Assert.Equal((int)Math.Round(11 * (1 - 0.6)), high.FindInput("end_at_step").LiteralAsInt());
+        Assert.Equal(
+            WanStageSchedulePolicy.HostHighEndStep(11, 0.6),
+            high.FindInput("end_at_step").LiteralAsInt());
         Assert.Equal("enable", high.FindInput("return_with_leftover_noise").LiteralAsString());
         Assert.Equal("enable", high.FindInput("add_noise").LiteralAsString());
         Assert.Equal(43, high.FindInput("noise_seed").LiteralAsLong());
@@ -363,7 +641,9 @@ public class WanRuntimeFlowTests
         ComfyNode high = Assert.Single(samplers, IsHighNoiseSampler);
         ComfyNode low = AssertLowNoiseForHigh(samplers, high);
 
-        Assert.Equal((int)Math.Round(10 * (1 - percent)), high.FindInput("end_at_step").LiteralAsInt());
+        Assert.Equal(
+            WanStageSchedulePolicy.HostHighEndStep(10, percent),
+            high.FindInput("end_at_step").LiteralAsInt());
         Assert.Equal((int)Math.Round(12 * (1 - percent)), low.FindInput("start_at_step").LiteralAsInt());
     }
 
@@ -499,6 +779,137 @@ public class WanRuntimeFlowTests
         Assert.True(IsHighNoiseSampler(wanLow.FindInput("latent_image").Connection?.Node));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Mixed_Ltx_then_multi_stage_Wan_keeps_nested_and_timeline_lifecycles_separate(
+        bool doNotSave)
+    {
+        using SwarmUiTestContext context = new();
+        MixedVideoModelBundle models =
+            TestModelFactory.CreateBaseLtxv2AndWan22ImageToVideoModels();
+        T2IModel lowNoiseModel =
+            AddDistinctWanModel(models.WanVideoModel, "UnitTest_Wan22_Low.safetensors");
+        JObject document = MakeDocument(
+            MakeClip(MakeStage(models.LtxVideoModel.Name, "Generated", steps: 7)),
+            MakeClip(
+                MakeStage(models.WanVideoModel.Name, "Generated", steps: 9),
+                MakeStage(
+                    models.WanVideoModel.Name,
+                    "PreviousStage",
+                    control: 0.8,
+                    steps: 10)));
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.LtxVideoModel,
+            document.ToString());
+        input.Set(T2IParamTypes.OutputIntermediateImages, true);
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 4);
+        input.Set(T2IParamTypes.DoNotSave, doNotSave);
+        ConfigureSwap(input, lowNoiseModel, percent: 0.6);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
+        ComfyNode[] wanHighs =
+        [
+            .. samplers.Where(node =>
+                IsHighNoiseSampler(node)
+                && node.FindInput("positive").Connection?.Node?.ClassTypeName
+                    == "WanImageToVideo"),
+        ];
+        Assert.Equal(2, wanHighs.Length);
+        ComfyNode firstWanHigh = Assert.Single(
+            wanHighs,
+            node => node.FindInput("noise_seed").LiteralAsLong() == 44);
+        ComfyNode secondWanHigh = Assert.Single(
+            wanHighs,
+            node => node.FindInput("noise_seed").LiteralAsLong() == 45);
+        ComfyNode firstWanLow = AssertLowNoiseForHigh(samplers, firstWanHigh);
+        ComfyNode secondWanLow = AssertLowNoiseForHigh(samplers, secondWanHigh);
+        ComfyNode ltxSampler = Assert.Single(
+            samplers,
+            node => !ReachesUpstream(
+                bridge,
+                node.FindInput("positive").Connection?.Node,
+                firstWanHigh.FindInput("positive").Connection?.Node?.Id)
+                && node.FindInput("positive").Connection?.Node?.ClassTypeName
+                    != "WanImageToVideo"
+                && !IsLowNoiseSampler(node));
+
+        ComfyNode firstWanConditioning =
+            firstWanHigh.FindInput("positive").Connection?.Node;
+        Assert.False(ReachesUpstream(
+            bridge,
+            firstWanConditioning.FindInput("start_image").Connection?.Node,
+            ltxSampler.Id));
+        VAEEncodeNode secondWanInput = Assert.IsType<VAEEncodeNode>(
+            secondWanHigh.FindInput("latent_image").Connection?.Node);
+        Assert.True(ReachesUpstream(bridge, secondWanInput, firstWanLow.Id));
+        Assert.False(ReachesUpstream(bridge, secondWanInput, ltxSampler.Id));
+
+        BatchImagesNodeNode merged = Assert.Single(
+            bridge.Graph.NodesOfType<BatchImagesNodeNode>());
+        SwarmTrimFramesNode trim = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
+        Assert.Same(merged, trim.Image.Connection?.Node);
+        Assert.Equal(4, trim.TrimStart.LiteralAsInt());
+        Assert.Equal(new JArray(trim.Id, 0), generator.CurrentMedia.Path);
+        Assert.Equal(25, generator.CurrentMedia.Frames);
+        Assert.True(ReachesUpstream(bridge, trim, secondWanLow.Id));
+
+        EmptyAudioNode wanSilence = Assert.Single(
+            bridge.Graph.NodesOfType<EmptyAudioNode>());
+        Assert.Equal(13 / 24.0, wanSilence.Duration.LiteralAsDouble()!.Value, precision: 6);
+        TrimAudioDurationNode finalAudioTrim = Assert.IsType<TrimAudioDurationNode>(
+            bridge.ResolvePath(generator.CurrentMedia.AttachedAudio.Path).Node);
+        Assert.Equal(4 / 24.0, finalAudioTrim.StartIndex.LiteralAsDouble()!.Value, precision: 6);
+        Assert.Equal(25 / 24.0, finalAudioTrim.Duration.LiteralAsDouble()!.Value, precision: 6);
+        AudioConcatNode finalAudio = Assert.Single(
+            bridge.Graph.NodesOfType<AudioConcatNode>(),
+            concat => ReachesUpstream(bridge, finalAudioTrim, concat.Id));
+        Assert.True(ReachesUpstream(
+            bridge,
+            finalAudio.Audio2.Connection?.Node,
+            wanSilence.Id));
+        Assert.False(ReachesUpstream(
+            bridge,
+            finalAudio.Audio1.Connection?.Node,
+            wanSilence.Id));
+
+        SwarmSaveAnimationWSNode[] saves =
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().ToArray();
+        if (doNotSave)
+        {
+            Assert.Empty(saves);
+        }
+        else
+        {
+            Assert.Equal(3, saves.Length);
+            Assert.Single(saves, save => ReferenceEquals(trim, save.Images.Connection?.Node));
+            Assert.Contains(
+                saves,
+                save => ReachesUpstream(
+                    bridge,
+                    save.Images.Connection?.Node,
+                    ltxSampler.Id));
+            Assert.Contains(
+                saves,
+                save => ReachesUpstream(
+                        bridge,
+                        save.Images.Connection?.Node,
+                        firstWanLow.Id)
+                    && !ReachesUpstream(
+                        bridge,
+                        save.Images.Connection?.Node,
+                        secondWanLow.Id));
+        }
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
     /// <summary>
     /// The host trims every image-to-video pass it builds, so a timeline that delegates to it once
     /// per clip has to drop those and keep only the trim over the finished timeline.
@@ -553,7 +964,7 @@ public class WanRuntimeFlowTests
                 WorkflowTestHarness.Template_BaseOnlyImage()
                     .Concat([snapshot.Step(), WorkflowTestHarness.CoreImageToVideoStep()])
                     .Concat(WorkflowTestHarness.VideoStagesSteps())));
-        Assert.Contains("requires a source-video entry", error.Message);
+        Assert.Contains("stage 0 has no source-video donor", error.Message);
         Assert.DoesNotContain("request: VideoStages:", error.Message);
         snapshot.AssertUnchanged();
     }
@@ -568,6 +979,26 @@ public class WanRuntimeFlowTests
             models.BaseModel,
             models.VideoModel,
             MakeDocument(MakeClip(stage), MakeClip(stage)).ToString());
+        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
+
+        AssertPreflightRefusalBeforeMutation(input, "request-global and is ambiguous");
+    }
+
+    [Fact]
+    public void Global_end_image_is_refused_before_mutation_for_multi_stage_Wan_clip()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 10),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    control: 0.5,
+                    steps: 12)));
         input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
 
         AssertPreflightRefusalBeforeMutation(input, "request-global and is ambiguous");
@@ -626,6 +1057,133 @@ public class WanRuntimeFlowTests
         input.Set(T2IParamTypes.VideoSwapPercent, swapPercent);
 
         AssertPreflightRefusalBeforeMutation(input, "must be finite and between 0 and 1");
+    }
+
+    [Theory]
+    [InlineData(10, 0.5, 0.7, 1)]
+    [InlineData(12, 0.5, 0.5, 0)]
+    public void Wan_swap_refuses_an_empty_later_stage_high_noise_window_before_mutation(
+        int steps,
+        double control,
+        double swapPercent,
+        int expectedComparison)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        T2IModel lowNoiseModel =
+            AddDistinctWanModel(models.VideoModel, "UnitTest_Wan22_Low.safetensors");
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 8),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    control: control,
+                    steps: steps)));
+        ConfigureSwap(input, lowNoiseModel, swapPercent);
+
+        int start = WanStageSchedulePolicy.StartStep(steps, control);
+        int end = WanStageSchedulePolicy.HostHighEndStep(steps, swapPercent);
+        Assert.Equal(expectedComparison, Math.Sign(start.CompareTo(end)));
+        AssertPreflightRefusalBeforeMutation(input, "no high-noise sampling window");
+    }
+
+    [Theory]
+    [InlineData(0, 8, "a stage that generates nothing")]
+    [InlineData(0.9, 8, "quantizes to sampler start step 0")]
+    public void Json_later_stage_control_is_refused_before_graph_mutation(
+        double control,
+        int steps,
+        string expectedReason)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject first = MakeStage(models.VideoModel.Name, steps: 8);
+        JObject second = MakeStage(models.VideoModel.Name, control: control, steps: steps);
+        first.Remove("imageReference");
+        second.Remove("imageReference");
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(first, second));
+
+        VideoStagesSpec parsed = VideoStagesContext.GetVideoStagesSpecForPromptParse(input);
+        Assert.Equal("Generated", parsed.Clips[0].Stages[0].ImageReference);
+        Assert.Equal("PreviousStage", parsed.Clips[0].Stages[1].ImageReference);
+        AssertPreflightRefusalBeforeMutation(input, expectedReason);
+    }
+
+    [Theory]
+    [InlineData(0.9, 8, false, 0.5, "quantizes to sampler start step 0")]
+    [InlineData(0.5, 10, true, 0.7, "no high-noise sampling window")]
+    public void Decoded_stage_adapter_rechecks_schedule_invariants_before_media_access(
+        double control,
+        int steps,
+        bool withSwap,
+        double swapPercent,
+        string expectedReason)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        WorkflowGenerator generator = new()
+        {
+            Workflow = new JObject(),
+            UserInput = new(null),
+        };
+        WanStagePayload payload = new(
+            models.VideoModel.Name,
+            control,
+            steps,
+            4.5,
+            "euler",
+            "normal");
+        StagePlan stage = new(
+            StageId: 1,
+            ClipStageIndex: 1,
+            ClipStageRawIndex: 1,
+            StageInputKind.PreviousStage,
+            IsPassthrough: false,
+            payload,
+            new(
+                IsTimelineTerminal: true,
+                IntermediateOutputPolicy.NotEligible,
+                PreserveConfiguredAudioTrackSave: false));
+        ClipPlan clip = new(
+            ClipId: 0,
+            Frames: 13,
+            ClipInputKind.RootMedia,
+            IsSourced: false,
+            SourceVideo: null,
+            [stage],
+            Audio: null)
+        {
+            Architecture = WanArchitectureModule.Instance.Descriptor,
+            EntryMode = ArchitectureEntryMode.ImageToVideo,
+            ArchitecturePayload = new WanClipPayload(0),
+        };
+        WorkflowGenerator.ImageToVideoGenInfo genInfo = new()
+        {
+            Generator = generator,
+            VideoSwapModel = withSwap ? models.VideoModel : null,
+            VideoSwapPercent = swapPercent,
+            Frames = 13,
+            Steps = steps,
+        };
+        JObject before = (JObject)generator.Workflow.DeepClone();
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => new WanDecodedVideoStageInput(
+                generator,
+                (512, 512),
+                24,
+                new GlobalVideoFrameTrimmer(generator))
+                .Configure(clip, stage, genInfo));
+
+        Assert.Contains(expectedReason, error.Message);
+        Assert.True(JToken.DeepEquals(before, generator.Workflow));
+        Assert.Null(generator.CurrentMedia);
     }
 
     [Theory]
@@ -764,6 +1322,15 @@ public class WanRuntimeFlowTests
     private static IEnumerable<ComfyNode> SamplerNodes(WorkflowBridge bridge) =>
         NodesOfClass(bridge, "SwarmKSampler")
             .Concat(NodesOfClass(bridge, "KSamplerAdvanced"));
+
+    private static ComfyNode SamplerBySeed(IEnumerable<ComfyNode> samplers, long seed) =>
+        Assert.Single(
+            samplers,
+            node => node.FindInput("noise_seed").LiteralAsLong() == seed);
+
+    private static string NodeText(ComfyNode node) =>
+        node?.FindInput("text")?.LiteralAsString()
+        ?? node?.FindInput("prompt")?.LiteralAsString();
 
     private static bool IsHighNoiseSampler(ComfyNode node) =>
         node is not null

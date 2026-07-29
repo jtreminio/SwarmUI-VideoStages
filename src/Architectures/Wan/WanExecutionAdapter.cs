@@ -1,6 +1,7 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan;
@@ -56,11 +57,48 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
                 }
             }
             double swapPercent = generator.UserInput.Get(T2IParamTypes.VideoSwapPercent, 0.5);
-            if (!double.IsFinite(swapPercent) || swapPercent < 0 || swapPercent > 1)
+            bool validSwapPercent =
+                double.IsFinite(swapPercent)
+                && swapPercent >= 0
+                && swapPercent <= 1;
+            if (!validSwapPercent)
             {
                 diagnostics.Add(Refuse(
                     $"'Video Swap Percent' must be finite and between 0 and 1, but was "
                     + $"'{swapPercent}'."));
+            }
+            else
+            {
+                foreach (ClipPlan clip in context.Plan.Clips.Where(
+                    clip => clip.Architecture.Id == ArchitectureId))
+                {
+                    foreach (StagePlan stage in clip.Stages.Where(
+                        stage => !stage.IsPassthrough && stage.ClipStageIndex > 0))
+                    {
+                        WanStagePayload payload = stage.RequireWanPayload();
+                        if (payload.Control >= 1
+                            || WanStageSchedulePolicy.HasSwapHighNoiseWindow(
+                                payload.Steps,
+                                payload.Control,
+                                swapPercent))
+                        {
+                            continue;
+                        }
+                        int startStep = WanStageSchedulePolicy.StartStep(
+                            payload.Steps,
+                            payload.Control);
+                        int highEndStep = WanStageSchedulePolicy.HostHighEndStep(
+                            payload.Steps,
+                            swapPercent);
+                        diagnostics.Add(Refuse(
+                            $"'Video Swap Model' gives clip {clip.ClipId} stage {stage.StageId} "
+                                + $"no high-noise sampling window: the partial-control start step "
+                                + $"{startStep} must be less than the swap high-noise end step "
+                                + $"{highEndStep}.",
+                            clip.ClipId,
+                            stage.StageId));
+                    }
+                }
             }
         }
         if (generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null) is not null)
@@ -97,9 +135,9 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
             && creativity != 1)
         {
             diagnostics.Add(Refuse(
-                "'Video2Video Creativity' is non-default, but current Wan clips enter from a "
-                + "still-image root. Partial denoise requires a source-video entry, which this "
-                + "Wan slice does not support."));
+                "'Video2Video Creativity' is request-global, but Wan stage 0 has no source-video "
+                + "donor. Use each later stage's authored 'Control' value for Wan refinement "
+                + "instead."));
         }
         return diagnostics;
     }
@@ -116,8 +154,8 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
             case ArchitectureHostPhase.DropCoreOutput:
                 handoff.DropCoreOutput();
                 break;
-            // Wan generates no audio, and refuses every stage image reference but the host root,
-            // so it captures nothing at the reference and ControlNet phases.
+            // PreviousStage is a Wan-local decoded handoff assembled by the session. It is not a
+            // captured host reference, so Wan needs nothing from reference or ControlNet phases.
             case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
             case ArchitectureHostPhase.CaptureBaseReference:
             case ArchitectureHostPhase.CaptureRefinerReference:

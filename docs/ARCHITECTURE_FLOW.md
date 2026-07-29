@@ -95,9 +95,11 @@ or frontend classification cannot authorize an unsupported model.
 
 `Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`, and
 `NoneArchitecture.Descriptor` are typed `VideoArchitectureDescriptor` values.
-Wan publishes image-to-video entry, one active stage per clip, video-only
-output, a four-frame profile grid, and cut-only boundaries. The same typed
-boundary/rule objects feed backend validation and frontend publication.
+Wan publishes image-to-video entry, same-profile multi-stage chaining,
+video-only output, a four-frame profile grid, and cut-only boundaries. Stage 0
+uses the generated root at full control; each later stage uses
+`PreviousStage`, with finite control in `(0, 1]`. The same typed boundary/rule
+objects feed backend validation and frontend publication.
 
 `ArchitectureCatalogSerializer.Serialize` projects the descriptor catalog and
 the currently resolved, session-authorized host models to:
@@ -289,8 +291,10 @@ For LTX, `Ltx2ClipPlanCompiler.Compile` produces `Ltx2ClipPayload` and
 LoRA, IC-LoRA, retake, frame references, and stage audio actions. Common
 orchestration carries these values; it must not interpret their graph meaning.
 For Wan, `WanClipPlanCompiler.Compile` produces the smaller `WanClipPayload`
-and `WanStagePayload`, and refuses unsupported settings that the common
-capability validator cannot yet see.
+and `WanStagePayload`. It requires every active stage to resolve to the exact
+`wan22` / `wan-2.2-i2v-14b` profile, enforces the generated-root /
+previous-stage chain, and refuses unsupported or empty integer schedules that
+the common capability validator cannot yet see.
 
 Blocking `PlanDiagnostic` values are thrown by
 `RequireVideoExecutionPlanContext` before a VideoStages mutation phase.
@@ -307,8 +311,10 @@ ComfyUI-LTXVideo nodes/features and resolvable IC-LoRA weights. Blocking
 diagnostics stop the request before later VideoStages host phases mutate the
 graph.
 `WanExecutionAdapter.PreflightRequest` similarly refuses host-only options the
-slice cannot honor: swap-model, end-frame, partial denoise, and active frame
-interpolation.
+slice cannot honor. A compatible swap model is delegated to the host adapter,
+but every later partial stage must retain a non-empty high-noise interval under
+the request-global swap split. Global end-frame and creativity settings remain
+bounded to the cases with unambiguous provenance.
 
 “Before mutation” here means before **VideoStages** mutation. SwarmUI may
 already have built host graph state that VideoStages captures or replaces.
@@ -337,6 +343,8 @@ resolvable root image, its VAE state (which may be explicitly absent), and a
 node snapshot, then restores them and prunes the host core video pass. Missing
 or corrupt handoff state fails closed and clears all
 `videostages.arch.wan22.*` handoff keys.
+`PreviousStage` is not a host reference capture: it is the decoded,
+Wan-local handoff between adjacent stages inside one generation session.
 
 All LTX-owned `NodeHelpers` keys are architecture-scoped by
 `LtxRuntimeKeyScope` under `videostages.arch.ltx2.*`. This LTX-private formatter
@@ -406,12 +414,18 @@ The `none` path uses `SourceOnlyGenerationSession` and
 ### B6b. Wan direct runtime execution
 
 `WanGenerationSessionFactory` snapshots the host image and VAE.
-`WanGenerationSession` resets each cut-only clip to that root, applies its
-compiled stage settings, and delegates graph construction to SwarmUI's
-`WorkflowGenerator.CreateImageToVideo`. It removes the host's per-clip trim,
-applies any global trim only at the terminal output, and returns a decoded
-video-only artifact. LTX/Wan boundaries are neutral hard cuts; no family
-assembler crosses the architecture boundary.
+`WanGenerationSession` resets each hard-cut clip to that captured root, then
+loops its compiled active stages. Stage 0 delegates the root image to SwarmUI's
+`WorkflowGenerator.CreateImageToVideo`; each later stage conditions on the
+preceding decoded batch and, for partial control, VAE-encodes that same batch
+before starting at the shared integer schedule step. The session publishes
+authored intermediates and removes every host per-pass trim. For a terminal
+single-clip session it applies the global trim after the final stage; for a
+multi-clip timeline, common assembly applies that trim once over the joined
+timeline. The session returns the final decoded video-only artifact. A new
+hard-cut clip resets to the captured root rather than consuming the previous
+clip. LTX/Wan boundaries are neutral hard cuts; no family assembler crosses the
+architecture boundary.
 
 ### B7. Return neutral artifacts and publish
 

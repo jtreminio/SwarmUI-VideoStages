@@ -1,7 +1,4 @@
 using ComfyTyped.Core;
-using ComfyTyped.Generated;
-using ComfyTyped.SwarmUI;
-using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
@@ -43,12 +40,11 @@ internal sealed class WanGenerationSession(
         ArgumentNullException.ThrowIfNull(context);
         ClipPlan clip = context.Clip;
         _ = clip.RequireWanPayload();
-        // Multi-stage clips are refused during capability validation; a clip that reached the
-        // runtime without exactly one stage means the two disagree.
-        StagePlan stage = clip.Stages.Count == 1
-            ? clip.Stages[0]
-            : throw new InvalidOperationException(
-                $"Clip {clip.ClipId} reached the Wan runtime with {clip.Stages.Count} stages.");
+        if (clip.Stages.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Clip {clip.ClipId} reached the Wan runtime without a stage.");
+        }
 
         // Every Wan clip re-enters from the host root: the slice supports hard cuts only, so no
         // clip continues from the previous clip's tail.
@@ -61,24 +57,44 @@ internal sealed class WanGenerationSession(
         g.CurrentMedia.AttachedAudio = null;
         g.CurrentVae = rootSources.Vae?.Duplicate();
 
-        int sectionId = hostScope.ApplyStageOverrides(clip, stage);
-        WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(clip, stage, sectionId);
-        // SwarmUI's generic builder creates latent audio whenever CurrentAudioVae is set. Another
-        // architecture can leave one ambient on a mixed timeline, but Wan's declared output is
-        // video-only, so isolate the call and restore the shared host value afterwards.
-        WGNodeData ambientAudioVae = g.CurrentAudioVae;
-        try
+        WanDecodedVideoStageInput stageInput = new(
+            g,
+            _dimensions,
+            plan.FramesPerSecond,
+            _trimmer);
+        foreach (StagePlan stage in clip.Stages)
         {
-            g.CurrentAudioVae = null;
-            g.CreateImageToVideo(genInfo);
+            int sectionId = hostScope.ApplyStageOverrides(clip, stage);
+            WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
+                clip,
+                stage,
+                sectionId);
+            stageInput.Configure(clip, stage, genInfo);
+            // SwarmUI's generic builder creates latent audio whenever CurrentAudioVae is set.
+            // Another architecture can leave one ambient on a mixed timeline, but Wan's declared
+            // output is video-only, so isolate every pass and restore the shared host value.
+            WGNodeData ambientAudioVae = g.CurrentAudioVae;
+            try
+            {
+                g.CurrentAudioVae = null;
+                g.CreateImageToVideo(genInfo);
+            }
+            finally
+            {
+                g.CurrentAudioVae = ambientAudioVae;
+            }
+            stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
+            hostScope.PublishIntermediate(stage);
         }
-        finally
+        StagePlan finalStage = clip.Stages[^1];
+        if (finalStage.Output.IsTimelineTerminal && _trimmer.IsRequested)
         {
-            g.CurrentAudioVae = ambientAudioVae;
+            _trimmer.Apply();
         }
-        DecodedClipArtifact output = Publish(clip, stage, genInfo);
-        hostScope.PublishIntermediate(stage);
-        return output;
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        return DecodedClipArtifact.FromRuntime(
+            RuntimeArtifact.Capture(g, bridge, ArtifactOrigin.StageOutput),
+            clip);
     }
 
     public void Dispose() => hostScope.Dispose();
@@ -148,51 +164,5 @@ internal sealed class WanGenerationSession(
                 + $"{snapped} — Wan generates in steps of {resolution.FrameGrid} frames.");
         }
         return snapped;
-    }
-
-    /// <summary>
-    /// Reconciles the host's output with the plan's. The clip's decoded video becomes the neutral
-    /// artifact assembly consumes, carrying the dimensions and length the graph actually produces.
-    /// </summary>
-    private DecodedClipArtifact Publish(
-        ClipPlan clip,
-        StagePlan stage,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo)
-    {
-        DropHostClipTrim();
-        g.CurrentMedia.Width = _dimensions.Width;
-        g.CurrentMedia.Height = _dimensions.Height;
-        g.CurrentMedia.Frames = genInfo.Frames ?? g.CurrentMedia.Frames;
-        g.CurrentMedia.FPS = genInfo.VideoFPS ?? g.CurrentMedia.FPS;
-        g.CurrentVae = genInfo.Vae;
-        if (stage.Output.IsTimelineTerminal && _trimmer.IsRequested)
-        {
-            _trimmer.Apply();
-        }
-        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        return DecodedClipArtifact.FromRuntime(
-            RuntimeArtifact.Capture(g, bridge, ArtifactOrigin.StageOutput),
-            clip);
-    }
-
-    /// <summary>
-    /// The host trims every image-to-video pass it builds, but the global trim is a property of the
-    /// finished timeline, not of each clip in it. Left in place, a multi-clip timeline would trim
-    /// once per clip and then once more over the join.
-    /// </summary>
-    private void DropHostClipTrim()
-    {
-        if (!_trimmer.IsRequested || g.CurrentMedia?.Path is not JArray { Count: 2 } path)
-        {
-            return;
-        }
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        if (bridge.NodeAt<SwarmTrimFramesNode>(path)?.Image.Connection is not INodeOutput source)
-        {
-            return;
-        }
-        string trimNodeId = $"{path[0]}";
-        g.CurrentMedia = g.CurrentMedia.WithPath(source.ToPath());
-        VideoGraphHelpers.RemoveNode(g, bridge, trimNodeId);
     }
 }

@@ -6,8 +6,8 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Wan;
 
 /// <summary>
-/// Wan 2.2 image-to-video. The first slice supports any number of cut-only clips with one active
-/// stage per clip; every other authoring feature is declared unsupported so the common capability
+/// Wan 2.2 image-to-video. Clips may chain same-profile stages over the preceding decoded stage
+/// output; every other authoring feature is declared unsupported so the common capability
 /// validator rejects it before graph mutation rather than an executor discovering it late.
 /// </summary>
 internal sealed class WanArchitectureModule : IVideoArchitectureModule
@@ -50,13 +50,16 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
             },
         ],
         new(
-            ArchitectureCapability.GeneratedEntry | ArchitectureCapability.DecodedOutput,
+            ArchitectureCapability.GeneratedEntry
+                | ArchitectureCapability.MultiStage
+                | ArchitectureCapability.DecodedOutput,
             ClipCapability.Prompts,
-            StageCapability.ImageInput,
+            StageCapability.ImageInput | StageCapability.VideoInput,
             OutputCapability.Video),
         WanBoundaryPolicy.Instance)
     {
-        StageGuideReferences = StageGuideReferencePolicy.GeneratedOnly,
+        StageGuideReferences = new(
+            StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
     };
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
@@ -83,7 +86,9 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
         ArchitectureClipCompileContext context)
     {
-        WanClipPlanCompilation compilation = WanClipPlanCompiler.Compile(clip);
+        WanClipPlanCompilation compilation = WanClipPlanCompiler.Compile(
+            clip,
+            stageModels);
         return new(
             compilation.Payload,
             compilation.Stages.ToDictionary(

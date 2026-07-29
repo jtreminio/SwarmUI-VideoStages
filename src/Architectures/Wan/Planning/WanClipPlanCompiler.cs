@@ -1,3 +1,4 @@
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan.Planning;
@@ -14,9 +15,12 @@ internal sealed record WanClipPlanCompilation(
 /// </summary>
 internal static class WanClipPlanCompiler
 {
-    internal static WanClipPlanCompilation Compile(ClipSpec clip)
+    internal static WanClipPlanCompilation Compile(
+        ClipSpec clip,
+        IReadOnlyDictionary<int, ResolvedVideoModel> stageModels)
     {
         ArgumentNullException.ThrowIfNull(clip);
+        ArgumentNullException.ThrowIfNull(stageModels);
         List<PlanDiagnostic> diagnostics = [];
         void Refuse(bool configured, string option, int? stageId = null)
         {
@@ -33,16 +37,59 @@ internal static class WanClipPlanCompiler
         }
 
         Dictionary<int, WanStagePayload> stages = [];
-        foreach (StageSpec stage in clip.Stages ?? [])
+        IReadOnlyList<StageSpec> authoredStages = clip.Stages ?? [];
+        for (int stageIndex = 0; stageIndex < authoredStages.Count; stageIndex++)
         {
-            // Wan enters from a still image, so a stage that generates nothing would hand a single
-            // frame to timeline assembly instead of decoded video.
+            StageSpec stage = authoredStages[stageIndex];
+            if (!stageModels.TryGetValue(
+                    stage.ClipStageRawIndex,
+                    out ResolvedVideoModel resolved)
+                || resolved.ArchitectureId != WanArchitectureModule.ArchitectureId
+                || resolved.ModelProfileId != WanArchitectureModule.ImageToVideoProfileId)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "wan22.stage-profile.unsupported",
+                    $"Clip {clip.Id} stage {stage.Id} must resolve to architecture "
+                        + $"'{WanArchitectureModule.ArchitectureId}' profile "
+                        + $"'{WanArchitectureModule.ImageToVideoProfileId}', but resolved "
+                        + $"architecture '{resolved?.ArchitectureId.ToString() ?? "<missing>"}' "
+                        + $"profile '{resolved?.ModelProfileId.ToString() ?? "<missing>"}'.",
+                    clip.Id,
+                    stage.Id));
+            }
             Refuse(stage.IsPassthrough, "a stage that generates nothing", stage.Id);
-            // Wan's only stage generates from the host image, which is a full generation. Partial
-            // regeneration needs a prior video to denoise from, and this slice never has one.
+            bool firstStage = stageIndex == 0;
             Refuse(
-                !stage.IsPassthrough && stage.Control < 1,
-                "partial regeneration",
+                firstStage
+                    && !StringUtils.Equals(stage.ImageReference, "Generated"),
+                "a first-stage input other than 'Generated'",
+                stage.Id);
+            Refuse(
+                !firstStage
+                    && !StringUtils.Equals(stage.ImageReference, "PreviousStage"),
+                "a later-stage input other than 'PreviousStage'",
+                stage.Id);
+            Refuse(
+                firstStage
+                    && (!double.IsFinite(stage.Control) || stage.Control != 1),
+                "first-stage control other than full generation (1)",
+                stage.Id);
+            Refuse(
+                !firstStage
+                    && (!double.IsFinite(stage.Control)
+                        || stage.Control <= 0
+                        || stage.Control > 1),
+                "later-stage control outside the finite range (0, 1]",
+                stage.Id);
+            Refuse(
+                !firstStage
+                    && double.IsFinite(stage.Control)
+                    && stage.Control > 0
+                    && WanStageSchedulePolicy.IsQuantizedZeroPartial(
+                        stage.Steps,
+                        stage.Control),
+                "later-stage partial control that quantizes to sampler start step 0",
                 stage.Id);
             stages.Add(
                 stage.ClipStageRawIndex,
