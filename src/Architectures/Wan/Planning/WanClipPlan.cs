@@ -5,7 +5,8 @@ namespace VideoStages.Architectures.Wan.Planning;
 
 /// <summary>
 /// The complete graph-free instruction for one Wan stage. The common plan treats this as opaque.
-/// <c>Control</c> is regeneration strength, so a lower value starts sampling later in the schedule.
+/// <c>Control</c> is regeneration strength, so a lower positive value starts sampling later in the
+/// schedule; exact zero is a samplerless passthrough for a decoded input.
 /// </summary>
 internal sealed record WanStagePayload(
     string Model,

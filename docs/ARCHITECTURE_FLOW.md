@@ -95,11 +95,16 @@ or frontend classification cannot authorize an unsupported model.
 
 `Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`, and
 `NoneArchitecture.Descriptor` are typed `VideoArchitectureDescriptor` values.
-Wan publishes image-to-video entry, same-profile multi-stage chaining,
-video-only output, a four-frame profile grid, and cut-only boundaries. Stage 0
-uses the generated root at full control; each later stage uses
-`PreviousStage`, with finite control in `(0, 1]`. The same typed boundary/rule
-objects feed backend validation and frontend publication.
+Wan publishes image-to-video and clip-local source-video entry, same-profile
+multi-stage chaining, video-only output, a four-frame profile grid, and
+cut-only boundaries. Generated stage 0 uses the host root at full control.
+Sourced stage 0 uses its conformed source at finite control in `[0, 1]`; each
+later stage uses `PreviousStage` with the same bound. Exact control `0` is a
+samplerless decoded-video passthrough for those two decoded inputs, while
+positive partial control still must quantize to a nonzero start step.
+Refine-video and audio capabilities remain absent. A request-global refine
+source cannot coexist with a clip-local sourced Wan timeline. The same typed
+boundary/rule objects feed backend validation and frontend publication.
 
 `ArchitectureCatalogSerializer.Serialize` projects the descriptor catalog and
 the currently resolved, session-authorized host models to:
@@ -293,8 +298,8 @@ orchestration carries these values; it must not interpret their graph meaning.
 For Wan, `WanClipPlanCompiler.Compile` produces the smaller `WanClipPayload`
 and `WanStagePayload`. It requires every active stage to resolve to the exact
 `wan22` / `wan-2.2-i2v-14b` profile, enforces the generated-root /
-previous-stage chain, and refuses unsupported or empty integer schedules that
-the common capability validator cannot yet see.
+source-video / previous-stage chain, and refuses unsupported or empty integer
+schedules that the common capability validator cannot yet see.
 
 Blocking `PlanDiagnostic` values are thrown by
 `RequireVideoExecutionPlanContext` before a VideoStages mutation phase.
@@ -312,9 +317,10 @@ diagnostics stop the request before later VideoStages host phases mutate the
 graph.
 `WanExecutionAdapter.PreflightRequest` similarly refuses host-only options the
 slice cannot honor. A compatible swap model is delegated to the host adapter,
-but every later partial stage must retain a non-empty high-noise interval under
-the request-global swap split. Global end-frame and creativity settings remain
-bounded to the cases with unambiguous provenance.
+but every decoded partial input — sourced stage 0 or a later stage — must retain
+a non-empty high-noise interval under the request-global swap split. Global
+end-frame is limited to one ImageToVideo clip. Global creativity remains
+refused in favor of the authored clip-local controls.
 
 “Before mutation” here means before **VideoStages** mutation. SwarmUI may
 already have built host graph state that VideoStages captures or replaces.
@@ -414,18 +420,28 @@ The `none` path uses `SourceOnlyGenerationSession` and
 ### B6b. Wan direct runtime execution
 
 `WanGenerationSessionFactory` snapshots the host image and VAE.
-`WanGenerationSession` resets each hard-cut clip to that captured root, then
-loops its compiled active stages. Stage 0 delegates the root image to SwarmUI's
-`WorkflowGenerator.CreateImageToVideo`; each later stage conditions on the
-preceding decoded batch and, for partial control, VAE-encodes that same batch
-before starting at the shared integer schedule step. The session publishes
-authored intermediates and removes every host per-pass trim. For a terminal
-single-clip session it applies the global trim after the final stage; for a
-multi-clip timeline, common assembly applies that trim once over the joined
-timeline. The session returns the final decoded video-only artifact. A new
-hard-cut clip resets to the captured root rather than consuming the previous
-clip. LTX/Wan boundaries are neutral hard cuts; no family assembler crosses the
-architecture boundary.
+`WanGenerationSession` prepares each hard-cut clip independently, then loops
+its compiled stages. Generated stage 0 resets to the captured root and
+delegates that image to SwarmUI's
+`WorkflowGenerator.CreateImageToVideo`. A sourced clip instead uses
+`SourcedClipInstaller` to resample, window, and resize its exact clip-local
+footage to WAN's snapped dimensions and requests video-only installation, so
+the source-audio trim branch is never built. Exact control `0` preserves that
+decoded source, or the immediately preceding decoded stage, without opening a
+host model section or constructing conditioning, latent, or sampler nodes.
+Eligible passthrough intermediates are still published. Full control
+conditions from source frame 0 without VAE-encoding the source batch; positive
+partial control conditions from frame 0 and VAE-encodes a distinct full
+conformed-batch selector. Each later stage uses the same passthrough/full/
+partial rules over the preceding decoded batch. The session validates the
+immutable clip, entry, source, stage input, payload, and canonical profile
+contract before graph mutation. It publishes authored intermediates and
+removes every host per-pass trim. For a terminal single-clip session it applies
+the global trim after the final stage; for a multi-clip timeline, common
+assembly applies that trim once over the joined timeline. The session returns
+the final decoded video-only artifact. A new generated hard-cut clip resets to
+the captured root rather than consuming the previous clip. LTX/Wan boundaries
+are neutral hard cuts; no family assembler crosses the architecture boundary.
 
 ### B7. Return neutral artifacts and publish
 

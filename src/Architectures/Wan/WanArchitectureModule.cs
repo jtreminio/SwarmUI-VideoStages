@@ -6,9 +6,10 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Wan;
 
 /// <summary>
-/// Wan 2.2 image-to-video. Clips may chain same-profile stages over the preceding decoded stage
-/// output; every other authoring feature is declared unsupported so the common capability
-/// validator rejects it before graph mutation rather than an executor discovering it late.
+/// Wan 2.2 image-to-video. Clips enter from either the generated host image or bounded clip-local
+/// source footage, then may chain same-profile stages over the preceding decoded stage output.
+/// Every other authoring feature is declared unsupported so common capability validation rejects
+/// it before graph mutation rather than an executor discovering it late.
 /// </summary>
 internal sealed class WanArchitectureModule : IVideoArchitectureModule
 {
@@ -34,7 +35,7 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         ArchitectureId,
         "Wan 2.2",
         ImageToVideoProfileId,
-        [ArchitectureEntryMode.ImageToVideo],
+        [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo],
         [AudioSourceKind.Disabled],
         [
             new(
@@ -51,9 +52,10 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         ],
         new(
             ArchitectureCapability.GeneratedEntry
+                | ArchitectureCapability.SourcedEntry
                 | ArchitectureCapability.MultiStage
                 | ArchitectureCapability.DecodedOutput,
-            ClipCapability.Prompts,
+            ClipCapability.Prompts | ClipCapability.SourceVideo,
             StageCapability.ImageInput | StageCapability.VideoInput,
             OutputCapability.Video),
         WanBoundaryPolicy.Instance)

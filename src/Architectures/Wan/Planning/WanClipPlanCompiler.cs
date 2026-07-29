@@ -38,6 +38,7 @@ internal static class WanClipPlanCompiler
 
         Dictionary<int, WanStagePayload> stages = [];
         IReadOnlyList<StageSpec> authoredStages = clip.Stages ?? [];
+        bool sourcedEntry = clip.SourceVideo is not null;
         for (int stageIndex = 0; stageIndex < authoredStages.Count; stageIndex++)
         {
             StageSpec stage = authoredStages[stageIndex];
@@ -58,8 +59,12 @@ internal static class WanClipPlanCompiler
                     clip.Id,
                     stage.Id));
             }
-            Refuse(stage.IsPassthrough, "a stage that generates nothing", stage.Id);
             bool firstStage = stageIndex == 0;
+            bool decodedStageInput = sourcedEntry || !firstStage;
+            Refuse(
+                stage.IsPassthrough && !decodedStageInput,
+                "a generated-root stage that generates nothing",
+                stage.Id);
             Refuse(
                 firstStage
                     && !StringUtils.Equals(stage.ImageReference, "Generated"),
@@ -72,29 +77,30 @@ internal static class WanClipPlanCompiler
                 stage.Id);
             Refuse(
                 firstStage
+                    && !sourcedEntry
                     && (!double.IsFinite(stage.Control) || stage.Control != 1),
-                "first-stage control other than full generation (1)",
+                "generated first-stage control other than full generation (1)",
                 stage.Id);
             Refuse(
-                !firstStage
+                decodedStageInput
                     && (!double.IsFinite(stage.Control)
-                        || stage.Control <= 0
+                        || stage.Control < 0
                         || stage.Control > 1),
-                "later-stage control outside the finite range (0, 1]",
+                "decoded-input control outside the finite range [0, 1]",
                 stage.Id);
             Refuse(
-                !firstStage
+                decodedStageInput
                     && double.IsFinite(stage.Control)
                     && stage.Control > 0
                     && WanStageSchedulePolicy.IsQuantizedZeroPartial(
                         stage.Steps,
                         stage.Control),
-                "later-stage partial control that quantizes to sampler start step 0",
+                "decoded-input partial control that quantizes to sampler start step 0",
                 stage.Id);
             stages.Add(
                 stage.ClipStageRawIndex,
                 new WanStagePayload(
-                    stage.Model,
+                    resolved?.ModelName ?? stage.Model,
                     stage.Control,
                     stage.Steps,
                     stage.CfgScale,

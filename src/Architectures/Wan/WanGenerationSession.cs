@@ -25,6 +25,7 @@ internal sealed class WanGenerationSession(
 {
     private readonly PlannedStagePromptResolver _prompts = new(g);
     private readonly GlobalVideoFrameTrimmer _trimmer = new(g);
+    private readonly SourcedClipInstaller _sourcedClipInstaller = new(g);
 
     /// <summary>
     /// The timeline resolution on the shared VideoStages pixel grid, which is already a whole
@@ -39,23 +40,41 @@ internal sealed class WanGenerationSession(
     {
         ArgumentNullException.ThrowIfNull(context);
         ClipPlan clip = context.Clip;
-        _ = clip.RequireWanPayload();
-        if (clip.Stages.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"Clip {clip.ClipId} reached the Wan runtime without a stage.");
-        }
+        WanRuntimeClipContract.Validate(plan, clip);
 
-        // Every Wan clip re-enters from the host root: the slice supports hard cuts only, so no
-        // clip continues from the previous clip's tail.
-        g.CurrentMedia = rootSources.Media?.Duplicate()
-            ?? throw new SwarmUserErrorException(
-                $"VideoStages: clip {clip.ClipId} has no host image to generate from.");
-        // Wan declares audio disabled. A mixed timeline's shared host image may acquire an
-        // architecture-owned latent-audio attachment while another factory prepares its root;
-        // it is not a decoded track Wan can carry into its neutral clip artifact.
+        if (clip.IsSourced)
+        {
+            SourceVideoPlan source = clip.SourceVideo
+                ?? throw new InvalidOperationException(
+                    $"Sourced Wan clip {clip.ClipId} has no source-video plan.");
+            ClipPlan sourceInstallPlan = clip with
+            {
+                SourceVideo = source with
+                {
+                    TargetWidth = _dimensions.Width,
+                    TargetHeight = _dimensions.Height,
+                },
+            };
+            g.CurrentMedia = _sourcedClipInstaller.TryInstall(
+                sourceInstallPlan,
+                includeSourceAudio: false)
+                ?? throw new SwarmUserErrorException(
+                    $"VideoStages: clip {clip.ClipId} source video could not be installed.");
+            g.CurrentVae = null;
+        }
+        else
+        {
+            // Every generated Wan clip re-enters from the host root: the slice supports hard cuts
+            // only, so no clip continues from the previous clip's tail.
+            g.CurrentMedia = rootSources.Media?.Duplicate()
+                ?? throw new SwarmUserErrorException(
+                    $"VideoStages: clip {clip.ClipId} has no host image to generate from.");
+            g.CurrentVae = rootSources.Vae?.Duplicate();
+        }
+        // Wan declares audio disabled. The sourced path does not build an audio branch, and a
+        // mixed timeline's shared host image may still acquire an architecture-owned attachment.
+        // Neither can become a decoded track on Wan's neutral clip artifact.
         g.CurrentMedia.AttachedAudio = null;
-        g.CurrentVae = rootSources.Vae?.Duplicate();
 
         WanDecodedVideoStageInput stageInput = new(
             g,
@@ -64,6 +83,15 @@ internal sealed class WanGenerationSession(
             _trimmer);
         foreach (StagePlan stage in clip.Stages)
         {
+            if (stage.IsPassthrough)
+            {
+                stageInput.ConfigurePassthrough(
+                    clip,
+                    stage,
+                    ResolveFrames(clip, stage, sectionId: null));
+                hostScope.PublishIntermediate(stage);
+                continue;
+            }
             int sectionId = hostScope.ApplyStageOverrides(clip, stage);
             WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
                 clip,
@@ -131,21 +159,35 @@ internal sealed class WanGenerationSession(
     }
 
     /// <summary>
-    /// An authored clip duration wins; otherwise the clip inherits the host's video length. Wan
-    /// enters from a still image, so there is no source media length to fall back on. Either way
-    /// the count is snapped, because Wan generates whole latent frames and an off-grid request
-    /// silently yields fewer pixel frames than were asked for.
+    /// An authored clip duration wins; otherwise a generated clip inherits the host video length.
+    /// Sourced clips always carry an authored frame window from the source plan. Either way the
+    /// count is snapped, because Wan generates whole latent frames and an off-grid request silently
+    /// yields fewer pixel frames than were asked for.
     /// </summary>
-    private int? ResolveFrames(ClipPlan clip, StagePlan stage, int sectionId)
+    private int? ResolveFrames(ClipPlan clip, StagePlan stage, int? sectionId)
     {
-        int? requested = clip.Frames is int authored && authored > 0
-            ? authored
-            : g.UserInput.TryGet(
+        int? requested;
+        if (clip.Frames is int authored && authored > 0)
+        {
+            requested = authored;
+        }
+        else if (sectionId is int scopedSection)
+        {
+            requested = g.UserInput.TryGet(
                 T2IParamTypes.VideoFrames,
-                out int hostFrames,
-                sectionId: sectionId)
-                ? hostFrames
-                : null;
+                out int scopedFrames,
+                sectionId: scopedSection)
+                    ? scopedFrames
+                    : null;
+        }
+        else
+        {
+            requested = g.UserInput.TryGet(
+                T2IParamTypes.VideoFrames,
+                out int hostFrames)
+                    ? hostFrames
+                    : null;
+        }
         if (requested is not int frames)
         {
             return null;

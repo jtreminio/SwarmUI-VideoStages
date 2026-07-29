@@ -16,9 +16,10 @@ internal sealed class WanGenerationSessionFactory(WorkflowGenerator g) :
     public void PrepareTimeline(ArchitectureTimelinePreparationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        // Wan clips all start from the image the host left current, whether or not Wan owns the
-        // root. On a mixed timeline another architecture may have prepared that image first, which
-        // is harmless here only because Wan rescales its own entry image anyway.
+        // Generated Wan clips start from the image the host left current, whether or not Wan owns
+        // the root. Sourced Wan clips ignore this snapshot and install their own clip-local media.
+        // On a mixed timeline another architecture may have prepared the host image first, which is
+        // harmless because generated Wan clips rescale their own entry image.
         _rootSources = new(g.CurrentMedia?.Duplicate(), g.CurrentVae?.Duplicate());
     }
 

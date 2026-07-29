@@ -53,6 +53,11 @@ public class WanArchitectureTests
 
         Assert.True(descriptor.Capabilities.Architecture.HasFlag(
             ArchitectureCapability.MultiStage));
+        Assert.True(descriptor.Capabilities.Architecture.HasFlag(
+            ArchitectureCapability.SourcedEntry));
+        Assert.True(descriptor.Capabilities.Clip.HasFlag(ClipCapability.SourceVideo));
+        Assert.Contains(ArchitectureEntryMode.SourceVideo, descriptor.EntryModes);
+        Assert.DoesNotContain(ArchitectureEntryMode.RefineVideo, descriptor.EntryModes);
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.ImageInput));
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.VideoInput));
         Assert.True(descriptor.StageGuideReferences.Allows(
@@ -128,9 +133,6 @@ public class WanArchitectureTests
                 IcLoras = [new("wan-ic.safetensors", "Upload", 1, 1, "canny", null)],
             },
             "IC-LoRA");
-        AssertRejected(
-            GeneratedClip(0, stage) with { SourceVideo = new("data", "clip.mp4", 0) },
-            "entry mode");
     }
 
     [Fact]
@@ -164,6 +166,77 @@ public class WanArchitectureTests
         Assert.Equal("normal", firstPayload.Scheduler);
         Assert.Equal(0.35, secondPayload.Control);
         Assert.Equal(17, secondPayload.Steps);
+    }
+
+    [Fact]
+    public void Compilation_accepts_bounded_sourced_stage_zero_and_previous_stage_chaining()
+    {
+        StageSpec first = Stage(10, "wan-model") with { Control = 0.5 };
+        StageSpec second = Stage(11, "wan-model") with
+        {
+            Control = 1,
+            ImageReference = "PreviousStage",
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+        };
+        ClipPlan compiled = Assert.Single(
+            Compile(SourcedClip(0, first, second)).Clips);
+
+        Assert.Equal(ArchitectureEntryMode.SourceVideo, compiled.EntryMode);
+        Assert.Equal(ClipInputKind.SourceVideo, compiled.Input);
+        Assert.Equal(StageInputKind.SourceVideo, compiled.Stages[0].Input);
+        Assert.Equal(StageInputKind.PreviousStage, compiled.Stages[1].Input);
+        Assert.Equal(0.5, compiled.Stages[0].RequireWanPayload().Control);
+        Assert.Equal(1, compiled.Stages[1].RequireWanPayload().Control);
+    }
+
+    [Fact]
+    public void Compilation_canonicalizes_an_authored_model_alias()
+    {
+        StageSpec stage = Stage(10, "wan-model-alias");
+        VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
+        ResolvedVideoModel resolved = new(
+            "canonical-wan-model.safetensors",
+            descriptor.Id,
+            WanArchitectureModule.ImageToVideoProfileId,
+            descriptor);
+
+        WanClipPlanCompilation compilation = WanClipPlanCompiler.Compile(
+            GeneratedClip(0, stage),
+            new Dictionary<int, ResolvedVideoModel>
+            {
+                [stage.ClipStageRawIndex] = resolved,
+            });
+
+        Assert.DoesNotContain(
+            compilation.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        Assert.Equal(
+            resolved.ModelName,
+            Assert.Single(compilation.Stages).Value.Model);
+    }
+
+    [Fact]
+    public void Compilation_accepts_exact_zero_as_decoded_input_passthrough()
+    {
+        StageSpec first = Stage(10, "wan-model") with { Control = 0 };
+        StageSpec second = Stage(11, "wan-model") with
+        {
+            Control = 0,
+            ImageReference = "PreviousStage",
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+        };
+
+        ClipPlan compiled = Assert.Single(
+            Compile(SourcedClip(0, first, second)).Clips);
+
+        Assert.All(compiled.Stages, stage => Assert.True(stage.IsPassthrough));
+        Assert.Equal(StageInputKind.SourceVideo, compiled.Stages[0].Input);
+        Assert.Equal(StageInputKind.PreviousStage, compiled.Stages[1].Input);
+        Assert.All(
+            compiled.Stages,
+            stage => Assert.Equal(0, stage.RequireWanPayload().Control));
     }
 
     [Fact]
@@ -238,7 +311,7 @@ public class WanArchitectureTests
 
         AssertRefused(
             GeneratedClip(0, stage with { Control = 0 }),
-            "a stage that generates nothing");
+            "generated-root stage that generates nothing");
         AssertRefused(
             GeneratedClip(0, stage with { Control = 0.8 }),
             "first-stage control");
@@ -252,25 +325,12 @@ public class WanArchitectureTests
                 stage with
                 {
                     Id = 11,
-                    Control = 0,
-                    ImageReference = "PreviousStage",
-                    ClipStageIndex = 1,
-                    ClipStageRawIndex = 1,
-                }),
-            "a stage that generates nothing");
-        AssertRefused(
-            GeneratedClip(
-                0,
-                stage,
-                stage with
-                {
-                    Id = 11,
                     Control = -0.1,
                     ImageReference = "PreviousStage",
                     ClipStageIndex = 1,
                     ClipStageRawIndex = 1,
                 }),
-            "finite range (0, 1]");
+            "finite range [0, 1]");
         AssertRefused(
             GeneratedClip(
                 0,
@@ -283,7 +343,7 @@ public class WanArchitectureTests
                     ClipStageIndex = 1,
                     ClipStageRawIndex = 1,
                 }),
-            "finite range (0, 1]");
+            "finite range [0, 1]");
         AssertRefused(
             GeneratedClip(
                 0,
@@ -309,6 +369,24 @@ public class WanArchitectureTests
                     ClipStageIndex = 1,
                     ClipStageRawIndex = 1,
                 }),
+            "quantizes to sampler start step 0");
+        AssertRefused(
+            SourcedClip(0, stage with { Control = 1.1 }),
+            "decoded-input control outside the finite range [0, 1]");
+        AssertRefused(
+            SourcedClip(0, stage with { Control = double.NaN }),
+            "decoded-input control outside the finite range [0, 1]");
+        AssertRefused(
+            SourcedClip(
+                0,
+                stage with
+                {
+                    Control = 0.5,
+                    ImageReference = "PreviousStage",
+                }),
+            "first-stage input other than 'Generated'");
+        AssertRefused(
+            SourcedClip(0, stage with { Control = 0.9, Steps = 8 }),
             "quantizes to sampler start step 0");
     }
 
@@ -451,6 +529,12 @@ public class WanArchitectureTests
             null,
             [],
             stages);
+
+    private static ClipSpec SourcedClip(int id, params StageSpec[] stages) =>
+        GeneratedClip(id, stages) with
+        {
+            SourceVideo = new("data", "source.mp4", 0),
+        };
 
     private static StageSpec Stage(int id, string model) =>
         new(id, 1, 1, "pixel-lanczos", model, 12, 4.5, "euler", "normal", "Generated");

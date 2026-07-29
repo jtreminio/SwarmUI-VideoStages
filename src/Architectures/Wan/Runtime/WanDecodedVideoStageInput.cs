@@ -4,6 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Planning;
 
@@ -29,18 +30,25 @@ internal sealed class WanDecodedVideoStageInput(
         ArgumentNullException.ThrowIfNull(clip);
         ArgumentNullException.ThrowIfNull(stage);
         ArgumentNullException.ThrowIfNull(genInfo);
-        if (stage.Input != StageInputKind.PreviousStage)
+        WanStagePayload payload = stage.RequireWanPayload();
+        if (stage.Input == StageInputKind.RootMedia)
         {
-            if (stage.ClipStageIndex != 0 || stage.Input != StageInputKind.RootMedia)
+            if (stage.ClipStageIndex != 0 || clip.IsSourced)
             {
                 throw new InvalidOperationException(
                     $"Clip {clip.ClipId} stage {stage.StageId} has unsupported Wan input "
                     + $"'{stage.Input}'.");
             }
+            if (!double.IsFinite(payload.Control) || payload.Control != 1)
+            {
+                throw new InvalidOperationException(
+                    $"Clip {clip.ClipId} stage {stage.StageId} reached the Wan runtime with "
+                    + $"generated-root control '{payload.Control}' instead of 1.");
+            }
             return;
         }
+        ValidateDecodedStagePosition(clip, stage);
 
-        WanStagePayload payload = stage.RequireWanPayload();
         if (!double.IsFinite(payload.Control) || payload.Control <= 0 || payload.Control > 1)
         {
             throw new InvalidOperationException(
@@ -88,6 +96,27 @@ internal sealed class WanDecodedVideoStageInput(
         genInfo.StartStep = startStep;
     }
 
+    internal void ConfigurePassthrough(
+        ClipPlan clip,
+        StagePlan stage,
+        int? expectedFrames)
+    {
+        ArgumentNullException.ThrowIfNull(clip);
+        ArgumentNullException.ThrowIfNull(stage);
+        WanStagePayload payload = stage.RequireWanPayload();
+        ValidateDecodedStagePosition(clip, stage);
+        if (!stage.IsPassthrough
+            || !double.IsFinite(payload.Control)
+            || payload.Control != 0)
+        {
+            throw new InvalidOperationException(
+                $"Clip {clip.ClipId} stage {stage.StageId} reached the Wan runtime with invalid "
+                + $"passthrough control '{payload.Control}'.");
+        }
+        ValidateDecodedInput(clip, stage, expectedFrames);
+        g.CurrentMedia.AttachedAudio = null;
+    }
+
     internal void NormalizeDecodedOutput(
         ClipPlan clip,
         StagePlan stage,
@@ -120,14 +149,17 @@ internal sealed class WanDecodedVideoStageInput(
     private void ValidateDecodedInput(ClipPlan clip, StagePlan stage, int? expectedFrames)
     {
         WGNodeData media = g.CurrentMedia;
+        string owner = stage.Input == StageInputKind.SourceVideo
+            ? "conformed source video"
+            : "immediately previous stage's decoded video";
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         if (media?.DataType != WGNodeData.DT_VIDEO
             || media.Path is not JArray { Count: 2 } path
             || bridge.ResolvePath(path) is null)
         {
             throw new SwarmUserErrorException(
-                $"VideoStages: clip {clip.ClipId} stage {stage.StageId} requires the immediately "
-                + "previous stage's resolvable decoded video.");
+                $"VideoStages: clip {clip.ClipId} stage {stage.StageId} requires its resolvable "
+                + $"{owner}.");
         }
         if (media.Width != dimensions.Width
             || media.Height != dimensions.Height
@@ -135,10 +167,31 @@ internal sealed class WanDecodedVideoStageInput(
             || expectedFrames is int frames && media.Frames != frames)
         {
             throw new SwarmUserErrorException(
-                $"VideoStages: clip {clip.ClipId} stage {stage.StageId} requires the previous "
-                + $"stage at {dimensions.Width}x{dimensions.Height}, {expectedFrames} frames, "
+                $"VideoStages: clip {clip.ClipId} stage {stage.StageId} requires its {owner} at "
+                + $"{dimensions.Width}x{dimensions.Height}, {expectedFrames} frames, "
                 + $"{framesPerSecond} fps, but received {media.Width}x{media.Height}, "
                 + $"{media.Frames} frames, {media.GetRawFPS()} fps.");
+        }
+    }
+
+    private static void ValidateDecodedStagePosition(ClipPlan clip, StagePlan stage)
+    {
+        bool validSource =
+            stage.Input == StageInputKind.SourceVideo
+            && stage.ClipStageIndex == 0
+            && clip.EntryMode == ArchitectureEntryMode.SourceVideo
+            && clip.Input == ClipInputKind.SourceVideo
+            && clip.IsSourced
+            && clip.SourceVideo is not null;
+        bool validPrevious =
+            stage.Input == StageInputKind.PreviousStage
+            && stage.ClipStageIndex > 0;
+        if (!validSource && !validPrevious)
+        {
+            throw new InvalidOperationException(
+                $"Clip {clip.ClipId} stage {stage.StageId} has unsupported Wan input "
+                + $"'{stage.Input}' at clip-stage index {stage.ClipStageIndex} for entry mode "
+                + $"'{clip.EntryMode}'.");
         }
     }
 

@@ -25,6 +25,18 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     {
         ArgumentNullException.ThrowIfNull(context);
         List<PlanDiagnostic> diagnostics = [];
+        if (context.Plan.Root.HostKind == HostRootKind.GlobalRefineSource
+            && context.Plan.Clips.Any(
+                clip => clip.Architecture?.Id == ArchitectureId
+                    && clip.EntryMode == ArchitectureEntryMode.SourceVideo
+                    && clip.Input == ClipInputKind.SourceVideo
+                    && clip.IsSourced
+                    && clip.SourceVideo is not null))
+        {
+            diagnostics.Add(Refuse(
+                "'Refine Source Video' is a request-global donor and cannot coexist with a "
+                + "clip-local sourced Wan timeline."));
+        }
         if (generator.UserInput.Get(T2IParamTypes.VideoSwapModel, null) is T2IModel swapModel)
         {
             if (!WanArchitectureModule.Instance.TryResolveModel(swapModel, out ResolvedVideoModel swap))
@@ -73,7 +85,9 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
                     clip => clip.Architecture.Id == ArchitectureId))
                 {
                     foreach (StagePlan stage in clip.Stages.Where(
-                        stage => !stage.IsPassthrough && stage.ClipStageIndex > 0))
+                        stage => !stage.IsPassthrough
+                            && stage.Input is StageInputKind.SourceVideo
+                                or StageInputKind.PreviousStage))
                     {
                         WanStagePayload payload = stage.RequireWanPayload();
                         if (payload.Control >= 1
@@ -111,6 +125,7 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
                 .ToArray() ?? [];
             bool isSingleCurrentWan =
                 onlyClip?.Architecture?.Id == ArchitectureId
+                && onlyClip.EntryMode == ArchitectureEntryMode.ImageToVideo
                 && activeStages.Length == 1
                 && activeStages[0].ResolvedModel?.ArchitectureId == ArchitectureId
                 && activeStages[0].ResolvedModel?.ModelProfileId
@@ -124,7 +139,8 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
                         .Distinct());
                 diagnostics.Add(Refuse(
                     "'Video End Frame' is request-global and is ambiguous unless the timeline "
-                    + "contains exactly one Wan 2.2 clip using the current image-to-video "
+                    + "contains exactly one Wan 2.2 ImageToVideo clip using the current "
+                    + "image-to-video "
                     + $"profile. This request has {context.Plan.Clips.Count} clip(s) across "
                     + $"architecture(s): {families}."));
             }
@@ -135,9 +151,9 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
             && creativity != 1)
         {
             diagnostics.Add(Refuse(
-                "'Video2Video Creativity' is request-global, but Wan stage 0 has no source-video "
-                + "donor. Use each later stage's authored 'Control' value for Wan refinement "
-                + "instead."));
+                "'Video2Video Creativity' is request-global, but Wan refinement strength is "
+                + "clip-local. Use sourced stage 0 or each later stage's authored 'Control' "
+                + "value instead."));
         }
         return diagnostics;
     }
