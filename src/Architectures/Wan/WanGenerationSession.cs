@@ -98,6 +98,8 @@ internal sealed class WanGenerationSession(
         {
             Generator = g,
             VideoModel = videoModel,
+            VideoSwapModel = g.UserInput.Get(T2IParamTypes.VideoSwapModel, null),
+            VideoSwapPercent = g.UserInput.Get(T2IParamTypes.VideoSwapPercent, 0.5),
             Frames = ResolveFrames(clip, stage, sectionId),
             VideoCFG = payload.CfgScale,
             VideoFPS = plan.FramesPerSecond,

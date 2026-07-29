@@ -15,20 +15,53 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
 
     /// <summary>
-    /// Host video parameters this slice cannot honor. They are consumed by the host's
-    /// image-to-video construction or post-processing rather than the authored clip compiler, and
-    /// each changes the result enough that silently omitting it would be the wrong answer.
+    /// Validates request-global host video parameters before any host graph phase runs. Supported
+    /// swap settings are passed through to the host builder; the remaining settings still change
+    /// the result enough that silently omitting them would be the wrong answer.
     /// </summary>
     public IReadOnlyList<PlanDiagnostic> PreflightRequest(
         ArchitectureRequestPreflightContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         List<PlanDiagnostic> diagnostics = [];
-        if (generator.UserInput.Get(T2IParamTypes.VideoSwapModel, null) is not null)
+        if (generator.UserInput.Get(T2IParamTypes.VideoSwapModel, null) is T2IModel swapModel)
         {
-            diagnostics.Add(Refuse(
-                "'Video Swap Model' is set, but VideoStages does not yet run Wan's low-noise "
-                + "second pass. Clear it to generate with the high-noise model alone."));
+            if (!WanArchitectureModule.Instance.TryResolveModel(swapModel, out ResolvedVideoModel swap))
+            {
+                diagnostics.Add(Refuse(
+                    $"'Video Swap Model' '{swapModel.Name}' is not a supported Wan 2.2 "
+                    + "image-to-video model."));
+            }
+            else
+            {
+                foreach (ClipPlan clip in context.Plan.Clips.Where(
+                    clip => clip.Architecture.Id == ArchitectureId))
+                {
+                    foreach (StagePlan stage in clip.Stages.Where(stage => !stage.IsPassthrough))
+                    {
+                        string mismatch = DescribeSwapIncompatibility(
+                            swap,
+                            clip.ClipId,
+                            stage.StageId,
+                            stage.ResolvedModel);
+                        if (mismatch is null)
+                        {
+                            continue;
+                        }
+                        diagnostics.Add(Refuse(
+                            mismatch,
+                            clip.ClipId,
+                            stage.StageId));
+                    }
+                }
+            }
+            double swapPercent = generator.UserInput.Get(T2IParamTypes.VideoSwapPercent, 0.5);
+            if (!double.IsFinite(swapPercent) || swapPercent < 0 || swapPercent > 1)
+            {
+                diagnostics.Add(Refuse(
+                    $"'Video Swap Percent' must be finite and between 0 and 1, but was "
+                    + $"'{swapPercent}'."));
+            }
         }
         if (generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null) is not null)
         {
@@ -87,8 +120,35 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     public IArchitectureGenerationSessionFactory CreateFactory() =>
         new WanGenerationSessionFactory(generator);
 
-    private static PlanDiagnostic Refuse(string message) => new(
+    internal static bool IsSwapCompatible(
+        ResolvedVideoModel swap,
+        ResolvedVideoModel stage) =>
+        swap is not null
+        && stage is not null
+        && swap.ArchitectureId == stage.ArchitectureId
+        && swap.ModelProfileId == stage.ModelProfileId;
+
+    internal static string DescribeSwapIncompatibility(
+        ResolvedVideoModel swap,
+        int clipId,
+        int stageId,
+        ResolvedVideoModel stage) =>
+        IsSwapCompatible(swap, stage)
+            ? null
+            : $"'Video Swap Model' '{swap?.ModelName ?? "<unresolved>"}' resolves to architecture "
+                + $"'{swap?.ArchitectureId.ToString() ?? "<unresolved>"}' profile "
+                + $"'{swap?.ModelProfileId.ToString() ?? "<unresolved>"}', but clip {clipId} stage "
+                + $"{stageId} uses model '{stage?.ModelName ?? "<unresolved>"}' architecture "
+                + $"'{stage?.ArchitectureId.ToString() ?? "<unresolved>"}' profile "
+                + $"'{stage?.ModelProfileId.ToString() ?? "<unresolved>"}'.";
+
+    private static PlanDiagnostic Refuse(
+        string message,
+        int? clipId = null,
+        int? stageId = null) => new(
         PlanDiagnosticSeverity.Error,
         "wan22.host-param.unsupported",
-        message);
+        message,
+        clipId,
+        stageId);
 }
