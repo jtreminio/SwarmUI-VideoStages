@@ -6,6 +6,7 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectureCatalog";
 import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
@@ -20,10 +21,7 @@ import {
     mountSelect,
     mountVideoStagesData,
 } from "../__test_helpers__/dom";
-import {
-    invalidateArchitectureCatalog,
-    loadAuthoritativeArchitectureCatalog,
-} from "../architectures/catalog";
+import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
 import { createCapabilityViewResolver } from "../architectures/policy";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
@@ -49,7 +47,7 @@ type StructuralOutcome =
 
 describe("detail structural stage operations", () => {
     beforeEach(async () => {
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson: async () => testArchitectureCatalogDto(),
@@ -58,7 +56,7 @@ describe("detail structural stage operations", () => {
     });
 
     afterEach(() => {
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         setVideoStagesHostBridgeForTests(null);
     });
 

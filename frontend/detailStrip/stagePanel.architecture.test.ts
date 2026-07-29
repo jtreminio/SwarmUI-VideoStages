@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
+import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectureCatalog";
 import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
@@ -11,10 +12,7 @@ import {
     mountVideoStagesData,
 } from "../__test_helpers__/dom";
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
-import {
-    invalidateArchitectureCatalog,
-    loadAuthoritativeArchitectureCatalog,
-} from "../architectures/catalog";
+import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
 import { createCapabilityViewResolver } from "../architectures/policy";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import { setVideoStagesHostBridgeForTests } from "../host";
@@ -81,7 +79,7 @@ const modelOptions = (column: HTMLElement): HTMLOptionElement[] => {
 
 afterEach(() => {
     jest.restoreAllMocks();
-    invalidateArchitectureCatalog();
+    resetArchitectureCatalogForTests();
     setVideoStagesHostBridgeForTests(null);
     __resetPersistenceForTests();
     document.body.innerHTML = "";

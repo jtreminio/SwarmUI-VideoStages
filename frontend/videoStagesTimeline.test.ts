@@ -6,6 +6,7 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { resetArchitectureCatalogForTests } from "./__test_helpers__/architectureCatalog";
 import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
 import { minimalClip, minimalStage } from "./__test_helpers__/clipFixtures";
 import {
@@ -15,7 +16,6 @@ import {
 } from "./__test_helpers__/dom";
 import {
     ARCHITECTURE_CATALOG_API,
-    invalidateArchitectureCatalog,
     loadAuthoritativeArchitectureCatalog,
 } from "./architectures/catalog";
 import {
@@ -124,7 +124,7 @@ describe("videoStagesTimeline", () => {
     let timeline: VideoStagesTimeline | null = null;
 
     beforeEach(async () => {
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson: async () => authoritativeDto(),
@@ -143,7 +143,7 @@ describe("videoStagesTimeline", () => {
     afterEach(() => {
         timeline?.dispose();
         timeline = null;
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         setVideoStagesHostBridgeForTests(null);
         jest.useRealTimers();
         resetSelectionForTests();
@@ -434,7 +434,7 @@ describe("videoStagesTimeline", () => {
     it("shows loading without authoring controls, then renders after authoritative success", async () => {
         document.getElementById("input_videomodel")?.remove();
         mountState(JSON.stringify({ schemaVersion: 5, clips: [] }));
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
 
         const dto = {
             architectures: testArchitectureCatalog().architectures,
@@ -511,7 +511,7 @@ describe("videoStagesTimeline", () => {
 
     it("adopts a trailing forced refresh when the host signal arrives during initial loading", async () => {
         mountState(makeClipsJson(1));
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         let resolveInitial!: (value: unknown) => void;
         let resolveTrailing!: (value: unknown) => void;
         const requestJson = jest
@@ -564,7 +564,7 @@ describe("videoStagesTimeline", () => {
 
     it("shows unavailable with Retry and recovers without touching the document", async () => {
         mountState(makeClipsJson(1));
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         let resolveRetry!: (value: unknown) => void;
         const requestJson = jest
             .fn<VideoStagesHostBridge["requestJson"]>()
@@ -811,7 +811,7 @@ describe("videoStagesTimeline", () => {
 
     it("rebases history when catalog refresh changes canonical model identity", async () => {
         const installedModel = "newly-installed-video.safetensors";
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         const requestJson = jest
             .fn<VideoStagesHostBridge["requestJson"]>()
             .mockResolvedValueOnce(authoritativeDto([]))

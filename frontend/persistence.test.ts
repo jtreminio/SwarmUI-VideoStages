@@ -6,6 +6,7 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { resetArchitectureCatalogForTests } from "./__test_helpers__/architectureCatalog";
 import {
     testArchitectureCatalog,
     testArchitectureCatalogDto,
@@ -21,10 +22,7 @@ import {
     mountVideoFps,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
-import {
-    invalidateArchitectureCatalog,
-    loadAuthoritativeArchitectureCatalog,
-} from "./architectures/catalog";
+import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
 import {
     getVideoStagesHostBridge,
     setVideoStagesHostBridgeForTests,
@@ -61,7 +59,7 @@ describe("persistence", () => {
             value: "ltx-2.3-alt.safetensors",
             label: "LTX Alt",
         });
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson: async () => testArchitectureCatalogDto(catalog),
@@ -71,7 +69,7 @@ describe("persistence", () => {
 
     afterEach(() => {
         jest.restoreAllMocks();
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         setVideoStagesHostBridgeForTests(null);
     });
 

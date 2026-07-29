@@ -9,6 +9,7 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { resetArchitectureCatalogForTests } from "./__test_helpers__/architectureCatalog";
 import {
     testArchitectureCatalog,
     testArchitectureCatalogDto,
@@ -19,10 +20,7 @@ import {
     mountVideoFps,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
-import {
-    invalidateArchitectureCatalog,
-    loadAuthoritativeArchitectureCatalog,
-} from "./architectures/catalog";
+import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
 import {
     IC_LORA_AUTO,
     resetIcLoraAutoDownloads,
@@ -266,7 +264,7 @@ describe("createTimelineDetailStrip", () => {
             value: "ltx-2.3-alt.safetensors",
             label: "LTX 2.3 Alt",
         });
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson: async () => testArchitectureCatalogDto(catalog),
@@ -286,7 +284,7 @@ describe("createTimelineDetailStrip", () => {
         strip = null;
         jest.useRealTimers();
         jest.restoreAllMocks();
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         setVideoStagesHostBridgeForTests(null);
         resetSelectionForTests();
         document.body.innerHTML = "";

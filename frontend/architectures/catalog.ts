@@ -16,7 +16,6 @@ export {
     ARCHITECTURE_CATALOG_API,
     buildArchitectureModelCatalog,
     getArchitectureCatalogSnapshot,
-    invalidateArchitectureCatalog,
     loadAuthoritativeArchitectureCatalog,
     refreshAuthoritativeArchitectureCatalog,
 } from "./catalogRepository";

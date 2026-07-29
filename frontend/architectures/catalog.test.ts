@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
+import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectureCatalog";
 import { testArchitectureCatalog } from "../__test_helpers__/architectureFixtures";
 import { minimalClip } from "../__test_helpers__/clipFixtures";
 import {
@@ -11,7 +12,6 @@ import {
     ARCHITECTURE_CATALOG_API,
     buildArchitectureModelCatalog,
     getArchitectureCatalogSnapshot,
-    invalidateArchitectureCatalog,
     loadAuthoritativeArchitectureCatalog,
     parseVideoArchitectureCatalog,
     refreshAuthoritativeArchitectureCatalog,
@@ -60,7 +60,7 @@ const deferred = <T>() => {
 };
 
 afterEach(() => {
-    invalidateArchitectureCatalog();
+    resetArchitectureCatalogForTests();
     setVideoStagesHostBridgeForTests(null);
     jest.restoreAllMocks();
     document.body.innerHTML = "";
@@ -320,7 +320,7 @@ describe("authoritative catalog repository", () => {
         });
     });
 
-    it("keeps the newest generation when superseded requests settle out of order", async () => {
+    it("prevents a request from before a test reset from publishing late", async () => {
         const requestA = deferred<unknown>();
         const requestB = deferred<unknown>();
         const newer = structuredClone(dto);
@@ -335,7 +335,7 @@ describe("authoritative catalog repository", () => {
         });
 
         const loadA = loadAuthoritativeArchitectureCatalog();
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         const loadB = loadAuthoritativeArchitectureCatalog();
         requestA.resolve(dto);
         await expect(loadA).resolves.toBeNull();

@@ -122,8 +122,7 @@ last-known DTO. If a forced refresh arrives during an active generation, forced
 callers share one trailing request that starts as soon as that generation
 settles; a model-install signal therefore cannot be consumed by an older
 response. Requests carry monotonically increasing generations and owned request
-handles, so an invalidated or superseded request cannot publish over a newer
-result or clear its promise.
+handles, so only the current request can publish state or clear its promise.
 
 Every response is validated all-or-nothing by
 `parseVideoArchitectureCatalog`. Initial failure or malformed data enters

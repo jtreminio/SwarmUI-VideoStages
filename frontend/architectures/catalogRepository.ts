@@ -150,12 +150,8 @@ export const refreshAuthoritativeArchitectureCatalog =
         return promise;
     };
 
-/**
- * Test/process reset and explicit supersession boundary. Older requests may
- * still settle, but generation ownership prevents them from publishing state
- * or clearing a newer request handle.
- */
-export const invalidateArchitectureCatalog = (): void => {
+/** Test-only reset for this module's process-wide singleton state. */
+export const resetArchitectureCatalogForTests = (): void => {
     requestGeneration++;
     activeRequest = null;
     trailingRequest = null;

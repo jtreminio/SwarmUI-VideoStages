@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
-
+import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectureCatalog";
 import {
     testArchitectureCapabilities,
     testArchitectureCatalog,
@@ -10,7 +10,6 @@ import {
     minimalRef,
     minimalStage,
 } from "../__test_helpers__/clipFixtures";
-import { invalidateArchitectureCatalog } from "../architectures/catalog";
 import { createCapabilityViewResolver } from "../architectures/policy";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import { __resetPersistenceForTests } from "../persistence";
@@ -76,7 +75,7 @@ const keyboardOperable = (element: HTMLButtonElement | null): boolean =>
 
 afterEach(() => {
     jest.restoreAllMocks();
-    invalidateArchitectureCatalog();
+    resetArchitectureCatalogForTests();
     __resetPersistenceForTests();
     document.body.innerHTML = "";
 });

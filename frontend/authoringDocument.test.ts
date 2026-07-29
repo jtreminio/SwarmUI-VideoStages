@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import { resetArchitectureCatalogForTests } from "./__test_helpers__/architectureCatalog";
 import { testArchitectureCatalogDto } from "./__test_helpers__/architectureFixtures";
 import {
     minimalClip,
@@ -10,10 +11,7 @@ import {
     mountSelect,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
-import {
-    invalidateArchitectureCatalog,
-    loadAuthoritativeArchitectureCatalog,
-} from "./architectures/catalog";
+import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
 import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import {
@@ -63,7 +61,7 @@ const mountRootDefaults = (): void => {
 
 describe("versioned authoring document identity", () => {
     beforeEach(async () => {
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson: async () => testArchitectureCatalogDto(),
@@ -78,7 +76,7 @@ describe("versioned authoring document identity", () => {
     });
 
     afterEach(() => {
-        invalidateArchitectureCatalog();
+        resetArchitectureCatalogForTests();
         setVideoStagesHostBridgeForTests(null);
     });
 
