@@ -14,6 +14,7 @@ import { createCapabilityViewResolver } from "../architectures/policy";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import { __resetPersistenceForTests } from "../persistence";
 import type { Clip } from "../types";
+import { buildAudioBody } from "./audioPanel";
 import { buildClipBody } from "./clipPanel";
 import type { DetailStripContext } from "./context";
 import { buildStageParamsColumn } from "./stagePanel";
@@ -183,5 +184,46 @@ describe("persisted-but-unsupported repair contract", () => {
         select.dispatchEvent(new Event("change", { bubbles: true }));
 
         expect(clips[0].refFraming).toBe("fit");
+    });
+
+    it("keeps supported audio reuse operable while repairing unsupported clip audio", () => {
+        const models = testArchitectureCatalog();
+        models.architectures[0].capabilities = testArchitectureCapabilities({
+            clip: ["audio-reuse"],
+            audioSourceKinds: ["Disabled"],
+        });
+        const clip = minimalClip({
+            audioSource: "Upload",
+            uploadedAudio: {
+                data: "data:audio/wav;base64,AA==",
+                fileName: "voice.wav",
+            },
+            reuseAudio: true,
+            stages: [minimalStage(), minimalStage(), minimalStage()],
+        });
+        const clips = [clip];
+        const ctx = context(models, clips);
+        ctx.structuralCommit = (apply) => {
+            apply(clips);
+        };
+
+        const body = buildAudioBody(ctx, { kind: "audio", clipIdx: 0 }, clips);
+        const source = body.querySelector<HTMLSelectElement>("select");
+        const reuse = body.querySelector<HTMLInputElement>(
+            ".vst-detail-audio-reuse input",
+        );
+        const repair = body.querySelector<HTMLButtonElement>(
+            ".vst-remove-unsupported-audio",
+        );
+
+        expect(source?.disabled).toBe(true);
+        expect(reuse?.disabled).toBe(false);
+        expect(repair).not.toBeNull();
+
+        repair?.click();
+
+        expect(clip.audioSource).toBe("Native");
+        expect(clip.uploadedAudio).toBeNull();
+        expect(clip.reuseAudio).toBe(true);
     });
 });

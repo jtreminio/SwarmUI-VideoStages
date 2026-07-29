@@ -107,4 +107,59 @@ describe("conversion feature-state ownership", () => {
         expect(conversion?.clip.icLoras).toEqual([]);
         expect(conversion?.clip.stages[0].icLoraStrengths).toEqual([]);
     });
+
+    it("drops audio reuse without dropping a supported uploaded audio source", () => {
+        const catalog = icLoraOnlyCatalog();
+        catalog.architectures[0].capabilities.audioSourceKinds = ["Upload"];
+        const clip = minimalClip({
+            audioSource: "Upload",
+            uploadedAudio: {
+                data: "data:audio/wav;base64,AA==",
+                fileName: "voice.wav",
+            },
+            reuseAudio: true,
+        });
+
+        const conversion = planArchitectureConversion(
+            clip,
+            targetFor(catalog),
+            catalog,
+        );
+
+        expect(conversion?.clip.audioSource).toBe("Upload");
+        expect(conversion?.clip.uploadedAudio).toEqual(clip.uploadedAudio);
+        expect(conversion?.clip.reuseAudio).toBe(false);
+        expect(conversion?.removals).toContain("captured stage audio reuse");
+        expect(conversion?.removals).not.toContain(
+            "clip audio source settings",
+        );
+    });
+
+    it("drops unsupported clip audio without dropping supported audio reuse", () => {
+        const catalog = icLoraOnlyCatalog();
+        catalog.architectures[0].capabilities.clip = ["audio-reuse"];
+        catalog.architectures[0].capabilities.audioSourceKinds = ["Disabled"];
+        const clip = minimalClip({
+            audioSource: "Upload",
+            uploadedAudio: {
+                data: "data:audio/wav;base64,AA==",
+                fileName: "voice.wav",
+            },
+            reuseAudio: true,
+        });
+
+        const conversion = planArchitectureConversion(
+            clip,
+            targetFor(catalog),
+            catalog,
+        );
+
+        expect(conversion?.clip.audioSource).toBe("Native");
+        expect(conversion?.clip.uploadedAudio).toBeNull();
+        expect(conversion?.clip.reuseAudio).toBe(true);
+        expect(conversion?.removals).toContain("clip audio source settings");
+        expect(conversion?.removals).not.toContain(
+            "captured stage audio reuse",
+        );
+    });
 });

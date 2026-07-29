@@ -19,7 +19,8 @@
         "reference-framing",
         "retake",
         "audio-sources",
-        "audio-segments"
+        "audio-segments",
+        "audio-reuse"
       ],
       "stage": [
         "image-input",

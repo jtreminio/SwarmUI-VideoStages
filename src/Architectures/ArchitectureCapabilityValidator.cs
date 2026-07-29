@@ -107,6 +107,10 @@ internal static class ArchitectureCapabilityValidator
             Has(descriptor.Capabilities.Clip, ClipCapability.AudioSources),
             "clip audio source");
         Require(
+            clip.ReuseAudio,
+            Has(descriptor.Capabilities.Clip, ClipCapability.AudioReuse),
+            "captured stage audio reuse");
+        Require(
             hasActiveStages && clip.IcLoras is { Count: > 0 },
             Has(descriptor.Capabilities.Stage, StageCapability.IcLora),
             "IC-LoRA");

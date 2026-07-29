@@ -65,6 +65,9 @@ public class WanArchitectureTests
             GeneratedClip(0, stage) with { PromptWindows = [new("late", 1, 1)] },
             "prompt relay");
         AssertRejected(
+            GeneratedClip(0, stage) with { ReuseAudio = true },
+            "captured stage audio reuse");
+        AssertRejected(
             GeneratedClip(0, stage) with
             {
                 IcLoras = [new("wan-ic.safetensors", "Upload", 1, 1, "canny", null)],
@@ -118,7 +121,6 @@ public class WanArchitectureTests
         AssertRefused(
             GeneratedClip(0, stage with { ImageReference = "Base" }),
             "stage image reference 'Base'");
-        AssertRefused(GeneratedClip(0, stage) with { ReuseAudio = true }, "audio reuse");
         AssertRefused(
             GeneratedClip(0, stage) with { ClipLengthFromAudio = true },
             "clip length from audio");

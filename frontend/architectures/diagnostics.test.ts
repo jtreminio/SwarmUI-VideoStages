@@ -2,6 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
+    testSourceOnlyArchitecture,
 } from "../__test_helpers__/architectureFixtures";
 import {
     minimalClip,
@@ -18,7 +19,11 @@ const combinedCatalog = (): ArchitectureModelCatalog => {
     const fake = fakeArchitectureCatalog();
     return {
         source: "backend",
-        architectures: [...ltx.architectures, ...fake.architectures],
+        architectures: [
+            ...ltx.architectures,
+            ...fake.architectures,
+            testSourceOnlyArchitecture(),
+        ],
         entries: [...ltx.entries, ...fake.entries],
     };
 };
@@ -72,6 +77,26 @@ describe("architecture diagnostics", () => {
                 "architecture.unusable.clip-length-from-control-net",
             ]),
         );
+        expect(clip).toEqual(before);
+    });
+
+    it("reports captured audio reuse independently from supported clip audio", () => {
+        const clip = minimalClip({
+            architecture: "none",
+            modelProfileId: "none",
+            sourceVideo: sourceVideoFixture(),
+            stages: [],
+            reuseAudio: true,
+        });
+        const before = structuredClone(clip);
+
+        const codes = deriveArchitectureDiagnostics(
+            [clip],
+            combinedCatalog(),
+        ).map(({ code }) => code);
+
+        expect(codes).toContain("architecture.unsupported.audio-reuse");
+        expect(codes).not.toContain("architecture.unsupported.audio-source");
         expect(clip).toEqual(before);
     });
 

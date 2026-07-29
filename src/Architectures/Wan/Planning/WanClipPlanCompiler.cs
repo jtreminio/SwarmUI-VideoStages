@@ -34,9 +34,8 @@ internal static class WanClipPlanCompiler
             }
         }
 
-        // Wan produces no audio, so the common audio-length owner and LTX-style reuse have no
-        // source to read. The capability validator only inspects the authored audio source string.
-        Refuse(clip.ReuseAudio, "audio reuse");
+        // Wan produces no audio, so these length policies have no source to read. Captured-stage
+        // reuse is already rejected by the common capability validator.
         Refuse(clip.ClipLengthFromAudio, "clip length from audio");
         Refuse(clip.ClipLengthFromControlNet, "clip length from ControlNet");
 

@@ -113,7 +113,6 @@ export const architectureFeatureSupport = (
         case "promptRelay":
             return capability.clip.includes("prompt-relay");
         case "clipAudio":
-        case "audioReuse":
             return (
                 capability.clip.includes("audio-sources") &&
                 (scope.audioSource === undefined ||
@@ -122,6 +121,8 @@ export const architectureFeatureSupport = (
                         scope.audioSource,
                     ))
             );
+        case "audioReuse":
+            return capability.clip.includes("audio-reuse");
         case "stageLoras":
             return (
                 capability.stage.includes("lora") &&

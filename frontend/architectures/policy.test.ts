@@ -97,6 +97,12 @@ describe("catalog-backed authoring policy", () => {
         expect(view.known).toBe(true);
         expect(view.decision("sourceVideo").supported).toBe(true);
         expect(view.decision("majorPrompt").supported).toBe(false);
+        expect(view.decision("clipAudio").supported).toBe(true);
+        expect(view.decision("audioReuse").supported).toBe(false);
+        expect(view.authoringState("audioReuse", true)).toMatchObject({
+            visible: true,
+            enabled: false,
+        });
     });
 
     it("evaluates conditional prompt and audio-reuse rules", () => {

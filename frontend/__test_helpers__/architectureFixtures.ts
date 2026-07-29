@@ -25,6 +25,7 @@ export const testArchitectureCapabilities = (
         "retake",
         "audio-sources",
         "audio-segments",
+        "audio-reuse",
     ],
     stage: [
         "image-input",

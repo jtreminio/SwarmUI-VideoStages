@@ -122,11 +122,15 @@ const persistedCapabilityIssues = (
     );
     const sourceKind = audioSourceKind(clip.audioSource);
     unsupported(
+        !supports("audioReuse") && clip.reuseAudio,
+        "audio-reuse",
+        "Captured stage audio reuse",
+    );
+    unsupported(
         !supports("clipAudio", { audioSource: clip.audioSource }) &&
             (sourceKind !== "Native" ||
                 clip.uploadedAudio !== null ||
                 clip.saveAudioTrack ||
-                clip.reuseAudio ||
                 clip.clipLengthFromAudio ||
                 clip.clipLengthFromControlNet),
         "audio-source",

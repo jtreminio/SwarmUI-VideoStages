@@ -260,13 +260,16 @@ export const planArchitectureConversion = (
         removals.push("source video");
         clip.sourceVideo = null;
     }
+    if (!supports("audioReuse") && clip.reuseAudio) {
+        removals.push("captured stage audio reuse");
+        clip.reuseAudio = false;
+    }
     if (!supports("clipAudio", { audioSource: clip.audioSource })) {
         const hasAudioSettings =
             clip.audioSource !== "Native" ||
             clip.uploadedAudio !== null ||
             clip.saveAudioTrack ||
             clip.clipLengthFromAudio ||
-            clip.reuseAudio ||
             clip.clipLengthFromControlNet;
         if (hasAudioSettings) {
             removals.push("clip audio source settings");
@@ -277,7 +280,6 @@ export const planArchitectureConversion = (
         clip.uploadedAudio = null;
         clip.saveAudioTrack = false;
         clip.clipLengthFromAudio = false;
-        clip.reuseAudio = false;
         clip.clipLengthFromControlNet = false;
     }
 

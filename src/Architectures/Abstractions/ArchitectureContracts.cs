@@ -73,6 +73,7 @@ internal enum ClipCapability
     AudioSources = 1 << 5,
     AudioSegments = 1 << 6,
     ReferenceFraming = 1 << 7,
+    AudioReuse = 1 << 8,
 }
 
 [Flags]

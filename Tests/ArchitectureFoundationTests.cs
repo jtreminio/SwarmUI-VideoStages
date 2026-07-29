@@ -535,6 +535,25 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
+    public void Source_only_none_rejects_captured_stage_audio_reuse()
+    {
+        ClipSpec clip = SourcedClip(0) with
+        {
+            ReuseAudio = true,
+            AuthoredArchitectureId = "none",
+            AuthoredModelProfileId = "none",
+        };
+
+        VideoExecutionPlan plan = Compile(clip, new FakeRegistry());
+
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
+                && diagnostic.Message.Contains("captured stage audio reuse"));
+        Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
+    }
+
+    [Fact]
     public void Capability_validation_requires_video_input_for_every_later_stage()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
@@ -1256,8 +1275,19 @@ public class ArchitectureFoundationTests
                 "decoded-output",
             ],
             capabilities["architecture"].Values<string>());
-        Assert.Contains("prompt-relay", capabilities["clip"].Values<string>());
-        Assert.Contains("reference-framing", capabilities["clip"].Values<string>());
+        Assert.Equal(
+            [
+                "source-video",
+                "prompts",
+                "prompt-relay",
+                "references",
+                "reference-framing",
+                "retake",
+                "audio-sources",
+                "audio-segments",
+                "audio-reuse",
+            ],
+            capabilities["clip"].Values<string>());
         Assert.Contains("frame-references", capabilities["stage"].Values<string>());
         Assert.Equal(
             ["pixel", "model", "latent", "latent-model"],

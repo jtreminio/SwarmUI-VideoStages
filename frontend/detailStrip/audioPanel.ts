@@ -23,6 +23,7 @@ import {
     applyPersistedCapabilityRepair,
     buildCapabilityNotice,
     buildCapabilityRepairButton,
+    CAPABILITY_REPAIR_SELECTORS,
 } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
@@ -116,6 +117,7 @@ export const buildAudioBody = (
                 (reuseDecision.reason ? ` ${reuseDecision.reason}` : ""),
         },
     );
+    reuseRow.classList.add("vst-detail-audio-reuse");
     base.appendChild(reuseRow);
     if (clip.reuseAudio && !reuseDecision.supported) {
         reuseRow.appendChild(buildCapabilityNotice(reuseDecision));
@@ -192,6 +194,7 @@ export const buildAudioBody = (
     }
     if (!audioDecision.supported) {
         applyPersistedCapabilityRepair(base, audioDecision, {
+            keep: [...CAPABILITY_REPAIR_SELECTORS, ".vst-detail-audio-reuse"],
             repair: {
                 label: "Remove unsupported clip audio",
                 className: "vst-remove-unsupported-audio",
@@ -203,7 +206,6 @@ export const buildAudioBody = (
                         }
                         target.audioSource = "Native";
                         target.uploadedAudio = null;
-                        target.reuseAudio = false;
                         target.clipLengthFromAudio = false;
                         target.saveAudioTrack = false;
                         return "render";
