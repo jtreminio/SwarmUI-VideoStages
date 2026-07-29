@@ -14044,6 +14044,7 @@ The conversion is one undoable change.`;
       renderEnabled = false;
     };
     const attach = (body, dock, renderImmediately = true) => {
+      renderEnabled = renderImmediately;
       if (boundBody === body && dockEl === dock) {
         return;
       }

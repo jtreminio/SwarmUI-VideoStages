@@ -251,6 +251,7 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         dock: HTMLElement,
         renderImmediately = true,
     ): void => {
+        renderEnabled = renderImmediately;
         if (boundBody === body && dockEl === dock) {
             return;
         }

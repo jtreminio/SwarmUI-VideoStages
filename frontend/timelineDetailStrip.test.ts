@@ -378,6 +378,19 @@ describe("createTimelineDetailStrip", () => {
         expect(detail()?.querySelector(".vst-audio-tracks-panel")).toBeNull();
     });
 
+    it("honors inert rendering when reattached to the same body and dock", () => {
+        const body = setup([{ duration: 4, stages: [{}] }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const dock = dockHost(body);
+        const rendered = dock.querySelector(".vst-detail-body");
+        expect(rendered).not.toBeNull();
+
+        strip?.attach(body, dock, false);
+        setSelection({ kind: "prompt-major", clipIdx: 0 });
+
+        expect(dock.querySelector(".vst-detail-body")).toBe(rendered);
+    });
+
     it("uses SwarmUI POT stops and updates side-length dimensions live", () => {
         setup([{ duration: 4, stages: [{}] }]);
         const ratio =
