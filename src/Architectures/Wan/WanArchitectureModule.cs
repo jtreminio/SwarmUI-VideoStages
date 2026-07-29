@@ -6,9 +6,9 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Wan;
 
 /// <summary>
-/// Wan 2.2 image-to-video. The first slice supports one generated clip with one stage; every other
-/// authoring feature is declared unsupported so the common capability validator rejects it before
-/// graph mutation rather than an executor discovering it late.
+/// Wan 2.2 image-to-video. The first slice supports any number of cut-only clips with one active
+/// stage per clip; every other authoring feature is declared unsupported so the common capability
+/// validator rejects it before graph mutation rather than an executor discovering it late.
 /// </summary>
 internal sealed class WanArchitectureModule : IVideoArchitectureModule
 {

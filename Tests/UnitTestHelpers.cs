@@ -183,6 +183,12 @@ internal sealed class SwarmUiTestContext : IDisposable
 
 internal sealed record TestModelBundle(T2IModel BaseModel, T2IModel VideoModel, T2IModel GemmaModel = null);
 
+internal sealed record MixedVideoModelBundle(
+    T2IModel BaseModel,
+    T2IModel LtxVideoModel,
+    T2IModel WanVideoModel,
+    T2IModel GemmaModel);
+
 internal static class TestModelFactory
 {
     public static TestModelBundle CreateBaseAndVideoModels()
@@ -213,6 +219,36 @@ internal static class TestModelFactory
         // Wan's model loader resolves a VAE through the host's known-model registry, so this bundle
         // needs the registry and a VAE folder that the shared factory deliberately leaves out: with
         // them present but empty, an unsatisfied lookup downloads instead of failing the test.
+        InstallWanSupportModels();
+        return models;
+    }
+
+    public static MixedVideoModelBundle CreateBaseLtxv2AndWan22ImageToVideoModels()
+    {
+        TestModelBundle ltx = CreateBaseAndLtxv2VideoModels();
+        T2IModelHandler handler = Program.T2IModelSets["Stable-Diffusion"];
+        T2IModel wan = new(
+            handler,
+            "/tmp",
+            "/tmp/UnitTest_Wan22.safetensors",
+            "UnitTest_Wan22.safetensors")
+        {
+            ModelClass = new T2IModelClass
+            {
+                ID = WanArchitectureModule.ImageToVideoModelClassId,
+                Name = "Wan 2.2 Image2Video 14B",
+                CompatClass = T2IModelClassSorter.CompatWan21_14b,
+                StandardWidth = 1024,
+                StandardHeight = 576,
+            },
+        };
+        handler.Models[wan.Name] = wan;
+        InstallWanSupportModels();
+        return new(ltx.BaseModel, ltx.VideoModel, wan, ltx.GemmaModel);
+    }
+
+    private static void InstallWanSupportModels()
+    {
         Program.T2IModelSets["VAE"] = new() { ModelType = "VAE" };
         if (CommonModels.Known.IsEmpty)
         {
@@ -220,7 +256,6 @@ internal static class TestModelFactory
         }
         Install("Clip", "umt5_xxl_fp8_e4m3fn_scaled.safetensors");
         Install("VAE", CommonModels.Known["wan21-vae"].FileName);
-        return models;
     }
 
     /// <summary>Makes a support model resolvable by name, as an on-disk install would.</summary>

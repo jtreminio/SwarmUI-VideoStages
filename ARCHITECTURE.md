@@ -5,10 +5,10 @@ video architecture; all authored stages in that clip, including skipped
 stages, must resolve to the same architecture. Different executable clips may
 use different architectures.
 
-Production currently registers source-only `none` and LTX Video 2.3 only. The
-registry, planning contracts, runtime dispatch, and timeline assembly are
-intentionally capable of hosting more modules without adding architecture
-branches to common code.
+Production registers source-only `none`, LTX Video 2.3, and the cut-only Wan
+2.2 Image2Video 14B slice. The registry, planning contracts, runtime dispatch,
+and timeline assembly host all three without architecture branches in common
+code.
 
 ## The execution model
 
@@ -141,9 +141,10 @@ An architecture module owns:
 - decoding its final clip; and
 - optional exclusive timeline finalization after publication.
 
-LTX implementations live under `VideoStages.Architectures.Ltx2`. Common
-planning, coordination, and assembly must not instantiate LTX managers, inspect
-LTX compatibility IDs, or create LTX nodes.
+Family implementations live under `VideoStages.Architectures.Ltx2` and
+`VideoStages.Architectures.Wan`. Common planning, coordination, and assembly
+must not instantiate their managers, inspect their compatibility IDs, or create
+their nodes.
 
 `VideoArchitectureManifest` is the production composition root. Each
 registration supplies its module, runtime factory, host integration, API
@@ -152,6 +153,14 @@ architecture list, and the frontend consumes the serialized backend catalog
 without a capability-definition mirror. Frontend architecture IDs may select
 local behavior or DOM panels, but those maps do not recognize models or declare
 profiles, labels, capabilities, or rules.
+
+Wan recognizes only exact class `wan-2_2-image2video-14b`, publishes one
+image-to-video profile with a four-frame grid, and allows one active stage per
+clip across any number of cut-joined clips. Its compiler and preflight reject
+unsupported audio, references, partial denoise, interpolation, swap-model, and
+end-frame behavior before its host phases mutate the graph. Its session delegates
+the family graph to SwarmUI's `CreateImageToVideo` and returns the same neutral
+decoded artifact contract as LTX.
 
 ## Capability catalog
 

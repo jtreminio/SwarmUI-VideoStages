@@ -55,14 +55,27 @@ internal sealed class WanGenerationSession(
         g.CurrentMedia = rootSources.Media?.Duplicate()
             ?? throw new SwarmUserErrorException(
                 $"VideoStages: clip {clip.ClipId} has no host image to generate from.");
-        if (rootSources.Vae is not null)
-        {
-            g.CurrentVae = rootSources.Vae.Duplicate();
-        }
+        // Wan declares audio disabled. A mixed timeline's shared host image may acquire an
+        // architecture-owned latent-audio attachment while another factory prepares its root;
+        // it is not a decoded track Wan can carry into its neutral clip artifact.
+        g.CurrentMedia.AttachedAudio = null;
+        g.CurrentVae = rootSources.Vae?.Duplicate();
 
         int sectionId = hostScope.ApplyStageOverrides(clip, stage);
         WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(clip, stage, sectionId);
-        g.CreateImageToVideo(genInfo);
+        // SwarmUI's generic builder creates latent audio whenever CurrentAudioVae is set. Another
+        // architecture can leave one ambient on a mixed timeline, but Wan's declared output is
+        // video-only, so isolate the call and restore the shared host value afterwards.
+        WGNodeData ambientAudioVae = g.CurrentAudioVae;
+        try
+        {
+            g.CurrentAudioVae = null;
+            g.CreateImageToVideo(genInfo);
+        }
+        finally
+        {
+            g.CurrentAudioVae = ambientAudioVae;
+        }
         DecodedClipArtifact output = Publish(clip, stage, genInfo);
         hostScope.PublishIntermediate(stage);
         return output;

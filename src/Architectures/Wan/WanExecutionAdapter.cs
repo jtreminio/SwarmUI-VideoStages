@@ -15,10 +15,9 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
 
     /// <summary>
-    /// Host video parameters this slice cannot honor. Both reach Wan's generation through the
-    /// host's own image-to-video construction, so neither is visible to clip compilation — and
-    /// both change the result enough that running without them would be the wrong answer rather
-    /// than a smaller one.
+    /// Host video parameters this slice cannot honor. They are consumed by the host's
+    /// image-to-video construction or post-processing rather than the authored clip compiler, and
+    /// each changes the result enough that silently omitting it would be the wrong answer.
     /// </summary>
     public IReadOnlyList<PlanDiagnostic> PreflightRequest(
         ArchitectureRequestPreflightContext context)
@@ -36,6 +35,27 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
             diagnostics.Add(Refuse(
                 "'Video End Frame' is set, but VideoStages does not yet support Wan's "
                 + "first-to-last-frame generation."));
+        }
+        if (generator.UserInput.TryGet(
+                T2IParamTypes.Video2VideoCreativity,
+                out double creativity)
+            && creativity != 1)
+        {
+            diagnostics.Add(Refuse(
+                "'Video2Video Creativity' is non-default, but VideoStages does not yet support "
+                + "Wan partial-denoise generation."));
+        }
+        if (generator.UserInput.TryGet(
+                ComfyUIBackendExtension.VideoFrameInterpolationMethod,
+                out string _)
+            && generator.UserInput.TryGet(
+                ComfyUIBackendExtension.VideoFrameInterpolationMultiplier,
+                out int multiplier)
+            && multiplier > 1)
+        {
+            diagnostics.Add(Refuse(
+                "host frame interpolation is active, but VideoStages does not yet apply it to "
+                + "the assembled Wan timeline."));
         }
         return diagnostics;
     }
@@ -70,5 +90,5 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     private static PlanDiagnostic Refuse(string message) => new(
         PlanDiagnosticSeverity.Error,
         "wan22.host-param.unsupported",
-        $"VideoStages: {message}");
+        message);
 }

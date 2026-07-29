@@ -10,18 +10,17 @@ For the detailed execution and frontend designs, continue to
 [`ARCHITECTURE.md`](../ARCHITECTURE.md) and
 [`FRONTEND_ARCHITECTURE.md`](../FRONTEND_ARCHITECTURE.md).
 
-VideoStages is a closed-world modular monolith. Production currently registers
-the source-only `none` architecture and LTX Video 2.3 (`ltx2`). WAN is not
-registered, so the architecture layer has not yet been tested by a second
-generating architecture.
+VideoStages is a closed-world modular monolith. Production registers the
+source-only `none` architecture, LTX Video 2.3 (`ltx2`), and the cut-only Wan
+2.2 Image2Video 14B slice (`wan22`).
 
 ## Ownership
 
 | Concern | Owner | Concrete entry points |
 |---|---|---|
 | Production registration | SwarmUI adapter | `VideoStagesExtension.OnInit`, `VideoArchitectureManifest` |
-| Exact model recognition | Backend architecture module | `VideoArchitectureRegistry.TryResolveModel`, `Ltx2ArchitectureModule.TryResolveModel` |
-| Capabilities and rules | Backend architecture module | `Ltx2ArchitectureModule.Descriptor`, `NoneArchitecture.Descriptor` |
+| Exact model recognition | Backend architecture module | `VideoArchitectureRegistry.TryResolveModel`, `Ltx2ArchitectureModule.TryResolveModel`, `WanArchitectureModule.TryResolveModel` |
+| Capabilities and rules | Backend architecture module | `Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`, `NoneArchitecture.Descriptor` |
 | Catalog transport | Common backend + SwarmUI authorization | `VideoStagesApi.VideoStagesGetArchitectureCatalog`, `AuthorizedArchitectureRegistry`, `ArchitectureCatalogSerializer.Serialize` |
 | Catalog loading and feature policy | Common frontend | `getArchitectureCatalogSnapshot`, `loadAuthoritativeArchitectureCatalog`, `refreshAuthoritativeArchitectureCatalog`, `parseVideoArchitectureCatalog`, `createCapabilityViewResolver` |
 | Architecture-specific authoring behavior | Frontend local behavior maps | `architectureBehavior`, `ltx2Behavior`, `authoringPanels.ts`, architecture ID identity modules |
@@ -83,6 +82,9 @@ plan compilation, always carry a request session.
   (case-insensitive).
 
 It returns `ArchitectureId("ltx2")` and `ModelProfileId("ltx-2.3")`.
+`WanArchitectureModule.TryResolveModel` requires compat class `wan-21-14b` and
+exact class `wan-2_2-image2video-14b`; it returns `wan22` and
+`wan-2.2-i2v-14b`.
 `NoneArchitectureModule.TryResolveModel` always returns false; common planning
 assigns `none` only to source-video clips with no active stages.
 
@@ -91,9 +93,10 @@ or frontend classification cannot authorize an unsupported model.
 
 ### A2. Capability declaration and transport
 
-`Ltx2ArchitectureModule.Descriptor` and `NoneArchitecture.Descriptor` are
-typed `VideoArchitectureDescriptor` values. They declare architecture, clip,
-stage, profile, boundary, audio-source, and output support. The same typed
+`Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`, and
+`NoneArchitecture.Descriptor` are typed `VideoArchitectureDescriptor` values.
+Wan publishes image-to-video entry, one active stage per clip, video-only
+output, a four-frame profile grid, and cut-only boundaries. The same typed
 boundary/rule objects feed backend validation and frontend publication.
 
 `ArchitectureCatalogSerializer.Serialize` projects the descriptor catalog and
@@ -191,8 +194,8 @@ through the local `ArchitectureBehavior` map. Only the `ltx2` ID selects
 `ltx2Behavior` today, and the interface is mostly IC-LoRA-shaped. LTX DOM
 rendering is keyed directly by the same ID in `authoringPanels.ts`. These maps
 own implementation behavior only; labels, profiles, capabilities, and rules
-remain backend DTO data. This abstraction should be reassessed after a second
-generating architecture supplies another concrete use case.
+remain backend DTO data. Wan needs no custom frontend behavior, so reassess this
+abstraction only when another architecture presents a concrete bespoke-UI need.
 
 ### A5. Opaque architecture-owned authoring payloads
 
@@ -285,6 +288,9 @@ For LTX, `Ltx2ClipPlanCompiler.Compile` produces `Ltx2ClipPayload` and
 `Ltx2StagePayload` instructions for LTX audio, prompt relay, guides, upscale,
 LoRA, IC-LoRA, retake, frame references, and stage audio actions. Common
 orchestration carries these values; it must not interpret their graph meaning.
+For Wan, `WanClipPlanCompiler.Compile` produces the smaller `WanClipPayload`
+and `WanStagePayload`, and refuses unsupported settings that the common
+capability validator cannot yet see.
 
 Blocking `PlanDiagnostic` values are thrown by
 `RequireVideoExecutionPlanContext` before a VideoStages mutation phase.
@@ -300,6 +306,9 @@ active runtime provider with graph-free
 ComfyUI-LTXVideo nodes/features and resolvable IC-LoRA weights. Blocking
 diagnostics stop the request before later VideoStages host phases mutate the
 graph.
+`WanExecutionAdapter.PreflightRequest` similarly refuses host-only options the
+slice cannot honor: swap-model, end-frame, partial denoise, and active frame
+interpolation.
 
 “Before mutation” here means before **VideoStages** mutation. SwarmUI may
 already have built host graph state that VideoStages captures or replaces.
@@ -323,6 +332,10 @@ LTX root policy, so it happens only when LTX owns the host root; the source-only
 path retains the raw capture.
 The remaining LTX host phases handle base/refiner references, pre-core handoff,
 core-output drop, and root audio-mask sizing.
+When Wan owns the image-to-video root, `WanRootMediaHandoff` captures the
+resolvable root image/VAE and a node snapshot, then restores them and prunes the
+host core video pass. Missing or corrupt handoff state fails closed and clears
+all `videostages.arch.wan22.*` handoff keys.
 
 All LTX-owned `NodeHelpers` keys are architecture-scoped by
 `LtxRuntimeKeyScope` under `videostages.arch.ltx2.*`. This LTX-private formatter
@@ -360,7 +373,7 @@ per-clip context with its private root and host state in
 `StageClipExecutionContext`; the sourced-only session captures only frame rate
 and audio sources.
 
-### B6. LTX graph execution
+### B6a. LTX graph execution
 
 `Ltx2ExecutionAdapter.CreateFactory` builds the LTX runtime collaborators.
 `Ltx2GenerationSessionFactory` prepares LTX root state when LTX owns it and
@@ -388,6 +401,16 @@ splitting, IC-LoRA, and post-video-chain behavior remain under
 
 The `none` path uses `SourceOnlyGenerationSession` and
 `SourcedClipInstaller`; it builds no generation latent, VAE, or stage runtime.
+
+### B6b. Wan direct runtime execution
+
+`WanGenerationSessionFactory` snapshots the host image and VAE.
+`WanGenerationSession` resets each cut-only clip to that root, applies its
+compiled stage settings, and delegates graph construction to SwarmUI's
+`WorkflowGenerator.CreateImageToVideo`. It removes the host's per-clip trim,
+applies any global trim only at the terminal output, and returns a decoded
+video-only artifact. LTX/Wan boundaries are neutral hard cuts; no family
+assembler crosses the architecture boundary.
 
 ### B7. Return neutral artifacts and publish
 
@@ -418,8 +441,10 @@ exclusive finalization only for an all-LTX HDR timeline.
 | Unknown model/profile, mixed clip architecture, forged identity | `ArchitecturePlanResolver` diagnostics |
 | Unsupported entry mode or feature | `ArchitectureCapabilityValidator` diagnostics |
 | Invalid LTX option | LTX clip/plan compiler diagnostics |
+| Invalid Wan option or unsupported host video parameter | Wan compiler / `WanExecutionAdapter.PreflightRequest` |
 | Invalid common geometry, boundary, or audio plan | Common compiler diagnostics |
 | Missing IC-LoRA dependencies | `Ltx2RequestPreflight` before later VideoStages mutation |
+| Missing or corrupt Wan root handoff | `WanRootMediaHandoff` with complete key cleanup |
 | Missing provider/session | `VideoArchitectureExecutionHost` / `ArchitectureRuntimeDispatcher` |
 | Wrong returned identity or decoded media | Dispatcher identity checks / `DecodedClipArtifact.ValidateDecoded` |
 | Invalid cross-architecture non-cut run | `MultiClipParallelMerger` |
