@@ -402,6 +402,9 @@ const clipDiffBase = (
         catalog,
         targetEntry?.architectureId,
     );
+    const targetProfile = targetDescriptor?.profiles.find(
+        (profile) => profile.id === targetEntry?.modelProfileId,
+    );
     if (
         !catalog ||
         !sourceArchitectureId ||
@@ -409,6 +412,7 @@ const clipDiffBase = (
         !targetEntry?.architectureId ||
         !targetEntry.modelProfileId ||
         !targetDescriptor ||
+        !targetProfile ||
         targetEntry.architectureId !== nextIdentity?.authoredArchitectureId ||
         targetEntry.modelProfileId !== targetStage.modelProfileId
     ) {
@@ -419,6 +423,7 @@ const clipDiffBase = (
         modelProfileId: targetEntry.modelProfileId,
         model: targetEntry.value,
         capabilities: clone(targetDescriptor.capabilities),
+        entryModes: clone(targetProfile.entryModes),
     };
     const requestedForCleanup = clone(next);
     requestedForCleanup.architecture = sourceArchitectureId;

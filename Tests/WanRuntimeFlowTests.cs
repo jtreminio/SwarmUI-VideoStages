@@ -37,6 +37,11 @@ public class WanRuntimeFlowTests
         internal JObject Workflow { get; private set; }
         internal WGNodeData Media { get; private set; }
         internal Dictionary<string, string> NodeHelpers { get; private set; }
+        internal Dictionary<int, Dictionary<string, object>> SectionOverrides
+        {
+            get;
+            private set;
+        }
 
         internal WorkflowGenerator.WorkflowGenStep Step() => new(g =>
         {
@@ -44,6 +49,9 @@ public class WanRuntimeFlowTests
             Workflow = (JObject)g.Workflow.DeepClone();
             Media = g.CurrentMedia;
             NodeHelpers = new(g.NodeHelpers);
+            SectionOverrides = g.UserInput.SectionParamOverrides.ToDictionary(
+                pair => pair.Key,
+                pair => new Dictionary<string, object>(pair.Value.ValuesInput));
         }, Constants.WorkflowStepPriority.PreflightRequest - 0.5);
 
         internal void AssertUnchanged()
@@ -51,6 +59,16 @@ public class WanRuntimeFlowTests
             Assert.True(JToken.DeepEquals(Workflow, Generator.Workflow));
             Assert.Same(Media, Generator.CurrentMedia);
             Assert.Equal(NodeHelpers, Generator.NodeHelpers);
+            Assert.Equal(
+                SectionOverrides.Keys.Order(),
+                Generator.UserInput.SectionParamOverrides.Keys.Order());
+            foreach ((int sectionId, Dictionary<string, object> values) in
+                SectionOverrides)
+            {
+                Assert.Equal(
+                    values,
+                    Generator.UserInput.SectionParamOverrides[sectionId].ValuesInput);
+            }
         }
     }
 
@@ -145,6 +163,124 @@ public class WanRuntimeFlowTests
         string loaderTuple =
             generator.NodeHelpers[$"modelloader_{models.VideoModel.Name}_image2video"];
         AssertLoaderTupleIsLive(workflow, loaderTuple);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Wan5b_text_entry_builds_native_latent_without_an_image_donor()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 10)));
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WorkflowTestHarness.Template_BaseOnlyImage()
+                    .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
+                    .Concat(WorkflowTestHarness.VideoStagesSteps()));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode latent = Assert.Single(
+            NodesOfClass(bridge, "Wan22ImageToVideoLatent"));
+        Assert.False(latent.FindInput("start_image").HasValue);
+        Assert.Equal(25, latent.FindInput("length").LiteralAsInt());
+        Assert.Equal(512, latent.FindInput("width").LiteralAsInt());
+        Assert.Equal(512, latent.FindInput("height").LiteralAsInt());
+        ComfyNode sampler = Assert.Single(SamplerNodes(bridge));
+        Assert.Same(latent, sampler.FindInput("latent_image").Connection?.Node);
+        Assert.Equal(10, sampler.FindInput("steps").LiteralAsInt());
+        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
+        Assert.Equal(25, generator.CurrentMedia.Frames);
+        Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
+        Assert.True(ReachesUpstream(
+            bridge,
+            bridge.ResolvePath(generator.CurrentMedia.Path)?.Node,
+            sampler.Id));
+        Assert.DoesNotContain(
+            NodesOfClass(bridge, "WanImageToVideo"),
+            _ => true);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Wan5b_text_entry_defaults_to_81_aligned_frames_when_the_host_value_is_absent()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 10)));
+        input.Remove(T2IParamTypes.Text2VideoFrames);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WorkflowTestHarness.Template_BaseOnlyImage()
+                    .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
+                    .Concat(WorkflowTestHarness.VideoStagesSteps()));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode latent = Assert.Single(
+            NodesOfClass(bridge, "Wan22ImageToVideoLatent"));
+        Assert.False(latent.FindInput("start_image").HasValue);
+        Assert.Equal(81, latent.FindInput("length").LiteralAsInt());
+        Assert.True(StaticGeneratedFrameGrid.IsAligned(
+            81,
+            WanArchitectureModule.FrameGrid));
+        Assert.Equal(81, generator.CurrentMedia.Frames);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Wan5b_text_entry_chains_a_later_stage_from_the_first_decoded_video()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 10),
+                MakeStage(models.VideoModel.Name, "PreviousStage", steps: 11)));
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WorkflowTestHarness.Template_BaseOnlyImage()
+                    .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
+                    .Concat(WorkflowTestHarness.VideoStagesSteps()));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode[] latents = [.. NodesOfClass(bridge, "Wan22ImageToVideoLatent")];
+        Assert.Equal(2, latents.Length);
+        ComfyNode native = Assert.Single(
+            latents,
+            latent => !latent.FindInput("start_image").HasValue);
+        ComfyNode continuation = Assert.Single(
+            latents,
+            latent => latent.FindInput("start_image").HasValue);
+        ComfyNode firstSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 10);
+        ComfyNode secondSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 11);
+        Assert.Same(native, firstSampler.FindInput("latent_image").Connection?.Node);
+        Assert.Same(
+            continuation,
+            secondSampler.FindInput("latent_image").Connection?.Node);
+        Assert.True(ReachesUpstream(
+            bridge,
+            continuation.FindInput("start_image").Connection?.Node,
+            firstSampler.Id));
+        Assert.Equal(25, generator.CurrentMedia.Frames);
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
     }
@@ -424,10 +560,12 @@ public class WanRuntimeFlowTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
     public void Wan_persisted_and_prompt_LoRAs_use_the_generic_model_only_loader(
-        bool useFiveBProfile)
+        bool useFiveBProfile,
+        bool nativeTextEntry)
     {
         using SwarmUiTestContext context = new();
         EnableHostLoraLoading();
@@ -438,6 +576,10 @@ public class WanRuntimeFlowTests
         AddLoraModel("UnitTest_Wan5b_Persisted.safetensors");
         AddLoraModel("UnitTest_Wan5b_Prompt_ModelZero.safetensors");
         AddLoraModel("UnitTest_Wan5b_Persisted_ModelZero.safetensors");
+        if (nativeTextEntry)
+        {
+            AddLoraModel("UnitTest_Wan5b_Base_Confined.safetensors");
+        }
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
         stage["loras"] = new JArray(
             new JObject
@@ -452,13 +594,35 @@ public class WanRuntimeFlowTests
                 ["weight"] = 0,
                 ["textEncoderWeight"] = 0.9,
             });
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            JsonSingleClipStages(stage),
-            prompt:
-                "global <videoclip[0,0]><lora:UnitTest_Wan5b_Prompt:0.4:0.8>"
-                + "<lora:UnitTest_Wan5b_Prompt_ModelZero:0:0.9>");
+        string stagesJson = JsonSingleClipStages(stage);
+        const string promptText =
+            "global <videoclip[0,0]><lora:UnitTest_Wan5b_Prompt:0.4:0.8>"
+            + "<lora:UnitTest_Wan5b_Prompt_ModelZero:0:0.9>";
+        T2IParamInput input = nativeTextEntry
+            ? BuildTextToVideoInput(
+                models.VideoModel,
+                stagesJson,
+                prompt: promptText)
+            : BuildNativeInput(
+                models.BaseModel,
+                models.VideoModel,
+                stagesJson,
+                prompt: promptText);
+        if (nativeTextEntry)
+        {
+            input.Set(
+                T2IParamTypes.Loras,
+                new List<string> { "UnitTest_Wan5b_Base_Confined" });
+            input.Set(
+                T2IParamTypes.LoraWeights,
+                new List<string> { "0.95" });
+            input.Set(
+                T2IParamTypes.LoraTencWeights,
+                new List<string> { "0.85" });
+            input.Set(
+                T2IParamTypes.LoraSectionConfinement,
+                new List<string> { $"{T2IParamInput.SectionID_BaseOnly}" });
+        }
         LoraParamState original = null;
         WorkflowGenerator.WorkflowGenStep snapshot = new(
             g => original = CaptureLoraParams(g.UserInput),
@@ -467,7 +631,12 @@ public class WanRuntimeFlowTests
         (JObject workflow, WorkflowGenerator generator) =
             WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
-                WanSteps().Append(snapshot));
+                (nativeTextEntry
+                    ? WorkflowTestHarness.Template_BaseOnlyImage()
+                        .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
+                        .Concat(WorkflowTestHarness.VideoStagesSteps())
+                    : WanSteps())
+                    .Append(snapshot));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         ComfyNode prompt = Assert.Single(
@@ -486,10 +655,21 @@ public class WanRuntimeFlowTests
                 is "UnitTest_Wan5b_Prompt_ModelZero.safetensors"
                     or "UnitTest_Wan5b_Persisted_ModelZero.safetensors");
         Assert.Equal(prompt.Id, persisted.FindInput("model").Connection?.Node?.Id);
-        Assert.True(ModelBranchReaches(
-            bridge,
-            Assert.Single(SamplerNodes(bridge)),
-            persisted));
+        ComfyNode sampler = Assert.Single(SamplerNodes(bridge));
+        Assert.True(ModelBranchReaches(bridge, sampler, persisted));
+        if (nativeTextEntry)
+        {
+            Assert.DoesNotContain(
+                LoraLoaderNodesOf(bridge),
+                node => node.FindInput("lora_name").LiteralAsString()
+                    == "UnitTest_Wan5b_Base_Confined.safetensors"
+                    && ModelBranchReaches(bridge, sampler, node));
+            ComfyNode latent = Assert.Single(
+                NodesOfClass(bridge, "Wan22ImageToVideoLatent"));
+            Assert.False(latent.FindInput("start_image").HasValue);
+            Assert.False(generator.IsImageToVideo);
+            Assert.False(generator.IsImageToVideoSwap);
+        }
         Assert.NotNull(original);
         AssertLoraParamsEqual(original, CaptureLoraParams(input));
         Assert.DoesNotContain(
@@ -497,6 +677,65 @@ public class WanRuntimeFlowTests
             generator.NodeHelpers.Keys);
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Wan5b_native_text_restores_ambient_video_and_audio_scopes_after_model_prep_failure()
+    {
+        using SwarmUiTestContext context = new();
+        EnableHostLoraLoading();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 10)));
+        const string ambientAudioVaeId = "unit-native-text-ambient-audio-vae";
+        WorkflowGenerator captured = null;
+        WGNodeData ambientAudioVae = null;
+        bool armed = false;
+        WorkflowGenerator.WorkflowGenStep installAmbientState = new(g =>
+        {
+            captured = g;
+            g.Workflow[ambientAudioVaeId] = new JObject
+            {
+                ["class_type"] = "UnitTest_NativeTextAmbientAudioVae",
+                ["inputs"] = new JObject(),
+            };
+            ambientAudioVae = new(
+                new JArray(ambientAudioVaeId, 0),
+                g,
+                WGNodeData.DT_AUDIOVAE,
+                null);
+            g.CurrentAudioVae = ambientAudioVae;
+            g.IsImageToVideo = true;
+            Assert.False(g.IsImageToVideoSwap);
+            armed = true;
+        }, Constants.WorkflowStepPriority.RunConfiguredStages - 0.01);
+        WorkflowGenerator.AddModelGenStep(g =>
+        {
+            if (armed)
+            {
+                Assert.True(g.IsImageToVideo);
+                Assert.False(g.IsImageToVideoSwap);
+                throw new InvalidOperationException(
+                    "unit-test native Wan model prep failure");
+            }
+        }, -9);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WorkflowTestHarness.Template_BaseOnlyImage()
+                    .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
+                    .Concat(WorkflowTestHarness.VideoStagesSteps())
+                    .Append(installAmbientState)));
+
+        Assert.Equal("unit-test native Wan model prep failure", error.Message);
+        Assert.NotNull(captured);
+        Assert.True(captured.IsImageToVideo);
+        Assert.False(captured.IsImageToVideoSwap);
+        Assert.Same(ambientAudioVae, captured.CurrentAudioVae);
+        Assert.True(captured.Workflow.ContainsKey(ambientAudioVaeId));
     }
 
     [Fact]
@@ -2175,6 +2414,196 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
+    public void Hard_cut_Wan5b_text_clips_join_in_order_without_a_host_image_donor()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
+        JObject document = MakeDocument(
+            MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10)),
+            MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 11)));
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            document.ToString());
+        input.Set(T2IParamTypes.OutputIntermediateImages, true);
+        string hostCoreOutputId = null;
+        WorkflowGenerator.WorkflowGenStep captureHostCore = new(g =>
+        {
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            hostCoreOutputId = bridge.ResolvePath(g.CurrentMedia.Path)?.Node.Id;
+            Assert.NotNull(hostCoreOutputId);
+        }, Constants.WorkflowStepPriority.CoreImageToVideo + 0.01);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WorkflowTestHarness.Template_BaseOnlyImage()
+                    .Concat([
+                        WorkflowTestHarness.CoreImageToVideoStep(),
+                        captureHostCore,
+                    ])
+                    .Concat(WorkflowTestHarness.VideoStagesSteps()));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.NotNull(hostCoreOutputId);
+        Assert.False(workflow.ContainsKey(hostCoreOutputId));
+        ComfyNode[] latents = [.. NodesOfClass(bridge, "Wan22ImageToVideoLatent")];
+        ComfyNode latent = Assert.Single(latents);
+        Assert.All(
+            latents,
+            item => Assert.False(item.FindInput("start_image").HasValue));
+        ComfyNode firstSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 10);
+        ComfyNode secondSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 11);
+        Assert.Same(latent, firstSampler.FindInput("latent_image").Connection?.Node);
+        Assert.Same(latent, secondSampler.FindInput("latent_image").Connection?.Node);
+        BatchImagesNodeNode merged = Assert.Single(
+            bridge.Graph.NodesOfType<BatchImagesNodeNode>());
+        Assert.True(ReachesUpstream(
+            bridge,
+            merged.Images[0].Connection?.Node,
+            firstSampler.Id));
+        Assert.False(ReachesUpstream(
+            bridge,
+            merged.Images[0].Connection?.Node,
+            secondSampler.Id));
+        Assert.True(ReachesUpstream(
+            bridge,
+            merged.Images[1].Connection?.Node,
+            secondSampler.Id));
+        Assert.False(ReachesUpstream(
+            bridge,
+            merged.Images[1].Connection?.Node,
+            firstSampler.Id));
+        Assert.Equal(new JArray(merged.Id, 0), generator.CurrentMedia.Path);
+        Assert.Equal(50, generator.CurrentMedia.Frames);
+        Assert.Null(generator.CurrentMedia.Compat);
+        Assert.DoesNotContain(
+            NodesOfClass(bridge, "WanImageToVideo"),
+            _ => true);
+        SwarmSaveAnimationWSNode[] saves =
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().ToArray();
+        Assert.Equal(2, saves.Length);
+        Assert.Single(
+            saves,
+            save => ReferenceEquals(merged, save.Images.Connection?.Node));
+        Assert.Null(generator.CurrentMedia.AttachedAudio);
+        Assert.Empty(bridge.Graph.NodesOfType<EmptyAudioNode>());
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Mixed_Ltx_and_Wan5b_text_hard_cuts_keep_order_provenance_audio_and_cleanup(
+        bool wanFirst)
+    {
+        using SwarmUiTestContext context = new();
+        MixedVideoModelBundle models =
+            TestModelFactory.CreateBaseLtxv2AndWan22ImageToVideoModels();
+        T2IModel wan5b = AddWan5bModel("UnitTest_Wan22_Text_Mixed_5b.safetensors");
+        JObject ltxClip = MakeClip(
+            MakeStage(models.LtxVideoModel.Name, "Generated", steps: 7));
+        JObject wanClip = MakeClip(
+            MakeStage(wan5b.Name, "Generated", steps: 9));
+        JObject document = wanFirst
+            ? MakeDocument(wanClip, ltxClip)
+            : MakeDocument(ltxClip, wanClip);
+        T2IParamInput input = BuildTextToVideoInput(
+            models.LtxVideoModel,
+            document.ToString());
+        input.Set(T2IParamTypes.OutputIntermediateImages, true);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                StageFlowTests.BuildNativeTextToVideoStepsWithPreCoreVideo(
+                    attachAudioToCurrentMedia: true));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.False(workflow.ContainsKey("200"));
+        Assert.False(workflow.ContainsKey("201"));
+        Assert.False(workflow.ContainsKey("202"));
+        ComfyNode wanLatent = Assert.Single(
+            NodesOfClass(bridge, "Wan22ImageToVideoLatent"));
+        Assert.False(wanLatent.FindInput("start_image").HasValue);
+        ComfyNode wanSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 9);
+        ComfyNode ltxSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 7);
+        Assert.Same(
+            wanLatent,
+            wanSampler.FindInput("latent_image").Connection?.Node);
+        Assert.False(ReachesUpstream(bridge, ltxSampler, wanLatent.Id));
+        BatchImagesNodeNode merged = Assert.Single(
+            bridge.Graph.NodesOfType<BatchImagesNodeNode>());
+        ComfyNode firstSampler = wanFirst ? wanSampler : ltxSampler;
+        ComfyNode secondSampler = wanFirst ? ltxSampler : wanSampler;
+        Assert.True(ReachesUpstream(
+            bridge,
+            merged.Images[0].Connection?.Node,
+            firstSampler.Id));
+        Assert.False(ReachesUpstream(
+            bridge,
+            merged.Images[0].Connection?.Node,
+            secondSampler.Id));
+        Assert.True(ReachesUpstream(
+            bridge,
+            merged.Images[1].Connection?.Node,
+            secondSampler.Id));
+        Assert.False(ReachesUpstream(
+            bridge,
+            merged.Images[1].Connection?.Node,
+            firstSampler.Id));
+        Assert.Equal(new JArray(merged.Id, 0), generator.CurrentMedia.Path);
+        Assert.Equal(50, generator.CurrentMedia.Frames);
+        Assert.Null(generator.CurrentMedia.Compat);
+
+        EmptyAudioNode wanSilence = Assert.Single(
+            bridge.Graph.NodesOfType<EmptyAudioNode>());
+        Assert.NotNull(generator.CurrentMedia.AttachedAudio);
+        AudioConcatNode joinedAudio = Assert.Single(
+            bridge.Graph.NodesOfType<AudioConcatNode>(),
+            audio => ReachesUpstream(
+                bridge,
+                bridge.ResolvePath(generator.CurrentMedia.AttachedAudio.Path)?.Node,
+                audio.Id));
+        ComfyNode firstAudio = joinedAudio.Audio1.Connection?.Node;
+        ComfyNode secondAudio = joinedAudio.Audio2.Connection?.Node;
+        Assert.Equal(wanFirst, ReferenceEquals(wanSilence, firstAudio));
+        Assert.Equal(!wanFirst, ReferenceEquals(wanSilence, secondAudio));
+        Assert.True(ReachesUpstream(
+            bridge,
+            wanFirst ? secondAudio : firstAudio,
+            ltxSampler.Id));
+
+        SwarmSaveAnimationWSNode[] saves =
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().ToArray();
+        Assert.Equal(2, saves.Length);
+        Assert.Single(
+            saves,
+            save => ReferenceEquals(merged, save.Images.Connection?.Node));
+        Assert.Single(
+            saves,
+            save => !ReferenceEquals(merged, save.Images.Connection?.Node)
+                && ReachesUpstream(
+                    bridge,
+                    save.Images.Connection?.Node,
+                    firstSampler.Id)
+                && !ReachesUpstream(
+                    bridge,
+                    save.Images.Connection?.Node,
+                    secondSampler.Id));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void Hard_cut_Wan_clips_may_execute_different_canonical_profiles()
     {
         using SwarmUiTestContext context = new();
@@ -2545,7 +2974,7 @@ public class WanRuntimeFlowTests
     [InlineData("swap", "not supported when any active Wan stage uses profile")]
     [InlineData("swap-passthrough", "not supported when any active Wan stage uses profile")]
     [InlineData("end-frame", "request-global and is ambiguous")]
-    public void Wan5b_request_global_swap_and_end_frame_are_refused_before_mutation(
+    public void Wan5b_image_and_sourced_request_global_options_are_refused_before_mutation(
         string option,
         string expectedReason)
     {
@@ -2572,6 +3001,50 @@ public class WanRuntimeFlowTests
         }
 
         AssertPreflightRefusalBeforeMutation(input, expectedReason);
+    }
+
+    [Theory]
+    [InlineData("swap", "'Video Swap Model'")]
+    [InlineData("end-frame", "'Video End Frame' is request-global and is ambiguous")]
+    public void Wan5b_native_text_request_global_options_are_refused_before_mutation(
+        string option,
+        string expectedReason)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 10)));
+        if (option == "swap")
+        {
+            input.Set(T2IParamTypes.VideoSwapModel, models.VideoModel);
+        }
+        else
+        {
+            input.Set(
+                T2IParamTypes.VideoEndFrame,
+                new Image([0x07], MediaType.ImagePng));
+        }
+
+        AssertPreflightRefusalBeforeMutation(input, expectedReason);
+    }
+
+    [Fact]
+    public void Wan5b_native_text_with_global_refine_source_is_refused_as_refine_entry_before_mutation()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 10)));
+        input.Set(
+            VideoStagesExtension.RefineSourceVideo,
+            new Image([0x08, 0x09], MediaType.VideoMp4));
+        input.Set(VideoStagesExtension.RefineSkipStages, 0);
+
+        AssertPreflightRefusalBeforeMutation(input, "entry mode 'RefineVideo'");
     }
 
     [Theory]
@@ -2944,7 +3417,7 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Global_end_image_is_refused_before_mutation_for_Wan_text_entry()
+    public void Wan14b_text_entry_is_refused_before_global_end_image_mutation()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
@@ -3353,6 +3826,104 @@ public class WanRuntimeFlowTests
         Assert.Empty(generator.UserInput.SectionParamOverrides);
     }
 
+    [Theory]
+    [InlineData("entry")]
+    [InlineData("clip-input")]
+    [InlineData("stage-input")]
+    [InlineData("clip-profile")]
+    [InlineData("stage-profile")]
+    [InlineData("root-host-kind")]
+    [InlineData("root-use")]
+    [InlineData("root-core-disposition")]
+    [InlineData("root-output-disposition")]
+    [InlineData("root-native-audio-disposition")]
+    public void Wan_runtime_clip_contract_rejects_forged_text_entry_contracts(
+        string corruption)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
+        (VideoExecutionPlan plan, ClipPlan validClip) =
+            MakeTextWanRuntimeContractPlan(models);
+        StagePlan validStage = Assert.Single(validClip.Stages);
+        ClipPlan invalidClip = corruption switch
+        {
+            "entry" => validClip with
+            {
+                EntryMode = ArchitectureEntryMode.ImageToVideo,
+            },
+            "clip-input" => validClip with
+            {
+                Input = ClipInputKind.RootMedia,
+            },
+            "stage-input" => validClip with
+            {
+                Stages = [validStage with { Input = StageInputKind.RootMedia }],
+            },
+            "clip-profile" => validClip with
+            {
+                ArchitecturePayload = validClip.RequireWanPayload() with
+                {
+                    ProfileId = WanArchitectureModule.ImageToVideoProfileId,
+                },
+            },
+            "stage-profile" => validClip with
+            {
+                Stages =
+                [
+                    validStage with
+                    {
+                        ArchitecturePayload = validStage.RequireWanPayload() with
+                        {
+                            ProfileId =
+                                WanArchitectureModule.ImageToVideoProfileId,
+                        },
+                    },
+                ],
+            },
+            "root-host-kind"
+                or "root-use"
+                or "root-core-disposition"
+                or "root-output-disposition"
+                or "root-native-audio-disposition" => validClip,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(corruption),
+                corruption,
+                "Unknown text-entry contract corruption."),
+        };
+
+        RootPlan invalidRoot = corruption switch
+        {
+            "root-host-kind" => plan.Root with
+            {
+                HostKind = HostRootKind.ImageToVideo,
+            },
+            "root-use" => plan.Root with { Use = RootUse.None },
+            "root-core-disposition" => plan.Root with
+            {
+                CoreDisposition = HostCoreDisposition.Keep,
+            },
+            "root-output-disposition" => plan.Root with
+            {
+                OutputDisposition = TimelineOutputDisposition.PreserveHostOutput,
+            },
+            "root-native-audio-disposition" => plan.Root with
+            {
+                NativeAudioDisposition = NativeAudioDisposition.KeepHostAudio,
+            },
+            _ => plan.Root,
+        };
+        VideoExecutionPlan invalidPlan = plan with
+        {
+            Root = invalidRoot,
+            Clips = [invalidClip],
+        };
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => WanRuntimeClipContract.Validate(invalidPlan, invalidClip));
+
+        Assert.Contains("malformed plan", error.Message);
+    }
+
     [Fact]
     public void Wan_runtime_clip_contract_rejects_text_encoder_only_LoRA()
     {
@@ -3452,7 +4023,7 @@ public class WanRuntimeFlowTests
                     .Concat([breakRoot, WorkflowTestHarness.CoreImageToVideoStep()])
                     .Concat(WorkflowTestHarness.VideoStagesSteps())));
 
-        Assert.Contains("host root image is missing or no longer resolves", error.Message);
+        Assert.Contains("host root media is missing or no longer resolves", error.Message);
         Assert.DoesNotContain(
             captured.NodeHelpers.Keys,
             key => key.StartsWith("videostages.arch.wan22.", StringComparison.Ordinal));
@@ -3619,6 +4190,54 @@ public class WanRuntimeFlowTests
         return (plan with { Clips = [generatedClip] }, generatedClip);
     }
 
+    private static (VideoExecutionPlan Plan, ClipPlan Clip)
+        MakeTextWanRuntimeContractPlan(TestModelBundle models)
+    {
+        (VideoExecutionPlan plan, ClipPlan generatedClip) =
+            MakeGeneratedWanRuntimeContractPlan(models);
+        StagePlan generatedStage = Assert.Single(generatedClip.Stages);
+        ResolvedVideoModel resolved = generatedStage.ResolvedModel with
+        {
+            ModelProfileId = WanArchitectureModule.Ti2v5bProfileId,
+        };
+        StagePlan textStage = generatedStage with
+        {
+            Input = StageInputKind.EmptyLatent,
+            ResolvedModel = resolved,
+            ArchitecturePayload = generatedStage.RequireWanPayload() with
+            {
+                ProfileId = WanArchitectureModule.Ti2v5bProfileId,
+                OwnsVideoEndFrame = false,
+            },
+        };
+        ClipPlan textClip = generatedClip with
+        {
+            Input = ClipInputKind.EmptyLatent,
+            EntryMode = ArchitectureEntryMode.TextToVideo,
+            Stages = [textStage],
+            ArchitecturePayload = generatedClip.RequireWanPayload() with
+            {
+                ProfileId = WanArchitectureModule.Ti2v5bProfileId,
+            },
+        };
+        return (
+            plan with
+            {
+                Root = plan.Root with
+                {
+                    HostKind = HostRootKind.TextToVideoRoot,
+                    Use = RootUse.Discard,
+                    CoreDisposition = HostCoreDisposition.Drop,
+                    OutputDisposition =
+                        TimelineOutputDisposition.PublishTimelineOutput,
+                    NativeAudioDisposition =
+                        NativeAudioDisposition.DiscardWithRoot,
+                },
+                Clips = [textClip],
+            },
+            textClip);
+    }
+
     private static SwarmFrameWindowNode AssertWanSourceConformChain(
         WorkflowBridge bridge,
         int width,
@@ -3748,9 +4367,28 @@ public class WanRuntimeFlowTests
     {
         WorkflowGenerator.AddModelGenStep(g =>
         {
-            int confinement = g.IsImageToVideoSwap
-                ? T2IParamInput.SectionID_VideoSwap
-                : T2IParamInput.SectionID_Video;
+            if (g.LoadingModelType == "negative"
+                && !g.UserInput.Get(T2IParamTypes.NegativeModelIncludeLoras, true))
+            {
+                return;
+            }
+            (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(
+                -1,
+                g.LoadingModel,
+                g.LoadingClip);
+            (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(
+                0,
+                g.LoadingModel,
+                g.LoadingClip);
+            int confinement = g.IsRefinerStage
+                ? T2IParamInput.SectionID_Refiner
+                : g.IsPixelDecoderStage
+                    ? T2IParamInput.SectionID_PixelDecoder
+                    : g.IsImageToVideoSwap
+                        ? T2IParamInput.SectionID_VideoSwap
+                        : g.IsImageToVideo
+                            ? T2IParamInput.SectionID_Video
+                            : T2IParamInput.SectionID_BaseOnly;
             (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(
                 confinement,
                 g.LoadingModel,

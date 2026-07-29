@@ -1,5 +1,4 @@
 import {
-    architectureCatalogView,
     architectureDescriptor,
     buildArchitectureRetargetPlan,
 } from "../../architectures/catalog";
@@ -26,45 +25,24 @@ export const appendStageModelSection = ({
     defaults,
     fields,
 }: StagePanelBindings): void => {
-    const modelView =
-        stageIdx === 0
-            ? {
-                  values: defaults.modelCatalog.entries.flatMap((entry) => {
-                      const architecture = architectureDescriptor(
-                          defaults.modelCatalog,
-                          entry.architectureId,
-                      );
-                      return architecture &&
-                          architectureSupportsClipStart(
-                              architecture.capabilities,
-                              clip,
-                              context.generatedEntryMode(),
-                          )
-                          ? [entry.value]
-                          : [];
-                  }),
-                  labels: defaults.modelCatalog.entries.flatMap(
-                      (entry): string[] => {
-                          const architecture = architectureDescriptor(
-                              defaults.modelCatalog,
-                              entry.architectureId,
-                          );
-                          return architecture &&
-                              architectureSupportsClipStart(
-                                  architecture.capabilities,
-                                  clip,
-                                  context.generatedEntryMode(),
-                              )
-                              ? [entry.label]
-                              : [];
-                      },
-                  ),
-              }
-            : architectureCatalogView(defaults.modelCatalog, clip.architecture);
-    const modelOptions: OptionSpec[] = modelView.values.map((value, index) => ({
-        value,
-        label: modelView.labels[index] ?? value,
-    }));
+    const modelOptions: OptionSpec[] = defaults.modelCatalog.entries.flatMap(
+        (entry): OptionSpec[] => {
+            const target = buildArchitectureRetargetPlan(
+                defaults.modelCatalog,
+                entry.value,
+            );
+            return target &&
+                (stageIdx === 0 ||
+                    target.architectureId === clip.architecture) &&
+                architectureSupportsClipStart(
+                    target.entryModes,
+                    clip,
+                    context.generatedEntryMode(),
+                )
+                ? [{ value: entry.value, label: entry.label }]
+                : [];
+        },
+    );
     if (
         stage.model &&
         !modelOptions.some((option) => option.value === stage.model)

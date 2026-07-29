@@ -58,6 +58,7 @@ export interface ArchitectureRetargetPlan {
     modelProfileId: ModelProfileId;
     model: string;
     capabilities: ArchitectureCapabilities;
+    entryModes: string[];
 }
 
 export interface ArchitectureCatalogModelDto {
@@ -79,6 +80,7 @@ export interface ArchitectureCatalogEntryDto {
 export interface VideoModelProfileDescriptor {
     id: ModelProfileId;
     label: string;
+    entryModes: string[];
     capabilities: string[];
     rules: CapabilityRuleDecision[];
 }

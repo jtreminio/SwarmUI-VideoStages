@@ -29,12 +29,6 @@ internal sealed class Ltx2ArchitectureModule :
         "LTX Video 2.3",
         new("ltx-2.3"),
         [
-            ArchitectureEntryMode.TextToVideo,
-            ArchitectureEntryMode.ImageToVideo,
-            ArchitectureEntryMode.SourceVideo,
-            ArchitectureEntryMode.RefineVideo,
-        ],
-        [
             AudioSourceKind.Native,
             AudioSourceKind.Upload,
             AudioSourceKind.ControlNet,
@@ -128,6 +122,12 @@ internal sealed class Ltx2ArchitectureModule :
         new(
             new(id),
             displayName,
+            [
+                ArchitectureEntryMode.TextToVideo,
+                ArchitectureEntryMode.ImageToVideo,
+                ArchitectureEntryMode.SourceVideo,
+                ArchitectureEntryMode.RefineVideo,
+            ],
             ModelProfileCapability.SamplerSelection
                 | ModelProfileCapability.SchedulerSelection
                 | ModelProfileCapability.DimensionRules

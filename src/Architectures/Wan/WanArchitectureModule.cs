@@ -70,11 +70,20 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         ArchitectureId,
         "Wan 2.2",
         ImageToVideoProfileId,
-        [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo],
         [AudioSourceKind.Disabled],
         [
-            Profile(ImageToVideoProfileId, "Wan 2.2 Image2Video 14B"),
-            Profile(Ti2v5bProfileId, "Wan 2.2 Text/Image2Video 5B"),
+            Profile(
+                ImageToVideoProfileId,
+                "Wan 2.2 Image2Video 14B",
+                [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo]),
+            Profile(
+                Ti2v5bProfileId,
+                "Wan 2.2 Text/Image2Video 5B",
+                [
+                    ArchitectureEntryMode.TextToVideo,
+                    ArchitectureEntryMode.ImageToVideo,
+                    ArchitectureEntryMode.SourceVideo,
+                ]),
         ],
         new(
             ArchitectureCapability.GeneratedEntry
@@ -138,10 +147,12 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
 
     private static VideoModelProfileDescriptor Profile(
         ModelProfileId id,
-        string displayName) =>
+        string displayName,
+        IReadOnlyList<ArchitectureEntryMode> entryModes) =>
         new(
             id,
             displayName,
+            entryModes,
             ModelProfileCapability.SamplerSelection
                 | ModelProfileCapability.SchedulerSelection
                 | ModelProfileCapability.DimensionRules

@@ -1,7 +1,6 @@
 import {
-    architectureDescriptor,
-    architectureForModel,
     buildArchitectureModelCatalog,
+    buildArchitectureRetargetPlan,
 } from "./architectures/catalog";
 import { parseBase2EditStageIndex } from "./constants";
 import { getVideoStagesHostBridge } from "./host";
@@ -111,11 +110,8 @@ export const isRootTextToVideoModel = (): boolean => {
         return false;
     }
     const catalog = buildArchitectureModelCatalog([modelName], [modelName]);
-    const architectureId = architectureForModel(catalog, modelName);
-    const architecture = architectureDescriptor(catalog, architectureId);
-    return (
-        architecture?.capabilities.entryModes.includes("text-to-video") ?? false
-    );
+    const target = buildArchitectureRetargetPlan(catalog, modelName);
+    return target ? target.entryModes.includes("text-to-video") : false;
 };
 
 export const getRootGeneratedEntryMode = ():

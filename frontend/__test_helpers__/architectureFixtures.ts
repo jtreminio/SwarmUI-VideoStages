@@ -40,7 +40,12 @@ export const testArchitectureCapabilities = (
     ],
     output: ["video", "attached-audio"],
     upscaleModes: ["pixel"],
-    entryModes: ["text-to-video", "image-to-video", "source-video"],
+    entryModes: [
+        "text-to-video",
+        "image-to-video",
+        "source-video",
+        "refine-video",
+    ],
     audioSourceKinds: ["Native", "Upload"],
     ...overrides,
 });
@@ -59,6 +64,12 @@ export const testArchitectureCatalog = (
                 {
                     id: "ltx-2.3",
                     label: "LTX Video 2.3",
+                    entryModes: [
+                        "text-to-video",
+                        "image-to-video",
+                        "source-video",
+                        "refine-video",
+                    ],
                     capabilities: [
                         "sampler-selection",
                         "scheduler-selection",
@@ -221,6 +232,7 @@ export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
         {
             id: "none",
             label: "Decoded source only",
+            entryModes: ["source-video"],
             capabilities: [],
             rules: [],
         },
@@ -267,12 +279,18 @@ export const fakeArchitectureCatalog = (
                 clip: ["prompts"],
                 stage: [],
                 upscaleModes: [],
+                entryModes: ["text-to-video", "image-to-video", "source-video"],
                 audioSourceKinds: ["Native"],
             }),
             profiles: [
                 {
                     id: "test-profile",
                     label: "Test Profile",
+                    entryModes: [
+                        "text-to-video",
+                        "image-to-video",
+                        "source-video",
+                    ],
                     capabilities: [],
                     rules: [],
                 },

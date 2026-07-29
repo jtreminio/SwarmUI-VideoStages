@@ -1,22 +1,15 @@
 import type { Clip } from "../../types";
-import type { ArchitectureRetargetPlan } from "../types";
-
 /** Pure entry-mode gate shared by diagnostics and model filtering. */
 export const architectureSupportsClipStart = (
-    capabilities: ArchitectureRetargetPlan["capabilities"],
+    entryModes: readonly string[],
     clip: Clip,
     generatedEntryMode: "text-to-video" | "image-to-video",
 ): boolean => {
-    const modes = capabilities.entryModes;
+    const modes = entryModes;
     if (clip.sourceVideo !== null) {
-        return modes.includes("source-video") || modes.includes("refine-video");
+        return modes.includes("source-video");
     }
-    const hasInitialReference = clip.refs.some(
-        (reference) =>
-            reference.fromEnd !== true &&
-            Math.max(1, Math.round(reference.frame)) === 1,
-    );
-    return hasInitialReference
-        ? modes.includes("image-to-video")
-        : modes.includes(generatedEntryMode);
+    // Global refine is a one-shot host override, not a persisted clip authoring
+    // mode. Frame references guide the chosen host mode; they do not replace it.
+    return modes.includes(generatedEntryMode);
 };

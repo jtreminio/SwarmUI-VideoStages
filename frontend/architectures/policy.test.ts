@@ -422,6 +422,7 @@ describe("catalog-backed authoring policy", () => {
         descriptor.profiles.push({
             id: "ltx-alt-profile",
             label: "Synthetic alternate profile",
+            entryModes: ["text-to-video", "image-to-video"],
             capabilities: [],
             rules: [],
         });

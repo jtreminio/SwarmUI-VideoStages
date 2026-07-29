@@ -5,7 +5,11 @@ import {
     testArchitectureCatalog,
     testRootDefaults,
 } from "../__test_helpers__/architectureFixtures";
-import { minimalClip, minimalStage } from "../__test_helpers__/clipFixtures";
+import {
+    minimalClip,
+    minimalRef,
+    minimalStage,
+} from "../__test_helpers__/clipFixtures";
 import {
     mountPromptBox,
     mountSelect,
@@ -87,6 +91,154 @@ afterEach(() => {
 });
 
 describe("stage architecture model filtering", () => {
+    it("exact-filters WAN profiles at every stage for text, image, and source entry", () => {
+        const models = catalog();
+        const wan = structuredClone(models.architectures[0]);
+        wan.id = "wan22";
+        wan.label = "WAN 2.2";
+        wan.defaultProfileId = "wan22-i2v-14b";
+        wan.profiles = [
+            {
+                ...wan.profiles[0],
+                id: "wan22-i2v-14b",
+                label: "WAN 2.2 I2V 14B",
+                entryModes: ["image-to-video", "source-video"],
+            },
+            {
+                ...wan.profiles[0],
+                id: "wan22-ti2v-5b",
+                label: "WAN 2.2 TI2V 5B",
+                entryModes: ["text-to-video", "image-to-video", "source-video"],
+            },
+        ];
+        models.architectures.push(wan);
+        models.entries.push(
+            {
+                value: "wan-14b.safetensors",
+                label: "WAN 14B",
+                architectureId: "wan22",
+                modelProfileId: "wan22-i2v-14b",
+            },
+            {
+                value: "wan-5b.safetensors",
+                label: "WAN 5B",
+                architectureId: "wan22",
+                modelProfileId: "wan22-ti2v-5b",
+            },
+        );
+        const stage = minimalStage({ model: "ltx" });
+        const optionsFor = (
+            entryMode: "text-to-video" | "image-to-video",
+            sourceVideo = false,
+            initialReference = false,
+        ) => {
+            const clip = minimalClip({
+                refs: initialReference ? [minimalRef({ frame: 1 })] : [],
+                sourceVideo: sourceVideo
+                    ? {
+                          data: "data:video/mp4;base64,AA==",
+                          fileName: "source.mp4",
+                          fps: 24,
+                          durationSeconds: 2,
+                          startSeconds: 0,
+                          lengthSeconds: 2,
+                      }
+                    : null,
+                stages: [stage],
+            });
+            const column = buildStageParamsColumn(
+                context(models, entryMode),
+                clip,
+                0,
+                0,
+                stage,
+                testRootDefaults(models),
+            );
+            return modelOptions(column)
+                .map((option) => option.value)
+                .filter((value) => value.startsWith("wan-"));
+        };
+
+        expect(optionsFor("text-to-video")).toEqual(["wan-5b.safetensors"]);
+        expect(optionsFor("text-to-video", false, true)).toEqual([
+            "wan-5b.safetensors",
+        ]);
+        expect(optionsFor("image-to-video")).toEqual([
+            "wan-14b.safetensors",
+            "wan-5b.safetensors",
+        ]);
+        expect(optionsFor("image-to-video", true)).toEqual([
+            "wan-14b.safetensors",
+            "wan-5b.safetensors",
+        ]);
+
+        const laterOptionsFor = (
+            entryMode: "text-to-video" | "image-to-video",
+            sourceVideo = false,
+            persistedModel = "wan-5b.safetensors",
+        ) => {
+            const laterStage = minimalStage({
+                model: persistedModel,
+                modelProfileId:
+                    persistedModel === "wan-14b.safetensors"
+                        ? "wan22-i2v-14b"
+                        : "wan22-ti2v-5b",
+            });
+            const clip = minimalClip({
+                architecture: "wan22",
+                modelProfileId: "wan22-ti2v-5b",
+                sourceVideo: sourceVideo
+                    ? {
+                          data: "data:video/mp4;base64,AA==",
+                          fileName: "source.mp4",
+                          fps: 24,
+                          durationSeconds: 2,
+                          startSeconds: 0,
+                          lengthSeconds: 2,
+                      }
+                    : null,
+                stages: [
+                    minimalStage({
+                        model: "wan-5b.safetensors",
+                        modelProfileId: "wan22-ti2v-5b",
+                    }),
+                    laterStage,
+                ],
+            });
+            const column = buildStageParamsColumn(
+                context(models, entryMode),
+                clip,
+                0,
+                1,
+                laterStage,
+                testRootDefaults(models),
+            );
+            return modelOptions(column).filter((option) =>
+                option.value.startsWith("wan-"),
+            );
+        };
+
+        expect(
+            laterOptionsFor("text-to-video").map(({ value }) => value),
+        ).toEqual(["wan-5b.safetensors"]);
+        expect(
+            laterOptionsFor("image-to-video").map(({ value }) => value),
+        ).toEqual(["wan-14b.safetensors", "wan-5b.safetensors"]);
+        expect(
+            laterOptionsFor("image-to-video", true).map(({ value }) => value),
+        ).toEqual(["wan-14b.safetensors", "wan-5b.safetensors"]);
+        const persisted14b = laterOptionsFor(
+            "text-to-video",
+            false,
+            "wan-14b.safetensors",
+        );
+        expect(persisted14b.map(({ value }) => value)).toEqual([
+            "wan-14b.safetensors",
+            "wan-5b.safetensors",
+        ]);
+        expect(persisted14b[0]).toMatchObject({ disabled: true });
+    });
+
     it("keeps unsupported persisted sampling and normal-LoRA values visible for repair", () => {
         const models = catalog();
         const stage = minimalStage({
@@ -312,7 +464,7 @@ describe("stage architecture model filtering", () => {
             (entry) => entry.id === "test-video",
         );
         if (!fake) throw new Error("missing fake architecture");
-        fake.capabilities.entryModes = ["text-to-video"];
+        fake.profiles[0].entryModes = ["text-to-video"];
         const clip = minimalClip({
             sourceVideo: {
                 data: "data:video/mp4;base64,AA==",
@@ -346,7 +498,7 @@ describe("stage architecture model filtering", () => {
             (entry) => entry.id === "test-video",
         );
         if (!fake) throw new Error("missing fake architecture");
-        fake.capabilities.entryModes = ["text-to-video"];
+        fake.profiles[0].entryModes = ["text-to-video"];
         const persisted = minimalStage({
             model: "test-video.safetensors",
             modelProfileId: "test-profile",
@@ -540,8 +692,8 @@ describe("stage architecture model filtering", () => {
             (entry) => entry.id === "test-video",
         );
         if (!ltx || !fake) throw new Error("missing test architectures");
-        ltx.capabilities.entryModes = ["image-to-video"];
-        fake.capabilities.entryModes = ["text-to-video"];
+        ltx.profiles[0].entryModes = ["image-to-video"];
+        fake.profiles[0].entryModes = ["text-to-video"];
         const textStage = minimalStage({
             model: "test-video.safetensors",
             modelProfileId: "test-profile",

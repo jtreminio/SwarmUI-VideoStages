@@ -550,7 +550,7 @@ describe("architecture diagnostics", () => {
             (entry) => entry.id === "test-video",
         );
         if (!fake) throw new Error("missing fake architecture");
-        fake.capabilities.entryModes = ["text-to-video"];
+        fake.profiles[0].entryModes = ["text-to-video"];
         const clip = minimalClip({
             architecture: "test-video",
             modelProfileId: "test-profile",
@@ -571,6 +571,79 @@ describe("architecture diagnostics", () => {
             deriveArchitectureDiagnostics([clip], models, "text-to-video").map(
                 ({ code }) => code,
             ),
+        ).not.toContain("architecture.entry-mode-unsupported");
+    });
+
+    it("keeps text entry exact when a WAN clip has a frame-1 reference", () => {
+        const models = combinedCatalog();
+        const template = models.architectures.find(
+            (entry) => entry.id === "ltx2",
+        );
+        if (!template) throw new Error("missing architecture template");
+        const wan = structuredClone(template);
+        wan.id = "wan22";
+        wan.label = "WAN 2.2";
+        wan.defaultProfileId = "wan22-i2v-14b";
+        wan.capabilities.entryModes = [
+            "text-to-video",
+            "image-to-video",
+            "source-video",
+        ];
+        wan.profiles = [
+            {
+                ...wan.profiles[0],
+                id: "wan22-i2v-14b",
+                label: "WAN 2.2 I2V 14B",
+                entryModes: ["image-to-video", "source-video"],
+            },
+            {
+                ...wan.profiles[0],
+                id: "wan22-ti2v-5b",
+                label: "WAN 2.2 TI2V 5B",
+                entryModes: ["text-to-video", "image-to-video", "source-video"],
+            },
+        ];
+        models.architectures.push(wan);
+        models.entries.push(
+            {
+                value: "wan-14b.safetensors",
+                label: "WAN 14B",
+                architectureId: "wan22",
+                modelProfileId: "wan22-i2v-14b",
+            },
+            {
+                value: "wan-5b.safetensors",
+                label: "WAN 5B",
+                architectureId: "wan22",
+                modelProfileId: "wan22-ti2v-5b",
+            },
+        );
+        const guidedClip = (model: string, modelProfileId: string) =>
+            minimalClip({
+                architecture: "wan22",
+                modelProfileId,
+                refs: [minimalRef({ frame: 1 })],
+                stages: [
+                    minimalStage({
+                        model,
+                        modelProfileId,
+                    }),
+                ],
+            });
+
+        expect(
+            deriveArchitectureDiagnostics(
+                [guidedClip("wan-14b.safetensors", "wan22-i2v-14b")],
+                models,
+                "text-to-video",
+            ).map(({ code }) => code),
+        ).toContain("architecture.entry-mode-unsupported");
+        expect(
+            deriveArchitectureDiagnostics(
+                [guidedClip("wan-5b.safetensors", "wan22-ti2v-5b")],
+                models,
+                "text-to-video",
+            ).map(({ code }) => code),
         ).not.toContain("architecture.entry-mode-unsupported");
     });
 });

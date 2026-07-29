@@ -32,7 +32,6 @@ internal static class NoneArchitecture
         Id,
         "Decoded source only",
         ProfileId,
-        [ArchitectureEntryMode.SourceVideo],
         [
             AudioSourceKind.Disabled,
             AudioSourceKind.Upload,
@@ -41,6 +40,7 @@ internal static class NoneArchitecture
             new(
                 ProfileId,
                 "Decoded source only",
+                [ArchitectureEntryMode.SourceVideo],
                 ModelProfileCapability.None,
                 [])
         ],

@@ -29,6 +29,7 @@ describe("architecture conversion policy", () => {
             modelProfileId: "test-profile",
             model: "test-video.safetensors",
             capabilities: fake.architectures[0].capabilities,
+            entryModes: fake.architectures[0].profiles[0].entryModes,
         };
         const clip = minimalClip({
             loras: [{ name: "detail" }],
@@ -73,6 +74,9 @@ describe("architecture conversion policy", () => {
                 model: "test-video.safetensors",
                 capabilities:
                     testArchitectureCatalog().architectures[0].capabilities,
+                entryModes:
+                    fakeArchitectureCatalog().architectures[0].profiles[0]
+                        .entryModes,
             },
             fakeArchitectureCatalog(),
         );
@@ -85,6 +89,9 @@ describe("architecture conversion policy", () => {
                 model: "ltx",
                 capabilities:
                     testArchitectureCatalog().architectures[0].capabilities,
+                entryModes:
+                    testArchitectureCatalog().architectures[0].profiles[0]
+                        .entryModes,
             },
             testArchitectureCatalog(),
         );
@@ -119,6 +126,9 @@ describe("architecture conversion policy", () => {
                 model: "ltx",
                 capabilities:
                     testArchitectureCatalog().architectures[0].capabilities,
+                entryModes:
+                    testArchitectureCatalog().architectures[0].profiles[0]
+                        .entryModes,
             },
             testArchitectureCatalog(),
         );
@@ -147,11 +157,12 @@ describe("architecture conversion policy", () => {
         expect(apply).toHaveBeenCalledTimes(1);
     });
 
-    it("gates source and generated starts from catalog entry modes", () => {
-        const ltx = testArchitectureCatalog().architectures[0].capabilities;
-        const textOnly =
-            fakeArchitectureCatalog().architectures[0].capabilities;
-        textOnly.entryModes = ["text-to-video"];
+    it("requires the exact clip source or host-generated entry mode", () => {
+        const ltx =
+            testArchitectureCatalog().architectures[0].profiles[0].entryModes;
+        const textOnly = ["text-to-video"];
+        const sourceOnly = ["source-video"];
+        const refineOnly = ["refine-video"];
         const source = minimalClip({
             sourceVideo: {
                 data: "data:video/mp4;base64,AA==",
@@ -170,12 +181,26 @@ describe("architecture conversion policy", () => {
             architectureSupportsClipStart(textOnly, source, "text-to-video"),
         ).toBe(false);
         expect(
+            architectureSupportsClipStart(sourceOnly, source, "text-to-video"),
+        ).toBe(true);
+        expect(
+            architectureSupportsClipStart(refineOnly, source, "text-to-video"),
+        ).toBe(false);
+        const guidedText = minimalClip({ refs: [minimalRef({ frame: 1 })] });
+        expect(
             architectureSupportsClipStart(
                 textOnly,
-                minimalClip(),
+                guidedText,
                 "text-to-video",
             ),
         ).toBe(true);
+        expect(
+            architectureSupportsClipStart(
+                ["image-to-video"],
+                guidedText,
+                "text-to-video",
+            ),
+        ).toBe(false);
     });
 
     it("retains clip LoRAs and selectively disables target-rule violations", () => {
@@ -204,6 +229,7 @@ describe("architecture conversion policy", () => {
                 modelProfileId: "ltx-2.3",
                 model: "ltx",
                 capabilities: catalog.architectures[0].capabilities,
+                entryModes: catalog.architectures[0].profiles[0].entryModes,
             },
             catalog,
         );
@@ -225,6 +251,7 @@ describe("architecture conversion policy", () => {
             model: "test-video.safetensors",
             capabilities:
                 testArchitectureCatalog().architectures[0].capabilities,
+            entryModes: catalog.architectures[0].profiles[0].entryModes,
         };
         const source = minimalClip({
             // Including the dropped payload: undo has to restore it too.

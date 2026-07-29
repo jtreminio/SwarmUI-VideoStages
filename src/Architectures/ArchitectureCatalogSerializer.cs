@@ -113,6 +113,7 @@ internal static class ArchitectureCatalogSerializer
     {
         ["id"] = profile.Id.Value,
         ["label"] = profile.DisplayName,
+        ["entryModes"] = new JArray(profile.EntryModes.Select(SerializeEntryMode)),
         ["capabilities"] = new JArray(ProfileCapabilities(profile.Capabilities)),
         ["rules"] = new JArray(profile.Rules.Select(SerializeRule)),
     };

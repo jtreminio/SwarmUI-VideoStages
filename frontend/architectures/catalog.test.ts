@@ -29,6 +29,7 @@ const dto = {
                 {
                     id: "synthetic-profile",
                     label: "Synthetic Profile",
+                    entryModes: ["image-to-video"],
                     capabilities: ["normal-lora"],
                     rules: [],
                 },
@@ -118,6 +119,59 @@ describe("architecture catalog wire contract", () => {
                 models: [dto.models[0], dto.models[0]],
             }),
         ).toBeNull();
+    });
+
+    it("requires non-empty unique entry modes on every model profile", () => {
+        const missing = structuredClone(dto);
+        delete (
+            missing.architectures[0].profiles[0] as {
+                entryModes?: string[];
+            }
+        ).entryModes;
+        expect(parseVideoArchitectureCatalog(missing)).toBeNull();
+
+        const empty = structuredClone(dto);
+        empty.architectures[0].profiles[0].entryModes = [];
+        expect(parseVideoArchitectureCatalog(empty)).toBeNull();
+
+        const duplicate = structuredClone(dto);
+        duplicate.architectures[0].profiles[0].entryModes = [
+            "image-to-video",
+            "image-to-video",
+        ];
+        expect(parseVideoArchitectureCatalog(duplicate)).toBeNull();
+    });
+
+    it("rejects unknown profile and overview entry modes", () => {
+        const unknownProfile = structuredClone(dto);
+        unknownProfile.architectures[0].profiles[0].entryModes[0] =
+            "future-video-mode";
+        expect(parseVideoArchitectureCatalog(unknownProfile)).toBeNull();
+
+        const unknownOverview = structuredClone(dto);
+        unknownOverview.architectures[0].capabilities.entryModes[0] =
+            "future-video-mode";
+        expect(parseVideoArchitectureCatalog(unknownOverview)).toBeNull();
+    });
+
+    it("requires overview entry modes to be the exact profile-mode union", () => {
+        const reordered = structuredClone(dto);
+        reordered.architectures[0].capabilities.entryModes.reverse();
+        expect(parseVideoArchitectureCatalog(reordered)).not.toBeNull();
+
+        const missingOverviewMode = structuredClone(dto);
+        missingOverviewMode.architectures[0].capabilities.entryModes =
+            missingOverviewMode.architectures[0].capabilities.entryModes.filter(
+                (mode) => mode !== "refine-video",
+            );
+        expect(parseVideoArchitectureCatalog(missingOverviewMode)).toBeNull();
+
+        const extraOverviewMode = structuredClone(dto);
+        extraOverviewMode.architectures[0].profiles[0].entryModes =
+            extraOverviewMode.architectures[0].profiles[0].entryModes.filter(
+                (mode) => mode !== "refine-video",
+            );
+        expect(parseVideoArchitectureCatalog(extraOverviewMode)).toBeNull();
     });
 
     it("requires the complete boundary/rule contract and lossless metadata", () => {
@@ -462,5 +516,25 @@ describe("authoritative catalog repository", () => {
         document.body.appendChild(input);
 
         expect(isRootTextToVideoModel()).toBe(true);
+    });
+
+    it("classifies a root model by its exact profile instead of the architecture union", async () => {
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => dto,
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        const input = document.createElement("input");
+        input.id = "input_model";
+        input.value = dto.models[1].modelName;
+        document.body.appendChild(input);
+
+        expect(dto.architectures[0].capabilities.entryModes).toContain(
+            "text-to-video",
+        );
+        expect(dto.architectures[0].profiles[1].entryModes).not.toContain(
+            "text-to-video",
+        );
+        expect(isRootTextToVideoModel()).toBe(false);
     });
 });

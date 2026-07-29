@@ -548,9 +548,13 @@ public class DecisionOwnerRegressionTests
             id,
             "Unit Test Foreign",
             profileId,
-            [ArchitectureEntryMode.ImageToVideo],
             [AudioSourceKind.Native],
-            [new(profileId, profileId.Value, ModelProfileCapability.None, [])],
+            [new(
+                profileId,
+                profileId.Value,
+                [ArchitectureEntryMode.ImageToVideo],
+                ModelProfileCapability.None,
+                [])],
             new(
                 ArchitectureCapability.GeneratedEntry,
                 ClipCapability.None,

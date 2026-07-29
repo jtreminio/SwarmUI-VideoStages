@@ -7,10 +7,10 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Wan;
 
 /// <summary>
-/// Wan's host-root handoff. A Wan clip entering from the host image-to-video root compiles to
+/// Wan's host-root handoff. A Wan clip entering from host-owned root media compiles to
 /// <see cref="HostCoreDisposition"/>.Handoff: the host still runs its own image-to-video
-/// pass, so the image it started from is captured before that happens, restored afterwards, and
-/// everything the host added in between is pruned. Wan then generates from that image itself.
+/// pass, so the media it started from is captured before that happens, restored afterwards, and
+/// everything the host added in between is pruned. Wan then generates from that media itself.
 /// Both host phases build a fresh adapter, so the capture lives in node helpers rather than in
 /// this object.
 /// </summary>
@@ -30,7 +30,7 @@ internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
         try
         {
             using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-            string media = EncodeRequiredMarker(bridge, g.CurrentMedia, "host root image");
+            string media = EncodeRequiredMarker(bridge, g.CurrentMedia, "host root media");
             string vae = g.CurrentVae is null
                 ? NullMarker
                 : EncodeRequiredMarker(bridge, g.CurrentVae, "host root VAE");
@@ -68,7 +68,7 @@ internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
             WGNodeData media = LoadRequiredMarker(
                 bridge,
                 _keys.PreCoreMedia,
-                "host root image",
+                "host root media",
                 fallbackVae: vae);
             HashSet<string> preCoreIds = LoadRequiredSnapshot(bridge);
             g.CurrentMedia = media;
@@ -97,8 +97,8 @@ internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
     }
 
     /// <summary>
-    /// Deliberately narrower than LTX's stage-ref marker: the host root Wan enters from is a still
-    /// image, so it carries no frame count, frame rate, or attached audio to preserve.
+    /// Deliberately narrower than LTX's stage-ref marker: this handoff only intercepts host root
+    /// image media today, so it carries no frame count, frame rate, or attached audio to preserve.
     /// </summary>
     private static string EncodeRequiredMarker(
         WorkflowBridge bridge,

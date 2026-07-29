@@ -27,10 +27,32 @@ internal static class ArchitectureCapabilityValidator
             }
         }
 
+        bool everyExecutingProfileSupportsEntry;
+        if (!hasActiveStages)
+        {
+            VideoModelProfileDescriptor defaultProfile = descriptor.Profiles.SingleOrDefault(
+                profile => profile.Id == descriptor.DefaultProfileId);
+            everyExecutingProfileSupportsEntry =
+                defaultProfile?.EntryModes?.Contains(entryMode) == true;
+        }
+        else
+        {
+            everyExecutingProfileSupportsEntry = clip.Stages.All(stage =>
+                stageModels.TryGetValue(
+                    stage.ClipStageRawIndex,
+                    out ResolvedVideoModel resolved)
+                && resolved is not null
+                && resolved.ArchitectureId == descriptor.Id
+                && ReferenceEquals(resolved.Architecture, descriptor)
+                && descriptor.Profiles.SingleOrDefault(
+                    profile => profile.Id == resolved.ModelProfileId)
+                    ?.EntryModes
+                    ?.Contains(entryMode) == true);
+        }
         Require(
             configured: true,
-            descriptor.EntryModes.Contains(entryMode),
-            $"entry mode '{entryMode}'");
+            everyExecutingProfileSupportsEntry,
+            $"entry mode '{entryMode}' for every executing model profile");
         Require(
             clip.SourceVideo is null,
             Has(
@@ -265,7 +287,8 @@ internal static class ArchitectureCapabilityValidator
 
             if (!stageModels.TryGetValue(
                     stage.ClipStageRawIndex,
-                    out ResolvedVideoModel resolved))
+                    out ResolvedVideoModel resolved)
+                || resolved is null)
             {
                 continue;
             }

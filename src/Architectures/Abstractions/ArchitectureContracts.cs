@@ -303,6 +303,7 @@ internal interface IArchitectureControlNetSourcePlan
 internal sealed record VideoModelProfileDescriptor(
     ModelProfileId Id,
     string DisplayName,
+    IReadOnlyList<ArchitectureEntryMode> EntryModes,
     ModelProfileCapability Capabilities,
     IReadOnlyList<RuleDecision> Rules)
 {
@@ -318,7 +319,6 @@ internal sealed record VideoArchitectureDescriptor(
     ArchitectureId Id,
     string DisplayName,
     ModelProfileId DefaultProfileId,
-    IReadOnlyList<ArchitectureEntryMode> EntryModes,
     IReadOnlyList<AudioSourceKind> AudioSourceKinds,
     IReadOnlyList<VideoModelProfileDescriptor> Profiles,
     ArchitectureCapabilityDescriptor Capabilities,
@@ -337,6 +337,16 @@ internal sealed record VideoArchitectureDescriptor(
 
     public IReadOnlyList<ModelProfileId> ModelProfiles =>
         Array.AsReadOnly(Profiles.Select(profile => profile.Id).ToArray());
+
+    /// <summary>
+    /// Overview/backward catalog projection only. Entry authorization belongs exclusively to the
+    /// selected model profiles and must never consult this union.
+    /// </summary>
+    public IReadOnlyList<ArchitectureEntryMode> EntryModes =>
+        Array.AsReadOnly(Profiles
+            .SelectMany(profile => profile.EntryModes)
+            .Distinct()
+            .ToArray());
 
     public IReadOnlyList<RuleDecision> Rules { get; init; } = [];
 }

@@ -43,6 +43,28 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                     $"Video architecture '{descriptor.Id}' has duplicate model profile ids: "
                     + string.Join(", ", duplicateProfiles.Select(id => $"'{id}'")));
             }
+            foreach (VideoModelProfileDescriptor profile in descriptor.Profiles)
+            {
+                if (profile.EntryModes is not { Count: > 0 })
+                {
+                    throw new InvalidOperationException(
+                        $"Video architecture '{descriptor.Id}' profile '{profile.Id}' must "
+                            + "declare at least one entry mode.");
+                }
+                ArchitectureEntryMode[] duplicateEntryModes = [
+                    .. profile.EntryModes
+                        .GroupBy(mode => mode)
+                        .Where(group => group.Count() > 1)
+                        .Select(group => group.Key)
+                ];
+                if (duplicateEntryModes.Length > 0
+                    || profile.EntryModes.Any(mode => !Enum.IsDefined(mode)))
+                {
+                    throw new InvalidOperationException(
+                        $"Video architecture '{descriptor.Id}' profile '{profile.Id}' has "
+                            + "duplicate or invalid entry modes.");
+                }
+            }
             BoundaryExecutionMode[] missingBoundaryModes = [
                 .. Enum.GetValues<BoundaryExecutionMode>()
                     .Where(mode => !descriptor.BoundaryRules.ContainsKey(mode))

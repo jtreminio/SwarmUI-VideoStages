@@ -253,11 +253,29 @@ export const deriveArchitectureDiagnostics = (
             if (
                 !sourceOnly &&
                 activeStageCount(clip) > 0 &&
-                !architectureSupportsClipStart(
-                    architecture.capabilities,
-                    clip,
-                    generatedEntryMode,
-                )
+                !clip.stages
+                    .filter((stage) => !stage.skipped)
+                    .every((stage) => {
+                        const resolved = modelByName.get(stage.model);
+                        const profile = resolved?.architectureId
+                            ? architectureById
+                                  .get(resolved.architectureId)
+                                  ?.profiles.find(
+                                      (candidate) =>
+                                          candidate.id ===
+                                          resolved.modelProfileId,
+                                  )
+                            : null;
+                        return (
+                            profile !== null &&
+                            profile !== undefined &&
+                            architectureSupportsClipStart(
+                                profile.entryModes,
+                                clip,
+                                generatedEntryMode,
+                            )
+                        );
+                    })
             ) {
                 diagnostics.push(
                     issue(

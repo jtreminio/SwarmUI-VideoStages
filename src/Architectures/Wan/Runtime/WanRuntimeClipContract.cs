@@ -41,7 +41,21 @@ internal static class WanRuntimeClipContract
             && clip.Input == ClipInputKind.RootMedia
             && !clip.IsSourced
             && clip.SourceVideo is null;
-        if (!sourcedEntry && !generatedEntry)
+        bool textEntry =
+            clip.EntryMode == ArchitectureEntryMode.TextToVideo
+            && clip.Input == ClipInputKind.EmptyLatent
+            && !clip.IsSourced
+            && clip.SourceVideo is null
+            && clipPayload.ProfileId == WanArchitectureModule.Ti2v5bProfileId
+            && plan.Root is
+            {
+                HostKind: HostRootKind.TextToVideoRoot,
+                Use: RootUse.Discard,
+                CoreDisposition: HostCoreDisposition.Drop,
+                OutputDisposition: TimelineOutputDisposition.PublishTimelineOutput,
+                NativeAudioDisposition: NativeAudioDisposition.DiscardWithRoot,
+            };
+        if (!sourcedEntry && !generatedEntry && !textEntry)
         {
             throw Invalid(clip, "has incongruent entry mode, clip input, or source-video plan");
         }
@@ -75,7 +89,9 @@ internal static class WanRuntimeClipContract
             WanStagePayload payload = stage.ArchitecturePayload as WanStagePayload
                 ?? throw Invalid(clip, $"stage {stage.StageId} has no canonical Wan stage payload");
             StageInputKind expectedInput = index == 0
-                ? sourcedEntry ? StageInputKind.SourceVideo : StageInputKind.RootMedia
+                ? sourcedEntry
+                    ? StageInputKind.SourceVideo
+                    : textEntry ? StageInputKind.EmptyLatent : StageInputKind.RootMedia
                 : StageInputKind.PreviousStage;
             if (stage.ClipStageIndex != index
                 || stage.ClipStageRawIndex < 0

@@ -1264,18 +1264,6 @@
   // frontend/architectures/catalogQueries.ts
   var architectureDescriptor = (catalog, architectureId) => (architectureId ? catalog?.architectures.find((entry) => entry.id === architectureId) : null) ?? null;
   var modelCatalogEntry = (catalog, model) => (model ? catalog?.entries.find((entry) => entry.value === model) : null) ?? null;
-  var architectureCatalogView = (catalog, architectureId) => {
-    const catalogArchitecture = architectureDescriptor(catalog, architectureId);
-    const entries = catalog.entries.filter(
-      (entry) => entry.architectureId === architectureId
-    );
-    return {
-      architectureId,
-      architectureLabel: catalogArchitecture?.label ?? architectureId,
-      values: entries.map((entry) => entry.value),
-      labels: entries.map((entry) => entry.label)
-    };
-  };
   var supportedArchitectureCatalog = (catalog) => ({
     architectures: structuredClone(catalog.architectures),
     source: catalog.source,
@@ -1288,20 +1276,79 @@
     const architectureId = entry?.architectureId ?? null;
     const descriptor = architectureDescriptor(catalog, architectureId);
     const profileId = entry?.modelProfileId ?? null;
+    const profile = descriptor?.profiles.find(
+      (candidate) => candidate.id === profileId
+    );
     const capabilities = descriptor?.capabilities;
-    return architectureId && profileId && capabilities ? {
+    return architectureId && profileId && profile && capabilities ? {
       architectureId,
       modelProfileId: profileId,
       model,
-      capabilities: structuredClone(capabilities)
+      capabilities: structuredClone(capabilities),
+      entryModes: [...profile.entryModes]
     } : null;
+  };
+
+  // frontend/architectures/conditionalRules.ts
+  var CONDITIONAL_RULE_CODES = {
+    audioReuseRequiresStages: "audio.reuse.requires_three_stages",
+    normalLoraRequiresSamplingStage: "normal-lora-requires-sampling-stage",
+    promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
+    retakeExcludesReferences: "retake-frame-references-unsupported",
+    retakeRequiresSource: "retake-source-required",
+    uniformTimelineHdr: "mixed-hdr-timeline-unsupported"
+  };
+  var conditionalRule = (rules, code) => rules.find((rule) => rule.code === code) ?? null;
+  var finiteConstraint = (rule, key, fallback) => {
+    const value = Number(rule.constraints?.[key]);
+    return Number.isFinite(value) ? value : fallback;
+  };
+  var DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES = 3;
+  var audioReuseMinimumActiveStages = (rule) => rule?.code === CONDITIONAL_RULE_CODES.audioReuseRequiresStages ? finiteConstraint(
+    rule,
+    "minimumActiveStages",
+    DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES
+  ) : DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES;
+  var evaluateConditionalRule = (rule, context) => {
+    const clip = context.clip;
+    switch (rule.code) {
+      case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
+        return clip !== void 0 && activeStageCount(clip) < audioReuseMinimumActiveStages(rule);
+      case CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage:
+        return context.stage !== void 0 && context.stage.control <= finiteConstraint(rule, "exclusiveMinimumControl", 0);
+      case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
+        return clip !== void 0 && (clip.clipLengthFromAudio || clip.clipLengthFromControlNet);
+      case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
+        return clip !== void 0 && clip.refs.length > 0 && (clip.sourceVideo !== null || context.globalRefineMode === true);
+      case CONDITIONAL_RULE_CODES.retakeRequiresSource:
+        return clip !== void 0 && clip.sourceVideo === null && context.globalRefineMode !== true;
+      case CONDITIONAL_RULE_CODES.uniformTimelineHdr: {
+        const clips = context.timelineClips;
+        const hasActiveHdr = context.hasActiveHdr;
+        if (!clips || !hasActiveHdr) return false;
+        if (clips.length < finiteConstraint(rule, "minimumTimelineClips", 2)) {
+          return false;
+        }
+        const hdr = clips.map(hasActiveHdr);
+        return hdr.some(Boolean) && hdr.some((value) => !value);
+      }
+      default:
+        return false;
+    }
   };
 
   // frontend/architectures/catalogWire.ts
   var BOUNDARY_MODES = ["cut", "continue", "crossfade"];
+  var ENTRY_MODES = [
+    "text-to-video",
+    "image-to-video",
+    "source-video",
+    "refine-video"
+  ];
   var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var isTrimmedNonEmpty = (value) => typeof value === "string" && value.length > 0 && value === value.trim();
   var isUniqueStringArray = (value) => Array.isArray(value) && value.every((entry) => isTrimmedNonEmpty(entry)) && new Set(value).size === value.length;
+  var isEntryModeArray = (value) => isUniqueStringArray(value) && value.every((entry) => ENTRY_MODES.includes(entry));
   var isRuleDecision = (value, allowedScopes) => {
     if (!isRecord2(value) || !["supported", "unsupported", "conditional"].includes(
       `${value.support}`
@@ -1326,6 +1373,16 @@
       return false;
     }
     return true;
+  };
+  var isMinimumStageControlRule = (value) => {
+    if (value.code !== CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage) {
+      return true;
+    }
+    if (value.support !== "conditional" || value.scope !== "stage" || value.entityId !== null || !isRecord2(value.constraints)) {
+      return false;
+    }
+    const constraints = value.constraints;
+    return Object.keys(value.constraints).length === 1 && typeof constraints.exclusiveMinimumControl === "number" && Number.isFinite(constraints.exclusiveMinimumControl);
   };
   var isBoundaryRule = (value) => {
     if (!isRuleDecision(value, ["boundary"]) || value.entityId !== null) {
@@ -1355,8 +1412,10 @@
     const continuityExtraFrames = constraints.continuityExtraFrames;
     return frameStep > 0 && minFrames >= 0 && maxFrames >= minFrames && defaultFrames >= minFrames && defaultFrames <= maxFrames && continuityExtraFrames >= 0 && (defaultFrames - minFrames) % frameStep === 0;
   };
-  var isRuleArray = (value, allowedScopes) => Array.isArray(value) && value.every((rule) => isRuleDecision(rule, allowedScopes)) && new Set(value.map((rule) => rule.code)).size === value.length;
-  var isProfile = (value) => isRecord2(value) && isTrimmedNonEmpty(value.id) && isTrimmedNonEmpty(value.label) && isUniqueStringArray(value.capabilities) && isRuleArray(value.rules, ["model-profile"]);
+  var isRuleArray = (value, allowedScopes) => Array.isArray(value) && value.every(
+    (rule) => isRuleDecision(rule, allowedScopes) && isMinimumStageControlRule(rule)
+  ) && new Set(value.map((rule) => rule.code)).size === value.length;
+  var isProfile = (value) => isRecord2(value) && isTrimmedNonEmpty(value.id) && isTrimmedNonEmpty(value.label) && isEntryModeArray(value.entryModes) && value.entryModes.length > 0 && isUniqueStringArray(value.capabilities) && isRuleArray(value.rules, ["model-profile", "stage"]);
   var isCapabilities = (value) => {
     if (!isRecord2(value)) {
       return false;
@@ -1367,9 +1426,8 @@
       value.stage,
       value.output,
       value.upscaleModes,
-      value.entryModes,
       value.audioSourceKinds
-    ].every(isUniqueStringArray);
+    ].every(isUniqueStringArray) && isEntryModeArray(value.entryModes);
   };
   var hasCompleteBoundaryRules = (value) => {
     if (!isRecord2(value)) {
@@ -1389,6 +1447,10 @@
         return null;
       }
       const profileIds = raw.profiles.map((profile) => profile.id);
+      const overviewEntryModes = new Set(raw.capabilities.entryModes);
+      const profileEntryModes = new Set(
+        raw.profiles.flatMap((profile) => profile.entryModes)
+      );
       const allCodes = [
         ...Object.values(raw.boundaryRules).map((rule) => rule.code),
         ...raw.rules.map((rule) => rule.code),
@@ -1396,7 +1458,9 @@
           (profile) => profile.rules.map((rule) => rule.code)
         )
       ];
-      if (architectureIds.has(raw.id) || new Set(profileIds).size !== profileIds.length || !profileIds.includes(raw.defaultProfileId) || new Set(allCodes).size !== allCodes.length) {
+      if (architectureIds.has(raw.id) || new Set(profileIds).size !== profileIds.length || !profileIds.includes(raw.defaultProfileId) || overviewEntryModes.size !== profileEntryModes.size || ![...overviewEntryModes].every(
+        (mode) => profileEntryModes.has(mode)
+      ) || new Set(allCodes).size !== allCodes.length) {
         return null;
       }
       architectureIds.add(raw.id);
@@ -2859,9 +2923,8 @@
       return false;
     }
     const catalog = buildArchitectureModelCatalog([modelName], [modelName]);
-    const architectureId = architectureForModel(catalog, modelName);
-    const architecture = architectureDescriptor(catalog, architectureId);
-    return architecture?.capabilities.entryModes.includes("text-to-video") ?? false;
+    const target = buildArchitectureRetargetPlan(catalog, modelName);
+    return target ? target.entryModes.includes("text-to-video") : false;
   };
   var getRootGeneratedEntryMode = () => !`${getRootModelInput()?.value ?? ""}`.trim() || isRootTextToVideoModel() ? "text-to-video" : "image-to-video";
   var getDropdownOptions = (paramId, fallbackSelectId) => {
@@ -3528,51 +3591,6 @@
     return true;
   };
 
-  // frontend/architectures/conditionalRules.ts
-  var CONDITIONAL_RULE_CODES = {
-    audioReuseRequiresStages: "audio.reuse.requires_three_stages",
-    promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
-    retakeExcludesReferences: "retake-frame-references-unsupported",
-    retakeRequiresSource: "retake-source-required",
-    uniformTimelineHdr: "mixed-hdr-timeline-unsupported"
-  };
-  var conditionalRule = (rules, code) => rules.find((rule) => rule.code === code) ?? null;
-  var finiteConstraint = (rule, key, fallback) => {
-    const value = Number(rule.constraints?.[key]);
-    return Number.isFinite(value) ? value : fallback;
-  };
-  var DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES = 3;
-  var audioReuseMinimumActiveStages = (rule) => rule?.code === CONDITIONAL_RULE_CODES.audioReuseRequiresStages ? finiteConstraint(
-    rule,
-    "minimumActiveStages",
-    DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES
-  ) : DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES;
-  var evaluateConditionalRule = (rule, context) => {
-    const clip = context.clip;
-    switch (rule.code) {
-      case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
-        return clip !== void 0 && activeStageCount(clip) < audioReuseMinimumActiveStages(rule);
-      case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
-        return clip !== void 0 && (clip.clipLengthFromAudio || clip.clipLengthFromControlNet);
-      case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
-        return clip !== void 0 && clip.refs.length > 0 && (clip.sourceVideo !== null || context.globalRefineMode === true);
-      case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-        return clip !== void 0 && clip.sourceVideo === null && context.globalRefineMode !== true;
-      case CONDITIONAL_RULE_CODES.uniformTimelineHdr: {
-        const clips = context.timelineClips;
-        const hasActiveHdr = context.hasActiveHdr;
-        if (!clips || !hasActiveHdr) return false;
-        if (clips.length < finiteConstraint(rule, "minimumTimelineClips", 2)) {
-          return false;
-        }
-        const hdr = clips.map(hasActiveHdr);
-        return hdr.some(Boolean) && hdr.some((value) => !value);
-      }
-      default:
-        return false;
-    }
-  };
-
   // frontend/architectures/policy/featureValues.ts
   var FEATURE_LABEL = {
     multiStage: "Multiple stages",
@@ -3727,10 +3745,15 @@
       const decision = (feature) => {
         if (feature === "stageLoras" && descriptor) {
           const supported = descriptor.capabilities.stage.includes("lora") && profile?.capabilities.includes("normal-lora") === true;
+          const profileRule = supported ? conditionalRule(
+            profile.rules,
+            CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
+          ) : null;
+          const violatedRule = profileRule && evaluateConditionalRule(profileRule, { clip, stage }) ? profileRule : null;
           return {
-            supported,
-            reason: supported ? "" : `LoRAs require normal-LoRA support in ${descriptor.label}.`,
-            rule: null
+            supported: supported && !violatedRule,
+            reason: supported && !violatedRule ? "" : violatedRule?.reason ?? `LoRAs require normal-LoRA support in ${descriptor.label}.`,
+            rule: violatedRule
           };
         }
         if (feature === "sampler" || feature === "scheduler") {
@@ -3784,7 +3807,9 @@
       modelProfileId: profile.id,
       model: model.value,
       capabilities: structuredClone(descriptor.capabilities),
-      profileCapabilities: [...profile.capabilities]
+      entryModes: [...profile.entryModes],
+      profileCapabilities: [...profile.capabilities],
+      profileRules: structuredClone(profile.rules)
     };
   };
   var planArchitectureConversion = (source, requested, catalog) => {
@@ -3803,6 +3828,10 @@
     const supportsMultipleStages = supports("multiStage");
     const supportsReferences = supports("frameReferences");
     const supportsNormalLoras = supports("stageLoras");
+    const samplingStageRule = conditionalRule(
+      target.profileRules,
+      CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
+    );
     clip.architecture = target.architectureId;
     clip.modelProfileId = target.modelProfileId;
     const payloadOwner = source.architecture === NONE_ARCHITECTURE_ID ? modelIdentityFromCatalog(catalog, source.stages[0]?.model ?? "")?.architectureId ?? source.architecture : source.architecture;
@@ -3830,6 +3859,7 @@
       clip.loras = [];
     }
     let removedUpscaleSettings = 0;
+    let repairedNormalLoraWeights = 0;
     for (const stage of clip.stages) {
       stage.model = target.model;
       stage.modelProfileId = target.modelProfileId;
@@ -3838,6 +3868,13 @@
       }
       if (!supportsNormalLoras) {
         stage.loraWeights = [];
+      } else if (samplingStageRule && evaluateConditionalRule(samplingStageRule, { clip, stage })) {
+        for (let index = 0; index < clip.loras.length; index++) {
+          if ((stage.loraWeights[index] ?? 1) !== 0) {
+            stage.loraWeights[index] = 0;
+            repairedNormalLoraWeights++;
+          }
+        }
       }
       if (stage.upscale !== 1 && !supports("upscale", { upscaleMethod: stage.upscaleMethod })) {
         removedUpscaleSettings++;
@@ -3846,6 +3883,11 @@
     }
     if (removedClipLoras > 0) {
       removals.push(countLabel(removedClipLoras, "clip LoRA"));
+    }
+    if (repairedNormalLoraWeights > 0) {
+      removals.push(
+        `${repairedNormalLoraWeights} normal LoRA ${repairedNormalLoraWeights === 1 ? "weight" : "weights"} disabled on samplerless stages`
+      );
     }
     if (removedUpscaleSettings > 0) {
       removals.push("stage upscale settings");
@@ -4391,14 +4433,18 @@
       catalog,
       targetEntry?.architectureId
     );
-    if (!catalog || !sourceArchitectureId || !targetStage || !targetEntry?.architectureId || !targetEntry.modelProfileId || !targetDescriptor || targetEntry.architectureId !== nextIdentity?.authoredArchitectureId || targetEntry.modelProfileId !== targetStage.modelProfileId) {
+    const targetProfile = targetDescriptor?.profiles.find(
+      (profile) => profile.id === targetEntry?.modelProfileId
+    );
+    if (!catalog || !sourceArchitectureId || !targetStage || !targetEntry?.architectureId || !targetEntry.modelProfileId || !targetDescriptor || !targetProfile || targetEntry.architectureId !== nextIdentity?.authoredArchitectureId || targetEntry.modelProfileId !== targetStage.modelProfileId) {
       throw new DocumentDiffError("architecture-invariant");
     }
     const target = {
       architectureId: targetEntry.architectureId,
       modelProfileId: targetEntry.modelProfileId,
       model: targetEntry.value,
-      capabilities: clone(targetDescriptor.capabilities)
+      capabilities: clone(targetDescriptor.capabilities),
+      entryModes: clone(targetProfile.entryModes)
     };
     const requestedForCleanup = clone(next);
     requestedForCleanup.architecture = sourceArchitectureId;
@@ -5644,15 +5690,12 @@
   var currentCapabilityViewResolver = () => createCapabilityViewResolver(getRootDefaults().modelCatalog);
 
   // frontend/architectures/conversion/entryModePolicy.ts
-  var architectureSupportsClipStart = (capabilities, clip, generatedEntryMode) => {
-    const modes = capabilities.entryModes;
+  var architectureSupportsClipStart = (entryModes, clip, generatedEntryMode) => {
+    const modes = entryModes;
     if (clip.sourceVideo !== null) {
-      return modes.includes("source-video") || modes.includes("refine-video");
+      return modes.includes("source-video");
     }
-    const hasInitialReference = clip.refs.some(
-      (reference) => reference.fromEnd !== true && Math.max(1, Math.round(reference.frame)) === 1
-    );
-    return hasInitialReference ? modes.includes("image-to-video") : modes.includes(generatedEntryMode);
+    return modes.includes(generatedEntryMode);
   };
 
   // frontend/architectures/diagnostics.ts
@@ -5793,6 +5836,7 @@
     const modelByName = new Map(
       catalog.entries.map((entry) => [entry.value, entry])
     );
+    const executableClipIndexSet = new Set(executableClipIndexes(clips));
     clips.forEach((clip, clipIdx) => {
       const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
       if (sourceOnly) {
@@ -5823,11 +5867,17 @@
             architecture.capabilities
           )
         );
-        if (!sourceOnly && activeStageCount(clip) > 0 && !architectureSupportsClipStart(
-          architecture.capabilities,
-          clip,
-          generatedEntryMode
-        )) {
+        if (!sourceOnly && activeStageCount(clip) > 0 && !clip.stages.filter((stage) => !stage.skipped).every((stage) => {
+          const resolved = modelByName.get(stage.model);
+          const profile = resolved?.architectureId ? architectureById.get(resolved.architectureId)?.profiles.find(
+            (candidate) => candidate.id === resolved.modelProfileId
+          ) : null;
+          return profile !== null && profile !== void 0 && architectureSupportsClipStart(
+            profile.entryModes,
+            clip,
+            generatedEntryMode
+          );
+        })) {
           diagnostics.push(
             issue(
               "architecture.entry-mode-unsupported",
@@ -5875,13 +5925,27 @@
         const resolvedProfile = architectureById.get(resolved.architectureId)?.profiles.find(
           (profile) => profile.id === resolved.modelProfileId
         );
-        if (clip.loras.some(
+        const hasEffectiveNormalLora = clip.loras.some(
           (_, index) => (stage.loraWeights[index] ?? 1) !== 0
-        ) && resolvedProfile && !resolvedProfile.capabilities.includes("normal-lora")) {
+        );
+        if (hasEffectiveNormalLora && resolvedProfile && !resolvedProfile.capabilities.includes("normal-lora")) {
           diagnostics.push(
             issue(
               "architecture.unsupported.stage-loras-profile",
               `Clip ${clipIdx} Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} has normal LoRAs, but model profile '${resolvedProfile.id}' does not support them.`,
+              clipIdx
+            )
+          );
+        }
+        const samplingStageRule = resolvedProfile ? conditionalRule(
+          resolvedProfile.rules,
+          CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
+        ) : null;
+        if (executableClipIndexSet.has(clipIdx) && stageIdx < activeStageCount(clip) && hasEffectiveNormalLora && samplingStageRule && evaluateConditionalRule(samplingStageRule, { clip, stage })) {
+          diagnostics.push(
+            issue(
+              samplingStageRule.code,
+              `Clip ${clipIdx} Stage ${stageIdx}: ${samplingStageRule.reason}`,
               clipIdx
             )
           );
@@ -11912,36 +11976,19 @@ The conversion is one undoable change.`;
     defaults,
     fields
   }) => {
-    const modelView = stageIdx === 0 ? {
-      values: defaults.modelCatalog.entries.flatMap((entry) => {
-        const architecture = architectureDescriptor(
+    const modelOptions = defaults.modelCatalog.entries.flatMap(
+      (entry) => {
+        const target = buildArchitectureRetargetPlan(
           defaults.modelCatalog,
-          entry.architectureId
+          entry.value
         );
-        return architecture && architectureSupportsClipStart(
-          architecture.capabilities,
+        return target && (stageIdx === 0 || target.architectureId === clip.architecture) && architectureSupportsClipStart(
+          target.entryModes,
           clip,
           context.generatedEntryMode()
-        ) ? [entry.value] : [];
-      }),
-      labels: defaults.modelCatalog.entries.flatMap(
-        (entry) => {
-          const architecture = architectureDescriptor(
-            defaults.modelCatalog,
-            entry.architectureId
-          );
-          return architecture && architectureSupportsClipStart(
-            architecture.capabilities,
-            clip,
-            context.generatedEntryMode()
-          ) ? [entry.label] : [];
-        }
-      )
-    } : architectureCatalogView(defaults.modelCatalog, clip.architecture);
-    const modelOptions = modelView.values.map((value, index) => ({
-      value,
-      label: modelView.labels[index] ?? value
-    }));
+        ) ? [{ value: entry.value, label: entry.label }] : [];
+      }
+    );
     if (stage.model && !modelOptions.some((option) => option.value === stage.model)) {
       modelOptions.unshift({
         value: stage.model,
@@ -12059,6 +12106,7 @@ The conversion is one undoable change.`;
     stageIdx,
     fields,
     stageCapabilities,
+    commit,
     debouncedCommit
   }) => {
     if (clip.refs.length > 0) {
@@ -12134,7 +12182,21 @@ The conversion is one undoable change.`;
         group.appendChild(row);
       });
       if (!loraState.enabled) {
-        disableCapabilityControls(group, loraState);
+        const hasEffectiveWeight = clip.loras.some(
+          (_, entryIdx) => (stage.loraWeights[entryIdx] ?? 1) !== 0
+        );
+        applyPersistedCapabilityRepair(group, loraState, {
+          repair: hasEffectiveWeight ? {
+            label: "Set this stage's LoRA weights to 0",
+            className: "vst-reset-unsupported-stage-loras",
+            onRepair: () => {
+              commit((target) => {
+                target.loraWeights = clip.loras.map(() => 0);
+              });
+              context.render();
+            }
+          } : void 0
+        });
       }
       fields.appendChild(group);
     }
@@ -12372,6 +12434,9 @@ The conversion is one undoable change.`;
     const sourcedStage0 = stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
     const isRefine = stageIdx >= 1 || sourcedStage0;
     const stageCapabilities = context.capabilities().forStage(clip, stage);
+    if (clip.loras.length > 0) {
+      column.dataset.vstStageLorasSupported = `${stageCapabilities.decision("stageLoras").supported}`;
+    }
     const commit = (mutate) => {
       context.commit((clips) => {
         const target = clips[clipIdx]?.stages[stageIdx];
@@ -14003,12 +14068,24 @@ The conversion is one undoable change.`;
       if (!selection || !dockEl || !renderedSelection) {
         return;
       }
+      const clips = getClips();
+      const renderedStageParams = dockEl.querySelector(
+        "[data-vst-stage-loras-supported]"
+      );
+      if (selection.kind === "clip" && renderedStageParams?.dataset.vstStageLorasSupported !== void 0) {
+        const clip = clips[selection.clipIdx];
+        const stage = clip?.stages[selection.stageIdx];
+        const currentSupported = clip && stage ? createCapabilityViewResolver(
+          getRootDefaults().modelCatalog
+        ).forStage(clip, stage).decision("stageLoras").supported : null;
+        if (currentSupported !== null && `${currentSupported}` !== renderedStageParams.dataset.vstStageLorasSupported) {
+          render();
+          return;
+        }
+      }
       const breadcrumb = dockEl.querySelector(".vst-detail-crumb");
       if (breadcrumb) {
-        breadcrumb.textContent = detailBreadcrumb(
-          renderedSelection,
-          getClips()
-        );
+        breadcrumb.textContent = detailBreadcrumb(renderedSelection, clips);
       }
     };
     draftQueue = createDetailDraftQueue({

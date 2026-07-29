@@ -426,7 +426,7 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Exact_5b_native_text_root_is_blocked_before_Wan_payload_compilation()
+    public void Exact_5b_native_text_root_compiles_to_empty_latent_entry()
     {
         StageSpec stage = Stage(10, "wan-five");
         ClipSpec clip = GeneratedClip(0, stage);
@@ -448,17 +448,72 @@ public class WanArchitectureTests
             RootEnvironment.FromSpec(spec),
             planning);
 
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        ClipPlan compiled = Assert.Single(plan.Clips);
+        Assert.Equal(ArchitectureEntryMode.TextToVideo, compiled.EntryMode);
+        Assert.Equal(ClipInputKind.EmptyLatent, compiled.Input);
+        Assert.Equal(StageInputKind.EmptyLatent, Assert.Single(compiled.Stages).Input);
+        Assert.Equal(
+            WanArchitectureModule.Ti2v5bProfileId,
+            compiled.RequireWanPayload().ProfileId);
+    }
+
+    [Fact]
+    public void Exact_5b_native_text_multistage_uses_empty_latent_then_previous_stage()
+    {
+        StageSpec first = Stage(10, "wan-five") with
+        {
+            ClipStageRawIndex = 0,
+        };
+        StageSpec second = Stage(11, "wan-five") with
+        {
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+            ImageReference = "PreviousStage",
+        };
+        ClipSpec clip = GeneratedClip(0, first, second);
+        VideoStagesSpec spec = new(512, 512, 24, true, [clip]);
+        ArchitecturePlanningResult planning = ResolveWan(
+            spec,
+            new Dictionary<string, ModelProfileId>
+            {
+                ["wan-five"] = WanArchitectureModule.Ti2v5bProfileId,
+            });
+
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            planning);
+
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        ClipPlan compiled = Assert.Single(plan.Clips);
+        Assert.Equal(
+            [StageInputKind.EmptyLatent, StageInputKind.PreviousStage],
+            compiled.Stages.Select(stage => stage.Input));
+    }
+
+    [Fact]
+    public void Exact_14b_native_text_root_is_blocked_by_profile_entry_mode()
+    {
+        StageSpec stage = Stage(10, "wan-fourteen");
+        ClipSpec clip = GeneratedClip(0, stage);
+        VideoStagesSpec spec = new(512, 512, 24, true, [clip]);
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            ResolveWan(spec));
+
         Assert.Contains(
             plan.Diagnostics,
             diagnostic =>
                 diagnostic.Code == "architecture-capability-unsupported"
                 && diagnostic.Severity == PlanDiagnosticSeverity.Error
-                && diagnostic.ClipId == 0
                 && diagnostic.Message.Contains("entry mode 'TextToVideo'"));
-        ClipPlan blocked = Assert.Single(plan.Clips);
-        Assert.Equal(ArchitectureEntryMode.TextToVideo, blocked.EntryMode);
-        Assert.Null(blocked.ArchitecturePayload);
-        Assert.Null(Assert.Single(blocked.Stages).ArchitecturePayload);
+        Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
     [Fact]

@@ -9,6 +9,12 @@ import type {
 } from "./types";
 
 const BOUNDARY_MODES = ["cut", "continue", "crossfade"] as const;
+const ENTRY_MODES = [
+    "text-to-video",
+    "image-to-video",
+    "source-video",
+    "refine-video",
+] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value);
@@ -20,6 +26,10 @@ const isUniqueStringArray = (value: unknown): value is string[] =>
     Array.isArray(value) &&
     value.every((entry) => isTrimmedNonEmpty(entry)) &&
     new Set(value).size === value.length;
+
+const isEntryModeArray = (value: unknown): value is string[] =>
+    isUniqueStringArray(value) &&
+    value.every((entry) => (ENTRY_MODES as readonly string[]).includes(entry));
 
 const isRuleDecision = (
     value: unknown,
@@ -140,6 +150,8 @@ const isProfile = (
     isRecord(value) &&
     isTrimmedNonEmpty(value.id) &&
     isTrimmedNonEmpty(value.label) &&
+    isEntryModeArray(value.entryModes) &&
+    value.entryModes.length > 0 &&
     isUniqueStringArray(value.capabilities) &&
     isRuleArray(value.rules, ["model-profile", "stage"]);
 
@@ -147,15 +159,16 @@ const isCapabilities = (value: unknown): value is ArchitectureCapabilities => {
     if (!isRecord(value)) {
         return false;
     }
-    return [
-        value.architecture,
-        value.clip,
-        value.stage,
-        value.output,
-        value.upscaleModes,
-        value.entryModes,
-        value.audioSourceKinds,
-    ].every(isUniqueStringArray);
+    return (
+        [
+            value.architecture,
+            value.clip,
+            value.stage,
+            value.output,
+            value.upscaleModes,
+            value.audioSourceKinds,
+        ].every(isUniqueStringArray) && isEntryModeArray(value.entryModes)
+    );
 };
 
 const hasCompleteBoundaryRules = (
@@ -202,6 +215,10 @@ export const parseVideoArchitectureCatalog = (
             return null;
         }
         const profileIds = raw.profiles.map((profile) => profile.id);
+        const overviewEntryModes = new Set(raw.capabilities.entryModes);
+        const profileEntryModes = new Set(
+            raw.profiles.flatMap((profile) => profile.entryModes),
+        );
         const allCodes = [
             ...Object.values(raw.boundaryRules).map((rule) => rule.code),
             ...raw.rules.map((rule) => rule.code),
@@ -213,6 +230,10 @@ export const parseVideoArchitectureCatalog = (
             architectureIds.has(raw.id) ||
             new Set(profileIds).size !== profileIds.length ||
             !profileIds.includes(raw.defaultProfileId) ||
+            overviewEntryModes.size !== profileEntryModes.size ||
+            ![...overviewEntryModes].every((mode) =>
+                profileEntryModes.has(mode),
+            ) ||
             new Set(allCodes).size !== allCodes.length
         ) {
             return null;

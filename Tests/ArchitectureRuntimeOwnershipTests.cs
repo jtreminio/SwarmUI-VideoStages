@@ -174,9 +174,13 @@ public class ArchitectureRuntimeOwnershipTests
             architectureId,
             id,
             profileId,
-            [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo],
             [AudioSourceKind.Native],
-            [new(profileId, profileId.Value, ModelProfileCapability.None, [])],
+            [new(
+                profileId,
+                profileId.Value,
+                [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo],
+                ModelProfileCapability.None,
+                [])],
             new(
                 ArchitectureCapability.GeneratedEntry | ArchitectureCapability.SourcedEntry,
                 ClipCapability.SourceVideo,

@@ -64,6 +64,12 @@
       {
         "id": "ltx-2.3",
         "label": "LTX Video 2.3",
+        "entryModes": [
+          "text-to-video",
+          "image-to-video",
+          "source-video",
+          "refine-video"
+        ],
         "capabilities": [
           "sampler-selection",
           "scheduler-selection",

@@ -471,7 +471,8 @@ public partial class StageFlowTests
             .Concat([SeedTextToVideoLtxVideoChainStep(attachAudioToCurrentMedia)])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeTextToVideoStepsWithPreCoreVideo(bool attachAudioToCurrentMedia) =>
+    internal static IEnumerable<WorkflowGenerator.WorkflowGenStep>
+        BuildNativeTextToVideoStepsWithPreCoreVideo(bool attachAudioToCurrentMedia) =>
         new[] { SeedNativeTextToVideoChainAsPreCoreMediaStep(attachAudioToCurrentMedia) }
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 

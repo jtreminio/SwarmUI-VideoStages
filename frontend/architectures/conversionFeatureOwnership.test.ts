@@ -31,6 +31,7 @@ const targetFor = (catalog: ReturnType<typeof icLoraOnlyCatalog>) => ({
     modelProfileId: "test-profile",
     model: "test-video.safetensors",
     capabilities: catalog.architectures[0].capabilities,
+    entryModes: catalog.architectures[0].profiles[0].entryModes,
 });
 
 describe("conversion feature-state ownership", () => {
@@ -252,6 +253,7 @@ describe("conversion feature-state ownership", () => {
                 modelProfileId: "ltx-2.3",
                 model: "ltx",
                 capabilities: catalog.architectures[0].capabilities,
+                entryModes: catalog.architectures[0].profiles[0].entryModes,
             },
             catalog,
         );

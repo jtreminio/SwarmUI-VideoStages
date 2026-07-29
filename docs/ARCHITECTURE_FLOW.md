@@ -12,7 +12,7 @@ For the detailed execution and frontend designs, continue to
 
 VideoStages is a closed-world modular monolith. Production registers the
 source-only `none` architecture, LTX Video 2.3 (`ltx2`), and the cut-only Wan
-2.2 Image2Video 14B and Text/Image2Video 5B image-conditioned profiles
+2.2 Image2Video 14B and Text/Image2Video 5B profiles
 (`wan22`).
 
 ## Ownership
@@ -104,12 +104,18 @@ or frontend classification cannot authorize an unsupported model.
 
 `Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`, and
 `NoneArchitecture.Descriptor` are typed `VideoArchitectureDescriptor` values.
-Wan publishes image-to-video and clip-local source-video entry, same-profile
-multi-stage chaining, video-only output, a four-frame profile grid, and
-cut-only boundaries. Both profiles publish ordinary persisted clip/stage and
-prompt-section LoRAs. Although the 5B host compatibility can construct a
-native text root, that path is not proven by this module, so `TextToVideo` is
-not an advertised entry mode. Generated stage 0 uses the host root at full control.
+Entry modes are owned by each model profile. The descriptor's entry-mode list
+is only the distinct catalog projection used for architecture overviews; model
+selection, diagnostics, conversion, planning, and runtime authorization all
+resolve the exact selected profile. The WAN 14B profile publishes
+`ImageToVideo` and `SourceVideo`; the 5B profile additionally publishes
+`TextToVideo`.
+
+Wan publishes same-profile multi-stage chaining, video-only output, a
+four-frame profile grid, and cut-only boundaries. Both profiles publish
+ordinary persisted clip/stage and prompt-section LoRAs. Image-generated stage
+0 uses the host root at full control. Native 5B text stage 0 uses an empty
+latent and does not decode or reinterpret the host's donor image.
 Sourced stage 0 uses its conformed source at finite control in `[0, 1]`; each
 later stage uses `PreviousStage` with the same bound. Exact control `0` is a
 samplerless decoded-video passthrough for those two decoded inputs, while
@@ -188,7 +194,7 @@ model dropdown and the authoritative backend catalog. Without that catalog the
 model catalog contains no capability or model-identity authority.
 `appendStageModelSection` uses it to build model options:
 
-- stage 0 may select a model whose architecture supports the clip's entry mode;
+- stage 0 may select a model whose exact profile supports the clip's entry mode;
 - later stages use `architectureCatalogView` and stay inside the clip's
   architecture;
 - unsupported persisted values remain visible and disabled.
@@ -452,11 +458,18 @@ The `none` path uses `SourceOnlyGenerationSession` and
 
 ### B6b. Wan direct runtime execution
 
-`WanGenerationSessionFactory` snapshots the host image and VAE.
+`WanGenerationSessionFactory` snapshots the host root media and VAE.
 `WanGenerationSession` prepares each hard-cut clip independently, then loops
 its compiled stages. Generated stage 0 resets to the captured root and
 delegates that image to SwarmUI's
-`WorkflowGenerator.CreateImageToVideo`. A sourced clip instead uses
+`WorkflowGenerator.CreateImageToVideo`. Native 5B text stage 0 prepares the
+authored model and prompt conditioning through the host loader, constructs
+`Wan22ImageToVideoLatent` without `start_image`, samples it with the authored
+steps, CFG, sampler, scheduler, seed, dimensions, and frame count, and decodes
+the result with the prepared VAE. An authored clip duration wins; otherwise
+text stage 0 uses the host text-to-video frame setting (default 81), and later
+stages inherit the preceding decoded frame count. All counts are snapped to
+the selected profile's frame grid. A sourced clip instead uses
 `SourcedClipInstaller` to resample, window, and resize its exact clip-local
 footage to WAN's snapped dimensions and requests video-only installation, so
 the source-audio trim branch is never built. Exact control `0` preserves that
@@ -511,9 +524,9 @@ weights remain round-trippable host parameter data but do not make a
 model-zero WAN row effectful. VideoStages does not claim to solve core's
 automatic 5B-LoRA classifier TODO.
 
-Native 5B text roots, Wan 2.1/VACE/FLF, same-clip cross-profile switching, 5B
-swap, transition expansion, advanced references, audio, refine-source, and HDR
-remain outside the WAN contract.
+Wan 2.1/VACE/FLF, same-clip cross-profile switching, 5B swap, transition
+expansion, advanced references, audio, refine-source, and HDR remain outside
+the WAN contract.
 
 The session publishes authored intermediates and
 removes every host per-pass trim. For a terminal single-clip session it applies

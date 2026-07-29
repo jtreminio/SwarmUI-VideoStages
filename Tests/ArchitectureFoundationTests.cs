@@ -923,6 +923,148 @@ public class ArchitectureFoundationTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Capability_validation_fails_closed_when_an_active_stage_resolution_is_missing(
+        bool includeNullResolution)
+    {
+        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor();
+        StageSpec stage = Stage(10, "fake-model");
+        ClipSpec clip = GeneratedClip(0, stage);
+        Dictionary<int, ResolvedVideoModel> stageModels = [];
+        if (includeNullResolution)
+        {
+            stageModels[stage.ClipStageRawIndex] = null;
+        }
+
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                clip,
+                descriptor,
+                ArchitectureEntryMode.ImageToVideo,
+                stageModels);
+
+        PlanDiagnostic diagnostic = Assert.Single(
+            diagnostics,
+            item => item.Message.Contains(
+                "entry mode 'ImageToVideo' for every executing model profile"));
+        Assert.Equal("architecture-capability-unsupported", diagnostic.Code);
+    }
+
+    [Fact]
+    public void Capability_validation_fails_closed_for_an_undeclared_stage_profile()
+    {
+        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor();
+        StageSpec stage = Stage(10, "fake-model");
+        ClipSpec clip = GeneratedClip(0, stage);
+        Dictionary<int, ResolvedVideoModel> stageModels = new()
+        {
+            [stage.ClipStageRawIndex] = new(
+                stage.Model,
+                descriptor.Id,
+                new("ghost-profile"),
+                descriptor),
+        };
+
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                clip,
+                descriptor,
+                ArchitectureEntryMode.ImageToVideo,
+                stageModels);
+
+        Assert.Single(
+            diagnostics,
+            item => item.Message.Contains(
+                "entry mode 'ImageToVideo' for every executing model profile"));
+    }
+
+    [Fact]
+    public void Capability_validation_requires_every_mixed_stage_profile_to_allow_the_entry()
+    {
+        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
+            architecture: ArchitectureCapability.GeneratedEntry
+                | ArchitectureCapability.MultiStage
+                | ArchitectureCapability.DecodedOutput) with
+        {
+            Profiles =
+            [
+                new(
+                    new("allows-image"),
+                    "allows-image",
+                    [ArchitectureEntryMode.ImageToVideo],
+                    ModelProfileCapability.SamplerSelection
+                        | ModelProfileCapability.SchedulerSelection
+                        | ModelProfileCapability.DimensionRules
+                        | ModelProfileCapability.FrameRules,
+                    []),
+                new(
+                    new("text-only"),
+                    "text-only",
+                    [ArchitectureEntryMode.TextToVideo],
+                    ModelProfileCapability.SamplerSelection
+                        | ModelProfileCapability.SchedulerSelection
+                        | ModelProfileCapability.DimensionRules
+                        | ModelProfileCapability.FrameRules,
+                    []),
+            ],
+            DefaultProfileId = new("allows-image"),
+        };
+        StageSpec first = Stage(10, "first") with { ClipStageRawIndex = 0 };
+        StageSpec second = Stage(11, "second") with
+        {
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+        };
+        ClipSpec clip = GeneratedClip(0, first, second);
+        Dictionary<int, ResolvedVideoModel> stageModels = new()
+        {
+            [0] = new(first.Model, descriptor.Id, new("allows-image"), descriptor),
+            [1] = new(second.Model, descriptor.Id, new("text-only"), descriptor),
+        };
+
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                clip,
+                descriptor,
+                ArchitectureEntryMode.ImageToVideo,
+                stageModels);
+
+        Assert.Single(
+            diagnostics,
+            item => item.Message.Contains(
+                "entry mode 'ImageToVideo' for every executing model profile"));
+    }
+
+    [Fact]
+    public void Capability_validation_uses_the_default_profile_for_a_stageless_clip()
+    {
+        VideoArchitectureDescriptor descriptor = NoneArchitectureModule.Instance.Descriptor;
+        ClipSpec clip = SourcedClip(0);
+
+        IReadOnlyList<PlanDiagnostic> sourcedDiagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                clip,
+                descriptor,
+                ArchitectureEntryMode.SourceVideo,
+                new Dictionary<int, ResolvedVideoModel>());
+        IReadOnlyList<PlanDiagnostic> textDiagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                clip,
+                descriptor,
+                ArchitectureEntryMode.TextToVideo,
+                new Dictionary<int, ResolvedVideoModel>());
+
+        Assert.DoesNotContain(
+            sourcedDiagnostics,
+            item => item.Message.Contains("entry mode"));
+        Assert.Single(
+            textDiagnostics,
+            item => item.Message.Contains(
+                "entry mode 'TextToVideo' for every executing model profile"));
+    }
+
+    [Theory]
     [InlineData("ltx2,fake")]
     [InlineData("fake,ltx2")]
     [InlineData("ltx2,fake,ltx2,fake")]
@@ -1317,8 +1459,18 @@ public class ArchitectureFoundationTests
         {
             Profiles =
             [
-                new(new("profile"), "first", ModelProfileCapability.None, []),
-                new(new("profile"), "second", ModelProfileCapability.None, []),
+                new(
+                    new("profile"),
+                    "first",
+                    [ArchitectureEntryMode.ImageToVideo],
+                    ModelProfileCapability.None,
+                    []),
+                new(
+                    new("profile"),
+                    "second",
+                    [ArchitectureEntryMode.ImageToVideo],
+                    ModelProfileCapability.None,
+                    []),
             ],
         };
 
@@ -1326,6 +1478,59 @@ public class ArchitectureFoundationTests
             new VideoArchitectureRegistry([new MatchingModule(invalid)]));
 
         Assert.Contains("duplicate model profile ids", error.Message);
+    }
+
+    [Fact]
+    public void Registry_rejects_a_profile_without_entry_modes()
+    {
+        VideoArchitectureDescriptor invalid = Descriptor("fake", "profile") with
+        {
+            Profiles =
+            [
+                new(
+                    new("profile"),
+                    "profile",
+                    [],
+                    ModelProfileCapability.None,
+                    []),
+            ],
+        };
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            new VideoArchitectureRegistry([new MatchingModule(invalid)]));
+
+        Assert.Contains("must declare at least one entry mode", error.Message);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Registry_rejects_duplicate_or_invalid_profile_entry_modes(bool invalidEnum)
+    {
+        IReadOnlyList<ArchitectureEntryMode> entryModes = invalidEnum
+            ? [(ArchitectureEntryMode)int.MaxValue]
+            :
+            [
+                ArchitectureEntryMode.ImageToVideo,
+                ArchitectureEntryMode.ImageToVideo,
+            ];
+        VideoArchitectureDescriptor invalid = Descriptor("fake", "profile") with
+        {
+            Profiles =
+            [
+                new(
+                    new("profile"),
+                    "profile",
+                    entryModes,
+                    ModelProfileCapability.None,
+                    []),
+            ],
+        };
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            new VideoArchitectureRegistry([new MatchingModule(invalid)]));
+
+        Assert.Contains("duplicate or invalid entry modes", error.Message);
     }
 
     [Fact]
@@ -1503,7 +1708,7 @@ public class ArchitectureFoundationTests
             WanArchitectureModule.ImageToVideoProfileId.Value,
             wan["defaultProfileId"]);
         Assert.Equal(
-            ["image-to-video", "source-video"],
+            ["image-to-video", "source-video", "text-to-video"],
             wan["capabilities"]["entryModes"].Values<string>());
         JObject[] wanProfiles = [.. wan["profiles"].Values<JObject>()];
         Assert.Equal(
@@ -1517,6 +1722,20 @@ public class ArchitectureFoundationTests
             wanProfile => Assert.Contains(
                 "normal-lora",
                 wanProfile["capabilities"].Values<string>()));
+        Assert.Equal(
+            ["image-to-video", "source-video"],
+            wanProfiles.Single(profile =>
+                profile.Value<string>("id")
+                    == WanArchitectureModule.ImageToVideoProfileId.Value)
+                ["entryModes"]
+                .Values<string>());
+        Assert.Equal(
+            ["text-to-video", "image-to-video", "source-video"],
+            wanProfiles.Single(profile =>
+                profile.Value<string>("id")
+                    == WanArchitectureModule.Ti2v5bProfileId.Value)
+                ["entryModes"]
+                .Values<string>());
         JObject model = Assert.Single(
             ((JArray)catalog["models"]).Values<JObject>(),
             item => item["modelName"]?.ToString() == models.VideoModel.Name);
@@ -1609,13 +1828,13 @@ public class ArchitectureFoundationTests
         IReadOnlyList<ArchitectureEntryMode> entryModes = null) =>
         Descriptor("fake", "fake-profile") with
         {
-            EntryModes = entryModes ?? [ArchitectureEntryMode.ImageToVideo],
             AudioSourceKinds = [AudioSourceKind.Native],
             Profiles =
             [
                 new(
                     new("fake-profile"),
                     "fake-profile",
+                    entryModes ?? [ArchitectureEntryMode.ImageToVideo],
                     profile,
                     []),
             ],
@@ -1690,6 +1909,10 @@ public class ArchitectureFoundationTests
                     new(
                         new("ltx-profile"),
                         "ltx-profile",
+                        [
+                            ArchitectureEntryMode.TextToVideo,
+                            ArchitectureEntryMode.ImageToVideo,
+                        ],
                         ModelProfileCapability.SamplerSelection
                             | ModelProfileCapability.SchedulerSelection
                             | ModelProfileCapability.DimensionRules
@@ -1698,6 +1921,10 @@ public class ArchitectureFoundationTests
                     new(
                         new("ltx-2.3-profile"),
                         "ltx-2.3-profile",
+                        [
+                            ArchitectureEntryMode.TextToVideo,
+                            ArchitectureEntryMode.ImageToVideo,
+                        ],
                         ModelProfileCapability.SamplerSelection
                             | ModelProfileCapability.SchedulerSelection
                             | ModelProfileCapability.DimensionRules
@@ -1787,14 +2014,14 @@ public class ArchitectureFoundationTests
             new(id),
             id,
             new(profile),
-            [
-                ArchitectureEntryMode.TextToVideo,
-                ArchitectureEntryMode.ImageToVideo,
-            ],
             [AudioSourceKind.Native],
             [new(
                 new(profile),
                 profile,
+                [
+                    ArchitectureEntryMode.TextToVideo,
+                    ArchitectureEntryMode.ImageToVideo,
+                ],
                 ModelProfileCapability.SamplerSelection
                     | ModelProfileCapability.SchedulerSelection
                     | ModelProfileCapability.DimensionRules

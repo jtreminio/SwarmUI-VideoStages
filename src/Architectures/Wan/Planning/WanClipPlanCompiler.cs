@@ -134,6 +134,10 @@ internal static class WanClipPlanCompiler
                 stage.Id);
             Refuse(
                 !firstStage
+                    // The common text-root parser canonicalizes every authored guide selector to
+                    // Generated. Common ClipPlanCompiler still owns the executable chain and
+                    // deliberately assigns PreviousStage to every later stage.
+                    && context.EntryMode != ArchitectureEntryMode.TextToVideo
                     && !StringUtils.Equals(stage.ImageReference, "PreviousStage"),
                 "a later-stage input other than 'PreviousStage'",
                 stage.Id);
