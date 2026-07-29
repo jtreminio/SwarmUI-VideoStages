@@ -538,7 +538,7 @@ public class WanRuntimeFlowTests
     /// so preflight is the only place they can be refused rather than ignored by this slice.
     /// </summary>
     [Theory]
-    [InlineData("Video2VideoCreativity", "partial-denoise generation")]
+    [InlineData("Video2VideoCreativity", "requires a source-video entry")]
     [InlineData("FrameInterpolation", "frame interpolation")]
     public void Host_video_parameters_the_slice_cannot_honor_are_refused(
         string parameter,

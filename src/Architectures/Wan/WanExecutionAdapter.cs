@@ -97,8 +97,9 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
             && creativity != 1)
         {
             diagnostics.Add(Refuse(
-                "'Video2Video Creativity' is non-default, but VideoStages does not yet support "
-                + "Wan partial-denoise generation."));
+                "'Video2Video Creativity' is non-default, but current Wan clips enter from a "
+                + "still-image root. Partial denoise requires a source-video entry, which this "
+                + "Wan slice does not support."));
         }
         if (generator.UserInput.TryGet(
                 ComfyUIBackendExtension.VideoFrameInterpolationMethod,
