@@ -1,4 +1,5 @@
 using SwarmUI.Text2Image;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -59,6 +60,11 @@ internal static class PromptParser
         return fallback ?? "";
     }
 
-    public static ParamSnapshot ApplyLoraScope(T2IParamInput input, int clipIndex, int stageSectionId) =>
-        VideoScopedLoraSelector.Apply(input, clipIndex, stageSectionId);
+    public static ParamSnapshot ApplyLoraScope(
+        T2IParamInput input,
+        int clipIndex,
+        int stageSectionId,
+        NormalLoraTargetPolicy targetPolicy =
+            NormalLoraTargetPolicy.ModelAndTextEncoder) =>
+        VideoScopedLoraSelector.Apply(input, clipIndex, stageSectionId, targetPolicy);
 }

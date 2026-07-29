@@ -223,6 +223,21 @@ internal static class TestModelFactory
         return models;
     }
 
+    public static TestModelBundle CreateBaseAndWan22Ti2v5bModels()
+    {
+        TestModelBundle models = CreateBaseAndVideoModels(
+            T2IModelClassSorter.CompatWan22_5b,
+            WanArchitectureModule.Ti2v5bModelClassId,
+            "Wan 2.2 Text/Image2Video 5B");
+        models.VideoModel.ModelClass = models.VideoModel.ModelClass with
+        {
+            StandardWidth = 960,
+            StandardHeight = 960,
+        };
+        InstallWanSupportModels();
+        return models;
+    }
+
     public static MixedVideoModelBundle CreateBaseLtxv2AndWan22ImageToVideoModels()
     {
         TestModelBundle ltx = CreateBaseAndLtxv2VideoModels();
@@ -256,6 +271,7 @@ internal static class TestModelFactory
         }
         Install("Clip", "umt5_xxl_fp8_e4m3fn_scaled.safetensors");
         Install("VAE", CommonModels.Known["wan21-vae"].FileName);
+        Install("VAE", CommonModels.Known["wan22-vae"].FileName);
     }
 
     /// <summary>Makes a support model resolvable by name, as an on-disk install would.</summary>

@@ -37,7 +37,20 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
                 "'Refine Source Video' is a request-global donor and cannot coexist with a "
                 + "clip-local sourced Wan timeline."));
         }
-        if (generator.UserInput.Get(T2IParamTypes.VideoSwapModel, null) is T2IModel swapModel)
+        bool has5bStage = context.Plan.Clips
+            .Where(clip => clip.Architecture?.Id == ArchitectureId)
+            .SelectMany(clip => clip.Stages)
+            .Any(stage =>
+                stage.ResolvedModel?.ModelProfileId
+                    == WanArchitectureModule.Ti2v5bProfileId);
+        T2IModel swapModel = generator.UserInput.Get(T2IParamTypes.VideoSwapModel, null);
+        if (swapModel is not null && has5bStage)
+        {
+            diagnostics.Add(Refuse(
+                $"'Video Swap Model' '{swapModel.Name}' is not supported when any active Wan "
+                    + $"stage uses profile '{WanArchitectureModule.Ti2v5bProfileId}'."));
+        }
+        else if (swapModel is not null)
         {
             if (!WanArchitectureModule.Instance.TryResolveModel(swapModel, out ResolvedVideoModel swap))
             {

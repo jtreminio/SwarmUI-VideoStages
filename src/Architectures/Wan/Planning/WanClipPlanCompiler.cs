@@ -40,30 +40,57 @@ internal static class WanClipPlanCompiler
         Dictionary<int, WanStagePayload> stages = [];
         IReadOnlyList<StageSpec> authoredStages = clip.Stages ?? [];
         bool sourcedEntry = clip.SourceVideo is not null;
+        ModelProfileId? clipProfile = null;
         for (int stageIndex = 0; stageIndex < authoredStages.Count; stageIndex++)
         {
             StageSpec stage = authoredStages[stageIndex];
-            if (!stageModels.TryGetValue(
+            bool resolvedStage = stageModels.TryGetValue(
                     stage.ClipStageRawIndex,
-                    out ResolvedVideoModel resolved)
-                || resolved.ArchitectureId != WanArchitectureModule.ArchitectureId
-                || resolved.ModelProfileId != WanArchitectureModule.ImageToVideoProfileId)
+                    out ResolvedVideoModel resolved);
+            bool supportedProfile =
+                resolvedStage
+                && resolved is not null
+                && resolved.ArchitectureId == WanArchitectureModule.ArchitectureId
+                && WanArchitectureModule.IsSupportedProfile(resolved.ModelProfileId);
+            if (!supportedProfile)
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Error,
                     "wan22.stage-profile.unsupported",
                     $"Clip {clip.Id} stage {stage.Id} must resolve to architecture "
-                        + $"'{WanArchitectureModule.ArchitectureId}' profile "
-                        + $"'{WanArchitectureModule.ImageToVideoProfileId}', but resolved "
+                        + $"'{WanArchitectureModule.ArchitectureId}' and one of its supported "
+                        + $"profiles "
+                        + $"'{string.Join(
+                            "', '",
+                            WanArchitectureModule.Instance.Descriptor.Profiles.Select(
+                                profile => profile.Id))}', but resolved "
                         + $"architecture '{resolved?.ArchitectureId.ToString() ?? "<missing>"}' "
                         + $"profile '{resolved?.ModelProfileId.ToString() ?? "<missing>"}'.",
+                    clip.Id,
+                    stage.Id));
+            }
+            else if (clipProfile is null)
+            {
+                clipProfile = resolved.ModelProfileId;
+            }
+            else if (resolved.ModelProfileId != clipProfile.Value)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "wan22.clip-profile.mixed",
+                    $"Clip {clip.Id} must use one Wan profile throughout, but stage {stage.Id} "
+                        + $"resolves to '{resolved.ModelProfileId}' after "
+                        + $"'{clipProfile.Value}'. Use a hard-cut clip to change profiles.",
                     clip.Id,
                     stage.Id));
             }
             bool firstStage = stageIndex == 0;
             bool decodedStageInput = sourcedEntry || !firstStage;
             ImmutableArray<NormalLoraPlan> loras =
-                NormalLoraPlanCompiler.Compile(clip, stage);
+                NormalLoraPlanCompiler.Compile(
+                    clip,
+                    stage,
+                    NormalLoraTargetPolicy.ModelOnly);
             Refuse(
                 stage.IsPassthrough && !decodedStageInput,
                 "a generated-root stage that generates nothing",
@@ -118,6 +145,8 @@ internal static class WanClipPlanCompiler
                 stage.ClipStageRawIndex,
                 new WanStagePayload(
                     resolved?.ModelName ?? stage.Model,
+                    resolved?.ModelProfileId
+                        ?? WanArchitectureModule.ImageToVideoProfileId,
                     stage.Control,
                     stage.Steps,
                     stage.CfgScale,
@@ -125,6 +154,11 @@ internal static class WanClipPlanCompiler
                     stage.Scheduler,
                     loras));
         }
-        return new(new WanClipPayload(clip.Id), stages, diagnostics.AsReadOnly());
+        return new(
+            new WanClipPayload(
+                clip.Id,
+                clipProfile ?? WanArchitectureModule.ImageToVideoProfileId),
+            stages,
+            diagnostics.AsReadOnly());
     }
 }

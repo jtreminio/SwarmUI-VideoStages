@@ -71,6 +71,7 @@ public class RealArchitectureContractTests
     [Theory]
     [InlineData("ltx2")]
     [InlineData("wan22")]
+    [InlineData("wan22-5b")]
     public void Model_recognition_is_exact_and_returns_the_declared_identity(string family)
     {
         using SwarmUiTestContext context = new();
@@ -101,6 +102,7 @@ public class RealArchitectureContractTests
     [Theory]
     [InlineData("ltx2")]
     [InlineData("wan22")]
+    [InlineData("wan22-5b")]
     public void Descriptor_publishes_the_common_executable_contract(string family)
     {
         using SwarmUiTestContext context = new();
@@ -139,6 +141,7 @@ public class RealArchitectureContractTests
     [Theory]
     [InlineData("ltx2")]
     [InlineData("wan22")]
+    [InlineData("wan22-5b")]
     public void Minimal_generated_image_to_video_clip_compiles_the_shared_payload_contract(
         string family)
     {
@@ -342,6 +345,7 @@ public class RealArchitectureContractTests
     {
         "ltx2" => CreateLtxFixture(),
         "wan22" => CreateWanFixture(),
+        "wan22-5b" => CreateWan5bFixture(),
         _ => throw new ArgumentOutOfRangeException(nameof(family), family, null),
     };
 
@@ -365,6 +369,17 @@ public class RealArchitectureContractTests
             models.VideoModel,
             WanArchitectureModule.ImageToVideoProfileId,
             "wan-2_1-image2video-14b");
+    }
+
+    private static FamilyFixture CreateWan5bFixture()
+    {
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
+        return new(
+            WanArchitectureModule.Instance,
+            models.BaseModel,
+            models.VideoModel,
+            WanArchitectureModule.Ti2v5bProfileId,
+            $"{WanArchitectureModule.Ti2v5bModelClassId}/lora");
     }
 
     private static VideoArchitectureRegistry RealRegistry() =>

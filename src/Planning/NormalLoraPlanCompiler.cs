@@ -5,19 +5,23 @@ namespace VideoStages.Planning;
 /// <summary>Orders clip and stage LoRAs for one stage.</summary>
 internal static class NormalLoraPlanCompiler
 {
-    internal static ImmutableArray<NormalLoraPlan> Compile(ClipSpec clip, StageSpec stage)
+    internal static ImmutableArray<NormalLoraPlan> Compile(
+        ClipSpec clip,
+        StageSpec stage,
+        NormalLoraTargetPolicy targetPolicy =
+            NormalLoraTargetPolicy.ModelAndTextEncoder)
     {
         ImmutableArray<NormalLoraPlan>.Builder plans =
             ImmutableArray.CreateBuilder<NormalLoraPlan>();
         if (stage.LoraWeights is null)
         {
-            AppendDirectDefinitions(plans, clip.Loras);
+            AppendDirectDefinitions(plans, clip.Loras, targetPolicy);
         }
         else
         {
             AppendClipDefinitions(plans, clip.Loras, stage.LoraWeights);
         }
-        AppendDirectDefinitions(plans, stage.Loras);
+        AppendDirectDefinitions(plans, stage.Loras, targetPolicy);
         return plans.ToImmutable();
     }
 
@@ -49,12 +53,16 @@ internal static class NormalLoraPlanCompiler
 
     private static void AppendDirectDefinitions(
         ImmutableArray<NormalLoraPlan>.Builder plans,
-        IReadOnlyList<LoraRef> entries)
+        IReadOnlyList<LoraRef> entries,
+        NormalLoraTargetPolicy targetPolicy)
     {
         foreach (LoraRef entry in entries ?? [])
         {
             double textEncoderWeight = entry.TencWeight ?? entry.Weight;
-            if (entry.Weight == 0 && textEncoderWeight == 0)
+            bool effective = targetPolicy == NormalLoraTargetPolicy.ModelOnly
+                ? entry.Weight != 0
+                : entry.Weight != 0 || textEncoderWeight != 0;
+            if (!effective)
             {
                 continue;
             }

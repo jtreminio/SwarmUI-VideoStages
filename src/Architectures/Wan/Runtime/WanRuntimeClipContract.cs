@@ -21,9 +21,14 @@ internal static class WanRuntimeClipContract
                 WanArchitectureModule.Instance.Descriptor)
             || clip.Architecture?.Id != WanArchitectureModule.ArchitectureId
             || clipPayload.ArchitectureId != WanArchitectureModule.ArchitectureId
-            || clipPayload.ClipId != clip.ClipId)
+            || clipPayload.ClipId != clip.ClipId
+            || !WanArchitectureModule.IsSupportedProfile(clipPayload.ProfileId)
+            || !clip.Architecture.Profiles.Any(
+                profile => profile.Id == clipPayload.ProfileId))
         {
-            throw Invalid(clip, "has incongruent Wan architecture or clip-payload identity");
+            throw Invalid(
+                clip,
+                "has incongruent Wan architecture, profile, or clip-payload identity");
         }
 
         bool sourcedEntry =
@@ -84,8 +89,7 @@ internal static class WanRuntimeClipContract
                     || string.IsNullOrWhiteSpace(lora.Name)
                     || !double.IsFinite(lora.ModelWeight)
                     || !double.IsFinite(lora.TextEncoderWeight)
-                    || lora.ModelWeight == 0
-                        && lora.TextEncoderWeight == 0))
+                    || lora.ModelWeight == 0))
             {
                 throw Invalid(
                     clip,
@@ -116,8 +120,11 @@ internal static class WanRuntimeClipContract
             }
             ResolvedVideoModel resolved = stage.ResolvedModel;
             if (payload.ArchitectureId != WanArchitectureModule.ArchitectureId
+                || payload.ProfileId != clipPayload.ProfileId
                 || resolved?.ArchitectureId != WanArchitectureModule.ArchitectureId
-                || resolved.ModelProfileId != WanArchitectureModule.ImageToVideoProfileId
+                || resolved.ModelProfileId != clipPayload.ProfileId
+                || resolved.ModelProfileId != payload.ProfileId
+                || !WanArchitectureModule.IsSupportedProfile(resolved.ModelProfileId)
                 || !string.Equals(
                     resolved.ModelName,
                     payload.Model,
@@ -127,11 +134,11 @@ internal static class WanRuntimeClipContract
                     WanArchitectureModule.Instance.Descriptor)
                 || resolved.Architecture?.Id != WanArchitectureModule.ArchitectureId
                 || !resolved.Architecture.Profiles.Any(
-                    profile => profile.Id == WanArchitectureModule.ImageToVideoProfileId))
+                    profile => profile.Id == resolved.ModelProfileId))
             {
                 throw Invalid(
                     clip,
-                    $"stage {stage.StageId} does not resolve to the canonical Wan profile");
+                    $"stage {stage.StageId} does not preserve the clip's canonical Wan profile");
             }
         }
     }

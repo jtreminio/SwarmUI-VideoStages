@@ -6,9 +6,9 @@ stages, must resolve to the same architecture. Different executable clips may
 use different architectures.
 
 Production registers source-only `none`, LTX Video 2.3, and the cut-only Wan
-2.2 Image2Video 14B slice. The registry, planning contracts, runtime dispatch,
-and timeline assembly host all three without architecture branches in common
-code.
+2.2 Image2Video 14B plus Text/Image2Video 5B image-conditioned profiles. The
+registry, planning contracts, runtime dispatch, and timeline assembly host all
+three architectures without architecture branches in common code.
 
 ## The execution model
 
@@ -154,13 +154,24 @@ without a capability-definition mirror. Frontend architecture IDs may select
 local behavior or DOM panels, but those maps do not recognize models or declare
 profiles, labels, capabilities, or rules.
 
-Wan recognizes only exact class `wan-2_2-image2video-14b`, publishes one
-image-to-video profile with a four-frame grid, and allows one active stage per
-clip across any number of cut-joined clips. Its compiler and preflight reject
-unsupported audio, references, partial denoise, interpolation, swap-model, and
-end-frame behavior before its host phases mutate the graph. Its session delegates
-the family graph to SwarmUI's `CreateImageToVideo` and returns the same neutral
-decoded artifact contract as LTX.
+Wan recognizes only the exact
+`wan-2_2-image2video-14b` / `wan-21-14b` and
+`wan-2_2-ti2v-5b` / `wan-22-5b` class/compatibility pairs. It publishes both
+four-frame-grid profiles under image-to-video and source-video entry; 14B
+remains the default. One clip may chain full, partial, and decoded passthrough
+stages only while retaining one canonical profile. A hard-cut clip may select
+the other profile. Its session delegates both profiles to SwarmUI's
+`CreateImageToVideo`, preserves decoded provenance, and returns the same neutral
+artifact contract as LTX. Persisted and prompt-section normal LoRAs use the
+host's generic loader. Both supported WAN compatibility classes select its
+existing model-only variant, so model-zero rows are omitted before planning or
+prompt-scope projection.
+
+Wan preflight preserves the narrow existing 14B swap and single-clip end-frame
+paths. Any active 5B stage refuses request-global swap and end-frame before
+VideoStages mutation. Native 5B text roots, Wan 2.1/VACE/FLF, same-clip
+cross-profile switching, transition expansion, advanced references, audio,
+refine-source, and HDR remain unsupported rather than silently omitted.
 
 ## Capability catalog
 

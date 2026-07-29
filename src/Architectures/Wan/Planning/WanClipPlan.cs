@@ -11,6 +11,7 @@ namespace VideoStages.Architectures.Wan.Planning;
 /// </summary>
 internal sealed record WanStagePayload(
     string Model,
+    ModelProfileId ProfileId,
     double Control,
     int Steps,
     double CfgScale,
@@ -22,7 +23,8 @@ internal sealed record WanStagePayload(
 }
 
 internal sealed record WanClipPayload(
-    int ClipId) :
+    int ClipId,
+    ModelProfileId ProfileId) :
     IArchitectureClipPayload
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;

@@ -7,6 +7,7 @@ using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2;
+using VideoStages.Architectures.Wan;
 using VideoStages.Execution;
 using VideoStages.Planning;
 using Xunit;
@@ -1495,6 +1496,27 @@ public class ArchitectureFoundationTests
                 && rule["constraints"]?["minimumActiveStages"]?.Value<int>() == 3
                 && rule["constraints"]?["failureSeverity"]?.ToString() == "warning"
                 && rule["constraints"]?["failureEffect"]?.ToString() == "disable-feature");
+        JObject wan = Assert.Single(
+            architectures.Values<JObject>(),
+            item => item["id"]?.ToString() == "wan22");
+        Assert.Equal(
+            WanArchitectureModule.ImageToVideoProfileId.Value,
+            wan["defaultProfileId"]);
+        Assert.Equal(
+            ["image-to-video", "source-video"],
+            wan["capabilities"]["entryModes"].Values<string>());
+        JObject[] wanProfiles = [.. wan["profiles"].Values<JObject>()];
+        Assert.Equal(
+            [
+                WanArchitectureModule.ImageToVideoProfileId.Value,
+                WanArchitectureModule.Ti2v5bProfileId.Value,
+            ],
+            wanProfiles.Select(profile => profile.Value<string>("id")));
+        Assert.All(
+            wanProfiles,
+            wanProfile => Assert.Contains(
+                "normal-lora",
+                wanProfile["capabilities"].Values<string>()));
         JObject model = Assert.Single(
             ((JArray)catalog["models"]).Values<JObject>(),
             item => item["modelName"]?.ToString() == models.VideoModel.Name);

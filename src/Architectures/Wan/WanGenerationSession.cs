@@ -118,7 +118,8 @@ internal sealed class WanGenerationSession(
         using (ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
             g.UserInput,
             clip.ClipId,
-            sectionId))
+            sectionId,
+            NormalLoraTargetPolicy.ModelOnly))
         using (ParamSnapshot loraScope =
             LoraParams.ApplyNormalLoras(g.UserInput, payload.Loras))
         {
@@ -159,14 +160,34 @@ internal sealed class WanGenerationSession(
                 // Wan's declared output is video-only, so isolate every pass and restore the
                 // shared host value.
                 WGNodeData ambientAudioVae = g.CurrentAudioVae;
+                HashSet<string> preHostNodeIds = null;
+                if (payload.ProfileId == WanArchitectureModule.Ti2v5bProfileId
+                    && genInfo.StartStep > 0)
+                {
+                    preHostNodeIds = [
+                        .. g.Workflow.Properties().Select(property => property.Name),
+                    ];
+                }
+                Exception hostConstructionError = null;
                 try
                 {
                     g.CurrentAudioVae = null;
                     g.CreateImageToVideo(genInfo);
                 }
+                catch (Exception error)
+                {
+                    hostConstructionError = error;
+                    throw;
+                }
                 finally
                 {
                     g.CurrentAudioVae = ambientAudioVae;
+                    if (preHostNodeIds is not null)
+                    {
+                        RunPostHostCleanup(
+                            () => PruneUnusedWan22Latents(preHostNodeIds),
+                            hostConstructionError);
+                    }
                 }
                 stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
             }
@@ -180,6 +201,56 @@ internal sealed class WanGenerationSession(
                     VideoGraphHelpers.RemoveCached(g, highLoaderKey);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Cleanup failures are authoritative after successful host construction. While a host
+    /// exception is already unwinding, cleanup is best-effort so it cannot replace that failure.
+    /// </summary>
+    internal static void RunPostHostCleanup(
+        Action cleanup,
+        Exception hostConstructionError)
+    {
+        ArgumentNullException.ThrowIfNull(cleanup);
+        try
+        {
+            cleanup();
+        }
+        catch (Exception cleanupError) when (hostConstructionError is not null)
+        {
+            Logs.Warning(
+                "VideoStages: failed to prune an unused Wan 5B latent while "
+                + $"preserving the original host construction failure: "
+                + $"{cleanupError.Message}");
+        }
+    }
+
+    /// <summary>
+    /// The host's 5B preparation always emits its native latent, then intentionally replaces that
+    /// latent with a VAE encoding when partial refinement starts after step zero. Remove only
+    /// consumerless nodes created by this pass. The complete pre-host graph is protected so the
+    /// recursive upstream walk cannot cross from a newly removed consumer into the stage's input
+    /// media, an earlier stage, or any other pre-existing branch.
+    /// </summary>
+    private void PruneUnusedWan22Latents(ISet<string> preHostNodeIds)
+    {
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        string[] unused = [
+            .. bridge.Graph.Nodes.Values
+                .Where(node =>
+                    node.ClassTypeName == "Wan22ImageToVideoLatent"
+                    && !preHostNodeIds.Contains(node.Id)
+                    && !bridge.Graph.FindInputsConnectedTo(node.FindOutput(0)).Any())
+                .Select(node => node.Id),
+        ];
+        foreach (string nodeId in unused)
+        {
+            WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(
+                bridge,
+                nodeId,
+                protectedNodeIds: preHostNodeIds,
+                nodeHelpers: g.NodeHelpers);
         }
     }
 

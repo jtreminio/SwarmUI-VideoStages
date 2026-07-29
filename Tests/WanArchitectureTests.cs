@@ -29,6 +29,62 @@ public class WanArchitectureTests
     }
 
     [Fact]
+    public void Resolves_only_the_two_exact_Wan_class_and_compatibility_pairs()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle fourteen =
+            TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        TestModelBundle five =
+            TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
+
+        Assert.True(WanArchitectureModule.Instance.TryResolveModel(
+            fourteen.VideoModel,
+            out ResolvedVideoModel resolvedFourteen));
+        Assert.Equal(
+            WanArchitectureModule.ImageToVideoProfileId,
+            resolvedFourteen.ModelProfileId);
+        Assert.True(WanArchitectureModule.Instance.TryResolveModel(
+            five.VideoModel,
+            out ResolvedVideoModel resolvedFive));
+        Assert.Equal(WanArchitectureModule.Ti2v5bProfileId, resolvedFive.ModelProfileId);
+
+        T2IModelClass exactFive = five.VideoModel.ModelClass;
+        five.VideoModel.ModelClass = exactFive with
+        {
+            CompatClass = T2IModelClassSorter.CompatWan21_14b,
+        };
+        Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
+        five.VideoModel.ModelClass = exactFive with
+        {
+            ID = $"{WanArchitectureModule.Ti2v5bModelClassId}/lora",
+        };
+        Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
+        five.VideoModel.ModelClass = exactFive with
+        {
+            ID = "wan-2_1-image2video-14b",
+            CompatClass = T2IModelClassSorter.CompatWan21_14b,
+        };
+        Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
+        five.VideoModel.ModelClass = exactFive with
+        {
+            ID = "wan-2_1-vace-14b",
+            CompatClass = T2IModelClassSorter.CompatWan21_14b,
+        };
+        Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
+
+        JObject catalog = ArchitectureCatalogSerializer.Serialize(
+            new WanCatalogRegistry(resolvedFive));
+        JObject catalogModel = Assert.Single(catalog["models"].Values<JObject>());
+        Assert.Equal(five.VideoModel.Name, catalogModel.Value<string>("modelName"));
+        Assert.Equal(
+            WanArchitectureModule.ArchitectureId.Value,
+            catalogModel.Value<string>("architectureId"));
+        Assert.Equal(
+            WanArchitectureModule.Ti2v5bProfileId.Value,
+            catalogModel.Value<string>("modelProfileId"));
+    }
+
+    [Fact]
     public void Boundary_policy_is_cut_only_on_the_Wan_frame_grid()
     {
         VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
@@ -42,9 +98,9 @@ public class WanArchitectureTests
         Assert.Equal(
             RuleSupport.Unsupported,
             descriptor.BoundaryRules[BoundaryExecutionMode.Crossfade].Support);
-        Assert.Equal(
-            WanArchitectureModule.FrameGrid,
-            Assert.Single(descriptor.Profiles).FrameGrid);
+        Assert.All(
+            descriptor.Profiles,
+            profile => Assert.Equal(WanArchitectureModule.FrameGrid, profile.FrameGrid));
     }
 
     [Fact]
@@ -62,8 +118,10 @@ public class WanArchitectureTests
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.ImageInput));
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.VideoInput));
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.Lora));
-        Assert.True(Assert.Single(descriptor.Profiles).Capabilities.HasFlag(
-            ModelProfileCapability.NormalLora));
+        Assert.All(
+            descriptor.Profiles,
+            profile => Assert.True(profile.Capabilities.HasFlag(
+                ModelProfileCapability.NormalLora)));
         Assert.True(descriptor.StageGuideReferences.Allows(
             StageGuideReferencePolicy.Classify("Generated")));
         Assert.True(descriptor.StageGuideReferences.Allows(
@@ -159,6 +217,11 @@ public class WanArchitectureTests
         Assert.Equal(StageInputKind.PreviousStage, compiled.Stages[1].Input);
         WanStagePayload firstPayload = compiled.Stages[0].RequireWanPayload();
         WanStagePayload secondPayload = compiled.Stages[1].RequireWanPayload();
+        Assert.Equal(
+            WanArchitectureModule.ImageToVideoProfileId,
+            compiled.RequireWanPayload().ProfileId);
+        Assert.Equal(WanArchitectureModule.ImageToVideoProfileId, firstPayload.ProfileId);
+        Assert.Equal(WanArchitectureModule.ImageToVideoProfileId, secondPayload.ProfileId);
         Assert.Equal("wan-model", firstPayload.Model);
         Assert.Equal(1, firstPayload.Control);
         Assert.Equal(12, firstPayload.Steps);
@@ -178,21 +241,31 @@ public class WanArchitectureTests
         JObject wan = Assert.Single(
             catalog["architectures"].Values<JObject>(),
             item => item.Value<string>("id") == "wan22");
-        JObject profile = Assert.Single(wan["profiles"].Values<JObject>());
-        JObject rule = Assert.Single(profile["rules"].Values<JObject>());
+        JObject[] profiles = [.. wan["profiles"].Values<JObject>()];
 
         Assert.Contains("lora", wan["capabilities"]["stage"].Values<string>());
-        Assert.Contains(
-            "normal-lora",
-            profile["capabilities"].Values<string>());
+        Assert.Equal(2, profiles.Length);
         Assert.Equal(
-            WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
-            rule.Value<string>("code"));
-        Assert.Equal("conditional", rule.Value<string>("support"));
-        Assert.Equal("stage", rule.Value<string>("scope"));
-        Assert.Equal(
-            0,
-            rule["constraints"].Value<double>("exclusiveMinimumControl"));
+            [
+                WanArchitectureModule.ImageToVideoProfileId.Value,
+                WanArchitectureModule.Ti2v5bProfileId.Value,
+            ],
+            profiles.Select(profile => profile.Value<string>("id")));
+        Assert.All(profiles, profile =>
+        {
+            JObject rule = Assert.Single(profile["rules"].Values<JObject>());
+            Assert.Contains(
+                "normal-lora",
+                profile["capabilities"].Values<string>());
+            Assert.Equal(
+                WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
+                rule.Value<string>("code"));
+            Assert.Equal("conditional", rule.Value<string>("support"));
+            Assert.Equal("stage", rule.Value<string>("scope"));
+            Assert.Equal(
+                0,
+                rule["constraints"].Value<double>("exclusiveMinimumControl"));
+        });
         Assert.Equal(
             0,
             WanArchitectureModule.NormalLoraRequiresSamplingStageRule
@@ -206,7 +279,11 @@ public class WanArchitectureTests
         StageSpec stage = Stage(10, "wan-model") with
         {
             LoraWeights = [0.35, 0],
-            Loras = [new("stage-zero", 0, 0.8)],
+            Loras =
+            [
+                new("stage-text-only", 0, 0.8),
+                new("stage-active", -0.4, 0.9),
+            ],
         };
         ClipSpec clip = GeneratedClip(0, stage) with
         {
@@ -230,9 +307,9 @@ public class WanArchitectureTests
             },
             lora =>
             {
-                Assert.Equal("stage-zero", lora.Name);
-                Assert.Equal(0, lora.ModelWeight);
-                Assert.Equal(0.8, lora.TextEncoderWeight);
+                Assert.Equal("stage-active", lora.Name);
+                Assert.Equal(-0.4, lora.ModelWeight);
+                Assert.Equal(0.9, lora.TextEncoderWeight);
             });
     }
 
@@ -259,6 +336,127 @@ public class WanArchitectureTests
     }
 
     [Fact]
+    public void Compilation_locks_each_clip_to_one_supported_profile_but_allows_cut_clips_to_differ()
+    {
+        StageSpec firstFive = Stage(10, "wan-five");
+        StageSpec secondFive = Stage(11, "wan-five") with
+        {
+            Control = 0.5,
+            ImageReference = "PreviousStage",
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+        };
+        ClipSpec fiveClip = GeneratedClip(0, firstFive, secondFive);
+        VideoStagesSpec fiveSpec = new(512, 512, 24, false, [fiveClip]);
+        VideoExecutionPlan fivePlan = VideoExecutionPlanCompiler.Compile(
+            fiveSpec,
+            RootEnvironment.FromSpec(fiveSpec),
+            ResolveWan(
+                fiveSpec,
+                new Dictionary<string, ModelProfileId>
+                {
+                    ["wan-five"] = WanArchitectureModule.Ti2v5bProfileId,
+                }));
+        ClipPlan compiledFive = Assert.Single(fivePlan.Clips);
+        Assert.DoesNotContain(
+            fivePlan.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        Assert.Equal(
+            WanArchitectureModule.Ti2v5bProfileId,
+            compiledFive.RequireWanPayload().ProfileId);
+        Assert.All(
+            compiledFive.Stages,
+            stage => Assert.Equal(
+                WanArchitectureModule.Ti2v5bProfileId,
+                stage.RequireWanPayload().ProfileId));
+
+        StageSpec mixedSecond = secondFive with { Model = "wan-fourteen" };
+        ClipSpec mixedClip = GeneratedClip(0, firstFive, mixedSecond);
+        VideoStagesSpec mixedSpec = new(512, 512, 24, false, [mixedClip]);
+        VideoExecutionPlan mixedPlan = VideoExecutionPlanCompiler.Compile(
+            mixedSpec,
+            RootEnvironment.FromSpec(mixedSpec),
+            ResolveWan(
+                mixedSpec,
+                new Dictionary<string, ModelProfileId>
+                {
+                    ["wan-five"] = WanArchitectureModule.Ti2v5bProfileId,
+                    ["wan-fourteen"] = WanArchitectureModule.ImageToVideoProfileId,
+                }));
+        Assert.Contains(
+            mixedPlan.Diagnostics,
+            diagnostic => diagnostic.Code == "wan22.clip-profile.mixed"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Error
+                && diagnostic.StageId == 11);
+        Assert.Null(Assert.Single(mixedPlan.Clips).ArchitecturePayload);
+
+        VideoStagesSpec cutSpec = new(
+            512,
+            512,
+            24,
+            false,
+            [
+                GeneratedClip(0, Stage(10, "wan-fourteen")),
+                GeneratedClip(1, Stage(11, "wan-five")),
+            ]);
+        VideoExecutionPlan cutPlan = VideoExecutionPlanCompiler.Compile(
+            cutSpec,
+            RootEnvironment.FromSpec(cutSpec),
+            ResolveWan(
+                cutSpec,
+                new Dictionary<string, ModelProfileId>
+                {
+                    ["wan-five"] = WanArchitectureModule.Ti2v5bProfileId,
+                    ["wan-fourteen"] = WanArchitectureModule.ImageToVideoProfileId,
+                }));
+        Assert.DoesNotContain(
+            cutPlan.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        Assert.Equal(
+            [
+                WanArchitectureModule.ImageToVideoProfileId,
+                WanArchitectureModule.Ti2v5bProfileId,
+            ],
+            cutPlan.Clips.Select(clip => clip.RequireWanPayload().ProfileId));
+    }
+
+    [Fact]
+    public void Exact_5b_native_text_root_is_blocked_before_Wan_payload_compilation()
+    {
+        StageSpec stage = Stage(10, "wan-five");
+        ClipSpec clip = GeneratedClip(0, stage);
+        VideoStagesSpec spec = new(
+            Width: 512,
+            Height: 512,
+            FPS: 24,
+            IsTextToVideo: true,
+            Clips: [clip]);
+        ArchitecturePlanningResult planning = ResolveWan(
+            spec,
+            new Dictionary<string, ModelProfileId>
+            {
+                ["wan-five"] = WanArchitectureModule.Ti2v5bProfileId,
+            });
+
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            planning);
+
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic =>
+                diagnostic.Code == "architecture-capability-unsupported"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Error
+                && diagnostic.ClipId == 0
+                && diagnostic.Message.Contains("entry mode 'TextToVideo'"));
+        ClipPlan blocked = Assert.Single(plan.Clips);
+        Assert.Equal(ArchitectureEntryMode.TextToVideo, blocked.EntryMode);
+        Assert.Null(blocked.ArchitecturePayload);
+        Assert.Null(Assert.Single(blocked.Stages).ArchitecturePayload);
+    }
+
+    [Fact]
     public void Compilation_canonicalizes_an_authored_model_alias()
     {
         StageSpec stage = Stage(10, "wan-model-alias");
@@ -282,6 +480,33 @@ public class WanArchitectureTests
         Assert.Equal(
             resolved.ModelName,
             Assert.Single(compilation.Stages).Value.Model);
+    }
+
+    [Fact]
+    public void Compilation_refuses_a_present_null_stage_resolution_and_uses_canonical_fallback()
+    {
+        StageSpec stage = Stage(10, "authored-wan-model");
+        WanClipPlanCompilation compilation = WanClipPlanCompiler.Compile(
+            GeneratedClip(0, stage),
+            new Dictionary<int, ResolvedVideoModel>
+            {
+                [stage.ClipStageRawIndex] = null,
+            });
+
+        PlanDiagnostic diagnostic = Assert.Single(
+            compilation.Diagnostics,
+            item => item.Code == "wan22.stage-profile.unsupported");
+        Assert.Equal(PlanDiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Equal(stage.Id, diagnostic.StageId);
+        Assert.Contains("<missing>", diagnostic.Message);
+        Assert.Equal(
+            WanArchitectureModule.ImageToVideoProfileId,
+            compilation.Payload.ProfileId);
+        WanStagePayload fallback = Assert.Single(compilation.Stages).Value;
+        Assert.Equal(stage.Model, fallback.Model);
+        Assert.Equal(
+            WanArchitectureModule.ImageToVideoProfileId,
+            fallback.ProfileId);
     }
 
     [Fact]
@@ -320,16 +545,20 @@ public class WanArchitectureTests
                 }),
             WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
             WanArchitectureModule.NormalLoraRequiresSamplingStageReason);
-        AssertBlocked(
-            Compile(
-                SourcedClip(
-                    0,
-                    passthrough with
-                    {
-                        Loras = [new("stage-text-only", 0, 0.8)],
-                    })),
-            WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
-            WanArchitectureModule.NormalLoraRequiresSamplingStageReason);
+        VideoExecutionPlan textOnly = Compile(
+            SourcedClip(
+                0,
+                passthrough with
+                {
+                    Loras = [new("stage-text-only", 0, 0.8)],
+                }));
+        Assert.DoesNotContain(
+            textOnly.Diagnostics,
+            diagnostic =>
+                diagnostic.Code
+                    == WanArchitectureModule.NormalLoraRequiresSamplingStageCode);
+        Assert.Empty(
+            Assert.Single(textOnly.Clips).Stages[0].RequireWanPayload().Loras);
         AssertBlocked(
             Compile(
                 SourcedClip(
@@ -391,7 +620,9 @@ public class WanArchitectureTests
             {
                 Profiles =
                 [
-                    Assert.Single(WanArchitectureModule.Instance.Descriptor.Profiles) with
+                    WanArchitectureModule.Instance.Descriptor.Profiles.Single(
+                        profile => profile.Id
+                            == WanArchitectureModule.ImageToVideoProfileId) with
                     {
                         Id = profileId,
                         FrameGrid = 8,
@@ -552,7 +783,9 @@ public class WanArchitectureTests
             Profiles =
             [
                 .. canonical.Profiles,
-                Assert.Single(canonical.Profiles) with
+                canonical.Profiles.Single(
+                    profile => profile.Id
+                        == WanArchitectureModule.ImageToVideoProfileId) with
                 {
                     Id = alternateId,
                     DisplayName = "Synthetic Wan alternate",
@@ -634,7 +867,9 @@ public class WanArchitectureTests
     }
 
     /// <summary>Assigns Wan to every clip without needing host model metadata installed.</summary>
-    private static ArchitecturePlanningResult ResolveWan(VideoStagesSpec spec)
+    private static ArchitecturePlanningResult ResolveWan(
+        VideoStagesSpec spec,
+        IReadOnlyDictionary<string, ModelProfileId> profilesByModel = null)
     {
         VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
         Dictionary<int, ClipArchitectureAssignment> clips = [];
@@ -646,7 +881,10 @@ public class WanArchitectureTests
                 stageModels[stage.ClipStageRawIndex] = new(
                     stage.Model,
                     descriptor.Id,
-                    WanArchitectureModule.ImageToVideoProfileId,
+                    profilesByModel is not null
+                        && profilesByModel.TryGetValue(stage.Model, out ModelProfileId profileId)
+                            ? profileId
+                            : WanArchitectureModule.ImageToVideoProfileId,
                     descriptor);
             }
             clips.TryAdd(clip.Id, new(
@@ -683,10 +921,15 @@ public class WanArchitectureTests
 
     private sealed class WanCatalogRegistry : IVideoArchitectureRegistry
     {
+        internal WanCatalogRegistry(params ResolvedVideoModel[] resolvedModels)
+        {
+            ResolvedModels = resolvedModels;
+        }
+
         public IReadOnlyList<VideoArchitectureDescriptor> Catalog =>
             [WanArchitectureModule.Instance.Descriptor];
 
-        public IReadOnlyList<ResolvedVideoModel> ResolvedModels => [];
+        public IReadOnlyList<ResolvedVideoModel> ResolvedModels { get; }
 
         public IVideoArchitectureModule GetModule(ArchitectureId architectureId) =>
             architectureId == WanArchitectureModule.ArchitectureId

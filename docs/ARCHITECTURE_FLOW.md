@@ -12,7 +12,8 @@ For the detailed execution and frontend designs, continue to
 
 VideoStages is a closed-world modular monolith. Production registers the
 source-only `none` architecture, LTX Video 2.3 (`ltx2`), and the cut-only Wan
-2.2 Image2Video 14B slice (`wan22`).
+2.2 Image2Video 14B and Text/Image2Video 5B image-conditioned profiles
+(`wan22`).
 
 ## Ownership
 
@@ -82,9 +83,17 @@ plan compilation, always carry a request session.
   (case-insensitive).
 
 It returns `ArchitectureId("ltx2")` and `ModelProfileId("ltx-2.3")`.
-`WanArchitectureModule.TryResolveModel` requires compat class `wan-21-14b` and
-exact class `wan-2_2-image2video-14b`; it returns `wan22` and
-`wan-2.2-i2v-14b`.
+`WanArchitectureModule.TryResolveModel` recognizes two exact class/compatibility
+pairs:
+
+- `wan-2_2-image2video-14b` / `wan-21-14b` resolves to `wan22` /
+  `wan-2.2-i2v-14b`; and
+- `wan-2_2-ti2v-5b` / `wan-22-5b` resolves to `wan22` /
+  `wan-2.2-ti2v-5b`.
+
+The 5B `/lora` class, a correct class with a spoofed compatibility class, and
+Wan 2.1/VACE/FLF classes do not resolve. The 14B profile remains the descriptor
+default.
 `NoneArchitectureModule.TryResolveModel` always returns false; common planning
 assigns `none` only to source-video clips with no active stages.
 
@@ -97,8 +106,10 @@ or frontend classification cannot authorize an unsupported model.
 `NoneArchitecture.Descriptor` are typed `VideoArchitectureDescriptor` values.
 Wan publishes image-to-video and clip-local source-video entry, same-profile
 multi-stage chaining, video-only output, a four-frame profile grid, and
-cut-only boundaries. Its current profile also publishes ordinary persisted
-clip/stage LoRAs. Generated stage 0 uses the host root at full control.
+cut-only boundaries. Both profiles publish ordinary persisted clip/stage and
+prompt-section LoRAs. Although the 5B host compatibility can construct a
+native text root, that path is not proven by this module, so `TextToVideo` is
+not an advertised entry mode. Generated stage 0 uses the host root at full control.
 Sourced stage 0 uses its conformed source at finite control in `[0, 1]`; each
 later stage uses `PreviousStage` with the same bound. Exact control `0` is a
 samplerless decoded-video passthrough for those two decoded inputs, while
@@ -299,16 +310,22 @@ orchestration carries these values; it must not interpret their graph meaning.
 `NormalLoraPlanCompiler` is common graph-free planning shared by LTX and Wan:
 it resolves each stage's effective clip rows, keeps clip-before-stage ordering,
 and leaves the resulting immutable array inside the selected architecture's
-stage payload rather than common `StagePlan`.
+stage payload rather than common `StagePlan`. Its default model-and-text target
+policy preserves LTX/generic text-encoder-only rows. WAN explicitly selects the
+model-only policy at this seam.
 For Wan, `WanClipPlanCompiler.Compile` produces the smaller `WanClipPayload`
-and `WanStagePayload`. It requires every active stage to resolve to the exact
-`wan22` / `wan-2.2-i2v-14b` profile, enforces the generated-root /
-source-video / previous-stage chain, refuses an effective LoRA plan on a
-samplerless passthrough, and refuses unsupported or empty integer schedules
-that the common capability validator cannot yet see. A clip-LoRA weight of
-zero is the supported per-stage disable path. Direct/default clip and stage
-rows whose model and text-encoder weights are both zero are omitted; a
-model-zero, text-encoder-nonzero row remains effectful and is retained.
+and `WanStagePayload`; both preserve canonical profile identity. It accepts
+only the two supported `wan22` profiles and requires one profile throughout a
+clip. A hard cut starts a new clip and may select the other profile. The
+compiler also enforces the generated-root / source-video / previous-stage
+chain, refuses an effective LoRA plan on a samplerless passthrough, and refuses
+unsupported or empty integer schedules that the common capability validator
+cannot yet see. A clip-LoRA weight of zero is the supported per-stage disable
+path. Direct/default clip and stage rows whose model and text-encoder weights
+are both zero are omitted by the default policy. Under WAN's model-only policy,
+every model-zero row is omitted even when its stored text-encoder weight is
+nonzero; the samplerless-stage rule therefore sees the same effective plan the
+WAN runtime can apply.
 
 Blocking `PlanDiagnostic` values are thrown by
 `RequireVideoExecutionPlanContext` before a VideoStages mutation phase.
@@ -325,10 +342,11 @@ ComfyUI-LTXVideo nodes/features and resolvable IC-LoRA weights. Blocking
 diagnostics stop the request before later VideoStages host phases mutate the
 graph.
 `WanExecutionAdapter.PreflightRequest` similarly refuses host-only options the
-slice cannot honor. A compatible swap model is delegated to the host adapter,
+slice cannot honor. A compatible 14B swap model is delegated to the host adapter,
 but every decoded partial input — sourced stage 0 or a later stage — must retain
 a non-empty high-noise interval under the request-global swap split. Global
-end-frame is limited to one ImageToVideo clip. Global creativity remains
+end-frame is limited to one 14B ImageToVideo clip. Any active 5B stage refuses
+request-global swap and end-frame before mutation. Global creativity remains
 refused in favor of the authored clip-local controls.
 
 “Before mutation” here means before **VideoStages** mutation. SwarmUI may
@@ -443,13 +461,23 @@ conditions from source frame 0 without VAE-encoding the source batch; positive
 partial control conditions from frame 0 and VAE-encodes a distinct full
 conformed-batch selector. Each later stage uses the same passthrough/full/
 partial rules over the preceding decoded batch. The session validates the
-immutable clip, entry, source, stage input, payload, and canonical profile
-contract before graph mutation.
+immutable clip, entry, source, stage input, payload, and canonical per-clip
+profile contract before graph mutation. A 14B pass uses the host's
+`WanImageToVideo`; a 5B pass uses `Wan22ImageToVideoLatent`. Full 5B generation
+feeds that latent directly to the sampler. Partial 5B refinement samples from
+the VAE encoding of the conformed decoded input, so after the host switches to
+that path the session removes only the newly created, consumerless 5B latent
+preparation node and its otherwise-unused upstream nodes. This pruning also
+runs when the host builder throws. If pruning then fails, the original host
+failure remains authoritative; without a host failure, a pruning failure is
+surfaced.
 
 For every generating pass, `PromptParser.ApplyLoraScope` first projects the
 matching bare, clip, and stage prompt-section rows into host
 `SectionID_Video`; nested inside it, `LoraParams.ApplyNormalLoras` appends the
-compiled persisted rows. That prompt-before-persisted order is deterministic.
+compiled persisted rows. WAN's model-only projection omits prompt rows whose
+model weight is zero while retaining the stored text-encoder weight on every
+nonzero-model row. That prompt-before-persisted order is deterministic.
 Both scopes are absent for passthrough stages and restore the original four
 host LoRA parameter lists in reverse nesting order on success or failure.
 Before the host builder runs, Wan evicts the high-pass
@@ -467,6 +495,17 @@ scope is transient too: Wan removes its marker in a `finally` before either
 parameter snapshot is restored, including when construction or normalization
 fails. An empty final high pass with a distinct or absent swap keeps its
 durable unscoped tuple. Marker eviction never removes live graph nodes.
+
+For both supported WAN compatibility classes, SwarmUI's generic LoRA loader
+targets the model only (`LorasTargetTextEnc=false`). VideoStages uses that
+existing generic path for both persisted and prompt-section rows; text-encoder
+weights remain round-trippable host parameter data but do not make a
+model-zero WAN row effectful. VideoStages does not claim to solve core's
+automatic 5B-LoRA classifier TODO.
+
+Native 5B text roots, Wan 2.1/VACE/FLF, same-clip cross-profile switching, 5B
+swap, transition expansion, advanced references, audio, refine-source, and HDR
+remain outside the WAN contract.
 
 The session publishes authored intermediates and
 removes every host per-pass trim. For a terminal single-clip session it applies

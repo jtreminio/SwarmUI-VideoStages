@@ -238,6 +238,45 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
+    public void NormalLoraPlanCompiler_ModelOnlyPolicy_OmitsTextOnlyDefinitions()
+    {
+        StageSpec stage = Stage(10) with
+        {
+            Loras =
+            [
+                new("stage-text-only", 0, 0.8),
+                new("stage-model", 0.4, 0.9),
+            ],
+        };
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            Loras =
+            [
+                new("clip-text-only", 0, 0.6),
+                new("clip-model", -0.3, 0.7),
+            ],
+        };
+
+        Assert.Collection(
+            NormalLoraPlanCompiler.Compile(
+                clip,
+                stage,
+                NormalLoraTargetPolicy.ModelOnly),
+            plan =>
+            {
+                Assert.Equal("clip-model", plan.Name);
+                Assert.Equal(-0.3, plan.ModelWeight);
+                Assert.Equal(0.7, plan.TextEncoderWeight);
+            },
+            plan =>
+            {
+                Assert.Equal("stage-model", plan.Name);
+                Assert.Equal(0.4, plan.ModelWeight);
+                Assert.Equal(0.9, plan.TextEncoderWeight);
+            });
+    }
+
+    [Fact]
     public void IcLoraPlanCompiler_UsesPerEntryStageStrengths()
     {
         StageSpec stage = Stage(11) with
