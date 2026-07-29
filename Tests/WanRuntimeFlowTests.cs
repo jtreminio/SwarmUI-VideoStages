@@ -6,8 +6,10 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan;
 using VideoStages.Generated;
+using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -111,13 +113,41 @@ public class WanRuntimeFlowTests
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.Equal(512, generator.CurrentMedia.Width);
         Assert.Equal(512, generator.CurrentMedia.Height);
+        VideoModelProfileDescriptor profile =
+            Assert.Single(WanArchitectureModule.Instance.Descriptor.Profiles);
         // The host asked for 16 frames; Wan generates whole latent frames, so the graph makes 13
-        // and the artifact reports what it makes rather than what was asked for.
+        // according to its resolved profile metadata, and the artifact reports what it makes
+        // rather than what was asked for.
+        Assert.Equal(
+            StaticGeneratedFrameGrid.SnapDown(16, profile.FrameGrid),
+            generator.CurrentMedia.Frames);
         Assert.Equal(13, generator.CurrentMedia.Frames);
         Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
         // Timeline publication is architecture-neutral, so nothing downstream can branch on Wan.
         Assert.Null(generator.CurrentMedia.Compat);
         Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
+    }
+
+    [Fact]
+    public void Wan_clip_preserves_an_aligned_authored_generated_frame_count()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 6));
+        clip["duration"] = 0.5;
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        (JObject _, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+
+        VideoModelProfileDescriptor profile =
+            Assert.Single(WanArchitectureModule.Instance.Descriptor.Profiles);
+        Assert.True(StaticGeneratedFrameGrid.IsAligned(17, profile.FrameGrid));
+        Assert.Equal(17, generator.CurrentMedia.Frames);
     }
 
     [Fact]

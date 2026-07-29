@@ -1,0 +1,68 @@
+using VideoStages.Planning;
+using Xunit;
+
+namespace VideoStages.Tests;
+
+public class StaticGeneratedFrameGridTests
+{
+    [Theory]
+    [InlineData(1, 4, 1)]
+    [InlineData(2, 4, 1)]
+    [InlineData(4, 4, 1)]
+    [InlineData(5, 4, 5)]
+    [InlineData(8, 4, 5)]
+    [InlineData(9, 4, 9)]
+    [InlineData(16, 4, 13)]
+    [InlineData(17, 4, 17)]
+    [InlineData(1, 8, 1)]
+    [InlineData(8, 8, 1)]
+    [InlineData(9, 8, 9)]
+    [InlineData(16, 8, 9)]
+    [InlineData(17, 8, 17)]
+    public void Snap_down_matches_static_generated_pixel_frame_grid(
+        int requested,
+        int grid,
+        int expected)
+    {
+        Assert.Equal(expected, StaticGeneratedFrameGrid.SnapDown(requested, grid));
+    }
+
+    [Theory]
+    [InlineData(int.MinValue)]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void Snap_down_preserves_minimum_one_frame_behavior(int requested)
+    {
+        Assert.Equal(1, StaticGeneratedFrameGrid.SnapDown(requested, 4));
+    }
+
+    [Theory]
+    [InlineData(0, 4, false)]
+    [InlineData(1, 4, true)]
+    [InlineData(4, 4, false)]
+    [InlineData(5, 4, true)]
+    [InlineData(13, 4, true)]
+    [InlineData(16, 4, false)]
+    [InlineData(17, 4, true)]
+    [InlineData(1, 1, true)]
+    [InlineData(2, 1, true)]
+    public void Alignment_predicate_uses_first_frame_as_grid_origin(
+        int requested,
+        int grid,
+        bool expected)
+    {
+        Assert.Equal(expected, StaticGeneratedFrameGrid.IsAligned(requested, grid));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Grid_must_be_positive(int grid)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => StaticGeneratedFrameGrid.SnapDown(16, grid));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => StaticGeneratedFrameGrid.IsAligned(16, grid));
+    }
+}

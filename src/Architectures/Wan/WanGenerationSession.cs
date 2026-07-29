@@ -131,13 +131,18 @@ internal sealed class WanGenerationSession(
         {
             return null;
         }
-        int snapped = ((Math.Max(1, frames) - 1) / WanArchitectureModule.FrameGrid
-            * WanArchitectureModule.FrameGrid) + 1;
+        WanStaticGeneratedFrameResolution resolution =
+            WanStaticGeneratedFrameResolver.Resolve(
+                frames,
+                clip.ClipId,
+                stage.StageId,
+                stage.ResolvedModel);
+        int snapped = resolution.Frames;
         if (snapped != frames)
         {
             Logs.Info(
                 $"VideoStages: clip {clip.ClipId} stage {stage.StageId} length {frames} snapped to "
-                + $"{snapped} — Wan generates in steps of {WanArchitectureModule.FrameGrid} frames.");
+                + $"{snapped} — Wan generates in steps of {resolution.FrameGrid} frames.");
         }
         return snapped;
     }

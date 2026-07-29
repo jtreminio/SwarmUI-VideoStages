@@ -112,6 +112,67 @@ public class WanArchitectureTests
         Assert.Equal("normal", stagePayload.Scheduler);
     }
 
+    [Fact]
+    public void Static_generated_frames_use_the_resolved_profile_grid_not_the_Wan_constant()
+    {
+        Assert.Equal(4, WanArchitectureModule.FrameGrid);
+        ModelProfileId profileId = new("synthetic-grid-8");
+        VideoArchitectureDescriptor descriptor =
+            WanArchitectureModule.Instance.Descriptor with
+            {
+                Profiles =
+                [
+                    Assert.Single(WanArchitectureModule.Instance.Descriptor.Profiles) with
+                    {
+                        Id = profileId,
+                        FrameGrid = 8,
+                    },
+                ],
+            };
+        ResolvedVideoModel resolved = new(
+            "synthetic-wan",
+            descriptor.Id,
+            profileId,
+            descriptor);
+
+        WanStaticGeneratedFrameResolution resolution =
+            WanStaticGeneratedFrameResolver.Resolve(16, 2, 10, resolved);
+
+        Assert.Equal(8, resolution.FrameGrid);
+        Assert.Equal(9, resolution.Frames);
+    }
+
+    [Fact]
+    public void Static_generated_frame_resolution_fails_closed_without_a_resolved_model()
+    {
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => WanStaticGeneratedFrameResolver.Resolve(16, 2, 10, null));
+
+        Assert.Equal(
+            "Clip 2 stage 10 has no resolved video model.",
+            error.Message);
+    }
+
+    [Fact]
+    public void Static_generated_frame_resolution_fails_closed_for_an_undeclared_profile()
+    {
+        VideoArchitectureDescriptor descriptor =
+            WanArchitectureModule.Instance.Descriptor;
+        ModelProfileId undeclared = new("undeclared-grid");
+        ResolvedVideoModel resolved = new(
+            "synthetic-wan",
+            descriptor.Id,
+            undeclared,
+            descriptor);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => WanStaticGeneratedFrameResolver.Resolve(16, 2, 10, resolved));
+
+        Assert.Equal(
+            "Clip 2 stage 10 resolved undeclared model profile 'undeclared-grid'.",
+            error.Message);
+    }
+
     /// <summary>
     /// Settings the common capability validator does not inspect. Each one would otherwise compile
     /// into a payload that silently omits it.
