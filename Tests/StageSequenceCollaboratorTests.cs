@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2;
 using VideoStages.Planning;
 using Xunit;
@@ -181,7 +182,7 @@ public class StageSequenceCollaboratorTests
             ArchitecturePayload = stage.RequireLtx2Payload() with
             {
                 Guide = new GuideReferencePlan(
-                    GuideReferenceKind.ExplicitStage,
+                    StageGuideReferenceKind.ExplicitStage,
                     $"Stage{stage.StageId}",
                     stage.StageId)
             }

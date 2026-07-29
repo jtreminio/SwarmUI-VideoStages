@@ -2,6 +2,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -190,7 +191,7 @@ internal class StageRunner
             // noise mask of every frame it spans. The official upscaler/V2V flows are encode-only.
             SourcedFootageIsStageInput: clipContext.PlannedClip.IsSourced
                 && clipContext.IsFirstStage(stage)
-                && payload.Guide.Kind == GuideReferenceKind.Generated
+                && payload.Guide.Kind == StageGuideReferenceKind.Generated
                 && !payload.Core.ImageReferenceWasExplicit,
             // The host's incoming image is the implicit frame-1 guide for clip 0/stage 0 only.
             // Later defaulted stages refine their incoming latent directly. Authored ImageReference
@@ -301,7 +302,7 @@ internal class StageRunner
     private bool GuideReferenceIsStageInput(
         StageRefStore.StageRef guideReference,
         JArray priorOutputPath,
-        GuideReferenceKind guideKind,
+        StageGuideReferenceKind guideKind,
         bool guideWasExplicit,
         LtxPostVideoChainCapture postVideoChain)
     {
@@ -309,7 +310,7 @@ internal class StageRunner
         {
             return false;
         }
-        return guideKind == GuideReferenceKind.Generated && !guideWasExplicit
+        return guideKind == StageGuideReferenceKind.Generated && !guideWasExplicit
             || priorOutputPath is not null && JToken.DeepEquals(guidePath, priorOutputPath)
             || _guideMediaResolver.IsLiveCurrentOutputReference(
                 guideReference.Media,
@@ -336,7 +337,7 @@ internal class StageRunner
         StageRefStore.StageRef guideReference,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         LtxPostVideoChainCapture postVideoChain) =>
-        stage.RequireLtx2Payload().Guide.Kind == GuideReferenceKind.Generated
+        stage.RequireLtx2Payload().Guide.Kind == StageGuideReferenceKind.Generated
         && postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true
         && _guideMediaResolver.IsLiveCurrentOutputReference(guideReference?.Media, postVideoChain)
         && !string.IsNullOrWhiteSpace(guideReference?.Vae?.Compat?.ID)

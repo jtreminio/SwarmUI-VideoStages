@@ -54,7 +54,10 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
             ClipCapability.Prompts,
             StageCapability.ImageInput,
             OutputCapability.Video),
-        WanBoundaryPolicy.Instance);
+        WanBoundaryPolicy.Instance)
+    {
+        StageGuideReferences = StageGuideReferencePolicy.GeneratedOnly,
+    };
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
     {

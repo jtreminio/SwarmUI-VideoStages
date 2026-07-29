@@ -143,7 +143,9 @@ public class PlanningCompilerComponentTests
         var references = ImageReferencePlanCompiler.Compile(clip, stage);
 
         Assert.Equal(PromptRelayMode.Relay, prompt.Mode);
-        Assert.Equal(new GuideReferencePlan(GuideReferenceKind.Base2Edit, "edit4", 4), guide);
+        Assert.Equal(
+            new GuideReferencePlan(StageGuideReferenceKind.Base2Edit, "edit4", 4),
+            guide);
         Assert.Collection(
             loras,
             lora => Assert.Equal("clip", lora.Name),

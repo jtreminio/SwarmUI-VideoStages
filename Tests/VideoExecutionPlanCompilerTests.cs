@@ -1,3 +1,4 @@
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 using Xunit;
 
@@ -126,13 +127,12 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Theory]
-    [InlineData("Base", (int)GuideReferenceKind.Base, -1)]
-    [InlineData("Refiner", (int)GuideReferenceKind.Refiner, -1)]
-    [InlineData("Generated", (int)GuideReferenceKind.Generated, -1)]
-    [InlineData("PreviousStage", (int)GuideReferenceKind.PreviousStage, -1)]
-    [InlineData("Stage3", (int)GuideReferenceKind.ExplicitStage, 3)]
-    [InlineData("edit4", (int)GuideReferenceKind.Base2Edit, 4)]
-    [InlineData("not-a-reference", (int)GuideReferenceKind.Unknown, -1)]
+    [InlineData("Base", (int)StageGuideReferenceKind.Base, -1)]
+    [InlineData("Refiner", (int)StageGuideReferenceKind.Refiner, -1)]
+    [InlineData("Generated", (int)StageGuideReferenceKind.Generated, -1)]
+    [InlineData("PreviousStage", (int)StageGuideReferenceKind.PreviousStage, -1)]
+    [InlineData("Stage3", (int)StageGuideReferenceKind.ExplicitStage, 3)]
+    [InlineData("edit4", (int)StageGuideReferenceKind.Base2Edit, 4)]
     public void Compile_GuideReferenceIntent_IsTyped(
         string raw,
         int expectedKindValue,
@@ -144,9 +144,27 @@ public class VideoExecutionPlanCompilerTests
             .Compile(Spec(false, GeneratedClip(0, stage)))
             .Clips[0].Stages[0].RequireLtx2Payload().Guide;
 
-        Assert.Equal((GuideReferenceKind)expectedKindValue, guide.Kind);
+        Assert.Equal((StageGuideReferenceKind)expectedKindValue, guide.Kind);
         Assert.Equal(expectedStageIndex < 0 ? null : expectedStageIndex, guide.ReferencedStageIndex);
         Assert.Equal(raw, guide.RawValue);
+    }
+
+    [Fact]
+    public void Compile_UnknownGuideReference_IsRejectedBeforeArchitectureCompilation()
+    {
+        StageSpec stage = Stage(10) with { ImageReference = "not-a-reference" };
+
+        VideoExecutionPlan plan =
+            TestPlanCompiler.Compile(Spec(false, GeneratedClip(0, stage)));
+
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Error
+                && diagnostic.ClipId == 0
+                && diagnostic.StageId == 10
+                && diagnostic.Message.Contains("stage image reference 'not-a-reference'"));
+        Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
     [Fact]
@@ -228,7 +246,7 @@ public class VideoExecutionPlanCompilerTests
             .Clips[0].Stages[1];
         Ltx2StagePayload ltx = compiled.RequireLtx2Payload();
 
-        Assert.Equal(GuideReferenceKind.Base2Edit, ltx.Guide.Kind);
+        Assert.Equal(StageGuideReferenceKind.Base2Edit, ltx.Guide.Kind);
         Assert.Equal(4, ltx.Guide.ReferencedStageIndex);
         Assert.Equal(StageUpscaleMode.Latent, ltx.Upscale.Mode);
         Assert.Equal(1.5, ltx.Upscale.Factor);

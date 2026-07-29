@@ -1,5 +1,6 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 
@@ -33,18 +34,18 @@ internal sealed class StageGuideReferenceState(
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
         return payload.Guide.Kind switch
         {
-            GuideReferenceKind.Base => WarnIfMissing(
+            StageGuideReferenceKind.Base => WarnIfMissing(
                 store.Base,
                 "VideoStages: ImageReference 'Base' requested, but no base reference exists."),
-            GuideReferenceKind.Refiner => WarnIfMissing(
+            StageGuideReferenceKind.Refiner => WarnIfMissing(
                 store.Refiner,
                 "VideoStages: ImageReference 'Refiner' requested, but no refiner reference exists."),
-            GuideReferenceKind.Generated => _previousStageRef ?? WarnIfMissing(
+            StageGuideReferenceKind.Generated => _previousStageRef ?? WarnIfMissing(
                 store.Generated,
                 "VideoStages: ImageReference 'Generated' requested, but no generated reference exists."),
-            GuideReferenceKind.PreviousStage => ResolvePreviousStageReference(),
-            GuideReferenceKind.ExplicitStage => ResolveExplicitStageReference(payload.Guide),
-            GuideReferenceKind.Base2Edit => ResolveBase2EditReference(payload.Guide),
+            StageGuideReferenceKind.PreviousStage => ResolvePreviousStageReference(),
+            StageGuideReferenceKind.ExplicitStage => ResolveExplicitStageReference(payload.Guide),
+            StageGuideReferenceKind.Base2Edit => ResolveBase2EditReference(payload.Guide),
             _ => WarnUnknownGuideReference(payload.Guide.RawValue),
         };
     }

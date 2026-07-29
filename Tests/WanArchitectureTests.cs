@@ -74,6 +74,9 @@ public class WanArchitectureTests
             GeneratedClip(0, stage) with { ClipLengthFromControlNet = true },
             "control-signal-derived clip duration");
         AssertRejected(
+            GeneratedClip(0, stage with { ImageReference = "Base" }),
+            "stage image reference 'Base'");
+        AssertRejected(
             GeneratedClip(0, stage) with
             {
                 IcLoras = [new("wan-ic.safetensors", "Upload", 1, 1, "canny", null)],
@@ -124,9 +127,6 @@ public class WanArchitectureTests
         AssertRefused(
             GeneratedClip(0, stage with { Control = 0.8 }),
             "partial regeneration");
-        AssertRefused(
-            GeneratedClip(0, stage with { ImageReference = "Base" }),
-            "stage image reference 'Base'");
     }
 
     private static void AssertRejected(ClipSpec clip, string expectedOption)

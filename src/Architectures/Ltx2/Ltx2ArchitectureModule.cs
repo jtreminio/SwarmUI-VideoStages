@@ -75,6 +75,13 @@ internal sealed class Ltx2ArchitectureModule :
                 | OutputCapability.StandaloneAudio),
         Ltx2BoundaryPolicy.Instance)
     {
+        StageGuideReferences = new(
+            StageGuideReferenceKind.Generated
+                | StageGuideReferenceKind.Base
+                | StageGuideReferenceKind.Refiner
+                | StageGuideReferenceKind.PreviousStage
+                | StageGuideReferenceKind.ExplicitStage
+                | StageGuideReferenceKind.Base2Edit),
         Rules = Ltx2ConditionalRulePolicySource.PublishedRules,
     };
 

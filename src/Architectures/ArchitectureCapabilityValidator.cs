@@ -220,6 +220,16 @@ internal static class ArchitectureCapabilityValidator
         for (int stageIndex = 0; stageIndex < stages.Count; stageIndex++)
         {
             StageSpec stage = stages[stageIndex];
+            StageGuideReferenceSelection guide =
+                StageGuideReferencePolicy.Classify(stage.ImageReference);
+            if (!descriptor.StageGuideReferences.Allows(guide))
+            {
+                diagnostics.Add(Unsupported(
+                    clip,
+                    descriptor,
+                    $"stage image reference '{stage.ImageReference}'",
+                    stage.Id));
+            }
             if (stageIndex > 0
                 && !Has(descriptor.Capabilities.Stage, StageCapability.VideoInput))
             {

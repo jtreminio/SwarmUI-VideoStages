@@ -321,6 +321,13 @@ internal sealed record VideoArchitectureDescriptor(
     ArchitectureCapabilityDescriptor Capabilities,
     IArchitectureBoundaryPolicy BoundaryPolicy)
 {
+    /// <summary>
+    /// The effective stage guide selectors this architecture can execute. Fail closed so a new
+    /// architecture must opt into every selector beyond the generated root.
+    /// </summary>
+    public StageGuideReferencePolicy StageGuideReferences { get; init; } =
+        StageGuideReferencePolicy.GeneratedOnly;
+
     /// <summary>The catalog projection of <see cref="BoundaryPolicy"/>; never a separate source.</summary>
     public IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> BoundaryRules =>
         BoundaryPolicy.PublishedRules;

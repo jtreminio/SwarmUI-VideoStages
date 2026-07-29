@@ -13,9 +13,6 @@ internal sealed record WanClipPlanCompilation(
 /// </summary>
 internal static class WanClipPlanCompiler
 {
-    /// <summary>The only stage input Wan consumes: the media the host root produced.</summary>
-    private const string GeneratedRootReference = "Generated";
-
     internal static WanClipPlanCompilation Compile(ClipSpec clip)
     {
         ArgumentNullException.ThrowIfNull(clip);
@@ -45,11 +42,6 @@ internal static class WanClipPlanCompiler
             Refuse(
                 !stage.IsPassthrough && stage.Control < 1,
                 "partial regeneration",
-                stage.Id);
-            Refuse(
-                !string.IsNullOrWhiteSpace(stage.ImageReference)
-                    && !StringUtils.Equals(stage.ImageReference, GeneratedRootReference),
-                $"stage image reference '{stage.ImageReference}'",
                 stage.Id);
             stages.Add(
                 stage.ClipStageRawIndex,

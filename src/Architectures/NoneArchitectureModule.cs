@@ -51,7 +51,10 @@ internal static class NoneArchitecture
                 | ClipCapability.AudioSegments,
             StageCapability.None,
             OutputCapability.Video | OutputCapability.AttachedAudio),
-        BoundaryPolicy);
+        BoundaryPolicy)
+    {
+        StageGuideReferences = StageGuideReferencePolicy.GeneratedOnly,
+    };
 
     private static ArchitectureBoundaryModePolicy Mode(
         RuleSupport support,

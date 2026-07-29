@@ -88,19 +88,8 @@ internal sealed record StageUpscalePlan(
     string RawMethod,
     string MethodName);
 
-internal enum GuideReferenceKind
-{
-    Base,
-    Refiner,
-    Generated,
-    PreviousStage,
-    ExplicitStage,
-    Base2Edit,
-    Unknown,
-}
-
 internal sealed record GuideReferencePlan(
-    GuideReferenceKind Kind,
+    StageGuideReferenceKind Kind,
     string RawValue,
     int? ReferencedStageIndex);
 
