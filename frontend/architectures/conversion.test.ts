@@ -60,6 +60,78 @@ describe("architecture conversion policy", () => {
         expect(conversion?.clip.refFraming).toBe("crop");
     });
 
+    it("drops the opaque payload only when the owning architecture changes", () => {
+        const payload = { ltx2: { tuning: "private" } };
+        const clip = minimalClip({ architecturePayload: payload });
+
+        const converted = planArchitectureConversion(
+            clip,
+            {
+                architectureId: "test-video",
+                modelProfileId: "test-profile",
+                model: "test-video.safetensors",
+                capabilities:
+                    testArchitectureCatalog().architectures[0].capabilities,
+            },
+            fakeArchitectureCatalog(),
+        );
+        // A retarget inside the owning architecture is not a change of owner.
+        const retargeted = planArchitectureConversion(
+            clip,
+            {
+                architectureId: "ltx2",
+                modelProfileId: "ltx-2.3",
+                model: "ltx",
+                capabilities:
+                    testArchitectureCatalog().architectures[0].capabilities,
+            },
+            testArchitectureCatalog(),
+        );
+
+        // A dormant sourced clip reads as `none`, but its authored stages still
+        // belong to the architecture that wrote the payload.
+        const dormant = planArchitectureConversion(
+            minimalClip({
+                architecture: "none",
+                modelProfileId: "none",
+                architecturePayload: payload,
+                sourceVideo: {
+                    data: "data:video/mp4;base64,AA==",
+                    fileName: "source.mp4",
+                    fps: 24,
+                    durationSeconds: 2,
+                    startSeconds: 0,
+                    lengthSeconds: 2,
+                },
+                // Stale profile: the conversion repairs it, so it must not read
+                // as "this clip has no authored owner".
+                stages: [
+                    minimalStage({
+                        skipped: true,
+                        modelProfileId: "stale-profile",
+                    }),
+                ],
+            }),
+            {
+                architectureId: "ltx2",
+                modelProfileId: "ltx-2.3",
+                model: "ltx",
+                capabilities:
+                    testArchitectureCatalog().architectures[0].capabilities,
+            },
+            testArchitectureCatalog(),
+        );
+
+        expect(converted?.clip.architecturePayload).toBeNull();
+        expect(converted?.removals).toContain("architecture-specific payload");
+        expect(retargeted?.clip.architecturePayload).toEqual(payload);
+        expect(retargeted?.removals).not.toContain(
+            "architecture-specific payload",
+        );
+        expect(dormant?.clip.architecturePayload).toEqual(payload);
+        expect(clip.architecturePayload).toEqual(payload);
+    });
+
     it("does not apply on cancel and applies exactly once on confirm", () => {
         const apply = jest.fn(() => true);
 
@@ -115,6 +187,8 @@ describe("architecture conversion policy", () => {
                 testArchitectureCatalog().architectures[0].capabilities,
         };
         const source = minimalClip({
+            // Including the dropped payload: undo has to restore it too.
+            architecturePayload: { ltx2: { tuning: "private" } },
             loras: [{ name: "detail" }],
             refs: [minimalRef()],
             stages: [

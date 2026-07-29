@@ -380,6 +380,43 @@ describe("diffDocuments", () => {
         expect(result.document).toEqual(after);
     });
 
+    it("saves the conversion that drops an opaque payload and refuses one that keeps it", () => {
+        const before = document();
+        before.clips[0].architecturePayload = { ltx2: { tuning: "private" } };
+        const { catalog, target } = crossArchitectureCatalog();
+        const planned = planArchitectureConversion(
+            before.clips[0],
+            target,
+            catalog,
+        );
+        if (!planned) throw new Error("expected valid conversion plan");
+        const after = structuredClone(before);
+        after.clips[0] = planned.clip as CanonicalClip;
+        expect(after.clips[0].architecturePayload).toBeNull();
+
+        const command = diffDocuments(before, after, {
+            architectureCatalog: catalog,
+        });
+        const result = reduceDocumentCommand(before, command, {
+            architectureCatalog: catalog,
+        });
+
+        expect(result.applied).toBe(true);
+        expect(result.document).toEqual(after);
+        expect(result.document.clips[0].architecturePayload).toBeNull();
+
+        // A requested state that changes owner while keeping the envelope is the
+        // exact attribution the conversion prevents, so the save path fails closed.
+        const keptPayload = structuredClone(after);
+        keptPayload.clips[0].architecturePayload =
+            before.clips[0].architecturePayload;
+        expect(() =>
+            diffDocuments(before, keptPayload, {
+                architectureCatalog: catalog,
+            }),
+        ).toThrow(DocumentDiffError);
+    });
+
     it("rejects cross-architecture saves without a catalog or with incompatible restored data", () => {
         const before = document();
         const { catalog, target } = crossArchitectureCatalog();

@@ -7,6 +7,8 @@ import { removeIcLoraStrengthAt } from "../../normalizationStage";
 import type { Clip, IcLora } from "../../types";
 import { isArchitectureHdrFeature } from "../behaviorRegistry";
 import { architectureDescriptor, modelCatalogEntry } from "../catalogQueries";
+import { modelIdentityFromCatalog } from "../clipIdentity";
+import { NONE_ARCHITECTURE_ID } from "../none/identity";
 import { architectureFeatureSupport } from "../policy/clipStageViews";
 import type { AuthoringFeature } from "../policy/types";
 import type {
@@ -115,6 +117,28 @@ export const planArchitectureConversion = (
 
     clip.architecture = target.architectureId;
     clip.modelProfileId = target.modelProfileId;
+
+    // The envelope belongs to the architecture that wrote it, so it cannot ride
+    // along to a different adapter, which would read foreign schema as its own.
+    // Undo does not need it kept here: history holds the pre-conversion document.
+    // `none` owns no envelope, so a dormant sourced clip is owned by its authored
+    // Stage 0 model alone — asking for a whole-clip identity would read repairable
+    // stage state as "no owner" and drop the payload of an unchanged owner.
+    // Nothing authors an envelope yet, so a whole-document save that changes owner
+    // while carrying one is refused rather than reinterpreted; when an adapter
+    // starts writing payloads, that save path needs its own replacement rule.
+    const payloadOwner =
+        source.architecture === NONE_ARCHITECTURE_ID
+            ? (modelIdentityFromCatalog(catalog, source.stages[0]?.model ?? "")
+                  ?.architectureId ?? source.architecture)
+            : source.architecture;
+    if (
+        payloadOwner !== target.architectureId &&
+        clip.architecturePayload !== null
+    ) {
+        removals.push("architecture-specific payload");
+        clip.architecturePayload = null;
+    }
 
     if (!supportsMultipleStages && clip.stages.length > 1) {
         const removedStages = clip.stages.slice(1);

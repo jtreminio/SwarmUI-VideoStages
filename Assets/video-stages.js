@@ -3798,6 +3798,11 @@
     const supportsNormalLoras = supports("stageLoras");
     clip.architecture = target.architectureId;
     clip.modelProfileId = target.modelProfileId;
+    const payloadOwner = source.architecture === NONE_ARCHITECTURE_ID ? modelIdentityFromCatalog(catalog, source.stages[0]?.model ?? "")?.architectureId ?? source.architecture : source.architecture;
+    if (payloadOwner !== target.architectureId && clip.architecturePayload !== null) {
+      removals.push("architecture-specific payload");
+      clip.architecturePayload = null;
+    }
     if (!supportsMultipleStages && clip.stages.length > 1) {
       const removedStages = clip.stages.slice(1);
       removals.push(countLabel(removedStages.length, "later authored stage"));
