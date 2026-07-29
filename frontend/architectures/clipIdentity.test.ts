@@ -5,7 +5,6 @@ import {
     deriveClipArchitectureIdentity,
     reconcileClipArchitectureIdentity,
 } from "./clipIdentity";
-import { reconcileSourcedClipIdentity } from "./policy/identity";
 
 describe("clip architecture identity", () => {
     it("derives authored Stage 0 separately from a source-only effective identity", () => {
@@ -32,9 +31,9 @@ describe("clip architecture identity", () => {
         });
     });
 
-    it("shares the same reconciliation service with the UI policy wrapper", () => {
+    it("reconciles a sourced clip to its effective source-only identity", () => {
         const catalog = testArchitectureCatalog();
-        const reducerClip = minimalClip({
+        const clip = minimalClip({
             architecture: "ltx2",
             modelProfileId: "ltx-2.3",
             sourceVideo: {
@@ -47,14 +46,9 @@ describe("clip architecture identity", () => {
             },
             stages: [minimalStage({ skipped: true })],
         });
-        const uiClip = structuredClone(reducerClip);
 
-        expect(reconcileClipArchitectureIdentity(reducerClip, catalog)).toBe(
-            true,
-        );
-        reconcileSourcedClipIdentity(uiClip, catalog);
-        expect(uiClip).toEqual(reducerClip);
-        expect(uiClip).toMatchObject({
+        expect(reconcileClipArchitectureIdentity(clip, catalog)).toBe(true);
+        expect(clip).toMatchObject({
             architecture: "none",
             modelProfileId: "none",
         });

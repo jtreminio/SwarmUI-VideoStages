@@ -1,5 +1,5 @@
 import { reconcileArchitectureIncomingIcLoraDrives } from "../architectures/behaviorRegistry";
-import { reconcileSourcedClipIdentity } from "../architectures/policy";
+import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity";
 import { CLIP_DURATION_MIN } from "../constants";
 import {
     appendHelp,
@@ -61,7 +61,10 @@ const applyPickedSourceVideo = (
             startSeconds: 0,
             lengthSeconds,
         };
-        reconcileSourcedClipIdentity(target, context.capabilities().catalog);
+        reconcileClipArchitectureIdentity(
+            target,
+            context.capabilities().catalog,
+        );
         applyClipDurationResize(
             target,
             Math.max(CLIP_DURATION_MIN, lengthSeconds),
@@ -106,7 +109,7 @@ export const buildSourceVideoSection = (
                 return null;
             }
             target.sourceVideo = null;
-            reconcileSourcedClipIdentity(
+            reconcileClipArchitectureIdentity(
                 target,
                 context.capabilities().catalog,
             );

@@ -6,7 +6,6 @@ import { buildArchitectureRetargetPlan } from "../architectures/catalog";
 import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity";
 import { NONE_ARCHITECTURE_ID } from "../architectures/none/identity";
 import type { CapabilityViewResolver } from "../architectures/policy";
-import { reconcileSourcedClipIdentity } from "../architectures/policy";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import {
     clamp,
@@ -113,7 +112,7 @@ export const applyStageSkip = (
     for (let index = start; index < clip.stages.length; index++) {
         clip.stages[index].skipped = skipped;
     }
-    reconcileSourcedClipIdentity(clip, catalog);
+    reconcileClipArchitectureIdentity(clip, catalog);
     reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
     return true;
 };
@@ -551,7 +550,10 @@ export const createDetailSelectionDomainOperations = (
                         entry,
                     );
                 }
-                reconcileSourcedClipIdentity(clip, getCapabilities().catalog);
+                reconcileClipArchitectureIdentity(
+                    clip,
+                    getCapabilities().catalog,
+                );
                 reconcileArchitectureIncomingIcLoraDrives(
                     clips,
                     getGeneratedEntryMode(),

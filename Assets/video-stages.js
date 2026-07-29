@@ -5622,11 +5622,6 @@
     body.prepend(notice);
   };
 
-  // frontend/architectures/policy/identity.ts
-  var reconcileSourcedClipIdentity = (clip, catalog) => {
-    reconcileClipArchitectureIdentity(clip, catalog);
-  };
-
   // frontend/architectures/policy.ts
   var createCapabilityViewResolver = (catalog, scope = {}) => {
     const architectureById = new Map(
@@ -11739,7 +11734,10 @@
         startSeconds: 0,
         lengthSeconds
       };
-      reconcileSourcedClipIdentity(target, context.capabilities().catalog);
+      reconcileClipArchitectureIdentity(
+        target,
+        context.capabilities().catalog
+      );
       applyClipDurationResize(
         target,
         Math.max(CLIP_DURATION_MIN, lengthSeconds),
@@ -11776,7 +11774,7 @@
           return null;
         }
         target.sourceVideo = null;
-        reconcileSourcedClipIdentity(
+        reconcileClipArchitectureIdentity(
           target,
           context.capabilities().catalog
         );
@@ -13444,7 +13442,7 @@ The conversion is one undoable change.`;
     for (let index = start; index < clip.stages.length; index++) {
       clip.stages[index].skipped = skipped;
     }
-    reconcileSourcedClipIdentity(clip, catalog);
+    reconcileClipArchitectureIdentity(clip, catalog);
     reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
     return true;
   };
@@ -13802,7 +13800,10 @@ The conversion is one undoable change.`;
               entry
             );
           }
-          reconcileSourcedClipIdentity(clip, getCapabilities().catalog);
+          reconcileClipArchitectureIdentity(
+            clip,
+            getCapabilities().catalog
+          );
           reconcileArchitectureIncomingIcLoraDrives(
             clips,
             getGeneratedEntryMode()

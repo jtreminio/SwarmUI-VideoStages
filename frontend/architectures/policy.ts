@@ -13,7 +13,6 @@ export {
     isAudioSourceSupported,
     upscaleModeForMethod,
 } from "./policy/featureValues";
-export { reconcileSourcedClipIdentity } from "./policy/identity";
 export type {
     AuthoringFeature,
     AuthoringState,

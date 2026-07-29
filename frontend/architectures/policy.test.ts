@@ -16,10 +16,8 @@ import {
     detailBreadcrumb,
 } from "../detailStrip/panelRouter";
 import { renderTimeline } from "../timelineView";
-import {
-    createCapabilityViewResolver,
-    reconcileSourcedClipIdentity,
-} from "./policy";
+import { reconcileClipArchitectureIdentity } from "./clipIdentity";
+import { createCapabilityViewResolver } from "./policy";
 import type { ArchitectureModelCatalog } from "./types";
 
 const catalog = (): ArchitectureModelCatalog => {
@@ -87,7 +85,7 @@ describe("catalog-backed authoring policy", () => {
             stages: [minimalStage({ skipped: true })],
         });
 
-        reconcileSourcedClipIdentity(clip, models);
+        reconcileClipArchitectureIdentity(clip, models);
 
         expect(clip).toMatchObject({
             architecture: "none",
@@ -355,14 +353,14 @@ describe("catalog-backed authoring policy", () => {
             ],
         });
 
-        reconcileSourcedClipIdentity(clip, models);
+        reconcileClipArchitectureIdentity(clip, models);
         expect(clip).toMatchObject({
             architecture: "ltx2",
             modelProfileId: "ltx-2.3",
         });
 
         clip.stages[0].skipped = false;
-        reconcileSourcedClipIdentity(clip, models);
+        reconcileClipArchitectureIdentity(clip, models);
         expect(clip).toMatchObject({
             architecture: "ltx2",
             modelProfileId: "ltx-2.3",
@@ -403,7 +401,7 @@ describe("catalog-backed authoring policy", () => {
             ],
         });
 
-        reconcileSourcedClipIdentity(clip, models);
+        reconcileClipArchitectureIdentity(clip, models);
 
         expect(clip).toMatchObject({
             architecture: "ltx2",
