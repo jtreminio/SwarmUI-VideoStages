@@ -39,8 +39,9 @@ internal sealed record OutputRegistry(IReadOnlySet<string> HostAnimationSaveIds)
 
 /// <summary>
 /// Publishes one final runtime artifact through the captured host output contract. Existing host
-/// saves retain their settings and ids; when the host supplied none, one normal animation save is
-/// created through the WorkflowGenerator compatibility adapter.
+/// saves retain their encoding settings and ids while their media wiring and frame rate follow the
+/// completed artifact; when the host supplied none, one normal animation save is created through
+/// the WorkflowGenerator compatibility adapter.
 /// </summary>
 internal sealed class OutputPublisher(
     WorkflowGenerator generator,
@@ -98,6 +99,10 @@ internal sealed class OutputPublisher(
         foreach (SwarmSaveAnimationWSNode save in hostSaves)
         {
             save.Images.ConnectToUntyped(videoOutput);
+            if (media.GetRawFPS() is int fps && fps > 0)
+            {
+                save.Fps.Set((double)fps);
+            }
             if (publishAudio && save.Audio.Connection?.Node?.Id is string staleAudioId)
             {
                 staleAudioNodeIds.Add(staleAudioId);

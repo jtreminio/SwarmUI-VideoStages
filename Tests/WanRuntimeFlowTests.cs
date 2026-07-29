@@ -537,27 +537,15 @@ public class WanRuntimeFlowTests
     /// These settings live in the host's video parameters rather than the authored clip document,
     /// so preflight is the only place they can be refused rather than ignored by this slice.
     /// </summary>
-    [Theory]
-    [InlineData("Video2VideoCreativity", "requires a source-video entry")]
-    [InlineData("FrameInterpolation", "frame interpolation")]
-    public void Host_video_parameters_the_slice_cannot_honor_are_refused(
-        string parameter,
-        string expectedReason)
+    [Fact]
+    public void Wan_partial_denoise_is_refused_with_its_missing_source_provenance()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
 
         T2IParamInput input = WanInput(models, steps: 10);
         PreflightSnapshot snapshot = new();
-        if (parameter == "Video2VideoCreativity")
-        {
-            input.Set(T2IParamTypes.Video2VideoCreativity, 0.5);
-        }
-        else
-        {
-            input.Set(ComfyUIBackendExtension.VideoFrameInterpolationMethod, "RIFE");
-            input.Set(ComfyUIBackendExtension.VideoFrameInterpolationMultiplier, 2);
-        }
+        input.Set(T2IParamTypes.Video2VideoCreativity, 0.5);
 
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
             () => WorkflowTestHarness.GenerateWithStepsAndState(
@@ -565,7 +553,7 @@ public class WanRuntimeFlowTests
                 WorkflowTestHarness.Template_BaseOnlyImage()
                     .Concat([snapshot.Step(), WorkflowTestHarness.CoreImageToVideoStep()])
                     .Concat(WorkflowTestHarness.VideoStagesSteps())));
-        Assert.Contains(expectedReason, error.Message);
+        Assert.Contains("requires a source-video entry", error.Message);
         Assert.DoesNotContain("request: VideoStages:", error.Message);
         snapshot.AssertUnchanged();
     }

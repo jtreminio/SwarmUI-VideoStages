@@ -17,6 +17,9 @@ internal static class StableNodeIds
     /// <summary>Per-stage intermediate save nodes, offset by stage ordinal.</summary>
     internal static Block IntermediateStageSave { get; } = new("intermediate-stage-save", 52100, 100);
 
+    /// <summary>The one assembled-timeline save emitted before frame interpolation.</summary>
+    internal static Block PreInterpolationSave { get; } = new("pre-interpolation-save", 52900, 100);
+
     /// <summary>The one fallback final save node.</summary>
     internal static Block FinalSave { get; } = new("final-save", 52200, 100);
 
@@ -34,6 +37,7 @@ internal static class StableNodeIds
         FinalSave,
         AudioInjection,
         AudioWindowMask,
+        PreInterpolationSave,
     ];
 
     internal static string Id(WorkflowGenerator g, Block block, int slot = 0)

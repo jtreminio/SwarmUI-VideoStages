@@ -51,7 +51,9 @@ internal sealed class VideoArchitectureExecutionHost
     internal void PreflightRequest(VideoExecutionPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        List<PlanDiagnostic> diagnostics = [];
+        List<PlanDiagnostic> diagnostics = [
+            .. new TimelineFrameInterpolator(_generator).Preflight(plan)
+        ];
         ArchitectureRequestPreflightContext context = new(plan);
         foreach (IArchitectureGenerationSessionFactoryProvider provider in ActiveProviders(plan))
         {

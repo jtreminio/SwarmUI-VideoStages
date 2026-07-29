@@ -43,6 +43,7 @@ internal sealed class VideoStagesCoordinator(
             planContext.Plan,
             preparedAudioSources,
             rootPolicy);
+        new TimelineFrameInterpolator(g).Apply();
         // Publication metadata describes decoded timeline media, not the model family that
         // happened to produce one clip. VAE ownership remains on RuntimeArtifact for the host save
         // adapter and never enters DecodedClipArtifact or cross-clip assembly.

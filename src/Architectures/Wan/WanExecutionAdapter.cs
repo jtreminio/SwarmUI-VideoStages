@@ -101,18 +101,6 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
                 + "still-image root. Partial denoise requires a source-video entry, which this "
                 + "Wan slice does not support."));
         }
-        if (generator.UserInput.TryGet(
-                ComfyUIBackendExtension.VideoFrameInterpolationMethod,
-                out string _)
-            && generator.UserInput.TryGet(
-                ComfyUIBackendExtension.VideoFrameInterpolationMultiplier,
-                out int multiplier)
-            && multiplier > 1)
-        {
-            diagnostics.Add(Refuse(
-                "host frame interpolation is active, but VideoStages does not yet apply it to "
-                + "the assembled Wan timeline."));
-        }
         return diagnostics;
     }
 

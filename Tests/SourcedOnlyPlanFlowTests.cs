@@ -1,5 +1,6 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -27,6 +28,60 @@ public partial class StageFlowTests
         Assert.Empty(SamplerNodesOrdered(bridge));
         INodeOutput currentOutput = bridge.ResolvePath((JArray)generator.CurrentMedia.Path);
         Assert.True(ReachesUpstream(bridge, currentOutput.Node, window.Id));
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Sourced_only_clip_interpolates_once_and_preserves_its_audio_at_publication()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        JObject sourced = MakeSourcedClip(models);
+        sourced["stages"] = new JArray();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeRootConfig(512, 512, sourced).ToString());
+        input.Set(ComfyUIBackendExtension.VideoFrameInterpolationMultiplier, 2);
+        input.Set(ComfyUIBackendExtension.VideoFrameInterpolationMethod, "RIFE");
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: true),
+                features: SourcedClipFeatures.Concat(["frameinterps"]));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmFrameWindowNode sourceWindow = AssertSourcedConformChain(bridge);
+        ComfyNode rife = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "RIFE VFI");
+        Assert.True(ReachesUpstream(bridge, rife, sourceWindow.Id));
+        Assert.Equal(SourcedClipFrames * 2 - 1, generator.CurrentMedia.Frames);
+        Assert.Equal(48, generator.CurrentMedia.GetRawFPS());
+        Assert.Equal(new JArray(rife.Id, 0), generator.CurrentMedia.Path);
+
+        WGNodeData attachedAudio = Assert.IsType<WGNodeData>(
+            generator.CurrentMedia.AttachedAudio);
+        INodeOutput attachedAudioOutput = bridge.ResolvePath(attachedAudio.Path);
+        Assert.NotNull(attachedAudioOutput);
+        TrimAudioDurationNode sourceAudioTrim = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.True(ReachesUpstream(bridge, attachedAudioOutput.Node, sourceAudioTrim.Id));
+
+        SwarmSaveAnimationWSNode save = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.Same(rife, save.Images.Connection?.Node);
+        Assert.Equal(48.0, save.Fps.LiteralAsDouble());
+        Assert.True(JToken.DeepEquals(
+            attachedAudio.Path,
+            WorkflowBridge.ToPath(save.Audio.Connection!)));
+
+        Assert.Empty(SamplerNodesOrdered(bridge));
+        Assert.DoesNotContain(
+            new[] { "200", "201", "202", "203" },
+            workflow.ContainsKey);
+        AssertNoDanglingNodeRefs(workflow);
         AssertWorkflowHasNoCycles(workflow);
     }
 
