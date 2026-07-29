@@ -8,22 +8,17 @@ import type {
 
 export const ARCHITECTURE_CATALOG_API = "VideoStagesGetArchitectureCatalog";
 
-interface CatalogRequest {
-    generation: number;
-    promise: Promise<VideoArchitectureCatalogDto | null>;
-}
-
-interface TrailingCatalogRequest {
-    after: CatalogRequest;
-    promise: Promise<VideoArchitectureCatalogDto | null>;
-}
+type CatalogRequest = Promise<VideoArchitectureCatalogDto | null>;
 
 let authoritativeCatalog: VideoArchitectureCatalogDto | null = null;
 let snapshotStatus: ArchitectureCatalogSnapshot["status"] = "loading";
 let snapshotError: string | null = null;
+/** Bumped by the test reset so an in-flight request cannot write state afterwards. */
 let requestGeneration = 0;
 let activeRequest: CatalogRequest | null = null;
-let trailingRequest: TrailingCatalogRequest | null = null;
+/** The single request coalescing every forced refresh raised during `activeRequest`. */
+let pendingRefresh: CatalogRequest | null = null;
+let onRequestStarted: (() => void) | null = null;
 
 const cloneCatalog = (
     catalog: VideoArchitectureCatalogDto,
@@ -41,123 +36,120 @@ export const getArchitectureCatalogSnapshot =
         error: snapshotError,
     });
 
-const requestAuthoritativeCatalog =
-    (): Promise<VideoArchitectureCatalogDto | null> => {
-        if (activeRequest) {
-            return activeRequest.promise;
-        }
+/**
+ * Notified the moment a request starts and moves the snapshot to
+ * `loading`/`refreshing`, including a queued refresh starting later. Views paint
+ * the transition they are showing instead of guessing when one will happen.
+ */
+export const setArchitectureCatalogRequestListener = (
+    listener: (() => void) | null,
+): void => {
+    onRequestStarted = listener;
+};
 
-        const generation = ++requestGeneration;
-        snapshotStatus = authoritativeCatalog ? "refreshing" : "loading";
-        snapshotError = null;
+const requestAuthoritativeCatalog = (): CatalogRequest => {
+    if (activeRequest) {
+        return activeRequest;
+    }
 
-        let request!: CatalogRequest;
-        const ownsRequest = (): boolean =>
-            activeRequest === request && requestGeneration === generation;
-        const promise = Promise.resolve()
-            .then(() =>
-                getVideoStagesHostBridge().requestJson(
-                    ARCHITECTURE_CATALOG_API,
-                ),
-            )
-            .then((response) => {
-                const parsed = parseVideoArchitectureCatalog(response);
-                if (!parsed) {
-                    throw new Error(
-                        "The architecture catalog response was malformed.",
-                    );
-                }
-                if (!ownsRequest()) {
-                    return null;
-                }
-                authoritativeCatalog = parsed;
-                snapshotStatus = "ready";
-                snapshotError = null;
-                return cloneCatalog(parsed);
-            })
-            .catch((error: unknown) => {
-                if (!ownsRequest()) {
-                    return null;
-                }
-                snapshotStatus = authoritativeCatalog ? "stale" : "unavailable";
-                snapshotError = errorMessage(error);
-                console.warn(
-                    "VideoStages: authoritative architecture catalog unavailable",
-                    error,
+    const generation = ++requestGeneration;
+    const owned = (): boolean => requestGeneration === generation;
+    snapshotStatus = authoritativeCatalog ? "refreshing" : "loading";
+    snapshotError = null;
+
+    const request = Promise.resolve()
+        .then(() =>
+            getVideoStagesHostBridge().requestJson(ARCHITECTURE_CATALOG_API),
+        )
+        .then((response) => {
+            const parsed = parseVideoArchitectureCatalog(response);
+            if (!parsed) {
+                throw new Error(
+                    "The architecture catalog response was malformed.",
                 );
+            }
+            if (!owned()) {
                 return null;
-            })
-            .finally(() => {
-                if (ownsRequest()) {
-                    activeRequest = null;
-                }
-            });
-        request = { generation, promise };
-        activeRequest = request;
-        return promise;
-    };
+            }
+            authoritativeCatalog = parsed;
+            snapshotStatus = "ready";
+            snapshotError = null;
+            return cloneCatalog(parsed);
+        })
+        .catch((error: unknown) => {
+            if (!owned()) {
+                return null;
+            }
+            snapshotStatus = authoritativeCatalog ? "stale" : "unavailable";
+            snapshotError = errorMessage(error);
+            console.warn(
+                "VideoStages: authoritative architecture catalog unavailable",
+                error,
+            );
+            return null;
+        })
+        .finally(() => {
+            if (owned()) {
+                activeRequest = null;
+            }
+        });
+    activeRequest = request;
+    onRequestStarted?.();
+    return request;
+};
 
 /**
  * Loads the initial authoritative catalog. A retained ready/stale catalog is
  * returned without a request; unavailable initial state can always retry.
  */
-export const loadAuthoritativeArchitectureCatalog =
-    (): Promise<VideoArchitectureCatalogDto | null> => {
-        if (activeRequest) {
-            return activeRequest.promise;
-        }
-        if (authoritativeCatalog) {
-            return Promise.resolve(cloneCatalog(authoritativeCatalog));
-        }
-        return requestAuthoritativeCatalog();
-    };
+export const loadAuthoritativeArchitectureCatalog = (): CatalogRequest => {
+    if (activeRequest) {
+        return activeRequest;
+    }
+    if (authoritativeCatalog) {
+        return Promise.resolve(cloneCatalog(authoritativeCatalog));
+    }
+    return requestAuthoritativeCatalog();
+};
 
 /**
  * Re-requests the backend catalog without dropping the last-known-good DTO.
- * Forced calls during one active generation share a fresh trailing request.
+ * Forced calls raised while a request is in flight share one request that starts
+ * after it, so the signal is never consumed by the older response.
  */
-export const refreshAuthoritativeArchitectureCatalog =
-    (): Promise<VideoArchitectureCatalogDto | null> => {
-        if (!activeRequest) {
-            return requestAuthoritativeCatalog();
+export const refreshAuthoritativeArchitectureCatalog = (): CatalogRequest => {
+    if (!activeRequest) {
+        return requestAuthoritativeCatalog();
+    }
+    if (pendingRefresh) {
+        return pendingRefresh;
+    }
+    const generation = requestGeneration;
+    const refresh: CatalogRequest = activeRequest.then(() => {
+        // Always vacate the slot, including when abandoning: a settled promise
+        // left there would answer later refresh signals without requesting.
+        if (pendingRefresh === refresh) {
+            pendingRefresh = null;
         }
-        if (trailingRequest?.after === activeRequest) {
-            return trailingRequest.promise;
-        }
-
-        const precedingRequest = activeRequest;
-        let request!: TrailingCatalogRequest;
-        const promise = precedingRequest.promise
-            .then(() => {
-                if (
-                    trailingRequest !== request ||
-                    requestGeneration !== precedingRequest.generation
-                ) {
-                    return null;
-                }
-                // The trailing request is now the active generation. Clear its
-                // slot so a later forced signal can schedule after this one.
-                trailingRequest = null;
-                return requestAuthoritativeCatalog();
-            })
-            .finally(() => {
-                if (trailingRequest === request) {
-                    trailingRequest = null;
-                }
-            });
-        request = { after: precedingRequest, promise };
-        trailingRequest = request;
-        return promise;
-    };
+        // A reset, or a request started between the settle and this callback,
+        // already supersedes this refresh.
+        return requestGeneration === generation
+            ? requestAuthoritativeCatalog()
+            : null;
+    });
+    pendingRefresh = refresh;
+    return refresh;
+};
 
 /** Test-only reset for this module's process-wide singleton state. */
 export const resetArchitectureCatalogForTests = (): void => {
     requestGeneration++;
     activeRequest = null;
-    trailingRequest = null;
+    pendingRefresh = null;
     authoritativeCatalog = null;
     snapshotStatus = "loading";
     snapshotError = null;
+    onRequestStarted = null;
 };
 
 export const buildArchitectureModelCatalog = (

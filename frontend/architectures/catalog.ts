@@ -18,5 +18,6 @@ export {
     getArchitectureCatalogSnapshot,
     loadAuthoritativeArchitectureCatalog,
     refreshAuthoritativeArchitectureCatalog,
+    setArchitectureCatalogRequestListener,
 } from "./catalogRepository";
 export { parseVideoArchitectureCatalog } from "./catalogWire";

@@ -1438,7 +1438,8 @@
   var snapshotError = null;
   var requestGeneration = 0;
   var activeRequest = null;
-  var trailingRequest = null;
+  var pendingRefresh = null;
+  var onRequestStarted = null;
   var cloneCatalog = (catalog) => structuredClone(catalog);
   var errorMessage = (error) => error instanceof Error ? error.message : `${error}`;
   var getArchitectureCatalogSnapshot = () => ({
@@ -1446,19 +1447,19 @@
     catalog: authoritativeCatalog ? cloneCatalog(authoritativeCatalog) : null,
     error: snapshotError
   });
+  var setArchitectureCatalogRequestListener = (listener) => {
+    onRequestStarted = listener;
+  };
   var requestAuthoritativeCatalog = () => {
     if (activeRequest) {
-      return activeRequest.promise;
+      return activeRequest;
     }
     const generation = ++requestGeneration;
+    const owned = () => requestGeneration === generation;
     snapshotStatus = authoritativeCatalog ? "refreshing" : "loading";
     snapshotError = null;
-    let request;
-    const ownsRequest = () => activeRequest === request && requestGeneration === generation;
-    const promise = Promise.resolve().then(
-      () => getVideoStagesHostBridge().requestJson(
-        ARCHITECTURE_CATALOG_API
-      )
+    const request = Promise.resolve().then(
+      () => getVideoStagesHostBridge().requestJson(ARCHITECTURE_CATALOG_API)
     ).then((response) => {
       const parsed = parseVideoArchitectureCatalog(response);
       if (!parsed) {
@@ -1466,7 +1467,7 @@
           "The architecture catalog response was malformed."
         );
       }
-      if (!ownsRequest()) {
+      if (!owned()) {
         return null;
       }
       authoritativeCatalog = parsed;
@@ -1474,7 +1475,7 @@
       snapshotError = null;
       return cloneCatalog(parsed);
     }).catch((error) => {
-      if (!ownsRequest()) {
+      if (!owned()) {
         return null;
       }
       snapshotStatus = authoritativeCatalog ? "stale" : "unavailable";
@@ -1485,17 +1486,17 @@
       );
       return null;
     }).finally(() => {
-      if (ownsRequest()) {
+      if (owned()) {
         activeRequest = null;
       }
     });
-    request = { generation, promise };
     activeRequest = request;
-    return promise;
+    onRequestStarted?.();
+    return request;
   };
   var loadAuthoritativeArchitectureCatalog = () => {
     if (activeRequest) {
-      return activeRequest.promise;
+      return activeRequest;
     }
     if (authoritativeCatalog) {
       return Promise.resolve(cloneCatalog(authoritativeCatalog));
@@ -1506,25 +1507,18 @@
     if (!activeRequest) {
       return requestAuthoritativeCatalog();
     }
-    if (trailingRequest?.after === activeRequest) {
-      return trailingRequest.promise;
+    if (pendingRefresh) {
+      return pendingRefresh;
     }
-    const precedingRequest = activeRequest;
-    let request;
-    const promise = precedingRequest.promise.then(() => {
-      if (trailingRequest !== request || requestGeneration !== precedingRequest.generation) {
-        return null;
+    const generation = requestGeneration;
+    const refresh = activeRequest.then(() => {
+      if (pendingRefresh === refresh) {
+        pendingRefresh = null;
       }
-      trailingRequest = null;
-      return requestAuthoritativeCatalog();
-    }).finally(() => {
-      if (trailingRequest === request) {
-        trailingRequest = null;
-      }
+      return requestGeneration === generation ? requestAuthoritativeCatalog() : null;
     });
-    request = { after: precedingRequest, promise };
-    trailingRequest = request;
-    return promise;
+    pendingRefresh = refresh;
+    return refresh;
   };
   var buildArchitectureModelCatalog = (values, labels) => {
     const backend = authoritativeCatalog;
@@ -15501,7 +15495,6 @@ The conversion is one undoable change.`;
       if (existingAdoption) {
         return existingAdoption;
       }
-      renderAll();
       const adoption = request.then((catalog) => {
         if (disposed) {
           return;
@@ -15553,10 +15546,16 @@ The conversion is one undoable change.`;
       });
       rebaseHistoryIfReady();
       hostLifecycle.bind();
+      setArchitectureCatalogRequestListener(() => {
+        if (!disposed) {
+          renderAll();
+        }
+      });
       void adoptArchitectureCatalog();
     };
     const dispose = () => {
       disposed = true;
+      setArchitectureCatalogRequestListener(null);
       hostLifecycle.dispose();
       retakeTrack.dispose();
       audioSegmentTrack.dispose();

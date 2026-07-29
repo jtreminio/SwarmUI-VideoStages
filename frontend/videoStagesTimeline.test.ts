@@ -102,6 +102,10 @@ const notify = (): void => triggerChangeFor(promptInput);
 
 const regionCount = (): number =>
     document.querySelectorAll(`#${TIMELINE_BODY_ID} .vst-region`).length;
+
+const blockingStatusPaints = (): number =>
+    document.querySelectorAll(`#${TIMELINE_BODY_ID} .vst-catalog-status`)
+        .length;
 const flushMicrotasks = async (): Promise<void> => {
     for (let i = 0; i < 12; i++) {
         await Promise.resolve();
@@ -552,10 +556,21 @@ describe("videoStagesTimeline", () => {
         extras[0]();
         await Promise.resolve();
         expect(requestJson).toHaveBeenCalledTimes(1);
+        // Scheduling the trailing refresh changed no status to paint.
+        expect(blockingStatusPaints()).toBe(1);
+        expect(
+            document.querySelector('[data-catalog-status="loading"]'),
+        ).not.toBeNull();
 
         resolveInitial(authoritativeDto());
         await flushMicrotasks();
         expect(requestJson).toHaveBeenCalledTimes(2);
+        // The trailing request's own start is painted, not guessed at earlier.
+        expect(
+            document.querySelector(
+                `#${TIMELINE_BODY_ID} [data-catalog-status="refreshing"]`,
+            ),
+        ).not.toBeNull();
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(document.querySelector(".vst-detail-add-iclora")).not.toBeNull();
 

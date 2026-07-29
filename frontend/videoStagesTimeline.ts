@@ -7,6 +7,7 @@ import {
     getArchitectureCatalogSnapshot,
     loadAuthoritativeArchitectureCatalog,
     refreshAuthoritativeArchitectureCatalog,
+    setArchitectureCatalogRequestListener,
 } from "./architectures/catalog";
 import { currentCapabilityViewResolver } from "./architectures/currentPolicy";
 import { deriveAuthoringDiagnostics } from "./authoringDiagnostics";
@@ -352,10 +353,8 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         if (existingAdoption) {
             return existingAdoption;
         }
-        // Catalog adoption owns the initial paint. Both initial loading and
-        // retained-data refreshing are visible immediately; neither path
-        // reads or mutates document state here.
-        renderAll();
+        // The loading/refreshing paint belongs to the request-started listener,
+        // which also fires for a refresh that only starts once this one settles.
         const adoption = request
             .then((catalog) => {
                 if (disposed) {
@@ -425,11 +424,17 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         });
         rebaseHistoryIfReady();
         hostLifecycle.bind();
+        setArchitectureCatalogRequestListener(() => {
+            if (!disposed) {
+                renderAll();
+            }
+        });
         void adoptArchitectureCatalog();
     };
 
     const dispose = (): void => {
         disposed = true;
+        setArchitectureCatalogRequestListener(null);
         hostLifecycle.dispose();
         retakeTrack.dispose();
         audioSegmentTrack.dispose();

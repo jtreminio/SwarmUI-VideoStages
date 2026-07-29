@@ -130,11 +130,14 @@ stale      = retained catalog, replacement request failed
 
 `loadAuthoritativeArchitectureCatalog` coalesces initial/cached loads.
 `refreshAuthoritativeArchitectureCatalog` forces a request without clearing the
-last-known DTO. If a forced refresh arrives during an active generation, forced
-callers share one trailing request that starts as soon as that generation
-settles; a model-install signal therefore cannot be consumed by an older
-response. Requests carry monotonically increasing generations and owned request
-handles, so only the current request can publish state or clear its promise.
+last-known DTO. There is at most one request in flight and at most one pending
+refresh behind it: forced refreshes raised during a request share that single
+pending one, which starts when the request settles, so a model-install signal
+cannot be consumed by an older response. A monotonic request generation lets
+only the current request publish state.
+`setArchitectureCatalogRequestListener` reports the moment a request starts, so
+the timeline paints the `loading`/`refreshing` transition it is actually in —
+including the pending refresh's later start — instead of painting ahead of it.
 
 Every response is validated all-or-nothing by
 `parseVideoArchitectureCatalog`. Initial failure or malformed data enters
