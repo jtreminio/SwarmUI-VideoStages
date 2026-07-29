@@ -44,7 +44,7 @@ public partial class StageFlowTests
         T2IParamInput input = BuildNativeInput(
             models.BaseModel, models.VideoModel, stagesJson,
             prompt: $"global words {ClipWindowTag("a red car", start: 0.0, duration: 0.25)}");
-        (JObject workflow, WorkflowGenerator _unused) = WorkflowTestHarness.GenerateWithStepsAndState(
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input, BuildNativeSteps(attachAudioToCurrentMedia: false));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -64,6 +64,9 @@ public partial class StageFlowTests
         Assert.Equal(
             Ltx2ArchitectureModule.LatentFrameCount(NativeHarnessClipFrames),
             relayPayload.Value<int>("latentFrames"));
+        // The actual 16-frame incoming native media beats the authored 97-frame duration for
+        // publication. This is not a static fallback request and must not be grid-snapped.
+        Assert.Equal(NativeHarnessClipFrames, generator.CurrentMedia.Frames);
 
         // The tiled window list leads with the MINOR prompt, then a blank gap window.
         JArray windows = (JArray)relayPayload["windows"];

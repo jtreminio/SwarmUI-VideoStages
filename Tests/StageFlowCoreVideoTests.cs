@@ -929,6 +929,36 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Root_ltx_stage_without_authored_duration_preserves_off_grid_video_frames_request()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        string stagesJson = JsonSingleClipStages(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8));
+        T2IParamInput input =
+            BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(T2IParamTypes.VideoFrames, 16);
+        input.Set(T2IParamTypes.VideoFPS, 24);
+        input.Set(T2IParamTypes.Steps, 19);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildCoreVideoWorkflowSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // This characterizes the extension's graph request and publication metadata. It does not
+        // claim that a real Comfy LTX decode produces an off-grid 16-frame video.
+        EmptyLTXVLatentVideoNode emptyLatent = Assert.Single(
+            bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>());
+        Assert.Equal(16, emptyLatent.Length.LiteralAsInt());
+        SwarmKSamplerNode sampler = Assert.Single(SamplerNodesOrdered(bridge));
+        Assert.Equal(8, sampler.FindInput("steps").LiteralAsInt());
+        Assert.Equal(16, generator.CurrentMedia.Frames);
+        Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
+    }
+
+    [Fact]
     public void Core_video_workflow_uses_clip_zero_as_root_ltx_stage()
     {
         using SwarmUiTestContext _ = new();
@@ -1489,6 +1519,35 @@ public partial class StageFlowTests
         Assert.Equal(241, emptyLatentNode.Length.LiteralAsInt());
         LTXVEmptyLatentAudioNode emptyAudioNode = Assert.Single(bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());
         Assert.Equal(241, emptyAudioNode.FramesNumber.LiteralAsInt());
+    }
+
+    [Fact]
+    public void Text_to_video_root_replacement_preserves_off_grid_text_to_video_frames_request()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        string stagesJson = JsonSingleClipStages(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8));
+        T2IParamInput input = BuildTextToVideoInput(models.VideoModel, stagesJson);
+        input.Set(T2IParamTypes.Text2VideoFrames, 16);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeTextToVideoStepsWithPreCoreVideo(
+                    attachAudioToCurrentMedia: true));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // The competing pre-core root is explicitly seeded at 25 frames. This characterizes the
+        // extension's 16-frame replacement request/publication, not real Comfy decoded output.
+        EmptyLTXVLatentVideoNode emptyLatent = Assert.Single(
+            bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>());
+        Assert.Equal(16, emptyLatent.Length.LiteralAsInt());
+        LTXVEmptyLatentAudioNode emptyAudio = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());
+        Assert.Equal(16, emptyAudio.FramesNumber.LiteralAsInt());
+        Assert.Equal(16, generator.CurrentMedia.Frames);
+        Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
     }
 
     [Fact]
