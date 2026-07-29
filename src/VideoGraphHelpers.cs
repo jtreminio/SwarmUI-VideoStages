@@ -6,15 +6,19 @@ using SwarmUI.Builtin_ComfyUIBackend;
 namespace VideoStages;
 
 /// <summary>
-/// The sole owner of the <c>NodeHelpers</c> node-reference cache: every write, read and
-/// invalidation of a cached node id goes through here. Invalidation understands all three
-/// encodings VideoStages actually stores - a bare node id (SwarmUI's own convention), a JSON
-/// <c>[nodeId, slot]</c> path, and the pipe-delimited <c>nodeId|slot|datatype|...</c> marker - so a
-/// removed node can never leave a live-looking cache entry behind (the "Node N not found" class of
-/// failure).
+/// Provides the common <c>NodeHelpers</c> accessors/codecs and is the sole owner of invalidation
+/// caused by graph-node removal. Invalidation recognizes the extension's bare node id, JSON
+/// <c>[nodeId, slot]</c> path, and pipe-delimited <c>nodeId|slot|datatype|...</c> marker plus
+/// SwarmUI's <c>modelId:modelSlot:clipId:clipSlot:vaeId:vaeSlot</c> loader tuple.
+/// Architecture-scoped snapshots and richer marker payload codecs stay beside their consumers,
+/// but every graph-removal path routes its removed ids through <see cref="InvalidateForRemovedNodes"/>
+/// (normally through <see cref="RemoveNode"/> or <see cref="WorkflowGraphCleanup"/>), preventing
+/// stale cache entries from surviving removed nodes.
 /// </summary>
 internal static class VideoGraphHelpers
 {
+    private const string ModelLoaderKeyPrefix = "modelloader_";
+
     /// <summary>The pipe-delimited marker separator, shared with the marker writers.</summary>
     internal const char MarkerSeparator = '|';
 
@@ -59,7 +63,7 @@ internal static class VideoGraphHelpers
     }
 
     /// <summary>Drops every cache entry whose value references one of
-    /// <paramref name="removedNodeIds"/>, in any encoding VideoStages writes.</summary>
+    /// <paramref name="removedNodeIds"/>, in any supported extension or host encoding.</summary>
     public static void InvalidateForRemovedNodes(
         IDictionary<string, string> nodeHelpers,
         IReadOnlyCollection<string> removedNodeIds)
@@ -71,8 +75,7 @@ internal static class VideoGraphHelpers
         List<string> staleKeys = [];
         foreach (KeyValuePair<string, string> entry in nodeHelpers)
         {
-            if (ReferencedNodeId(entry.Value) is string nodeId
-                && removedNodeIds.Contains(nodeId))
+            if (ReferencesRemovedNode(entry.Key, entry.Value, removedNodeIds))
             {
                 staleKeys.Add(entry.Key);
             }
@@ -81,6 +84,69 @@ internal static class VideoGraphHelpers
         {
             nodeHelpers.Remove(key);
         }
+    }
+
+    private static bool ReferencesRemovedNode(
+        string key,
+        string encoded,
+        IReadOnlyCollection<string> removedNodeIds)
+    {
+        if (key.StartsWith(ModelLoaderKeyPrefix, StringComparison.Ordinal))
+        {
+            return TryParseModelLoaderNodeIds(encoded, out IReadOnlyList<string> nodeIds)
+                && nodeIds.Any(removedNodeIds.Contains);
+        }
+        return ReferencedNodeId(encoded) is string nodeId
+            && removedNodeIds.Contains(nodeId);
+    }
+
+    /// <summary>
+    /// Parses only SwarmUI's exact six-part model-loader cache format. The model and CLIP pairs
+    /// are required; the VAE pair must be wholly absent or wholly valid. Malformed host values are
+    /// opaque rather than guessed at during destructive graph cleanup.
+    /// </summary>
+    private static bool TryParseModelLoaderNodeIds(
+        string encoded,
+        out IReadOnlyList<string> nodeIds)
+    {
+        nodeIds = [];
+        if (string.IsNullOrWhiteSpace(encoded))
+        {
+            return false;
+        }
+        string[] parts = encoded.Split(':');
+        if (parts.Length != 6
+            || !TryParseNodeSlotPair(parts[0], parts[1], required: true, out string modelId)
+            || !TryParseNodeSlotPair(parts[2], parts[3], required: true, out string clipId)
+            || !TryParseNodeSlotPair(parts[4], parts[5], required: false, out string vaeId))
+        {
+            return false;
+        }
+        nodeIds = new[] { modelId, clipId, vaeId }
+            .Where(id => id is not null)
+            .ToArray();
+        return true;
+    }
+
+    private static bool TryParseNodeSlotPair(
+        string nodeId,
+        string slot,
+        bool required,
+        out string parsedNodeId)
+    {
+        parsedNodeId = null;
+        bool nodeMissing = string.IsNullOrWhiteSpace(nodeId);
+        bool slotMissing = string.IsNullOrWhiteSpace(slot);
+        if (!required && nodeMissing && slotMissing)
+        {
+            return true;
+        }
+        if (nodeMissing || slotMissing || !int.TryParse(slot, out _))
+        {
+            return false;
+        }
+        parsedNodeId = nodeId;
+        return true;
     }
 
     /// <summary>The node id a cached value refers to, or null when the value is not a node

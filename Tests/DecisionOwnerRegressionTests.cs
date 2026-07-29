@@ -81,7 +81,7 @@ public class DecisionOwnerRegressionTests
     // ---- 4c: one owner for the node-helper cache -------------------------------------------
 
     [Fact]
-    public void Node_helper_invalidation_understands_every_encoding_videostages_writes()
+    public void Node_helper_invalidation_understands_every_supported_reference_encoding()
     {
         Dictionary<string, string> nodeHelpers = new()
         {
@@ -99,17 +99,62 @@ public class DecisionOwnerRegressionTests
             ["videostages.controlnet.audio.1"] = new JArray("104", 0).ToString(Formatting.None),
             // Not a node reference: the pre-core id snapshot.
             ["videostages.arch.ltx2.pre-core-node-ids"] = "103,104,105",
+            // SwarmUI model-loader tuples can reference three independent nodes. Node ids are
+            // deliberately non-numeric; only their paired output slots are integers.
+            ["modelloader_removed-model_image2video"] =
+                "removed-model:0:surviving-clip:1:surviving-vae:2",
+            ["modelloader_removed-clip_image2video"] =
+                "surviving-model:0:removed-clip:1:surviving-vae:2",
+            ["modelloader_removed-vae_image2video"] =
+                "surviving-model:0:surviving-clip:1:removed-vae:2",
+            ["modelloader_removed-model-no-vae_image2video"] =
+                "removed-model:0:surviving-clip:1::",
+            ["modelloader_all-surviving-no-vae_image2video"] =
+                "surviving-model:0:surviving-clip:1::",
+            ["modelloader_all-surviving_image2video"] =
+                "surviving-model:0:surviving-clip:1:surviving-vae:2",
+            // Exact key prefix but malformed tuples must remain opaque.
+            ["modelloader_missing-model_image2video"] =
+                ":0:surviving-clip:1:surviving-vae:2",
+            ["modelloader_partial-clip_image2video"] =
+                "surviving-model:0:removed-clip::surviving-vae:2",
+            ["modelloader_missing-clip_image2video"] =
+                "surviving-model:0::::",
+            ["modelloader_partial-vae_image2video"] =
+                "surviving-model:0:surviving-clip:1::2",
+            ["modelloader_bad-slot_image2video"] =
+                "removed-model:not-a-slot:surviving-clip:1:surviving-vae:2",
+            ["modelloader_wrong-part-count_image2video"] =
+                "removed-model:0:surviving-clip:1",
+            // A colon tuple under any other key is not SwarmUI's model-loader cache.
+            ["videostages.opaque.colon-state"] =
+                "removed-model:0:surviving-clip:1:surviving-vae:2",
         };
 
-        VideoGraphHelpers.InvalidateForRemovedNodes(nodeHelpers, ["103"]);
+        VideoGraphHelpers.InvalidateForRemovedNodes(
+            nodeHelpers,
+            ["103", "removed-model", "removed-clip", "removed-vae"]);
 
         Assert.False(nodeHelpers.ContainsKey(
             "videostages.arch.ltx2.stage-ref.generated.media"));
         Assert.False(nodeHelpers.ContainsKey("videostages.controlnet.fullimage.0"));
         Assert.False(nodeHelpers.ContainsKey("__generic_node__UnitTest___{}"));
+        Assert.False(nodeHelpers.ContainsKey("modelloader_removed-model_image2video"));
+        Assert.False(nodeHelpers.ContainsKey("modelloader_removed-clip_image2video"));
+        Assert.False(nodeHelpers.ContainsKey("modelloader_removed-vae_image2video"));
+        Assert.False(nodeHelpers.ContainsKey("modelloader_removed-model-no-vae_image2video"));
         Assert.True(nodeHelpers.ContainsKey(
             "videostages.arch.ltx2.stage-ref.base.media"));
         Assert.True(nodeHelpers.ContainsKey("videostages.controlnet.audio.1"));
+        Assert.True(nodeHelpers.ContainsKey("modelloader_all-surviving-no-vae_image2video"));
+        Assert.True(nodeHelpers.ContainsKey("modelloader_all-surviving_image2video"));
+        Assert.True(nodeHelpers.ContainsKey("modelloader_missing-model_image2video"));
+        Assert.True(nodeHelpers.ContainsKey("modelloader_partial-clip_image2video"));
+        Assert.True(nodeHelpers.ContainsKey("modelloader_missing-clip_image2video"));
+        Assert.True(nodeHelpers.ContainsKey("modelloader_partial-vae_image2video"));
+        Assert.True(nodeHelpers.ContainsKey("modelloader_bad-slot_image2video"));
+        Assert.True(nodeHelpers.ContainsKey("modelloader_wrong-part-count_image2video"));
+        Assert.True(nodeHelpers.ContainsKey("videostages.opaque.colon-state"));
         Assert.Equal(
             "103,104,105",
             nodeHelpers["videostages.arch.ltx2.pre-core-node-ids"]);

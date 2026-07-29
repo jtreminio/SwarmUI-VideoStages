@@ -49,13 +49,34 @@ public class WanRuntimeFlowTests
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        string loaderKey = $"modelloader_{models.VideoModel.Name}_image2video";
+        string hostLoaderTuple = null;
+        bool hostLoaderTupleWasInvalidated = false;
+        WorkflowGenerator.WorkflowGenStep captureHostLoaderTuple = new(
+            g => g.NodeHelpers.TryGetValue(loaderKey, out hostLoaderTuple),
+            Constants.WorkflowStepPriority.DropCoreImageToVideoOutput - 0.01);
+        WorkflowGenerator.WorkflowGenStep observeHandoffCleanup = new(
+            g => hostLoaderTupleWasInvalidated = !g.NodeHelpers.ContainsKey(loaderKey),
+            Constants.WorkflowStepPriority.DropCoreImageToVideoOutput + 0.01);
 
-        (JObject workflow, WorkflowGenerator generator) = GenerateWanClip(models, steps: 10);
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                WanInput(models, steps: 10),
+                WorkflowTestHarness.Template_BaseOnlyImage()
+                    .Concat([
+                        WorkflowTestHarness.CoreImageToVideoStep(),
+                        captureHostLoaderTuple,
+                        observeHandoffCleanup,
+                    ])
+                    .Concat(WorkflowTestHarness.VideoStagesSteps()));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // The clip builds its own model and text encoders. The core video pass this clip replaces
-        // left the host's loader cache pointing at nodes the root handoff pruned, so reusing that
-        // cache would leave the sampler wired to nodes that are no longer in the graph.
+        // The host core pass populated its six-part loader tuple. The root handoff pruned those
+        // nodes and invalidated the tuple before Wan asked the same host builder for its clip
+        // graph, so no Wan-local delete is needed to avoid reusing dangling references.
+        Assert.NotNull(hostLoaderTuple);
+        Assert.Equal(6, hostLoaderTuple.Split(':').Length);
+        Assert.True(hostLoaderTupleWasInvalidated);
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
 

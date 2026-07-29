@@ -322,10 +322,14 @@ is nothing clip-scoped to validate.
   sanctioned exception is the exclusive `FinalizeTimeline` contract after
   publication: LTX uses it to delete each published animation save and graft in
   the HDR save. Nothing else may re-target that set.
-- `VideoGraphHelpers` owns every write, read, removal, and invalidation of the
-  `NodeHelpers` node-reference cache, across all three encodings VideoStages
-  stores (bare id, JSON `[nodeId, slot]` path, pipe-delimited marker), so a
-  removed node cannot leave a live-looking cache entry behind.
+- `VideoGraphHelpers` provides common `NodeHelpers` accessors/codecs and is the
+  sole owner of invalidation caused by graph-node removal. It recognizes the
+  extension's bare-id, JSON `[nodeId, slot]`, and pipe-marker encodings plus
+  SwarmUI's six-part model/CLIP/VAE loader tuple. Architecture-scoped snapshots
+  and richer marker codecs stay beside their consumers, but every graph-removal
+  path routes removed ids through `InvalidateForRemovedNodes` (normally through
+  `RemoveNode` or `WorkflowGraphCleanup`), so no removed node leaves a
+  live-looking cache entry behind.
 - `StableNodeIds` is the one allocation map for stable dynamic node ids; each
   allocator owns a declared block and a slot outside it throws.
 - Embedded upload blobs are stripped from saved metadata by walking

@@ -84,7 +84,11 @@ internal sealed class StageFramePreparer(
                 $"VideoStages: stage {stage.StageId} could not resolve LTX video model "
                 + $"'{payload.Core.Model}'.");
         }
-        _ = g.NodeHelpers.Remove($"modelloader_{videoModel.Name}_image2video");
+        // The host loader key does not include the stage section or its scoped LoRA state, so LTX
+        // must rebuild even when shared graph cleanup has already removed every stale tuple.
+        VideoGraphHelpers.RemoveCached(
+            g,
+            $"modelloader_{videoModel.Name}_image2video");
 
         bool sourceIsVideo = sourceMedia.DataType == WGNodeData.DT_VIDEO;
         (int batchIndex, int batchLen) = sourceIsVideo ? (0, 1) : (-1, -1);

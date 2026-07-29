@@ -93,10 +93,6 @@ internal sealed class WanGenerationSession(
             ?? throw new SwarmUserErrorException(
                 $"VideoStages: clip {clip.ClipId} could not resolve Wan video model "
                 + $"'{payload.Model}'.");
-        // The host caches its loader nodes per model name, and the core video pass this clip
-        // replaces populated that cache with nodes the root handoff has since pruned. Reusing it
-        // would wire the clip's sampler and text encoders to nodes that no longer exist.
-        _ = g.NodeHelpers.Remove($"modelloader_{videoModel.Name}_image2video");
         (string positive, string negative) = _prompts.Resolve(clip, stage);
         return new WorkflowGenerator.ImageToVideoGenInfo
         {
