@@ -251,6 +251,9 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         dock: HTMLElement,
         renderImmediately = true,
     ): void => {
+        // Both assignments are load-bearing: this one is the only one a re-attach
+        // to the same binding reaches, and the one after dispose() restores the
+        // mode dispose() just cleared.
         renderEnabled = renderImmediately;
         if (boundBody === body && dockEl === dock) {
             return;
