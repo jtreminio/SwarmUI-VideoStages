@@ -42,7 +42,6 @@ internal static class TestPlanCompiler
                     stage.Model,
                     descriptor.Id,
                     new("ltx-2.3"),
-                    "ltxv2",
                     descriptor);
             }
             clips.TryAdd(clip.Id, new(

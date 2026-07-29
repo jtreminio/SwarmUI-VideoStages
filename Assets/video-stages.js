@@ -1410,7 +1410,7 @@
     const modelNames = /* @__PURE__ */ new Set();
     const models = [];
     for (const raw of value.models) {
-      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || raw.compatId !== void 0 && raw.compatId !== null && typeof raw.compatId !== "string") {
+      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId)) {
         return null;
       }
       const descriptor = architectures.find(
@@ -1425,8 +1425,7 @@
       models.push({
         modelName: raw.modelName,
         architectureId: raw.architectureId,
-        modelProfileId: raw.modelProfileId,
-        compatId: raw.compatId ?? null
+        modelProfileId: raw.modelProfileId
       });
     }
     return { architectures, models };

@@ -38,13 +38,11 @@ const dto = {
             modelName: "ltx-two.safetensors",
             architectureId: "ltx2",
             modelProfileId: "ltx-2.3",
-            compatId: "ltxv2",
         },
         {
             modelName: "ltx-two-three.safetensors",
             architectureId: "ltx2",
             modelProfileId: "synthetic-profile",
-            compatId: "ltxv2",
         },
     ],
 };
@@ -172,13 +170,6 @@ describe("architecture catalog wire contract", () => {
         duplicateCode.architectures[0].rules[0].code =
             duplicateCode.architectures[0].boundaryRules.continue.code;
         expect(parseVideoArchitectureCatalog(duplicateCode)).toBeNull();
-
-        const malformed = structuredClone(dto) as unknown as {
-            architectures: typeof dto.architectures;
-            models: Array<Record<string, unknown>>;
-        };
-        malformed.models[0].compatId = 23;
-        expect(parseVideoArchitectureCatalog(malformed)).toBeNull();
     });
 
     it("uses exact authoritative boundary constraints", () => {

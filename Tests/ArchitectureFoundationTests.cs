@@ -1249,7 +1249,6 @@ public class ArchitectureFoundationTests
             item => item["modelName"]?.ToString() == models.VideoModel.Name);
         Assert.Equal("ltx2", model["architectureId"]);
         Assert.Equal("ltx-2.3", model["modelProfileId"]);
-        Assert.Equal(T2IModelClassSorter.CompatLtxv2.ID, model["compatId"]);
     }
 
     [Fact]
@@ -1509,7 +1508,7 @@ public class ArchitectureFoundationTests
             string name,
             VideoArchitectureDescriptor architecture,
             string profile) =>
-            new(name, architecture.Id, new(profile), $"{architecture.Id}-compat", architecture);
+            new(name, architecture.Id, new(profile), architecture);
 
         private sealed class FakeModule(
             VideoArchitectureDescriptor descriptor,
@@ -1612,7 +1611,6 @@ public class ArchitectureFoundationTests
                 model.Name,
                 descriptor.Id,
                 descriptor.Profiles[0].Id,
-                "ambiguous",
                 resolvedDescriptor ?? descriptor);
             return true;
         }

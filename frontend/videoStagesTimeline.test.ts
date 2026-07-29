@@ -116,7 +116,6 @@ const authoritativeDto = (
         modelName,
         architectureId: "ltx2",
         modelProfileId: "ltx-2.3",
-        compatId: "ltxv2",
     })),
 });
 
@@ -443,7 +442,6 @@ describe("videoStagesTimeline", () => {
                     modelName: "server-ltx-model.safetensors",
                     architectureId: "ltx2",
                     modelProfileId: "ltx-2.3",
-                    compatId: "ltxv2",
                 },
             ],
         };

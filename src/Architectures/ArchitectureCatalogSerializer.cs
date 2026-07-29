@@ -118,7 +118,6 @@ internal static class ArchitectureCatalogSerializer
         ["modelName"] = model.ModelName,
         ["architectureId"] = model.ArchitectureId.Value,
         ["modelProfileId"] = model.ModelProfileId.Value,
-        ["compatId"] = model.HostCompatibilityId,
     };
 
     private static IEnumerable<string> ArchitectureCapabilities(ArchitectureCapability value)

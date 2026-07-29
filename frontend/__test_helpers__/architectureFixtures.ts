@@ -195,7 +195,6 @@ export const testArchitectureCatalogDto = (
                       modelName: entry.value,
                       architectureId: entry.architectureId,
                       modelProfileId: entry.modelProfileId,
-                      compatId: null,
                   },
               ]
             : [],

@@ -89,7 +89,7 @@ the currently resolved, session-authorized host models to:
 
 ```text
 architectures[] = descriptor + capabilities + profiles + rules
-models[]        = modelName + architectureId + modelProfileId + compatId
+models[]        = modelName + architectureId + modelProfileId
 ```
 
 `VideoStagesApi.VideoStagesGetArchitectureCatalog` exposes that projection as

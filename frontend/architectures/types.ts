@@ -60,7 +60,6 @@ export interface ArchitectureCatalogModelDto {
     modelName: string;
     architectureId: VideoArchitectureId;
     modelProfileId: ModelProfileId;
-    compatId?: string | null;
 }
 
 export interface ArchitectureCatalogEntryDto {

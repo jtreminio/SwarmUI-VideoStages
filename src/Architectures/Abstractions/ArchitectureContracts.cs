@@ -332,7 +332,6 @@ internal sealed record ResolvedVideoModel(
     string ModelName,
     ArchitectureId ArchitectureId,
     ModelProfileId ModelProfileId,
-    string HostCompatibilityId,
     VideoArchitectureDescriptor Architecture);
 
 internal interface IVideoArchitectureModule

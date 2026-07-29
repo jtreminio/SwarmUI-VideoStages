@@ -345,7 +345,6 @@ describe("stage architecture model filtering", () => {
                 modelName: entry.value,
                 architectureId: entry.architectureId as string,
                 modelProfileId: entry.modelProfileId as string,
-                compatId: null,
             })),
         };
         setVideoStagesHostBridgeForTests({

@@ -90,7 +90,6 @@ internal sealed class Ltx2ArchitectureModule :
             model.Name,
             ArchitectureId,
             new("ltx-2.3"),
-            model.ModelClass.CompatClass.ID,
             Descriptor);
         return true;
     }
