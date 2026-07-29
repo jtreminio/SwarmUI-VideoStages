@@ -2,6 +2,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.None;
+using VideoStages.Architectures.Wan;
 
 namespace VideoStages.Architectures;
 
@@ -32,6 +33,14 @@ internal static class VideoArchitectureManifest
             RootVideoStageResizer.RegisterHandlers,
             Ltx2ApiRoutes.Register,
             Ltx2HostIntegration.RegisterDependencies),
+        // Wan needs no host handlers, routes, or custom nodes: its graph is built by SwarmUI's own
+        // image-to-video step out of stock ComfyUI nodes.
+        new(
+            WanArchitectureModule.Instance,
+            generator => new WanExecutionAdapter(generator),
+            static () => { },
+            static () => { },
+            static () => { }),
     ];
 
     internal static IReadOnlyList<IVideoArchitectureModule> ProductionModules =>

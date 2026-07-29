@@ -46,6 +46,12 @@ internal static class WanClipPlanCompiler
             // Wan enters from a still image, so a stage that generates nothing would hand a single
             // frame to timeline assembly instead of decoded video.
             Refuse(stage.IsPassthrough, "a stage that generates nothing", stage.Id);
+            // Wan's only stage generates from the host image, which is a full generation. Partial
+            // regeneration needs a prior video to denoise from, and this slice never has one.
+            Refuse(
+                !stage.IsPassthrough && stage.Control < 1,
+                "partial regeneration",
+                stage.Id);
             Refuse(
                 !string.IsNullOrWhiteSpace(stage.ImageReference)
                     && !StringUtils.Equals(stage.ImageReference, GeneratedRootReference),

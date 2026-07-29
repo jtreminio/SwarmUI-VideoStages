@@ -104,7 +104,7 @@ public class WanArchitectureTests
     [Fact]
     public void Compilation_attaches_one_opaque_stage_payload_per_authored_stage()
     {
-        ClipSpec clip = GeneratedClip(0, Stage(10, "wan-model") with { Control = 0.8 });
+        ClipSpec clip = GeneratedClip(0, Stage(10, "wan-model") with { Control = 1 });
 
         ClipPlan compiled = Assert.Single(Compile(clip).Clips);
 
@@ -113,7 +113,7 @@ public class WanArchitectureTests
         WanStagePayload stagePayload = Assert.Single(compiled.Stages).RequireWanPayload();
         Assert.Same(stagePayload, Assert.Single(payload.Stages).Value);
         Assert.Equal("wan-model", stagePayload.Model);
-        Assert.Equal(0.8, stagePayload.Control);
+        Assert.Equal(1, stagePayload.Control);
         Assert.Equal(12, stagePayload.Steps);
         Assert.Equal(4.5, stagePayload.CfgScale);
         Assert.Equal("euler", stagePayload.Sampler);
@@ -132,6 +132,9 @@ public class WanArchitectureTests
         AssertRefused(
             GeneratedClip(0, stage with { Control = 0 }),
             "a stage that generates nothing");
+        AssertRefused(
+            GeneratedClip(0, stage with { Control = 0.8 }),
+            "partial regeneration");
         AssertRefused(
             GeneratedClip(0, stage with { ImageReference = "Base" }),
             "stage image reference 'Base'");

@@ -1211,7 +1211,9 @@ public class ArchitectureFoundationTests
         JObject catalog = await VideoStagesApi.VideoStagesGetArchitectureCatalog(null);
 
         JArray architectures = (JArray)catalog["architectures"];
-        Assert.Equal(2, architectures.Count);
+        Assert.Equal(
+            ["none", "ltx2", "wan22"],
+            architectures.Values<JObject>().Select(item => item["id"]?.ToString()));
         JObject none = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "none");

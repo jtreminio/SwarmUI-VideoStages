@@ -204,11 +204,31 @@ internal static class TestModelFactory
         return models;
     }
 
-    public static TestModelBundle CreateBaseAndWan22ImageToVideoModels() =>
-        CreateBaseAndVideoModels(
+    public static TestModelBundle CreateBaseAndWan22ImageToVideoModels()
+    {
+        TestModelBundle models = CreateBaseAndVideoModels(
             T2IModelClassSorter.CompatWan21_14b,
             WanArchitectureModule.ImageToVideoModelClassId,
             "Wan 2.2 Image2Video 14B");
+        // Wan's model loader resolves a VAE through the host's known-model registry, so this bundle
+        // needs the registry and a VAE folder that the shared factory deliberately leaves out: with
+        // them present but empty, an unsatisfied lookup downloads instead of failing the test.
+        Program.T2IModelSets["VAE"] = new() { ModelType = "VAE" };
+        if (CommonModels.Known.IsEmpty)
+        {
+            CommonModels.RegisterCoreSet();
+        }
+        Install("Clip", "umt5_xxl_fp8_e4m3fn_scaled.safetensors");
+        Install("VAE", CommonModels.Known["wan21-vae"].FileName);
+        return models;
+    }
+
+    /// <summary>Makes a support model resolvable by name, as an on-disk install would.</summary>
+    private static void Install(string modelType, string fileName)
+    {
+        T2IModelHandler handler = Program.T2IModelSets[modelType];
+        handler.Models[fileName] = new(handler, "/tmp", $"/tmp/{fileName}", fileName);
+    }
 
     private static TestModelBundle CreateBaseAndVideoModelsWithClass(T2IModelClass videoClass)
     {
