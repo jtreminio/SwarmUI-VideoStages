@@ -22,7 +22,7 @@ generating architecture.
 | Production registration | SwarmUI adapter | `VideoStagesExtension.OnInit`, `VideoArchitectureManifest` |
 | Exact model recognition | Backend architecture module | `VideoArchitectureRegistry.TryResolveModel`, `Ltx2ArchitectureModule.TryResolveModel` |
 | Capabilities and rules | Backend architecture module | `Ltx2ArchitectureModule.Descriptor`, `NoneArchitecture.Descriptor` |
-| Catalog transport | Common backend | `VideoStagesApi.VideoStagesGetArchitectureCatalog`, `ArchitectureCatalogSerializer.Serialize` |
+| Catalog transport | Common backend + SwarmUI authorization | `VideoStagesApi.VideoStagesGetArchitectureCatalog`, `AuthorizedArchitectureRegistry`, `ArchitectureCatalogSerializer.Serialize` |
 | Catalog loading and feature policy | Common frontend | `getArchitectureCatalogSnapshot`, `loadAuthoritativeArchitectureCatalog`, `refreshAuthoritativeArchitectureCatalog`, `parseVideoArchitectureCatalog`, `createCapabilityViewResolver` |
 | Architecture-specific authoring behavior | Frontend local behavior maps | `architectureBehavior`, `ltx2Behavior`, `authoringPanels.ts`, architecture ID identity modules |
 | Curated IC-LoRA download route | LTX backend adapter + SwarmUI core | `Ltx2ApiRoutes`, `ModelsAPI.DoModelDownloadWS` |
@@ -58,7 +58,9 @@ together.
 `Program.MainSDModels.Models` and asks each registered
 `IVideoArchitectureModule.TryResolveModel` to recognize each installed model.
 The registry rejects duplicate architecture/profile IDs, invalid module
-results, ambiguous model matches, and invalid default profiles.
+results, ambiguous model matches, and invalid default profiles. API projection
+wraps that registry in `AuthorizedArchitectureRegistry`, which removes models
+the requesting SwarmUI session is not allowed to see.
 
 `Ltx2ArchitectureModule.TryResolveModel` accepts a model only when:
 
@@ -82,7 +84,7 @@ stage, profile, boundary, audio-source, and output support. The same typed
 boundary/rule objects feed backend validation and frontend publication.
 
 `ArchitectureCatalogSerializer.Serialize` projects the descriptor catalog and
-the currently resolved host models to:
+the currently resolved, session-authorized host models to:
 
 ```text
 architectures[] = descriptor + capabilities + profiles + rules
@@ -214,7 +216,9 @@ stages, source media, dimensions, FPS, and timeline audio into
 ### B2. Select `ArchitectureId` and compile opaque payloads
 
 `ArchitecturePlanResolver.ResolveAuthoredStages` resolves every authored stage
-model, including skipped stages, through the backend registry. For a generated
+model, including skipped stages, through the same session-authorized backend
+registry used for catalog projection. A forbidden model is unresolved and
+blocks planning before graph mutation. For a generated
 clip, the first authored stage selects the module and `ArchitectureId`;
 `ValidateClipIdentity` checks persisted identity and
 `ValidateSameArchitecture` requires all authored stages to use that

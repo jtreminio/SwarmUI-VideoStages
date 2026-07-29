@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
+using SwarmUI.Accounts;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures;
@@ -63,6 +64,28 @@ public class ArchitectureFoundationTests
         Assert.Contains(
             result.Diagnostics,
             item => item.Code == "architecture-authored-identity-mismatch");
+    }
+
+    [Fact]
+    public void Resolver_rejects_a_model_forbidden_to_the_request_session()
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10, "ltx-model")) with
+        {
+            AuthoredArchitectureId = "ltx2",
+            AuthoredStages = [new(0, "ltx-model", "ltx-profile", Skipped: false)],
+        };
+
+        ArchitecturePlanningResult result = ArchitecturePlanResolver.Resolve(
+            Spec(clip),
+            new FakeRegistry(),
+            RestrictedSession("ltx-model"));
+
+        Assert.Contains(
+            result.Diagnostics,
+            item => item.Code == "architecture-stage0-model-unresolved"
+                && item.Message.Contains("'ltx-model'"));
+        Assert.False(result.Clips.ContainsKey(clip.Id));
+        Assert.True(result.HasErrors);
     }
 
     [Fact]
@@ -1230,6 +1253,20 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
+    public async Task Catalog_api_hides_models_forbidden_to_the_request_session()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject catalog = await VideoStagesApi.VideoStagesGetArchitectureCatalog(
+            RestrictedSession(models.VideoModel.Name));
+
+        Assert.DoesNotContain(
+            ((JArray)catalog["models"]).Values<JObject>(),
+            model => model["modelName"]?.ToString() == models.VideoModel.Name);
+    }
+
+    [Fact]
     public void Ltx_23_host_class_resolves_the_specific_profile()
     {
         using SwarmUiTestContext _ = new();
@@ -1348,6 +1385,22 @@ public class ArchitectureFoundationTests
                 stage,
                 OutputCapability.Video),
         };
+
+    private static Session RestrictedSession(params string[] modelPrefixes)
+    {
+        Role role = new("video-stages-test")
+        {
+            Data = new Role.RoleData
+            {
+                ModelBlacklist = [.. modelPrefixes],
+            },
+        };
+        User user = (User)System.Runtime.CompilerServices.RuntimeHelpers
+            .GetUninitializedObject(typeof(User));
+        user.Data = new User.DatabaseEntry { ID = "video-stages-test-user" };
+        user.CalculatedRole = role;
+        return new Session { User = user };
+    }
 
     private static VideoExecutionPlan Plan(ClipSpec clip)
     {

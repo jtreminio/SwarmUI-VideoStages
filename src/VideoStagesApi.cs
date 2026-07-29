@@ -19,8 +19,8 @@ public static class VideoStagesApi
 
     /// <summary>Returns the authoritative architecture/capability catalog and current host models
     /// that resolve through production architecture modules.</summary>
-    public static Task<JObject> VideoStagesGetArchitectureCatalog(Session _)
+    public static Task<JObject> VideoStagesGetArchitectureCatalog(Session session)
         => Task.FromResult(ArchitectureCatalogSerializer.Serialize(
-            VideoArchitectureRegistry.Production));
+            VideoArchitectureRegistry.Production.ForSession(session)));
 
 }

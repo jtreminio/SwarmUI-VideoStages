@@ -66,7 +66,10 @@ internal static class VideoStagesContext
             return new PlanCacheEntry(null);
         }
         ArchitecturePlanningResult architecturePlanning =
-            ArchitecturePlanResolver.Resolve(spec, VideoArchitectureRegistry.Production);
+            ArchitecturePlanResolver.Resolve(
+                spec,
+                VideoArchitectureRegistry.Production,
+                g.UserInput.SourceSession);
 
         bool canInterceptHostCore = RootHostWorkflowFacts.CanInterceptHostCore(g, spec);
         RootEnvironment rootEnvironment = new(

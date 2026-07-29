@@ -1,3 +1,4 @@
+using SwarmUI.Accounts;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
@@ -19,6 +20,12 @@ internal sealed record ArchitecturePlanningResult(
 
 internal static class ArchitecturePlanResolver
 {
+    internal static ArchitecturePlanningResult Resolve(
+        VideoStagesSpec spec,
+        IVideoArchitectureRegistry registry,
+        Session session) =>
+        Resolve(spec, registry.ForSession(session));
+
     internal static ArchitecturePlanningResult Resolve(
         VideoStagesSpec spec,
         IVideoArchitectureRegistry registry)
