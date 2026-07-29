@@ -4,6 +4,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using SwarmUI.WebAPI;
+using VideoStages.Architectures.Wan;
 
 namespace VideoStages.Tests;
 
@@ -202,6 +203,12 @@ internal static class TestModelFactory
         };
         return models;
     }
+
+    public static TestModelBundle CreateBaseAndWan22ImageToVideoModels() =>
+        CreateBaseAndVideoModels(
+            T2IModelClassSorter.CompatWan21_14b,
+            WanArchitectureModule.ImageToVideoModelClassId,
+            "Wan 2.2 Image2Video 14B");
 
     private static TestModelBundle CreateBaseAndVideoModelsWithClass(T2IModelClass videoClass)
     {
