@@ -103,7 +103,66 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Wan_swap_runs_a_distinct_low_noise_pass_with_global_swap_overrides()
+    public void Single_Wan_clip_uses_the_global_end_image_and_prunes_the_host_Flf_pass()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        T2IParamInput input = WanInput(models, steps: 10);
+        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
+        string discardedHostFlfId = null;
+        WorkflowGenerator.WorkflowGenStep captureHostFlf = new(g =>
+        {
+            discardedHostFlfId = Assert.Single(
+                ((JObject)g.Workflow).Properties(),
+                property => property.Value["class_type"]?.ToString()
+                    == "WanFirstLastFrameToVideo").Name;
+        }, Constants.WorkflowStepPriority.DropCoreImageToVideoOutput - 0.01);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WorkflowTestHarness.Template_BaseOnlyImage()
+                    .Concat([
+                        WorkflowTestHarness.CoreImageToVideoStep(),
+                        captureHostFlf,
+                    ])
+                    .Concat(WorkflowTestHarness.VideoStagesSteps()));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.NotNull(discardedHostFlfId);
+        Assert.Null(workflow[discardedHostFlfId]);
+        ComfyNode flf = Assert.Single(NodesOfClass(bridge, "WanFirstLastFrameToVideo"));
+        Assert.Empty(NodesOfClass(bridge, "WanImageToVideo"));
+        ComfyNode endScale = flf.FindInput("end_image").Connection?.Node;
+        Assert.NotNull(endScale);
+        Assert.Equal("ImageScale", endScale.ClassTypeName);
+        Assert.Equal(512, endScale.FindInput("width").LiteralAsInt());
+        Assert.Equal(512, endScale.FindInput("height").LiteralAsInt());
+        Assert.Equal("lanczos", endScale.FindInput("upscale_method").LiteralAsString());
+        LoadImageNode endLoad = Assert.IsType<LoadImageNode>(
+            endScale.FindInput("image").Connection?.Node);
+        Assert.Equal("${videoendframe}", endLoad.Image.LiteralAsString());
+
+        ComfyNode startImage = flf.FindInput("start_image").Connection?.Node;
+        Assert.NotNull(startImage);
+        Assert.NotSame(endScale, startImage);
+        Assert.Single(
+            bridge.Graph.NodesOfType<VAEDecodeNode>(),
+            decode => ReachesUpstream(bridge, startImage, decode.Id));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
+        Assert.Null(generator.CurrentMedia.Compat);
+        Assert.Null(generator.CurrentMedia.AttachedAudio);
+        Assert.Equal(512, generator.CurrentMedia.Width);
+        Assert.Equal(512, generator.CurrentMedia.Height);
+        Assert.Equal(13, generator.CurrentMedia.Frames);
+        Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
+        Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
+    }
+
+    [Fact]
+    public void Wan_swap_composes_with_end_frame_and_global_low_noise_overrides()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
@@ -121,6 +180,7 @@ public class WanRuntimeFlowTests
             ComfyUIBackendExtension.SchedulerParam,
             "karras",
             T2IParamInput.SectionID_VideoSwap);
+        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x02], MediaType.ImagePng));
         string highLoaderKey = $"modelloader_{models.VideoModel.Name}_image2video";
         string lowLoaderKey = $"modelloader_{lowNoiseModel.Name}_image2video";
         string discardedHighTuple = null;
@@ -158,6 +218,8 @@ public class WanRuntimeFlowTests
         Assert.NotEqual(discardedLowTuple, liveLowTuple);
         AssertLoaderTupleIsLive(workflow, liveHighTuple);
         AssertLoaderTupleIsLive(workflow, liveLowTuple);
+        Assert.Equal(2, NodesOfClass(bridge, "WanFirstLastFrameToVideo").Count());
+        Assert.Empty(NodesOfClass(bridge, "WanImageToVideo"));
 
         ComfyNode[] samplers = [.. SamplerNodes(bridge)];
         Assert.Equal(2, samplers.Length);
@@ -476,7 +538,6 @@ public class WanRuntimeFlowTests
     /// so preflight is the only place they can be refused rather than ignored by this slice.
     /// </summary>
     [Theory]
-    [InlineData("VideoEndFrame", "first-to-last-frame generation")]
     [InlineData("Video2VideoCreativity", "partial-denoise generation")]
     [InlineData("FrameInterpolation", "frame interpolation")]
     public void Host_video_parameters_the_slice_cannot_honor_are_refused(
@@ -488,11 +549,7 @@ public class WanRuntimeFlowTests
 
         T2IParamInput input = WanInput(models, steps: 10);
         PreflightSnapshot snapshot = new();
-        if (parameter == "VideoEndFrame")
-        {
-            input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
-        }
-        else if (parameter == "Video2VideoCreativity")
+        if (parameter == "Video2VideoCreativity")
         {
             input.Set(T2IParamTypes.Video2VideoCreativity, 0.5);
         }
@@ -511,6 +568,47 @@ public class WanRuntimeFlowTests
         Assert.Contains(expectedReason, error.Message);
         Assert.DoesNotContain("request: VideoStages:", error.Message);
         snapshot.AssertUnchanged();
+    }
+
+    [Fact]
+    public void Global_end_image_is_refused_before_mutation_for_two_Wan_clips()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(MakeClip(stage), MakeClip(stage)).ToString());
+        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
+
+        AssertPreflightRefusalBeforeMutation(input, "request-global and is ambiguous");
+    }
+
+    [Theory]
+    [InlineData("ltx2")]
+    [InlineData("wan22")]
+    public void Global_end_image_is_refused_before_mutation_for_mixed_timeline(
+        string firstFamily)
+    {
+        using SwarmUiTestContext context = new();
+        MixedVideoModelBundle models =
+            TestModelFactory.CreateBaseLtxv2AndWan22ImageToVideoModels();
+        T2IModel first = firstFamily == "wan22"
+            ? models.WanVideoModel
+            : models.LtxVideoModel;
+        T2IModel second = firstFamily == "wan22"
+            ? models.LtxVideoModel
+            : models.WanVideoModel;
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            first,
+            MakeDocument(
+                MakeClip(MakeStage(first.Name, "Generated", steps: 7)),
+                MakeClip(MakeStage(second.Name, "Generated", steps: 9))).ToString());
+        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
+
+        AssertPreflightRefusalBeforeMutation(input, "request-global and is ambiguous");
     }
 
     [Fact]

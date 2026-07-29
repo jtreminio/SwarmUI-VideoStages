@@ -65,9 +65,31 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
         }
         if (generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null) is not null)
         {
-            diagnostics.Add(Refuse(
-                "'Video End Frame' is set, but VideoStages does not yet support Wan's "
-                + "first-to-last-frame generation."));
+            ClipPlan onlyClip = context.Plan.Clips.Count == 1
+                ? context.Plan.Clips[0]
+                : null;
+            StagePlan[] activeStages = onlyClip?.Stages
+                .Where(stage => !stage.IsPassthrough)
+                .ToArray() ?? [];
+            bool isSingleCurrentWan =
+                onlyClip?.Architecture?.Id == ArchitectureId
+                && activeStages.Length == 1
+                && activeStages[0].ResolvedModel?.ArchitectureId == ArchitectureId
+                && activeStages[0].ResolvedModel?.ModelProfileId
+                    == WanArchitectureModule.ImageToVideoProfileId;
+            if (!isSingleCurrentWan)
+            {
+                string families = string.Join(
+                    ", ",
+                    context.Plan.Clips
+                        .Select(clip => clip.Architecture?.Id.ToString() ?? "<unresolved>")
+                        .Distinct());
+                diagnostics.Add(Refuse(
+                    "'Video End Frame' is request-global and is ambiguous unless the timeline "
+                    + "contains exactly one Wan 2.2 clip using the current image-to-video "
+                    + $"profile. This request has {context.Plan.Clips.Count} clip(s) across "
+                    + $"architecture(s): {families}."));
+            }
         }
         if (generator.UserInput.TryGet(
                 T2IParamTypes.Video2VideoCreativity,
