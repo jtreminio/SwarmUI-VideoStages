@@ -1,6 +1,8 @@
 using ComfyTyped.Core;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using Xunit;
 
@@ -9,6 +11,8 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public sealed class StageRefStoreScopeTests
 {
+    // Formatter-level companion to the generated-workflow sweep below: it covers the key families a
+    // single representative generation does not reach, and pins that they stay distinct.
     [Fact]
     public void Every_owned_runtime_key_family_uses_the_ltx_architecture_prefix()
     {
@@ -34,6 +38,52 @@ public sealed class StageRefStoreScopeTests
             runtimeKeys,
             key => Assert.StartsWith("videostages.arch.ltx2.", key));
         Assert.Equal(runtimeKeys.Count, runtimeKeys.Distinct().Count());
+    }
+
+    [Fact]
+    public void A_generated_ltx_workflow_writes_no_unscoped_runtime_key()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+        JObject clip = Fixtures.MakeClip(
+            Fixtures.MakeStage(models.VideoModel.Name, "Generated", steps: 10),
+            Fixtures.MakeStage(models.VideoModel.Name, "Generated", upscale: 2, steps: 10));
+        clip["icLoras"] = new JArray(new JObject
+        {
+            ["lora"] = "UnitTest_IcLoraA",
+            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
+            ["strength"] = 1.0,
+            ["attentionStrength"] = 1.0,
+            ["controlType"] = Constants.IcLoraControlCanny,
+            ["driveMedia"] = new JObject
+            {
+                ["data"] = "data:video/mp4;base64,QUJD",
+                ["fileName"] = "drive.mp4",
+            },
+        });
+
+        (JObject _, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                Fixtures.BuildNativeInput(
+                    models.BaseModel,
+                    models.VideoModel,
+                    new JArray(clip).ToString()),
+                WorkflowTestHarness.Template_BaseOnlyImage()
+                    .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
+                    .Concat(WorkflowTestHarness.VideoStagesSteps()));
+
+        // The only VideoStages runtime keys that may sit outside an architecture
+        // scope are the architecture-neutral captures common orchestration owns.
+        string[] videoStagesKeys = [.. generator.NodeHelpers.Keys
+            .Where(key => key.StartsWith("videostages.", StringComparison.Ordinal))
+            .Where(key => !key.StartsWith("videostages.controlnet.", StringComparison.Ordinal))];
+
+        Assert.NotEmpty(videoStagesKeys);
+        Assert.All(
+            videoStagesKeys,
+            key => Assert.StartsWith("videostages.arch.ltx2.", key));
     }
 
     [Fact]
@@ -90,6 +140,30 @@ public sealed class StageRefStoreScopeTests
         Assert.True(JToken.DeepEquals(
             generator.CurrentMedia.Path,
             new JArray("400", 0)));
+    }
+
+    private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>
+        new(g =>
+        {
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            UnknownNode refinerImage = bridge.AddStub("UnitTest_RefinerImage", "200")
+                .WithOutputs(WGNodeData.DT_IMAGE);
+            g.CurrentMedia = refinerImage.GetOutput(0).ToWGMedia(
+                g,
+                WGNodeData.DT_IMAGE,
+                width: 512,
+                height: 512);
+        }, 4.0);
+
+    private static void RegisterLora(string name)
+    {
+        if (!Program.T2IModelSets.TryGetValue("LoRA", out T2IModelHandler handler))
+        {
+            handler = new T2IModelHandler { ModelType = "LoRA" };
+            Program.T2IModelSets["LoRA"] = handler;
+        }
+        T2IModel lora = new(handler, "/tmp", $"/tmp/{name}.safetensors", $"{name}.safetensors");
+        handler.Models[lora.Name] = lora;
     }
 
     private static WorkflowGenerator Generator() => new()
