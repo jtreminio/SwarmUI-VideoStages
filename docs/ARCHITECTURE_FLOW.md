@@ -174,6 +174,16 @@ own implementation behavior only; labels, profiles, capabilities, and rules
 remain backend DTO data. This abstraction should be reassessed after a second
 generating architecture supplies another concrete use case.
 
+### A5. Opaque architecture-owned authoring payloads
+
+Each persisted clip has an `architecturePayload` envelope containing either
+`null` or an opaque JSON object. Common normalization and persistence preserve
+that object structurally without projecting, defaulting, or interpreting its
+nested fields. The architecture adapter named by the clip's `architecture` ID
+owns any typed parsing of the envelope. Unknown architecture IDs therefore
+retain future architecture data through decode, normalization, save, and
+reload even when common code does not understand that data.
+
 ### Flow A failures
 
 | Failure | Current result |

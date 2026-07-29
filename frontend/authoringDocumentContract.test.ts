@@ -44,6 +44,7 @@ const contractState = (): VideoStagesConfig => ({
             id: "clip-0",
             architecture: "ltx2",
             modelProfileId: "ltx-2.3",
+            architecturePayload: null,
             skipped: false,
             hue: 210,
             boundaryOut: "continue",
@@ -151,6 +152,7 @@ const contractState = (): VideoStagesConfig => ({
             id: "clip-1",
             architecture: "ltx2",
             modelProfileId: "ltx-2.3",
+            architecturePayload: null,
             skipped: false,
             hue: 40,
             boundaryOut: "cut",
@@ -252,12 +254,32 @@ describe("authoring document contract fixture", () => {
         expect(JSON.parse(reencoded)).toEqual(fixture());
     });
 
-    it("round-trips current typed authored data for an unknown architecture", () => {
+    it("round-trips opaque nested payload for an unknown architecture", () => {
         const unknown = fixture();
         const clips = unknown.clips as Record<string, unknown>[];
         const populatedClip = clips[0];
+        const opaquePayload = {
+            futureConditioning: {
+                layers: [
+                    {
+                        kind: "motion-vector-field",
+                        options: {
+                            temporalScale: 1.25,
+                            preserveOcclusion: true,
+                        },
+                    },
+                ],
+            },
+            futureStagePayloads: {
+                "stage-0": {
+                    schedule: [0, 0.25, 1],
+                    vendorExtension: "leave-this-verbatim",
+                },
+            },
+        };
         populatedClip.architecture = "future-video";
         populatedClip.modelProfileId = "future-video-v1";
+        populatedClip.architecturePayload = opaquePayload;
         for (const [index, stage] of (
             populatedClip.stages as Record<string, unknown>[]
         ).entries()) {
@@ -274,6 +296,7 @@ describe("authoring document contract fixture", () => {
         if (!decoded) {
             return;
         }
+        expect(decoded.clips[0].architecturePayload).toEqual(opaquePayload);
         const serialized = serializeStateForStorage(
             createRootConfig(decoded.dims, decoded.clips, decoded.audioTracks),
         );
@@ -286,6 +309,9 @@ describe("authoring document contract fixture", () => {
         if (!decodedAgain) {
             return;
         }
+        expect(decodedAgain.clips[0].architecturePayload).toEqual(
+            opaquePayload,
+        );
         const serializedAgain = serializeStateForStorage(
             createRootConfig(
                 decodedAgain.dims,
@@ -299,6 +325,7 @@ describe("authoring document contract fixture", () => {
             clips: {
                 architecture: string;
                 modelProfileId: string;
+                architecturePayload: Record<string, unknown> | null;
                 stages: {
                     model: string;
                     modelProfileId: string;
@@ -317,6 +344,7 @@ describe("authoring document contract fixture", () => {
         expect(roundTripped.clips[0]).toMatchObject({
             architecture: "future-video",
             modelProfileId: "future-video-v1",
+            architecturePayload: opaquePayload,
             stages: [
                 {
                     model: "removed-video-stage-0.safetensors",

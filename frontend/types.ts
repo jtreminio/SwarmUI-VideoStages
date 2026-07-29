@@ -66,6 +66,13 @@ export interface ClipLora {
     name: string;
 }
 
+/**
+ * Opaque JSON owned by the clip's architecture adapter. Common authoring,
+ * normalization, and persistence code may carry this envelope but must not
+ * interpret or project its nested fields.
+ */
+export type ArchitecturePayload = Record<string, unknown>;
+
 export interface Stage {
     id?: string;
     skipped: boolean;
@@ -191,6 +198,7 @@ export interface Clip {
     id?: string;
     architecture: VideoArchitectureId;
     modelProfileId: ModelProfileId;
+    architecturePayload: ArchitecturePayload | null;
     skipped: boolean;
     hue: number;
     boundaryOut: BoundaryOut;

@@ -67,6 +67,7 @@ const clip = (id: string): CanonicalClip => ({
     id,
     architecture: "ltx2",
     modelProfileId: "ltx-2.3",
+    architecturePayload: null,
     skipped: false,
     hue: 20,
     boundaryOut: "cut",

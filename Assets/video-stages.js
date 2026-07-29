@@ -2074,6 +2074,7 @@
     return Number.isFinite(numeric) && numeric > 0 ? numeric : normalizeBoundaryOverlap(value, constraints);
   };
   var normalizeReferenceFraming = (value) => value === "stretch" || value === "fit" || value === "fit-green" ? value : "crop";
+  var preserveArchitecturePayload = (value) => isRecord(value) ? structuredClone(value) : null;
   var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
     const defaults = getRootDefaults2();
     const refs = includeDefaultRef ? [buildDefaultRef()] : [];
@@ -2102,6 +2103,7 @@
     return {
       architecture,
       modelProfileId: (previousClip?.architecture !== NONE_ARCHITECTURE_ID ? previousClip?.modelProfileId : null) ?? modelProfileForModel(defaults.modelCatalog, firstStage.model) ?? firstStage.modelProfileId,
+      architecturePayload: null,
       skipped: previousClip?.skipped === true,
       hue: UNASSIGNED_HUE,
       boundaryOut: "cut",
@@ -2248,6 +2250,9 @@
       id: normalizeOptionalEntityId(rawClip.id),
       architecture,
       modelProfileId,
+      architecturePayload: preserveArchitecturePayload(
+        rawClip.architecturePayload
+      ),
       skipped: !!rawClip.skipped,
       hue: normalizeStoredHue(rawClip.hue),
       boundaryOut,
@@ -3050,6 +3055,7 @@
         id: clip.id,
         architecture: clip.architecture,
         modelProfileId: clip.modelProfileId,
+        architecturePayload: clip.architecturePayload,
         skipped: clip.skipped,
         boundaryOut: clip.boundaryOut,
         boundaryOutCarryAudio: clip.boundaryOutCarryAudio,
@@ -4002,6 +4008,7 @@
       "duration",
       "refFraming",
       "audioSource",
+      "architecturePayload",
       "loras",
       "icLoras",
       "saveAudioTrack",

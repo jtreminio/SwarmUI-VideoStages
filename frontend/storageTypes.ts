@@ -35,6 +35,7 @@ export const STORED_CLIP_KEYS = [
     "id",
     "architecture",
     "modelProfileId",
+    "architecturePayload",
     "skipped",
     "boundaryOut",
     "boundaryOutCarryAudio",
