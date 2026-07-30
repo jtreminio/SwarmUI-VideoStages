@@ -24,10 +24,11 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class RealArchitectureContractTests
 {
-    // At 24 fps, 0.6 seconds aligns to 17 frames (8n+1 and 4n+1), so the same authored
-    // duration is native to both LTX and Wan frame grids.
+    // At 24 fps, 0.6 seconds is 16 inclusive structural source frames. A resolved LTX or WAN
+    // generated stage raises that request to 17 on its own grid.
     private const double CrossFamilyClipDuration = 0.6;
-    private const int CrossFamilyClipFrames = 17;
+    private const int CrossFamilySourceFrames = 16;
+    private const int CrossFamilyGeneratedFrames = 17;
 
     private static readonly string[] SourcedClipFeatures =
         [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
@@ -272,7 +273,9 @@ public class RealArchitectureContractTests
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.Equal(512, generator.CurrentMedia.Width);
         Assert.Equal(512, generator.CurrentMedia.Height);
-        Assert.Equal(CrossFamilyClipFrames * 2, generator.CurrentMedia.Frames);
+        Assert.Equal(
+            CrossFamilySourceFrames + CrossFamilyGeneratedFrames,
+            generator.CurrentMedia.Frames);
         Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
         Assert.Null(generator.CurrentMedia.Compat);
         Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));

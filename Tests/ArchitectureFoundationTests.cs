@@ -1351,6 +1351,37 @@ public class ArchitectureFoundationTests
         Assert.Contains("Duplicate video architecture ids", error.Message);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Registry_rejects_a_nonpositive_architecture_frame_grid(int frameGrid)
+    {
+        VideoArchitectureDescriptor descriptor = Descriptor("fake", "profile") with
+        {
+            FrameGrid = frameGrid,
+        };
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => new VideoArchitectureRegistry([new MatchingModule(descriptor)]));
+
+        Assert.Contains("invalid frame grid", error.Message);
+    }
+
+    [Fact]
+    public void Registry_rejects_a_nonpositive_resolved_model_frame_grid()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        VideoArchitectureDescriptor descriptor = Descriptor("fake", "profile");
+        VideoArchitectureRegistry registry =
+            new([new MatchingModule(descriptor, resolvedFrameGrid: 0)]);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => registry.TryResolveModel(models.VideoModel, out _));
+
+        Assert.Contains("invalid model resolution", error.Message);
+    }
+
     [Fact]
     public void Registry_rejects_an_ignore_contract_without_an_owned_projector()
     {
@@ -1673,6 +1704,7 @@ public class ArchitectureFoundationTests
             item => item["modelName"]?.ToString() == models.VideoModel.Name);
         Assert.Equal("ltx2", model["architectureId"]);
         Assert.Equal("ltx-2.3", model["modelProfileId"]);
+        Assert.Equal(Ltx2ArchitectureModule.FrameGrid, model["frameGrid"]);
     }
 
     [Fact]
@@ -2000,7 +2032,8 @@ public class ArchitectureFoundationTests
 
     private sealed class MatchingModule(
         VideoArchitectureDescriptor descriptor,
-        VideoArchitectureDescriptor resolvedDescriptor = null) : IVideoArchitectureModule
+        VideoArchitectureDescriptor resolvedDescriptor = null,
+        int? resolvedFrameGrid = null) : IVideoArchitectureModule
     {
         public VideoArchitectureDescriptor Descriptor => descriptor;
 
@@ -2017,6 +2050,7 @@ public class ArchitectureFoundationTests
                 EntryAbilities =
                     VideoModelEntryAbility.TextToVideo
                     | VideoModelEntryAbility.ImageToVideo,
+                HandlerFrameGridOverride = resolvedFrameGrid,
                 HostFactsAuthoritative = true,
             };
             return true;

@@ -1003,6 +1003,7 @@ describe("stage architecture model filtering", () => {
                 modelProfileId: entry.modelProfileId as string,
                 modelClassId: entry.modelClassId as string,
                 compatibilityClassId: entry.compatibilityClassId as string,
+                frameGrid: entry.frameGrid ?? 1,
                 entryModes: [...entry.entryModes],
             })),
         };

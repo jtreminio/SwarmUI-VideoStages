@@ -1,5 +1,6 @@
 import type { CapabilityViewResolver } from "./architectures/policy";
 import { referenceEndpointPolicy } from "./architectures/referenceEndpoints";
+import { resolvedClipFrameGrid } from "./architectures/temporalGrid";
 import { clamp, REF_FRAME_MIN } from "./constants";
 import { documentFps } from "./documentQueries";
 import {
@@ -49,7 +50,9 @@ interface RefDragState {
     arrowOriginalLeft: string;
     originalLabel: string;
     durationSeconds: number;
+    generatedDurationSeconds: number;
     fps: number;
+    frameGrid: number;
     frameMax: number;
     allowedPositions: string[];
     fromEnd: boolean;
@@ -182,6 +185,7 @@ export const createTimelineReferencesTrack = (
             state.durationSeconds,
             state.fps,
             state.fromEnd,
+            state.frameGrid,
         );
         if (!getTimelineAuthoringSettings().snap || rect.width <= 0) {
             return { frame, fromEnd: state.fromEnd };
@@ -228,7 +232,7 @@ export const createTimelineReferencesTrack = (
                 state.arrow,
                 position.frame,
                 position.fromEnd,
-                state.durationSeconds,
+                state.generatedDurationSeconds,
                 state.fps,
             );
         },
@@ -301,6 +305,7 @@ export const createTimelineReferencesTrack = (
         }
         const arrow = findArrow(clipIdx, refIdx);
         const fps = documentFps(getState());
+        const frameMax = getReferenceFrameMax(getRootDefaults, clip, fps);
         me.preventDefault();
         return dragSession(body, {
             clipIdx,
@@ -314,8 +319,13 @@ export const createTimelineReferencesTrack = (
                 mark.querySelector<HTMLElement>(".vst-refs-ph")?.textContent ??
                 "",
             durationSeconds: clip.duration,
+            generatedDurationSeconds: frameMax / fps,
             fps,
-            frameMax: getReferenceFrameMax(getRootDefaults, clip, fps),
+            frameGrid: resolvedClipFrameGrid(
+                clip,
+                getRootDefaults().modelCatalog,
+            ),
+            frameMax,
             allowedPositions: referencePositions(clip),
             fromEnd: ref.fromEnd === true,
             sourceRevision: currentRevision(),
@@ -365,6 +375,7 @@ export const createTimelineReferencesTrack = (
             clip.duration,
             documentFps(getState()),
             false,
+            resolvedClipFrameGrid(clip, getRootDefaults().modelCatalog),
         );
         addRefAtFrame(clipIdx, frame, currentRevision());
     };

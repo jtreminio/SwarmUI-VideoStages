@@ -1,5 +1,5 @@
 import { CLIP_DURATION_MIN, clamp, REF_FRAME_MIN } from "./constants";
-import { getReferenceFrameMax } from "./normalization";
+import { getKnownReferenceFrameMax } from "./normalizationStage";
 import { framesForClip, snapDurationToFps } from "./renderUtils";
 import type { Clip, RootDefaults } from "./types";
 
@@ -25,13 +25,17 @@ export const pxToFrame = (
     durationSeconds: number,
     fps: number,
     fromEnd: boolean,
+    frameGrid: number,
 ): number => {
     const safeFps = Number.isFinite(fps) && fps > 0 ? fps : 1;
-    const duration =
+    const authoredDuration =
         Number.isFinite(durationSeconds) && durationSeconds > 0
             ? durationSeconds
             : 0;
-    const frameMax = Math.max(REF_FRAME_MIN, framesForClip(duration, safeFps));
+    const frameMax = Math.max(
+        REF_FRAME_MIN,
+        framesForClip(authoredDuration, safeFps, frameGrid),
+    );
     if (
         !Number.isFinite(pointerXWithinRegion) ||
         !Number.isFinite(regionWidthPx) ||
@@ -40,8 +44,11 @@ export const pxToFrame = (
         return REF_FRAME_MIN;
     }
     const fraction = clamp(pointerXWithinRegion / regionWidthPx, 0, 1);
-    const time = fraction * duration;
-    const rawFrame = fromEnd ? (duration - time) * safeFps : time * safeFps;
+    const effectiveDuration = frameMax / safeFps;
+    const time = fraction * effectiveDuration;
+    const rawFrame = fromEnd
+        ? (effectiveDuration - time) * safeFps
+        : time * safeFps;
     return clamp(Math.round(rawFrame), REF_FRAME_MIN, frameMax);
 };
 
@@ -50,9 +57,16 @@ export const clampClipRefsToDuration = (
     getRootDefaults: () => RootDefaults,
     effectiveFps?: number,
 ): void => {
-    const frameMax = getReferenceFrameMax(getRootDefaults, clip, effectiveFps);
+    const frameMax = getKnownReferenceFrameMax(
+        getRootDefaults,
+        clip,
+        effectiveFps,
+    );
     for (const ref of clip.refs) {
-        ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
+        ref.frame =
+            frameMax === null
+                ? Math.max(REF_FRAME_MIN, Math.round(ref.frame))
+                : clamp(ref.frame, REF_FRAME_MIN, frameMax);
     }
 };
 

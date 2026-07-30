@@ -7,9 +7,9 @@ import type {
 } from "./policy/types";
 import type { ArchitectureModelCatalog } from "./types";
 
-export type { FeatureSupportScope } from "./policy/clipStageViews";
-export { architectureFeatureSupport } from "./policy/clipStageViews";
+export type { FeatureSupportScope } from "./policy/featureValues";
 export {
+    architectureFeatureSupport,
     isAudioSourceSupported,
     upscaleModeForMethod,
 } from "./policy/featureValues";

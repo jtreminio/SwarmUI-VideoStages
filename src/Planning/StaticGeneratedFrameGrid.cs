@@ -28,6 +28,43 @@ internal static class StaticGeneratedFrameGrid
         return 1 + (Math.Max(1, requestedPixelFrames) - 1) / frameGrid * frameGrid;
     }
 
+    /// <summary>
+    /// Snaps a known static generated request up so the effective duration never becomes shorter
+    /// than the authored duration.
+    /// </summary>
+    internal static int SnapUp(int requestedPixelFrames, int frameGrid)
+    {
+        ValidateGrid(frameGrid);
+        int intervals = Math.Max(1, requestedPixelFrames) - 1;
+        int blocks = intervals / frameGrid + (intervals % frameGrid == 0 ? 0 : 1);
+        return checked(1 + checked(blocks * frameGrid));
+    }
+
+    /// <summary>
+    /// Returns the smallest grid satisfying every active stage handler. A mixed 6/8 request, for
+    /// example, resolves to 24 rather than silently inheriting whichever architecture was globally
+    /// coarsest.
+    /// </summary>
+    internal static int CompatibleGrid(IEnumerable<int> frameGrids)
+    {
+        int compatible = 1;
+        foreach (int grid in frameGrids ?? [])
+        {
+            ValidateGrid(grid);
+            compatible = checked(compatible / GreatestCommonDivisor(compatible, grid) * grid);
+        }
+        return compatible;
+    }
+
+    private static int GreatestCommonDivisor(int left, int right)
+    {
+        while (right != 0)
+        {
+            (left, right) = (right, left % right);
+        }
+        return left;
+    }
+
     private static void ValidateGrid(int frameGrid)
     {
         if (frameGrid < 1)

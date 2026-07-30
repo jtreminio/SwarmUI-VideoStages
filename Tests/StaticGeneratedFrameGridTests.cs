@@ -38,6 +38,33 @@ public class StaticGeneratedFrameGridTests
     }
 
     [Theory]
+    [InlineData(1, 6, 1)]
+    [InlineData(2, 6, 7)]
+    [InlineData(13, 6, 13)]
+    [InlineData(14, 6, 19)]
+    [InlineData(27, 6, 31)]
+    [InlineData(27, 8, 33)]
+    public void Snap_up_preserves_authored_duration(
+        int requested,
+        int grid,
+        int expected)
+    {
+        Assert.Equal(expected, StaticGeneratedFrameGrid.SnapUp(requested, grid));
+    }
+
+    [Theory]
+    [InlineData(new[] { 1, 1 }, 1)]
+    [InlineData(new[] { 4, 8 }, 8)]
+    [InlineData(new[] { 6, 8 }, 24)]
+    [InlineData(new[] { 4, 6, 8 }, 24)]
+    public void Compatible_grid_is_the_least_common_multiple(
+        int[] grids,
+        int expected)
+    {
+        Assert.Equal(expected, StaticGeneratedFrameGrid.CompatibleGrid(grids));
+    }
+
+    [Theory]
     [InlineData(0, 4, false)]
     [InlineData(1, 4, true)]
     [InlineData(4, 4, false)]
@@ -62,6 +89,10 @@ public class StaticGeneratedFrameGridTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(
             () => StaticGeneratedFrameGrid.SnapDown(16, grid));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => StaticGeneratedFrameGrid.SnapUp(16, grid));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => StaticGeneratedFrameGrid.CompatibleGrid([4, grid]));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => StaticGeneratedFrameGrid.IsAligned(16, grid));
     }

@@ -242,4 +242,18 @@ public class AuthoringDocumentContractTests
         Assert.Throws<SwarmUserErrorException>(
             () => VideoStagesSpecParser.Parse(new WorkflowGenerator { UserInput = input }));
     }
+
+    [Fact]
+    public void OversizedIntegerDocumentFieldsDoNotLeakRawOverflowExceptions()
+    {
+        JObject document = JObject.Parse(FixtureJson());
+        document["fps"] = JToken.Parse("999999999999999999999999999999");
+        T2IParamInput input = new(null);
+        Fixtures.SetVideoStagesConfig(input, document.ToString());
+
+        Exception error = Record.Exception(
+            () => VideoStagesSpecParser.Parse(new WorkflowGenerator { UserInput = input }));
+
+        Assert.False(error is OverflowException);
+    }
 }

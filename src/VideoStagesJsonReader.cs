@@ -109,11 +109,6 @@ internal static class VideoStagesJsonReader
         {
             return defaultValue;
         }
-        if (token.Type == JTokenType.Integer)
-        {
-            return token.Value<int>();
-        }
-
         string raw = $"{token}";
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -220,11 +215,6 @@ internal static class VideoStagesJsonReader
         {
             return null;
         }
-        if (token.Type == JTokenType.Integer)
-        {
-            return token.Value<int>();
-        }
-
         string raw = $"{token}";
         return string.IsNullOrWhiteSpace(raw)
             ? null

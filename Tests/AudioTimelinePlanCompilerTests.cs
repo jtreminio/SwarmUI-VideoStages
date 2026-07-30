@@ -7,13 +7,15 @@ namespace VideoStages.Tests;
 public class AudioTimelinePlanCompilerTests
 {
     private const int Fps = 24;
+    private const int Frames = 49;
+    private const double ClipSeconds = Frames / (double)Fps;
 
     private static StageSpec Stage(int id) => new(
         id, 1, 1, "pixel-lanczos", "ltx-2", 8, 1, "euler", "normal", "Generated");
 
     private static ClipSpec Clip(
         int id,
-        int? frames = 48,
+        int? frames = Frames,
         string boundary = Constants.BoundaryOutCut,
         int overlap = 8) => new(
             id,
@@ -59,7 +61,7 @@ public class AudioTimelinePlanCompilerTests
 
         AudioTrackClipWindow baseWindow = Assert.Single(baseTrack.Windows);
         Assert.Equal(0, baseWindow.TimelineStartSeconds);
-        Assert.Equal(2, baseWindow.DurationSeconds, 8);
+        Assert.Equal(ClipSeconds, baseWindow.DurationSeconds, 8);
         Assert.Equal(0, baseWindow.SourceStartSeconds);
 
         AudioTrackClipWindow overlayWindow = Assert.Single(overlayTrack.Windows);
@@ -78,9 +80,15 @@ public class AudioTimelinePlanCompilerTests
         AudioTrackClipWindow[] windows = Track(timeline, "music").Windows.ToArray();
         Assert.Equal(3, windows.Length);
         Assert.Equal([0, 1, 2], windows.Select(window => window.ClipId));
-        Assert.Equal([0d, 2d, 4d], windows.Select(window => window.TimelineStartSeconds));
-        Assert.Equal([0d, 2d, 4d], windows.Select(window => window.SourceStartSeconds));
-        Assert.All(windows, window => Assert.Equal(2, window.DurationSeconds, 8));
+        Assert.Equal(
+            [0d, ClipSeconds, ClipSeconds * 2],
+            windows.Select(window => window.TimelineStartSeconds));
+        Assert.Equal(
+            [0d, ClipSeconds, ClipSeconds * 2],
+            windows.Select(window => window.SourceStartSeconds));
+        Assert.All(
+            windows,
+            window => Assert.Equal(ClipSeconds, window.DurationSeconds, 8));
         Assert.DoesNotContain(timeline.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.timeline.span.non_partitioning_projection");
     }
@@ -94,8 +102,8 @@ public class AudioTimelinePlanCompilerTests
 
         AudioTrackClipWindow window = Assert.Single(Track(timeline, "stinger").Windows);
         Assert.Equal(1, window.ClipId);
-        Assert.Equal(2, window.TimelineStartSeconds, 8);
-        Assert.Equal(2, window.DurationSeconds, 8);
+        Assert.Equal(ClipSeconds, window.TimelineStartSeconds, 8);
+        Assert.Equal(ClipSeconds, window.DurationSeconds, 8);
         Assert.Equal(3, window.SourceStartSeconds, 8);
     }
 
@@ -112,9 +120,16 @@ public class AudioTimelinePlanCompilerTests
         AudioTrackClipWindow[] windows = Track(timeline, "dialogue").Windows.ToArray();
         Assert.Equal(3, windows.Length);
         Assert.Equal([0, 1, 2], windows.Select(window => window.ClipId));
-        Assert.Equal([1.5d, 2d, 4d], windows.Select(window => window.TimelineStartSeconds));
-        Assert.Equal([0.5d, 2d, 0.5d], windows.Select(window => window.DurationSeconds));
-        Assert.Equal([10d, 10.5d, 12.5d], windows.Select(window => window.SourceStartSeconds));
+        double firstDuration = ClipSeconds - 1.5;
+        Assert.Equal(
+            [1.5d, ClipSeconds, ClipSeconds * 2],
+            windows.Select(window => window.TimelineStartSeconds));
+        Assert.Equal(
+            [firstDuration, ClipSeconds, 4.5 - ClipSeconds * 2],
+            windows.Select(window => window.DurationSeconds));
+        Assert.Equal(
+            [10d, 10 + firstDuration, 10 + firstDuration + ClipSeconds],
+            windows.Select(window => window.SourceStartSeconds));
     }
 
     [Fact]
@@ -130,8 +145,12 @@ public class AudioTimelinePlanCompilerTests
 
         AudioTrackClipWindow[] windows = Track(timeline, "bounded").Windows.ToArray();
         Assert.Equal([1, 2], windows.Select(window => window.ClipId));
-        Assert.Equal([2d, 4d], windows.Select(window => window.TimelineStartSeconds));
-        Assert.Equal([2d, 0.5d], windows.Select(window => window.DurationSeconds));
+        Assert.Equal(
+            [ClipSeconds, ClipSeconds * 2],
+            windows.Select(window => window.TimelineStartSeconds));
+        Assert.Equal(
+            [ClipSeconds, 4.5 - ClipSeconds * 2],
+            windows.Select(window => window.DurationSeconds));
     }
 
     [Fact]

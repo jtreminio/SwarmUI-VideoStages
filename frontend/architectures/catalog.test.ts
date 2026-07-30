@@ -49,6 +49,7 @@ const dto = {
             modelProfileId: "ltx-2.3",
             modelClassId: "ltx-video",
             compatibilityClassId: "ltx-video",
+            frameGrid: 8,
             entryModes: [
                 "text-to-video",
                 "image-to-video",
@@ -62,6 +63,7 @@ const dto = {
             modelProfileId: "synthetic-profile",
             modelClassId: "ltx-image-video",
             compatibilityClassId: "ltx-video",
+            frameGrid: 8,
             entryModes: ["image-to-video"],
         },
     ],
@@ -141,12 +143,26 @@ describe("architecture catalog wire contract", () => {
         for (const key of [
             "modelClassId",
             "compatibilityClassId",
+            "frameGrid",
             "entryModes",
         ] as const) {
             const missing = structuredClone(dto) as Record<string, unknown>;
             const models = missing.models as Record<string, unknown>[];
             delete models[0][key];
             expect(parseVideoArchitectureCatalog(missing)).toBeNull();
+        }
+        for (const invalid of [
+            0,
+            -1,
+            1.5,
+            "8",
+            2_147_483_648,
+            Number.MAX_SAFE_INTEGER + 1,
+        ]) {
+            const malformed = structuredClone(dto) as Record<string, unknown>;
+            const models = malformed.models as Record<string, unknown>[];
+            models[0].frameGrid = invalid;
+            expect(parseVideoArchitectureCatalog(malformed)).toBeNull();
         }
     });
 
@@ -420,6 +436,7 @@ describe("architecture catalog wire contract", () => {
                 modelProfileId: model.modelProfileId,
                 modelClassId: model.modelClassId,
                 compatibilityClassId: model.compatibilityClassId,
+                frameGrid: model.frameGrid,
                 entryModes: [...model.entryModes],
             })),
         };

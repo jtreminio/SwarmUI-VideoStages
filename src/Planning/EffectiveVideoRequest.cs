@@ -138,9 +138,16 @@ internal static class EffectiveVideoRequestProjector
 {
     internal static EffectiveVideoRequest Project(
         VideoStagesSpec authored,
+        ArchitecturePlanningResult architecturePlanning) =>
+        Project(authored, RootEnvironment.FromSpec(authored), architecturePlanning);
+
+    internal static EffectiveVideoRequest Project(
+        VideoStagesSpec authored,
+        RootEnvironment rootEnvironment,
         ArchitecturePlanningResult architecturePlanning)
     {
         ArgumentNullException.ThrowIfNull(authored);
+        ArgumentNullException.ThrowIfNull(rootEnvironment);
         ArgumentNullException.ThrowIfNull(architecturePlanning);
 
         ClipSpec[] authoredClips = (authored.Clips ?? []).ToArray();
@@ -169,6 +176,17 @@ internal static class EffectiveVideoRequestProjector
         int rootTimelineIndex = Array.FindIndex(
             authoredClips,
             clip => clip.SourceVideo is null && clip.Stages is { Count: > 0 });
+        RootPlan root = RootPlanCompiler.Compile(
+            rootEnvironment,
+            authoredClips
+                .Where(clip =>
+                    clip.SourceVideo is not null
+                    || clip.Stages is { Count: > 0 })
+                .ToArray());
+        bool rootCanForceTextToVideoGeneration =
+            root.HostKind == HostRootKind.TextToVideoRoot
+            && root.Use == RootUse.Discard
+            && !rootEnvironment.HasGlobalRefineSource;
         foreach (ModuleProjectionBatch batch in BuildProjectionBatches(
             canonicalClips,
             architecturePlanning))
@@ -187,11 +205,37 @@ internal static class EffectiveVideoRequestProjector
                 requestDecisions);
         }
 
+        List<EffectiveRequestDecision>[] temporalDecisions =
+            authoredClips.Select(_ => new List<EffectiveRequestDecision>()).ToArray();
+        for (int timelineIndex = 0; timelineIndex < effectiveClips.Length; timelineIndex++)
+        {
+            ClipSpec clip = effectiveClips[timelineIndex];
+            ClipArchitectureAssignment assignment =
+                architecturePlanning.Clips.GetValueOrDefault(clip.Id);
+            bool admissionBlocked = architecturePlanning.Diagnostics.Any(diagnostic =>
+                diagnostic.Severity == PlanDiagnosticSeverity.Error
+                && diagnostic.ClipId == clip.Id)
+                || architectureDecisions[timelineIndex].Any(decision =>
+                    decision.Disposition == EffectiveRequestDisposition.Block);
+            if (assignment is null || admissionBlocked)
+            {
+                continue;
+            }
+            effectiveClips[timelineIndex] = ProjectResolvedTemporalGrid(
+                canonicalClips[timelineIndex],
+                clip,
+                assignment,
+                rootCanForceTextToVideoGeneration
+                    && timelineIndex == rootTimelineIndex,
+                temporalDecisions[timelineIndex]);
+        }
+
         List<EffectiveRequestDecision> decisions = [];
         for (int timelineIndex = 0; timelineIndex < authoredClips.Length; timelineIndex++)
         {
             decisions.AddRange(canonicalDecisions[timelineIndex]);
             decisions.AddRange(architectureDecisions[timelineIndex]);
+            decisions.AddRange(temporalDecisions[timelineIndex]);
         }
         Dictionary<int, BoundaryExecutionMode> authoredBoundaryModes = [];
         Dictionary<int, BoundaryFallback> projectedBoundaryFallbacks = [];
@@ -458,6 +502,135 @@ internal static class EffectiveVideoRequestProjector
             AuthoredArchitectureId = architectureHint,
             AuthoredModelProfileId = profileHint,
             AuthoredStages = Array.AsReadOnly(authoredStages),
+        };
+    }
+
+    private static ClipSpec ProjectResolvedTemporalGrid(
+        ClipSpec authoredCanonical,
+        ClipSpec projected,
+        ClipArchitectureAssignment assignment,
+        bool forceRootStageGeneration,
+        ICollection<EffectiveRequestDecision> decisions)
+    {
+        if (!projected.Frames.HasValue
+            || projected.Stages is not { Count: > 0 }
+            || projected.ClipLengthFromAudio
+            || projected.ClipLengthFromControlNet)
+        {
+            return projected;
+        }
+
+        List<int> activeGrids = [];
+        foreach (StageSpec stage in projected.Stages.Where(stage =>
+            !stage.IsPassthrough
+            || (forceRootStageGeneration && stage.ClipStageIndex == 0)))
+        {
+            if (!assignment.StageModels.TryGetValue(
+                    stage.ClipStageRawIndex,
+                    out ResolvedVideoModel resolved))
+            {
+                // Architecture planning already reports the unresolved stage. Do not guess a grid
+                // or duplicate that admission error here.
+                return projected;
+            }
+            activeGrids.Add(resolved.FrameGrid);
+        }
+        if (activeGrids.Count == 0)
+        {
+            return projected;
+        }
+
+        int frameGrid;
+        try
+        {
+            frameGrid = StaticGeneratedFrameGrid.CompatibleGrid(activeGrids);
+        }
+        catch (OverflowException)
+        {
+            decisions.Add(EffectiveRequestDecision.Block(
+                "effective-request.temporal-grid-conflict",
+                $"Clip {projected.Id}'s active model handlers require temporal grids "
+                    + $"[{string.Join(", ", activeGrids)}], whose compatible grid cannot be "
+                    + "represented. Use stage models with compatible temporal requirements.",
+                projected.Id));
+            return projected;
+        }
+
+        int effectiveFrames;
+        try
+        {
+            effectiveFrames =
+                StaticGeneratedFrameGrid.SnapUp(projected.Frames.Value, frameGrid);
+        }
+        catch (OverflowException)
+        {
+            decisions.Add(EffectiveRequestDecision.Block(
+                "effective-request.temporal-frame-count-overflow",
+                $"Clip {projected.Id}'s {projected.Frames.Value}-frame duration cannot be "
+                    + $"represented on its resolved {frameGrid}-frame temporal grid.",
+                projected.Id));
+            return projected;
+        }
+
+        Dictionary<int, StageSpec> authoredStageByRawIndex =
+            (authoredCanonical.Stages ?? [])
+                .ToDictionary(stage => stage.ClipStageRawIndex);
+        bool retakeEndAdjusted = false;
+        StageSpec[] effectiveStages = projected.Stages
+            .Select(stage =>
+            {
+                RetakeWindowSpec retake = stage.RetakeWindow;
+                if (retake is null
+                    || !authoredCanonical.Frames.HasValue
+                    || !authoredStageByRawIndex.TryGetValue(
+                        stage.ClipStageRawIndex,
+                        out StageSpec authoredStage)
+                    || authoredStage.RetakeWindow is not { } authoredRetake
+                    || retake != authoredRetake
+                    || authoredRetake.StartFrame < 0
+                    || (long)authoredRetake.StartFrame
+                        + Math.Max(0, authoredRetake.LengthFrames)
+                        < authoredCanonical.Frames.Value)
+                {
+                    return stage;
+                }
+                int lengthFrames = Math.Max(
+                    retake.LengthFrames,
+                    effectiveFrames - retake.StartFrame);
+                retakeEndAdjusted |= lengthFrames != retake.LengthFrames;
+                return stage with
+                {
+                    RetakeWindow = retake with
+                    {
+                        LengthFrames = lengthFrames,
+                    },
+                };
+            })
+            .ToArray();
+        if (effectiveFrames != projected.Frames.Value)
+        {
+            string provenance = authoredCanonical.Frames == projected.Frames
+                ? $"its authored {projected.Frames.Value}-frame duration"
+                : $"its authored {authoredCanonical.Frames?.ToString() ?? "unknown"}-frame "
+                    + $"duration was architecture-projected to {projected.Frames.Value} frames and";
+            decisions.Add(EffectiveRequestDecision.Execute(
+                "effective-request.temporal-grid",
+                $"Clip {projected.Id} resolves to a {frameGrid}-frame temporal grid; "
+                    + $"{provenance} executes as {effectiveFrames} frames.",
+                projected.Id));
+        }
+        else if (retakeEndAdjusted)
+        {
+            decisions.Add(EffectiveRequestDecision.Execute(
+                "effective-request.temporal-retake-end",
+                $"Clip {projected.Id}'s authored full-length retake follows the "
+                    + $"{effectiveFrames}-frame duration produced by architecture projection.",
+                projected.Id));
+        }
+        return projected with
+        {
+            Frames = effectiveFrames,
+            Stages = Array.AsReadOnly(effectiveStages),
         };
     }
 

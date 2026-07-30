@@ -2096,7 +2096,10 @@ public class WanRuntimeFlowTests
                 WanSourceFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        SwarmFrameWindowNode sourceWindow = AssertWanSourceConformChain(bridge, 512, 512);
+        SwarmFrameWindowNode sourceWindow = AssertWanSourceConformChain(
+            bridge,
+            512,
+            512);
         ComfyNode sampler = Assert.Single(SamplerNodes(bridge));
         Assert.True(ReachesUpstream(bridge, sampler, sourceWindow.Id));
         Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
@@ -2132,7 +2135,10 @@ public class WanRuntimeFlowTests
                 WanSourceFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        SwarmFrameWindowNode sourceWindow = AssertWanSourceConformChain(bridge, 512, 512);
+        SwarmFrameWindowNode sourceWindow = AssertWanSourceConformChain(
+            bridge,
+            512,
+            512);
         ComfyNode sampler = Assert.Single(SamplerNodes(bridge));
         Assert.Equal(0, sampler.FindInput("start_at_step").LiteralAsInt());
         Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeNode>());
@@ -2243,7 +2249,11 @@ public class WanRuntimeFlowTests
                 WanSourceFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        SwarmFrameWindowNode sourceWindow = AssertWanSourceConformChain(bridge, 512, 512);
+        SwarmFrameWindowNode sourceWindow = AssertWanSourceConformChain(
+            bridge,
+            512,
+            512,
+            expectedFrames: 16);
         Assert.Empty(SamplerNodes(bridge));
         Assert.Empty(NodesOfClass(bridge, "WanImageToVideo"));
         Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeNode>());
@@ -2252,7 +2262,7 @@ public class WanRuntimeFlowTests
             bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
         Assert.True(ReachesUpstream(bridge, trim, sourceWindow.Id));
         Assert.Equal(new JArray(trim.Id, 0), generator.CurrentMedia.Path);
-        Assert.Equal(13, generator.CurrentMedia.Frames);
+        Assert.Equal(12, generator.CurrentMedia.Frames);
         Assert.Null(generator.CurrentMedia.AttachedAudio);
         SwarmSaveAnimationWSNode save = Assert.Single(
             bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
@@ -2655,7 +2665,7 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Wan_clip_preserves_an_aligned_authored_generated_frame_count()
+    public void Wan_clip_uses_its_own_resolved_frame_grid()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
@@ -2671,9 +2681,9 @@ public class WanRuntimeFlowTests
             WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
 
         Assert.True(StaticGeneratedFrameGrid.IsAligned(
-            17,
+            13,
             WanArchitectureModule.Instance.Descriptor.FrameGrid));
-        Assert.Equal(17, generator.CurrentMedia.Frames);
+        Assert.Equal(13, generator.CurrentMedia.Frames);
     }
 
     [Fact]
@@ -3759,7 +3769,8 @@ public class WanRuntimeFlowTests
     private static SwarmFrameWindowNode AssertWanSourceConformChain(
         WorkflowBridge bridge,
         int width,
-        int height)
+        int height,
+        int expectedFrames = WanSourcedFrames)
     {
         SwarmLoadVideoB64Node load = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -3777,7 +3788,7 @@ public class WanRuntimeFlowTests
         Assert.Equal(
             (int)Math.Round(WanSourcedStartSeconds * 24),
             window.StartFrame.LiteralAsInt());
-        Assert.Equal(WanSourcedFrames, window.FrameCount.LiteralAsInt());
+        Assert.Equal(expectedFrames, window.FrameCount.LiteralAsInt());
         ImageScaleNode scale = Assert.Single(
             bridge.Graph.NodesOfType<ImageScaleNode>(),
             node => node.Image.Connection?.Node == window);

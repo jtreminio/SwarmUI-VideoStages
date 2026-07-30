@@ -2,6 +2,7 @@ import {
     CONDITIONAL_RULE_CODES,
     isKnownConditionalRuleCode,
 } from "./conditionalRules";
+import { MAX_FRAME_GRID } from "./temporalGrid";
 import type {
     ArchitectureCapabilities,
     ArchitectureCatalogEntryDto,
@@ -347,6 +348,9 @@ export const parseVideoArchitectureCatalog = (
             !isTrimmedNonEmpty(raw.modelProfileId) ||
             !isTrimmedNonEmpty(raw.modelClassId) ||
             !isTrimmedNonEmpty(raw.compatibilityClassId) ||
+            !Number.isSafeInteger(raw.frameGrid) ||
+            Number(raw.frameGrid) < 1 ||
+            Number(raw.frameGrid) > MAX_FRAME_GRID ||
             !isEntryModeArray(raw.entryModes) ||
             raw.entryModes.length === 0 ||
             (raw.entryAbilities !== undefined &&
@@ -374,6 +378,7 @@ export const parseVideoArchitectureCatalog = (
             modelProfileId: raw.modelProfileId,
             modelClassId: raw.modelClassId,
             compatibilityClassId: raw.compatibilityClassId,
+            frameGrid: Number(raw.frameGrid),
             ...(raw.entryAbilities === undefined
                 ? {}
                 : { entryAbilities: [...raw.entryAbilities] }),

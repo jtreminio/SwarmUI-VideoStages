@@ -58,10 +58,14 @@ export const resolveTimelineTiming = (
         return { ...clip, boundaryOut: effective };
     });
     const plan = capabilities
-        ? crossfadePlanForClips(compacted, fps, (_left, position, mode) =>
-              capabilities
-                  .forBoundaryIndex(clips, indexes[position])
-                  .overlapConstraints(mode),
+        ? crossfadePlanForClips(
+              compacted,
+              fps,
+              (_left, position, mode) =>
+                  capabilities
+                      .forBoundaryIndex(clips, indexes[position])
+                      .overlapConstraints(mode),
+              (clip) => capabilities.forClip(clip).frameGrid,
           )
         : crossfadePlanForClips(compacted, fps);
     const seams = executableBoundaries(clips);
@@ -82,7 +86,13 @@ export const resolveTimelineTiming = (
         };
     });
     const clipFrames = clips.map((clip, clipIdx) =>
-        executable.has(clipIdx) ? framesForClip(clip.duration, fps) : 0,
+        executable.has(clipIdx)
+            ? framesForClip(
+                  clip.duration,
+                  fps,
+                  capabilities?.forClip(clip).frameGrid ?? 1,
+              )
+            : 0,
     );
     const generatedFrames = indexes.reduce(
         (sum, clipIdx) => sum + clipFrames[clipIdx],

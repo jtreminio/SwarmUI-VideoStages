@@ -24,7 +24,7 @@ internal static class WanStaticGeneratedFrameResolver
             throw new InvalidOperationException(
                 $"Clip {clipId} stage {stageId} has no resolved video model.");
         }
-        int frameGrid = resolvedModel.Architecture.FrameGrid;
+        int frameGrid = resolvedModel.FrameGrid;
         return new(
             StaticGeneratedFrameGrid.SnapDown(requestedPixelFrames, frameGrid),
             frameGrid);

@@ -373,6 +373,16 @@ internal sealed record ResolvedVideoModel(
     VideoArchitectureDescriptor Architecture)
 {
     /// <summary>
+    /// Temporal requirement of the resolved model handler. It currently defaults to the
+    /// architecture contract, while remaining model-scoped so a future handler can narrow it
+    /// without reintroducing global timeline policy.
+    /// </summary>
+    public int? HandlerFrameGridOverride { get; init; }
+
+    public int FrameGrid =>
+        HandlerFrameGridOverride ?? Architecture?.FrameGrid ?? 1;
+
+    /// <summary>
     /// Test and compatibility adapters receive a deterministic synthetic identity. Production
     /// registry resolutions must replace it and set <see cref="HostFactsAuthoritative"/>.
     /// </summary>

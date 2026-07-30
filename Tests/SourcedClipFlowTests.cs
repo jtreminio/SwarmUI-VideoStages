@@ -17,6 +17,7 @@ public partial class StageFlowTests
     // Duration 0.6s at the harness's 24 fps aligns to 17 spec frames (8n+1); the default continue
     // overlap (8) then resolves to a 9-frame window. StartSeconds 1.0 slices from frame 24.
     private const int SourcedClipFrames = 17;
+    private const int SourcedOnlyClipFrames = 16;
     private const double SourcedClipDuration = 0.6;
     private const double SourcedStartSeconds = 1.0;
 
@@ -61,7 +62,9 @@ public partial class StageFlowTests
             features: SourcedClipFeatures);
     }
 
-    private static SwarmFrameWindowNode AssertSourcedConformChain(WorkflowBridge bridge)
+    private static SwarmFrameWindowNode AssertSourcedConformChain(
+        WorkflowBridge bridge,
+        int expectedFrames = SourcedClipFrames)
     {
         SwarmLoadVideoB64Node loadVideo = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -80,7 +83,7 @@ public partial class StageFlowTests
         SwarmFrameWindowNode window = Assert.Single(
             bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
         Assert.Equal((int)Math.Round(SourcedStartSeconds * 24), window.StartFrame.LiteralAsInt());
-        Assert.Equal(SourcedClipFrames, window.FrameCount.LiteralAsInt());
+        Assert.Equal(expectedFrames, window.FrameCount.LiteralAsInt());
         Assert.Equal(resample.Id, window.ImagesInput.Connection!.Node.Id);
 
         ImageScaleNode scale = Assert.Single(
@@ -93,7 +96,7 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
             n => ReachesUpstream(bridge, n, components.Id));
         Assert.Equal(SourcedStartSeconds, trim.StartIndex.LiteralAsDouble());
-        Assert.Equal(SourcedClipFrames / 24.0, trim.Duration.LiteralAsDouble()!.Value, precision: 6);
+        Assert.Equal(expectedFrames / 24.0, trim.Duration.LiteralAsDouble()!.Value, precision: 6);
 
         return window;
     }
@@ -811,8 +814,10 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator g) = GenerateSourcedFlow(models, sourced);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        SwarmFrameWindowNode window = AssertSourcedConformChain(bridge);
-        Assert.Equal(SourcedClipFrames, g.CurrentMedia.Frames);
+        SwarmFrameWindowNode window = AssertSourcedConformChain(
+            bridge,
+            SourcedOnlyClipFrames);
+        Assert.Equal(SourcedOnlyClipFrames, g.CurrentMedia.Frames);
         INodeOutput currentOutput = bridge.ResolvePath((JArray)g.CurrentMedia.Path);
         Assert.True(
             ReachesUpstream(bridge, currentOutput.Node, window.Id),

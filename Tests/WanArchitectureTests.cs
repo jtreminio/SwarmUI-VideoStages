@@ -191,6 +191,7 @@ public class WanArchitectureTests
         Assert.Equal(
             WanArchitectureModule.Ti2v5bProfileId.Value,
             catalogModel.Value<string>("modelProfileId"));
+        Assert.Equal(WanArchitectureModule.FrameGrid, catalogModel.Value<int>("frameGrid"));
         Assert.Equal(
             ["text", "image"],
             catalogModel["entryAbilities"].Values<string>());
@@ -1196,25 +1197,25 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Static_generated_frames_use_the_resolved_architecture_grid()
+    public void Static_generated_frames_use_the_resolved_model_handler_grid()
     {
         Assert.Equal(4, WanArchitectureModule.FrameGrid);
         VideoArchitectureDescriptor descriptor =
-            WanArchitectureModule.Instance.Descriptor with
-            {
-                FrameGrid = 8,
-            };
+            WanArchitectureModule.Instance.Descriptor;
         ResolvedVideoModel resolved = new(
             "synthetic-wan",
             descriptor.Id,
             new("stale-profile-alias"),
-            descriptor);
+            descriptor)
+        {
+            HandlerFrameGridOverride = 6,
+        };
 
         WanStaticGeneratedFrameResolution resolution =
             WanStaticGeneratedFrameResolver.Resolve(16, 2, 10, resolved);
 
-        Assert.Equal(8, resolution.FrameGrid);
-        Assert.Equal(9, resolution.Frames);
+        Assert.Equal(6, resolution.FrameGrid);
+        Assert.Equal(13, resolution.Frames);
     }
 
     [Fact]

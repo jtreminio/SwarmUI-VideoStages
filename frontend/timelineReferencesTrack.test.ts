@@ -266,9 +266,8 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
             new MouseEvent("click", { bubbles: true, clientX: 60 }),
         );
 
-        // Half-way across five seconds is frame 40 at the stored 16fps, not 60
-        // at the host's default 24fps.
-        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(40);
+        // Inclusive frame geometry makes the stored 16fps clip 81 frames long.
+        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(41);
     });
 
     it("retimes a ref by dragging its thumbnail, suppressing the trailing click", () => {
@@ -282,8 +281,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
 
         expect(getSelection().kind).toBe("none");
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        // Half-way across a 5s clip @24fps → frame 60.
-        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(60);
+        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(61);
     });
 
     it("snaps a dragged reference to the nearest clip edge", () => {
@@ -301,7 +299,27 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
 
         dragThumb(thumb, 0, 60);
 
-        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(40);
+        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(41);
+    });
+
+    it("drags to the padded tail without aligning the effective frame count twice", async () => {
+        const catalog = testArchitectureCatalog();
+        const model = catalog.entries[0];
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => testArchitectureCatalogDto(catalog),
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        mountSelect("input_videomodel", {
+            options: [model.value],
+            value: model.value,
+        });
+        const body = setup([{ duration: 6.5, refs: [{ frame: 1 }] }], 4);
+        stubLaneRect(body, 0, 0, 120);
+
+        dragThumb(markEl(body, 0, 0), 0, 120);
+
+        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(33);
     });
 
     it("drags a bounded reference between its advertised endpoints", async () => {
@@ -385,10 +403,10 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
 
         dragThumb(thumb, 0, 60);
 
-        expect(thumb.querySelector(".vst-refs-ph")?.textContent).toBe("R 60");
-        expect(thumb.style.left).toBe("50%");
+        expect(thumb.querySelector(".vst-refs-ph")?.textContent).toBe("R 61");
+        expect(thumb.style.left).toBe("50.41322314049586%");
         expect(thumb.style.left).not.toBe(originalLeft);
-        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(60);
+        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(61);
     });
 
     it("drags the on-clip arrow together with the thumbnail", () => {
@@ -416,7 +434,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
             new MouseEvent("mousemove", { bubbles: true, clientX: 60 }),
         );
 
-        expect(arrow?.style.left).toBe("50%");
+        expect(arrow?.style.left).toBe("50.41322314049586%");
         document.dispatchEvent(
             new MouseEvent("mouseup", { bubbles: true, clientX: 60 }),
         );

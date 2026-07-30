@@ -1,5 +1,9 @@
 import { modelProfileForModel } from "./architectures/catalog";
 import {
+    resolveClipFrameGrid,
+    resolvedClipFrameGrid,
+} from "./architectures/temporalGrid";
+import {
     clamp,
     REF_FRAME_MIN,
     STAGE_REF_STRENGTH_DEFAULT,
@@ -225,7 +229,17 @@ export const removeIcLoraStrengthAt = (clip: Clip, entryIdx: number): void => {
 
 export const getReferenceFrameMax = (
     getRootDefaults: () => RootDefaults,
-    clip?: Pick<Clip, "duration">,
+    clip?: Pick<Clip, "duration"> &
+        Partial<
+            Pick<
+                Clip,
+                | "stages"
+                | "sourceVideo"
+                | "retake"
+                | "clipLengthFromAudio"
+                | "clipLengthFromControlNet"
+            >
+        >,
     effectiveFps?: number,
 ): number => {
     const defaults = getRootDefaults();
@@ -236,9 +250,53 @@ export const getReferenceFrameMax = (
             ? effectiveFps
             : defaults.fps;
     if (clip) {
-        return Math.max(REF_FRAME_MIN, framesForClip(clip.duration, fps));
+        const frameGrid = clip.stages
+            ? resolvedClipFrameGrid(
+                  { ...clip, stages: clip.stages },
+                  defaults.modelCatalog,
+              )
+            : 1;
+        return Math.max(
+            REF_FRAME_MIN,
+            framesForClip(clip.duration, fps, frameGrid),
+        );
     }
     return Math.max(REF_FRAME_MIN, defaults.frames);
+};
+
+/**
+ * Upper bound suitable for destructive normalization. Unknown, conflicting, and dormant model
+ * facts have no safe upper bound: preserve their authored reference positions for later repair.
+ */
+export const getKnownReferenceFrameMax = (
+    getRootDefaults: () => RootDefaults,
+    clip: Pick<Clip, "duration" | "stages"> &
+        Partial<
+            Pick<
+                Clip,
+                | "sourceVideo"
+                | "retake"
+                | "clipLengthFromAudio"
+                | "clipLengthFromControlNet"
+            >
+        >,
+    effectiveFps?: number,
+): number | null => {
+    const defaults = getRootDefaults();
+    const resolution = resolveClipFrameGrid(clip, defaults.modelCatalog);
+    if (resolution.status !== "resolved") {
+        return null;
+    }
+    const fps =
+        typeof effectiveFps === "number" &&
+        Number.isFinite(effectiveFps) &&
+        effectiveFps > 0
+            ? effectiveFps
+            : defaults.fps;
+    return Math.max(
+        REF_FRAME_MIN,
+        framesForClip(clip.duration, fps, resolution.frameGrid),
+    );
 };
 
 export const normalizeStage = (
@@ -386,26 +444,23 @@ export const normalizeStage = (
 
 export const normalizeRef = (
     rawRef: Record<string, unknown>,
-    frameMax: number,
+    frameMax: number | null,
 ): RefImage => {
     const fallback = buildDefaultRef();
     const source = textOr(rawRef.source, fallback.source);
+    const authoredFrame = Math.max(
+        REF_FRAME_MIN,
+        Math.round(numberOr(rawRef.frame, fallback.frame)),
+    );
     return {
         id: normalizeOptionalEntityId(rawRef.id),
         source,
         uploadFileName: textOr(rawRef.uploadFileName, "") || null,
         uploadedImage: normalizeUploadedMedia(rawRef.uploadedImage),
-        frame: Math.max(
-            REF_FRAME_MIN,
-            Math.round(
-                clampedNumber(
-                    rawRef.frame,
-                    fallback.frame,
-                    REF_FRAME_MIN,
-                    frameMax,
-                ),
-            ),
-        ),
+        frame:
+            frameMax === null
+                ? authoredFrame
+                : clamp(authoredFrame, REF_FRAME_MIN, frameMax),
         fromEnd: !!rawRef.fromEnd,
     };
 };

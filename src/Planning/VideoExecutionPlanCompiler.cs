@@ -26,7 +26,10 @@ internal static class VideoExecutionPlanCompiler
         ArgumentNullException.ThrowIfNull(architecturePlanning);
 
         EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(spec, architecturePlanning);
+            EffectiveVideoRequestProjector.Project(
+                spec,
+                rootEnvironment,
+                architecturePlanning);
         spec = request.Spec;
         architecturePlanning = request.ArchitecturePlanning;
         List<PlanDiagnostic> diagnostics =

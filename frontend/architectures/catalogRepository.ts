@@ -190,6 +190,7 @@ export const buildArchitectureModelCatalog = (
                 modelClassId: backendModel?.modelClassId ?? null,
                 compatibilityClassId:
                     backendModel?.compatibilityClassId ?? null,
+                frameGrid: backendModel?.frameGrid ?? null,
                 ...(backendModel?.entryAbilities === undefined
                     ? {}
                     : {

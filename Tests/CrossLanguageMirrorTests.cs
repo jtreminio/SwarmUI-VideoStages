@@ -19,8 +19,9 @@ namespace VideoStages.Tests;
 /// <list type="bullet">
 /// <item>M1 — typed boundary budgeting via <see cref="BoundaryOverlapPlanner"/> vs
 /// frontend <c>boundaryPlan.crossfadePlanForClips</c>.</item>
-/// <item>M2 — frame alignment: <see cref="ClipTimelineSpecParser.CalculateAlignedFrameCount"/> vs
-/// frontend <c>renderUtils.framesForClip</c>.</item>
+/// <item>M2 — resolved frame alignment: structural duration parsing plus
+/// <see cref="StaticGeneratedFrameGrid.SnapUp"/> vs frontend
+/// <c>renderUtils.framesForClip</c>.</item>
 /// <item>M4 — IC-LoRA auto-model naming: <see cref="IcLoraWeights"/> vs frontend
 /// <c>icLoraPresets</c>.</item>
 /// <item>Upscale mode classification: <see cref="StageUpscalePlanCompiler"/> vs frontend
@@ -79,8 +80,11 @@ public class CrossLanguageMirrorTests
         {
             double duration = c.Value<double>("durationSeconds");
             int fps = c.Value<int>("fps");
+            int frameGrid = c.Value<int>("frameGrid");
             int expected = c.Value<int>("expectedFrames");
-            Assert.Equal(expected, ClipTimelineSpecParser.CalculateAlignedFrameCount(duration, fps));
+            int structural =
+                ClipTimelineSpecParser.CalculateStructuralFrameCount(duration, fps);
+            Assert.Equal(expected, StaticGeneratedFrameGrid.SnapUp(structural, frameGrid));
         }
     }
 

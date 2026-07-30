@@ -5,18 +5,23 @@ export const escapeAttr = (value: unknown): string =>
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
-const FRAME_ALIGNMENT = 8;
-
-export const framesForClip = (durationSeconds: number, fps: number): number =>
-    Math.max(
+export const framesForClip = (
+    durationSeconds: number,
+    fps: number,
+    rawFrameGrid: number,
+): number => {
+    const frameGrid =
+        Number.isInteger(rawFrameGrid) && rawFrameGrid > 0 ? rawFrameGrid : 1;
+    return Math.max(
         1,
         Math.ceil(
             Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) /
-                FRAME_ALIGNMENT,
+                frameGrid,
         ) *
-            FRAME_ALIGNMENT +
+            frameGrid +
             1,
     );
+};
 
 export const snapDurationToFps = (seconds: number, fps: number): number => {
     if (

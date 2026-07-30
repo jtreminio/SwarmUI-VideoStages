@@ -16,6 +16,553 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public sealed class EffectiveVideoRequestTests
 {
+    [Theory]
+    [InlineData(1, 27)]
+    [InlineData(4, 29)]
+    [InlineData(6, 31)]
+    [InlineData(8, 33)]
+    public void Temporal_grid_is_applied_only_after_the_selected_model_resolves(
+        int frameGrid,
+        int expectedFrames)
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
+        ClipSpec clip = Clip(stage) with { Frames = 27 };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = frameGrid };
+        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => module, _ => descriptor));
+
+        Assert.Equal(27, authored.Clips[0].Frames);
+        Assert.Equal(expectedFrames, request.Spec.Clips[0].Frames);
+        Assert.Equal(
+            expectedFrames == 27 ? 0 : 1,
+            request.Decisions.Count(decision =>
+                decision.Code == "effective-request.temporal-grid"));
+    }
+
+    [Fact]
+    public void Active_stage_grids_resolve_to_their_least_common_grid()
+    {
+        StageSpec first = Stage(0, rawIndex: 0, model: "six-grid-model");
+        StageSpec second = Stage(1, rawIndex: 1, model: "eight-grid-model");
+        ClipSpec clip = Clip(first, second) with { Frames = 27 };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 1 };
+        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+        Dictionary<int, ResolvedVideoModel> stageModels = new()
+        {
+            [0] = new(first.Model, descriptor.Id, descriptor.DefaultProfileId, descriptor)
+            {
+                HandlerFrameGridOverride = 6,
+            },
+            [1] = new(second.Model, descriptor.Id, descriptor.DefaultProfileId, descriptor)
+            {
+                HandlerFrameGridOverride = 8,
+            },
+        };
+        ArchitecturePlanningResult architectures = new(
+            new Dictionary<int, ClipArchitectureAssignment>
+            {
+                [clip.Id] = new(clip.Id, module, descriptor, stageModels),
+            },
+            []);
+
+        EffectiveVideoRequest request =
+            EffectiveVideoRequestProjector.Project(authored, architectures);
+
+        Assert.Equal(49, request.Spec.Clips[0].Frames);
+        Assert.Contains(
+            request.Decisions,
+            decision => decision.Code == "effective-request.temporal-grid"
+                && decision.Message.Contains("24-frame temporal grid"));
+    }
+
+    [Fact]
+    public void Full_length_retake_tracks_the_resolved_effective_frame_count()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
+        {
+            RetakeWindow = new(2, 25, 0.6),
+        };
+        ClipSpec clip = Clip(stage) with { Frames = 27 };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => module, _ => descriptor));
+
+        Assert.Equal(25, authored.Clips[0].Stages[0].RetakeWindow.LengthFrames);
+        Assert.Equal(31, request.Spec.Clips[0].Stages[0].RetakeWindow.LengthFrames);
+    }
+
+    [Fact]
+    public void Text_to_video_root_uses_its_model_grid_even_when_control_is_zero()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
+        {
+            Control = 0,
+        };
+        ClipSpec clip = Clip(stage) with { Frames = 27 };
+        VideoStagesSpec authored = Spec(clip) with { IsTextToVideo = true };
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => module, _ => descriptor));
+
+        Assert.Equal(33, request.Spec.Clips[0].Frames);
+        Assert.Contains(
+            request.Decisions,
+            decision => decision.Code == "effective-request.temporal-grid");
+    }
+
+    [Fact]
+    public void Passthrough_after_a_sourced_text_to_video_lead_still_replaces_the_text_root()
+    {
+        StageSpec sourceStage = Stage(0, rawIndex: 0, model: "grid-model") with
+        {
+            Control = 0,
+        };
+        StageSpec trailingStage = Stage(0, rawIndex: 0, model: "grid-model") with
+        {
+            Control = 0,
+        };
+        ClipSpec source = Clip(sourceStage) with
+        {
+            Id = 0,
+            Frames = 27,
+            SourceVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
+        };
+        ClipSpec trailing = Clip(trailingStage) with { Id = 1, Frames = 27 };
+        VideoStagesSpec authored = Spec(source, trailing) with
+        {
+            IsTextToVideo = true,
+        };
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => module, _ => descriptor));
+
+        Assert.Equal(
+            new int?[] { 27, 33 },
+            request.Spec.Clips.Select(clip => clip.Frames));
+        Assert.Contains(
+            request.Decisions,
+            decision => decision.Code == "effective-request.temporal-grid");
+    }
+
+    [Fact]
+    public void Global_refine_root_does_not_force_passthrough_model_execution()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
+        {
+            Control = 0,
+        };
+        ClipSpec clip = Clip(stage) with { Frames = 27 };
+        VideoStagesSpec authored = Spec(clip) with { IsTextToVideo = true };
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            new(
+                HostRootKind.TextToVideoRoot,
+                CanHandoffHostCore: true,
+                HasGlobalRefineSource: true),
+            Resolve(authored, _ => module, _ => descriptor));
+
+        Assert.Equal(27, request.Spec.Clips[0].Frames);
+        Assert.DoesNotContain(
+            request.Decisions,
+            decision => decision.Code == "effective-request.temporal-grid");
+    }
+
+    [Fact]
+    public void Temporal_grid_runs_after_architecture_effective_value_projection()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
+        ClipSpec clip = Clip(stage) with { Frames = 27 };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        int? framesSeenByArchitecture = null;
+        RecordingProjectionModule module = new(
+            descriptor,
+            context =>
+            {
+                ArchitectureOwnedEffectiveClip owned = Assert.Single(context.OwnedClips);
+                framesSeenByArchitecture = owned.Clip.Frames;
+                return new(
+                [
+                    new(
+                        owned.TimelineIndex,
+                        owned.Clip with { Frames = 28 },
+                        []),
+                ],
+                []);
+            });
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => module, _ => descriptor));
+
+        Assert.Equal(27, framesSeenByArchitecture);
+        Assert.Equal(33, request.Spec.Clips[0].Frames);
+        Assert.Contains(
+            request.Decisions,
+            decision => decision.Code == "effective-request.temporal-grid"
+                && decision.Message.Contains("authored 27-frame")
+                && decision.Message.Contains("architecture-projected to 28"));
+    }
+
+    [Fact]
+    public void Authored_full_retake_survives_architecture_frame_projection()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
+        {
+            RetakeWindow = new(2, 25, 0.6),
+        };
+        ClipSpec clip = Clip(stage) with { Frames = 27 };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        RecordingProjectionModule module = new(
+            descriptor,
+            context =>
+            {
+                ArchitectureOwnedEffectiveClip owned = Assert.Single(context.OwnedClips);
+                return new(
+                [
+                    new(
+                        owned.TimelineIndex,
+                        owned.Clip with { Frames = 28 },
+                        []),
+                ],
+                []);
+            });
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => module, _ => descriptor));
+
+        Assert.Equal(33, request.Spec.Clips[0].Frames);
+        Assert.Equal(
+            31,
+            request.Spec.Clips[0].Stages[0].RetakeWindow.LengthFrames);
+    }
+
+    [Fact]
+    public void Architecture_owned_retake_projection_is_not_overwritten_by_common_grid_logic()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
+        {
+            RetakeWindow = new(2, 25, 0.6),
+        };
+        ClipSpec clip = Clip(stage) with { Frames = 27 };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        RetakeWindowSpec projectedRetake = new(10, 5, 0.4);
+        RecordingProjectionModule module = new(
+            descriptor,
+            context =>
+            {
+                ArchitectureOwnedEffectiveClip owned = Assert.Single(context.OwnedClips);
+                StageSpec projectedStage = Assert.Single(owned.Clip.Stages) with
+                {
+                    RetakeWindow = projectedRetake,
+                };
+                return new(
+                [
+                    new(
+                        owned.TimelineIndex,
+                        owned.Clip with
+                        {
+                            Frames = 28,
+                            Stages = [projectedStage],
+                        },
+                        []),
+                ],
+                []);
+            });
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => module, _ => descriptor));
+
+        Assert.Equal(33, request.Spec.Clips[0].Frames);
+        Assert.Equal(projectedRetake, request.Spec.Clips[0].Stages[0].RetakeWindow);
+    }
+
+    [Fact]
+    public void Retake_end_adjustment_is_audited_when_architecture_frames_are_already_aligned()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
+        {
+            RetakeWindow = new(2, 25, 0.6),
+        };
+        ClipSpec clip = Clip(stage) with { Frames = 27 };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        RecordingProjectionModule module = new(
+            descriptor,
+            context =>
+            {
+                ArchitectureOwnedEffectiveClip owned = Assert.Single(context.OwnedClips);
+                return new(
+                [
+                    new(
+                        owned.TimelineIndex,
+                        owned.Clip with { Frames = 33 },
+                        []),
+                ],
+                []);
+            });
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => module, _ => descriptor));
+
+        Assert.Equal(31, request.Spec.Clips[0].Stages[0].RetakeWindow.LengthFrames);
+        Assert.Contains(
+            request.Decisions,
+            decision => decision.Code == "effective-request.temporal-retake-end"
+                && decision.Disposition == EffectiveRequestDisposition.Execute);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void Runtime_derived_lengths_are_not_projected_onto_a_static_grid(
+        bool fromAudio,
+        bool fromControl)
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
+        ClipSpec clip = Clip(stage) with
+        {
+            Frames = 27,
+            ClipLengthFromAudio = fromAudio,
+            ClipLengthFromControlNet = fromControl,
+        };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => module, _ => descriptor));
+
+        Assert.Equal(27, request.Spec.Clips[0].Frames);
+        Assert.DoesNotContain(
+            request.Decisions,
+            decision => decision.Code == "effective-request.temporal-grid");
+    }
+
+    [Fact]
+    public void Sourced_passthrough_stages_do_not_change_the_source_frame_count()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
+        {
+            Control = 0,
+        };
+        ClipSpec clip = Clip(stage) with
+        {
+            Frames = 27,
+            SourceVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
+        };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => module, _ => descriptor));
+
+        Assert.Equal(27, request.Spec.Clips[0].Frames);
+        Assert.DoesNotContain(
+            request.Decisions,
+            decision => decision.Code == "effective-request.temporal-grid");
+    }
+
+    [Fact]
+    public void Work_ignored_by_an_architecture_does_not_activate_its_temporal_grid()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0) with
+        {
+            Control = 0,
+            RetakeWindow = new(0, 28, 0.6),
+        };
+        ClipSpec clip = Clip(stage) with
+        {
+            Frames = 28,
+            SourceVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
+        };
+        VideoStagesSpec authored = Spec(clip);
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            ResolveWan(authored));
+
+        Assert.Equal(28, request.Spec.Clips[0].Frames);
+        Assert.Null(request.Spec.Clips[0].Stages[0].RetakeWindow);
+        Assert.Contains(
+            request.Decisions,
+            decision => decision.Code == "effective-request.wan-retake-ignored");
+        Assert.DoesNotContain(
+            request.Decisions,
+            decision => decision.Code == "effective-request.temporal-grid");
+    }
+
+    [Fact]
+    public void Admission_blocked_clips_do_not_claim_temporal_execution()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
+        ClipSpec clip = Clip(stage) with { Frames = 27 };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+        ArchitecturePlanningResult resolved =
+            Resolve(authored, _ => module, _ => descriptor);
+        ArchitecturePlanningResult blocked = resolved with
+        {
+            Diagnostics =
+            [
+                new(
+                    PlanDiagnosticSeverity.Error,
+                    "architecture-authored-stage-model-unresolved",
+                    "Skipped suffix model is unavailable.",
+                    clip.Id,
+                    RawStageIndex: 1),
+            ],
+        };
+
+        EffectiveVideoRequest request =
+            EffectiveVideoRequestProjector.Project(authored, blocked);
+
+        Assert.Equal(27, request.Spec.Clips[0].Frames);
+        Assert.DoesNotContain(
+            request.Decisions,
+            decision => decision.Code == "effective-request.temporal-grid");
+    }
+
+    [Fact]
+    public void Architecture_projection_blocks_suppress_temporal_execution()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
+        ClipSpec clip = Clip(stage) with { Frames = 27 };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        RecordingProjectionModule module = new(
+            descriptor,
+            context =>
+            {
+                ArchitectureOwnedEffectiveClip owned = Assert.Single(context.OwnedClips);
+                return new(
+                [
+                    new(
+                        owned.TimelineIndex,
+                        owned.Clip,
+                        [
+                            EffectiveRequestDecision.Block(
+                                "effective-request.test-block",
+                                "Test architecture block.",
+                                owned.Clip.Id),
+                        ]),
+                ],
+                []);
+            });
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => module, _ => descriptor));
+
+        Assert.Equal(27, request.Spec.Clips[0].Frames);
+        Assert.Contains(clip.Id, request.BlockedClipIds);
+        Assert.DoesNotContain(
+            request.Decisions,
+            decision => decision.Code == "effective-request.temporal-grid");
+    }
+
+    [Fact]
+    public void Unrepresentable_active_stage_grid_combination_blocks_instead_of_guessing()
+    {
+        StageSpec first = Stage(0, rawIndex: 0, model: "grid-a");
+        StageSpec second = Stage(1, rawIndex: 1, model: "grid-b");
+        ClipSpec clip = Clip(first, second) with { Frames = 27 };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 1 };
+        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+        Dictionary<int, ResolvedVideoModel> stageModels = new()
+        {
+            [0] = new(first.Model, descriptor.Id, descriptor.DefaultProfileId, descriptor)
+            {
+                HandlerFrameGridOverride = 50_000,
+            },
+            [1] = new(second.Model, descriptor.Id, descriptor.DefaultProfileId, descriptor)
+            {
+                HandlerFrameGridOverride = 50_001,
+            },
+        };
+        ArchitecturePlanningResult architectures = new(
+            new Dictionary<int, ClipArchitectureAssignment>
+            {
+                [clip.Id] = new(clip.Id, module, descriptor, stageModels),
+            },
+            []);
+
+        EffectiveVideoRequest request =
+            EffectiveVideoRequestProjector.Project(authored, architectures);
+
+        Assert.Contains(clip.Id, request.BlockedClipIds);
+        Assert.Contains(
+            request.Decisions,
+            decision => decision.Code
+                    == "effective-request.temporal-grid-conflict"
+                && decision.Disposition == EffectiveRequestDisposition.Block);
+    }
+
+    [Fact]
+    public void Unrepresentable_aligned_frame_count_blocks_instead_of_overflowing()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
+        ClipSpec clip = Clip(stage) with { Frames = int.MaxValue };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => module, _ => descriptor));
+
+        Assert.Contains(clip.Id, request.BlockedClipIds);
+        Assert.Contains(
+            request.Decisions,
+            decision => decision.Code
+                    == "effective-request.temporal-frame-count-overflow"
+                && decision.Disposition == EffectiveRequestDisposition.Block);
+    }
+
     [Fact]
     public void Projection_preserves_authored_values_and_removes_every_ignored_Wan_value()
     {
@@ -846,6 +1393,17 @@ public sealed class EffectiveVideoRequestTests
         }
         return new(assignments, []);
     }
+
+    private static ArchitectureEffectiveRequestProjection IdentityProjection(
+        ArchitectureEffectiveRequestProjectionContext context) =>
+        new(
+            context.OwnedClips
+                .Select(owned => new ArchitectureProjectedEffectiveClip(
+                    owned.TimelineIndex,
+                    owned.Clip,
+                    []))
+                .ToArray(),
+            []);
 
     private static InvalidOperationException AssertContractViolation(
         VideoStagesSpec authored,

@@ -24,7 +24,8 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator generator) = GenerateSourcedFlow(models, sourced);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        SwarmFrameWindowNode window = AssertSourcedConformChain(bridge);
+        SwarmFrameWindowNode window =
+            AssertSourcedConformChain(bridge, SourcedOnlyClipFrames);
         Assert.Empty(SamplerNodesOrdered(bridge));
         INodeOutput currentOutput = bridge.ResolvePath((JArray)generator.CurrentMedia.Path);
         Assert.True(ReachesUpstream(bridge, currentOutput.Node, window.Id));
@@ -52,12 +53,13 @@ public partial class StageFlowTests
                 features: SourcedClipFeatures.Concat(["frameinterps"]));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        SwarmFrameWindowNode sourceWindow = AssertSourcedConformChain(bridge);
+        SwarmFrameWindowNode sourceWindow =
+            AssertSourcedConformChain(bridge, SourcedOnlyClipFrames);
         ComfyNode rife = Assert.Single(
             bridge.Graph.Nodes.Values,
             node => node.ClassTypeName == "RIFE VFI");
         Assert.True(ReachesUpstream(bridge, rife, sourceWindow.Id));
-        Assert.Equal(SourcedClipFrames * 2 - 1, generator.CurrentMedia.Frames);
+        Assert.Equal(SourcedOnlyClipFrames * 2 - 1, generator.CurrentMedia.Frames);
         Assert.Equal(48, generator.CurrentMedia.GetRawFPS());
         Assert.Equal(new JArray(rife.Id, 0), generator.CurrentMedia.Path);
 
@@ -149,13 +151,13 @@ public partial class StageFlowTests
         SwarmTrimFramesNode videoTrim = Assert.Single(
             bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
         Assert.Equal(new JArray(videoTrim.Id, 0), generator.CurrentMedia.Path);
-        Assert.Equal(SourcedClipFrames - 5, generator.CurrentMedia.Frames);
+        Assert.Equal(SourcedOnlyClipFrames - 5, generator.CurrentMedia.Frames);
 
         TrimAudioDurationNode audioTrim = Assert.IsType<TrimAudioDurationNode>(
             bridge.ResolvePath(generator.CurrentMedia.AttachedAudio.Path).Node);
         Assert.Equal(2 / 24.0, audioTrim.StartIndex.LiteralAsDouble()!.Value, precision: 6);
         Assert.Equal(
-            (SourcedClipFrames - 5) / 24.0,
+            (SourcedOnlyClipFrames - 5) / 24.0,
             audioTrim.Duration.LiteralAsDouble()!.Value,
             precision: 6);
         AssertWorkflowHasNoCycles(workflow);
@@ -190,7 +192,7 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
         Assert.True(ReachesUpstream(bridge, videoTrim.Image.Connection!.Node, merge.Id));
         Assert.Equal(new JArray(videoTrim.Id, 0), generator.CurrentMedia.Path);
-        Assert.Equal(SourcedClipFrames * 2 - 3, generator.CurrentMedia.Frames);
+        Assert.Equal(SourcedOnlyClipFrames * 2 - 3, generator.CurrentMedia.Frames);
 
         TrimAudioDurationNode audioTrim = Assert.IsType<TrimAudioDurationNode>(
             bridge.ResolvePath(generator.CurrentMedia.AttachedAudio.Path).Node);
@@ -198,7 +200,7 @@ public partial class StageFlowTests
         Assert.True(ReachesUpstream(bridge, audioTrim, audioConcat.Id));
         Assert.Equal(1 / 24.0, audioTrim.StartIndex.LiteralAsDouble()!.Value, precision: 6);
         Assert.Equal(
-            (SourcedClipFrames * 2 - 3) / 24.0,
+            (SourcedOnlyClipFrames * 2 - 3) / 24.0,
             audioTrim.Duration.LiteralAsDouble()!.Value,
             precision: 6);
         AssertWorkflowHasNoCycles(workflow);

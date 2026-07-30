@@ -284,20 +284,38 @@ public class BackendConsolidationTests
             StableNodeIds.AudioWindowMask.Width));
     }
 
-    // --- 5e: the frame grid is a declared architecture fact ------------------------------------
+    // --- 5e: authored time parsing is structural ------------------------------------------------
 
     [Fact]
-    public void Frame_grid_comes_from_the_architecture_not_a_neutral_literal()
+    public void Authored_duration_parsing_does_not_import_a_global_architecture_grid()
     {
-        int declared = VideoArchitectureRegistry.Production.Catalog
-            .Select(architecture => architecture.FrameGrid)
-            .Max();
-
-        Assert.Equal(Ltx2ArchitectureModule.FrameGrid, declared);
-        Assert.Equal(declared, ClipTimelineSpecParser.FrameAlignment);
         Assert.Equal(
-            declared + 1,
-            ClipTimelineSpecParser.CalculateAlignedFrameCount(declared / 24.0, 24));
+            27,
+            ClipTimelineSpecParser.CalculateStructuralFrameCount(1.05, 24));
+    }
+
+    [Fact]
+    public void Authored_duration_parsing_rejects_unrepresentable_counts()
+    {
+        Assert.Throws<OverflowException>(
+            () => ClipTimelineSpecParser.CalculateStructuralFrameCount(
+                int.MaxValue,
+                1));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => ClipTimelineSpecParser.CalculateStructuralFrameCount(
+                double.PositiveInfinity,
+                24));
+    }
+
+    [Fact]
+    public void Retake_window_clamping_cannot_wrap_its_endpoint()
+    {
+        Assert.Equal(
+            (int.MaxValue - 2, int.MaxValue),
+            RetakeWindowSpec.ClampFrameWindow(
+                int.MaxValue - 2,
+                int.MaxValue,
+                int.MaxValue));
     }
 
     // --- 5e: published rule constraints are the values the evaluator enforces ------------------

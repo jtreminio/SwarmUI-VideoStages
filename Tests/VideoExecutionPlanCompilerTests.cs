@@ -603,9 +603,9 @@ public class VideoExecutionPlanCompilerTests
     {
         VideoStagesSpec spec = Spec(
             false,
-            GeneratedClip(0, Stage(10)) with { Frames = 48 },
-            GeneratedClip(1, Stage(11)) with { Frames = 48 },
-            GeneratedClip(2, Stage(12)) with { Frames = 48 }) with
+            GeneratedClip(0, Stage(10)) with { Frames = 49 },
+            GeneratedClip(1, Stage(11)) with { Frames = 49 },
+            GeneratedClip(2, Stage(12)) with { Frames = 49 }) with
         {
             TimelineAudioSegments =
             [
@@ -625,10 +625,16 @@ public class VideoExecutionPlanCompilerTests
         AudioSegmentItemPlan[] projected = plan.Clips
             .SelectMany(clip => clip.Audio.Segments.Items)
             .ToArray();
+        double clipSeconds = 49 / 24.0;
+        double firstLength = clipSeconds - 1.5;
         Assert.Equal(3, projected.Length);
         Assert.Equal([1.5d, 0d, 0d], projected.Select(item => item.StartSeconds));
-        Assert.Equal([0.5d, 2d, 0.5d], projected.Select(item => item.LengthSeconds));
-        Assert.Equal([10d, 10.5d, 12.5d], projected.Select(item => item.TrimStartSeconds));
+        Assert.Equal(
+            [firstLength, clipSeconds, 4.5 - clipSeconds * 2],
+            projected.Select(item => item.LengthSeconds));
+        Assert.Equal(
+            [10d, 10 + firstLength, 10 + firstLength + clipSeconds],
+            projected.Select(item => item.TrimStartSeconds));
         Assert.All(projected, item =>
         {
             Assert.Equal(AudioSourceKind.Upload, item.SourceKind);

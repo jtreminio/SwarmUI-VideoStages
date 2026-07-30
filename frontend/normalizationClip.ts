@@ -36,7 +36,7 @@ import {
     buildDefaultRef,
     buildDefaultStage,
     buildDefaultStageRefStrengths,
-    getReferenceFrameMax,
+    getKnownReferenceFrameMax,
     normalizeRef,
     normalizeStage,
     normalizeStageIcLoraStrengths,
@@ -191,14 +191,6 @@ export const normalizeClip = (
         fps,
     );
     const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
-    const refFrameMax = getReferenceFrameMax(
-        getRootDefaults,
-        { duration },
-        fps,
-    );
-    const refs = refsRaw.map((rawRef) =>
-        normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax),
-    );
     const clipScopedLoras = normalizeStageLoras(rawClip.loras);
     const loraNames: string[] = [];
     const loraDefaultWeightByName = new Map<string, number>();
@@ -236,7 +228,7 @@ export const normalizeClip = (
                 getDefaultStageModel,
                 isRecord(stagesRaw[i]) ? stagesRaw[i] : {},
                 previousStage,
-                refs.length,
+                refsRaw.length,
                 i,
                 sourceVideo !== null,
                 loras,
@@ -252,6 +244,29 @@ export const normalizeClip = (
             stages[index].skipped = true;
         }
     }
+    // Preserved exactly as authored: a source that cannot supply a length is
+    // reported by architecture diagnostics, never silently erased here. Only
+    // the mutual exclusion between the two flags is enforced, with ControlNet
+    // precedence matching VideoClipSpecParser and AudioLengthPlanCompiler.
+    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
+    const clipLengthFromAudio =
+        !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
+    const retake = normalizeRetake(rawClip.retake, duration);
+    const refFrameMax = getKnownReferenceFrameMax(
+        getRootDefaults,
+        {
+            duration,
+            stages,
+            sourceVideo,
+            retake,
+            clipLengthFromAudio,
+            clipLengthFromControlNet,
+        },
+        fps,
+    );
+    const refs = refsRaw.map((rawRef) =>
+        normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax),
+    );
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const stageZero = stages[0] ?? null;
     const persistedArchitecture = trimmedText(rawClip.architecture);
@@ -307,13 +322,6 @@ export const normalizeClip = (
                       icLoraDefaultStrengths),
         );
     }
-    // Preserved exactly as authored: a source that cannot supply a length is
-    // reported by architecture diagnostics, never silently erased here. Only
-    // the mutual exclusion between the two flags is enforced, with ControlNet
-    // precedence matching VideoClipSpecParser and AudioLengthPlanCompiler.
-    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
-    const clipLengthFromAudio =
-        !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
     const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
     const boundaryRule = architectureDescriptor(
         defaults.modelCatalog,
@@ -346,7 +354,7 @@ export const normalizeClip = (
         uploadedAudio: normalizeUploadedMedia(rawClip.uploadedAudio),
         prompt: text(rawClip.prompt),
         promptWindows: normalizePromptWindows(rawClip),
-        retake: normalizeRetake(rawClip.retake, duration),
+        retake,
         sourceVideo,
         refs,
         stages,

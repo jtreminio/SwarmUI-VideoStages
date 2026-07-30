@@ -26,7 +26,8 @@ public sealed record RetakeWindowSpec(
     public static (int Start, int End) ClampFrameWindow(int startFrame, int lengthFrames, int limitFrames)
     {
         int start = Math.Clamp(startFrame, 0, limitFrames);
-        int end = Math.Clamp(startFrame + Math.Max(0, lengthFrames), start, limitFrames);
+        long requestedEnd = (long)startFrame + Math.Max(0, lengthFrames);
+        int end = (int)Math.Clamp(requestedEnd, start, (long)limitFrames);
         return (start, end);
     }
 }

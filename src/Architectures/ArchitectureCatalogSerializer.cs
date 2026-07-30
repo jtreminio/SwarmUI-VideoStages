@@ -135,6 +135,7 @@ internal static class ArchitectureCatalogSerializer
         ["modelProfileId"] = model.ModelProfileId.Value,
         ["modelClassId"] = model.ModelClassId,
         ["compatibilityClassId"] = model.CompatibilityClassId,
+        ["frameGrid"] = model.FrameGrid,
         ["entryAbilities"] = new JArray(ModelEntryAbilities(model.EntryAbilities)),
         ["enhancements"] = new JObject
         {

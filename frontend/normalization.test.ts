@@ -102,6 +102,21 @@ describe("normalization", () => {
         expect(ref.frame).toBe(10);
     });
 
+    it("normalizeClip preserves tail references while an authored model is unavailable", () => {
+        const clip = normalizeClip(
+            {
+                duration: 1.05,
+                stages: [{ ...minimalStageRaw, model: "removed-model" }],
+                refs: [{ source: REF_SOURCE_BASE, frame: 33 }],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+
+        expect(clip.stages[0].model).toBe("removed-model");
+        expect(clip.refs[0].frame).toBe(33);
+    });
+
     it("normalizeStageRefStrengthValue accepts 0 without clamping up", () => {
         expect(normalizeStageRefStrengthValue(0)).toBe(0);
         expect(normalizeStageRefStrengthValue("0")).toBe(0);
@@ -697,6 +712,23 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
+        expect(clip.clipLengthFromAudio).toBe(true);
+    });
+
+    it("normalizeClip preserves reference positions while clip length is runtime-derived", () => {
+        const clip = normalizeClip(
+            {
+                duration: 1.05,
+                clipLengthFromAudio: true,
+                refs: [{ source: "Base", frame: 100 }],
+                stages: [{ model: "ltx-2.3.safetensors" }],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+            24,
+        );
+
+        expect(clip.refs[0].frame).toBe(100);
         expect(clip.clipLengthFromAudio).toBe(true);
     });
 

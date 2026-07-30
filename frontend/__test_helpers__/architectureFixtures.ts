@@ -189,6 +189,7 @@ export const testArchitectureCatalog = (
             modelProfileId: "ltx-2.3",
             modelClassId: "ltx-video",
             compatibilityClassId: "ltx-video",
+            frameGrid: 8,
             entryModes: [
                 "text-to-video",
                 "image-to-video",
@@ -203,6 +204,7 @@ export const testArchitectureCatalog = (
             modelProfileId: "ltx-2.3",
             modelClassId: "ltx-video",
             compatibilityClassId: "ltx-video",
+            frameGrid: 8,
             entryModes: [
                 "text-to-video",
                 "image-to-video",
@@ -229,6 +231,7 @@ export const testArchitectureCatalogDto = (
                       compatibilityClassId:
                           entry.compatibilityClassId ??
                           "test-compatibility-class",
+                      frameGrid: entry.frameGrid ?? 1,
                       ...(entry.entryAbilities
                           ? { entryAbilities: [...entry.entryAbilities] }
                           : {}),
@@ -363,6 +366,7 @@ export const fakeArchitectureCatalog = (
             modelProfileId: "test-profile",
             modelClassId: "test-video",
             compatibilityClassId: "test-video",
+            frameGrid: 1,
             entryModes: [
                 "text-to-video",
                 "image-to-video",

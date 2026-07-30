@@ -350,7 +350,7 @@ const renderRegions = (
                 renderKeyframes(
                     clip,
                     layout.index,
-                    layout.durationSeconds,
+                    layout.generatedDurationSeconds,
                     fps,
                     unit,
                 ) +

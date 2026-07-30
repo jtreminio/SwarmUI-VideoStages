@@ -679,7 +679,7 @@ public class PlanningCompilerComponentTests
     {
         ArchitecturePlanningResult architecture = TestPlanCompiler.ResolveLtx(spec);
         EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(spec, architecture);
+            EffectiveVideoRequestProjector.Project(spec, environment, architecture);
         spec = request.Spec;
         architecture = request.ArchitecturePlanning;
         List<PlanDiagnostic> diagnostics =

@@ -1,4 +1,5 @@
 using Newtonsoft.Json.Linq;
+using SwarmUI.Utils;
 
 namespace VideoStages;
 
@@ -29,6 +30,28 @@ internal static class VideoClipSpecParser
             clipObject, "clipLengthFromControlNet", false);
         bool reuseAudio = VideoStagesJsonReader.GetOptionalBool(
             clipObject, "reuseAudio", false);
+        if (!double.IsFinite(duration) || duration < 0)
+        {
+            throw new SwarmUserErrorException(
+                $"VideoStages: {location} duration must be a finite non-negative number.");
+        }
+        double durationSeconds = duration;
+        int? clipFrames = null;
+        if (durationSeconds > 0)
+        {
+            try
+            {
+                clipFrames = ClipTimelineSpecParser.CalculateStructuralFrameCount(
+                    durationSeconds,
+                    context.Fps);
+            }
+            catch (OverflowException)
+            {
+                throw new SwarmUserErrorException(
+                    $"VideoStages: {location} duration at {context.Fps} fps exceeds the "
+                        + "supported frame range.");
+            }
+        }
 
         IReadOnlyList<IcLoraSpec> icLoras =
             VideoStageResourceParser.ParseIcLoras(clipObject, context.Warn);
@@ -44,11 +67,6 @@ internal static class VideoClipSpecParser
         List<StageSpec> stages = ParseStages(
             rawStages, clipIndex, references.Count, sourceVideo is not null, context);
         ApplyRetake(stages, clipObject, clipIndex, duration, sourceVideo is not null, context);
-
-        double durationSeconds = Math.Max(0, duration);
-        int? clipFrames = durationSeconds > 0
-            ? ClipTimelineSpecParser.CalculateAlignedFrameCount(durationSeconds, context.Fps)
-            : null;
 
         return new ClipSpec(
             Id: clipIndex,

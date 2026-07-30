@@ -26,6 +26,12 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
         foreach (IVideoArchitectureModule module in resolved)
         {
             VideoArchitectureDescriptor descriptor = module.Descriptor;
+            if (descriptor.FrameGrid < 1)
+            {
+                throw new InvalidOperationException(
+                    $"Video architecture '{descriptor.Id}' has invalid frame grid "
+                        + $"{descriptor.FrameGrid}; grids must be positive.");
+            }
             if (module is not IArchitectureEffectiveRequestProjector projector)
             {
                 if (descriptor.IgnoredUnsupportedFeatures.Count > 0)
@@ -128,6 +134,7 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                     || string.IsNullOrWhiteSpace(match.ModelClassId)
                     || string.IsNullOrWhiteSpace(match.CompatibilityClassId)
                     || match.EntryAbilities == VideoModelEntryAbility.None
+                    || match.FrameGrid < 1
                     || !match.HostFactsAuthoritative)
                 {
                     throw new InvalidOperationException(

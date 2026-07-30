@@ -17,11 +17,11 @@ import {
 } from "./conditionalRules";
 import { NONE_ARCHITECTURE_ID } from "./none/identity";
 import { createBoundaryCapabilityViews } from "./policy/boundaryPolicy";
+import { createClipStageCapabilityViews } from "./policy/clipStageViews";
 import {
     architectureFeatureSupport,
-    createClipStageCapabilityViews,
-} from "./policy/clipStageViews";
-import { upscaleModeForMethod } from "./policy/featureValues";
+    upscaleModeForMethod,
+} from "./policy/featureValues";
 import type { AuthoringFeature } from "./policy/types";
 import type {
     ArchitectureCapabilities,
@@ -258,13 +258,30 @@ export const deriveArchitectureDiagnostics = (
     const modelByName = new Map(
         catalog.entries.map((entry) => [entry.value, entry]),
     );
+    const clipStageViews = createClipStageCapabilityViews(
+        architectureById,
+        modelByName,
+    );
     const boundaries = createBoundaryCapabilityViews(
         architectureById,
-        createClipStageCapabilityViews(architectureById, modelByName).forClip,
+        clipStageViews.forClip,
     );
     const executableClipIndexSet = new Set(executableClipIndexes(clips));
 
     clips.forEach((clip, clipIdx) => {
+        const temporalGrid = clipStageViews.forClip(clip).frameGridResolution;
+        if (
+            executableClipIndexSet.has(clipIdx) &&
+            temporalGrid.status === "conflict"
+        ) {
+            diagnostics.push(
+                issue(
+                    "architecture.temporal-grid-conflict",
+                    `Clip ${clipIdx}'s active model handlers have no representable compatible temporal grid. Use stage models with compatible temporal requirements.`,
+                    clipIdx,
+                ),
+            );
+        }
         const sourceOnly =
             activeStageCount(clip) === 0 && clip.sourceVideo !== null;
         const resolvedFirstModel =

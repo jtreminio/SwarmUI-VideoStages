@@ -398,7 +398,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         expect(savedClips(saveSpy)[0].duration).toBe(4.5);
     });
 
-    it("uses stored 16fps for duration snapping and reference clamping on resize", () => {
+    it("preserves a dormant reference when resizing an unresolved model", () => {
         clipsSection(
             [
                 {
@@ -428,6 +428,6 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         const clips = savedClips(saveSpy);
         expect(persistence.getState().fps).toBe(16);
         expect(clips[0].duration).toBe(1.3);
-        expect(clips[0].refs[0].frame).toBe(25);
+        expect(clips[0].refs[0].frame).toBe(999);
     });
 });

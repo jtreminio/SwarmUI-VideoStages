@@ -115,7 +115,9 @@ internal sealed class WanGenerationSession(
                 stageInput.ConfigurePassthrough(
                     clip,
                     stage,
-                    ResolveFrames(clip, stage, sectionId: null));
+                    stage.Input == StageInputKind.PreviousStage
+                        ? g.CurrentMedia?.Frames
+                        : ResolveRequestedFrames(clip, stage, sectionId: null));
                 hostScope.PublishIntermediate(stage);
                 continue;
             }
@@ -576,41 +578,44 @@ internal sealed class WanGenerationSession(
     }
 
     /// <summary>
-    /// An authored clip duration wins; otherwise a generated clip inherits the host video length.
-    /// Sourced clips always carry an authored frame window from the source plan. Either way the
-    /// count is snapped, because Wan generates whole latent frames and an off-grid request silently
-    /// yields fewer pixel frames than were asked for.
+    /// An authored clip duration wins; otherwise a stage inherits the applicable host video length.
+    /// Passthrough stages consume this structural count directly; only generating stages project it
+    /// onto the resolved model handler's temporal grid.
     /// </summary>
-    private int? ResolveFrames(ClipPlan clip, StagePlan stage, int? sectionId)
+    private int? ResolveRequestedFrames(
+        ClipPlan clip,
+        StagePlan stage,
+        int? sectionId)
     {
-        int? requested;
         if (clip.Frames is int authored && authored > 0)
         {
-            requested = authored;
+            return authored;
         }
-        else if (clip.EntryMode == ArchitectureEntryMode.TextToVideo)
+        if (clip.EntryMode == ArchitectureEntryMode.TextToVideo)
         {
-            requested = stage.Input == StageInputKind.EmptyLatent
+            return stage.Input == StageInputKind.EmptyLatent
                 ? g.UserInput.Get(T2IParamTypes.Text2VideoFrames, 81)
                 : g.CurrentMedia?.Frames;
         }
-        else if (sectionId is int scopedSection)
+        if (sectionId is int scopedSection)
         {
-            requested = g.UserInput.TryGet(
+            return g.UserInput.TryGet(
                 T2IParamTypes.VideoFrames,
                 out int scopedFrames,
                 sectionId: scopedSection)
                     ? scopedFrames
                     : null;
         }
-        else
-        {
-            requested = g.UserInput.TryGet(
-                T2IParamTypes.VideoFrames,
-                out int hostFrames)
-                    ? hostFrames
-                    : null;
-        }
+        return g.UserInput.TryGet(
+            T2IParamTypes.VideoFrames,
+            out int hostFrames)
+                ? hostFrames
+                : null;
+    }
+
+    private int? ResolveFrames(ClipPlan clip, StagePlan stage, int? sectionId)
+    {
+        int? requested = ResolveRequestedFrames(clip, stage, sectionId);
         if (requested is not int frames)
         {
             return null;

@@ -979,6 +979,75 @@ describe("architecture diagnostics", () => {
         ).toContain("architecture.unsupported.upscale");
     });
 
+    it("surfaces unrepresentable active temporal-grid combinations", () => {
+        const models = testArchitectureCatalog();
+        models.entries.push(
+            {
+                ...models.entries[0],
+                value: "grid-50000.safetensors",
+                frameGrid: 50_000,
+            },
+            {
+                ...models.entries[0],
+                value: "grid-50001.safetensors",
+                frameGrid: 50_001,
+            },
+        );
+        const clip = minimalClip({
+            stages: [
+                minimalStage({
+                    model: "grid-50000.safetensors",
+                    control: 1,
+                }),
+                minimalStage({
+                    model: "grid-50001.safetensors",
+                    control: 1,
+                }),
+            ],
+        });
+
+        expect(
+            deriveArchitectureDiagnostics([clip], models).map(
+                ({ code }) => code,
+            ),
+        ).toContain("architecture.temporal-grid-conflict");
+    });
+
+    it("does not report temporal conflicts for a skipped clip", () => {
+        const models = testArchitectureCatalog();
+        models.entries.push(
+            {
+                ...models.entries[0],
+                value: "grid-50000.safetensors",
+                frameGrid: 50_000,
+            },
+            {
+                ...models.entries[0],
+                value: "grid-50001.safetensors",
+                frameGrid: 50_001,
+            },
+        );
+        const clip = minimalClip({
+            skipped: true,
+            stages: [
+                minimalStage({
+                    model: "grid-50000.safetensors",
+                    control: 1,
+                }),
+                minimalStage({
+                    model: "grid-50001.safetensors",
+                    control: 1,
+                }),
+            ],
+        });
+
+        expect(
+            deriveArchitectureDiagnostics([clip], models).map(
+                ({ code }) => code,
+            ),
+        ).not.toContain("architecture.temporal-grid-conflict");
+    });
+
     it("keeps text entry exact when a WAN clip has a frame-1 reference", () => {
         const models = combinedCatalog();
         const template = models.architectures.find(

@@ -1435,6 +1435,311 @@
     }
   };
 
+  // frontend/selectOption.ts
+  var preserveSelectedOption = (options, selectedValue, position, build) => {
+    const value = `${selectedValue || ""}`.trim();
+    if (!value || options.some((option2) => option2.value === value)) {
+      return;
+    }
+    const option = build(value);
+    if (!option) {
+      return;
+    }
+    if (position === "start") {
+      options.unshift(option);
+    } else {
+      options.push(option);
+    }
+  };
+  var resolveSelectValue = (currentValue, options, fallback) => {
+    const desired = `${currentValue || ""}`;
+    return options.some((option) => option.value === desired) ? desired : fallback;
+  };
+
+  // frontend/audioSource.ts
+  var AUDIO_SOURCE_NATIVE = "Native";
+  var AUDIO_SOURCE_UPLOAD = "Upload";
+  var AUDIO_SOURCE_CONTROLNET = "ControlNet";
+  var AUDIO_SOURCE_DISABLED_KIND = "Disabled";
+  var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
+  var isAceStepFunAudioSource = (source) => ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
+  var audioSourceKind = (source) => {
+    const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
+    return isAceStepFunAudioSource(normalized) ? "AceStepFun" : normalized;
+  };
+  var isAllowedAudioSource = (allowedKinds, source) => {
+    const kind = audioSourceKind(source);
+    return allowedKinds.includes(kind) || kind === AUDIO_SOURCE_NATIVE && allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND);
+  };
+  var defaultAuthoringAudioSource = (allowedKinds) => allowedKinds.includes(AUDIO_SOURCE_NATIVE) || allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND) ? AUDIO_SOURCE_NATIVE : allowedKinds[0] ?? AUDIO_SOURCE_NATIVE;
+  var isControlNetAudioSource = (source) => `${source ?? ""}`.trim() === AUDIO_SOURCE_CONTROLNET;
+  var canUseClipLengthFromAudio = (source) => {
+    const normalized = `${source ?? ""}`.trim();
+    return normalized === AUDIO_SOURCE_UPLOAD || isAceStepFunAudioSource(normalized) || isControlNetAudioSource(normalized);
+  };
+  var getAceStepFunRefs = () => {
+    const snapshot = getVideoStagesHostBridge().getAceStepFunRegistry();
+    if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
+      return [];
+    }
+    const seen = /* @__PURE__ */ new Set();
+    const refs = [];
+    for (const raw of snapshot.refs) {
+      const ref = `${raw || ""}`.trim();
+      if (!ref || seen.has(ref)) {
+        continue;
+      }
+      seen.add(ref);
+      refs.push(ref);
+    }
+    return refs;
+  };
+  var getAceStepFunRefLabel = (ref) => {
+    const audioRef = ACESTEPFUN_AUDIO_REF_PATTERN.exec(ref);
+    if (audioRef) {
+      return `AceStepFun Audio ${audioRef[1]}`;
+    }
+    return ref;
+  };
+  var appendAceStepFunRefs = (options) => {
+    for (const ref of getAceStepFunRefs()) {
+      options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
+    }
+  };
+  var appendMissingSelectedRef = (options, currentValue) => preserveSelectedOption(
+    options,
+    currentValue,
+    "end",
+    (value) => isAceStepFunAudioSource(value) ? { value, label: getAceStepFunRefLabel(value) } : null
+  );
+  var buildSegmentAudioSourceOptions = (currentValue = "") => {
+    const options = [
+      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
+    ];
+    appendAceStepFunRefs(options);
+    appendMissingSelectedRef(options, currentValue);
+    return options;
+  };
+  var buildAudioSourceOptions = (currentValue = "", context = {}) => {
+    const options = [
+      { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
+      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
+    ];
+    appendAceStepFunRefs(options);
+    if (context.controlNetEnabled) {
+      options.push({
+        value: AUDIO_SOURCE_CONTROLNET,
+        label: AUDIO_SOURCE_CONTROLNET
+      });
+    }
+    if (context.allowedKinds) {
+      const allowed = new Set(context.allowedKinds);
+      const filtered = options.filter((option) => {
+        const kind = audioSourceKind(option.value);
+        return allowed.has(kind) || kind === AUDIO_SOURCE_NATIVE && allowed.has(AUDIO_SOURCE_DISABLED_KIND);
+      });
+      options.length = 0;
+      options.push(...filtered);
+    }
+    appendMissingSelectedRef(options, currentValue);
+    preserveSelectedOption(options, currentValue, "start", (value) => ({
+      value,
+      label: `${value} (unsupported persisted value)`
+    }));
+    return options;
+  };
+
+  // frontend/architectures/policy/featureValues.ts
+  var FEATURE_LABEL = {
+    multiStage: "Multiple stages",
+    sourceVideo: "Source video",
+    frameReferences: "Frame references",
+    referenceFraming: "Reference framing",
+    retake: "Retakes",
+    majorPrompt: "Major prompts",
+    promptRelay: "Relay prompts",
+    clipAudio: "Clip audio",
+    audioReuse: "Captured stage audio reuse",
+    audioDerivedDuration: "Audio-derived clip duration",
+    controlSignalDerivedDuration: "Control-signal-derived clip duration",
+    stageLoras: "LoRAs",
+    icLora: "IC-LoRA",
+    hdr: "HDR",
+    upscale: "Stage upscaling"
+  };
+  var architectureReason = (label, feature) => `${FEATURE_LABEL[feature]} is not supported by ${label}.`;
+  var noArchitectureReason = (feature) => `${FEATURE_LABEL[feature]} requires a generated clip with a known architecture.`;
+  var upscaleModeForMethod = (method) => {
+    const normalized = method.trim().toLowerCase();
+    const hasMethodName = (prefix) => normalized.startsWith(prefix) && normalized.slice(prefix.length).trim().length > 0;
+    if (hasMethodName("latentmodel-")) return "latent-model";
+    if (hasMethodName("latent-")) return "latent";
+    if (hasMethodName("pixel-")) return "pixel";
+    if (hasMethodName("model-")) return "model";
+    return "unsupported";
+  };
+  var architectureFeatureSupport = (feature, scope) => {
+    const capability = scope.capabilities;
+    const extras = scope.extras;
+    const has = (extra, legacy, legacyValue = extra) => extras === void 0 ? legacy.includes(legacyValue) : extras.includes(extra);
+    switch (feature) {
+      case "multiStage":
+        return has("multi-stage", capability.architecture);
+      case "sourceVideo":
+        return has("source-video", capability.clip);
+      case "frameReferences":
+        return has("frame-references", capability.stage);
+      case "referenceFraming":
+        return has("reference-framing", capability.clip);
+      case "retake":
+        return has("retake", capability.clip);
+      case "majorPrompt":
+        return has("prompts", capability.clip);
+      case "promptRelay":
+        return has("prompt-relay", capability.clip);
+      case "clipAudio":
+        return has("audio-sources", capability.clip) && (scope.audioSource === void 0 || isAllowedAudioSource(
+          capability.audioSourceKinds,
+          scope.audioSource
+        ));
+      case "audioReuse":
+        return has("audio-reuse", capability.clip);
+      case "audioDerivedDuration":
+        return has("audio-derived-duration", capability.clip);
+      case "controlSignalDerivedDuration":
+        return has("control-signal-derived-duration", capability.clip);
+      case "stageLoras":
+        return has("lora", capability.stage);
+      case "icLora":
+        return has("ic-lora", capability.stage);
+      case "hdr":
+        return has("hdr", capability.stage);
+      case "upscale":
+        return scope.upscaleMethod === void 0 ? ["pixel", "model", "latent", "latent-model"].some(
+          (mode) => has(`${mode}-upscale`, capability.upscaleModes, mode)
+        ) : has(
+          `${upscaleModeForMethod(scope.upscaleMethod)}-upscale`,
+          capability.upscaleModes,
+          upscaleModeForMethod(scope.upscaleMethod)
+        );
+    }
+  };
+
+  // frontend/architectures/temporalGrid.ts
+  var MAX_FRAME_GRID = 2147483647;
+  var greatestCommonDivisor = (left, right) => {
+    while (right !== 0) {
+      [left, right] = [right, left % right];
+    }
+    return left;
+  };
+  var resolveCompatibleFrameGrid = (frameGrids) => {
+    let compatible = 1;
+    for (const raw of frameGrids) {
+      const grid = Number(raw);
+      if (!Number.isInteger(grid) || grid < 1 || grid > MAX_FRAME_GRID) {
+        return { status: "conflict" };
+      }
+      const next = compatible / greatestCommonDivisor(compatible, grid) * grid;
+      if (!Number.isSafeInteger(next) || next > MAX_FRAME_GRID) {
+        return { status: "conflict" };
+      }
+      compatible = next;
+    }
+    return { status: "resolved", frameGrid: compatible };
+  };
+  var resolveFrameGridForModelLookup = (models, frameGridForModel) => {
+    if (models.length === 0) {
+      return { status: "not-applicable" };
+    }
+    const grids = models.map(frameGridForModel);
+    return grids.some((grid) => grid === null) ? { status: "unknown" } : resolveCompatibleFrameGrid(grids);
+  };
+  var effectiveGridModels = (clip, modelForName, architectureForId, scope) => {
+    const stages = clip.stages.slice(0, activeStageCount(clip));
+    if (stages.length === 0) {
+      return [];
+    }
+    const firstModel = modelForName(stages[0].model);
+    const clipDescriptor = firstModel?.architectureId ? architectureForId(firstModel.architectureId) : void 0;
+    const retakeCanExecute = clip.retake !== null && clip.retake !== void 0 && (clip.sourceVideo != null || scope.globalRefineMode === true) && (!clipDescriptor || architectureFeatureSupport("retake", {
+      capabilities: clipDescriptor.capabilities,
+      extras: firstModel?.enhancements?.extras ?? clipDescriptor.extras
+    }));
+    return stages.filter((stage, stageIndex) => {
+      if (stageIndex === 0 && clip.sourceVideo == null && scope.globalRefineMode !== true) {
+        return true;
+      }
+      if (stage.control > 0 || stageIndex === stages.length - 1 && retakeCanExecute) {
+        return true;
+      }
+      const upscaleMode = upscaleModeForMethod(stage.upscaleMethod ?? "");
+      if ((stage.upscale ?? 1) === 1 || upscaleMode !== "latent" && upscaleMode !== "latent-model") {
+        return false;
+      }
+      const model = modelForName(stage.model);
+      const descriptor = model?.architectureId ? architectureForId(model.architectureId) : void 0;
+      return !descriptor || architectureFeatureSupport("upscale", {
+        capabilities: descriptor.capabilities,
+        extras: model?.enhancements?.extras ?? descriptor.extras,
+        upscaleMethod: stage.upscaleMethod ?? ""
+      });
+    }).map((stage) => stage.model);
+  };
+  var resolveClipFrameGridForLookup = (clip, modelForName, architectureForId, scope = {}) => {
+    const activeStages = clip.stages.slice(0, activeStageCount(clip));
+    if (activeStages.length === 0) {
+      return { status: "not-applicable" };
+    }
+    const resolvedAuthoredModels = clip.stages.map(
+      (stage) => modelForName(stage.model)
+    );
+    if (resolvedAuthoredModels.some(
+      (model) => !model?.architectureId || !model.modelProfileId || !model.compatibilityClassId
+    )) {
+      return { status: "unknown" };
+    }
+    const firstModel = resolvedAuthoredModels[0];
+    const descriptor = architectureForId(firstModel.architectureId);
+    if (!descriptor || resolvedAuthoredModels.some(
+      (model) => model?.architectureId !== firstModel.architectureId || model.compatibilityClassId !== firstModel.compatibilityClassId
+    ) || activeStages.some(
+      (stage) => (stage.upscale ?? 1) !== 1 && upscaleModeForMethod(stage.upscaleMethod ?? "") === "unsupported"
+    )) {
+      return { status: "unknown" };
+    }
+    const ignored = descriptor.ignoredUnsupportedFeatures ?? [];
+    if (clip.clipLengthFromAudio === true && !ignored.includes("audioDerivedDuration") || clip.clipLengthFromControlNet === true && !ignored.includes("controlSignalDerivedDuration")) {
+      return { status: "not-applicable" };
+    }
+    const models = effectiveGridModels(
+      clip,
+      modelForName,
+      architectureForId,
+      scope
+    );
+    return resolveFrameGridForModelLookup(
+      models,
+      (model) => modelForName(model)?.frameGrid ?? null
+    );
+  };
+  var resolveClipFrameGrid = (clip, catalog, scope = {}) => {
+    if (!catalog) {
+      const activeCount = activeStageCount(clip);
+      return activeCount === 0 ? { status: "not-applicable" } : { status: "unknown" };
+    }
+    return resolveClipFrameGridForLookup(
+      clip,
+      (model) => modelCatalogEntry(catalog, model) ?? void 0,
+      (architectureId) => architectureDescriptor(catalog, architectureId) ?? void 0,
+      scope
+    );
+  };
+  var resolvedClipFrameGrid = (clip, catalog, scope = {}) => {
+    const resolution = resolveClipFrameGrid(clip, catalog, scope);
+    return resolution.status === "resolved" ? resolution.frameGrid : 1;
+  };
+
   // frontend/architectures/types.ts
   var AUTHORING_FEATURES = [
     "multiStage",
@@ -1626,7 +1931,7 @@
     const modelNames = /* @__PURE__ */ new Set();
     const models = [];
     for (const raw of value.models) {
-      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !isEntryModeArray(raw.entryModes) || raw.entryModes.length === 0 || raw.entryAbilities !== void 0 && (!isEntryAbilityArray(raw.entryAbilities) || raw.entryAbilities.length === 0) || raw.enhancements !== void 0 && (!isRecord2(raw.enhancements) || !isUniqueStringArray(raw.enhancements.extras) || !isReferencePositionArray(
+      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !isEntryModeArray(raw.entryModes) || raw.entryModes.length === 0 || raw.entryAbilities !== void 0 && (!isEntryAbilityArray(raw.entryAbilities) || raw.entryAbilities.length === 0) || raw.enhancements !== void 0 && (!isRecord2(raw.enhancements) || !isUniqueStringArray(raw.enhancements.extras) || !isReferencePositionArray(
         raw.enhancements.referencePositions
       ))) {
         return null;
@@ -1642,6 +1947,7 @@
         modelProfileId: raw.modelProfileId,
         modelClassId: raw.modelClassId,
         compatibilityClassId: raw.compatibilityClassId,
+        frameGrid: Number(raw.frameGrid),
         ...raw.entryAbilities === void 0 ? {} : { entryAbilities: [...raw.entryAbilities] },
         ...rawEnhancements === void 0 ? {} : {
           enhancements: {
@@ -1779,6 +2085,7 @@
           modelProfileId: backendModel?.modelProfileId ?? null,
           modelClassId: backendModel?.modelClassId ?? null,
           compatibilityClassId: backendModel?.compatibilityClassId ?? null,
+          frameGrid: backendModel?.frameGrid ?? null,
           ...backendModel?.entryAbilities === void 0 ? {} : {
             entryAbilities: [...backendModel.entryAbilities]
           },
@@ -1804,120 +2111,6 @@
       return fromCatalog;
     }
     return "unsupported";
-  };
-
-  // frontend/selectOption.ts
-  var preserveSelectedOption = (options, selectedValue, position, build) => {
-    const value = `${selectedValue || ""}`.trim();
-    if (!value || options.some((option2) => option2.value === value)) {
-      return;
-    }
-    const option = build(value);
-    if (!option) {
-      return;
-    }
-    if (position === "start") {
-      options.unshift(option);
-    } else {
-      options.push(option);
-    }
-  };
-  var resolveSelectValue = (currentValue, options, fallback) => {
-    const desired = `${currentValue || ""}`;
-    return options.some((option) => option.value === desired) ? desired : fallback;
-  };
-
-  // frontend/audioSource.ts
-  var AUDIO_SOURCE_NATIVE = "Native";
-  var AUDIO_SOURCE_UPLOAD = "Upload";
-  var AUDIO_SOURCE_CONTROLNET = "ControlNet";
-  var AUDIO_SOURCE_DISABLED_KIND = "Disabled";
-  var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
-  var isAceStepFunAudioSource = (source) => ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
-  var audioSourceKind = (source) => {
-    const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
-    return isAceStepFunAudioSource(normalized) ? "AceStepFun" : normalized;
-  };
-  var isAllowedAudioSource = (allowedKinds, source) => {
-    const kind = audioSourceKind(source);
-    return allowedKinds.includes(kind) || kind === AUDIO_SOURCE_NATIVE && allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND);
-  };
-  var defaultAuthoringAudioSource = (allowedKinds) => allowedKinds.includes(AUDIO_SOURCE_NATIVE) || allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND) ? AUDIO_SOURCE_NATIVE : allowedKinds[0] ?? AUDIO_SOURCE_NATIVE;
-  var isControlNetAudioSource = (source) => `${source ?? ""}`.trim() === AUDIO_SOURCE_CONTROLNET;
-  var canUseClipLengthFromAudio = (source) => {
-    const normalized = `${source ?? ""}`.trim();
-    return normalized === AUDIO_SOURCE_UPLOAD || isAceStepFunAudioSource(normalized) || isControlNetAudioSource(normalized);
-  };
-  var getAceStepFunRefs = () => {
-    const snapshot = getVideoStagesHostBridge().getAceStepFunRegistry();
-    if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
-      return [];
-    }
-    const seen = /* @__PURE__ */ new Set();
-    const refs = [];
-    for (const raw of snapshot.refs) {
-      const ref = `${raw || ""}`.trim();
-      if (!ref || seen.has(ref)) {
-        continue;
-      }
-      seen.add(ref);
-      refs.push(ref);
-    }
-    return refs;
-  };
-  var getAceStepFunRefLabel = (ref) => {
-    const audioRef = ACESTEPFUN_AUDIO_REF_PATTERN.exec(ref);
-    if (audioRef) {
-      return `AceStepFun Audio ${audioRef[1]}`;
-    }
-    return ref;
-  };
-  var appendAceStepFunRefs = (options) => {
-    for (const ref of getAceStepFunRefs()) {
-      options.push({ value: ref, label: getAceStepFunRefLabel(ref) });
-    }
-  };
-  var appendMissingSelectedRef = (options, currentValue) => preserveSelectedOption(
-    options,
-    currentValue,
-    "end",
-    (value) => isAceStepFunAudioSource(value) ? { value, label: getAceStepFunRefLabel(value) } : null
-  );
-  var buildSegmentAudioSourceOptions = (currentValue = "") => {
-    const options = [
-      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
-    ];
-    appendAceStepFunRefs(options);
-    appendMissingSelectedRef(options, currentValue);
-    return options;
-  };
-  var buildAudioSourceOptions = (currentValue = "", context = {}) => {
-    const options = [
-      { value: AUDIO_SOURCE_NATIVE, label: AUDIO_SOURCE_NATIVE },
-      { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
-    ];
-    appendAceStepFunRefs(options);
-    if (context.controlNetEnabled) {
-      options.push({
-        value: AUDIO_SOURCE_CONTROLNET,
-        label: AUDIO_SOURCE_CONTROLNET
-      });
-    }
-    if (context.allowedKinds) {
-      const allowed = new Set(context.allowedKinds);
-      const filtered = options.filter((option) => {
-        const kind = audioSourceKind(option.value);
-        return allowed.has(kind) || kind === AUDIO_SOURCE_NATIVE && allowed.has(AUDIO_SOURCE_DISABLED_KIND);
-      });
-      options.length = 0;
-      options.push(...filtered);
-    }
-    appendMissingSelectedRef(options, currentValue);
-    preserveSelectedOption(options, currentValue, "start", (value) => ({
-      value,
-      label: `${value} (unsupported persisted value)`
-    }));
-    return options;
   };
 
   // frontend/clipColor.ts
@@ -2026,13 +2219,15 @@
 
   // frontend/renderUtils.ts
   var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  var FRAME_ALIGNMENT = 8;
-  var framesForClip = (durationSeconds, fps) => Math.max(
-    1,
-    Math.ceil(
-      Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) / FRAME_ALIGNMENT
-    ) * FRAME_ALIGNMENT + 1
-  );
+  var framesForClip = (durationSeconds, fps, rawFrameGrid) => {
+    const frameGrid = Number.isInteger(rawFrameGrid) && rawFrameGrid > 0 ? rawFrameGrid : 1;
+    return Math.max(
+      1,
+      Math.ceil(
+        Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) / frameGrid
+      ) * frameGrid + 1
+    );
+  };
   var snapDurationToFps = (seconds, fps) => {
     if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
       return seconds;
@@ -2172,9 +2367,28 @@
     const defaults = getRootDefaults2();
     const fps = typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps;
     if (clip) {
-      return Math.max(REF_FRAME_MIN, framesForClip(clip.duration, fps));
+      const frameGrid = clip.stages ? resolvedClipFrameGrid(
+        { ...clip, stages: clip.stages },
+        defaults.modelCatalog
+      ) : 1;
+      return Math.max(
+        REF_FRAME_MIN,
+        framesForClip(clip.duration, fps, frameGrid)
+      );
     }
     return Math.max(REF_FRAME_MIN, defaults.frames);
+  };
+  var getKnownReferenceFrameMax = (getRootDefaults2, clip, effectiveFps) => {
+    const defaults = getRootDefaults2();
+    const resolution = resolveClipFrameGrid(clip, defaults.modelCatalog);
+    if (resolution.status !== "resolved") {
+      return null;
+    }
+    const fps = typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps;
+    return Math.max(
+      REF_FRAME_MIN,
+      framesForClip(clip.duration, fps, resolution.frameGrid)
+    );
   };
   var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, sourcedClip = false, clipLoras = [], clipLoraDefaultWeights = []) => {
     const defaults = getRootDefaults2();
@@ -2295,22 +2509,16 @@
   var normalizeRef = (rawRef, frameMax) => {
     const fallback = buildDefaultRef();
     const source = textOr(rawRef.source, fallback.source);
+    const authoredFrame = Math.max(
+      REF_FRAME_MIN,
+      Math.round(numberOr(rawRef.frame, fallback.frame))
+    );
     return {
       id: normalizeOptionalEntityId(rawRef.id),
       source,
       uploadFileName: textOr(rawRef.uploadFileName, "") || null,
       uploadedImage: normalizeUploadedMedia(rawRef.uploadedImage),
-      frame: Math.max(
-        REF_FRAME_MIN,
-        Math.round(
-          clampedNumber(
-            rawRef.frame,
-            fallback.frame,
-            REF_FRAME_MIN,
-            frameMax
-          )
-        )
-      ),
+      frame: frameMax === null ? authoredFrame : clamp(authoredFrame, REF_FRAME_MIN, frameMax),
       fromEnd: !!rawRef.fromEnd
     };
   };
@@ -2396,14 +2604,6 @@
       fps
     );
     const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
-    const refFrameMax = getReferenceFrameMax(
-      getRootDefaults2,
-      { duration },
-      fps
-    );
-    const refs = refsRaw.map(
-      (rawRef) => normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax)
-    );
     const clipScopedLoras = normalizeStageLoras(rawClip.loras);
     const loraNames = [];
     const loraDefaultWeightByName = /* @__PURE__ */ new Map();
@@ -2438,7 +2638,7 @@
           getDefaultStageModel2,
           isRecord(stagesRaw[i]) ? stagesRaw[i] : {},
           previousStage,
-          refs.length,
+          refsRaw.length,
           i,
           sourceVideo !== null,
           loras,
@@ -2454,6 +2654,24 @@
         stages[index].skipped = true;
       }
     }
+    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
+    const clipLengthFromAudio = !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
+    const retake = normalizeRetake(rawClip.retake, duration);
+    const refFrameMax = getKnownReferenceFrameMax(
+      getRootDefaults2,
+      {
+        duration,
+        stages,
+        sourceVideo,
+        retake,
+        clipLengthFromAudio,
+        clipLengthFromControlNet
+      },
+      fps
+    );
+    const refs = refsRaw.map(
+      (rawRef) => normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax)
+    );
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const stageZero = stages[0] ?? null;
     const persistedArchitecture = trimmedText(rawClip.architecture);
@@ -2494,8 +2712,6 @@
         hasLegacyControlNetStrength ? [] : stages[index - 1]?.icLoraStrengths ?? icLoraDefaultStrengths
       );
     }
-    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
-    const clipLengthFromAudio = !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
     const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
     const boundaryRule = architectureDescriptor(
       defaults.modelCatalog,
@@ -2528,7 +2744,7 @@
       uploadedAudio: normalizeUploadedMedia(rawClip.uploadedAudio),
       prompt: text(rawClip.prompt),
       promptWindows: normalizePromptWindows(rawClip),
-      retake: normalizeRetake(rawClip.retake, duration),
+      retake,
       sourceVideo,
       refs,
       stages
@@ -4413,7 +4629,7 @@
   };
 
   // frontend/documentDimensionSnap.ts
-  var greatestCommonDivisor = (left, right) => {
+  var greatestCommonDivisor2 = (left, right) => {
     let a = Math.abs(Math.round(left));
     let b = Math.abs(Math.round(right));
     while (b !== 0) {
@@ -4421,7 +4637,7 @@
     }
     return a || 1;
   };
-  var leastCommonMultiple = (left, right) => Math.abs(left * right) / greatestCommonDivisor(left, right);
+  var leastCommonMultiple = (left, right) => Math.abs(left * right) / greatestCommonDivisor2(left, right);
   var activeDocumentDimensionMultiple = (clips, catalog) => clips.reduce(
     (multiple, clip) => leastCommonMultiple(
       multiple,
@@ -5566,36 +5782,6 @@
     body.prepend(notice);
   };
 
-  // frontend/architectures/policy/featureValues.ts
-  var FEATURE_LABEL = {
-    multiStage: "Multiple stages",
-    sourceVideo: "Source video",
-    frameReferences: "Frame references",
-    referenceFraming: "Reference framing",
-    retake: "Retakes",
-    majorPrompt: "Major prompts",
-    promptRelay: "Relay prompts",
-    clipAudio: "Clip audio",
-    audioReuse: "Captured stage audio reuse",
-    audioDerivedDuration: "Audio-derived clip duration",
-    controlSignalDerivedDuration: "Control-signal-derived clip duration",
-    stageLoras: "LoRAs",
-    icLora: "IC-LoRA",
-    hdr: "HDR",
-    upscale: "Stage upscaling"
-  };
-  var architectureReason = (label, feature) => `${FEATURE_LABEL[feature]} is not supported by ${label}.`;
-  var noArchitectureReason = (feature) => `${FEATURE_LABEL[feature]} requires a generated clip with a known architecture.`;
-  var upscaleModeForMethod = (method) => {
-    const normalized = method.trim().toLowerCase();
-    const hasMethodName = (prefix) => normalized.startsWith(prefix) && normalized.slice(prefix.length).trim().length > 0;
-    if (hasMethodName("latentmodel-")) return "latent-model";
-    if (hasMethodName("latent-")) return "latent";
-    if (hasMethodName("pixel-")) return "pixel";
-    if (hasMethodName("model-")) return "model";
-    return "unsupported";
-  };
-
   // frontend/architectures/policy/clipStageViews.ts
   var UNRESOLVED_ARCHITECTURE_ID = "unsupported";
   var FEATURE_RULE_CODES = {
@@ -5625,52 +5811,6 @@
       }
     }
     return void 0;
-  };
-  var architectureFeatureSupport = (feature, scope) => {
-    const capability = scope.capabilities;
-    const extras = scope.extras;
-    const has = (extra, legacy, legacyValue = extra) => extras === void 0 ? legacy.includes(legacyValue) : extras.includes(extra);
-    switch (feature) {
-      case "multiStage":
-        return has("multi-stage", capability.architecture);
-      case "sourceVideo":
-        return has("source-video", capability.clip);
-      case "frameReferences":
-        return has("frame-references", capability.stage);
-      case "referenceFraming":
-        return has("reference-framing", capability.clip);
-      case "retake":
-        return has("retake", capability.clip);
-      case "majorPrompt":
-        return has("prompts", capability.clip);
-      case "promptRelay":
-        return has("prompt-relay", capability.clip);
-      case "clipAudio":
-        return has("audio-sources", capability.clip) && (scope.audioSource === void 0 || isAllowedAudioSource(
-          capability.audioSourceKinds,
-          scope.audioSource
-        ));
-      case "audioReuse":
-        return has("audio-reuse", capability.clip);
-      case "audioDerivedDuration":
-        return has("audio-derived-duration", capability.clip);
-      case "controlSignalDerivedDuration":
-        return has("control-signal-derived-duration", capability.clip);
-      case "stageLoras":
-        return has("lora", capability.stage);
-      case "icLora":
-        return has("ic-lora", capability.stage);
-      case "hdr":
-        return has("hdr", capability.stage);
-      case "upscale":
-        return scope.upscaleMethod === void 0 ? ["pixel", "model", "latent", "latent-model"].some(
-          (mode) => has(`${mode}-upscale`, capability.upscaleModes, mode)
-        ) : has(
-          `${upscaleModeForMethod(scope.upscaleMethod)}-upscale`,
-          capability.upscaleModes,
-          upscaleModeForMethod(scope.upscaleMethod)
-        );
-    }
   };
   var createClipStageCapabilityViews = (architectureById, modelByName, scope = {}) => {
     const effectiveClipIdentity = (clip) => {
@@ -5712,10 +5852,18 @@
           rule: conditionalRule2 ?? null
         };
       };
+      const frameGridResolution = resolveClipFrameGridForLookup(
+        clip,
+        (model) => modelByName.get(model),
+        (architectureId2) => architectureById.get(architectureId2),
+        { globalRefineMode: scope.globalRefineMode }
+      );
       return {
         architectureId,
         architectureLabel: label,
         known: descriptor !== void 0,
+        frameGrid: frameGridResolution.status === "resolved" ? frameGridResolution.frameGrid : 1,
+        frameGridResolution,
         audioSourceKinds: descriptor?.capabilities.audioSourceKinds ?? [],
         decision,
         authoringState: (feature, persisted) => {
@@ -5971,12 +6119,26 @@
     const modelByName = new Map(
       catalog.entries.map((entry) => [entry.value, entry])
     );
+    const clipStageViews = createClipStageCapabilityViews(
+      architectureById,
+      modelByName
+    );
     const boundaries = createBoundaryCapabilityViews(
       architectureById,
-      createClipStageCapabilityViews(architectureById, modelByName).forClip
+      clipStageViews.forClip
     );
     const executableClipIndexSet = new Set(executableClipIndexes(clips));
     clips.forEach((clip, clipIdx) => {
+      const temporalGrid = clipStageViews.forClip(clip).frameGridResolution;
+      if (executableClipIndexSet.has(clipIdx) && temporalGrid.status === "conflict") {
+        diagnostics.push(
+          issue(
+            "architecture.temporal-grid-conflict",
+            `Clip ${clipIdx}'s active model handlers have no representable compatible temporal grid. Use stage models with compatible temporal requirements.`,
+            clipIdx
+          )
+        );
+      }
       const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
       const resolvedFirstModel = !sourceOnly && clip.stages.length > 0 ? modelByName.get(clip.stages[0].model) : void 0;
       const effectiveArchitectureId = effectiveArchitectureIdForClip(
@@ -6655,7 +6817,7 @@
       ...generic,
       defaultFrames: mode === "cut" || !Number.isFinite(persisted) || persisted <= 0 ? generic.defaultFrames : persisted
     };
-  }) => {
+  }, resolveFrameGrid = () => 1) => {
     const count = clips.length;
     const boundaryCount = Math.max(0, count - 1);
     const noOverlap = () => new Array(boundaryCount).fill(0);
@@ -6674,7 +6836,9 @@
     if (requested === 0) {
       return { overlaps: noOverlap(), fallback: false };
     }
-    const frames = clips.map((c) => framesForClip(c.duration, fps));
+    const frames = clips.map(
+      (clip, index) => framesForClip(clip.duration, fps, resolveFrameGrid(clip, index))
+    );
     const constraints = clips.map(
       (clip, index) => resolveConstraints(clip, index, clip.boundaryOut ?? "cut")
     );
@@ -6846,7 +7010,8 @@
     const plan = capabilities ? crossfadePlanForClips(
       compacted,
       fps,
-      (_left, position, mode) => capabilities.forBoundaryIndex(clips, indexes[position]).overlapConstraints(mode)
+      (_left, position, mode) => capabilities.forBoundaryIndex(clips, indexes[position]).overlapConstraints(mode),
+      (clip) => capabilities.forClip(clip).frameGrid
     ) : crossfadePlanForClips(compacted, fps);
     const seams = executableBoundaries(clips);
     const boundaries = seams.map((seam) => {
@@ -6862,7 +7027,11 @@
       };
     });
     const clipFrames = clips.map(
-      (clip, clipIdx) => executable.has(clipIdx) ? framesForClip(clip.duration, fps) : 0
+      (clip, clipIdx) => executable.has(clipIdx) ? framesForClip(
+        clip.duration,
+        fps,
+        capabilities?.forClip(clip).frameGrid ?? 1
+      ) : 0
     );
     const generatedFrames = indexes.reduce(
       (sum, clipIdx) => sum + clipFrames[clipIdx],
@@ -6984,12 +7153,13 @@
       const clip = clips[index];
       const durationSeconds = Math.max(0, clip.duration || 0);
       const frameCount = timing?.clipFrames[index] ?? 0;
-      const generatedDurationSeconds = useOutputGeometry && frameCount > 0 ? frameCount / timing.fps : durationSeconds;
+      const generatedDurationSeconds = frameCount > 0 ? frameCount / (timing?.fps ?? 1) : durationSeconds;
       const incomingJoinSeconds = useOutputGeometry ? overlapBefore.get(index) ?? 0 : 0;
       const outgoingJoinSeconds = useOutputGeometry ? overlapAfter.get(index) ?? 0 : 0;
+      const layoutDurationSeconds = useOutputGeometry ? generatedDurationSeconds : durationSeconds;
       const timelineDurationSeconds = Math.max(
         0,
-        generatedDurationSeconds - incomingJoinSeconds / 2 - outgoingJoinSeconds / 2
+        layoutDurationSeconds - incomingJoinSeconds / 2 - outgoingJoinSeconds / 2
       );
       const rawWidthPx = timelineDurationSeconds * pxPerSecond;
       const widthPx = incomingJoinSeconds > 0 || outgoingJoinSeconds > 0 ? Math.max(1, rawWidthPx) : Math.max(DEFAULT_MIN_WIDTH_PX, rawWidthPx);
@@ -9822,7 +9992,7 @@
     return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" data-vst-join-trim-seconds="${sharedAllocation}" title="Clip ${layout.index}${timingTitle} · Click to edit${firstClip ? "" : " · Shift+click to delete"}">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
       clip,
       layout.index,
-      layout.durationSeconds,
+      layout.generatedDurationSeconds,
       fps,
       unit
     ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs}${retakeSupported || clip.retake ? "" : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` + renderRetakeOverlay(
@@ -10160,12 +10330,12 @@
         const time = keyframeTimeSeconds(
           ref.frame,
           isEnd,
-          layout.durationSeconds,
+          layout.generatedDurationSeconds,
           fps
         );
         const left = keyframeLeftPercent(
           time,
-          layout.durationSeconds
+          layout.generatedDurationSeconds
         );
         const source = refSourceLabel(ref.source ?? "");
         const image = ref.uploadedImage?.data;
@@ -10408,7 +10578,8 @@
       const plan = crossfadePlanForClips(
         executable.map((clipIdx) => clips[clipIdx]),
         fps,
-        (_left, position, mode) => ctx.capabilities().forBoundaryIndex(clips, executable[position]).overlapConstraints(mode)
+        (_left, position, mode) => ctx.capabilities().forBoundaryIndex(clips, executable[position]).overlapConstraints(mode),
+        (target) => ctx.capabilities().forClip(target).frameGrid
       );
       return plan.fallback ? 0 : plan.overlaps[seam.position] ?? 0;
     };
@@ -11278,22 +11449,30 @@
     const seconds = Math.max(CLIP_DURATION_MIN, px / pxPerSecond);
     return Math.max(CLIP_DURATION_MIN, snapDurationToFps(seconds, fps));
   };
-  var pxToFrame = (pointerXWithinRegion, regionWidthPx, durationSeconds, fps, fromEnd) => {
+  var pxToFrame = (pointerXWithinRegion, regionWidthPx, durationSeconds, fps, fromEnd, frameGrid) => {
     const safeFps2 = Number.isFinite(fps) && fps > 0 ? fps : 1;
-    const duration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
-    const frameMax = Math.max(REF_FRAME_MIN, framesForClip(duration, safeFps2));
+    const authoredDuration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
+    const frameMax = Math.max(
+      REF_FRAME_MIN,
+      framesForClip(authoredDuration, safeFps2, frameGrid)
+    );
     if (!Number.isFinite(pointerXWithinRegion) || !Number.isFinite(regionWidthPx) || regionWidthPx <= 0) {
       return REF_FRAME_MIN;
     }
     const fraction = clamp(pointerXWithinRegion / regionWidthPx, 0, 1);
-    const time = fraction * duration;
-    const rawFrame = fromEnd ? (duration - time) * safeFps2 : time * safeFps2;
+    const effectiveDuration = frameMax / safeFps2;
+    const time = fraction * effectiveDuration;
+    const rawFrame = fromEnd ? (effectiveDuration - time) * safeFps2 : time * safeFps2;
     return clamp(Math.round(rawFrame), REF_FRAME_MIN, frameMax);
   };
   var clampClipRefsToDuration = (clip, getRootDefaults2, effectiveFps) => {
-    const frameMax = getReferenceFrameMax(getRootDefaults2, clip, effectiveFps);
+    const frameMax = getKnownReferenceFrameMax(
+      getRootDefaults2,
+      clip,
+      effectiveFps
+    );
     for (const ref of clip.refs) {
-      ref.frame = clamp(ref.frame, REF_FRAME_MIN, frameMax);
+      ref.frame = frameMax === null ? Math.max(REF_FRAME_MIN, Math.round(ref.frame)) : clamp(ref.frame, REF_FRAME_MIN, frameMax);
     }
   };
   var applyClipDurationResize = (clip, newDuration, getRootDefaults2, effectiveFps) => {
@@ -15366,7 +15545,8 @@ The conversion is one undoable change.`;
         rect.width,
         state.durationSeconds,
         state.fps,
-        state.fromEnd
+        state.fromEnd,
+        state.frameGrid
       );
       if (!getTimelineAuthoringSettings().snap || rect.width <= 0) {
         return { frame, fromEnd: state.fromEnd };
@@ -15408,7 +15588,7 @@ The conversion is one undoable change.`;
           state.arrow,
           position.frame,
           position.fromEnd,
-          state.durationSeconds,
+          state.generatedDurationSeconds,
           state.fps
         );
       },
@@ -15467,6 +15647,7 @@ The conversion is one undoable change.`;
       }
       const arrow = findArrow(clipIdx, refIdx);
       const fps = documentFps(getState());
+      const frameMax = getReferenceFrameMax(getRootDefaults, clip, fps);
       me.preventDefault();
       return dragSession(body, {
         clipIdx,
@@ -15478,8 +15659,13 @@ The conversion is one undoable change.`;
         arrowOriginalLeft: arrow?.style.left ?? "",
         originalLabel: mark.querySelector(".vst-refs-ph")?.textContent ?? "",
         durationSeconds: clip.duration,
+        generatedDurationSeconds: frameMax / fps,
         fps,
-        frameMax: getReferenceFrameMax(getRootDefaults, clip, fps),
+        frameGrid: resolvedClipFrameGrid(
+          clip,
+          getRootDefaults().modelCatalog
+        ),
+        frameMax,
         allowedPositions: referencePositions(clip),
         fromEnd: ref.fromEnd === true,
         sourceRevision: currentRevision()
@@ -15526,7 +15712,8 @@ The conversion is one undoable change.`;
         rect.width,
         clip.duration,
         documentFps(getState()),
-        false
+        false,
+        resolvedClipFrameGrid(clip, getRootDefaults().modelCatalog)
       );
       addRefAtFrame(clipIdx, frame, currentRevision());
     };

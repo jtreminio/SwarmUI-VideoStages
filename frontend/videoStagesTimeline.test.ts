@@ -122,6 +122,7 @@ const authoritativeDto = (
         modelProfileId: "ltx-2.3",
         modelClassId: "ltx-video",
         compatibilityClassId: "ltx-video",
+        frameGrid: 8,
         entryModes: [
             "text-to-video",
             "image-to-video",
@@ -456,6 +457,7 @@ describe("videoStagesTimeline", () => {
                     modelProfileId: "ltx-2.3",
                     modelClassId: "ltx-video",
                     compatibilityClassId: "ltx-video",
+                    frameGrid: 8,
                     entryModes: [
                         "text-to-video",
                         "image-to-video",

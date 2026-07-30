@@ -276,8 +276,8 @@ public class VideoStagesSpecParserClipsTests
 
             // Stage double override read as 5.5, not 55.
             Assert.Equal(5.5, parsed.Stages[0].CfgScale);
-            // Clip duration 5.5s @ 24fps -> aligned frame count of 137 (55s would be ~1321 frames).
-            Assert.Equal(137, parsed.Frames);
+            // Structural parse: 5.5s @ 24fps -> 133 inclusive frames (55s would be 1321).
+            Assert.Equal(133, parsed.Frames);
         }
         finally
         {
@@ -895,8 +895,8 @@ public class VideoStagesSpecParserClipsTests
 
     [Theory]
     [InlineData(10.0, 241)]
-    [InlineData(21.5, 521)]
-    public void ParseConfig_ClipDurationFrames_AreAlignedUpToEightPlusOne(double duration, int expectedFrames)
+    [InlineData(21.5, 517)]
+    public void ParseConfig_ClipDurationFrames_AreStructural(double duration, int expectedFrames)
     {
         string json = JsonConvert.SerializeObject(MakeRootConfig(
             width: 1280,
@@ -1191,6 +1191,24 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
+    public void ParseClip_SourceVideoStartBeyondFrameRange_IsAUserError()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0);
+        clip["sourceVideo"] = new JObject
+        {
+            ["data"] = "data:video/mp4;base64,QUJD",
+            ["fileName"] = "footage.mp4",
+            ["startSeconds"] = 1e20,
+        };
+
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => ParseSingleClip(clip));
+
+        Assert.Contains("SourceVideo start", error.Message);
+        Assert.Contains("representable frame range", error.Message);
+    }
+
+    [Fact]
     public void ParseStage_Clip0Stage0_RefineSourceVideoMode_ForcesControlToZero()
     {
         string json = JsonConvert.SerializeObject(new JArray(
@@ -1376,6 +1394,19 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
+    public void ParseClips_RejectsDurationBeyondTheRepresentableFrameRange()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["duration"] = int.MaxValue;
+        string json = JsonConvert.SerializeObject(new JArray(clip));
+
+        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            () => VideoStagesSpecParser.Parse(BuildRefineParser(json)));
+
+        Assert.Contains("duration at 24 fps exceeds", error.Message);
+    }
+
+    [Fact]
     public void ParseClips_Retake_ConvertsSecondsToFramesAtFpsAndAttachesToLastStage()
     {
         // Mid-clip window (ends at 2.5s of a 3.0s clip): plain seconds→frames conversion.
@@ -1394,21 +1425,22 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseClips_Retake_ReachingClipEndExtendsToAlignedFrameCount()
+    public void ParseClips_Retake_ReachingClipEndExtendsToStructuralFrameCount()
     {
-        // The 3.0s clip aligns UP to 73 frames (8n+1). A retake ending at the authored 3.0s must
-        // extend through that aligned tail instead of stopping at frame 72.
+        // Parsing owns only inclusive seconds-to-frames structure. The selected model grid is
+        // unknown here and is applied later by effective-request projection.
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
-        clip["retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 2.0);
+        clip["duration"] = 1.05;
+        clip["retake"] = MakeRetake(startSeconds: 0.5, lengthSeconds: 0.55);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
 
         RetakeWindowSpec retake = parsed.Stages[^1].RetakeWindow;
         Assert.NotNull(retake);
-        Assert.Equal(24, retake.StartFrame);
-        Assert.Equal(parsed.Frames!.Value - 24, retake.LengthFrames);
-        Assert.Equal(73, parsed.Frames);
+        Assert.Equal(12, retake.StartFrame);
+        Assert.Equal(parsed.Frames!.Value - 12, retake.LengthFrames);
+        Assert.Equal(27, parsed.Frames);
     }
 
     [Fact]

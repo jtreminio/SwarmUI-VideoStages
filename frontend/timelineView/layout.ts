@@ -115,18 +115,19 @@ export const computeRegionLayout = (
         const durationSeconds = Math.max(0, clip.duration || 0);
         const frameCount = timing?.clipFrames[index] ?? 0;
         const generatedDurationSeconds =
-            useOutputGeometry && frameCount > 0
-                ? frameCount / timing.fps
-                : durationSeconds;
+            frameCount > 0 ? frameCount / (timing?.fps ?? 1) : durationSeconds;
         const incomingJoinSeconds = useOutputGeometry
             ? (overlapBefore.get(index) ?? 0)
             : 0;
         const outgoingJoinSeconds = useOutputGeometry
             ? (overlapAfter.get(index) ?? 0)
             : 0;
+        const layoutDurationSeconds = useOutputGeometry
+            ? generatedDurationSeconds
+            : durationSeconds;
         const timelineDurationSeconds = Math.max(
             0,
-            generatedDurationSeconds -
+            layoutDurationSeconds -
                 incomingJoinSeconds / 2 -
                 outgoingJoinSeconds / 2,
         );

@@ -1,5 +1,5 @@
 using Newtonsoft.Json.Linq;
-using VideoStages.Architectures;
+using SwarmUI.Utils;
 
 namespace VideoStages;
 
@@ -9,24 +9,32 @@ namespace VideoStages;
 internal static class ClipTimelineSpecParser
 {
     /// <summary>
-    /// The frame grid authored durations snap to. It is a model-family fact, so it is read from the
-    /// registered architectures rather than hardcoded here; the coarsest declared grid is used
-    /// because it also satisfies every finer one.
+    /// Converts authored time to an inclusive pixel-frame count without importing model policy.
+    /// Architecture-grid normalization happens only after the active stage models resolve.
     /// </summary>
-    private static readonly Lazy<int> Grid = new(() => VideoArchitectureRegistry.Production.Catalog
-        .Select(architecture => architecture.FrameGrid)
-        .Where(grid => grid > 0)
-        .DefaultIfEmpty(1)
-        .Max());
-
-    internal static int FrameAlignment => Grid.Value;
-
-    public static int CalculateAlignedFrameCount(double durationSeconds, int fps)
+    public static int CalculateStructuralFrameCount(double durationSeconds, int fps)
     {
-        int alignment = Math.Max(1, FrameAlignment);
-        int rawFrames = Math.Max(0, (int)Math.Ceiling(durationSeconds * fps));
-        int alignedFrames = (int)Math.Ceiling(rawFrames / (double)alignment) * alignment;
-        return Math.Max(1, alignedFrames + 1);
+        if (!double.IsFinite(durationSeconds) || durationSeconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(durationSeconds),
+                durationSeconds,
+                "An authored duration must be finite and non-negative.");
+        }
+        if (fps < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(fps),
+                fps,
+                "Timeline fps must be positive.");
+        }
+        double intervals = Math.Ceiling(durationSeconds * fps);
+        if (!double.IsFinite(intervals) || intervals > int.MaxValue - 1d)
+        {
+            throw new OverflowException(
+                "The authored duration and fps exceed the representable pixel-frame count.");
+        }
+        return checked((int)intervals + 1);
     }
 
     public static SourceVideoSpec ParseSourceVideo(
@@ -58,7 +66,14 @@ internal static class ClipTimelineSpecParser
         {
             start = 0;
         }
-        return new SourceVideoSpec(upload.Data, upload.FileName, RoundTenth(start));
+        double roundedStart = RoundTenth(start);
+        if (!IsRepresentableNonNegativeFrame(Math.Round(roundedStart * fps)))
+        {
+            throw new SwarmUserErrorException(
+                $"VideoStages: Clip {clipIndex} SourceVideo start exceeds the representable "
+                    + "frame range.");
+        }
+        return new SourceVideoSpec(upload.Data, upload.FileName, roundedStart);
     }
 
     public static RetakeWindowSpec ParseRetake(
@@ -85,14 +100,24 @@ internal static class ClipTimelineSpecParser
             return null;
         }
 
-        int startFrame = (int)Math.Round(startSeconds * fps);
-        int lengthFrames = (int)Math.Round(lengthSeconds * fps);
+        double rawStartFrame = Math.Round(startSeconds * fps);
+        double rawLengthFrames = Math.Round(lengthSeconds * fps);
+        if (!IsRepresentableNonNegativeFrame(rawStartFrame)
+            || !IsRepresentableNonNegativeFrame(rawLengthFrames))
+        {
+            VideoStagesJsonReader.Warn(
+                warn,
+                $"VideoStages: {location} exceeds the representable frame range and was ignored.");
+            return null;
+        }
+        int startFrame = (int)rawStartFrame;
+        int lengthFrames = (int)rawLengthFrames;
         if (clipDurationSeconds > 0
             && startSeconds + lengthSeconds >= clipDurationSeconds - 0.5 / fps)
         {
             lengthFrames = Math.Max(
                 lengthFrames,
-                CalculateAlignedFrameCount(clipDurationSeconds, fps) - startFrame);
+                CalculateStructuralFrameCount(clipDurationSeconds, fps) - startFrame);
         }
         if (startFrame < 0 || lengthFrames <= 0)
         {
@@ -107,6 +132,9 @@ internal static class ClipTimelineSpecParser
 
     private static bool IsFinite(double value) =>
         !double.IsNaN(value) && !double.IsInfinity(value);
+
+    private static bool IsRepresentableNonNegativeFrame(double value) =>
+        IsFinite(value) && value >= 0 && value <= int.MaxValue;
 
     private static double RoundTenth(double value) =>
         Math.Round(value * 10) / 10;

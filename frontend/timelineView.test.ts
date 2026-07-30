@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
 import { minimalClip, minimalRef } from "./__test_helpers__/clipFixtures";
 import { createCapabilityViewResolver } from "./architectures/policy";
+import { resolveTimelineTiming } from "./timelineTiming";
 import { renderTimeline } from "./timelineView";
 import {
     audioSegmentWaveBarHeights,
@@ -740,9 +741,16 @@ describe("renderTimeline (DOM)", () => {
     });
 
     it("uses aligned generated width when deciding whether a region is tiny", () => {
-        renderTimeline(body, [makeClip(0.1, 1, 0), makeClip(5, 1, 0)], {
-            pxPerSecond: 44,
-        });
+        renderTimeline(
+            body,
+            [minimalClip({ duration: 0.1 }), minimalClip({ duration: 5 })],
+            {
+                pxPerSecond: 44,
+                capabilities: createCapabilityViewResolver(
+                    testArchitectureCatalog(),
+                ),
+            },
+        );
         const regions = body.querySelectorAll(".vst-region");
         expect(regions[0].classList.contains("vst-region-tiny")).toBe(false);
         expect(regions[1].classList.contains("vst-region-tiny")).toBe(false);
@@ -1055,6 +1063,62 @@ describe("renderTimeline (DOM)", () => {
         expect(thumb?.style.backgroundImage).toContain(
             "data:image/png;base64,QQ==",
         );
+    });
+
+    it("places a grid-padded tail reference at the generated endpoint", () => {
+        const clip = minimalClip({
+            duration: 1.05,
+            refs: [minimalRef({ frame: 33 })],
+        });
+        renderTimeline(body, [clip], {
+            fps: 24,
+            capabilities: createCapabilityViewResolver(
+                testArchitectureCatalog(),
+            ),
+        });
+
+        expect(body.querySelector<HTMLElement>(".vst-key")?.style.left).toBe(
+            "100%",
+        );
+        expect(
+            body.querySelector<HTMLElement>(".vst-refs-mark")?.style.left,
+        ).toBe("100%");
+    });
+
+    it("keeps generated marker geometry when a later authored card prevents output compaction", () => {
+        const generated = minimalClip({
+            duration: 1.05,
+            refs: [minimalRef({ frame: 17 })],
+        });
+        const dormant = minimalClip({ skipped: true });
+        const capabilities = createCapabilityViewResolver(
+            testArchitectureCatalog(),
+        );
+        const timing = resolveTimelineTiming(
+            [generated, dormant],
+            24,
+            capabilities,
+        );
+        const layouts = computeRegionLayout([generated, dormant], {
+            pxPerSecond: 10,
+            timing,
+        });
+        expect(timing.outputGeometryAvailable).toBe(false);
+        expect(layouts[0].generatedDurationSeconds).toBe(33 / 24);
+        expect(layouts[0].timelineDurationSeconds).toBe(1.05);
+        expect(layouts[1].startSeconds).toBe(1.05);
+
+        renderTimeline(body, [generated, dormant], {
+            fps: 24,
+            capabilities,
+        });
+
+        expect(body.querySelector<HTMLElement>(".vst-key")?.style.left).toBe(
+            "51.51515151515152%",
+        );
+        expect(
+            body.querySelector<HTMLElement>(".vst-refs-mark")?.style.left,
+        ).toBe("51.51515151515152%");
     });
 
     it("renders the References track between the video and audio tracks", () => {

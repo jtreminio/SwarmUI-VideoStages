@@ -178,6 +178,7 @@ export const buildBoundaryBody = (
                     .capabilities()
                     .forBoundaryIndex(clips, executable[position])
                     .overlapConstraints(mode),
+            (target) => ctx.capabilities().forClip(target).frameGrid,
         );
         return plan.fallback ? 0 : (plan.overlaps[seam.position] ?? 0);
     };
