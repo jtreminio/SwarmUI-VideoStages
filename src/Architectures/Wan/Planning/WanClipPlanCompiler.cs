@@ -65,16 +65,16 @@ internal static class WanClipPlanCompiler
                     stage,
                     NormalLoraTargetPolicy.ModelOnly);
             if (decodedStageInput
-                && stage.Control <= WanArchitectureModule
-                    .NormalLoraRequiresSamplingStageRule
+                && stage.Control <= HostVideoStageRules
+                    .NormalLoraRequiresSamplingStage
                     .Require<MinimumStageControlRuleConstraints>()
                     .ExclusiveMinimumControl
                 && !loras.IsDefaultOrEmpty)
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Error,
-                    WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
-                    WanArchitectureModule.NormalLoraRequiresSamplingStageReason,
+                    HostVideoStageRules.NormalLoraRequiresSamplingStageCode,
+                    HostVideoStageRules.NormalLoraRequiresSamplingStageReason,
                     clip.Id,
                     stage.Id));
             }

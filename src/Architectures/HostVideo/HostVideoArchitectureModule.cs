@@ -124,6 +124,7 @@ internal sealed class HostVideoArchitectureModule :
         FrameGrid = 1,
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
+        Rules = [HostVideoStageRules.NormalLoraRequiresSamplingStage],
     };
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
@@ -238,14 +239,16 @@ internal sealed class HostVideoArchitectureModule :
                     stage.ClipStageRawIndex));
             }
             if (decodedInput
-                && stage.Control <= 0
+                && stage.Control <= HostVideoStageRules
+                    .NormalLoraRequiresSamplingStage
+                    .Require<MinimumStageControlRuleConstraints>()
+                    .ExclusiveMinimumControl
                 && !loras.IsDefaultOrEmpty)
             {
                 diagnostics.Add(Error(
                     clip,
-                    ArchitectureFeatureVocabulary.RuleCode(
-                        ConditionalRuleCodeId.NormalLoraRequiresSamplingStage),
-                    "Normal LoRAs require a sampling stage and cannot run on a passthrough.",
+                    HostVideoStageRules.NormalLoraRequiresSamplingStageCode,
+                    HostVideoStageRules.NormalLoraRequiresSamplingStageReason,
                     stage.Id,
                     stage.ClipStageRawIndex));
             }

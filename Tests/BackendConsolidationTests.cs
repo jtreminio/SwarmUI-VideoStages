@@ -5,6 +5,7 @@ using SwarmUI.Utils;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2;
+using VideoStages.HostVideo;
 using VideoStages.Planning;
 using Xunit;
 
@@ -323,6 +324,11 @@ public class BackendConsolidationTests
     [Fact]
     public void Conditional_rule_thresholds_come_from_the_published_constraints()
     {
+        Assert.Equal(
+            0,
+            HostVideoStageRules.NormalLoraRequiresSamplingStage
+                .Require<MinimumStageControlRuleConstraints>()
+                .ExclusiveMinimumControl);
         Assert.Equal(
             Ltx2ConditionalRulePolicySource.AudioReuseRequiresThreeStages
                 .Require<MinimumActiveStagesRuleConstraints>().MinimumActiveStages,

@@ -276,7 +276,7 @@ public class WanArchitectureTests
             StageCapability.FrameReferences));
         Assert.True(descriptor.Capabilities.Clip.HasFlag(ClipCapability.References));
         Assert.Contains(
-            WanArchitectureModule.NormalLoraRequiresSamplingStageRule,
+            HostVideoStageRules.NormalLoraRequiresSamplingStage,
             descriptor.Rules);
         Assert.True(descriptor.StageGuideReferences.Allows(
             StageGuideReferencePolicy.Classify("Generated")));
@@ -664,7 +664,7 @@ public class WanArchitectureTests
         Assert.Null(wan["profiles"]);
         JObject rule = Assert.Single(wan["rules"].Values<JObject>());
         Assert.Equal(
-            WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
+            HostVideoStageRules.NormalLoraRequiresSamplingStageCode,
             rule.Value<string>("code"));
         Assert.Equal("conditional", rule.Value<string>("support"));
         Assert.Equal("stage", rule.Value<string>("scope"));
@@ -673,7 +673,7 @@ public class WanArchitectureTests
             rule["constraints"].Value<double>("exclusiveMinimumControl"));
         Assert.Equal(
             0,
-            WanArchitectureModule.NormalLoraRequiresSamplingStageRule
+            HostVideoStageRules.NormalLoraRequiresSamplingStage
                 .Require<MinimumStageControlRuleConstraints>()
                 .ExclusiveMinimumControl);
     }
@@ -1100,8 +1100,8 @@ public class WanArchitectureTests
                 {
                     Loras = [new("clip-active", 0.5)],
                 }),
-            WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
-            WanArchitectureModule.NormalLoraRequiresSamplingStageReason);
+            HostVideoStageRules.NormalLoraRequiresSamplingStageCode,
+            HostVideoStageRules.NormalLoraRequiresSamplingStageReason);
         VideoExecutionPlan textOnly = Compile(
             SourcedClip(
                 0,
@@ -1113,7 +1113,7 @@ public class WanArchitectureTests
             textOnly.Diagnostics,
             diagnostic =>
                 diagnostic.Code
-                    == WanArchitectureModule.NormalLoraRequiresSamplingStageCode);
+                    == HostVideoStageRules.NormalLoraRequiresSamplingStageCode);
         Assert.Empty(
             Assert.Single(textOnly.Clips).Stages[0].RequireWanPayload().Loras);
         AssertBlocked(
@@ -1125,8 +1125,8 @@ public class WanArchitectureTests
                         Control = -0.1,
                         Loras = [new("stage-negative-control", 1)],
                     })),
-            WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
-            WanArchitectureModule.NormalLoraRequiresSamplingStageReason);
+            HostVideoStageRules.NormalLoraRequiresSamplingStageCode,
+            HostVideoStageRules.NormalLoraRequiresSamplingStageReason);
 
         ClipSpec disabled = SourcedClip(
             0,
@@ -1149,7 +1149,7 @@ public class WanArchitectureTests
             stageNoOp.Diagnostics,
             diagnostic =>
                 diagnostic.Code
-                    == WanArchitectureModule.NormalLoraRequiresSamplingStageCode);
+                    == HostVideoStageRules.NormalLoraRequiresSamplingStageCode);
         Assert.Empty(
             Assert.Single(stageNoOp.Clips).Stages[0].RequireWanPayload().Loras);
 
@@ -1162,7 +1162,7 @@ public class WanArchitectureTests
             sampled.Diagnostics,
             diagnostic =>
                 diagnostic.Code
-                    == WanArchitectureModule.NormalLoraRequiresSamplingStageCode);
+                    == HostVideoStageRules.NormalLoraRequiresSamplingStageCode);
         Assert.Single(
             Assert.Single(sampled.Clips).Stages[0].RequireWanPayload().Loras);
     }

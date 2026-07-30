@@ -1,3 +1,4 @@
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
 namespace VideoStages.HostVideo;
@@ -33,4 +34,25 @@ internal static class HostVideoStageSchedulePolicy
 
     internal static bool IsQuantizedZeroPartial(int steps, double control) =>
         control < 1 && StartStep(steps, control) == 0;
+}
+
+/// <summary>
+/// Conditional authoring rules shared by architectures that execute decoded stages through
+/// SwarmUI's stock host-video path.
+/// </summary>
+internal static class HostVideoStageRules
+{
+    internal static string NormalLoraRequiresSamplingStageCode { get; } =
+        ArchitectureFeatureVocabulary.RuleCode(
+            ConditionalRuleCodeId.NormalLoraRequiresSamplingStage);
+
+    internal const string NormalLoraRequiresSamplingStageReason =
+        "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.";
+
+    internal static RuleDecision NormalLoraRequiresSamplingStage { get; } =
+        RuleDecision.Conditional(
+            NormalLoraRequiresSamplingStageCode,
+            NormalLoraRequiresSamplingStageReason,
+            RuleScope.Stage,
+            new MinimumStageControlRuleConstraints(0));
 }

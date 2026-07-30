@@ -1,6 +1,7 @@
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan.Planning;
+using VideoStages.HostVideo;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan;
@@ -53,20 +54,6 @@ internal sealed class WanArchitectureModule :
             Ti2v5bProfileId),
     ];
 
-    internal static string NormalLoraRequiresSamplingStageCode { get; } =
-        ArchitectureFeatureVocabulary.RuleCode(
-            ConditionalRuleCodeId.NormalLoraRequiresSamplingStage);
-
-    internal const string NormalLoraRequiresSamplingStageReason =
-        "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.";
-
-    internal static RuleDecision NormalLoraRequiresSamplingStageRule { get; } =
-        RuleDecision.Conditional(
-            NormalLoraRequiresSamplingStageCode,
-            NormalLoraRequiresSamplingStageReason,
-            RuleScope.Stage,
-            new MinimumStageControlRuleConstraints(0));
-
     internal static WanArchitectureModule Instance { get; } = new();
 
     public VideoArchitectureDescriptor Descriptor { get; } = new(
@@ -118,7 +105,7 @@ internal sealed class WanArchitectureModule :
         FrameGrid = FrameGrid,
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
-        Rules = [NormalLoraRequiresSamplingStageRule],
+        Rules = [HostVideoStageRules.NormalLoraRequiresSamplingStage],
     };
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
