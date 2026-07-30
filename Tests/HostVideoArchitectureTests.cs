@@ -123,6 +123,53 @@ public class HostVideoArchitectureTests
         Assert.Equal(expectedLoras, payload.Loras.Length);
     }
 
+    [Fact]
+    public void Compilation_rejects_request_global_refine_instead_of_treating_root_as_passthrough()
+    {
+        using SwarmUiTestContext context = new();
+        T2IModel model = Model(
+            "nvidia-cosmos-1-7b-text2world",
+            Compatibility("nvidia-cosmos-1"));
+        Assert.True(HostVideoArchitectureModule.Instance.TryResolveModel(
+            model,
+            out ResolvedVideoModel resolved));
+        StageSpec stage = new(
+            10,
+            0,
+            1,
+            "pixel-lanczos",
+            model.Name,
+            12,
+            4.5,
+            "euler",
+            "normal",
+            "Generated");
+        ClipSpec clip = new(
+            0,
+            25,
+            Constants.AudioSourceNative,
+            [],
+            false,
+            false,
+            false,
+            false,
+            null,
+            [],
+            [stage]);
+
+        ArchitectureClipCompilation compilation =
+            HostVideoArchitectureModule.Instance.ValidateAndCompileClip(
+                clip,
+                new Dictionary<int, ResolvedVideoModel> { [0] = resolved },
+                new(512, 512, 24, ArchitectureEntryMode.RefineVideo));
+
+        PlanDiagnostic diagnostic = Assert.Single(
+            compilation.Diagnostics,
+            item => item.Code == "host-video.option.unsupported");
+        Assert.Equal(PlanDiagnosticSeverity.Error, diagnostic.Severity);
+        Assert.Contains("refine-video", diagnostic.Message);
+    }
+
     [Theory]
     [InlineData("nvidia-cosmos-predict2-t2i-2b", "nvidia-cosmos-predict2-t2i-2b")]
     [InlineData("nvidia-cosmos-predict2-t2i-14b", "nvidia-cosmos-predict2-t2i-14b")]

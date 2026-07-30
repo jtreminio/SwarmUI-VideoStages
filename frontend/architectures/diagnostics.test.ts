@@ -1117,14 +1117,12 @@ describe("architecture diagnostics", () => {
             deriveArchitectureDiagnostics(
                 [guidedClip("wan-14b.safetensors", "wan22-i2v-14b")],
                 models,
-                "text-to-video",
             ).map(({ code }) => code),
         ).not.toContain("architecture.entry-mode-unsupported");
         expect(
             deriveArchitectureDiagnostics(
                 [guidedClip("wan-5b.safetensors", "wan22-ti2v-5b")],
                 models,
-                "text-to-video",
             ).map(({ code }) => code),
         ).not.toContain("architecture.entry-mode-unsupported");
     });

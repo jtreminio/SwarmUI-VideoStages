@@ -711,10 +711,6 @@
     )) {
       return null;
     }
-    const descriptor = authored ? architectureDescriptor(catalog, authored.architectureId) : null;
-    if (clip.stages.length > 1 && !(descriptor?.extras?.includes("multi-stage") ?? descriptor?.capabilities.architecture.includes("multi-stage"))) {
-      return null;
-    }
     const authoredIdentity = {
       authoredArchitectureId: authored?.architectureId ?? null,
       authoredModelProfileId: authored?.modelProfileId ?? null
@@ -6111,7 +6107,7 @@
     return diagnostics;
   };
   var effectiveArchitectureIdForClip = (clip, catalog) => resolvedClipArchitectureId(clip, catalog) ?? "unsupported";
-  var deriveArchitectureDiagnostics = (clips, catalog, _generatedEntryMode = "text-to-video") => {
+  var deriveArchitectureDiagnostics = (clips, catalog) => {
     const diagnostics = [];
     const architectureById = new Map(
       catalog.architectures.map((entry) => [entry.id, entry])
@@ -6179,15 +6175,7 @@
         }
       }
       const architecture = sourceOnly ? architectureById.get("none") : architectureById.get(effectiveArchitectureId);
-      if (!architecture && !sourceOnly && effectiveArchitectureId !== "unsupported") {
-        diagnostics.push(
-          issue(
-            "architecture.unknown",
-            `Clip ${clipIdx} uses unknown architecture '${clip.architecture}'. Its persisted settings were preserved, but generation is blocked.`,
-            clipIdx
-          )
-        );
-      } else if (architecture) {
+      if (architecture) {
         diagnostics.push(
           ...persistedCapabilityIssues(
             clip,
@@ -6298,11 +6286,7 @@
     const authoredPrefix = firstSkippedClip < 0 ? clips : clips.slice(0, firstSkippedClip);
     if (context.catalog) {
       diagnostics.push(
-        ...deriveArchitectureDiagnostics(
-          authoredPrefix,
-          context.catalog,
-          context.generatedEntryMode
-        )
+        ...deriveArchitectureDiagnostics(authoredPrefix, context.catalog)
       );
     }
     const executable = executableClipIndexes(clips).map((clipIdx) => ({
@@ -16188,8 +16172,7 @@ The conversion is one undoable change.`;
           globalPrompt,
           audioTracks: state.audioTracks,
           diagnostics: deriveAuthoringDiagnostics(clips, {
-            catalog: architectureCatalog,
-            generatedEntryMode: getRootGeneratedEntryMode()
+            catalog: architectureCatalog
           }),
           capabilities: capabilities()
         });

@@ -249,7 +249,6 @@ export const effectiveArchitectureIdForClip = (
 export const deriveArchitectureDiagnostics = (
     clips: readonly Clip[],
     catalog: ArchitectureModelCatalog,
-    _generatedEntryMode: "text-to-video" | "image-to-video" = "text-to-video",
 ): ArchitectureDiagnostic[] => {
     const diagnostics: ArchitectureDiagnostic[] = [];
     const architectureById = new Map(
@@ -340,19 +339,7 @@ export const deriveArchitectureDiagnostics = (
         const architecture = sourceOnly
             ? architectureById.get("none")
             : architectureById.get(effectiveArchitectureId);
-        if (
-            !architecture &&
-            !sourceOnly &&
-            effectiveArchitectureId !== "unsupported"
-        ) {
-            diagnostics.push(
-                issue(
-                    "architecture.unknown",
-                    `Clip ${clipIdx} uses unknown architecture '${clip.architecture}'. Its persisted settings were preserved, but generation is blocked.`,
-                    clipIdx,
-                ),
-            );
-        } else if (architecture) {
+        if (architecture) {
             diagnostics.push(
                 ...persistedCapabilityIssues(
                     clip,

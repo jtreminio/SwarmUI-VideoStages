@@ -30,7 +30,6 @@ import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import { setSelection, subscribeSelection } from "./selection";
 import type { UpdateMeta } from "./store";
 import {
-    getRootGeneratedEntryMode,
     isVideoStagesEnabled,
     readGlobalPrompt,
     setVideoStagesEnabled,
@@ -315,7 +314,6 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 audioTracks: state.audioTracks,
                 diagnostics: deriveAuthoringDiagnostics(clips, {
                     catalog: architectureCatalog,
-                    generatedEntryMode: getRootGeneratedEntryMode(),
                 }),
                 capabilities: capabilities(),
             });

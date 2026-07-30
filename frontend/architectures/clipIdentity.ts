@@ -1,6 +1,6 @@
 import { activeStageCount } from "../clipSemantics";
 import type { Clip } from "../types";
-import { architectureDescriptor, modelCatalogEntry } from "./catalogQueries";
+import { modelCatalogEntry } from "./catalogQueries";
 import { NONE_ARCHITECTURE_ID } from "./none/identity";
 import type { ArchitectureModelCatalog } from "./types";
 
@@ -83,19 +83,6 @@ export const deriveClipArchitectureIdentity = (
     ) {
         return null;
     }
-    const descriptor = authored
-        ? architectureDescriptor(catalog, authored.architectureId)
-        : null;
-    if (
-        clip.stages.length > 1 &&
-        !(
-            descriptor?.extras?.includes("multi-stage") ??
-            descriptor?.capabilities.architecture.includes("multi-stage")
-        )
-    ) {
-        return null;
-    }
-
     const authoredIdentity = {
         authoredArchitectureId: authored?.architectureId ?? null,
         authoredModelProfileId: authored?.modelProfileId ?? null,

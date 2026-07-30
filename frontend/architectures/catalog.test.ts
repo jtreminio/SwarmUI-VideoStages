@@ -164,6 +164,9 @@ describe("architecture catalog wire contract", () => {
             models[0].frameGrid = invalid;
             expect(parseVideoArchitectureCatalog(malformed)).toBeNull();
         }
+        const unknownArchitecture = structuredClone(dto);
+        unknownArchitecture.models[0].architectureId = "removed-architecture";
+        expect(parseVideoArchitectureCatalog(unknownArchitecture)).toBeNull();
     });
 
     it("rejects duplicate architecture and model identities but accepts profile aliases", () => {

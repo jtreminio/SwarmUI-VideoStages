@@ -473,6 +473,19 @@ internal interface IVideoArchitectureModule
 
     bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved);
 
+    /// <summary>
+    /// Performs only architecture-owned semantic validation and payload compilation.
+    /// </summary>
+    /// <remarks>
+    /// Callers must first normalize the request, resolve every active stage through
+    /// <see cref="VideoStages.Architectures.VideoArchitectureRegistry"/>, reject
+    /// architecture-resolution diagnostics, and pass
+    /// <see cref="VideoStages.Architectures.ArchitectureCapabilityValidator"/>. Implementations may
+    /// therefore treat a
+    /// missing active-stage resolution, mismatched architecture, incompatible model, or missing
+    /// model entry ability as a caller contract violation instead of re-validating those facts.
+    /// Architecture-private entry-mode semantics remain the module's responsibility.
+    /// </remarks>
     ArchitectureClipCompilation ValidateAndCompileClip(
         ClipSpec clip,
         IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,

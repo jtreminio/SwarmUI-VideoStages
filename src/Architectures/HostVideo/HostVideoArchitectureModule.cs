@@ -243,83 +243,43 @@ internal sealed class HostVideoArchitectureModule :
         ArgumentNullException.ThrowIfNull(context);
 
         List<PlanDiagnostic> diagnostics = [];
-        string compatibilityClassId = null;
-        foreach ((int rawStageIndex, ResolvedVideoModel resolved) in stageModels
-            .OrderBy(pair => pair.Key))
+        if (context.EntryMode == ArchitectureEntryMode.RefineVideo)
         {
-            if (resolved?.ArchitectureId != ArchitectureId)
-            {
-                continue;
-            }
-            if (string.IsNullOrWhiteSpace(resolved.ModelClassId)
-                || string.IsNullOrWhiteSpace(resolved.CompatibilityClassId)
-                || resolved.EntryAbilities == VideoModelEntryAbility.None)
-            {
-                diagnostics.Add(Error(
-                    clip,
-                    "host-video.model-facts.missing",
-                    $"Authored stage {rawStageIndex} is missing the proven host model facts "
-                        + "required by the generic video fallback.",
-                    rawStageIndex: rawStageIndex));
-                continue;
-            }
-            if (compatibilityClassId is null)
-            {
-                compatibilityClassId = resolved.CompatibilityClassId;
-            }
-            else if (!string.Equals(
-                compatibilityClassId,
-                resolved.CompatibilityClassId,
-                StringComparison.Ordinal))
-            {
-                diagnostics.Add(Error(
-                    clip,
-                    "host-video.clip-compatibility-class.mixed",
-                    $"Authored stage {rawStageIndex} resolves to compatibility class "
-                        + $"'{resolved.CompatibilityClassId}' after '{compatibilityClassId}'. "
-                        + "Use a separate clip to change video model families.",
-                    rawStageIndex: rawStageIndex));
-            }
+            diagnostics.Add(Error(
+                clip,
+                "host-video.option.unsupported",
+                "Generic VideoStages does not support request-global refine-video entry."));
         }
-
+        IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
+        // Model facts are registry-owned, clip compatibility is resolver-owned, and entry-role
+        // admission is capability-validator-owned. This compiler consumes that vetted assignment;
+        // an absent key is a caller contract violation, not another user-facing validation result.
+        string compatibilityClassId = activeStages.Count == 0
+            ? ""
+            : stageModels[activeStages[0].ClipStageRawIndex].CompatibilityClassId;
         Dictionary<int, IArchitectureStagePayload> stages = [];
-        foreach (StageSpec stage in clip.Stages ?? [])
+        foreach (StageSpec stage in activeStages)
         {
-            if (!stageModels.TryGetValue(
-                stage.ClipStageRawIndex,
-                    out ResolvedVideoModel resolved)
-                || resolved?.ArchitectureId != ArchitectureId
-                || string.IsNullOrWhiteSpace(resolved.ModelClassId)
-                || string.IsNullOrWhiteSpace(resolved.CompatibilityClassId)
-                || resolved.EntryAbilities == VideoModelEntryAbility.None)
-            {
-                diagnostics.Add(Error(
-                    clip,
-                    "host-video.stage-model.unsupported",
-                    $"Stage {stage.Id} does not resolve to a proven generic host-video model.",
-                    stage.Id,
-                    stage.ClipStageRawIndex));
-            }
-
+            ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
             bool decodedInput = clip.SourceVideo is not null
                 || stage.ClipStageIndex > 0;
             NormalLoraTargetPolicy loraTargetPolicy =
-                resolved?.LorasTargetTextEncoder == false
+                resolved.LorasTargetTextEncoder == false
                     ? NormalLoraTargetPolicy.ModelOnly
                     : NormalLoraTargetPolicy.ModelAndTextEncoder;
             ImmutableArray<NormalLoraPlan> loras = NormalLoraPlanCompiler.Compile(
                 clip,
                 stage,
                 loraTargetPolicy);
-            if (!double.IsFinite(stage.Control)
-                || decodedInput && (stage.Control < 0 || stage.Control > 1)
-                || !decodedInput && stage.Control != 1)
+            if (decodedInput
+                && (!double.IsFinite(stage.Control)
+                    || stage.Control < 0
+                    || stage.Control > 1))
             {
                 diagnostics.Add(Error(
                     clip,
                     "host-video.stage-control.invalid",
-                    $"Stage {stage.Id} control must be 1 for a generated root or within [0, 1] "
-                        + "for decoded input.",
+                    $"Stage {stage.Id} decoded-input control must be finite and within [0, 1].",
                     stage.Id,
                     stage.ClipStageRawIndex));
             }
@@ -348,9 +308,9 @@ internal sealed class HostVideoArchitectureModule :
             }
 
             stages[stage.ClipStageRawIndex] = new HostVideoStagePayload(
-                resolved?.ModelName ?? stage.Model,
-                resolved?.ModelClassId ?? "",
-                resolved?.CompatibilityClassId ?? "",
+                resolved.ModelName,
+                resolved.ModelClassId,
+                resolved.CompatibilityClassId,
                 loraTargetPolicy,
                 stage.Control,
                 stage.Steps,
@@ -362,7 +322,7 @@ internal sealed class HostVideoArchitectureModule :
         }
 
         return new(
-            new HostVideoClipPayload(clip.Id, compatibilityClassId ?? ""),
+            new HostVideoClipPayload(clip.Id, compatibilityClassId),
             stages,
             diagnostics.AsReadOnly());
     }

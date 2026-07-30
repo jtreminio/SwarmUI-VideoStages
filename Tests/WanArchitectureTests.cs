@@ -768,7 +768,7 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Compilation_locks_each_clip_to_one_compatibility_class_but_allows_cut_clips_to_differ()
+    public void Resolved_clips_publish_their_compatibility_class_and_allow_cut_clips_to_differ()
     {
         StageSpec firstFive = Stage(10, "wan-five");
         StageSpec secondFive = Stage(11, "wan-five") with
@@ -798,26 +798,6 @@ public class WanArchitectureTests
             stage => Assert.Equal(
                 WanArchitectureModule.Ti2v5bModelClassId,
                 stage.RequireWanPayload().ModelClassId));
-
-        StageSpec mixedSecond = secondFive with { Model = "wan-fourteen" };
-        ClipSpec mixedClip = GeneratedClip(0, firstFive, mixedSecond);
-        VideoStagesSpec mixedSpec = new(512, 512, 24, false, [mixedClip]);
-        VideoExecutionPlan mixedPlan = VideoExecutionPlanCompiler.Compile(
-            mixedSpec,
-            RootEnvironment.FromSpec(mixedSpec),
-            ResolveWan(
-                mixedSpec,
-                new Dictionary<string, ModelProfileId>
-                {
-                    ["wan-five"] = WanArchitectureModule.Ti2v5bProfileId,
-                    ["wan-fourteen"] = WanArchitectureModule.ImageToVideoProfileId,
-                }));
-        Assert.Contains(
-            mixedPlan.Diagnostics,
-            diagnostic => diagnostic.Code == "wan.clip-compatibility-class.mixed"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Error
-                && diagnostic.RawStageIndex == 1);
-        Assert.Null(Assert.Single(mixedPlan.Clips).ArchitecturePayload);
 
         VideoStagesSpec cutSpec = new(
             512,
@@ -912,8 +892,11 @@ public class WanArchitectureTests
             compiled.RequireWanPayload().CompatibilityClassId);
     }
 
-    [Fact]
-    public void Resolution_rejects_a_skipped_Wan_stage_from_another_compatibility_class()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Resolution_rejects_an_authored_Wan_stage_from_another_compatibility_class(
+        bool skipped)
     {
         using SwarmUiTestContext context = new();
         TestModelBundle installed = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
@@ -922,12 +905,22 @@ public class WanArchitectureTests
             "UnitTest_Wan21_I2V_1_3B.safetensors",
             "wan-2_1-image2video-1_3b",
             T2IModelClassSorter.CompatWan21_1_3b);
-        ClipSpec clip = GeneratedClip(0, Stage(10, installed.VideoModel.Name)) with
+        StageSpec first = Stage(10, installed.VideoModel.Name);
+        StageSpec second = Stage(11, other.Name) with
+        {
+            Control = 0.5,
+            ImageReference = "PreviousStage",
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+        };
+        ClipSpec clip = GeneratedClip(
+            0,
+            skipped ? [first] : [first, second]) with
         {
             AuthoredStages =
             [
                 new(0, installed.VideoModel.Name, null, false),
-                new(1, other.Name, null, true),
+                new(1, other.Name, null, skipped),
             ],
         };
         VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
@@ -946,7 +939,9 @@ public class WanArchitectureTests
             candidate => candidate.Code
                 == "architecture-mixed-authored-stage-compatibility");
         Assert.Equal(1, diagnostic.RawStageIndex);
-        Assert.Contains("(skipped)", diagnostic.Message);
+        Assert.Equal(
+            skipped,
+            diagnostic.Message.Contains("(skipped)", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1073,26 +1068,29 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Compilation_refuses_a_present_null_stage_resolution_and_uses_canonical_fallback()
+    public void Capability_validation_rejects_a_missing_stage_resolution_before_Wan_compilation()
     {
         StageSpec stage = Stage(10, "authored-wan-model");
-        WanClipPlanCompilation compilation = WanClipPlanCompiler.Compile(
-            GeneratedClip(0, stage),
-            new Dictionary<int, ResolvedVideoModel>
-            {
-                [stage.ClipStageRawIndex] = null,
-            },
-            new(512, 512, 24));
+        ClipSpec clip = GeneratedClip(0, stage);
+        VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
+
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                clip,
+                descriptor,
+                ArchitectureEntryMode.ImageToVideo,
+                new Dictionary<int, ResolvedVideoModel>
+                {
+                    [stage.ClipStageRawIndex] = null,
+                });
 
         PlanDiagnostic diagnostic = Assert.Single(
-            compilation.Diagnostics,
-            item => item.Code == "wan22.stage-model.unsupported");
+            diagnostics,
+            item => item.Code == "architecture-model-entry-unsupported");
         Assert.Equal(PlanDiagnosticSeverity.Error, diagnostic.Severity);
         Assert.Equal(stage.Id, diagnostic.StageId);
-        Assert.Contains("<missing>", diagnostic.Message);
-        WanStagePayload fallback = Assert.Single(compilation.Stages).Value;
-        Assert.Equal(stage.Model, fallback.Model);
-        Assert.Equal("", fallback.ModelClassId);
+        Assert.Equal(stage.ClipStageRawIndex, diagnostic.RawStageIndex);
+        Assert.Contains(stage.Model, diagnostic.Message);
     }
 
     [Fact]
@@ -1229,24 +1227,13 @@ public class WanArchitectureTests
             error.Message);
     }
 
-    /// <summary>
-    /// Settings the common capability validator does not inspect. Each one would otherwise compile
-    /// into a payload that silently omits it.
-    /// </summary>
+    /// <summary>Decoded scheduling rules are architecture-owned. Root control and guide
+    /// canonicalization are intentionally owned by parsing/projection and are not repeated here.</summary>
     [Fact]
-    public void Direct_compiler_refuses_invalid_stage_inputs_controls_and_quantized_schedules()
+    public void Compiler_refuses_invalid_decoded_controls_and_quantized_schedules()
     {
         StageSpec stage = Stage(10, "wan-model");
 
-        AssertRefused(
-            GeneratedClip(0, stage with { Control = 0 }),
-            "generated-root stage that generates nothing");
-        AssertRefused(
-            GeneratedClip(0, stage with { Control = 0.8 }),
-            "first-stage control");
-        AssertRefused(
-            GeneratedClip(0, stage with { Control = double.NaN }),
-            "first-stage control");
         AssertRefused(
             GeneratedClip(
                 0,
@@ -1255,19 +1242,6 @@ public class WanArchitectureTests
                 {
                     Id = 11,
                     Control = -0.1,
-                    ImageReference = "PreviousStage",
-                    ClipStageIndex = 1,
-                    ClipStageRawIndex = 1,
-                }),
-            "finite range [0, 1]");
-        AssertRefused(
-            GeneratedClip(
-                0,
-                stage,
-                stage with
-                {
-                    Id = 11,
-                    Control = 1.1,
                     ImageReference = "PreviousStage",
                     ClipStageIndex = 1,
                     ClipStageRawIndex = 1,
@@ -1292,6 +1266,19 @@ public class WanArchitectureTests
                 stage with
                 {
                     Id = 11,
+                    Control = 1.1,
+                    ImageReference = "PreviousStage",
+                    ClipStageIndex = 1,
+                    ClipStageRawIndex = 1,
+                }),
+            "finite range [0, 1]");
+        AssertRefused(
+            GeneratedClip(
+                0,
+                stage,
+                stage with
+                {
+                    Id = 11,
                     Control = 0.9,
                     Steps = 8,
                     ImageReference = "PreviousStage",
@@ -1305,15 +1292,6 @@ public class WanArchitectureTests
         AssertRefused(
             SourcedClip(0, stage with { Control = double.NaN }),
             "decoded-input control outside the finite range [0, 1]");
-        AssertRefused(
-            SourcedClip(
-                0,
-                stage with
-                {
-                    Control = 0.5,
-                    ImageReference = "PreviousStage",
-                }),
-            "first-stage input other than 'Generated'");
         AssertRefused(
             SourcedClip(0, stage with { Control = 0.9, Steps = 8 }),
             "quantizes to sampler start step 0");

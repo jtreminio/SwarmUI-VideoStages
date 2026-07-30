@@ -232,15 +232,6 @@ internal static class VideoExecutionPlanCompiler
         {
             diagnostics.AddRange(clipPlan.Audio.Diagnostics.Select(audioDiagnostic =>
                 audioDiagnostic with { ClipId = audioDiagnostic.ClipId ?? clipPlan.ClipId }));
-            VideoArchitectureDescriptor descriptor = architecturePlanning.Clips
-                .GetValueOrDefault(clipPlan.ClipId)?.Architecture;
-            if (descriptor is not null)
-            {
-                diagnostics.AddRange(
-                    ArchitectureCapabilityValidator.ValidateProjectedAudioSegments(
-                        clipPlan,
-                        descriptor));
-            }
         }
         diagnostics.AddRange(audioTimeline.Diagnostics);
         return plan with

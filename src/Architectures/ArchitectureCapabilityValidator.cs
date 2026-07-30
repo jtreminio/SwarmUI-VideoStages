@@ -204,24 +204,6 @@ internal static class ArchitectureCapabilityValidator
             clip.Id));
     }
 
-    /// <summary>
-    /// Audio segments are no longer authored on a clip: the root timeline audio tracks are
-    /// projected onto each clip's plan after clip compilation, so the capability can only be
-    /// checked against that projection.
-    /// </summary>
-    internal static IReadOnlyList<PlanDiagnostic> ValidateProjectedAudioSegments(
-        ClipPlan clip,
-        VideoArchitectureDescriptor descriptor) =>
-        clip.Audio.Segments.Items.IsEmpty
-            || Has(descriptor.Capabilities.Clip, ClipCapability.AudioSegments)
-            ? []
-            : [new(
-                PlanDiagnosticSeverity.Error,
-                "architecture-capability-unsupported",
-                $"Clip {clip.ClipId} configures 'audio segments', which architecture "
-                    + $"'{descriptor.Id}' does not support.",
-                clip.ClipId)];
-
     private static void ValidateAudioSourceKind(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,

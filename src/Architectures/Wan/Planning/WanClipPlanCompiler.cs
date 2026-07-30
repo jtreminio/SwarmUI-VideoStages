@@ -40,81 +40,22 @@ internal static class WanClipPlanCompiler
         }
 
         Dictionary<int, WanStagePayload> stages = [];
-        IReadOnlyList<StageSpec> authoredStages = clip.Stages ?? [];
+        IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
         bool sourcedEntry = clip.SourceVideo is not null;
         Refuse(
             context.EntryMode == ArchitectureEntryMode.RefineVideo,
             "request-global refine-video entry");
-        string clipCompatibilityClassId = null;
-        foreach ((int rawStageIndex, ResolvedVideoModel resolved) in stageModels
-            .OrderBy(pair => pair.Key))
+        // The registry owns model-fact validity, the resolver owns same-architecture and
+        // same-compatibility admission, and the common capability validator owns stage entry roles.
+        // Reaching this compiler means those contracts passed; the indexer is intentionally an
+        // invariant assertion rather than a fourth user-facing model validation layer.
+        string clipCompatibilityClassId = activeStages.Count == 0
+            ? ""
+            : stageModels[activeStages[0].ClipStageRawIndex].CompatibilityClassId;
+        for (int stageIndex = 0; stageIndex < activeStages.Count; stageIndex++)
         {
-            if (resolved is null
-                || resolved.ArchitectureId != WanArchitectureModule.ArchitectureId)
-            {
-                continue;
-            }
-            if (string.IsNullOrWhiteSpace(resolved.ModelClassId)
-                || string.IsNullOrWhiteSpace(resolved.CompatibilityClassId)
-                || resolved.EntryAbilities == VideoModelEntryAbility.None)
-            {
-                diagnostics.Add(new(
-                    PlanDiagnosticSeverity.Error,
-                    "wan.model-facts.missing",
-                    $"Clip {clip.Id} authored stage {rawStageIndex} is missing the host model "
-                        + "class, compatibility class, or entry abilities required to plan WAN.",
-                    clip.Id,
-                    RawStageIndex: rawStageIndex));
-                continue;
-            }
-            if (clipCompatibilityClassId is null)
-            {
-                clipCompatibilityClassId = resolved.CompatibilityClassId;
-            }
-            else if (!string.Equals(
-                resolved.CompatibilityClassId,
-                clipCompatibilityClassId,
-                StringComparison.Ordinal))
-            {
-                diagnostics.Add(new(
-                    PlanDiagnosticSeverity.Error,
-                    "wan.clip-compatibility-class.mixed",
-                    $"Clip {clip.Id} must use one host model compatibility class throughout, "
-                        + $"but authored stage {rawStageIndex} resolves to "
-                        + $"'{resolved.CompatibilityClassId}' after "
-                        + $"'{clipCompatibilityClassId}'. Use a separate clip to change model "
-                        + "compatibility families.",
-                    clip.Id,
-                    StageId: null,
-                    RawStageIndex: rawStageIndex));
-            }
-        }
-        for (int stageIndex = 0; stageIndex < authoredStages.Count; stageIndex++)
-        {
-            StageSpec stage = authoredStages[stageIndex];
-            bool resolvedStage = stageModels.TryGetValue(
-                    stage.ClipStageRawIndex,
-                    out ResolvedVideoModel resolved);
-            bool supportedModel =
-                resolvedStage
-                && resolved is not null
-                && resolved.ArchitectureId == WanArchitectureModule.ArchitectureId
-                && !string.IsNullOrWhiteSpace(resolved.ModelClassId)
-                && !string.IsNullOrWhiteSpace(resolved.CompatibilityClassId)
-                && resolved.EntryAbilities != VideoModelEntryAbility.None;
-            if (!supportedModel)
-            {
-                diagnostics.Add(new(
-                    PlanDiagnosticSeverity.Error,
-                    "wan22.stage-model.unsupported",
-                    $"Clip {clip.Id} stage {stage.Id} must resolve to architecture "
-                        + $"'{WanArchitectureModule.ArchitectureId}' with usable host model "
-                        + "facts, but resolved "
-                        + $"architecture '{resolved?.ArchitectureId.ToString() ?? "<missing>"}' "
-                        + $"model class '{resolved?.ModelClassId ?? "<missing>"}'.",
-                    clip.Id,
-                    stage.Id));
-            }
+            StageSpec stage = activeStages[stageIndex];
+            ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
             bool firstStage = stageIndex == 0;
             bool decodedStageInput = sourcedEntry || !firstStage;
             ImmutableArray<NormalLoraPlan> loras =
@@ -122,10 +63,6 @@ internal static class WanClipPlanCompiler
                     clip,
                     stage,
                     NormalLoraTargetPolicy.ModelOnly);
-            Refuse(
-                stage.IsPassthrough && !decodedStageInput,
-                "a generated-root stage that generates nothing",
-                stage.Id);
             if (decodedStageInput
                 && stage.Control <= WanArchitectureModule
                     .NormalLoraRequiresSamplingStageRule
@@ -141,24 +78,13 @@ internal static class WanClipPlanCompiler
                     stage.Id));
             }
             Refuse(
-                firstStage
-                    && !StringUtils.Equals(stage.ImageReference, "Generated"),
-                "a first-stage input other than 'Generated'",
-                stage.Id);
-            Refuse(
                 !firstStage
-                    // The common text-root parser canonicalizes every authored guide selector to
-                    // Generated. Common ClipPlanCompiler still owns the executable chain and
-                    // deliberately assigns PreviousStage to every later stage.
+                    // Text-root parsing canonicalizes every selector to Generated. In other entry
+                    // modes, Generated is individually supported but cannot describe the executable
+                    // later-stage edge, which common compilation always wires from PreviousStage.
                     && context.EntryMode != ArchitectureEntryMode.TextToVideo
                     && !StringUtils.Equals(stage.ImageReference, "PreviousStage"),
                 "a later-stage input other than 'PreviousStage'",
-                stage.Id);
-            Refuse(
-                firstStage
-                    && !sourcedEntry
-                    && (!double.IsFinite(stage.Control) || stage.Control != 1),
-                "generated first-stage control other than full generation (1)",
                 stage.Id);
             Refuse(
                 decodedStageInput
@@ -177,7 +103,7 @@ internal static class WanClipPlanCompiler
                 "decoded-input partial control that quantizes to sampler start step 0",
                 stage.Id);
             WanStagePayload payload = new(
-                    resolved?.ModelName ?? stage.Model,
+                    resolved.ModelName,
                     stage.Control,
                     stage.Steps,
                     stage.CfgScale,
@@ -186,8 +112,8 @@ internal static class WanClipPlanCompiler
                     StageUpscalePlanCompiler.Compile(stage),
                     loras)
             {
-                ModelClassId = resolved?.ModelClassId ?? "",
-                CompatibilityClassId = resolved?.CompatibilityClassId ?? "",
+                ModelClassId = resolved.ModelClassId,
+                CompatibilityClassId = resolved.CompatibilityClassId,
             };
             stages.Add(stage.ClipStageRawIndex, payload);
         }
@@ -203,7 +129,7 @@ internal static class WanClipPlanCompiler
                 firstReference,
                 lastReference)
             {
-                CompatibilityClassId = clipCompatibilityClassId ?? "",
+                CompatibilityClassId = clipCompatibilityClassId,
             },
             stages,
             diagnostics.AsReadOnly());

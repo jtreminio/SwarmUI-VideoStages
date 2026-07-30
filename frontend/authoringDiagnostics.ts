@@ -27,7 +27,6 @@ export interface AuthoringDiagnosticContext {
     globalRefineMode?: boolean;
     /** Backend-projected catalog. Without it, architecture-owned rules are not inferred. */
     catalog?: ArchitectureModelCatalog;
-    generatedEntryMode?: "text-to-video" | "image-to-video";
 }
 
 export { activeStageCount } from "./clipSemantics";
@@ -53,11 +52,7 @@ export const deriveAuthoringDiagnostics = (
         firstSkippedClip < 0 ? clips : clips.slice(0, firstSkippedClip);
     if (context.catalog) {
         diagnostics.push(
-            ...deriveArchitectureDiagnostics(
-                authoredPrefix,
-                context.catalog,
-                context.generatedEntryMode,
-            ),
+            ...deriveArchitectureDiagnostics(authoredPrefix, context.catalog),
         );
     }
     const executable = executableClipIndexes(clips).map((clipIdx) => ({

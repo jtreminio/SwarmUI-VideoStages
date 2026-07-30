@@ -1,4 +1,7 @@
+using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.HostVideo;
+using VideoStages.Architectures.Ltx2;
 using VideoStages.Planning;
 using Xunit;
 
@@ -641,6 +644,74 @@ public class VideoExecutionPlanCompilerTests
             Assert.Equal("dialogue.wav", item.UploadedMedia.FileName);
             Assert.Equal(0.75, item.Volume);
         });
+    }
+
+    [Fact]
+    public void Compile_MixedTimelineAudio_SuppressesSegmentsForUnsupportedArchitecture()
+    {
+        ClipSpec ltx = GeneratedClip(0, Stage(10));
+        ClipSpec host = GeneratedClip(1, Stage(11));
+        VideoStagesSpec spec = Spec(false, ltx, host) with
+        {
+            TimelineAudioSegments =
+            [
+                new(
+                    "mixed-overlay",
+                    new UploadedMediaSpec(
+                        "data:audio/wav;base64,QUJD",
+                        "overlay.wav"),
+                    null,
+                    TimelineStartSeconds: 0,
+                    SourceStartSeconds: 0,
+                    LengthSeconds: 4),
+            ],
+        };
+        ClipArchitectureAssignment Assignment(
+            ClipSpec clip,
+            IVideoArchitectureModule module)
+        {
+            VideoArchitectureDescriptor descriptor = module.Descriptor;
+            return new(
+                clip.Id,
+                module,
+                descriptor,
+                clip.Stages.ToDictionary(
+                    stage => stage.ClipStageRawIndex,
+                    stage => new ResolvedVideoModel(
+                        stage.Model,
+                        descriptor.Id,
+                        descriptor.DefaultProfileId,
+                        descriptor)
+                    {
+                        HostFactsAuthoritative = true,
+                    }));
+        }
+        ArchitecturePlanningResult architectures = new(
+            new Dictionary<int, ClipArchitectureAssignment>
+            {
+                [ltx.Id] = Assignment(ltx, Ltx2ArchitectureModule.Instance),
+                [host.Id] = Assignment(host, HostVideoArchitectureModule.Instance),
+            },
+            []);
+
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            architectures);
+
+        Assert.Single(plan.Clips[0].Audio.Segments.Items);
+        Assert.Empty(plan.Clips[1].Audio.Segments.Items);
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                    == "effective-request.audio-segments-ignored"
+                && diagnostic.ClipId == host.Id
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                    == "architecture-capability-unsupported"
+                && diagnostic.Message.Contains("audio segments"));
     }
 
     [Fact]

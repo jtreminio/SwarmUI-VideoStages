@@ -771,7 +771,7 @@ describe("reduceDocumentCommand", () => {
         expect(result.document.clips[0].boundaryOut).toBe("continue");
     });
 
-    it("rejects a target that cannot preserve the authored stage chain", () => {
+    it("preserves an unsupported active stage chain for backend diagnostics", () => {
         const source = document();
         const targetClip = source.clips[1];
         targetClip.icLoras = [
@@ -817,13 +817,54 @@ describe("reduceDocumentCommand", () => {
             { architectureCatalog: catalogWithFake(fake) },
         );
 
-        expect(result.applied).toBe(false);
-        expect(result.failure).toBe("invalid-architecture-conversion");
-        expect(result.document).toEqual(source);
+        expect(result.applied).toBe(true);
+        expect(
+            result.document.clips[1].stages.map(({ model }) => model),
+        ).toEqual(["test-video.safetensors", "test-video.safetensors"]);
         expect(source).toEqual(before);
         expect(source.clips[1].stages.map(({ id }) => id)).toEqual([
             "stage-convert-a",
             "stage-convert-b",
+        ]);
+    });
+
+    it("allows conversion to a single-stage architecture when later authored stages are dormant", () => {
+        const source = document();
+        source.clips[1].stages = [
+            stage("stage-convert-a"),
+            { ...stage("stage-convert-b"), skipped: true },
+        ];
+        const fake = fakeArchitectureCatalog();
+        fake.architectures[0].capabilities.architecture =
+            fake.architectures[0].capabilities.architecture.filter(
+                (feature) => feature !== "multi-stage",
+            );
+
+        const result = reduceDocumentCommand(
+            source,
+            {
+                type: "clip.convert-architecture",
+                clipId: "clip-b",
+                target: {
+                    architectureId: "test-video",
+                    modelProfileId: "test-profile",
+                    model: "test-video.safetensors",
+                    capabilities: fake.architectures[0].capabilities,
+                    entryModes: fake.architectures[0].profiles[0].entryModes,
+                },
+            },
+            { architectureCatalog: catalogWithFake(fake) },
+        );
+
+        expect(result.applied).toBe(true);
+        expect(
+            result.document.clips[1].stages.map(({ model, skipped }) => ({
+                model,
+                skipped,
+            })),
+        ).toEqual([
+            { model: "test-video.safetensors", skipped: false },
+            { model: "test-video.safetensors", skipped: true },
         ]);
     });
 
