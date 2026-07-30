@@ -105,6 +105,8 @@ internal sealed class Ltx2ArchitectureModule :
                 | (model.ModelClass.CompatClass.IsImage2Video
                     ? VideoModelEntryAbility.ImageToVideo
                     : VideoModelEntryAbility.None),
+            Enhancements = ["arbitrary-frame-references"],
+            ReferencePositions = ["any"],
             HostFactsAuthoritative = true,
         };
         return true;

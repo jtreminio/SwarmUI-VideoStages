@@ -419,7 +419,7 @@ describe("diffDocuments", () => {
         ).toThrow(DocumentDiffError);
     });
 
-    it("rejects cross-architecture saves without a catalog or with incompatible restored data", () => {
+    it("requires a catalog but accepts newly authored dormant extras", () => {
         const before = document();
         const { catalog, target } = crossArchitectureCatalog();
         const planned = planArchitectureConversion(
@@ -438,7 +438,7 @@ describe("diffDocuments", () => {
         after.clips[0].refs = [ref("unsupported-restored-ref")];
         expect(() =>
             diffDocuments(before, after, { architectureCatalog: catalog }),
-        ).toThrow(new DocumentDiffError("architecture-invariant"));
+        ).not.toThrow();
     });
 
     it("detects architecture conversion in dormant source-only authored stages", () => {

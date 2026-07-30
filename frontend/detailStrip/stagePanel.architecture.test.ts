@@ -128,7 +128,7 @@ afterEach(() => {
 });
 
 describe("stage architecture model filtering", () => {
-    it("filters WAN models by the input each stage actually receives", () => {
+    it("keeps every WAN family model available for text and image roots", () => {
         const models = catalog();
         const wan = structuredClone(models.architectures[0]);
         wan.id = "wan22";
@@ -157,6 +157,7 @@ describe("stage architecture model filtering", () => {
                 modelProfileId: "wan22-i2v-14b",
                 modelClassId: "wan-i2v-14b",
                 compatibilityClassId: "wan-video",
+                entryAbilities: ["text", "image"],
                 entryModes: ["image-to-video", "source-video", "refine-video"],
             },
             {
@@ -166,6 +167,7 @@ describe("stage architecture model filtering", () => {
                 modelProfileId: "wan22-ti2v-5b",
                 modelClassId: "wan-ti2v-5b",
                 compatibilityClassId: "wan-video",
+                entryAbilities: ["text", "image"],
                 entryModes: ["text-to-video", "image-to-video"],
             },
         );
@@ -202,8 +204,12 @@ describe("stage architecture model filtering", () => {
                 .filter((value) => value.startsWith("wan-"));
         };
 
-        expect(optionsFor("text-to-video")).toEqual(["wan-5b.safetensors"]);
+        expect(optionsFor("text-to-video")).toEqual([
+            "wan-14b.safetensors",
+            "wan-5b.safetensors",
+        ]);
         expect(optionsFor("text-to-video", false, true)).toEqual([
+            "wan-14b.safetensors",
             "wan-5b.safetensors",
         ]);
         expect(optionsFor("image-to-video")).toEqual([
@@ -549,7 +555,7 @@ describe("stage architecture model filtering", () => {
         );
     });
 
-    it("shows a text-only single-stage target when conversion removes an incompatible later stage", () => {
+    it("hides a text-only target that cannot preserve a later decoded stage", () => {
         const models = catalog();
         const target = models.entries.find(
             (entry) => entry.value === "test-video.safetensors",
@@ -583,13 +589,13 @@ describe("stage architecture model filtering", () => {
             testRootDefaults(models),
         );
 
-        expect(modelOptions(column).map(({ value }) => value)).toContain(
+        expect(modelOptions(column).map(({ value }) => value)).not.toContain(
             "test-video.safetensors",
         );
         expect(clip).toEqual(before);
     });
 
-    it("hides an image-only target when conversion removes the source video that made image entry valid", () => {
+    it("shows an image-only target because source video remains authored", () => {
         const models = catalog();
         const target = models.entries.find(
             (entry) => entry.value === "test-video.safetensors",
@@ -623,7 +629,7 @@ describe("stage architecture model filtering", () => {
             testRootDefaults(models),
         );
 
-        expect(modelOptions(column).map(({ value }) => value)).not.toContain(
+        expect(modelOptions(column).map(({ value }) => value)).toContain(
             "test-video.safetensors",
         );
         expect(clip).toEqual(before);

@@ -4,6 +4,11 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan.Planning;
 
+internal sealed record WanFrameReferencePlan(
+    string Source,
+    string UploadFileName,
+    string InlineData);
+
 /// <summary>
 /// The complete graph-free instruction for one Wan stage. The common plan treats this as opaque.
 /// <c>Control</c> is regeneration strength, so a lower positive value starts sampling later in the
@@ -30,7 +35,9 @@ internal sealed record WanStagePayload(
 
 internal sealed record WanClipPayload(
     int ClipId,
-    ModelProfileId ProfileId) :
+    ModelProfileId ProfileId,
+    WanFrameReferencePlan FirstFrameReference = null,
+    WanFrameReferencePlan LastFrameReference = null) :
     IArchitectureClipPayload,
     IArchitectureClipGeometryProjection
 {

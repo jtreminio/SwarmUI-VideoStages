@@ -1276,15 +1276,16 @@
     const architectureId = entry?.architectureId ?? null;
     const descriptor = architectureDescriptor(catalog, architectureId);
     const profileId = entry?.modelProfileId ?? null;
-    const profile = descriptor?.profiles.find(
-      (candidate) => candidate.id === profileId
-    );
     const capabilities = descriptor?.capabilities;
-    return entry && architectureId && profileId && profile && capabilities ? {
+    return entry && architectureId && profileId && descriptor && capabilities ? {
       architectureId,
       modelProfileId: profileId,
       model,
+      extras: [
+        ...entry.enhancements?.extras ?? descriptor.extras ?? []
+      ],
       capabilities: structuredClone(capabilities),
+      ...entry.entryAbilities === void 0 ? {} : { entryAbilities: [...entry.entryAbilities] },
       entryModes: [...entry.entryModes]
     } : null;
   };
@@ -1345,10 +1346,18 @@
     "source-video",
     "refine-video"
   ];
+  var ENTRY_ABILITIES = ["text", "image"];
+  var REFERENCE_POSITIONS = ["first", "last", "any"];
   var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var isTrimmedNonEmpty = (value) => typeof value === "string" && value.length > 0 && value === value.trim();
   var isUniqueStringArray = (value) => Array.isArray(value) && value.every((entry) => isTrimmedNonEmpty(entry)) && new Set(value).size === value.length;
   var isEntryModeArray = (value) => isUniqueStringArray(value) && value.every((entry) => ENTRY_MODES.includes(entry));
+  var isEntryAbilityArray = (value) => isUniqueStringArray(value) && value.every(
+    (entry) => ENTRY_ABILITIES.includes(entry)
+  );
+  var isReferencePositionArray = (value) => isUniqueStringArray(value) && value.every(
+    (entry) => REFERENCE_POSITIONS.includes(entry)
+  );
   var isRuleDecision = (value, allowedScopes) => {
     if (!isRecord2(value) || !["supported", "unsupported", "conditional"].includes(
       `${value.support}`
@@ -1443,7 +1452,7 @@
     const architectures = [];
     const architectureIds = /* @__PURE__ */ new Set();
     for (const raw of value.architectures) {
-      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isTrimmedNonEmpty(raw.defaultProfileId) || !isCapabilities(raw.capabilities) || !Array.isArray(raw.profiles) || !raw.profiles.every(isProfile) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["architecture", "clip", "stage", "output"])) {
+      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isTrimmedNonEmpty(raw.defaultProfileId) || !isCapabilities(raw.capabilities) || raw.extras !== void 0 && !isUniqueStringArray(raw.extras) || !Array.isArray(raw.profiles) || !raw.profiles.every(isProfile) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["architecture", "clip", "stage", "output"])) {
         return null;
       }
       const profileIds = raw.profiles.map((profile) => profile.id);
@@ -1468,6 +1477,7 @@
         id: raw.id,
         label: raw.label,
         defaultProfileId: raw.defaultProfileId,
+        ...raw.extras === void 0 ? {} : { extras: [...raw.extras] },
         capabilities: structuredClone(raw.capabilities),
         profiles: structuredClone(raw.profiles),
         boundaryRules: structuredClone(raw.boundaryRules),
@@ -1480,7 +1490,9 @@
     const modelNames = /* @__PURE__ */ new Set();
     const models = [];
     for (const raw of value.models) {
-      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !isEntryModeArray(raw.entryModes) || raw.entryModes.length === 0) {
+      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !isEntryModeArray(raw.entryModes) || raw.entryModes.length === 0 || raw.entryAbilities !== void 0 && (!isEntryAbilityArray(raw.entryAbilities) || raw.entryAbilities.length === 0) || raw.enhancements !== void 0 && (!isRecord2(raw.enhancements) || !isUniqueStringArray(raw.enhancements.extras) || !isReferencePositionArray(
+        raw.enhancements.referencePositions
+      ))) {
         return null;
       }
       const descriptor = architectures.find(
@@ -1492,12 +1504,22 @@
         return null;
       }
       modelNames.add(raw.modelName);
+      const rawEnhancements = raw.enhancements;
       models.push({
         modelName: raw.modelName,
         architectureId: raw.architectureId,
         modelProfileId: raw.modelProfileId,
         modelClassId: raw.modelClassId,
         compatibilityClassId: raw.compatibilityClassId,
+        ...raw.entryAbilities === void 0 ? {} : { entryAbilities: [...raw.entryAbilities] },
+        ...rawEnhancements === void 0 ? {} : {
+          enhancements: {
+            extras: [...rawEnhancements.extras],
+            referencePositions: [
+              ...rawEnhancements.referencePositions
+            ]
+          }
+        },
         entryModes: [...raw.entryModes]
       });
     }
@@ -1626,6 +1648,14 @@
           modelProfileId: backendModel?.modelProfileId ?? null,
           modelClassId: backendModel?.modelClassId ?? null,
           compatibilityClassId: backendModel?.compatibilityClassId ?? null,
+          ...backendModel?.entryAbilities === void 0 ? {} : {
+            entryAbilities: [...backendModel.entryAbilities]
+          },
+          ...backendModel?.enhancements === void 0 ? {} : {
+            enhancements: structuredClone(
+              backendModel.enhancements
+            )
+          },
           entryModes: [...backendModel?.entryModes ?? []]
         };
       })
@@ -2930,7 +2960,10 @@
     }
     const catalog = buildArchitectureModelCatalog([modelName], [modelName]);
     const target = buildArchitectureRetargetPlan(catalog, modelName);
-    return target ? target.entryModes.includes("text-to-video") : false;
+    if (!target) {
+      return false;
+    }
+    return target.entryAbilities === void 0 ? target.entryModes.includes("text-to-video") : target.entryAbilities.includes("text");
   };
   var getRootGeneratedEntryMode = () => !`${getRootModelInput()?.value ?? ""}`.trim() || isRootTextToVideoModel() ? "text-to-video" : "image-to-video";
   var getDropdownOptions = (paramId, fallbackSelectId) => {
@@ -3526,9 +3559,7 @@
   var modelIdentityFromCatalog = (catalog, model) => {
     if (!catalog) return null;
     const entry = modelCatalogEntry(catalog, model);
-    if (!entry?.architectureId || !entry.modelProfileId || !entry.compatibilityClassId || !architectureDescriptor(catalog, entry.architectureId)?.profiles.some(
-      (profile) => profile.id === entry.modelProfileId
-    )) {
+    if (!entry?.architectureId || !entry.modelProfileId || !entry.compatibilityClassId) {
       return null;
     }
     return {
@@ -3543,9 +3574,7 @@
       stage,
       identity: modelIdentityFromCatalog(catalog, stage.model)
     }));
-    if (identities.some(
-      ({ stage, identity }) => !identity || stage.modelProfileId !== identity.modelProfileId
-    )) {
+    if (identities.some(({ identity }) => !identity)) {
       return null;
     }
     const authored = identities[0]?.identity ?? null;
@@ -3555,7 +3584,7 @@
       return null;
     }
     const descriptor = authored ? architectureDescriptor(catalog, authored.architectureId) : null;
-    if (clip.stages.length > 1 && !descriptor?.capabilities.architecture.includes("multi-stage")) {
+    if (clip.stages.length > 1 && !(descriptor?.extras?.includes("multi-stage") ?? descriptor?.capabilities.architecture.includes("multi-stage"))) {
       return null;
     }
     const authoredIdentity = {
@@ -3598,268 +3627,49 @@
     return true;
   };
 
-  // frontend/architectures/policy/featureValues.ts
-  var FEATURE_LABEL = {
-    multiStage: "Multiple stages",
-    sourceVideo: "Source video",
-    frameReferences: "Frame references",
-    referenceFraming: "Reference framing",
-    retake: "Retakes",
-    majorPrompt: "Major prompts",
-    promptRelay: "Relay prompts",
-    clipAudio: "Clip audio",
-    audioReuse: "Captured stage audio reuse",
-    audioDerivedDuration: "Audio-derived clip duration",
-    controlSignalDerivedDuration: "Control-signal-derived clip duration",
-    stageLoras: "LoRAs",
-    icLora: "IC-LoRA",
-    hdr: "HDR",
-    upscale: "Stage upscaling"
-  };
-  var architectureReason = (label, feature) => `${FEATURE_LABEL[feature]} is not supported by ${label}.`;
-  var noArchitectureReason = (feature) => `${FEATURE_LABEL[feature]} requires a generated clip with a known architecture.`;
-  var upscaleModeForMethod = (method) => {
-    const normalized = method.trim().toLowerCase();
-    if (normalized.startsWith("latentmodel-")) return "latent-model";
-    if (normalized.startsWith("latent-")) return "latent";
-    if (normalized.startsWith("pixel-")) return "pixel";
-    return "model";
-  };
-
-  // frontend/architectures/policy/clipStageViews.ts
-  var FEATURE_RULE_CODES = {
-    promptRelay: [CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength],
-    audioReuse: [CONDITIONAL_RULE_CODES.audioReuseRequiresStages],
-    retake: [
-      CONDITIONAL_RULE_CODES.retakeRequiresSource,
-      CONDITIONAL_RULE_CODES.retakeExcludesReferences
-    ],
-    hdr: [CONDITIONAL_RULE_CODES.uniformTimelineHdr]
-  };
-  var conditionalRuleFor = (clip, feature, descriptor, scope, effectiveArchitectureId) => {
-    const codes = FEATURE_RULE_CODES[feature];
-    if (!codes) return void 0;
-    for (const code of codes) {
-      const rule = conditionalRule(descriptor.rules, code);
-      if (rule && evaluateConditionalRule(rule, {
-        clip,
-        globalRefineMode: scope.globalRefineMode,
-        timelineClips: scope.timelineClips,
-        hasActiveHdr: (target) => clipHasActiveHdrForArchitecture(
-          target,
-          effectiveArchitectureId(target)
-        )
-      })) {
-        return rule;
-      }
-    }
-    return void 0;
-  };
-  var architectureFeatureSupport = (feature, scope) => {
-    const capability = scope.capabilities;
-    switch (feature) {
-      case "multiStage":
-        return capability.architecture.includes("multi-stage");
-      case "sourceVideo":
-        return capability.clip.includes("source-video");
-      case "frameReferences":
-        return capability.clip.includes("references") && capability.stage.includes("frame-references");
-      case "referenceFraming":
-        return capability.clip.includes("reference-framing");
-      case "retake":
-        return capability.clip.includes("retake");
-      case "majorPrompt":
-        return capability.clip.includes("prompts");
-      case "promptRelay":
-        return capability.clip.includes("prompt-relay");
-      case "clipAudio":
-        return capability.clip.includes("audio-sources") && (scope.audioSource === void 0 || isAllowedAudioSource(
-          capability.audioSourceKinds,
-          scope.audioSource
-        ));
-      case "audioReuse":
-        return capability.clip.includes("audio-reuse");
-      case "audioDerivedDuration":
-        return capability.clip.includes("audio-derived-duration");
-      case "controlSignalDerivedDuration":
-        return capability.clip.includes("control-signal-derived-duration");
-      case "stageLoras":
-        return capability.stage.includes("lora") && (scope.profileCapabilities === void 0 || scope.profileCapabilities.includes("normal-lora"));
-      case "icLora":
-        return capability.stage.includes("ic-lora");
-      case "hdr":
-        return capability.stage.includes("hdr");
-      case "upscale":
-        return scope.upscaleMethod === void 0 ? capability.upscaleModes.length > 0 : capability.upscaleModes.includes(
-          upscaleModeForMethod(scope.upscaleMethod)
-        );
-    }
-  };
-  var scopedFeatureSupport = (feature, descriptor, profileId) => architectureFeatureSupport(feature, {
-    capabilities: descriptor.capabilities,
-    profileCapabilities: descriptor.profiles.find(
-      (entry) => entry.id === profileId
-    )?.capabilities
-  });
-  var createClipStageCapabilityViews = (architectureById, modelByName, scope = {}) => {
-    const effectiveClipIdentity = (clip) => {
-      const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
-      const resolvedModel = sourceOnly ? void 0 : modelByName.get(clip.stages[0]?.model ?? "");
-      const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? clip.architecture;
-      const profileId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.modelProfileId ?? clip.modelProfileId;
-      return {
-        architectureId,
-        profileId,
-        descriptor: architectureById.get(architectureId)
-      };
-    };
-    const forClip = (clip) => {
-      const identity = effectiveClipIdentity(clip);
-      const { architectureId, profileId, descriptor } = identity;
-      const label = descriptor?.label ?? (architectureId === NONE_ARCHITECTURE_ID ? "source-only clips" : `unknown architecture '${architectureId}'`);
-      const decision = (feature) => {
-        if (!descriptor) {
-          return {
-            supported: false,
-            reason: noArchitectureReason(feature),
-            rule: null
-          };
-        }
-        const conditionalRule2 = conditionalRuleFor(
-          clip,
-          feature,
-          descriptor,
-          scope,
-          (target) => effectiveClipIdentity(target).architectureId
-        );
-        const supported = scopedFeatureSupport(feature, descriptor, profileId) && !conditionalRule2;
-        return {
-          supported,
-          reason: supported ? "" : conditionalRule2?.reason ?? architectureReason(label, feature),
-          rule: conditionalRule2 ?? null
-        };
-      };
-      return {
-        architectureId,
-        architectureLabel: label,
-        known: descriptor !== void 0,
-        audioSourceKinds: descriptor?.capabilities.audioSourceKinds ?? [],
-        decision,
-        authoringState: (feature, persisted) => {
-          const result = decision(feature);
-          return {
-            ...result,
-            visible: result.supported || persisted,
-            enabled: result.supported
-          };
-        }
-      };
-    };
-    const forStage = (clip, stage) => {
-      const view = forClip(clip);
-      const sourceOnly = view.architectureId === NONE_ARCHITECTURE_ID && activeStageCount(clip) === 0 && clip.sourceVideo !== null;
-      const resolvedModel = sourceOnly ? void 0 : modelByName.get(stage.model);
-      const architectureId = resolvedModel?.architectureId ?? view.architectureId;
-      const descriptor = architectureById.get(architectureId);
-      const profileId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.modelProfileId ?? stage.modelProfileId;
-      const profile = descriptor?.profiles.find(
-        (entry) => entry.id === profileId
-      );
-      const decision = (feature) => {
-        if (feature === "stageLoras" && descriptor) {
-          const supported2 = descriptor.capabilities.stage.includes("lora") && profile?.capabilities.includes("normal-lora") === true;
-          const profileRule = supported2 ? conditionalRule(
-            profile.rules,
-            CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
-          ) : null;
-          const violatedRule = profileRule && evaluateConditionalRule(profileRule, { clip, stage }) ? profileRule : null;
-          return {
-            supported: supported2 && !violatedRule,
-            reason: supported2 && !violatedRule ? "" : violatedRule?.reason ?? `LoRAs require normal-LoRA support in ${descriptor.label}.`,
-            rule: violatedRule
-          };
-        }
-        if (feature === "sampler" || feature === "scheduler") {
-          const required = feature === "sampler" ? "sampler-selection" : "scheduler-selection";
-          const supported2 = profile?.capabilities.includes(required) === true;
-          return {
-            supported: supported2,
-            reason: supported2 ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection is not supported by this model profile.`,
-            rule: null
-          };
-        }
-        const supported = descriptor !== void 0 && architectureFeatureSupport("upscale", {
-          capabilities: descriptor.capabilities
-        });
-        return {
-          supported,
-          reason: supported ? "" : descriptor ? architectureReason(descriptor.label, "upscale") : noArchitectureReason("upscale"),
-          rule: null
-        };
-      };
-      return {
-        upscaleModes: descriptor?.capabilities.upscaleModes ?? [],
-        decision,
-        authoringState: (feature, persisted) => {
-          const result = decision(feature);
-          return {
-            ...result,
-            visible: result.supported || persisted,
-            enabled: result.supported
-          };
-        }
-      };
-    };
-    return { forClip, forStage };
-  };
-
   // frontend/architectures/conversion/entryModePolicy.ts
   var firstActiveStageIndex = (clip) => {
     const index = clip.stages.findIndex((stage) => !stage.skipped);
     return index >= 0 ? index : null;
   };
   var modelSupportsStageEntry = (model, clip, stageIdx, generatedEntryMode) => {
+    const supportsText = model.entryAbilities?.includes("text") ?? model.entryModes.includes("text-to-video");
+    const supportsImage = model.entryAbilities?.includes("image") ?? model.entryModes.includes("image-to-video");
     const firstActive = firstActiveStageIndex(clip);
     const isClipRoot = firstActive === null ? !clip.stages.slice(0, stageIdx).some((candidate) => !candidate.skipped) : stageIdx === firstActive;
     if (!isClipRoot) {
-      return model.entryModes.includes("image-to-video");
+      return supportsImage;
     }
     if (clip.sourceVideo === null) {
-      return model.entryModes.includes(generatedEntryMode);
+      return generatedEntryMode === "text-to-video" ? supportsText : supportsImage;
     }
-    return model.entryModes.includes("source-video") || model.entryModes.includes("refine-video") || model.entryModes.includes("image-to-video");
+    return supportsImage || model.entryModes.includes("source-video") || model.entryModes.includes("refine-video");
   };
   var modelSupportsAllActiveStageEntries = (model, clip, generatedEntryMode) => clip.stages.every(
     (stage, stageIdx) => stage.skipped || modelSupportsStageEntry(model, clip, stageIdx, generatedEntryMode)
   );
 
   // frontend/architectures/conversion/plan.ts
-  var countLabel = (count, singular) => `${count} ${singular}${count === 1 ? "" : "s"}`;
-  var ownId = (value) => typeof value === "object" && value !== null && "id" in value && typeof value.id === "string" ? value.id : null;
-  var collectIds = (values) => values.map(ownId).filter((id) => id !== null);
   var resolveArchitectureRetarget = (requested, catalog) => {
     if (!catalog) {
       return null;
     }
     const model = modelCatalogEntry(catalog, requested.model);
-    if (!model?.architectureId || !model.modelProfileId || model.architectureId !== requested.architectureId || model.modelProfileId !== requested.modelProfileId) {
+    if (!model?.architectureId || !model.modelProfileId || model.architectureId !== requested.architectureId) {
       return null;
     }
     const descriptor = architectureDescriptor(catalog, model.architectureId);
-    const profile = descriptor?.profiles.find(
-      (entry) => entry.id === model.modelProfileId
-    );
-    if (!descriptor || !profile) {
+    if (!descriptor) {
       return null;
     }
     return {
       architectureId: descriptor.id,
-      modelProfileId: profile.id,
+      modelProfileId: model.modelProfileId,
       model: model.value,
+      extras: [...model.enhancements?.extras ?? descriptor.extras ?? []],
       capabilities: structuredClone(descriptor.capabilities),
-      entryModes: [...model.entryModes],
-      profileCapabilities: [...profile.capabilities],
-      profileRules: structuredClone(profile.rules)
+      ...model.entryAbilities === void 0 ? {} : { entryAbilities: [...model.entryAbilities] },
+      entryModes: [...model.entryModes]
     };
   };
   var planArchitectureConversion = (source, requested, catalog, generatedEntryMode = "text-to-video") => {
@@ -3867,176 +3677,26 @@
     if (!target) {
       return null;
     }
+    if (!modelSupportsAllActiveStageEntries(target, source, generatedEntryMode)) {
+      return null;
+    }
     const clip = structuredClone(source);
-    const removals = [];
-    const removedEntityIds = [];
-    const supports = (feature, value) => architectureFeatureSupport(feature, {
-      capabilities: target.capabilities,
-      profileCapabilities: target.profileCapabilities,
-      ...value
-    });
-    const supportsMultipleStages = supports("multiStage");
-    const supportsReferences = supports("frameReferences");
-    const supportsNormalLoras = supports("stageLoras");
-    const samplingStageRule = conditionalRule(
-      target.profileRules,
-      CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
-    );
     clip.architecture = target.architectureId;
     clip.modelProfileId = target.modelProfileId;
-    const payloadOwner = source.architecture === NONE_ARCHITECTURE_ID ? modelIdentityFromCatalog(catalog, source.stages[0]?.model ?? "")?.architectureId ?? source.architecture : source.architecture;
-    if (payloadOwner !== target.architectureId && clip.architecturePayload !== null) {
-      removals.push("architecture-specific payload");
-      clip.architecturePayload = null;
-    }
-    if (!supportsMultipleStages && clip.stages.length > 1) {
-      const removedStages = clip.stages.slice(1);
-      removals.push(countLabel(removedStages.length, "later authored stage"));
-      removedEntityIds.push(...collectIds(removedStages));
-      clip.stages = clip.stages.slice(0, 1);
-    }
-    if (!supportsReferences && clip.refs.length > 0) {
-      removals.push(countLabel(clip.refs.length, "frame reference"));
-      removedEntityIds.push(...collectIds(clip.refs));
-      clip.refs = [];
-    }
-    if (!supports("referenceFraming") && clip.refFraming !== "crop") {
-      removals.push("reference framing setting");
-      clip.refFraming = "crop";
-    }
-    const removedClipLoras = !supportsNormalLoras ? clip.loras.length : 0;
-    if (removedClipLoras > 0) {
-      clip.loras = [];
-    }
-    let removedUpscaleSettings = 0;
-    let repairedNormalLoraWeights = 0;
     for (const stage of clip.stages) {
       stage.model = target.model;
       stage.modelProfileId = target.modelProfileId;
-      if (!supportsReferences) {
-        stage.refStrengths = [];
-      }
-      if (!supportsNormalLoras) {
-        stage.loraWeights = [];
-      } else if (samplingStageRule && evaluateConditionalRule(samplingStageRule, { clip, stage })) {
-        for (let index = 0; index < clip.loras.length; index++) {
-          if ((stage.loraWeights[index] ?? 1) !== 0) {
-            stage.loraWeights[index] = 0;
-            repairedNormalLoraWeights++;
-          }
-        }
-      }
-      if (stage.upscale !== 1 && !supports("upscale", { upscaleMethod: stage.upscaleMethod })) {
-        removedUpscaleSettings++;
-        stage.upscale = 1;
-      }
     }
-    if (removedClipLoras > 0) {
-      removals.push(countLabel(removedClipLoras, "clip LoRA"));
-    }
-    if (repairedNormalLoraWeights > 0) {
-      removals.push(
-        `${repairedNormalLoraWeights} normal LoRA ${repairedNormalLoraWeights === 1 ? "weight" : "weights"} disabled on samplerless stages`
-      );
-    }
-    if (removedUpscaleSettings > 0) {
-      removals.push("stage upscale settings");
-    }
-    const removeIcLoras = (doomed) => {
-      const removed = clip.icLoras.filter(doomed);
-      if (removed.length === 0) {
-        return 0;
-      }
-      for (let index = clip.icLoras.length - 1; index >= 0; index--) {
-        if (doomed(clip.icLoras[index])) {
-          removeIcLoraStrengthAt(clip, index);
-        }
-      }
-      removedEntityIds.push(...collectIds(removed));
-      clip.icLoras = clip.icLoras.filter((entry) => !doomed(entry));
-      return removed.length;
-    };
-    if (!supports("icLora") && clip.icLoras.length > 0) {
-      removals.push(
-        countLabel(
-          removeIcLoras(() => true),
-          "IC-LoRA"
-        )
-      );
-    } else if (supports("icLora")) {
-      if (!supports("hdr")) {
-        const hdrCount = removeIcLoras(
-          (entry) => isArchitectureHdrFeature(source.architecture, entry)
-        );
-        if (hdrCount > 0) {
-          removals.push(countLabel(hdrCount, "HDR IC-LoRA"));
-        }
-      }
-      let repairedTargets = false;
-      for (const entry of clip.icLoras) {
-        if (entry.stage >= clip.stages.length) {
-          entry.stage = IC_LORA_STAGE_ALL;
-          repairedTargets = true;
-        }
-        if (entry.driveData === "none" && entry.driveSource !== IC_LORA_SOURCE_UPLOAD) {
-          entry.driveSource = IC_LORA_SOURCE_UPLOAD;
-          entry.driveMedia = null;
-        }
-      }
-      if (repairedTargets) {
-        removals.push("IC-LoRA targets on removed stages");
-      }
-    }
-    if (!supports("retake") && clip.retake !== null) {
-      removals.push("retake");
-      const id = ownId(clip.retake);
-      if (id) removedEntityIds.push(id);
-      clip.retake = null;
-    }
-    if (!supports("majorPrompt") && clip.prompt.trim()) {
-      removals.push("major prompt");
-      clip.prompt = "";
-    }
-    if (!supports("promptRelay") && clip.promptWindows.length > 0) {
-      removals.push(countLabel(clip.promptWindows.length, "relay prompt"));
-      removedEntityIds.push(...collectIds(clip.promptWindows));
-      clip.promptWindows = [];
-    }
-    if (!supports("sourceVideo") && clip.sourceVideo) {
-      removals.push("source video");
-      clip.sourceVideo = null;
-    }
-    if (!supports("audioReuse") && clip.reuseAudio) {
-      removals.push("captured stage audio reuse");
-      clip.reuseAudio = false;
-    }
-    if (!supports("controlSignalDerivedDuration") && clip.clipLengthFromControlNet) {
-      removals.push("control-signal-derived clip duration");
-      clip.clipLengthFromControlNet = false;
-    }
-    if (!supports("clipAudio", { audioSource: clip.audioSource })) {
-      const hasAudioSettings = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.saveAudioTrack;
-      if (hasAudioSettings) {
-        removals.push("clip audio source settings");
-      }
-      clip.audioSource = defaultAuthoringAudioSource(
-        target.capabilities.audioSourceKinds
-      );
-      clip.uploadedAudio = null;
-      clip.saveAudioTrack = false;
-    }
-    if (clip.clipLengthFromAudio && (!supports("audioDerivedDuration") || !canUseClipLengthFromAudio(clip.audioSource))) {
-      removals.push("audio-derived clip duration");
-      clip.clipLengthFromAudio = false;
-    }
-    if (!modelSupportsAllActiveStageEntries(target, clip, generatedEntryMode)) {
-      return null;
+    const payloadOwner = source.architecture === NONE_ARCHITECTURE_ID ? modelIdentityFromCatalog(catalog, source.stages[0]?.model ?? "")?.architectureId ?? source.architecture : source.architecture;
+    const dropsForeignPayload = payloadOwner !== target.architectureId && clip.architecturePayload !== null;
+    if (dropsForeignPayload) {
+      clip.architecturePayload = null;
     }
     return {
       clip,
-      removals,
-      removedEntityIds,
-      selectionAffected: removedEntityIds.length > 0
+      removals: dropsForeignPayload ? ["architecture-specific payload"] : [],
+      removedEntityIds: [],
+      selectionAffected: false
     };
   };
 
@@ -5739,6 +5399,227 @@
     body.prepend(notice);
   };
 
+  // frontend/architectures/policy/featureValues.ts
+  var FEATURE_LABEL = {
+    multiStage: "Multiple stages",
+    sourceVideo: "Source video",
+    frameReferences: "Frame references",
+    referenceFraming: "Reference framing",
+    retake: "Retakes",
+    majorPrompt: "Major prompts",
+    promptRelay: "Relay prompts",
+    clipAudio: "Clip audio",
+    audioReuse: "Captured stage audio reuse",
+    audioDerivedDuration: "Audio-derived clip duration",
+    controlSignalDerivedDuration: "Control-signal-derived clip duration",
+    stageLoras: "LoRAs",
+    icLora: "IC-LoRA",
+    hdr: "HDR",
+    upscale: "Stage upscaling"
+  };
+  var architectureReason = (label, feature) => `${FEATURE_LABEL[feature]} is not supported by ${label}.`;
+  var noArchitectureReason = (feature) => `${FEATURE_LABEL[feature]} requires a generated clip with a known architecture.`;
+  var upscaleModeForMethod = (method) => {
+    const normalized = method.trim().toLowerCase();
+    if (normalized.startsWith("latentmodel-")) return "latent-model";
+    if (normalized.startsWith("latent-")) return "latent";
+    if (normalized.startsWith("pixel-")) return "pixel";
+    return "model";
+  };
+
+  // frontend/architectures/policy/clipStageViews.ts
+  var FEATURE_RULE_CODES = {
+    promptRelay: [CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength],
+    audioReuse: [CONDITIONAL_RULE_CODES.audioReuseRequiresStages],
+    retake: [
+      CONDITIONAL_RULE_CODES.retakeRequiresSource,
+      CONDITIONAL_RULE_CODES.retakeExcludesReferences
+    ],
+    hdr: [CONDITIONAL_RULE_CODES.uniformTimelineHdr]
+  };
+  var conditionalRuleFor = (clip, feature, descriptor, scope, effectiveArchitectureId) => {
+    const codes = FEATURE_RULE_CODES[feature];
+    if (!codes) return void 0;
+    for (const code of codes) {
+      const rule = conditionalRule(descriptor.rules, code);
+      if (rule && evaluateConditionalRule(rule, {
+        clip,
+        globalRefineMode: scope.globalRefineMode,
+        timelineClips: scope.timelineClips,
+        hasActiveHdr: (target) => clipHasActiveHdrForArchitecture(
+          target,
+          effectiveArchitectureId(target)
+        )
+      })) {
+        return rule;
+      }
+    }
+    return void 0;
+  };
+  var architectureFeatureSupport = (feature, scope) => {
+    const capability = scope.capabilities;
+    const extras = scope.extras;
+    const has = (extra, legacy, legacyValue = extra) => extras === void 0 ? legacy.includes(legacyValue) : extras.includes(extra);
+    switch (feature) {
+      case "multiStage":
+        return has("multi-stage", capability.architecture);
+      case "sourceVideo":
+        return has("source-video", capability.clip);
+      case "frameReferences":
+        return has("frame-references", capability.stage);
+      case "referenceFraming":
+        return has("reference-framing", capability.clip);
+      case "retake":
+        return has("retake", capability.clip);
+      case "majorPrompt":
+        return has("prompts", capability.clip);
+      case "promptRelay":
+        return has("prompt-relay", capability.clip);
+      case "clipAudio":
+        return has("audio-sources", capability.clip) && (scope.audioSource === void 0 || isAllowedAudioSource(
+          capability.audioSourceKinds,
+          scope.audioSource
+        ));
+      case "audioReuse":
+        return has("audio-reuse", capability.clip);
+      case "audioDerivedDuration":
+        return has("audio-derived-duration", capability.clip);
+      case "controlSignalDerivedDuration":
+        return has("control-signal-derived-duration", capability.clip);
+      case "stageLoras":
+        return has("lora", capability.stage);
+      case "icLora":
+        return has("ic-lora", capability.stage);
+      case "hdr":
+        return has("hdr", capability.stage);
+      case "upscale":
+        return scope.upscaleMethod === void 0 ? ["pixel", "model", "latent", "latent-model"].some(
+          (mode) => has(`${mode}-upscale`, capability.upscaleModes, mode)
+        ) : has(
+          `${upscaleModeForMethod(scope.upscaleMethod)}-upscale`,
+          capability.upscaleModes,
+          upscaleModeForMethod(scope.upscaleMethod)
+        );
+    }
+  };
+  var createClipStageCapabilityViews = (architectureById, modelByName, scope = {}) => {
+    const effectiveClipIdentity = (clip) => {
+      const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+      const resolvedModel = sourceOnly ? void 0 : modelByName.get(clip.stages[0]?.model ?? "");
+      const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? clip.architecture;
+      const profileId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.modelProfileId ?? clip.modelProfileId;
+      return {
+        architectureId,
+        profileId,
+        descriptor: architectureById.get(architectureId)
+      };
+    };
+    const forClip = (clip) => {
+      const identity = effectiveClipIdentity(clip);
+      const { architectureId, descriptor } = identity;
+      const resolvedModel = modelByName.get(clip.stages[0]?.model ?? "");
+      const label = descriptor?.label ?? (architectureId === NONE_ARCHITECTURE_ID ? "source-only clips" : `unknown architecture '${architectureId}'`);
+      const decision = (feature) => {
+        if (!descriptor) {
+          return {
+            supported: false,
+            reason: noArchitectureReason(feature),
+            rule: null
+          };
+        }
+        const conditionalRule2 = conditionalRuleFor(
+          clip,
+          feature,
+          descriptor,
+          scope,
+          (target) => effectiveClipIdentity(target).architectureId
+        );
+        const supported = architectureFeatureSupport(feature, {
+          capabilities: descriptor.capabilities,
+          extras: resolvedModel?.enhancements?.extras ?? descriptor.extras
+        }) && !conditionalRule2;
+        return {
+          supported,
+          reason: supported ? "" : conditionalRule2?.reason ?? architectureReason(label, feature),
+          rule: conditionalRule2 ?? null
+        };
+      };
+      return {
+        architectureId,
+        architectureLabel: label,
+        known: descriptor !== void 0,
+        audioSourceKinds: descriptor?.capabilities.audioSourceKinds ?? [],
+        decision,
+        authoringState: (feature, persisted) => {
+          const result = decision(feature);
+          return {
+            ...result,
+            visible: result.supported || persisted,
+            enabled: result.supported
+          };
+        }
+      };
+    };
+    const forStage = (clip, stage) => {
+      const view = forClip(clip);
+      const sourceOnly = view.architectureId === NONE_ARCHITECTURE_ID && activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+      const resolvedModel = sourceOnly ? void 0 : modelByName.get(stage.model);
+      const architectureId = resolvedModel?.architectureId ?? view.architectureId;
+      const descriptor = architectureById.get(architectureId);
+      const profileId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.modelProfileId ?? stage.modelProfileId;
+      const profile = descriptor?.profiles.find(
+        (entry) => entry.id === profileId
+      );
+      const decision = (feature) => {
+        if (feature === "stageLoras" && descriptor) {
+          const modelExtras = resolvedModel?.enhancements?.extras;
+          const supported2 = modelExtras ? modelExtras.includes("lora") && modelExtras.includes("normal-lora") : descriptor.capabilities.stage.includes("lora") && profile?.capabilities.includes("normal-lora") === true;
+          const profileRule = supported2 ? conditionalRule(
+            profile?.rules ?? [],
+            CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
+          ) : null;
+          const violatedRule = profileRule && evaluateConditionalRule(profileRule, { clip, stage }) ? profileRule : null;
+          return {
+            supported: supported2 && !violatedRule,
+            reason: supported2 && !violatedRule ? "" : violatedRule?.reason ?? `LoRAs require normal-LoRA support in ${descriptor.label}.`,
+            rule: violatedRule
+          };
+        }
+        if (feature === "sampler" || feature === "scheduler") {
+          const required = feature === "sampler" ? "sampler-selection" : "scheduler-selection";
+          const supported2 = resolvedModel?.enhancements?.extras.includes(required) ?? profile?.capabilities.includes(required) === true;
+          return {
+            supported: supported2,
+            reason: supported2 ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection is not supported by this model profile.`,
+            rule: null
+          };
+        }
+        const supported = descriptor !== void 0 && architectureFeatureSupport("upscale", {
+          capabilities: descriptor.capabilities,
+          extras: resolvedModel?.enhancements?.extras ?? descriptor.extras
+        });
+        return {
+          supported,
+          reason: supported ? "" : descriptor ? architectureReason(descriptor.label, "upscale") : noArchitectureReason("upscale"),
+          rule: null
+        };
+      };
+      return {
+        upscaleModes: descriptor?.capabilities.upscaleModes ?? [],
+        decision,
+        authoringState: (feature, persisted) => {
+          const result = decision(feature);
+          return {
+            ...result,
+            visible: result.supported || persisted,
+            enabled: result.supported
+          };
+        }
+      };
+    };
+    return { forClip, forStage };
+  };
+
   // frontend/architectures/policy.ts
   var createCapabilityViewResolver = (catalog, scope = {}) => {
     const architectureById = new Map(
@@ -5771,15 +5652,17 @@
   var issue = (code, message, clipIdx, severity = "error") => ({ severity, code, message, clipIdx });
   var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities) => {
     const diagnostics = [];
+    const backendProjectsUnsupported = architectureId === "wan22" || architectureId === "host-video";
     const supports = (feature, value) => architectureFeatureSupport(feature, { capabilities, ...value });
-    const unsupported = (active, key, label, severity = "error") => {
+    const unsupported = (active, key, label, severity) => {
       if (active) {
+        const effectiveSeverity = severity ?? (backendProjectsUnsupported ? "warning" : "error");
         diagnostics.push(
           issue(
             `architecture.unsupported.${key}`,
-            severity === "warning" ? `${label} is saved on Clip ${clipIdx}, but its architecture cannot use it. Generation will ignore it and keep the authored setting.` : `${label} is persisted on Clip ${clipIdx}, but its architecture does not support it. Remove it or explicitly convert the clip.`,
+            effectiveSeverity === "warning" ? `${label} is saved on Clip ${clipIdx}, but its architecture cannot use it. Generation will ignore it and keep the authored setting.` : `${label} is persisted on Clip ${clipIdx}, but its architecture does not support it. Remove it or explicitly convert the clip.`,
             clipIdx,
-            severity
+            effectiveSeverity
           )
         );
       }
@@ -5802,8 +5685,7 @@
     unsupported(
       !supports("icLora") && clip.icLoras.length > 0,
       "ic-lora",
-      "IC-LoRA",
-      architectureId === "wan22" ? "warning" : "error"
+      "IC-LoRA"
     );
     unsupported(
       !supports("hdr") && clip.icLoras.some(
@@ -5852,7 +5734,7 @@
       unsupportedUpscales.length > 0,
       "upscale",
       "Stage upscaling",
-      architectureId === "wan22" && unsupportedUpscales.every(
+      backendProjectsUnsupported && unsupportedUpscales.every(
         (stage) => isKnownAdvancedUpscale(stage.upscaleMethod)
       ) ? "warning" : "error"
     );
@@ -11467,6 +11349,59 @@
     return built.section;
   };
 
+  // frontend/architectures/referenceEndpoints.ts
+  var referenceEndpointPolicy = (clip, catalog) => {
+    const activeStages = clip.stages.slice(0, activeStageCount(clip));
+    const firstPositions = modelCatalogEntry(catalog, activeStages[0]?.model)?.enhancements?.referencePositions ?? [];
+    let terminalGenerating = activeStages.at(-1);
+    while (terminalGenerating && terminalGenerating.control <= 0) {
+      activeStages.pop();
+      terminalGenerating = activeStages.at(-1);
+    }
+    const lastPositions = modelCatalogEntry(catalog, terminalGenerating?.model)?.enhancements?.referencePositions ?? [];
+    if (firstPositions.includes("any")) {
+      return {
+        positions: ["any"],
+        bounded: false,
+        supportsFirst: true,
+        supportsLast: true
+      };
+    }
+    const supportsFirst = firstPositions.includes("first");
+    const supportsLast = lastPositions.includes("last");
+    const positions = [
+      ...supportsFirst ? ["first"] : [],
+      ...supportsLast ? ["last"] : []
+    ];
+    return {
+      positions,
+      bounded: positions.length > 0,
+      supportsFirst,
+      supportsLast
+    };
+  };
+  var boundedReferencePositionHelp = (policy) => {
+    if (!policy.bounded) {
+      return void 0;
+    }
+    if (policy.supportsFirst && policy.supportsLast) {
+      return "This clip accepts an image only at the first or final frame.";
+    }
+    if (policy.supportsFirst) {
+      return "This clip accepts an image only at the first frame.";
+    }
+    return "This clip accepts an image only at the final frame.";
+  };
+  var boundedReferenceToggleHelp = (policy) => {
+    if (!policy.bounded) {
+      return void 0;
+    }
+    if (policy.supportsFirst && policy.supportsLast) {
+      return "Off means first frame; on means final frame.";
+    }
+    return policy.supportsFirst ? "This clip supports only the first frame. Turn this off to repair an older final-frame value." : "This clip supports only the final frame. Turn this on to repair an older first-frame value.";
+  };
+
   // frontend/imageSource.ts
   var buildImageSourceOptions = (currentValue = "") => {
     const options = [
@@ -11580,10 +11515,19 @@
         clip,
         getState().fps
       );
+      const endpointPolicy = referenceEndpointPolicy(
+        clip,
+        getRootDefaults().modelCatalog
+      );
+      const boundedPositions = endpointPolicy.bounded;
+      const supportsFirst = endpointPolicy.supportsFirst;
+      const supportsLast = endpointPolicy.supportsLast;
+      const currentPositionSupported = ref.fromEnd ? supportsLast : supportsFirst;
+      const editableFrameMax = boundedPositions ? REF_FRAME_MIN : frameMax;
       const frameInput = buildNumber(
         ref.frame,
         REF_FRAME_MIN,
-        frameMax,
+        editableFrameMax,
         1,
         (value) => {
           ctx.debouncedCommit(`ref-${editorRefIdx}-frame`, (cs) => {
@@ -11592,7 +11536,7 @@
               target.frame = clamp(
                 Math.round(value),
                 REF_FRAME_MIN,
-                frameMax
+                editableFrameMax
               );
             }
           });
@@ -11607,7 +11551,7 @@
           "Attach at Frame",
           frameInput,
           void 0,
-          "The frame within the clip where this reference is anchored. Frame 1 is the first frame; the image influences the clip most strongly around here."
+          boundedReferencePositionHelp(endpointPolicy) ?? (boundedPositions ? "This clip accepts an image only at a bounded endpoint." : "The frame within the clip where this reference is anchored. Frame 1 is the first frame; the image influences the clip most strongly around here.")
         )
       );
       fields.appendChild(
@@ -11623,7 +11567,8 @@
             });
           },
           {
-            help: "Count the attach frame backwards from the last frame instead of forward from the first — so it stays anchored to the end even if the clip length changes."
+            disabled: boundedPositions && currentPositionSupported && !(supportsFirst && supportsLast),
+            help: boundedReferenceToggleHelp(endpointPolicy) ?? (boundedPositions ? "Choose the supported clip endpoint." : "Count the attach frame backwards from the last frame instead of forward from the first — so it stays anchored to the end even if the clip length changes.")
           }
         )
       );
@@ -12080,7 +12025,7 @@
 
   // frontend/architectures/conversion/presentation.ts
   var architectureConversionMessage = (fromLabel, toLabel, removals) => {
-    const impact = removals.length === 0 ? "Architecture-owned stage settings will be retargeted." : `This removes: ${removals.join(", ")}.`;
+    const impact = removals.length === 0 ? "Stage models will be retargeted. Unsupported settings stay saved but dormant." : `This removes: ${removals.join(", ")}.`;
     return `Convert this clip from ${fromLabel} to ${toLabel}?
 
 ${impact}
@@ -13618,6 +13563,19 @@ The conversion is one undoable change.`;
     }
     return null;
   };
+  var nextAllowedReferencePosition = (refs, rawFrameMax, allowed) => {
+    if (allowed.includes("any") || allowed.length === 0) {
+      const frame = nextAvailableReferenceFrame(refs, rawFrameMax);
+      return frame === null ? null : { frame, fromEnd: false };
+    }
+    if (allowed.includes("first") && !refs.some((ref) => ref.frame === REF_FRAME_MIN && !ref.fromEnd)) {
+      return { frame: REF_FRAME_MIN, fromEnd: false };
+    }
+    if (allowed.includes("last") && !refs.some((ref) => ref.frame === REF_FRAME_MIN && ref.fromEnd)) {
+      return { frame: REF_FRAME_MIN, fromEnd: true };
+    }
+    return null;
+  };
 
   // frontend/detailStrip/selectionDomainOperations.ts
   var refStrengthPatches = (clip, next) => clip.stages.flatMap(
@@ -13723,11 +13681,12 @@ The conversion is one undoable change.`;
         if (!clip?.id || !getCapabilities().forClip(clip).decision("frameReferences").supported) {
           return null;
         }
-        const frame = nextAvailableReferenceFrame(
+        const position = nextAllowedReferencePosition(
           clip.refs,
-          getReferenceFrameMax(getRootDefaults, clip)
+          getReferenceFrameMax(getRootDefaults, clip),
+          referenceEndpointPolicy(clip, getRootDefaults().modelCatalog).positions
         );
-        if (frame === null) {
+        if (position === null) {
           return null;
         }
         return {
@@ -13739,7 +13698,8 @@ The conversion is one undoable change.`;
                 clipId: clip.id,
                 ref: {
                   ...buildDefaultRef(),
-                  frame,
+                  frame: position.frame,
+                  fromEnd: position.fromEnd,
                   id: createEntityId("ref")
                 }
               },
@@ -15134,6 +15094,7 @@ The conversion is one undoable change.`;
     let boundBody = null;
     let unregister = null;
     const canEditReferences = (clip) => getCapabilities?.().forClip(clip).decision("frameReferences").supported ?? true;
+    const referencePositions = (clip) => referenceEndpointPolicy(clip, getRootDefaults().modelCatalog).positions;
     const findArrow = (clipIdx, refIdx) => boundBody?.querySelector(
       `.vst-region[data-clip-idx="${clipIdx}"] .vst-key[data-ref-idx="${refIdx}"]`
     ) ?? null;
@@ -15165,8 +15126,26 @@ The conversion is one undoable change.`;
             clip,
             fps
           );
+          const allowed = referencePositions(clip);
           const ref = buildDefaultRef();
-          ref.frame = clamp(Math.round(frame), REF_FRAME_MIN, frameMax);
+          if (allowed.length === 0 || allowed.includes("any")) {
+            ref.frame = clamp(
+              Math.round(frame),
+              REF_FRAME_MIN,
+              frameMax
+            );
+          } else {
+            const position = nextAllowedReferencePosition(
+              clip.refs,
+              frameMax,
+              allowed
+            );
+            if (!position) {
+              return null;
+            }
+            ref.frame = position.frame;
+            ref.fromEnd = position.fromEnd;
+          }
           appendRefToClip(clip, ref);
           newRefIdx = clip.refs.length - 1;
           return clips;
@@ -15182,7 +15161,18 @@ The conversion is one undoable change.`;
         return clip && removeRefAt(clip, refIdx) ? clips : null;
       });
     };
-    const dragFrameAt = (state, clientX) => {
+    const dragPositionAt = (state, clientX) => {
+      const bounded = state.allowedPositions.length > 0 && !state.allowedPositions.includes("any");
+      if (bounded) {
+        const rect2 = state.lane.getBoundingClientRect();
+        const prefersLast = clientX - rect2.left >= rect2.width / 2;
+        const supportsFirst = state.allowedPositions.includes("first");
+        const supportsLast = state.allowedPositions.includes("last");
+        return {
+          frame: REF_FRAME_MIN,
+          fromEnd: supportsLast && (!supportsFirst || prefersLast)
+        };
+      }
       const rect = state.lane.getBoundingClientRect();
       const frame = pxToFrame(
         clientX - rect.left,
@@ -15192,20 +15182,23 @@ The conversion is one undoable change.`;
         state.fromEnd
       );
       if (!getTimelineAuthoringSettings().snap || rect.width <= 0) {
-        return frame;
+        return { frame, fromEnd: state.fromEnd };
       }
       const thresholdFrames = Math.max(
         1,
         SNAP_THRESHOLD_PX / rect.width * state.frameMax
       );
-      return Math.round(
-        snapPoint(
-          frame,
-          [],
-          [REF_FRAME_MIN, state.frameMax],
-          thresholdFrames
-        )
-      );
+      return {
+        frame: Math.round(
+          snapPoint(
+            frame,
+            [],
+            [REF_FRAME_MIN, state.frameMax],
+            thresholdFrames
+          )
+        ),
+        fromEnd: state.fromEnd
+      };
     };
     const restoreDragPreview = (state) => {
       state.mark.style.left = state.originalLeft;
@@ -15222,27 +15215,29 @@ The conversion is one undoable change.`;
       suppressEscapeClick: true,
       onMove: (ctx) => {
         body.classList.add(DRAGGING_CLASS2);
+        const position = dragPositionAt(state, ctx.event.clientX);
         positionRefMarker(
           state.mark,
           state.arrow,
-          dragFrameAt(state, ctx.event.clientX),
-          state.fromEnd,
+          position.frame,
+          position.fromEnd,
           state.durationSeconds,
           state.fps
         );
       },
       onCommit: (ctx) => {
         body.classList.remove(DRAGGING_CLASS2);
-        const newFrame = dragFrameAt(state, ctx.event.clientX);
+        const position = dragPositionAt(state, ctx.event.clientX);
         const saved = commitClipMutation(
           state.sourceRevision,
           "references-track",
           (clips) => {
             const ref = clips[state.clipIdx]?.refs?.[state.refIdx];
-            if (!ref || ref.frame === newFrame) {
+            if (!ref || ref.frame === position.frame && ref.fromEnd === position.fromEnd) {
               return null;
             }
-            ref.frame = newFrame;
+            ref.frame = position.frame;
+            ref.fromEnd = position.fromEnd;
             return clips;
           }
         );
@@ -15298,6 +15293,7 @@ The conversion is one undoable change.`;
         durationSeconds: clip.duration,
         fps,
         frameMax: getReferenceFrameMax(getRootDefaults, clip, fps),
+        allowedPositions: referencePositions(clip),
         fromEnd: ref.fromEnd === true,
         sourceRevision: currentRevision()
       });

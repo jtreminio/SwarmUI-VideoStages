@@ -1,11 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
-import { testArchitectureCatalog } from "../__test_helpers__/architectureFixtures";
+import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectureCatalog";
+import {
+    testArchitectureCatalog,
+    testArchitectureCatalogDto,
+} from "../__test_helpers__/architectureFixtures";
 import {
     mountPromptBox,
+    mountSelect,
     mountVideoFps,
     mountVideoStagesData,
 } from "../__test_helpers__/dom";
+import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
 import { createCapabilityViewResolver } from "../architectures/policy";
+import { setVideoStagesHostBridgeForTests } from "../host";
+import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
 import { __resetPersistenceForTests, getClips } from "../persistence";
 import type { DetailStripContext } from "./context";
 import { buildRefBody } from "./refPanel";
@@ -18,6 +26,8 @@ describe("buildRefBody", () => {
     });
 
     afterEach(() => {
+        resetArchitectureCatalogForTests();
+        setVideoStagesHostBridgeForTests(null);
         document.body.innerHTML = "";
     });
 
@@ -57,5 +67,110 @@ describe("buildRefBody", () => {
         expect(
             field?.querySelector(".sui-info-popover")?.textContent,
         ).not.toContain("Frame 0 is the first frame");
+    });
+
+    it("locks bounded references to frame one while allowing first/last editing", async () => {
+        const catalog = testArchitectureCatalog();
+        const model = catalog.entries[0];
+        model.enhancements = {
+            extras: ["frame-references"],
+            referencePositions: ["first", "last"],
+        };
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => testArchitectureCatalogDto(catalog),
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        mountSelect("input_videomodel", {
+            options: [model.value],
+            value: model.value,
+        });
+        mountVideoStagesData({
+            clips: [
+                {
+                    duration: 5,
+                    stages: [{ model: model.value }],
+                    refs: [{ source: "Upload", frame: 1, fromEnd: false }],
+                },
+            ],
+        });
+
+        const body = buildRefBody(
+            {
+                capabilities: () => createCapabilityViewResolver(catalog),
+                buildClampedNumber: () => document.createElement("input"),
+            } as unknown as DetailStripContext,
+            { kind: "ref", clipIdx: 0, refIdx: 0 },
+            getClips(),
+        );
+        const frame = body.querySelector<HTMLInputElement>(
+            '[data-vst-focus-key="ref-0-frame"]',
+        );
+        const fromEnd = Array.from(
+            body.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+        ).find((input) =>
+            input
+                .closest(".auto-input")
+                ?.textContent?.includes("Count from clip end"),
+        );
+
+        expect(frame?.min).toBe("1");
+        expect(frame?.max).toBe("1");
+        expect(fromEnd?.disabled).toBe(false);
+        expect(body.textContent).toContain(
+            "This clip accepts an image only at the first or final frame.",
+        );
+    });
+
+    it("lets a persisted unsupported endpoint be repaired", async () => {
+        const catalog = testArchitectureCatalog();
+        const model = catalog.entries[0];
+        model.enhancements = {
+            extras: ["frame-references"],
+            referencePositions: ["first"],
+        };
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => testArchitectureCatalogDto(catalog),
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        mountSelect("input_videomodel", {
+            options: [model.value],
+            value: model.value,
+        });
+        mountVideoStagesData({
+            clips: [
+                {
+                    duration: 5,
+                    stages: [{ model: model.value }],
+                    refs: [{ source: "Upload", frame: 1, fromEnd: true }],
+                },
+            ],
+        });
+
+        const body = buildRefBody(
+            {
+                capabilities: () => createCapabilityViewResolver(catalog),
+                buildClampedNumber: () => document.createElement("input"),
+            } as unknown as DetailStripContext,
+            { kind: "ref", clipIdx: 0, refIdx: 0 },
+            getClips(),
+        );
+        const fromEnd = Array.from(
+            body.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+        ).find((input) =>
+            input
+                .closest(".auto-input")
+                ?.textContent?.includes("Count from clip end"),
+        );
+
+        expect(fromEnd?.disabled).toBe(false);
+        expect(body.textContent).toContain(
+            "This clip accepts an image only at the first frame.",
+        );
+        expect(body.textContent).toContain(
+            "This clip supports only the first frame.",
+        );
+        expect(body.textContent).not.toContain("or final frame");
     });
 });

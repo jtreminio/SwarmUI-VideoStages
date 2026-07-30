@@ -1,3 +1,8 @@
+import {
+    boundedReferencePositionHelp,
+    boundedReferenceToggleHelp,
+    referenceEndpointPolicy,
+} from "../architectures/referenceEndpoints";
 import { clamp, mediaPreviewSrc, REF_FRAME_MIN } from "../constants";
 import {
     buildCheckbox,
@@ -136,10 +141,21 @@ export const buildRefSection = (
             clip,
             getState().fps,
         );
+        const endpointPolicy = referenceEndpointPolicy(
+            clip,
+            getRootDefaults().modelCatalog,
+        );
+        const boundedPositions = endpointPolicy.bounded;
+        const supportsFirst = endpointPolicy.supportsFirst;
+        const supportsLast = endpointPolicy.supportsLast;
+        const currentPositionSupported = ref.fromEnd
+            ? supportsLast
+            : supportsFirst;
+        const editableFrameMax = boundedPositions ? REF_FRAME_MIN : frameMax;
         const frameInput = buildNumber(
             ref.frame,
             REF_FRAME_MIN,
-            frameMax,
+            editableFrameMax,
             1,
             (value) => {
                 ctx.debouncedCommit(`ref-${editorRefIdx}-frame`, (cs) => {
@@ -148,7 +164,7 @@ export const buildRefSection = (
                         target.frame = clamp(
                             Math.round(value),
                             REF_FRAME_MIN,
-                            frameMax,
+                            editableFrameMax,
                         );
                     }
                 });
@@ -163,9 +179,12 @@ export const buildRefSection = (
                 "Attach at Frame",
                 frameInput,
                 undefined,
-                "The frame within the clip where this reference is anchored. " +
-                    "Frame 1 is the first frame; the image influences the clip " +
-                    "most strongly around here.",
+                boundedReferencePositionHelp(endpointPolicy) ??
+                    (boundedPositions
+                        ? "This clip accepts an image only at a bounded endpoint."
+                        : "The frame within the clip where this reference is anchored. " +
+                          "Frame 1 is the first frame; the image influences the clip " +
+                          "most strongly around here."),
             ),
         );
         fields.appendChild(
@@ -181,10 +200,17 @@ export const buildRefSection = (
                     });
                 },
                 {
+                    disabled:
+                        boundedPositions &&
+                        currentPositionSupported &&
+                        !(supportsFirst && supportsLast),
                     help:
-                        "Count the attach frame backwards from the last frame " +
-                        "instead of forward from the first — so it stays " +
-                        "anchored to the end even if the clip length changes.",
+                        boundedReferenceToggleHelp(endpointPolicy) ??
+                        (boundedPositions
+                            ? "Choose the supported clip endpoint."
+                            : "Count the attach frame backwards from the last frame " +
+                              "instead of forward from the first — so it stays " +
+                              "anchored to the end even if the clip length changes."),
                 },
             ),
         );

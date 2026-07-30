@@ -191,6 +191,29 @@ public class WanArchitectureTests
         Assert.Equal(
             WanArchitectureModule.Ti2v5bProfileId.Value,
             catalogModel.Value<string>("modelProfileId"));
+        Assert.Equal(
+            ["text", "image"],
+            catalogModel["entryAbilities"].Values<string>());
+        Assert.Equal(
+            ["first"],
+            catalogModel["enhancements"]["referencePositions"].Values<string>());
+        Assert.Contains(
+            "bounded-frame-references",
+            catalogModel["enhancements"]["extras"].Values<string>());
+        Assert.Contains(
+            "normal-lora",
+            catalogModel["enhancements"]["extras"].Values<string>());
+        Assert.Equal(
+            ["text-to-video", "image-to-video"],
+            catalogModel["entryModes"].Values<string>());
+
+        JObject architecture = Assert.Single(
+            catalog["architectures"].Values<JObject>());
+        Assert.Contains(
+            "frame-references",
+            architecture["extras"].Values<string>());
+        Assert.NotNull(architecture["capabilities"]);
+        Assert.NotNull(architecture["profiles"]);
     }
 
     [Fact]
@@ -228,6 +251,9 @@ public class WanArchitectureTests
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.VideoInput));
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.PixelUpscale));
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.Lora));
+        Assert.True(descriptor.Capabilities.Stage.HasFlag(
+            StageCapability.FrameReferences));
+        Assert.True(descriptor.Capabilities.Clip.HasFlag(ClipCapability.References));
         Assert.All(
             descriptor.Profiles,
             profile => Assert.True(profile.Capabilities.HasFlag(
@@ -257,33 +283,214 @@ public class WanArchitectureTests
                     UpscaleMethod = "model-fake-upscaler.safetensors",
                 }),
             "effective-request.wan-advanced-upscale-ignored");
-        AssertRejected(
+        AssertIgnored(
             GeneratedClip(0, stage with { RetakeWindow = new(0, 8, 1) }),
-            "retake");
-        AssertRejected(
+            "effective-request.wan-retake-ignored");
+        AssertIgnored(
             GeneratedClip(0, stage) with { ImageRefs = [new("Generated", 1, false, null)] },
-            "image references");
-        AssertRejected(
+            "effective-request.wan-frame-reference-source-ignored");
+        AssertIgnored(
             GeneratedClip(0, stage) with { PromptWindows = [new("late", 1, 1)] },
-            "prompt relay");
-        AssertRejected(
+            "effective-request.wan-prompt-relay-ignored");
+        AssertIgnored(
             GeneratedClip(0, stage) with { ReuseAudio = true },
-            "captured stage audio reuse");
-        AssertRejected(
+            "effective-request.wan-audio-reuse-ignored");
+        AssertIgnored(
             GeneratedClip(0, stage) with { ClipLengthFromAudio = true },
-            "audio-derived clip duration");
-        AssertRejected(
+            "effective-request.wan-audio-duration-ignored");
+        AssertIgnored(
             GeneratedClip(0, stage) with { ClipLengthFromControlNet = true },
-            "control-signal-derived clip duration");
-        AssertRejected(
+            "effective-request.wan-control-duration-ignored");
+        AssertIgnored(
             GeneratedClip(0, stage with { ImageReference = "Base" }),
-            "stage image reference 'Base'");
+            "effective-request.wan-stage-reference-ignored");
         AssertIgnored(
             GeneratedClip(0, stage) with
             {
                 IcLoras = [new("wan-ic.safetensors", "Upload", 1, 1, "canny", null)],
             },
             "effective-request.wan-ic-lora-ignored");
+    }
+
+    [Fact]
+    public void Effective_request_keeps_one_uploaded_first_and_last_reference_and_warns_for_the_rest()
+    {
+        StageSpec stage = Stage(10, "wan-model");
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            ImageRefs =
+            [
+                new("Upload", 3, false, "middle.png", "middle"),
+                new("Upload", 1, false, "first.png", "first"),
+                new("Upload", 1, false, "duplicate.png", "duplicate"),
+                new("Base", 1, true, null),
+                new("Upload", 1, true, "last.png", "last"),
+            ],
+        };
+
+        VideoExecutionPlan plan = Compile(clip);
+        WanClipPayload payload = Assert.Single(plan.Clips).RequireWanPayload();
+
+        Assert.Equal("first.png", payload.FirstFrameReference.UploadFileName);
+        Assert.Equal("last.png", payload.LastFrameReference.UploadFileName);
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.wan-middle-frame-reference-ignored");
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.wan-duplicate-frame-reference-ignored");
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.wan-frame-reference-source-ignored");
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void Effective_request_ignores_last_reference_when_the_terminal_model_lacks_it()
+    {
+        StageSpec stage = Stage(10, "wan-five");
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            ImageRefs = [new("Upload", 1, true, "last.png", "last")],
+        };
+        VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            ResolveWan(
+                spec,
+                new Dictionary<string, ModelProfileId>
+                {
+                    [stage.Model] = WanArchitectureModule.Ti2v5bProfileId,
+                }));
+
+        Assert.Null(Assert.Single(plan.Clips).RequireWanPayload().LastFrameReference);
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.wan-last-frame-reference-ignored"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void Ignored_non_upload_first_reference_does_not_change_text_entry()
+    {
+        StageSpec stage = Stage(10, "wan-model");
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            ImageRefs = [new("Base", 1, false, null)],
+        };
+        VideoStagesSpec spec = new(512, 512, 24, true, [clip]);
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            ResolveWan(spec));
+
+        ClipPlan compiled = Assert.Single(plan.Clips);
+        Assert.Equal(ClipInputKind.EmptyLatent, compiled.Input);
+        Assert.Equal(StageInputKind.EmptyLatent, Assert.Single(compiled.Stages).Input);
+        Assert.Null(compiled.RequireWanPayload().FirstFrameReference);
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.wan-frame-reference-source-ignored"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+    }
+
+    [Fact]
+    public void Uploaded_first_reference_keeps_the_text_root_plan_shape()
+    {
+        StageSpec stage = Stage(10, "wan-model");
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            ImageRefs =
+            [
+                new(
+                    "Upload",
+                    1,
+                    false,
+                    "first.png",
+                    "data:image/png;base64,RklSU1Q="),
+            ],
+        };
+        VideoStagesSpec spec = new(512, 512, 24, true, [clip]);
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            ResolveWan(spec));
+
+        ClipPlan compiled = Assert.Single(plan.Clips);
+        Assert.Equal(ClipInputKind.EmptyLatent, compiled.Input);
+        Assert.Equal(StageInputKind.EmptyLatent, Assert.Single(compiled.Stages).Input);
+        Assert.NotNull(compiled.RequireWanPayload().FirstFrameReference);
+    }
+
+    [Fact]
+    public void First_reference_permission_comes_from_the_first_effective_model()
+    {
+        StageSpec stage = Stage(10, "wan-last-only");
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            ImageRefs =
+            [
+                new(
+                    "Upload",
+                    1,
+                    false,
+                    "first.png",
+                    "data:image/png;base64,RklSU1Q="),
+            ],
+        };
+        VideoStagesSpec spec = new(512, 512, 24, true, [clip]);
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            ResolveWan(
+                spec,
+                referencePositionsByModel: new Dictionary<string, IReadOnlyList<string>>
+                {
+                    [stage.Model] = ["last"],
+                }));
+
+        ClipPlan compiled = Assert.Single(plan.Clips);
+        Assert.Null(compiled.RequireWanPayload().FirstFrameReference);
+        Assert.Equal(ClipInputKind.EmptyLatent, compiled.Input);
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.wan-first-frame-reference-ignored"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+    }
+
+    [Fact]
+    public void Effective_request_uses_the_terminal_active_stage_before_a_skipped_tail()
+    {
+        StageSpec stage = Stage(10, "wan-model");
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            ImageRefs = [new("Upload", 1, true, "last.png", "last")],
+            AuthoredStages =
+            [
+                new(0, stage.Model, null, false),
+                new(1, stage.Model, null, true),
+            ],
+        };
+
+        VideoExecutionPlan plan = Compile(clip);
+
+        Assert.NotNull(Assert.Single(plan.Clips).RequireWanPayload().LastFrameReference);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.wan-last-frame-reference-ignored");
     }
 
     [Fact]
@@ -1231,7 +1438,9 @@ public class WanArchitectureTests
     /// <summary>Assigns Wan to every clip without needing host model metadata installed.</summary>
     private static ArchitecturePlanningResult ResolveWan(
         VideoStagesSpec spec,
-        IReadOnlyDictionary<string, ModelProfileId> profilesByModel = null)
+        IReadOnlyDictionary<string, ModelProfileId> profilesByModel = null,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>
+            referencePositionsByModel = null)
     {
         VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
         Dictionary<int, ClipArchitectureAssignment> clips = [];
@@ -1240,13 +1449,20 @@ public class WanArchitectureTests
             Dictionary<int, ResolvedVideoModel> stageModels = [];
             foreach (StageSpec stage in clip.Stages ?? [])
             {
-                stageModels[stage.ClipStageRawIndex] = ResolvedWan(
+                ResolvedVideoModel resolved = ResolvedWan(
                     stage.Model,
                     profilesByModel is not null
                         && profilesByModel.TryGetValue(stage.Model, out ModelProfileId profileId)
                             ? profileId
                             : WanArchitectureModule.ImageToVideoProfileId,
                     descriptor);
+                if (referencePositionsByModel?.TryGetValue(
+                        stage.Model,
+                        out IReadOnlyList<string> referencePositions) == true)
+                {
+                    resolved = resolved with { ReferencePositions = referencePositions };
+                }
+                stageModels[stage.ClipStageRawIndex] = resolved;
             }
             clips.TryAdd(clip.Id, new(
                 clip.Id,
@@ -1276,6 +1492,8 @@ public class WanArchitectureTests
                 : T2IModelClassSorter.CompatWan21_14b.ID,
             EntryAbilities = VideoModelEntryAbility.TextToVideo
                 | VideoModelEntryAbility.ImageToVideo,
+            Enhancements = ["bounded-frame-references"],
+            ReferencePositions = five ? ["first"] : ["first", "last"],
         };
     }
 

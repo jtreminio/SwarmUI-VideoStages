@@ -111,7 +111,12 @@ export const isRootTextToVideoModel = (): boolean => {
     }
     const catalog = buildArchitectureModelCatalog([modelName], [modelName]);
     const target = buildArchitectureRetargetPlan(catalog, modelName);
-    return target ? target.entryModes.includes("text-to-video") : false;
+    if (!target) {
+        return false;
+    }
+    return target.entryAbilities === undefined
+        ? target.entryModes.includes("text-to-video")
+        : target.entryAbilities.includes("text");
 };
 
 export const getRootGeneratedEntryMode = ():

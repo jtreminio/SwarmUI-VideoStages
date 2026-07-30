@@ -40,7 +40,15 @@ export interface ArchitectureModelEntry {
     modelProfileId: ModelProfileId | null;
     modelClassId: string | null;
     compatibilityClassId: string | null;
+    entryAbilities?: string[];
+    enhancements?: ModelEnhancements;
+    /** Legacy alias retained while persisted profile identities migrate. */
     entryModes: string[];
+}
+
+export interface ModelEnhancements {
+    extras: string[];
+    referencePositions: string[];
 }
 
 export interface ArchitectureModelCatalog {
@@ -61,6 +69,8 @@ export interface ArchitectureRetargetPlan {
     modelProfileId: ModelProfileId;
     model: string;
     capabilities: ArchitectureCapabilities;
+    extras?: string[];
+    entryAbilities?: string[];
     entryModes: string[];
 }
 
@@ -70,6 +80,9 @@ export interface ArchitectureCatalogModelDto {
     modelProfileId: ModelProfileId;
     modelClassId: string;
     compatibilityClassId: string;
+    entryAbilities?: string[];
+    enhancements?: ModelEnhancements;
+    /** Legacy alias retained for older clients. */
     entryModes: string[];
 }
 
@@ -77,6 +90,8 @@ export interface ArchitectureCatalogEntryDto {
     id: VideoArchitectureId;
     label: string;
     defaultProfileId: ModelProfileId;
+    extras?: string[];
+    /** Scoped legacy transport; new feature reads use `extras`. */
     capabilities: ArchitectureCapabilities;
     profiles: VideoModelProfileDescriptor[];
     boundaryRules: Record<string, CapabilityRuleDecision>;

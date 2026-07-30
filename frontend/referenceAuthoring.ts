@@ -55,3 +55,27 @@ export const nextAvailableReferenceFrame = (
     }
     return null;
 };
+
+export const nextAllowedReferencePosition = (
+    refs: readonly Pick<RefImage, "frame" | "fromEnd">[],
+    rawFrameMax: number,
+    allowed: readonly string[],
+): { frame: number; fromEnd: boolean } | null => {
+    if (allowed.includes("any") || allowed.length === 0) {
+        const frame = nextAvailableReferenceFrame(refs, rawFrameMax);
+        return frame === null ? null : { frame, fromEnd: false };
+    }
+    if (
+        allowed.includes("first") &&
+        !refs.some((ref) => ref.frame === REF_FRAME_MIN && !ref.fromEnd)
+    ) {
+        return { frame: REF_FRAME_MIN, fromEnd: false };
+    }
+    if (
+        allowed.includes("last") &&
+        !refs.some((ref) => ref.frame === REF_FRAME_MIN && ref.fromEnd)
+    ) {
+        return { frame: REF_FRAME_MIN, fromEnd: true };
+    }
+    return null;
+};

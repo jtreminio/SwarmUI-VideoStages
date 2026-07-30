@@ -67,16 +67,19 @@ export const buildArchitectureRetargetPlan = (
     const architectureId = entry?.architectureId ?? null;
     const descriptor = architectureDescriptor(catalog, architectureId);
     const profileId = entry?.modelProfileId ?? null;
-    const profile = descriptor?.profiles.find(
-        (candidate) => candidate.id === profileId,
-    );
     const capabilities = descriptor?.capabilities;
-    return entry && architectureId && profileId && profile && capabilities
+    return entry && architectureId && profileId && descriptor && capabilities
         ? {
               architectureId,
               modelProfileId: profileId,
               model,
+              extras: [
+                  ...(entry.enhancements?.extras ?? descriptor.extras ?? []),
+              ],
               capabilities: structuredClone(capabilities),
+              ...(entry.entryAbilities === undefined
+                  ? {}
+                  : { entryAbilities: [...entry.entryAbilities] }),
               entryModes: [...entry.entryModes],
           }
         : null;

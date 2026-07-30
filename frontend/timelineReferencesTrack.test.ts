@@ -6,12 +6,21 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { resetArchitectureCatalogForTests } from "./__test_helpers__/architectureCatalog";
+import {
+    testArchitectureCatalog,
+    testArchitectureCatalogDto,
+} from "./__test_helpers__/architectureFixtures";
 import {
     mountPromptBox,
+    mountSelect,
     mountVideoFps,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
+import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
 import { createGestureRouter } from "./gestureRouter";
+import { setVideoStagesHostBridgeForTests } from "./host";
+import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import * as persistence from "./persistence";
 import {
     getSelection,
@@ -97,6 +106,8 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         router?.dispose();
         router = null;
         jest.restoreAllMocks();
+        resetArchitectureCatalogForTests();
+        setVideoStagesHostBridgeForTests(null);
         resetSelectionForTests();
         document.body.innerHTML = "";
     });
@@ -291,6 +302,40 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         dragThumb(thumb, 0, 60);
 
         expect(savedClips(saveSpy)[0].refs[0].frame).toBe(40);
+    });
+
+    it("drags a bounded reference between its advertised endpoints", async () => {
+        const catalog = testArchitectureCatalog();
+        const model = catalog.entries[0];
+        model.enhancements = {
+            extras: ["frame-references"],
+            referencePositions: ["first", "last"],
+        };
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => testArchitectureCatalogDto(catalog),
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        mountSelect("input_videomodel", {
+            options: [model.value],
+            value: model.value,
+        });
+        const body = setup([
+            {
+                duration: 5,
+                refs: [{ frame: 1, fromEnd: false }],
+            },
+        ]);
+        stubLaneRect(body, 0, 0, 120);
+
+        dragThumb(markEl(body, 0, 0), 0, 100);
+        expect(savedClips(saveSpy)[0].refs[0]).toMatchObject({
+            frame: 1,
+            fromEnd: true,
+        });
+        expect(
+            markEl(body, 0, 0).querySelector(".vst-refs-ph")?.textContent,
+        ).toBe("R -1");
     });
 
     it("treats a sub-threshold press as a select, not a drag", () => {

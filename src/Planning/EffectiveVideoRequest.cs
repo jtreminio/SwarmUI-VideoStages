@@ -164,7 +164,24 @@ internal static class EffectiveVideoRequestProjector
         }
         if (isHostVideo)
         {
-            effective = ProjectHostVideoClip(effective, decisions);
+            effective = ProjectBaselineVideoClip(
+                effective,
+                decisions,
+                preserveFrameReferences: false,
+                HostVideoArchitectureModule.Instance.Descriptor,
+                "generic host-video",
+                "host-video");
+        }
+        else
+        {
+            effective = ProjectBaselineVideoClip(
+                effective,
+                decisions,
+                preserveFrameReferences: true,
+                WanArchitectureModule.Instance.Descriptor,
+                "WAN",
+                "wan");
+            effective = ProjectWanFrameReferences(effective, assignment, decisions);
         }
         string architectureName = isWan ? "WAN" : "generic host video";
         string codePrefix = isWan ? "wan" : "host-video";
@@ -240,9 +257,121 @@ internal static class EffectiveVideoRequestProjector
         return effective with { Stages = Array.AsReadOnly(stages) };
     }
 
-    private static ClipSpec ProjectHostVideoClip(
+    private static ClipSpec ProjectWanFrameReferences(
         ClipSpec effective,
+        ClipArchitectureAssignment assignment,
         ICollection<EffectiveRequestDecision> decisions)
+    {
+        List<ImageRefSpec> retained = [];
+        bool hasFirst = false;
+        bool hasLast = false;
+        foreach (ImageRefSpec reference in effective.ImageRefs ?? [])
+        {
+            bool first = !reference.FromEnd && reference.Frame == 1;
+            bool last = reference.FromEnd && reference.Frame == 1;
+            if (!first && !last)
+            {
+                decisions.Add(Ignore(
+                    "effective-request.wan-middle-frame-reference-ignored",
+                    $"Clip {effective.Id} has a WAN image reference at "
+                        + $"{(reference.FromEnd ? "end-relative" : "start-relative")} frame "
+                        + $"{reference.Frame}. WAN native conditioning accepts only the first "
+                        + "and final frame. The authored reference remains saved and is ignored "
+                        + "for this generation.",
+                    effective.Id));
+                continue;
+            }
+            if (first && effective.SourceVideo is not null)
+            {
+                decisions.Add(Ignore(
+                    "effective-request.wan-sourced-first-frame-reference-ignored",
+                    $"Clip {effective.Id} already enters from sourced video, so its separate "
+                        + "first-frame reference remains saved and is ignored for this "
+                        + "generation.",
+                    effective.Id));
+                continue;
+            }
+            if (first)
+            {
+                StageSpec firstStage = (effective.Stages ?? []).FirstOrDefault();
+                ResolvedVideoModel firstModel =
+                    firstStage is null
+                        ? null
+                        : assignment.StageModels.GetValueOrDefault(
+                            firstStage.ClipStageRawIndex);
+                if (firstModel?.ReferencePositions?.Contains(
+                        "first",
+                        StringComparer.Ordinal) != true)
+                {
+                    decisions.Add(Ignore(
+                        "effective-request.wan-first-frame-reference-ignored",
+                        $"Clip {effective.Id}'s first-frame reference is not supported by the "
+                            + $"selected first WAN model '{firstModel?.ModelName ?? "<missing>"}'. "
+                            + "The authored reference remains saved and is ignored for this "
+                            + "generation.",
+                        effective.Id));
+                    continue;
+                }
+            }
+            if (!StringUtils.Equals(reference.Source, "Upload"))
+            {
+                decisions.Add(Ignore(
+                    "effective-request.wan-frame-reference-source-ignored",
+                    $"Clip {effective.Id}'s WAN {(first ? "first" : "final")}-frame "
+                        + $"reference uses source '{reference.Source}', but the native WAN "
+                        + "bounded-reference path currently accepts uploaded images. The "
+                        + "authored reference remains saved and is ignored for this generation.",
+                    effective.Id));
+                continue;
+            }
+            if (first && hasFirst || last && hasLast)
+            {
+                decisions.Add(Ignore(
+                    "effective-request.wan-duplicate-frame-reference-ignored",
+                    $"Clip {effective.Id} has more than one WAN "
+                        + $"{(first ? "first" : "last")} frame reference. The first authored "
+                        + "reference remains active; later references remain saved and are "
+                        + "ignored for this generation.",
+                    effective.Id));
+                continue;
+            }
+            if (last)
+            {
+                StageSpec terminalStage = (effective.Stages ?? [])
+                    .LastOrDefault(stage => !stage.IsPassthrough);
+                ResolvedVideoModel terminal =
+                    terminalStage is null
+                        ? null
+                        : assignment.StageModels.GetValueOrDefault(
+                            terminalStage.ClipStageRawIndex);
+                if (terminal?.ReferencePositions?.Contains(
+                        "last",
+                        StringComparer.Ordinal) != true)
+                {
+                    decisions.Add(Ignore(
+                        "effective-request.wan-last-frame-reference-ignored",
+                        $"Clip {effective.Id}'s final-frame reference is not supported by the "
+                            + $"selected terminal WAN model '{terminal?.ModelName ?? "<missing>"}'. "
+                            + "The authored reference remains saved and is ignored for this "
+                            + "generation.",
+                        effective.Id));
+                    continue;
+                }
+            }
+            retained.Add(reference);
+            hasFirst |= first;
+            hasLast |= last;
+        }
+        return effective with { ImageRefs = retained.AsReadOnly() };
+    }
+
+    private static ClipSpec ProjectBaselineVideoClip(
+        ClipSpec effective,
+        ICollection<EffectiveRequestDecision> decisions,
+        bool preserveFrameReferences,
+        VideoArchitectureDescriptor descriptor,
+        string architectureName,
+        string codePrefix)
     {
         void IgnoreConfigured(bool configured, string feature, string code)
         {
@@ -251,19 +380,33 @@ internal static class EffectiveVideoRequestProjector
                 return;
             }
             decisions.Add(Ignore(
-                $"effective-request.host-video-{code}-ignored",
-                $"Clip {effective.Id} configures {feature}, which the generic host-video "
-                    + "fallback does not use. The authored setting remains saved and is ignored "
+                $"effective-request.{codePrefix}-{code}-ignored",
+                $"Clip {effective.Id} configures {feature}, which {architectureName} "
+                    + "does not use. The authored setting remains saved and is ignored "
                     + "for this generation.",
                 effective.Id));
         }
 
-        IgnoreConfigured(
-            effective.ImageRefs is { Count: > 0 }
-                || effective.Stages?.Any(
-                    stage => stage.ImageRefStrengths is { Count: > 0 }) == true,
-            "image/frame references",
-            "references");
+        if (!preserveFrameReferences)
+        {
+            IgnoreConfigured(
+                effective.ImageRefs is { Count: > 0 }
+                    || effective.Stages?.Any(
+                        stage => stage.ImageRefStrengths is { Count: > 0 }) == true,
+                "image/frame references",
+                "references");
+        }
+        else
+        {
+            IgnoreConfigured(
+                effective.Stages?.Any(
+                    stage => stage.ImageRefStrengths?.Any(
+                        strength => Math.Abs(
+                            strength - Constants.DefaultStageRefStrength)
+                            > 0.000001) == true) == true,
+                "per-stage frame-reference strengths",
+                "reference-strengths");
+        }
         IgnoreConfigured(
             effective.PromptWindows is { Count: > 0 },
             "prompt relay windows",
@@ -315,14 +458,13 @@ internal static class EffectiveVideoRequestProjector
                 StageGuideReferenceSelection guide =
                     StageGuideReferencePolicy.Classify(stage.ImageReference);
                 bool supportedGuide =
-                    HostVideoArchitectureModule.Instance.Descriptor
-                        .StageGuideReferences.Allows(guide);
+                    descriptor.StageGuideReferences.Allows(guide);
                 if (!supportedGuide)
                 {
                     decisions.Add(Ignore(
-                        "effective-request.host-video-stage-reference-ignored",
+                        $"effective-request.{codePrefix}-stage-reference-ignored",
                         $"Clip {effective.Id} Stage {stage.Id} uses image selector "
-                            + $"'{stage.ImageReference}', which the generic host-video fallback "
+                            + $"'{stage.ImageReference}', which {architectureName} "
                             + "does not use. The authored selector remains saved; this generation "
                             + $"uses '{(index == 0 ? "Generated" : "PreviousStage")}'.",
                         effective.Id,
@@ -348,7 +490,7 @@ internal static class EffectiveVideoRequestProjector
             ClipLengthFromControlNet = false,
             ReuseAudio = false,
             UploadedAudio = null,
-            ImageRefs = [],
+            ImageRefs = preserveFrameReferences ? effective.ImageRefs : [],
             PromptWindows = [],
             BoundaryOutCarryAudio = false,
             ReferenceFraming = ReferenceFramingMode.Crop,

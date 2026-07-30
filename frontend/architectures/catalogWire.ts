@@ -15,6 +15,8 @@ const ENTRY_MODES = [
     "source-video",
     "refine-video",
 ] as const;
+const ENTRY_ABILITIES = ["text", "image"] as const;
+const REFERENCE_POSITIONS = ["first", "last", "any"] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value);
@@ -30,6 +32,18 @@ const isUniqueStringArray = (value: unknown): value is string[] =>
 const isEntryModeArray = (value: unknown): value is string[] =>
     isUniqueStringArray(value) &&
     value.every((entry) => (ENTRY_MODES as readonly string[]).includes(entry));
+
+const isEntryAbilityArray = (value: unknown): value is string[] =>
+    isUniqueStringArray(value) &&
+    value.every((entry) =>
+        (ENTRY_ABILITIES as readonly string[]).includes(entry),
+    );
+
+const isReferencePositionArray = (value: unknown): value is string[] =>
+    isUniqueStringArray(value) &&
+    value.every((entry) =>
+        (REFERENCE_POSITIONS as readonly string[]).includes(entry),
+    );
 
 const isRuleDecision = (
     value: unknown,
@@ -207,6 +221,7 @@ export const parseVideoArchitectureCatalog = (
             !isTrimmedNonEmpty(raw.label) ||
             !isTrimmedNonEmpty(raw.defaultProfileId) ||
             !isCapabilities(raw.capabilities) ||
+            (raw.extras !== undefined && !isUniqueStringArray(raw.extras)) ||
             !Array.isArray(raw.profiles) ||
             !raw.profiles.every(isProfile) ||
             !hasCompleteBoundaryRules(raw.boundaryRules) ||
@@ -243,6 +258,7 @@ export const parseVideoArchitectureCatalog = (
             id: raw.id,
             label: raw.label,
             defaultProfileId: raw.defaultProfileId,
+            ...(raw.extras === undefined ? {} : { extras: [...raw.extras] }),
             capabilities: structuredClone(raw.capabilities),
             profiles: structuredClone(raw.profiles),
             boundaryRules: structuredClone(raw.boundaryRules),
@@ -264,7 +280,16 @@ export const parseVideoArchitectureCatalog = (
             !isTrimmedNonEmpty(raw.modelClassId) ||
             !isTrimmedNonEmpty(raw.compatibilityClassId) ||
             !isEntryModeArray(raw.entryModes) ||
-            raw.entryModes.length === 0
+            raw.entryModes.length === 0 ||
+            (raw.entryAbilities !== undefined &&
+                (!isEntryAbilityArray(raw.entryAbilities) ||
+                    raw.entryAbilities.length === 0)) ||
+            (raw.enhancements !== undefined &&
+                (!isRecord(raw.enhancements) ||
+                    !isUniqueStringArray(raw.enhancements.extras) ||
+                    !isReferencePositionArray(
+                        raw.enhancements.referencePositions,
+                    )))
         ) {
             return null;
         }
@@ -280,12 +305,28 @@ export const parseVideoArchitectureCatalog = (
             return null;
         }
         modelNames.add(raw.modelName);
+        const rawEnhancements = raw.enhancements as
+            | { extras: string[]; referencePositions: string[] }
+            | undefined;
         models.push({
             modelName: raw.modelName,
             architectureId: raw.architectureId,
             modelProfileId: raw.modelProfileId,
             modelClassId: raw.modelClassId,
             compatibilityClassId: raw.compatibilityClassId,
+            ...(raw.entryAbilities === undefined
+                ? {}
+                : { entryAbilities: [...raw.entryAbilities] }),
+            ...(rawEnhancements === undefined
+                ? {}
+                : {
+                      enhancements: {
+                          extras: [...rawEnhancements.extras],
+                          referencePositions: [
+                              ...rawEnhancements.referencePositions,
+                          ],
+                      },
+                  }),
             entryModes: [...raw.entryModes],
         });
     }

@@ -376,6 +376,18 @@ internal sealed record ResolvedVideoModel(
     public VideoModelEntryAbility EntryAbilities { get; init; } =
         VideoModelEntryPolicy.FromProfileAlias(Architecture, ModelProfileId);
 
+    /// <summary>
+    /// Optional model-level refinements of the architecture's feature set. Most features are
+    /// architecture-wide; facts whose support depends on the selected checkpoint belong here.
+    /// </summary>
+    public IReadOnlyList<string> Enhancements { get; init; } = [];
+
+    /// <summary>
+    /// Frame positions accepted by this model's native image-conditioning path. Values are
+    /// stable wire names such as <c>first</c>, <c>last</c>, and <c>any</c>.
+    /// </summary>
+    public IReadOnlyList<string> ReferencePositions { get; init; } = [];
+
     public bool HostFactsAuthoritative { get; init; }
 }
 

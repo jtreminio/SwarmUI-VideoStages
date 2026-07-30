@@ -48,6 +48,8 @@ const persistedCapabilityIssues = (
     capabilities: ArchitectureCapabilities,
 ): ArchitectureDiagnostic[] => {
     const diagnostics: ArchitectureDiagnostic[] = [];
+    const backendProjectsUnsupported =
+        architectureId === "wan22" || architectureId === "host-video";
     const supports = (
         feature: AuthoringFeature,
         value?: { audioSource?: string; upscaleMethod?: string },
@@ -57,17 +59,19 @@ const persistedCapabilityIssues = (
         active: boolean,
         key: string,
         label: string,
-        severity: ArchitectureDiagnostic["severity"] = "error",
+        severity?: ArchitectureDiagnostic["severity"],
     ): void => {
         if (active) {
+            const effectiveSeverity =
+                severity ?? (backendProjectsUnsupported ? "warning" : "error");
             diagnostics.push(
                 issue(
                     `architecture.unsupported.${key}`,
-                    severity === "warning"
+                    effectiveSeverity === "warning"
                         ? `${label} is saved on Clip ${clipIdx}, but its architecture cannot use it. Generation will ignore it and keep the authored setting.`
                         : `${label} is persisted on Clip ${clipIdx}, but its architecture does not support it. Remove it or explicitly convert the clip.`,
                     clipIdx,
-                    severity,
+                    effectiveSeverity,
                 ),
             );
         }
@@ -91,7 +95,6 @@ const persistedCapabilityIssues = (
         !supports("icLora") && clip.icLoras.length > 0,
         "ic-lora",
         "IC-LoRA",
-        architectureId === "wan22" ? "warning" : "error",
     );
     unsupported(
         !supports("hdr") &&
@@ -148,7 +151,7 @@ const persistedCapabilityIssues = (
         unsupportedUpscales.length > 0,
         "upscale",
         "Stage upscaling",
-        architectureId === "wan22" &&
+        backendProjectsUnsupported &&
             unsupportedUpscales.every((stage) =>
                 isKnownAdvancedUpscale(stage.upscaleMethod),
             )

@@ -190,6 +190,18 @@ export const buildArchitectureModelCatalog = (
                 modelClassId: backendModel?.modelClassId ?? null,
                 compatibilityClassId:
                     backendModel?.compatibilityClassId ?? null,
+                ...(backendModel?.entryAbilities === undefined
+                    ? {}
+                    : {
+                          entryAbilities: [...backendModel.entryAbilities],
+                      }),
+                ...(backendModel?.enhancements === undefined
+                    ? {}
+                    : {
+                          enhancements: structuredClone(
+                              backendModel.enhancements,
+                          ),
+                      }),
                 entryModes: [...(backendModel?.entryModes ?? [])],
             };
         }),

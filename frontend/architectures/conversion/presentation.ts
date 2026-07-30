@@ -5,7 +5,7 @@ export const architectureConversionMessage = (
 ): string => {
     const impact =
         removals.length === 0
-            ? "Architecture-owned stage settings will be retargeted."
+            ? "Stage models will be retargeted. Unsupported settings stay saved but dormant."
             : `This removes: ${removals.join(", ")}.`;
     return (
         `Convert this clip from ${fromLabel} to ${toLabel}?\n\n` +

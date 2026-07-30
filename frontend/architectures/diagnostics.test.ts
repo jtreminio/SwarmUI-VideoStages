@@ -41,6 +41,12 @@ const wanCatalog = (): ArchitectureModelCatalog => {
     wan.capabilities.stage = wan.capabilities.stage.filter(
         (capability) => capability !== "ic-lora" && capability !== "hdr",
     );
+    wan.capabilities.clip = wan.capabilities.clip.filter(
+        (capability) =>
+            capability !== "prompt-relay" &&
+            capability !== "reference-framing" &&
+            capability !== "audio-reuse",
+    );
     wan.capabilities.upscaleModes = ["pixel"];
     wan.profiles = [
         {
@@ -58,7 +64,47 @@ const wanCatalog = (): ArchitectureModelCatalog => {
         modelProfileId: "wan22-i2v-14b",
         modelClassId: "wan-i2v-14b",
         compatibilityClassId: "wan-video",
+        entryAbilities: ["text", "image"],
         entryModes: ["image-to-video", "source-video", "refine-video"],
+    });
+    return models;
+};
+
+const hostVideoCatalog = (): ArchitectureModelCatalog => {
+    const models = combinedCatalog();
+    const template = models.architectures.find((entry) => entry.id === "ltx2");
+    if (!template) throw new Error("missing architecture template");
+    const host = structuredClone(template);
+    host.id = "host-video";
+    host.label = "Host Video";
+    host.defaultProfileId = "host-video";
+    host.capabilities.clip = ["prompts", "source-video"];
+    host.capabilities.stage = [
+        "image-input",
+        "video-input",
+        "pixel-upscale",
+        "lora",
+    ];
+    host.capabilities.output = ["video"];
+    host.capabilities.upscaleModes = ["pixel"];
+    host.capabilities.audioSourceKinds = ["Disabled"];
+    host.profiles = [
+        {
+            ...host.profiles[0],
+            id: "host-video",
+            label: "Host Video",
+        },
+    ];
+    models.architectures.push(host);
+    models.entries.push({
+        value: "host-video.safetensors",
+        label: "Host Video",
+        architectureId: "host-video",
+        modelProfileId: "host-video",
+        modelClassId: "host-video",
+        compatibilityClassId: "host-video",
+        entryAbilities: ["text", "image"],
+        entryModes: ["text-to-video", "image-to-video", "source-video"],
     });
     return models;
 };
@@ -160,6 +206,9 @@ describe("architecture diagnostics", () => {
             architecture: "wan22",
             modelProfileId: "wan22-i2v-14b",
             icLoras: [hdrIcLoraFixture({ hdr: false })],
+            refFraming: "fit",
+            promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
+            reuseAudio: true,
             stages: [
                 minimalStage({
                     model: "wan-14b.safetensors",
@@ -178,10 +227,45 @@ describe("architecture diagnostics", () => {
             [
                 "architecture.unsupported.ic-lora",
                 "architecture.unsupported.upscale",
+                "architecture.unsupported.reference-framing",
+                "architecture.unsupported.prompt-relay",
+                "architecture.unsupported.audio-reuse",
             ].includes(code),
         );
 
-        expect(matching).toHaveLength(2);
+        expect(matching).toHaveLength(5);
+        expect(matching.every(({ severity }) => severity === "warning")).toBe(
+            true,
+        );
+        expect(clip).toEqual(before);
+    });
+
+    it("warns for optional generic host data that backend projection safely ignores", () => {
+        const clip = minimalClip({
+            architecture: "host-video",
+            modelProfileId: "host-video",
+            refs: [minimalRef()],
+            refFraming: "fit",
+            promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
+            reuseAudio: true,
+            icLoras: [hdrIcLoraFixture({ hdr: false })],
+            stages: [
+                minimalStage({
+                    model: "host-video.safetensors",
+                    modelProfileId: "host-video",
+                    upscale: 2,
+                    upscaleMethod: "latentmodel-detail.safetensors",
+                }),
+            ],
+        });
+        const before = structuredClone(clip);
+
+        const matching = deriveArchitectureDiagnostics(
+            [clip],
+            hostVideoCatalog(),
+        ).filter(({ code }) => code.startsWith("architecture.unsupported."));
+
+        expect(matching.length).toBeGreaterThan(0);
         expect(matching.every(({ severity }) => severity === "warning")).toBe(
             true,
         );
@@ -204,6 +288,27 @@ describe("architecture diagnostics", () => {
 
         expect(
             deriveArchitectureDiagnostics([clip], wanCatalog()).find(
+                ({ code }) => code === "architecture.unsupported.upscale",
+            )?.severity,
+        ).toBe("error");
+    });
+
+    it("keeps an unclassifiable generic host upscale blocking", () => {
+        const clip = minimalClip({
+            architecture: "host-video",
+            modelProfileId: "host-video",
+            stages: [
+                minimalStage({
+                    model: "host-video.safetensors",
+                    modelProfileId: "host-video",
+                    upscale: 2,
+                    upscaleMethod: "future-upscale",
+                }),
+            ],
+        });
+
+        expect(
+            deriveArchitectureDiagnostics([clip], hostVideoCatalog()).find(
                 ({ code }) => code === "architecture.unsupported.upscale",
             )?.severity,
         ).toBe("error");
@@ -880,6 +985,7 @@ describe("architecture diagnostics", () => {
                 modelProfileId: "wan22-i2v-14b",
                 modelClassId: "wan-i2v-14b",
                 compatibilityClassId: "wan-video",
+                entryAbilities: ["text", "image"],
                 entryModes: ["image-to-video", "source-video", "refine-video"],
             },
             {
@@ -889,6 +995,7 @@ describe("architecture diagnostics", () => {
                 modelProfileId: "wan22-ti2v-5b",
                 modelClassId: "wan-ti2v-5b",
                 compatibilityClassId: "wan-video",
+                entryAbilities: ["text", "image"],
                 entryModes: ["text-to-video", "image-to-video"],
             },
         );
@@ -911,7 +1018,7 @@ describe("architecture diagnostics", () => {
                 models,
                 "text-to-video",
             ).map(({ code }) => code),
-        ).toContain("architecture.entry-mode-unsupported");
+        ).not.toContain("architecture.entry-mode-unsupported");
         expect(
             deriveArchitectureDiagnostics(
                 [guidedClip("wan-5b.safetensors", "wan22-ti2v-5b")],

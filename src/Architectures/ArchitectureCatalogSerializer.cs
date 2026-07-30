@@ -22,6 +22,7 @@ internal static class ArchitectureCatalogSerializer
         ["id"] = descriptor.Id.Value,
         ["label"] = descriptor.DisplayName,
         ["defaultProfileId"] = descriptor.DefaultProfileId.Value,
+        ["extras"] = new JArray(ArchitectureExtras(descriptor)),
         ["capabilities"] = SerializeCapabilities(descriptor),
         ["profiles"] = new JArray(descriptor.Profiles.Select(Serialize)),
         ["boundaryRules"] = new JObject(descriptor.BoundaryRules.Select(pair =>
@@ -125,8 +126,43 @@ internal static class ArchitectureCatalogSerializer
         ["modelProfileId"] = model.ModelProfileId.Value,
         ["modelClassId"] = model.ModelClassId,
         ["compatibilityClassId"] = model.CompatibilityClassId,
+        ["entryAbilities"] = new JArray(ModelEntryAbilities(model.EntryAbilities)),
+        ["enhancements"] = new JObject
+        {
+            ["extras"] = new JArray(
+                ArchitectureExtras(model.Architecture)
+                    .Concat(ProfileCapabilities(
+                        model.Architecture.Profiles
+                            .Single(profile => profile.Id == model.ModelProfileId)
+                            .Capabilities))
+                    .Concat(model.Enhancements ?? [])
+                    .Distinct(StringComparer.Ordinal)),
+            ["referencePositions"] = new JArray(model.ReferencePositions ?? []),
+        },
+
+        // Migration aliases. Persisted profile hints and older frontends still understand these.
         ["entryModes"] = new JArray(ModelEntryModes(model.EntryAbilities)),
     };
+
+    private static IEnumerable<string> ModelEntryAbilities(VideoModelEntryAbility abilities)
+    {
+        if (Has(abilities, VideoModelEntryAbility.TextToVideo))
+        {
+            yield return "text";
+        }
+        if (Has(abilities, VideoModelEntryAbility.ImageToVideo))
+        {
+            yield return "image";
+        }
+    }
+
+    private static IEnumerable<string> ArchitectureExtras(
+        VideoArchitectureDescriptor descriptor) =>
+        ArchitectureCapabilities(descriptor.Capabilities.Architecture)
+            .Concat(ClipCapabilities(descriptor.Capabilities.Clip))
+            .Concat(StageCapabilities(descriptor.Capabilities.Stage))
+            .Concat(OutputCapabilities(descriptor.Capabilities.Output))
+            .Distinct(StringComparer.Ordinal);
 
     private static IEnumerable<string> ModelEntryModes(VideoModelEntryAbility abilities)
     {

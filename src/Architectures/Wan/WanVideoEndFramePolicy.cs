@@ -1,4 +1,3 @@
-using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
@@ -59,14 +58,5 @@ internal static class WanVideoEndFramePolicy
         }
         && architectureId == WanArchitectureModule.ArchitectureId
         && abilities.HasFlag(VideoModelEntryAbility.ImageToVideo)
-        && (
-            string.Equals(
-                compatibility,
-                T2IModelClassSorter.CompatWan21_14b.ID,
-                StringComparison.Ordinal)
-            || string.Equals(
-                compatibility,
-                T2IModelClassSorter.CompatWan21_1_3b.ID,
-                StringComparison.Ordinal)
-        );
+        && WanArchitectureModule.SupportsHostEndFrame(compatibility);
 }

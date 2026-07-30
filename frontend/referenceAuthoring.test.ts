@@ -1,5 +1,8 @@
 import { describe, expect, it } from "@jest/globals";
-import { nextAvailableReferenceFrame } from "./referenceAuthoring";
+import {
+    nextAllowedReferencePosition,
+    nextAvailableReferenceFrame,
+} from "./referenceAuthoring";
 
 describe("nextAvailableReferenceFrame", () => {
     it("spaces preferred frames by rounded ten-percent increments", () => {
@@ -49,6 +52,30 @@ describe("nextAvailableReferenceFrame", () => {
                     { frame: 3, fromEnd: false },
                 ],
                 3,
+            ),
+        ).toBeNull();
+    });
+});
+
+describe("nextAllowedReferencePosition", () => {
+    it("allocates only the advertised first and last positions", () => {
+        expect(
+            nextAllowedReferencePosition([], 121, ["first", "last"]),
+        ).toEqual({ frame: 1, fromEnd: false });
+        expect(
+            nextAllowedReferencePosition([{ frame: 1, fromEnd: false }], 121, [
+                "first",
+                "last",
+            ]),
+        ).toEqual({ frame: 1, fromEnd: true });
+        expect(
+            nextAllowedReferencePosition(
+                [
+                    { frame: 1, fromEnd: false },
+                    { frame: 1, fromEnd: true },
+                ],
+                121,
+                ["first", "last"],
             ),
         ).toBeNull();
     });

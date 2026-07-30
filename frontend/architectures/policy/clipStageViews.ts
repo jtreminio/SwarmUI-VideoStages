@@ -87,6 +87,8 @@ const conditionalRuleFor = (
 /** Value-level narrowing for features whose support depends on the authored value. */
 export interface FeatureSupportScope {
     capabilities: ArchitectureCapabilities;
+    /** Canonical flat feature set. Scoped capability arrays remain migration aliases. */
+    extras?: readonly string[];
     /**
      * Model-profile capability list. `undefined` means "no profile scoping" —
      * the architecture-level answer stands.
@@ -108,27 +110,33 @@ export const architectureFeatureSupport = (
     scope: FeatureSupportScope,
 ): boolean => {
     const capability = scope.capabilities;
+    const extras = scope.extras;
+    const has = (
+        extra: string,
+        legacy: readonly string[],
+        legacyValue: string = extra,
+    ): boolean =>
+        extras === undefined
+            ? legacy.includes(legacyValue)
+            : extras.includes(extra);
     switch (feature) {
         case "multiStage":
-            return capability.architecture.includes("multi-stage");
+            return has("multi-stage", capability.architecture);
         case "sourceVideo":
-            return capability.clip.includes("source-video");
+            return has("source-video", capability.clip);
         case "frameReferences":
-            return (
-                capability.clip.includes("references") &&
-                capability.stage.includes("frame-references")
-            );
+            return has("frame-references", capability.stage);
         case "referenceFraming":
-            return capability.clip.includes("reference-framing");
+            return has("reference-framing", capability.clip);
         case "retake":
-            return capability.clip.includes("retake");
+            return has("retake", capability.clip);
         case "majorPrompt":
-            return capability.clip.includes("prompts");
+            return has("prompts", capability.clip);
         case "promptRelay":
-            return capability.clip.includes("prompt-relay");
+            return has("prompt-relay", capability.clip);
         case "clipAudio":
             return (
-                capability.clip.includes("audio-sources") &&
+                has("audio-sources", capability.clip) &&
                 (scope.audioSource === undefined ||
                     isAllowedAudioSource(
                         capability.audioSourceKinds,
@@ -136,41 +144,29 @@ export const architectureFeatureSupport = (
                     ))
             );
         case "audioReuse":
-            return capability.clip.includes("audio-reuse");
+            return has("audio-reuse", capability.clip);
         case "audioDerivedDuration":
-            return capability.clip.includes("audio-derived-duration");
+            return has("audio-derived-duration", capability.clip);
         case "controlSignalDerivedDuration":
-            return capability.clip.includes("control-signal-derived-duration");
+            return has("control-signal-derived-duration", capability.clip);
         case "stageLoras":
-            return (
-                capability.stage.includes("lora") &&
-                (scope.profileCapabilities === undefined ||
-                    scope.profileCapabilities.includes("normal-lora"))
-            );
+            return has("lora", capability.stage);
         case "icLora":
-            return capability.stage.includes("ic-lora");
+            return has("ic-lora", capability.stage);
         case "hdr":
-            return capability.stage.includes("hdr");
+            return has("hdr", capability.stage);
         case "upscale":
             return scope.upscaleMethod === undefined
-                ? capability.upscaleModes.length > 0
-                : capability.upscaleModes.includes(
+                ? ["pixel", "model", "latent", "latent-model"].some((mode) =>
+                      has(`${mode}-upscale`, capability.upscaleModes, mode),
+                  )
+                : has(
+                      `${upscaleModeForMethod(scope.upscaleMethod)}-upscale`,
+                      capability.upscaleModes,
                       upscaleModeForMethod(scope.upscaleMethod),
                   );
     }
 };
-
-const scopedFeatureSupport = (
-    feature: AuthoringFeature,
-    descriptor: ArchitectureCatalogEntryDto,
-    profileId: string,
-): boolean =>
-    architectureFeatureSupport(feature, {
-        capabilities: descriptor.capabilities,
-        profileCapabilities: descriptor.profiles.find(
-            (entry) => entry.id === profileId,
-        )?.capabilities,
-    });
 
 export const createClipStageCapabilityViews = (
     architectureById: ArchitectureLookup,
@@ -201,7 +197,8 @@ export const createClipStageCapabilityViews = (
 
     const forClip = (clip: Clip): ClipCapabilityView => {
         const identity = effectiveClipIdentity(clip);
-        const { architectureId, profileId, descriptor } = identity;
+        const { architectureId, descriptor } = identity;
+        const resolvedModel = modelByName.get(clip.stages[0]?.model ?? "");
         const label =
             descriptor?.label ??
             (architectureId === NONE_ARCHITECTURE_ID
@@ -223,8 +220,12 @@ export const createClipStageCapabilityViews = (
                 (target) => effectiveClipIdentity(target).architectureId,
             );
             const supported =
-                scopedFeatureSupport(feature, descriptor, profileId) &&
-                !conditionalRule;
+                architectureFeatureSupport(feature, {
+                    capabilities: descriptor.capabilities,
+                    extras:
+                        resolvedModel?.enhancements?.extras ??
+                        descriptor.extras,
+                }) && !conditionalRule;
             return {
                 supported,
                 reason: supported
@@ -273,12 +274,15 @@ export const createClipStageCapabilityViews = (
             feature: "stageLoras" | "upscale" | "sampler" | "scheduler",
         ): CapabilityDecision => {
             if (feature === "stageLoras" && descriptor) {
-                const supported =
-                    descriptor.capabilities.stage.includes("lora") &&
-                    profile?.capabilities.includes("normal-lora") === true;
+                const modelExtras = resolvedModel?.enhancements?.extras;
+                const supported = modelExtras
+                    ? modelExtras.includes("lora") &&
+                      modelExtras.includes("normal-lora")
+                    : descriptor.capabilities.stage.includes("lora") &&
+                      profile?.capabilities.includes("normal-lora") === true;
                 const profileRule = supported
                     ? conditionalRule(
-                          profile.rules,
+                          profile?.rules ?? [],
                           CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
                       )
                     : null;
@@ -303,6 +307,7 @@ export const createClipStageCapabilityViews = (
                         ? "sampler-selection"
                         : "scheduler-selection";
                 const supported =
+                    resolvedModel?.enhancements?.extras.includes(required) ??
                     profile?.capabilities.includes(required) === true;
                 return {
                     supported,
@@ -316,6 +321,9 @@ export const createClipStageCapabilityViews = (
                 descriptor !== undefined &&
                 architectureFeatureSupport("upscale", {
                     capabilities: descriptor.capabilities,
+                    extras:
+                        resolvedModel?.enhancements?.extras ??
+                        descriptor.extras,
                 });
             return {
                 supported,

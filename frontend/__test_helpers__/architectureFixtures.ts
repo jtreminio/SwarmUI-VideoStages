@@ -229,6 +229,16 @@ export const testArchitectureCatalogDto = (
                       compatibilityClassId:
                           entry.compatibilityClassId ??
                           "test-compatibility-class",
+                      ...(entry.entryAbilities
+                          ? { entryAbilities: [...entry.entryAbilities] }
+                          : {}),
+                      ...(entry.enhancements
+                          ? {
+                                enhancements: structuredClone(
+                                    entry.enhancements,
+                                ),
+                            }
+                          : {}),
                       entryModes: [...entry.entryModes],
                   },
               ]

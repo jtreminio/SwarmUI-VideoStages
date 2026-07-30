@@ -668,16 +668,16 @@ describe("reduceDocumentCommand", () => {
             boundaryOut: "continue",
             duration: 7,
             prompt: "preserve me",
-            refs: [],
-            promptWindows: [],
-            retake: null,
-            sourceVideo: null,
-            icLoras: [],
-            audioSource: "Native",
-            uploadedAudio: null,
-            saveAudioTrack: false,
-            clipLengthFromAudio: false,
-            reuseAudio: false,
+            refs: targetClip.refs,
+            promptWindows: targetClip.promptWindows,
+            retake: targetClip.retake,
+            sourceVideo: targetClip.sourceVideo,
+            icLoras: targetClip.icLoras,
+            audioSource: "Upload",
+            uploadedAudio: targetClip.uploadedAudio,
+            saveAudioTrack: true,
+            clipLengthFromAudio: true,
+            reuseAudio: true,
         });
         expect(result.document.clips[0].boundaryOut).toBe("cut");
         expect(
@@ -696,9 +696,9 @@ describe("reduceDocumentCommand", () => {
                 skipped: false,
                 model: "test-video.safetensors",
                 modelProfileId: "test-profile",
-                refStrengths: [],
-                upscale: 1,
-                loraWeights: [],
+                refStrengths: [0.8],
+                upscale: 2,
+                loraWeights: [1],
             },
             {
                 id: "stage-convert-b",
@@ -738,7 +738,7 @@ describe("reduceDocumentCommand", () => {
         expect(result.document.clips[0].boundaryOut).toBe("continue");
     });
 
-    it("removes incompatible later stages and repairs their IC-LoRA targets in one selection-affecting command", () => {
+    it("rejects a target that cannot preserve the authored stage chain", () => {
         const source = document();
         const targetClip = source.clips[1];
         targetClip.icLoras = [
@@ -784,15 +784,9 @@ describe("reduceDocumentCommand", () => {
             { architectureCatalog: catalogWithFake(fake) },
         );
 
-        expect(result.applied).toBe(true);
-        expect(result.document.clips[1].stages).toHaveLength(1);
-        expect(result.document.clips[1].icLoras).toEqual([
-            expect.objectContaining({
-                stage: -1,
-                driveSource: "Incoming",
-                driveData: "visual",
-            }),
-        ]);
+        expect(result.applied).toBe(false);
+        expect(result.failure).toBe("invalid-architecture-conversion");
+        expect(result.document).toEqual(source);
         expect(source).toEqual(before);
         expect(source.clips[1].stages.map(({ id }) => id)).toEqual([
             "stage-convert-a",
@@ -1293,7 +1287,7 @@ describe("reduceDocumentCommand", () => {
         });
     });
 
-    it("does not let forged retarget or conversion plans self-authorize", () => {
+    it("rejects forged model ownership but treats profile ids as aliases", () => {
         const source = document();
         const catalog = catalogWithFake();
         const forgedRetarget = reduceDocumentCommand(
@@ -1329,8 +1323,9 @@ describe("reduceDocumentCommand", () => {
         );
 
         expect(forgedRetarget.failure).toBe("architecture-invariant");
-        expect(forgedConversion.failure).toBe(
-            "invalid-architecture-conversion",
+        expect(forgedConversion.applied).toBe(true);
+        expect(forgedConversion.document.clips[1].modelProfileId).toBe(
+            "test-profile",
         );
     });
 
@@ -1367,7 +1362,7 @@ describe("reduceDocumentCommand", () => {
         expect(result.document).toEqual(source);
     });
 
-    it("uses exact target profile LoRA and upscale-mode support during conversion", () => {
+    it("preserves unsupported LoRA and upscale settings as dormant data", () => {
         const source = document();
         const fake = fakeArchitectureCatalog();
         fake.architectures[0].capabilities.stage = ["lora"];
@@ -1414,8 +1409,8 @@ describe("reduceDocumentCommand", () => {
                 loraWeights: entry.loraWeights,
             })),
         ).toEqual([
-            { upscale: 1, loraWeights: [] },
-            { upscale: 2, loraWeights: [] },
+            { upscale: 2, loraWeights: [1] },
+            { upscale: 2, loraWeights: [1] },
         ]);
     });
 

@@ -18,7 +18,10 @@ import {
 } from "./catalog";
 import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
 import { createCapabilityViewResolver } from "./policy";
-import type { CapabilityRuleDecision } from "./types";
+import type {
+    CapabilityRuleDecision,
+    VideoArchitectureCatalogDto,
+} from "./types";
 
 const dto = {
     architectures: [
@@ -93,6 +96,23 @@ describe("architecture catalog wire contract", () => {
                 models: [],
             }),
         ).toBeNull();
+    });
+
+    it("decodes model facts and enhancements while retaining the legacy aliases", () => {
+        const current: VideoArchitectureCatalogDto = structuredClone(dto);
+        current.architectures[0].extras = ["multi-stage", "frame-references"];
+        current.models[0].entryAbilities = ["text", "image"];
+        current.models[0].enhancements = {
+            extras: ["multi-stage", "frame-references", "normal-lora"],
+            referencePositions: ["first", "last"],
+        };
+
+        expect(parseVideoArchitectureCatalog(current)).toEqual(current);
+        const legacy = parseVideoArchitectureCatalog(dto);
+        expect(legacy).toEqual(dto);
+        expect(legacy?.models[0]).not.toHaveProperty("entryAbilities");
+        expect(legacy?.models[0]).not.toHaveProperty("enhancements");
+        expect(legacy?.models[0].entryModes).toEqual(dto.models[0].entryModes);
     });
 
     it("requires host model identity and entry facts", () => {
@@ -540,6 +560,39 @@ describe("authoritative catalog repository", () => {
         const input = document.createElement("input");
         input.id = "input_model";
         input.value = future.models[0].modelName;
+        document.body.appendChild(input);
+
+        expect(isRootTextToVideoModel()).toBe(true);
+    });
+
+    it("prefers authoritative entry abilities over contradictory legacy entry modes", async () => {
+        const current: VideoArchitectureCatalogDto = structuredClone(dto);
+        current.models[0].entryAbilities = ["image"];
+        current.models[0].entryModes = ["text-to-video", "image-to-video"];
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => current,
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        const input = document.createElement("input");
+        input.id = "input_model";
+        input.value = current.models[0].modelName;
+        document.body.appendChild(input);
+
+        expect(isRootTextToVideoModel()).toBe(false);
+    });
+
+    it("falls back to legacy entry modes when entry abilities are absent", async () => {
+        const legacy = structuredClone(dto);
+        legacy.models[0].entryModes = ["text-to-video"];
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => legacy,
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        const input = document.createElement("input");
+        input.id = "input_model";
+        input.value = legacy.models[0].modelName;
         document.body.appendChild(input);
 
         expect(isRootTextToVideoModel()).toBe(true);

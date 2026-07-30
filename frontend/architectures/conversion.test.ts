@@ -18,7 +18,7 @@ import {
 } from "./conversion/presentation";
 
 describe("architecture conversion policy", () => {
-    it("summarizes destructive architecture-owned changes", () => {
+    it("preserves architecture-owned settings as dormant data", () => {
         const fake = fakeArchitectureCatalog();
         fake.architectures[0].capabilities.architecture =
             fake.architectures[0].capabilities.architecture.filter(
@@ -48,18 +48,15 @@ describe("architecture conversion policy", () => {
             removals,
         );
 
-        expect(removals).toEqual(
-            expect.arrayContaining([
-                "1 later authored stage",
-                "1 frame reference",
-                "reference framing setting",
-                "1 clip LoRA",
-                "1 relay prompt",
-            ]),
-        );
+        expect(removals).toEqual([]);
         expect(message).toContain("one undoable change");
-        expect(message).toContain("This removes:");
-        expect(conversion?.clip.refFraming).toBe("crop");
+        expect(message).toContain("stay saved but dormant");
+        expect(conversion?.clip).toMatchObject({
+            refs: clip.refs,
+            refFraming: "fit-green",
+            loras: clip.loras,
+            promptWindows: clip.promptWindows,
+        });
     });
 
     it("drops the opaque payload only when the owning architecture changes", () => {
@@ -220,6 +217,23 @@ describe("architecture conversion policy", () => {
         ).toBe(false);
     });
 
+    it("uses model entry facts before the legacy text/image aliases", () => {
+        const clip = minimalClip({
+            stages: [minimalStage(), minimalStage()],
+        });
+        const contradictory = {
+            entryAbilities: ["text"],
+            entryModes: ["text-to-video", "image-to-video"],
+        };
+
+        expect(
+            modelSupportsStageEntry(contradictory, clip, 0, "text-to-video"),
+        ).toBe(true);
+        expect(
+            modelSupportsStageEntry(contradictory, clip, 1, "text-to-video"),
+        ).toBe(false);
+    });
+
     it("uses the host root mode only for the first active stage", () => {
         const textOnly = { entryModes: ["text-to-video"] };
         const imageOnly = { entryModes: ["image-to-video"] };
@@ -268,7 +282,7 @@ describe("architecture conversion policy", () => {
         ).toBeNull();
     });
 
-    it("checks entry roles after a single-stage target removes an incompatible later stage", () => {
+    it("rejects a target that cannot perform a preserved later stage", () => {
         const catalog = fakeArchitectureCatalog();
         catalog.architectures[0].capabilities.architecture =
             catalog.architectures[0].capabilities.architecture.filter(
@@ -294,12 +308,11 @@ describe("architecture conversion policy", () => {
             "text-to-video",
         );
 
-        expect(conversion?.clip.stages).toHaveLength(1);
-        expect(conversion?.removals).toContain("1 later authored stage");
+        expect(conversion).toBeNull();
         expect(source).toEqual(before);
     });
 
-    it("checks the generated root after target cleanup removes source video", () => {
+    it("preserves source video when an image-capable target can refine it", () => {
         const catalog = fakeArchitectureCatalog();
         catalog.entries[0].entryModes = ["image-to-video"];
         catalog.architectures[0].profiles[0].entryModes = ["image-to-video"];
@@ -315,20 +328,19 @@ describe("architecture conversion policy", () => {
         });
         const before = structuredClone(source);
 
-        expect(
-            planArchitectureConversion(
-                source,
-                {
-                    architectureId: "test-video",
-                    modelProfileId: "test-profile",
-                    model: "test-video.safetensors",
-                    capabilities: catalog.architectures[0].capabilities,
-                    entryModes: ["image-to-video"],
-                },
-                catalog,
-                "text-to-video",
-            ),
-        ).toBeNull();
+        const conversion = planArchitectureConversion(
+            source,
+            {
+                architectureId: "test-video",
+                modelProfileId: "test-profile",
+                model: "test-video.safetensors",
+                capabilities: catalog.architectures[0].capabilities,
+                entryModes: ["image-to-video"],
+            },
+            catalog,
+            "text-to-video",
+        );
+        expect(conversion?.clip.sourceVideo).toEqual(source.sourceVideo);
         expect(source).toEqual(before);
     });
 
@@ -354,7 +366,7 @@ describe("architecture conversion policy", () => {
         ).toBe(true);
     });
 
-    it("retains clip LoRAs and selectively disables target-rule violations", () => {
+    it("retains clip LoRAs and dormant samplerless weights", () => {
         const catalog = testArchitectureCatalog();
         catalog.architectures[0].profiles[0].rules = [
             {
@@ -386,11 +398,9 @@ describe("architecture conversion policy", () => {
         );
 
         expect(conversion?.clip.loras).toEqual(source.loras);
-        expect(conversion?.clip.stages[0].loraWeights).toEqual([0, 0]);
+        expect(conversion?.clip.stages[0].loraWeights).toEqual([1, 0.4]);
         expect(conversion?.clip.stages[1].loraWeights).toEqual([0.7, 0]);
-        expect(conversion?.removals).toContain(
-            "2 normal LoRA weights disabled on samplerless stages",
-        );
+        expect(conversion?.removals).toEqual([]);
         expect(source.stages[0].loraWeights).toEqual([1, 0.4]);
     });
 

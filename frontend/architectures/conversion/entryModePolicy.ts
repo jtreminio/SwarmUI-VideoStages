@@ -16,11 +16,18 @@ const firstActiveStageIndex = (clip: Clip): number | null => {
  * host input that began the clip.
  */
 export const modelSupportsStageEntry = (
-    model: Pick<ArchitectureModelEntry, "entryModes">,
+    model: Pick<ArchitectureModelEntry, "entryModes"> &
+        Partial<Pick<ArchitectureModelEntry, "entryAbilities">>,
     clip: Clip,
     stageIdx: number,
     generatedEntryMode: GeneratedEntryMode,
 ): boolean => {
+    const supportsText =
+        model.entryAbilities?.includes("text") ??
+        model.entryModes.includes("text-to-video");
+    const supportsImage =
+        model.entryAbilities?.includes("image") ??
+        model.entryModes.includes("image-to-video");
     const firstActive = firstActiveStageIndex(clip);
     const isClipRoot =
         firstActive === null
@@ -29,22 +36,25 @@ export const modelSupportsStageEntry = (
                   .some((candidate) => !candidate.skipped)
             : stageIdx === firstActive;
     if (!isClipRoot) {
-        return model.entryModes.includes("image-to-video");
+        return supportsImage;
     }
     if (clip.sourceVideo === null) {
         // Frame references guide this root mode; they do not replace it.
-        return model.entryModes.includes(generatedEntryMode);
+        return generatedEntryMode === "text-to-video"
+            ? supportsText
+            : supportsImage;
     }
     return (
+        supportsImage ||
         model.entryModes.includes("source-video") ||
-        model.entryModes.includes("refine-video") ||
-        model.entryModes.includes("image-to-video")
+        model.entryModes.includes("refine-video")
     );
 };
 
 /** Whether one model can perform every active role after a whole-clip retarget. */
 export const modelSupportsAllActiveStageEntries = (
-    model: Pick<ArchitectureModelEntry, "entryModes">,
+    model: Pick<ArchitectureModelEntry, "entryModes"> &
+        Partial<Pick<ArchitectureModelEntry, "entryAbilities">>,
     clip: Clip,
     generatedEntryMode: GeneratedEntryMode,
 ): boolean =>

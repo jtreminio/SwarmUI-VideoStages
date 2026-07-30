@@ -6,6 +6,7 @@ import { buildArchitectureRetargetPlan } from "../architectures/catalog";
 import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity";
 import { NONE_ARCHITECTURE_ID } from "../architectures/none/identity";
 import type { CapabilityViewResolver } from "../architectures/policy";
+import { referenceEndpointPolicy } from "../architectures/referenceEndpoints";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import {
     clamp,
@@ -25,7 +26,7 @@ import {
     buildDefaultStage,
     getReferenceFrameMax,
 } from "../normalization";
-import { nextAvailableReferenceFrame } from "../referenceAuthoring";
+import { nextAllowedReferencePosition } from "../referenceAuthoring";
 import { getDefaultStageModel, getRootDefaults } from "../rootDefaults";
 import { selectionAfterRemoval, setSelection } from "../selection";
 import type { Clip, TimelineSelection } from "../types";
@@ -212,11 +213,13 @@ export const createDetailSelectionDomainOperations = (
             ) {
                 return null;
             }
-            const frame = nextAvailableReferenceFrame(
+            const position = nextAllowedReferencePosition(
                 clip.refs,
                 getReferenceFrameMax(getRootDefaults, clip),
+                referenceEndpointPolicy(clip, getRootDefaults().modelCatalog)
+                    .positions,
             );
-            if (frame === null) {
+            if (position === null) {
                 return null;
             }
             return {
@@ -228,7 +231,8 @@ export const createDetailSelectionDomainOperations = (
                             clipId: clip.id,
                             ref: {
                                 ...buildDefaultRef(),
-                                frame,
+                                frame: position.frame,
+                                fromEnd: position.fromEnd,
                                 id: createEntityId("ref"),
                             },
                         },

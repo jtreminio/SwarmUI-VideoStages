@@ -29,6 +29,7 @@ internal sealed class WanGenerationSession(
     private readonly GlobalVideoFrameTrimmer _trimmer = new(g);
     private readonly SourcedClipInstaller _sourcedClipInstaller = new(g);
     private readonly StagePixelScaleGraphBuilder _pixelScaler = new(g);
+    private readonly WanFrameReferenceResolver _frameReferences = new(g);
 
     /// <summary>
     /// The timeline resolution on the shared VideoStages pixel grid, which is already a whole
@@ -64,21 +65,34 @@ internal sealed class WanGenerationSession(
                     $"VideoStages: clip {clip.ClipId} source video could not be installed.");
             g.CurrentVae = null;
         }
-        else if (clip.Input == ClipInputKind.EmptyLatent)
-        {
-            // Native WAN text entry asks the host for an empty video after loading the authored
-            // model. The discarded host text donor is never decoded or treated as an image.
-            g.CurrentMedia = null;
-            g.CurrentVae = null;
-        }
         else
         {
-            // Every generated Wan clip re-enters from the host root: the slice supports hard cuts
-            // only, so no clip continues from the previous clip's tail.
-            g.CurrentMedia = rootSources.Media?.Duplicate()
-                ?? throw new SwarmUserErrorException(
-                    $"VideoStages: clip {clip.ClipId} has no host image to generate from.");
-            g.CurrentVae = rootSources.Vae?.Duplicate();
+            WGNodeData authoredFirst = _frameReferences.ResolveFirst(
+                clip.RequireWanPayload().FirstFrameReference);
+            if (authoredFirst is not null)
+            {
+                g.CurrentMedia = authoredFirst;
+                // The selected WAN model supplies its own VAE during host preparation. Do not
+                // attach an unrelated text-root donor VAE to the uploaded image.
+                g.CurrentVae = null;
+            }
+            else if (clip.Input == ClipInputKind.EmptyLatent)
+            {
+                // Upload materialization is deliberately runtime-owned. A missing or malformed
+                // first image leaves the text-root plan unchanged and falls back to native text
+                // generation without borrowing a host image.
+                g.CurrentMedia = null;
+                g.CurrentVae = null;
+            }
+            else
+            {
+                // Every other generated Wan clip re-enters from the host root: the slice supports
+                // hard cuts only, so no clip continues from the previous clip's tail.
+                g.CurrentMedia = rootSources.Media?.Duplicate()
+                    ?? throw new SwarmUserErrorException(
+                        $"VideoStages: clip {clip.ClipId} has no host image to generate from.");
+                g.CurrentVae = rootSources.Vae?.Duplicate();
+            }
         }
         // Wan declares audio disabled. The sourced path does not build an audio branch, and a
         // mixed timeline's shared host image may still acquire an architecture-owned attachment.
@@ -150,7 +164,11 @@ internal sealed class WanGenerationSession(
                     clip,
                     stage,
                     sectionId);
-                if (stage.Input == StageInputKind.EmptyLatent)
+                bool materializedFirstFrame =
+                    stage.Input == StageInputKind.EmptyLatent
+                    && g.CurrentMedia is not null;
+                if (stage.Input == StageInputKind.EmptyLatent
+                    && !materializedFirstFrame)
                 {
                     ExecuteNativeTextStage(clip, stage, genInfo);
                     stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
@@ -161,7 +179,10 @@ internal sealed class WanGenerationSession(
                     : WanStageSchedulePolicy.StartStep(
                         payload.Steps,
                         payload.Control);
-                stageInput.Configure(clip, stage, genInfo, startStep);
+                if (!materializedFirstFrame)
+                {
+                    stageInput.Configure(clip, stage, genInfo, startStep);
+                }
                 // SwarmUI's generic builder creates latent audio whenever CurrentAudioVae is
                 // set. Another architecture can leave one ambient on a mixed timeline, but
                 // Wan's declared output is video-only, so isolate every pass and restore the
@@ -223,8 +244,7 @@ internal sealed class WanGenerationSession(
         WanStagePayload payload = stage.RequireWanPayload();
         if (clip.EntryMode != ArchitectureEntryMode.TextToVideo
             || clip.Input != ClipInputKind.EmptyLatent
-            || stage.ClipStageIndex != 0
-            || genInfo.VideoEndFrame is not null)
+            || stage.ClipStageIndex != 0)
         {
             throw new InvalidOperationException(
                 $"Clip {clip.ClipId} stage {stage.StageId} has an invalid native Wan text "
@@ -244,30 +264,37 @@ internal sealed class WanGenerationSession(
             int frames = genInfo.Frames
                 ?? throw new InvalidOperationException(
                     $"Clip {clip.ClipId} stage {stage.StageId} has no native Wan frame count.");
-            WGNodeData ambientVae = g.CurrentVae;
-            using (ParamSnapshot frameScope = ParamSnapshot.Of(
-                g.UserInput,
-                T2IParamTypes.Text2VideoFrames.Type))
+            if (genInfo.VideoEndFrame is not null)
             {
-                try
+                BuildNativeLastFrameConditioning(genInfo, frames);
+            }
+            else
+            {
+                WGNodeData ambientVae = g.CurrentVae;
+                using (ParamSnapshot frameScope = ParamSnapshot.Of(
+                    g.UserInput,
+                    T2IParamTypes.Text2VideoFrames.Type))
                 {
-                    g.UserInput.Set(T2IParamTypes.Text2VideoFrames, frames);
-                    g.CurrentVae = genInfo.Vae;
-                    g.CurrentMedia = g.EmptyImage(
-                        (int)genInfo.Width,
-                        (int)genInfo.Height,
-                        1);
-                    ValidateNativeTextLatent(
-                        clip,
-                        stage,
-                        g.CurrentMedia,
-                        (int)genInfo.Width,
-                        (int)genInfo.Height,
-                        frames);
-                }
-                finally
-                {
-                    g.CurrentVae = ambientVae;
+                    try
+                    {
+                        g.UserInput.Set(T2IParamTypes.Text2VideoFrames, frames);
+                        g.CurrentVae = genInfo.Vae;
+                        g.CurrentMedia = g.EmptyImage(
+                            (int)genInfo.Width,
+                            (int)genInfo.Height,
+                            1);
+                        ValidateNativeTextLatent(
+                            clip,
+                            stage,
+                            g.CurrentMedia,
+                            (int)genInfo.Width,
+                            (int)genInfo.Height,
+                            frames);
+                    }
+                    finally
+                    {
+                        g.CurrentVae = ambientVae;
+                    }
                 }
             }
             g.CurrentMedia.FPS = plan.FramesPerSecond;
@@ -299,6 +326,85 @@ internal sealed class WanGenerationSession(
             g.CurrentAudioVae = ambientAudioVae;
             g.IsImageToVideo = ambientImageToVideo;
         }
+    }
+
+    private void BuildNativeLastFrameConditioning(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        int frames)
+    {
+        WGNodeData endFrame = g.LoadImage(
+            genInfo.VideoEndFrame,
+            "${videostageswanlastframe}",
+            false);
+        string scaled = g.CreateNode("ImageScale", new Newtonsoft.Json.Linq.JObject
+        {
+            ["image"] = endFrame.Path,
+            ["width"] = genInfo.Width,
+            ["height"] = genInfo.Height,
+            ["upscale_method"] = "lanczos",
+            ["crop"] = "disabled",
+        });
+        Newtonsoft.Json.Linq.JArray scaledEnd = [scaled, 0];
+        Newtonsoft.Json.Linq.JToken clipVisionEnd = null;
+        string compatibilityId = genInfo.VideoModel.ModelClass?.CompatClass?.ID;
+        bool exactWan22ImageModel = StringUtils.Equals(
+            genInfo.VideoModel.ModelClass?.ID,
+            WanArchitectureModule.ImageToVideoModelClassId);
+        if (!exactWan22ImageModel
+            && (compatibilityId == T2IModelClassSorter.CompatWan21_14b.ID
+                || compatibilityId == T2IModelClassSorter.CompatWan21_1_3b.ID))
+        {
+            string targetName = g.RequireVisionModel(
+                "clip_vision_h.safetensors",
+                "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/"
+                    + "split_files/clip_vision/clip_vision_h.safetensors",
+                "64a7ef761bfccbadbaa3da77366aac4185a6c58fa5de5f589b42a65bcc21f161",
+                T2IParamTypes.ClipVisionModel);
+            string clipLoader = g.CreateNode(
+                "CLIPVisionLoader",
+                new Newtonsoft.Json.Linq.JObject
+                {
+                    ["clip_name"] = targetName,
+                });
+            string encodedEnd = g.CreateNode(
+                "CLIPVisionEncode",
+                new Newtonsoft.Json.Linq.JObject
+                {
+                    ["clip_vision"] = new Newtonsoft.Json.Linq.JArray(clipLoader, 0),
+                    ["image"] = scaledEnd,
+                    ["crop"] = "center",
+                });
+            clipVisionEnd = new Newtonsoft.Json.Linq.JArray(encodedEnd, 0);
+        }
+        string conditioning = g.CreateNode(
+            "WanFirstLastFrameToVideo",
+            new Newtonsoft.Json.Linq.JObject
+            {
+                ["width"] = genInfo.Width,
+                ["height"] = genInfo.Height,
+                ["length"] = frames,
+                ["positive"] = genInfo.PosCond,
+                ["negative"] = genInfo.NegCond,
+                ["vae"] = genInfo.Vae.Path,
+                ["start_image"] = null,
+                ["end_image"] = scaledEnd,
+                ["clip_vision_start_image"] = null,
+                ["clip_vision_end_image"] = clipVisionEnd,
+                ["batch_size"] = 1,
+            });
+        genInfo.PosCond = [conditioning, 0];
+        genInfo.NegCond = [conditioning, 1];
+        g.CurrentMedia = new(
+            [conditioning, 2],
+            g,
+            WGNodeData.DT_LATENT_VIDEO,
+            genInfo.Model.Compat)
+        {
+            Width = (int)genInfo.Width,
+            Height = (int)genInfo.Height,
+            Frames = frames,
+            FPS = plan.FramesPerSecond,
+        };
     }
 
     private void ValidateNativeTextLatent(
@@ -407,10 +513,27 @@ internal sealed class WanGenerationSession(
             Steps = payload.Steps,
             Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.StageId,
             ContextID = sectionId,
-            VideoEndFrame = WanVideoEndFramePolicy.ShouldApply(plan, clip, stage)
-                ? g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
-                : null,
+            VideoEndFrame = ResolveEndFrame(clip, stage),
         };
+    }
+
+    private Image ResolveEndFrame(ClipPlan clip, StagePlan stage)
+    {
+        bool terminalGenerating = ReferenceEquals(
+            stage,
+            clip.Stages.LastOrDefault(candidate => !candidate.IsPassthrough));
+        if (!terminalGenerating)
+        {
+            return null;
+        }
+        WanFrameReferencePlan authored = clip.RequireWanPayload().LastFrameReference;
+        if (authored is not null)
+        {
+            return _frameReferences.ResolveLast(authored);
+        }
+        return WanVideoEndFramePolicy.ShouldApply(plan, clip, stage)
+            ? g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
+            : null;
     }
 
     private void ApplyPixelUpscale(StagePlan stage)

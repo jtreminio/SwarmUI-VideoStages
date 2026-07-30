@@ -1,4 +1,5 @@
 import type { CapabilityViewResolver } from "./architectures/policy";
+import { referenceEndpointPolicy } from "./architectures/referenceEndpoints";
 import { clamp, REF_FRAME_MIN } from "./constants";
 import { documentFps } from "./documentQueries";
 import {
@@ -13,6 +14,7 @@ import {
     removeRefAt,
 } from "./normalization";
 import { getClips, getState } from "./persistence";
+import { nextAllowedReferencePosition } from "./referenceAuthoring";
 import { getRootDefaults } from "./rootDefaults";
 import { activateSelection, setSelection } from "./selection";
 import { getTimelineAuthoringSettings } from "./timelineAuthoringSettings";
@@ -49,6 +51,7 @@ interface RefDragState {
     durationSeconds: number;
     fps: number;
     frameMax: number;
+    allowedPositions: string[];
     fromEnd: boolean;
     sourceRevision: number;
 }
@@ -61,6 +64,10 @@ export const createTimelineReferencesTrack = (
     const canEditReferences = (clip: ReturnType<typeof getClips>[number]) =>
         getCapabilities?.().forClip(clip).decision("frameReferences")
             .supported ?? true;
+    const referencePositions = (
+        clip: ReturnType<typeof getClips>[number],
+    ): string[] =>
+        referenceEndpointPolicy(clip, getRootDefaults().modelCatalog).positions;
 
     const findArrow = (clipIdx: number, refIdx: number): HTMLElement | null =>
         boundBody?.querySelector<HTMLElement>(
@@ -107,8 +114,26 @@ export const createTimelineReferencesTrack = (
                     clip,
                     fps,
                 );
+                const allowed = referencePositions(clip);
                 const ref = buildDefaultRef();
-                ref.frame = clamp(Math.round(frame), REF_FRAME_MIN, frameMax);
+                if (allowed.length === 0 || allowed.includes("any")) {
+                    ref.frame = clamp(
+                        Math.round(frame),
+                        REF_FRAME_MIN,
+                        frameMax,
+                    );
+                } else {
+                    const position = nextAllowedReferencePosition(
+                        clip.refs,
+                        frameMax,
+                        allowed,
+                    );
+                    if (!position) {
+                        return null;
+                    }
+                    ref.frame = position.frame;
+                    ref.fromEnd = position.fromEnd;
+                }
                 appendRefToClip(clip, ref);
                 newRefIdx = clip.refs.length - 1;
                 return clips;
@@ -133,7 +158,23 @@ export const createTimelineReferencesTrack = (
         });
     };
 
-    const dragFrameAt = (state: RefDragState, clientX: number): number => {
+    const dragPositionAt = (
+        state: RefDragState,
+        clientX: number,
+    ): { frame: number; fromEnd: boolean } => {
+        const bounded =
+            state.allowedPositions.length > 0 &&
+            !state.allowedPositions.includes("any");
+        if (bounded) {
+            const rect = state.lane.getBoundingClientRect();
+            const prefersLast = clientX - rect.left >= rect.width / 2;
+            const supportsFirst = state.allowedPositions.includes("first");
+            const supportsLast = state.allowedPositions.includes("last");
+            return {
+                frame: REF_FRAME_MIN,
+                fromEnd: supportsLast && (!supportsFirst || prefersLast),
+            };
+        }
         const rect = state.lane.getBoundingClientRect();
         const frame = pxToFrame(
             clientX - rect.left,
@@ -143,20 +184,23 @@ export const createTimelineReferencesTrack = (
             state.fromEnd,
         );
         if (!getTimelineAuthoringSettings().snap || rect.width <= 0) {
-            return frame;
+            return { frame, fromEnd: state.fromEnd };
         }
         const thresholdFrames = Math.max(
             1,
             (SNAP_THRESHOLD_PX / rect.width) * state.frameMax,
         );
-        return Math.round(
-            snapPoint(
-                frame,
-                [],
-                [REF_FRAME_MIN, state.frameMax],
-                thresholdFrames,
+        return {
+            frame: Math.round(
+                snapPoint(
+                    frame,
+                    [],
+                    [REF_FRAME_MIN, state.frameMax],
+                    thresholdFrames,
+                ),
             ),
-        );
+            fromEnd: state.fromEnd,
+        };
     };
 
     const restoreDragPreview = (state: RefDragState): void => {
@@ -178,27 +222,33 @@ export const createTimelineReferencesTrack = (
         suppressEscapeClick: true,
         onMove: (ctx) => {
             body.classList.add(DRAGGING_CLASS);
+            const position = dragPositionAt(state, ctx.event.clientX);
             positionRefMarker(
                 state.mark,
                 state.arrow,
-                dragFrameAt(state, ctx.event.clientX),
-                state.fromEnd,
+                position.frame,
+                position.fromEnd,
                 state.durationSeconds,
                 state.fps,
             );
         },
         onCommit: (ctx) => {
             body.classList.remove(DRAGGING_CLASS);
-            const newFrame = dragFrameAt(state, ctx.event.clientX);
+            const position = dragPositionAt(state, ctx.event.clientX);
             const saved = commitClipMutation(
                 state.sourceRevision,
                 "references-track",
                 (clips) => {
                     const ref = clips[state.clipIdx]?.refs?.[state.refIdx];
-                    if (!ref || ref.frame === newFrame) {
+                    if (
+                        !ref ||
+                        (ref.frame === position.frame &&
+                            ref.fromEnd === position.fromEnd)
+                    ) {
                         return null;
                     }
-                    ref.frame = newFrame;
+                    ref.frame = position.frame;
+                    ref.fromEnd = position.fromEnd;
                     return clips;
                 },
             );
@@ -266,6 +316,7 @@ export const createTimelineReferencesTrack = (
             durationSeconds: clip.duration,
             fps,
             frameMax: getReferenceFrameMax(getRootDefaults, clip, fps),
+            allowedPositions: referencePositions(clip),
             fromEnd: ref.fromEnd === true,
             sourceRevision: currentRevision(),
         });

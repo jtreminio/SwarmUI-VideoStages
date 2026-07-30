@@ -197,14 +197,30 @@ internal static class WanClipPlanCompiler
             };
             stages.Add(stage.ClipStageRawIndex, payload);
         }
+        WanFrameReferencePlan firstReference = CompileReference(
+            (clip.ImageRefs ?? []).SingleOrDefault(reference =>
+                !reference.FromEnd && reference.Frame == 1));
+        WanFrameReferencePlan lastReference = CompileReference(
+            (clip.ImageRefs ?? []).SingleOrDefault(reference =>
+                reference.FromEnd && reference.Frame == 1));
         return new(
             new WanClipPayload(
                 clip.Id,
-                clipProfile ?? WanArchitectureModule.ImageToVideoProfileId)
+                clipProfile ?? WanArchitectureModule.ImageToVideoProfileId,
+                firstReference,
+                lastReference)
             {
                 CompatibilityClassId = clipCompatibilityClassId ?? "",
             },
             stages,
             diagnostics.AsReadOnly());
     }
+
+    private static WanFrameReferencePlan CompileReference(ImageRefSpec reference) =>
+        reference is null
+            ? null
+            : new(
+                reference.Source?.Trim() ?? "",
+                reference.UploadFileName,
+                reference.Data);
 }

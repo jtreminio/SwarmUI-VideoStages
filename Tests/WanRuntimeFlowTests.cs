@@ -30,6 +30,7 @@ public class WanRuntimeFlowTests
     private const double WanSourcedStartSeconds = 1;
     private static readonly string[] WanSourceFeatures =
         [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
+    private static readonly string[] WanReferenceFeatures = WanSourceFeatures;
 
     private sealed class PreflightSnapshot
     {
@@ -381,6 +382,315 @@ public class WanRuntimeFlowTests
         Assert.DoesNotContain(
             NodesOfClass(bridge, "WanImageToVideo"),
             _ => true);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Authored_first_frame_upload_conditions_a_text_root_without_using_a_root_donor()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["refs"] = new JArray(UploadedWanReference("RklSU1Q=", fromEnd: false));
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+        WorkflowGenerator.WorkflowGenStep clearUnusedRootDonor = new(g =>
+        {
+            g.CurrentMedia = null;
+            g.CurrentVae = null;
+        }, Constants.WorkflowStepPriority.RunConfiguredStages - 0.01);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WanSteps().Append(clearUnusedRootDonor),
+                WanReferenceFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmLoadImageB64Node upload = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+        Assert.Equal("RklSU1Q=", upload.ImageBase64.LiteralAsString());
+        ComfyNode conditioning = Assert.Single(NodesOfClass(bridge, "WanImageToVideo"));
+        Assert.True(ReachesUpstream(
+            bridge,
+            conditioning.FindInput("start_image").Connection?.Node,
+            upload.Id));
+        ComfyNode sampler = Assert.Single(SamplerNodes(bridge));
+        Assert.True(ReachesUpstream(bridge, sampler, conditioning.Id));
+        Assert.DoesNotContain(NodesOfClass(bridge, "EmptyHunyuanLatentVideo"), _ => true);
+        Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Theory]
+    [InlineData("missing", "missing inline data and a file name")]
+    [InlineData("malformed", "Ignoring invalid WAN first-frame reference payload")]
+    public void Unusable_first_upload_warns_and_falls_back_to_native_text_without_a_root_donor(
+        string failure,
+        string expectedWarning)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject reference = new()
+        {
+            ["source"] = "Upload",
+            ["frame"] = 1,
+            ["fromEnd"] = false,
+        };
+        if (failure == "malformed")
+        {
+            reference["uploadedImage"] = new JObject
+            {
+                ["data"] = "not-an-image-payload",
+                ["fileName"] = "broken.png",
+            };
+        }
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["refs"] = new JArray(reference);
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+        WorkflowGenerator.WorkflowGenStep clearUnusedRootDonor = new(g =>
+        {
+            g.CurrentMedia = null;
+            g.CurrentVae = null;
+        }, Constants.WorkflowStepPriority.RunConfiguredStages - 0.01);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WanSteps().Append(clearUnusedRootDonor),
+                WanReferenceFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ClipPlan planned = Assert.Single(
+            generator.RequireVideoExecutionPlanContext().Plan.Clips);
+        Assert.Equal(ClipInputKind.EmptyLatent, planned.Input);
+        Assert.Equal(StageInputKind.EmptyLatent, Assert.Single(planned.Stages).Input);
+        Assert.Single(NodesOfClass(bridge, "EmptyHunyuanLatentVideo"));
+        Assert.Empty(NodesOfClass(bridge, "WanImageToVideo"));
+        Assert.Empty(NodesOfClass(bridge, "WanFirstLastFrameToVideo"));
+        Assert.Contains(
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains(expectedWarning, StringComparison.Ordinal));
+        Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("wan-2_1-text2video-14b", true)]
+    public void Authored_last_only_upload_conditions_a_text_root_without_a_root_donor(
+        string modelClassId,
+        bool expectsClipVision)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        if (modelClassId is not null)
+        {
+            models.VideoModel.ModelClass = models.VideoModel.ModelClass with
+            {
+                ID = modelClassId,
+                Name = "Wan 2.1 Video 14B",
+            };
+        }
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["refs"] = new JArray(UploadedWanReference("TEFTVA==", fromEnd: true));
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+        WorkflowGenerator.WorkflowGenStep clearUnusedRootDonor = new(g =>
+        {
+            g.CurrentMedia = null;
+            g.CurrentVae = null;
+        }, Constants.WorkflowStepPriority.RunConfiguredStages - 0.01);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WanSteps().Append(clearUnusedRootDonor),
+                WanReferenceFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode conditioning = Assert.Single(
+            NodesOfClass(bridge, "WanFirstLastFrameToVideo"));
+        Assert.False(conditioning.FindInput("start_image").HasValue);
+        SwarmLoadImageB64Node upload = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+        Assert.True(ReachesUpstream(
+            bridge,
+            conditioning.FindInput("end_image").Connection?.Node,
+            upload.Id));
+        Assert.Equal(
+            expectsClipVision,
+            conditioning.FindInput("clip_vision_end_image").HasValue);
+        Assert.False(conditioning.FindInput("clip_vision_start_image").HasValue);
+        Assert.Empty(NodesOfClass(bridge, "WanImageToVideo"));
+        Assert.Empty(NodesOfClass(bridge, "EmptyHunyuanLatentVideo"));
+        ComfyNode sampler = Assert.Single(SamplerNodes(bridge));
+        Assert.Same(
+            conditioning,
+            sampler.FindInput("latent_image").Connection?.Node);
+        Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Malformed_first_with_valid_last_degrades_to_last_only_conditioning()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject malformedFirst = UploadedWanReference(
+            "not-valid-base64",
+            fromEnd: false);
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["refs"] = new JArray(
+            malformedFirst,
+            UploadedWanReference("TEFTVA==", fromEnd: true));
+        T2IParamInput input = BuildTextToVideoInput(
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+        WorkflowGenerator.WorkflowGenStep clearUnusedRootDonor = new(g =>
+        {
+            g.CurrentMedia = null;
+            g.CurrentVae = null;
+        }, Constants.WorkflowStepPriority.RunConfiguredStages - 0.01);
+
+        (JObject workflow, _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WanSteps().Append(clearUnusedRootDonor),
+                WanReferenceFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode conditioning = Assert.Single(
+            NodesOfClass(bridge, "WanFirstLastFrameToVideo"));
+        Assert.False(conditioning.FindInput("start_image").HasValue);
+        Assert.True(conditioning.FindInput("end_image").HasValue);
+        Assert.Contains(
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains(
+                "Ignoring invalid WAN first-frame reference payload",
+                StringComparison.Ordinal));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Authored_last_frame_upload_belongs_to_the_terminal_generating_stage()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 10),
+            MakeStage(
+                models.VideoModel.Name,
+                "PreviousStage",
+                control: 0.5,
+                steps: 12),
+            MakeStage(
+                models.VideoModel.Name,
+                "PreviousStage",
+                control: 0,
+                steps: 13));
+        clip["refs"] = new JArray(UploadedWanReference("TEFTVA==", fromEnd: true));
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        (JObject workflow, _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WanSteps(),
+                WanReferenceFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmLoadImageB64Node upload = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+        Assert.Equal("TEFTVA==", upload.ImageBase64.LiteralAsString());
+        ComfyNode firstConditioning = Assert.Single(
+            NodesOfClass(bridge, "WanImageToVideo"));
+        ComfyNode terminalConditioning = Assert.Single(
+            NodesOfClass(bridge, "WanFirstLastFrameToVideo"));
+        Assert.True(ReachesUpstream(
+            bridge,
+            terminalConditioning.FindInput("end_image").Connection?.Node,
+            upload.Id));
+        ComfyNode firstSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 10);
+        ComfyNode terminalSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 12);
+        Assert.True(ReachesUpstream(bridge, firstSampler, firstConditioning.Id));
+        Assert.False(ReachesUpstream(bridge, firstSampler, terminalConditioning.Id));
+        Assert.True(ReachesUpstream(bridge, terminalSampler, terminalConditioning.Id));
+        Assert.DoesNotContain(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 13);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Authored_first_and_last_uploads_are_clip_local_and_override_no_global_state()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        clip["refs"] = new JArray(
+            UploadedWanReference("RklSU1Q=", fromEnd: false),
+            UploadedWanReference("TEFTVA==", fromEnd: true));
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+        Image globalEnd = new([0x44], MediaType.ImagePng);
+        input.Set(T2IParamTypes.VideoEndFrame, globalEnd);
+
+        (JObject workflow, _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WanSteps(),
+                WanReferenceFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmLoadImageB64Node[] uploads =
+            [.. bridge.Graph.NodesOfType<SwarmLoadImageB64Node>()];
+        Assert.Equal(
+            ["RklSU1Q=", "TEFTVA=="],
+            uploads.Select(upload => upload.ImageBase64.LiteralAsString()).Order());
+        ComfyNode conditioning = Assert.Single(
+            NodesOfClass(bridge, "WanFirstLastFrameToVideo"));
+        SwarmLoadImageB64Node first = Assert.Single(
+            uploads,
+            upload => upload.ImageBase64.LiteralAsString() == "RklSU1Q=");
+        SwarmLoadImageB64Node last = Assert.Single(
+            uploads,
+            upload => upload.ImageBase64.LiteralAsString() == "TEFTVA==");
+        Assert.True(ReachesUpstream(
+            bridge,
+            conditioning.FindInput("start_image").Connection?.Node,
+            first.Id));
+        Assert.True(ReachesUpstream(
+            bridge,
+            conditioning.FindInput("end_image").Connection?.Node,
+            last.Id));
+        Assert.Same(globalEnd, input.Get(T2IParamTypes.VideoEndFrame, null));
+        Assert.DoesNotContain(
+            bridge.Graph.NodesOfType<LoadImageNode>(),
+            load => load.Image.LiteralAsString() == "${videoendframe}");
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
     }
@@ -3223,7 +3533,7 @@ public class WanRuntimeFlowTests
 
         AssertPreflightRefusalBeforeMutation(
             input,
-            "cannot coexist with a clip-local sourced Wan timeline");
+            "cannot coexist with a clip-local sourced WAN timeline");
     }
 
     [Theory]
@@ -3434,6 +3744,19 @@ public class WanRuntimeFlowTests
         };
         return clip;
     }
+
+    private static JObject UploadedWanReference(string payload, bool fromEnd) =>
+        new()
+        {
+            ["source"] = "Upload",
+            ["frame"] = 1,
+            ["fromEnd"] = fromEnd,
+            ["uploadedImage"] = new JObject
+            {
+                ["data"] = $"data:image/png;base64,{payload}",
+                ["fileName"] = fromEnd ? "last.png" : "first.png",
+            },
+        };
 
     private static SwarmFrameWindowNode AssertWanSourceConformChain(
         WorkflowBridge bridge,

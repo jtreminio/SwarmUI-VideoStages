@@ -102,11 +102,14 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
                 | ArchitectureCapability.SourcedEntry
                 | ArchitectureCapability.MultiStage
                 | ArchitectureCapability.DecodedOutput,
-            ClipCapability.Prompts | ClipCapability.SourceVideo,
+            ClipCapability.Prompts
+                | ClipCapability.SourceVideo
+                | ClipCapability.References,
             StageCapability.ImageInput
                 | StageCapability.VideoInput
                 | StageCapability.PixelUpscale
-                | StageCapability.Lora,
+                | StageCapability.Lora
+                | StageCapability.FrameReferences,
             OutputCapability.Video),
         WanBoundaryPolicy.Instance)
     {
@@ -144,10 +147,24 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
             CompatibilityClassId = compatClassId,
             EntryAbilities = VideoModelEntryAbility.TextToVideo
                 | VideoModelEntryAbility.ImageToVideo,
+            Enhancements = ["bounded-frame-references"],
+            ReferencePositions = SupportsHostEndFrame(compatClassId)
+                ? ["first", "last"]
+                : ["first"],
             HostFactsAuthoritative = true,
         };
         return true;
     }
+
+    internal static bool SupportsHostEndFrame(string compatibilityClassId) =>
+        string.Equals(
+            compatibilityClassId,
+            T2IModelClassSorter.CompatWan21_14b.ID,
+            StringComparison.Ordinal)
+        || string.Equals(
+            compatibilityClassId,
+            T2IModelClassSorter.CompatWan21_1_3b.ID,
+            StringComparison.Ordinal);
 
     internal static bool IsSupportedProfile(ModelProfileId profileId) =>
         profileId == OrdinaryImageToVideoProfileId

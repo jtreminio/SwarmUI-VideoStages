@@ -26,10 +26,7 @@ export const modelIdentityFromCatalog = (
     if (
         !entry?.architectureId ||
         !entry.modelProfileId ||
-        !entry.compatibilityClassId ||
-        !architectureDescriptor(catalog, entry.architectureId)?.profiles.some(
-            (profile) => profile.id === entry.modelProfileId,
-        )
+        !entry.compatibilityClassId
     ) {
         return null;
     }
@@ -53,12 +50,7 @@ export const deriveClipArchitectureIdentity = (
         stage,
         identity: modelIdentityFromCatalog(catalog, stage.model),
     }));
-    if (
-        identities.some(
-            ({ stage, identity }) =>
-                !identity || stage.modelProfileId !== identity.modelProfileId,
-        )
-    ) {
+    if (identities.some(({ identity }) => !identity)) {
         return null;
     }
     const authored = identities[0]?.identity ?? null;
@@ -77,7 +69,10 @@ export const deriveClipArchitectureIdentity = (
         : null;
     if (
         clip.stages.length > 1 &&
-        !descriptor?.capabilities.architecture.includes("multi-stage")
+        !(
+            descriptor?.extras?.includes("multi-stage") ??
+            descriptor?.capabilities.architecture.includes("multi-stage")
+        )
     ) {
         return null;
     }
