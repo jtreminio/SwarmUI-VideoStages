@@ -172,6 +172,7 @@ internal static class WanClipPlanCompiler
                     stage.CfgScale,
                     stage.Sampler,
                     stage.Scheduler,
+                    StageUpscalePlanCompiler.Compile(stage),
                     loras)
             {
                 OwnsVideoEndFrame =

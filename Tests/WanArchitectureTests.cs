@@ -117,6 +117,7 @@ public class WanArchitectureTests
         Assert.DoesNotContain(ArchitectureEntryMode.RefineVideo, descriptor.EntryModes);
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.ImageInput));
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.VideoInput));
+        Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.PixelUpscale));
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.Lora));
         Assert.All(
             descriptor.Profiles,
@@ -160,11 +161,24 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Capability_validation_rejects_what_the_first_slice_does_not_support()
+    public void Capability_validation_accepts_pixel_upscale_but_rejects_advanced_upscalers()
     {
         StageSpec stage = Stage(10, "wan-model");
 
-        AssertRejected(GeneratedClip(0, stage with { Upscale = 2 }), "upscale");
+        VideoExecutionPlan pixelPlan = Compile(
+            GeneratedClip(0, stage with { Upscale = 2 }));
+        Assert.DoesNotContain(
+            pixelPlan.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        AssertRejected(
+            GeneratedClip(
+                0,
+                stage with
+                {
+                    Upscale = 2,
+                    UpscaleMethod = "model-fake-upscaler.safetensors",
+                }),
+            "upscale");
         AssertRejected(
             GeneratedClip(0, stage with { RetakeWindow = new(0, 8, 1) }),
             "retake");
@@ -230,10 +244,69 @@ public class WanArchitectureTests
         Assert.Equal(4.5, firstPayload.CfgScale);
         Assert.Equal("euler", firstPayload.Sampler);
         Assert.Equal("normal", firstPayload.Scheduler);
+        Assert.Equal(StageUpscaleMode.None, firstPayload.Upscale.Mode);
+        Assert.Equal(1, firstPayload.Upscale.Factor);
         Assert.Equal(0.35, secondPayload.Control);
         Assert.Equal(17, secondPayload.Steps);
         Assert.Empty(firstPayload.Loras);
         Assert.Empty(secondPayload.Loras);
+    }
+
+    [Fact]
+    public void Compilation_carries_a_normalized_Wan_pixel_upscale()
+    {
+        StageSpec stage = Stage(10, "wan-model") with
+        {
+            Upscale = 1.5,
+            UpscaleMethod = "pixel-bicubic",
+        };
+
+        WanStagePayload payload = Assert.Single(
+            Assert.Single(Compile(GeneratedClip(0, stage)).Clips).Stages)
+            .RequireWanPayload();
+
+        Assert.Equal(StageUpscaleMode.Pixel, payload.Upscale.Mode);
+        Assert.Equal(1.5, payload.Upscale.Factor);
+        Assert.Equal("pixel-bicubic", payload.Upscale.RawMethod);
+        Assert.Equal("bicubic", payload.Upscale.MethodName);
+    }
+
+    [Fact]
+    public void Geometry_projection_warns_when_only_one_Wan_clip_pixel_upscales()
+    {
+        StageSpec first = Stage(10, "wan-model");
+        StageSpec upscaled = Stage(11, "wan-model") with
+        {
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+            ImageReference = "PreviousStage",
+            Control = 0,
+            Upscale = 2,
+        };
+        VideoStagesSpec spec = new(
+            512,
+            512,
+            24,
+            false,
+            [
+                GeneratedClip(0, first, upscaled),
+                GeneratedClip(1, Stage(12, "wan-model")),
+            ]);
+
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            ResolveWan(spec));
+
+        PlanDiagnostic diagnostic = Assert.Single(
+            plan.Diagnostics,
+            item => item.Code == "clip-geometry-will-conform");
+        Assert.Equal(0, diagnostic.ClipId);
+        Assert.Contains("1024x1024", diagnostic.Message);
+        Assert.Contains("512x512", diagnostic.Message);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            item => item.Code == "clip-aspect-mismatch");
     }
 
     [Fact]

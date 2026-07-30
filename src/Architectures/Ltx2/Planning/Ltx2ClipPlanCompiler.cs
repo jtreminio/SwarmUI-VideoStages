@@ -37,7 +37,7 @@ internal static class Ltx2ClipPlanCompiler
                     stage.ControlNetStrength,
                     stage.ImageRefWasExplicit),
                 GuideReferencePlanCompiler.Compile(stage.ImageReference),
-                CompileUpscale(stage),
+                StageUpscalePlanCompiler.Compile(stage),
                 NormalLoraPlanCompiler.Compile(clip, stage),
                 IcLoraPlanCompiler.Compile(clip, stage, context),
                 CompileRetake(stage.RetakeWindow),
@@ -65,42 +65,6 @@ internal static class Ltx2ClipPlanCompiler
                 clip.ReferenceFraming),
             stages,
             diagnostics.AsReadOnly());
-    }
-
-    private static StageUpscalePlan CompileUpscale(StageSpec stage)
-    {
-        StageUpscaleMode mode;
-        if (stage.Upscale == 1)
-        {
-            mode = StageUpscaleMode.None;
-        }
-        else if (stage.IsPixelUpscale)
-        {
-            mode = StageUpscaleMode.Pixel;
-        }
-        else if (stage.IsModelUpscale)
-        {
-            mode = StageUpscaleMode.Model;
-        }
-        else if (stage.IsLatentUpscale)
-        {
-            mode = StageUpscaleMode.Latent;
-        }
-        else if (stage.IsLatentModelUpscale)
-        {
-            mode = StageUpscaleMode.LatentModel;
-        }
-        else
-        {
-            mode = StageUpscaleMode.Unsupported;
-        }
-
-        string raw = stage.UpscaleMethod?.Trim() ?? "";
-        int separator = raw.IndexOf('-');
-        string methodName = separator >= 0 && separator < raw.Length - 1
-            ? raw[(separator + 1)..]
-            : raw;
-        return new(mode, stage.Upscale, raw, methodName);
     }
 
     private static RetakePlan CompileRetake(RetakeWindowSpec retake) => retake is null

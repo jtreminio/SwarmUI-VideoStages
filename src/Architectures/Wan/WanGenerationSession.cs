@@ -27,6 +27,7 @@ internal sealed class WanGenerationSession(
     private readonly PlannedStagePromptResolver _prompts = new(g);
     private readonly GlobalVideoFrameTrimmer _trimmer = new(g);
     private readonly SourcedClipInstaller _sourcedClipInstaller = new(g);
+    private readonly StagePixelScaleGraphBuilder _pixelScaler = new(g);
 
     /// <summary>
     /// The timeline resolution on the shared VideoStages pixel grid, which is already a whole
@@ -89,11 +90,11 @@ internal sealed class WanGenerationSession(
 
         WanDecodedVideoStageInput stageInput = new(
             g,
-            _dimensions,
             plan.FramesPerSecond,
             _trimmer);
         foreach (StagePlan stage in clip.Stages)
         {
+            ApplyPixelUpscale(stage);
             if (stage.IsPassthrough)
             {
                 stageInput.ConfigurePassthrough(
@@ -272,8 +273,8 @@ internal sealed class WanGenerationSession(
                 WGNodeData.DT_LATENT_VIDEO,
                 genInfo.Model.Compat)
             {
-                Width = _dimensions.Width,
-                Height = _dimensions.Height,
+                Width = (int)genInfo.Width,
+                Height = (int)genInfo.Height,
                 Frames = frames,
                 FPS = plan.FramesPerSecond,
             };
@@ -368,6 +369,8 @@ internal sealed class WanGenerationSession(
                 $"VideoStages: clip {clip.ClipId} could not resolve Wan video model "
                 + $"'{payload.Model}'.");
         (string positive, string negative) = _prompts.Resolve(clip, stage);
+        int width = g.CurrentMedia?.Width ?? _dimensions.Width;
+        int height = g.CurrentMedia?.Height ?? _dimensions.Height;
         return new WorkflowGenerator.ImageToVideoGenInfo
         {
             Generator = g,
@@ -377,8 +380,8 @@ internal sealed class WanGenerationSession(
             Frames = ResolveFrames(clip, stage, sectionId),
             VideoCFG = payload.CfgScale,
             VideoFPS = plan.FramesPerSecond,
-            Width = _dimensions.Width,
-            Height = _dimensions.Height,
+            Width = width,
+            Height = height,
             Prompt = positive,
             NegativePrompt = negative,
             Steps = payload.Steps,
@@ -388,6 +391,42 @@ internal sealed class WanGenerationSession(
                 ? g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
                 : null,
         };
+    }
+
+    private void ApplyPixelUpscale(StagePlan stage)
+    {
+        StageUpscalePlan upscale = stage.RequireWanPayload().Upscale;
+        if (upscale.Mode == StageUpscaleMode.None)
+        {
+            return;
+        }
+        if (upscale.Mode != StageUpscaleMode.Pixel)
+        {
+            throw new InvalidOperationException(
+                $"Clip stage {stage.StageId} reached the Wan runtime with unsupported upscale "
+                    + $"method '{upscale.RawMethod}'.");
+        }
+        if (g.CurrentMedia is null)
+        {
+            // Native text entry has no pixels to resize. Its generated dimensions remain the
+            // authored timeline dimensions, matching the existing LTX text-entry behavior.
+            return;
+        }
+
+        int currentWidth = g.CurrentMedia.Width
+            ?? throw new InvalidOperationException(
+                $"Clip stage {stage.StageId} cannot pixel-scale media with no width.");
+        int currentHeight = g.CurrentMedia.Height
+            ?? throw new InvalidOperationException(
+                $"Clip stage {stage.StageId} cannot pixel-scale media with no height.");
+        (int targetWidth, int targetHeight) = DimensionSnap.Snap(
+            currentWidth * upscale.Factor,
+            currentHeight * upscale.Factor);
+        _pixelScaler.Apply(
+            g.CurrentMedia,
+            targetWidth,
+            targetHeight,
+            upscale.MethodName);
     }
 
     /// <summary>

@@ -17,6 +17,7 @@ internal sealed record WanStagePayload(
     double CfgScale,
     string Sampler,
     string Scheduler,
+    StageUpscalePlan Upscale,
     ImmutableArray<NormalLoraPlan> Loras) : IArchitectureStagePayload
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
@@ -31,9 +32,32 @@ internal sealed record WanStagePayload(
 internal sealed record WanClipPayload(
     int ClipId,
     ModelProfileId ProfileId) :
-    IArchitectureClipPayload
+    IArchitectureClipPayload,
+    IArchitectureClipGeometryProjection
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
+
+    public (int Width, int Height) ProjectFinalDimensions(
+        IReadOnlyList<StagePlan> stages,
+        int width,
+        int height)
+    {
+        foreach (StagePlan stage in stages ?? [])
+        {
+            StageUpscalePlan upscale = stage.RequireWanPayload().Upscale;
+            if (upscale?.Mode != StageUpscaleMode.Pixel
+                || stage.Input is not (
+                    StageInputKind.SourceVideo
+                    or StageInputKind.PreviousStage))
+            {
+                continue;
+            }
+            (width, height) = DimensionSnap.Snap(
+                width * upscale.Factor,
+                height * upscale.Factor);
+        }
+        return (width, height);
+    }
 }
 
 internal static class WanClipPlanExtensions

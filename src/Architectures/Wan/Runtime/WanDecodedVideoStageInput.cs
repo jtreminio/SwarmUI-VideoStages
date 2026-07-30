@@ -13,12 +13,11 @@ namespace VideoStages.Architectures.Wan;
 /// <summary>
 /// Adapts a completed Wan stage into the host image-to-video builder's decoded-video refinement
 /// contract. The host owns conditioning and latent encoding; this collaborator supplies the
-/// first-frame selector, denoise start step, exact media invariants, and removal of its per-pass
+/// first-frame selector, denoise start step, exact timing invariants, and removal of its per-pass
 /// global trim wrapper.
 /// </summary>
 internal sealed class WanDecodedVideoStageInput(
     WorkflowGenerator g,
-    (int Width, int Height) dimensions,
     int framesPerSecond,
     GlobalVideoFrameTrimmer trimmer)
 {
@@ -128,8 +127,6 @@ internal sealed class WanDecodedVideoStageInput(
             throw new SwarmUserErrorException(
                 $"VideoStages: clip {clip.ClipId} stage {stage.StageId} produced no Wan video.");
         }
-        g.CurrentMedia.Width = dimensions.Width;
-        g.CurrentMedia.Height = dimensions.Height;
         g.CurrentMedia.Frames = genInfo.Frames ?? g.CurrentMedia.Frames;
         g.CurrentMedia.FPS = genInfo.VideoFPS ?? g.CurrentMedia.FPS;
         g.CurrentMedia.AttachedAudio = null;
@@ -161,16 +158,13 @@ internal sealed class WanDecodedVideoStageInput(
                 $"VideoStages: clip {clip.ClipId} stage {stage.StageId} requires its resolvable "
                 + $"{owner}.");
         }
-        if (media.Width != dimensions.Width
-            || media.Height != dimensions.Height
-            || media.GetRawFPS() != framesPerSecond
+        if (media.GetRawFPS() != framesPerSecond
             || expectedFrames is int frames && media.Frames != frames)
         {
             throw new SwarmUserErrorException(
                 $"VideoStages: clip {clip.ClipId} stage {stage.StageId} requires its {owner} at "
-                + $"{dimensions.Width}x{dimensions.Height}, {expectedFrames} frames, "
-                + $"{framesPerSecond} fps, but received {media.Width}x{media.Height}, "
-                + $"{media.Frames} frames, {media.GetRawFPS()} fps.");
+                + $"{expectedFrames} frames and {framesPerSecond} fps, but received "
+                + $"{media.Frames} frames and {media.GetRawFPS()} fps.");
         }
     }
 

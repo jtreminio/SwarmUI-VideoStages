@@ -72,22 +72,6 @@ internal sealed record StageCorePlan(
     double? ControlNetStrength,
     bool ImageReferenceWasExplicit);
 
-internal enum StageUpscaleMode
-{
-    None,
-    Pixel,
-    Model,
-    Latent,
-    LatentModel,
-    Unsupported,
-}
-
-internal sealed record StageUpscalePlan(
-    StageUpscaleMode Mode,
-    double Factor,
-    string RawMethod,
-    string MethodName);
-
 internal sealed record GuideReferencePlan(
     StageGuideReferenceKind Kind,
     string RawValue,

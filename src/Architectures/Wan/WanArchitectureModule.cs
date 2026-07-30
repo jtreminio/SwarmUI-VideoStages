@@ -91,7 +91,10 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
                 | ArchitectureCapability.MultiStage
                 | ArchitectureCapability.DecodedOutput,
             ClipCapability.Prompts | ClipCapability.SourceVideo,
-            StageCapability.ImageInput | StageCapability.VideoInput | StageCapability.Lora,
+            StageCapability.ImageInput
+                | StageCapability.VideoInput
+                | StageCapability.PixelUpscale
+                | StageCapability.Lora,
             OutputCapability.Video),
         WanBoundaryPolicy.Instance)
     {

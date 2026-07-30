@@ -1264,6 +1264,104 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
+    public void Wan_pixel_upscale_resizes_the_decoded_input_before_the_next_generating_stage()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject first = MakeStage(
+            models.VideoModel.Name,
+            "Generated",
+            steps: 10);
+        first.Remove("imageReference");
+        JObject second = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            control: 0.5,
+            upscale: 1.5,
+            upscaleMethod: "pixel-lanczos",
+            steps: 12);
+        second.Remove("imageReference");
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(first, second));
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode firstSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 43);
+        ComfyNode secondSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 44);
+        ImageScaleNode authoredScale = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            scale => scale.Width.LiteralAsInt() == 768
+                && scale.Height.LiteralAsInt() == 768
+                && scale.UpscaleMethod.LiteralAsString() == "lanczos"
+                && scale.Image.Connection?.Node is VAEDecodeNode decode
+                && ReachesUpstream(bridge, decode, firstSampler.Id));
+        VAEEncodeNode secondStageEncode = Assert.IsType<VAEEncodeNode>(
+            secondSampler.FindInput("latent_image").Connection?.Node);
+        Assert.True(ReachesUpstream(
+            bridge,
+            secondStageEncode,
+            authoredScale.Id));
+        ComfyNode secondConditioning =
+            secondSampler.FindInput("positive").Connection?.Node;
+        Assert.True(ReachesUpstream(
+            bridge,
+            secondConditioning.FindInput("start_image").Connection?.Node,
+            authoredScale.Id));
+        Assert.Equal(768, generator.CurrentMedia.Width);
+        Assert.Equal(768, generator.CurrentMedia.Height);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Wan_pixel_upscale_is_the_output_of_a_samplerless_passthrough_stage()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject first = MakeStage(
+            models.VideoModel.Name,
+            "Generated",
+            steps: 10);
+        first.Remove("imageReference");
+        JObject passthrough = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            control: 0,
+            upscale: 1.5,
+            upscaleMethod: "pixel-bicubic",
+            steps: 12);
+        passthrough.Remove("imageReference");
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(first, passthrough));
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode sampler = Assert.Single(SamplerNodes(bridge));
+        ImageScaleNode scale = Assert.IsType<ImageScaleNode>(
+            bridge.ResolvePath(generator.CurrentMedia.Path)?.Node);
+        Assert.Equal(768, scale.Width.LiteralAsInt());
+        Assert.Equal(768, scale.Height.LiteralAsInt());
+        Assert.Equal("bicubic", scale.UpscaleMethod.LiteralAsString());
+        Assert.True(ReachesUpstream(bridge, scale, sampler.Id));
+        Assert.Equal(768, generator.CurrentMedia.Width);
+        Assert.Equal(768, generator.CurrentMedia.Height);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void Partial_sourced_Wan_stage_uses_conformed_video_for_conditioning_and_latent()
     {
         using SwarmUiTestContext context = new();
@@ -2411,6 +2509,63 @@ public class WanRuntimeFlowTests
         ComfyNode[] saves = [.. NodesOfClass(bridge, "SwarmSaveAnimationWS")];
         Assert.Equal(2, saves.Length);
         Assert.Single(saves, node => node.FindInput("images").Connection?.Node == merged);
+    }
+
+    [Fact]
+    public void Hard_cut_conforms_an_upscaled_Wan_clip_before_timeline_assembly()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject first = MakeStage(
+            models.VideoModel.Name,
+            "Generated",
+            steps: 8);
+        JObject upscale = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            control: 0,
+            upscale: 2,
+            upscaleMethod: "pixel-lanczos",
+            steps: 8);
+        JObject regular = MakeStage(
+            models.VideoModel.Name,
+            "Generated",
+            steps: 9);
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(
+                MakeClip(first, upscale),
+                MakeClip(regular)).ToString());
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ImageScaleNode stageScale = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            scale => scale.Width.LiteralAsInt() == 1024
+                && scale.Height.LiteralAsInt() == 1024
+                && scale.UpscaleMethod.LiteralAsString() == "lanczos");
+        ImageScaleNode timelineConform = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            scale => scale.Width.LiteralAsInt() == 512
+                && scale.Height.LiteralAsInt() == 512
+                && ReachesUpstream(bridge, scale, stageScale.Id));
+        BatchImagesNodeNode merged = Assert.Single(
+            bridge.Graph.NodesOfType<BatchImagesNodeNode>());
+        Assert.True(ReachesUpstream(
+            bridge,
+            merged.Images[0].Connection?.Node,
+            timelineConform.Id));
+        Assert.False(ReachesUpstream(
+            bridge,
+            merged.Images[1].Connection?.Node,
+            stageScale.Id));
+        Assert.Equal(512, generator.CurrentMedia.Width);
+        Assert.Equal(512, generator.CurrentMedia.Height);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
     }
 
     [Fact]
@@ -3609,6 +3764,7 @@ public class WanRuntimeFlowTests
             4.5,
             "euler",
             "normal",
+            new(StageUpscaleMode.None, 1, "pixel-lanczos", "lanczos"),
             []);
         StagePlan stage = new(
             StageId: sourcedInput ? 0 : 1,
@@ -3653,7 +3809,6 @@ public class WanRuntimeFlowTests
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => new WanDecodedVideoStageInput(
                 generator,
-                (512, 512),
                 24,
                 new GlobalVideoFrameTrimmer(generator))
                 .Configure(clip, stage, genInfo));
@@ -3673,6 +3828,13 @@ public class WanRuntimeFlowTests
     [InlineData("loras-no-op", "invalid immutable normal-LoRA payload")]
     [InlineData("passthrough-loras", "samplerless passthrough with a normal-LoRA plan")]
     [InlineData("end-frame-owner", "invalid request-global end-frame ownership")]
+    [InlineData("upscale-null", "invalid immutable pixel-upscale payload")]
+    [InlineData("upscale-nonfinite", "invalid immutable pixel-upscale payload")]
+    [InlineData("upscale-zero", "invalid immutable pixel-upscale payload")]
+    [InlineData("upscale-none-factor", "invalid immutable pixel-upscale payload")]
+    [InlineData("upscale-pixel-factor", "invalid immutable pixel-upscale payload")]
+    [InlineData("upscale-pixel-method", "invalid immutable pixel-upscale payload")]
+    [InlineData("upscale-unsupported", "invalid immutable pixel-upscale payload")]
     public void Wan_runtime_clip_contract_rejects_stale_sourced_plans_before_graph_mutation(
         string corruption,
         string expectedReason)
@@ -3732,6 +3894,56 @@ public class WanRuntimeFlowTests
                 ProfileId = WanArchitectureModule.Ti2v5bProfileId,
             };
             invalidClip = validClip with { ArchitecturePayload = stalePayload };
+        }
+        else if (corruption.StartsWith("upscale-", StringComparison.Ordinal))
+        {
+            StagePlan validStage = Assert.Single(validClip.Stages);
+            StageUpscalePlan staleUpscale = corruption switch
+            {
+                "upscale-null" => null,
+                "upscale-nonfinite" => new(
+                    StageUpscaleMode.Pixel,
+                    double.NaN,
+                    "pixel-lanczos",
+                    "lanczos"),
+                "upscale-zero" => new(
+                    StageUpscaleMode.Pixel,
+                    0,
+                    "pixel-lanczos",
+                    "lanczos"),
+                "upscale-none-factor" => new(
+                    StageUpscaleMode.None,
+                    2,
+                    "pixel-lanczos",
+                    "lanczos"),
+                "upscale-pixel-factor" => new(
+                    StageUpscaleMode.Pixel,
+                    1,
+                    "pixel-lanczos",
+                    "lanczos"),
+                "upscale-pixel-method" => new(
+                    StageUpscaleMode.Pixel,
+                    2,
+                    "pixel-bicubic",
+                    "lanczos"),
+                "upscale-unsupported" => new(
+                    StageUpscaleMode.Model,
+                    2,
+                    "model-fake",
+                    "fake"),
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(corruption),
+                    corruption,
+                    "Unknown upscale corruption."),
+            };
+            WanStagePayload stalePayload = validStage.RequireWanPayload() with
+            {
+                Upscale = staleUpscale,
+            };
+            invalidClip = validClip with
+            {
+                Stages = [validStage with { ArchitecturePayload = stalePayload }],
+            };
         }
         else if (corruption == "loras-default")
         {
@@ -3820,6 +4032,93 @@ public class WanRuntimeFlowTests
 
         Assert.Contains("malformed plan", error.Message);
         Assert.Contains(expectedReason, error.Message);
+        Assert.True(JToken.DeepEquals(before, generator.Workflow));
+        Assert.Null(generator.CurrentMedia);
+        Assert.Empty(generator.NodeHelpers);
+        Assert.Empty(generator.UserInput.SectionParamOverrides);
+    }
+
+    [Fact]
+    public void Wan_runtime_clip_contract_ignores_method_text_for_a_factor_one_noop()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        (VideoExecutionPlan plan, ClipPlan validClip) =
+            MakeSourcedWanRuntimeContractPlan(models);
+        StagePlan validStage = Assert.Single(validClip.Stages);
+        StagePlan noOpStage = validStage with
+        {
+            ArchitecturePayload = validStage.RequireWanPayload() with
+            {
+                Upscale = new(
+                    StageUpscaleMode.None,
+                    1,
+                    "model-dormant-authoring-data",
+                    "dormant-authoring-data"),
+            },
+        };
+        ClipPlan noOpClip = validClip with { Stages = [noOpStage] };
+
+        WanRuntimeClipContract.Validate(
+            plan with { Clips = [noOpClip] },
+            noOpClip);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Wan_runtime_clip_contract_rejects_pixel_upscale_without_decoded_stage_input(
+        bool textEntry)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = textEntry
+            ? TestModelFactory.CreateBaseAndWan22Ti2v5bModels()
+            : TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        (VideoExecutionPlan plan, ClipPlan validClip) = textEntry
+            ? MakeTextWanRuntimeContractPlan(models)
+            : MakeGeneratedWanRuntimeContractPlan(models);
+        StagePlan validStage = Assert.Single(validClip.Stages);
+        StagePlan invalidStage = validStage with
+        {
+            ArchitecturePayload = validStage.RequireWanPayload() with
+            {
+                Upscale = new(
+                    StageUpscaleMode.Pixel,
+                    2,
+                    "pixel-lanczos",
+                    "lanczos"),
+            },
+        };
+        ClipPlan invalidClip = validClip with { Stages = [invalidStage] };
+        VideoExecutionPlan invalidPlan = plan with { Clips = [invalidClip] };
+        WorkflowGenerator generator = new()
+        {
+            Workflow = new JObject
+            {
+                ["sentinel"] = new JObject
+                {
+                    ["class_type"] = "UnitTest_Sentinel",
+                    ["inputs"] = new JObject(),
+                },
+            },
+            UserInput = new(null),
+        };
+        JObject before = (JObject)generator.Workflow.DeepClone();
+        using WanGenerationSession session = new(
+            generator,
+            invalidPlan,
+            new WanRootSources(null, null),
+            new WanStageHostScope(generator, invalidPlan));
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => session.Execute(new(
+                invalidClip,
+                ClipIndex: 0,
+                PreviousClip: null,
+                PreviousClipOutput: null,
+                PreviousTimelineClipOutput: null)));
+
+        Assert.Contains("invalid immutable pixel-upscale payload", error.Message);
         Assert.True(JToken.DeepEquals(before, generator.Workflow));
         Assert.Null(generator.CurrentMedia);
         Assert.Empty(generator.NodeHelpers);
@@ -4118,6 +4417,11 @@ public class WanRuntimeFlowTests
                 CfgScale: 4.5,
                 Sampler: "euler",
                 Scheduler: "normal",
+                Upscale: new(
+                    StageUpscaleMode.None,
+                    1,
+                    "pixel-lanczos",
+                    "lanczos"),
                 Loras: []),
             new StageOutputPlan(
                 IsTimelineTerminal: true,

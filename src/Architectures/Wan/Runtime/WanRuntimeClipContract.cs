@@ -104,6 +104,7 @@ internal static class WanRuntimeClipContract
             }
             bool decodedInput =
                 stage.Input is StageInputKind.SourceVideo or StageInputKind.PreviousStage;
+            ValidateUpscale(clip, stage, payload.Upscale, decodedInput);
             bool passthrough = decodedInput && payload.Control == 0;
             bool expectedEndFrameOwner =
                 generatedEntry
@@ -173,6 +174,37 @@ internal static class WanRuntimeClipContract
                     clip,
                     $"stage {stage.StageId} does not preserve the clip's canonical Wan profile");
             }
+        }
+    }
+
+    private static void ValidateUpscale(
+        ClipPlan clip,
+        StagePlan stage,
+        StageUpscalePlan upscale,
+        bool decodedInput)
+    {
+        bool validFactor = upscale is not null
+            && double.IsFinite(upscale.Factor)
+            && upscale.Factor > 0;
+        bool canonicalPixelMethod = upscale is not null
+            && !string.IsNullOrWhiteSpace(upscale.RawMethod)
+            && !string.IsNullOrWhiteSpace(upscale.MethodName)
+            && upscale.RawMethod.StartsWith("pixel-", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(
+                upscale.RawMethod["pixel-".Length..],
+                upscale.MethodName,
+                StringComparison.Ordinal);
+        bool canonicalNone = upscale?.Mode == StageUpscaleMode.None
+            && upscale.Factor == 1;
+        bool canonicalPixel = upscale?.Mode == StageUpscaleMode.Pixel
+            && upscale.Factor != 1
+            && decodedInput
+            && canonicalPixelMethod;
+        if (!validFactor || !canonicalNone && !canonicalPixel)
+        {
+            throw Invalid(
+                clip,
+                $"stage {stage.StageId} has an invalid immutable pixel-upscale payload");
         }
     }
 

@@ -67,13 +67,13 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
         WGNodeData upscaleSource = ResolveSourceMedia(source, postVideoChain, width, height);
         if (upscale.Mode == StageUpscaleMode.Pixel)
         {
-            ImageScaleNode scaleNode = AddPixelScale(
-                upscaleSource.Path,
+            WGNodeData scaled = new StagePixelScaleGraphBuilder(g).Apply(
+                upscaleSource,
                 targetWidth,
                 targetHeight,
                 upscale.MethodName);
             return PublishUpscaledMedia(
-                upscaleSource.WithPath(scaleNode.IMAGE),
+                scaled,
                 dimensions,
                 targetWidth,
                 targetHeight);
@@ -135,22 +135,6 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
         detached.Width = width;
         detached.Height = height;
         return detached;
-    }
-
-    private ImageScaleNode AddPixelScale(
-        JArray sourcePath,
-        int width,
-        int height,
-        string upscaleMethod)
-    {
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        return ImageScaleReuse.RetargetOrCreate(
-            bridge,
-            sourcePath,
-            width,
-            height,
-            "disabled",
-            upscaleMethod);
     }
 
     private ImageScaleNode AddModelUpscaleChain(
