@@ -4,7 +4,6 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
-using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Planning;
 
@@ -13,8 +12,8 @@ namespace VideoStages.Architectures.Wan;
 /// <summary>
 /// Adapts a completed Wan stage into the host image-to-video builder's decoded-video refinement
 /// contract. The host owns conditioning and latent encoding; this collaborator supplies the
-/// first-frame selector, denoise start step, exact timing invariants, and removal of its per-pass
-/// global trim wrapper.
+/// denoise start step, verifies live decoded media, and removes the host's per-pass global trim
+/// wrapper.
 /// </summary>
 internal sealed class WanDecodedVideoStageInput(
     WorkflowGenerator g,
@@ -29,42 +28,15 @@ internal sealed class WanDecodedVideoStageInput(
         ArgumentNullException.ThrowIfNull(clip);
         ArgumentNullException.ThrowIfNull(stage);
         ArgumentNullException.ThrowIfNull(genInfo);
-        WanStagePayload payload = stage.RequireWanPayload();
         if (stage.Input == StageInputKind.RootMedia)
         {
-            if (stage.ClipStageIndex != 0 || clip.IsSourced)
-            {
-                throw new InvalidOperationException(
-                    $"Clip {clip.ClipId} stage {stage.StageId} has unsupported Wan input "
-                    + $"'{stage.Input}'.");
-            }
-            if (!double.IsFinite(payload.Control) || payload.Control != 1)
-            {
-                throw new InvalidOperationException(
-                    $"Clip {clip.ClipId} stage {stage.StageId} reached the Wan runtime with "
-                    + $"generated-root control '{payload.Control}' instead of 1.");
-            }
             return;
         }
-        ValidateDecodedStagePosition(clip, stage);
 
-        if (!double.IsFinite(payload.Control) || payload.Control <= 0 || payload.Control > 1)
-        {
-            throw new InvalidOperationException(
-                $"Clip {clip.ClipId} stage {stage.StageId} reached the Wan runtime with invalid "
-                + $"control '{payload.Control}'.");
-        }
+        WanStagePayload payload = stage.RequireWanPayload();
         int startStep = WanStageSchedulePolicy.StartStep(
             payload.Steps,
             payload.Control);
-        if (WanStageSchedulePolicy.IsQuantizedZeroPartial(
-                payload.Steps,
-                payload.Control))
-        {
-            throw new InvalidOperationException(
-                $"Clip {clip.ClipId} stage {stage.StageId} reached the Wan runtime with partial "
-                + $"control '{payload.Control}' that quantizes to sampler start step 0.");
-        }
         ValidateDecodedInput(clip, stage, genInfo.Frames);
         genInfo.BatchIndex = 0;
         genInfo.BatchLen = 1;
@@ -78,16 +50,6 @@ internal sealed class WanDecodedVideoStageInput(
     {
         ArgumentNullException.ThrowIfNull(clip);
         ArgumentNullException.ThrowIfNull(stage);
-        WanStagePayload payload = stage.RequireWanPayload();
-        ValidateDecodedStagePosition(clip, stage);
-        if (!stage.IsPassthrough
-            || !double.IsFinite(payload.Control)
-            || payload.Control != 0)
-        {
-            throw new InvalidOperationException(
-                $"Clip {clip.ClipId} stage {stage.StageId} reached the Wan runtime with invalid "
-                + $"passthrough control '{payload.Control}'.");
-        }
         ValidateDecodedInput(clip, stage, expectedFrames);
         g.CurrentMedia.AttachedAudio = null;
     }
@@ -141,27 +103,6 @@ internal sealed class WanDecodedVideoStageInput(
                 $"VideoStages: clip {clip.ClipId} stage {stage.StageId} requires its {owner} at "
                 + $"{expectedFrames} frames and {framesPerSecond} fps, but received "
                 + $"{media.Frames} frames and {media.GetRawFPS()} fps.");
-        }
-    }
-
-    private static void ValidateDecodedStagePosition(ClipPlan clip, StagePlan stage)
-    {
-        bool validSource =
-            stage.Input == StageInputKind.SourceVideo
-            && stage.ClipStageIndex == 0
-            && clip.EntryMode == ArchitectureEntryMode.SourceVideo
-            && clip.Input == ClipInputKind.SourceVideo
-            && clip.IsSourced
-            && clip.SourceVideo is not null;
-        bool validPrevious =
-            stage.Input == StageInputKind.PreviousStage
-            && stage.ClipStageIndex > 0;
-        if (!validSource && !validPrevious)
-        {
-            throw new InvalidOperationException(
-                $"Clip {clip.ClipId} stage {stage.StageId} has unsupported Wan input "
-                + $"'{stage.Input}' at clip-stage index {stage.ClipStageIndex} for entry mode "
-                + $"'{clip.EntryMode}'.");
         }
     }
 

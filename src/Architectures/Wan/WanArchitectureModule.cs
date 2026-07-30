@@ -6,9 +6,8 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Wan;
 
 /// <summary>
-/// Wan image-to-video models recognized from the host's compatibility and entry facts. Exact
-/// legacy profiles remain runtime aliases for the two paths which already had special handling;
-/// they are not the authority for ordinary Wan image-entry support.
+/// WAN models recognized from the host's compatibility and checkpoint facts. Exact legacy
+/// profiles remain aliases for established paths; entry authorization is family-wide.
 /// </summary>
 internal sealed class WanArchitectureModule : IVideoArchitectureModule
 {
@@ -76,7 +75,11 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
             Profile(
                 ImageToVideoProfileId,
                 "Wan 2.2 Image2Video 14B",
-                [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo]),
+                [
+                    ArchitectureEntryMode.TextToVideo,
+                    ArchitectureEntryMode.ImageToVideo,
+                    ArchitectureEntryMode.SourceVideo,
+                ]),
             Profile(
                 Ti2v5bProfileId,
                 "Wan 2.2 Text/Image2Video 5B",
@@ -87,8 +90,12 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
                 ]),
             Profile(
                 OrdinaryImageToVideoProfileId,
-                "Wan Image2Video",
-                [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo]),
+                "Wan Video",
+                [
+                    ArchitectureEntryMode.TextToVideo,
+                    ArchitectureEntryMode.ImageToVideo,
+                    ArchitectureEntryMode.SourceVideo,
+                ]),
         ],
         new(
             ArchitectureCapability.GeneratedEntry
@@ -111,7 +118,7 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
     {
         string modelClassId = model?.ModelClass?.ID;
         string compatClassId = model?.ModelClass?.CompatClass?.ID;
-        if (!IsOrdinaryWanImageModel(model))
+        if (!IsOrdinaryWanModel(model))
         {
             resolved = null;
             return false;
@@ -127,11 +134,6 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
                 StringComparison.Ordinal));
         ModelProfileId profileId =
             legacyMatch?.ProfileId ?? OrdinaryImageToVideoProfileId;
-        VideoModelEntryAbility entryAbilities =
-            profileId == Ti2v5bProfileId
-                ? VideoModelEntryAbility.TextToVideo
-                    | VideoModelEntryAbility.ImageToVideo
-                : VideoModelEntryAbility.ImageToVideo;
         resolved = new(
             model.Name,
             ArchitectureId,
@@ -140,7 +142,8 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         {
             ModelClassId = modelClassId,
             CompatibilityClassId = compatClassId,
-            EntryAbilities = entryAbilities,
+            EntryAbilities = VideoModelEntryAbility.TextToVideo
+                | VideoModelEntryAbility.ImageToVideo,
             HostFactsAuthoritative = true,
         };
         return true;
@@ -150,7 +153,7 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         profileId == OrdinaryImageToVideoProfileId
         || LegacyRecognizedProfiles.Any(candidate => candidate.ProfileId == profileId);
 
-    private static bool IsOrdinaryWanImageModel(T2IModel model)
+    private static bool IsOrdinaryWanModel(T2IModel model)
     {
         T2IModelClass modelClass = model?.ModelClass;
         T2IModelCompatClass compatibility = modelClass?.CompatClass;
@@ -159,7 +162,7 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         if (model is null
             || modelClass is null
             || compatibility is null
-            || !compatibility.IsImage2Video
+            || !(compatibility.IsImage2Video || compatibility.IsText2Video)
             || !compatibilityClassId.StartsWith("wan-", StringComparison.OrdinalIgnoreCase)
             || string.IsNullOrWhiteSpace(modelClassId)
             || !(modelClassId.StartsWith("wan-2_1-", StringComparison.OrdinalIgnoreCase)
@@ -193,10 +196,7 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         {
             return false;
         }
-        // The compatibility family advertises both entry abilities broadly. A concrete T2V class
-        // is still not an image-entry model.
-        return !modelClassId.Contains("text2video", StringComparison.OrdinalIgnoreCase)
-            || modelClassId.Contains("image2video", StringComparison.OrdinalIgnoreCase);
+        return true;
     }
 
     private static bool HasClassToken(string modelClassId, string token)

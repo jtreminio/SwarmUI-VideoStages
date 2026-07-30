@@ -26,12 +26,6 @@ internal sealed record WanStagePayload(
 
     public string CompatibilityClassId { get; init; } =
         WanArchitectureModule.ArchitectureId.Value;
-
-    /// <summary>
-    /// True only for the last generating stage of a pure generated 14B clip. The request-global
-    /// end image, when configured, belongs exclusively to this stage.
-    /// </summary>
-    public bool OwnsVideoEndFrame { get; init; }
 }
 
 internal sealed record WanClipPayload(

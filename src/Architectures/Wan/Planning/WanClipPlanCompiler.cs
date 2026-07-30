@@ -42,26 +42,6 @@ internal static class WanClipPlanCompiler
         Dictionary<int, WanStagePayload> stages = [];
         IReadOnlyList<StageSpec> authoredStages = clip.Stages ?? [];
         bool sourcedEntry = clip.SourceVideo is not null;
-        int? terminalGeneratingRawIndex = authoredStages
-            .Where(candidate => !candidate.IsPassthrough)
-            .Select(candidate => (int?)candidate.ClipStageRawIndex)
-            .LastOrDefault();
-        bool eligibleForVideoEndFrameOwnership =
-            context.EntryMode == ArchitectureEntryMode.ImageToVideo
-            && clip.SourceVideo is null
-            && terminalGeneratingRawIndex.HasValue
-            && authoredStages.All(stage =>
-                stageModels.TryGetValue(
-                    stage.ClipStageRawIndex,
-                    out ResolvedVideoModel resolved)
-                && resolved is not null
-                && resolved.ArchitectureId == WanArchitectureModule.ArchitectureId
-                && resolved.ModelProfileId
-                    == WanArchitectureModule.ImageToVideoProfileId
-                && string.Equals(
-                    resolved.ModelClassId,
-                    WanArchitectureModule.ImageToVideoModelClassId,
-                    StringComparison.OrdinalIgnoreCase));
         ModelProfileId? clipProfile = null;
         string clipCompatibilityClassId = null;
         foreach ((int rawStageIndex, ResolvedVideoModel resolved) in stageModels
@@ -214,9 +194,6 @@ internal static class WanClipPlanCompiler
             {
                 ModelClassId = resolved?.ModelClassId ?? "",
                 CompatibilityClassId = resolved?.CompatibilityClassId ?? "",
-                OwnsVideoEndFrame =
-                    eligibleForVideoEndFrameOwnership
-                    && stage.ClipStageRawIndex == terminalGeneratingRawIndex.Value,
             };
             stages.Add(stage.ClipStageRawIndex, payload);
         }

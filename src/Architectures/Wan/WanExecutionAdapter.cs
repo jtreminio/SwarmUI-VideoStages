@@ -1,7 +1,6 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan;
@@ -16,10 +15,9 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
 
     /// <summary>
-    /// Validates request-global host video parameters before any host graph phase runs. Legacy
-    /// request-global swap settings are projected to one warning and isolated by the host handler;
-    /// the remaining settings still change the result enough that silently omitting them would be
-    /// the wrong answer.
+    /// Validates request-global host video parameters before any host graph phase runs. Parameters
+    /// that do not belong to the authored WAN timeline are either projected to one warning and
+    /// ignored, or refused when silently changing their meaning would be misleading.
     /// </summary>
     public IReadOnlyList<PlanDiagnostic> PreflightRequest(
         ArchitectureRequestPreflightContext context)
@@ -40,62 +38,24 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
         }
         if (generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null) is not null)
         {
-            ClipPlan onlyClip = context.Plan.Clips.Count == 1
-                ? context.Plan.Clips[0]
-                : null;
-            bool hasValidRuntimeContract = false;
-            if (onlyClip is not null)
-            {
-                try
-                {
-                    WanRuntimeClipContract.Validate(context.Plan, onlyClip);
-                    hasValidRuntimeContract = true;
-                }
-                catch (InvalidOperationException)
-                {
-                    // The request-global option reports malformed immutable plans through the
-                    // same user-facing refusal as all other ineligible timeline shapes.
-                }
-            }
-            StagePlan[] generatingStages = onlyClip?.Stages
-                .Where(stage => !stage.IsPassthrough)
-                .ToArray() ?? [];
-            bool isPureGenerated14b =
-                hasValidRuntimeContract
-                && onlyClip.EntryMode == ArchitectureEntryMode.ImageToVideo
-                && onlyClip.ArchitecturePayload is WanClipPayload
-                {
-                    ProfileId: var clipProfile,
-                }
-                && clipProfile == WanArchitectureModule.ImageToVideoProfileId;
-            bool hasExactlyOneTerminalOwner =
-                hasValidRuntimeContract
-                && generatingStages.Length > 0
-                && onlyClip.Stages.Count(
-                    stage => stage.ArchitecturePayload is WanStagePayload
-                    {
-                        OwnsVideoEndFrame: true,
-                    }) == 1
-                && generatingStages[^1].ArchitecturePayload is WanStagePayload
-                {
-                    OwnsVideoEndFrame: true,
-                };
-            bool isSingleCurrentWan =
-                isPureGenerated14b
-                && hasExactlyOneTerminalOwner;
-            if (!isSingleCurrentWan)
+            if (!WanVideoEndFramePolicy.TryResolveTarget(
+                    context.Plan,
+                    out _,
+                    out _))
             {
                 string families = string.Join(
                     ", ",
                     context.Plan.Clips
                         .Select(clip => clip.Architecture?.Id.ToString() ?? "<unresolved>")
                         .Distinct());
-                diagnostics.Add(Refuse(
-                    "'Video End Frame' is request-global and is ambiguous unless the timeline "
-                    + "contains exactly one generated Wan 2.2 ImageToVideo clip with at least "
-                    + "one generating stage, canonical 14B ownership, and the current image-to-video "
-                    + $"profile. This request has {context.Plan.Clips.Count} clip(s) across "
-                    + $"architecture(s): {families}."));
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
+                    "wan.end-frame.ignored",
+                    "'Video End Frame' was ignored because it can only target the final "
+                        + "generating stage of one WAN image-to-video clip, and that stage must "
+                        + "use a WAN model whose host workflow supports a final image. "
+                        + $"This request has {context.Plan.Clips.Count} clip(s) across "
+                        + $"architecture(s): {families}."));
             }
         }
         if (generator.UserInput.TryGet(

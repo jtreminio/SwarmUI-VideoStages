@@ -1708,7 +1708,7 @@ public class ArchitectureFoundationTests
             WanArchitectureModule.ImageToVideoProfileId.Value,
             wan["defaultProfileId"]);
         Assert.Equal(
-            ["image-to-video", "source-video", "text-to-video"],
+            ["text-to-video", "image-to-video", "source-video"],
             wan["capabilities"]["entryModes"].Values<string>());
         JObject[] wanProfiles = [.. wan["profiles"].Values<JObject>()];
         Assert.Equal(
@@ -1724,10 +1724,17 @@ public class ArchitectureFoundationTests
                 "normal-lora",
                 wanProfile["capabilities"].Values<string>()));
         Assert.Equal(
-            ["image-to-video", "source-video"],
+            ["text-to-video", "image-to-video", "source-video"],
             wanProfiles.Single(profile =>
                 profile.Value<string>("id")
                     == WanArchitectureModule.ImageToVideoProfileId.Value)
+                ["entryModes"]
+                .Values<string>());
+        Assert.Equal(
+            ["text-to-video", "image-to-video", "source-video"],
+            wanProfiles.Single(profile =>
+                profile.Value<string>("id")
+                    == WanArchitectureModule.OrdinaryImageToVideoProfileId.Value)
                 ["entryModes"]
                 .Values<string>());
         Assert.Equal(

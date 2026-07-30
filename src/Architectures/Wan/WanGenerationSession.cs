@@ -16,7 +16,7 @@ internal sealed record WanRootSources(WGNodeData Media, WGNodeData Vae);
 /// Runs one Wan clip. Host primitives own graph construction: this session resolves the compiled
 /// stage settings, delegates image/video inputs to
 /// <see cref="WorkflowGenerator.CreateImageToVideo"/>, composes the same public primitives for a
-/// native 5B text latent, and reconciles the result with the committed timeline semantics.
+/// native WAN text latent, and reconciles the result with the committed timeline semantics.
 /// </summary>
 internal sealed class WanGenerationSession(
     WorkflowGenerator g,
@@ -42,7 +42,6 @@ internal sealed class WanGenerationSession(
     {
         ArgumentNullException.ThrowIfNull(context);
         ClipPlan clip = context.Clip;
-        WanRuntimeClipContract.Validate(plan, clip);
 
         if (clip.IsSourced)
         {
@@ -66,7 +65,7 @@ internal sealed class WanGenerationSession(
         }
         else if (clip.Input == ClipInputKind.EmptyLatent)
         {
-            // Native 5B text entry constructs its own latent after loading the authored stage
+            // Native WAN text entry asks the host for an empty video after loading the authored
             // model. The discarded host text donor is never decoded or treated as an image.
             g.CurrentMedia = null;
             g.CurrentVae = null;
@@ -205,9 +204,9 @@ internal sealed class WanGenerationSession(
     }
 
     /// <summary>
-    /// Native Wan 2.2 TI2V 5B stage-zero construction. Host primitives continue to own model
-    /// loading, conditioning, and sampling; WAN owns the one latent shape the host image builder
-    /// cannot parameterize without an image donor.
+    /// Native WAN text stage-zero construction. Host primitives own model loading, conditioning,
+    /// empty-video creation, and sampling. The narrow parameter scope supplies the authored stage
+    /// length to the host primitive without changing the request retained in metadata.
     /// </summary>
     private void ExecuteNativeTextStage(
         ClipPlan clip,
@@ -218,7 +217,6 @@ internal sealed class WanGenerationSession(
         if (clip.EntryMode != ArchitectureEntryMode.TextToVideo
             || clip.Input != ClipInputKind.EmptyLatent
             || stage.ClipStageIndex != 0
-            || payload.ProfileId != WanArchitectureModule.Ti2v5bProfileId
             || genInfo.VideoEndFrame is not null)
         {
             throw new InvalidOperationException(
@@ -239,25 +237,33 @@ internal sealed class WanGenerationSession(
             int frames = genInfo.Frames
                 ?? throw new InvalidOperationException(
                     $"Clip {clip.ClipId} stage {stage.StageId} has no native Wan frame count.");
-            string latent = g.CreateNode("Wan22ImageToVideoLatent", new Newtonsoft.Json.Linq.JObject
+            WGNodeData ambientVae = g.CurrentVae;
+            using (ParamSnapshot frameScope = ParamSnapshot.Of(
+                g.UserInput,
+                T2IParamTypes.Text2VideoFrames.Type))
             {
-                ["batch_size"] = 1,
-                ["length"] = frames,
-                ["width"] = genInfo.Width,
-                ["height"] = genInfo.Height,
-                ["vae"] = genInfo.Vae.Path,
-            });
-            g.CurrentMedia = new(
-                [latent, 0],
-                g,
-                WGNodeData.DT_LATENT_VIDEO,
-                genInfo.Model.Compat)
-            {
-                Width = (int)genInfo.Width,
-                Height = (int)genInfo.Height,
-                Frames = frames,
-                FPS = plan.FramesPerSecond,
-            };
+                try
+                {
+                    g.UserInput.Set(T2IParamTypes.Text2VideoFrames, frames);
+                    g.CurrentVae = genInfo.Vae;
+                    g.CurrentMedia = g.EmptyImage(
+                        (int)genInfo.Width,
+                        (int)genInfo.Height,
+                        1);
+                    ValidateNativeTextLatent(
+                        clip,
+                        stage,
+                        g.CurrentMedia,
+                        (int)genInfo.Width,
+                        (int)genInfo.Height,
+                        frames);
+                }
+                finally
+                {
+                    g.CurrentVae = ambientVae;
+                }
+            }
+            g.CurrentMedia.FPS = plan.FramesPerSecond;
             string sampled = g.CreateKSampler(
                 genInfo.Model.Path,
                 genInfo.PosCond,
@@ -285,6 +291,31 @@ internal sealed class WanGenerationSession(
         {
             g.CurrentAudioVae = ambientAudioVae;
             g.IsImageToVideo = ambientImageToVideo;
+        }
+    }
+
+    private void ValidateNativeTextLatent(
+        ClipPlan clip,
+        StagePlan stage,
+        WGNodeData latent,
+        int width,
+        int height,
+        int frames)
+    {
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        bool valid =
+            latent is not null
+            && latent.DataType == WGNodeData.DT_LATENT_VIDEO
+            && latent.Path is Newtonsoft.Json.Linq.JArray { Count: 2 } path
+            && bridge.ResolvePath(path) is not null
+            && latent.Frames == frames
+            && latent.Width == width
+            && latent.Height == height;
+        if (!valid)
+        {
+            throw new SwarmUserErrorException(
+                $"VideoStages: clip {clip.ClipId} stage {stage.StageId} could not create a "
+                    + $"valid {width}x{height}, {frames}-frame WAN text-video latent.");
         }
     }
 
@@ -369,7 +400,7 @@ internal sealed class WanGenerationSession(
             Steps = payload.Steps,
             Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.StageId,
             ContextID = sectionId,
-            VideoEndFrame = payload.OwnsVideoEndFrame
+            VideoEndFrame = WanVideoEndFramePolicy.ShouldApply(plan, clip, stage)
                 ? g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
                 : null,
         };
