@@ -194,10 +194,10 @@ export const createClipStageCapabilityViews = (
             if (feature === "stageLoras" && descriptor) {
                 const extras =
                     resolvedModel?.enhancements?.extras ?? descriptor.extras;
-                const supported =
-                    extras === undefined
-                        ? descriptor.capabilities.stage.includes("lora")
-                        : extras.includes("lora");
+                const supported = architectureFeatureSupport(feature, {
+                    capabilities: descriptor.capabilities,
+                    extras,
+                });
                 const architectureRule = supported
                     ? conditionalRule(
                           descriptor.rules,

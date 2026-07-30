@@ -186,120 +186,13 @@ internal static class ArchitectureCatalogSerializer
     }
 
     private static IEnumerable<string> ArchitectureCapabilities(ArchitectureCapability value)
-    {
-        if (Has(value, ArchitectureCapability.GeneratedEntry))
-        {
-            yield return "generated-entry";
-        }
-        if (Has(value, ArchitectureCapability.SourcedEntry))
-        {
-            yield return "sourced-entry";
-        }
-        if (Has(value, ArchitectureCapability.MultiStage))
-        {
-            yield return "multi-stage";
-        }
-        if (Has(value, ArchitectureCapability.NativeAudio))
-        {
-            yield return "native-audio";
-        }
-        if (Has(value, ArchitectureCapability.DecodedOutput))
-        {
-            yield return "decoded-output";
-        }
-    }
+        => ArchitectureFeatureVocabulary.WireNames(value);
 
     private static IEnumerable<string> ClipCapabilities(ClipCapability value)
-    {
-        if (Has(value, ClipCapability.SourceVideo))
-        {
-            yield return "source-video";
-        }
-        if (Has(value, ClipCapability.Prompts))
-        {
-            yield return "prompts";
-        }
-        if (Has(value, ClipCapability.PromptRelay))
-        {
-            yield return "prompt-relay";
-        }
-        if (Has(value, ClipCapability.References))
-        {
-            yield return "references";
-        }
-        if (Has(value, ClipCapability.ReferenceFraming))
-        {
-            yield return "reference-framing";
-        }
-        if (Has(value, ClipCapability.Retake))
-        {
-            yield return "retake";
-        }
-        if (Has(value, ClipCapability.AudioSources))
-        {
-            yield return "audio-sources";
-        }
-        if (Has(value, ClipCapability.AudioSegments))
-        {
-            yield return "audio-segments";
-        }
-        if (Has(value, ClipCapability.AudioReuse))
-        {
-            yield return "audio-reuse";
-        }
-        if (Has(value, ClipCapability.AudioDerivedDuration))
-        {
-            yield return "audio-derived-duration";
-        }
-        if (Has(value, ClipCapability.ControlSignalDerivedDuration))
-        {
-            yield return "control-signal-derived-duration";
-        }
-    }
+        => ArchitectureFeatureVocabulary.WireNames(value);
 
     private static IEnumerable<string> StageCapabilities(StageCapability value)
-    {
-        if (Has(value, StageCapability.ImageInput))
-        {
-            yield return "image-input";
-        }
-        if (Has(value, StageCapability.VideoInput))
-        {
-            yield return "video-input";
-        }
-        if (Has(value, StageCapability.PixelUpscale))
-        {
-            yield return "pixel-upscale";
-        }
-        if (Has(value, StageCapability.ModelUpscale))
-        {
-            yield return "model-upscale";
-        }
-        if (Has(value, StageCapability.LatentUpscale))
-        {
-            yield return "latent-upscale";
-        }
-        if (Has(value, StageCapability.LatentModelUpscale))
-        {
-            yield return "latent-model-upscale";
-        }
-        if (Has(value, StageCapability.Lora))
-        {
-            yield return "lora";
-        }
-        if (Has(value, StageCapability.IcLora))
-        {
-            yield return "ic-lora";
-        }
-        if (Has(value, StageCapability.Hdr))
-        {
-            yield return "hdr";
-        }
-        if (Has(value, StageCapability.FrameReferences))
-        {
-            yield return "frame-references";
-        }
-    }
+        => ArchitectureFeatureVocabulary.WireNames(value);
 
     private static IEnumerable<string> OutputCapabilities(
         VideoArchitectureDescriptor descriptor)
@@ -324,24 +217,7 @@ internal static class ArchitectureCatalogSerializer
     }
 
     private static IEnumerable<string> UpscaleModes(StageCapability value)
-    {
-        if (Has(value, StageCapability.PixelUpscale))
-        {
-            yield return "pixel";
-        }
-        if (Has(value, StageCapability.ModelUpscale))
-        {
-            yield return "model";
-        }
-        if (Has(value, StageCapability.LatentUpscale))
-        {
-            yield return "latent";
-        }
-        if (Has(value, StageCapability.LatentModelUpscale))
-        {
-            yield return "latent-model";
-        }
-    }
+        => ArchitectureFeatureVocabulary.UpscaleModeWireNames(value);
 
     private static IEnumerable<string> LegacyProfileCapabilities(
         VideoArchitectureDescriptor descriptor)
@@ -371,13 +247,7 @@ internal static class ArchitectureCatalogSerializer
     };
 
     private static string SerializeConditionalFeature(ConditionalRuleFeature feature) =>
-        feature switch
-        {
-            ConditionalRuleFeature.Retake => "retake",
-            ConditionalRuleFeature.FrameReferences => "frameReferences",
-            ConditionalRuleFeature.Hdr => "hdr",
-            _ => throw new ArgumentOutOfRangeException(nameof(feature)),
-        };
+        ArchitectureFeatureVocabulary.AuthoringKey(feature);
 
     private static string SerializeFailureSeverity(RuleFailureSeverity severity) =>
         severity switch
@@ -403,27 +273,8 @@ internal static class ArchitectureCatalogSerializer
     };
 
     private static string SerializeUnsupportedAuthoringFeature(
-        UnsupportedAuthoringFeature feature) => feature switch
-        {
-            UnsupportedAuthoringFeature.MultiStage => "multiStage",
-            UnsupportedAuthoringFeature.SourceVideo => "sourceVideo",
-            UnsupportedAuthoringFeature.FrameReferences => "frameReferences",
-            UnsupportedAuthoringFeature.ReferenceFraming => "referenceFraming",
-            UnsupportedAuthoringFeature.Retake => "retake",
-            UnsupportedAuthoringFeature.MajorPrompt => "majorPrompt",
-            UnsupportedAuthoringFeature.PromptRelay => "promptRelay",
-            UnsupportedAuthoringFeature.ClipAudio => "clipAudio",
-            UnsupportedAuthoringFeature.AudioReuse => "audioReuse",
-            UnsupportedAuthoringFeature.AudioDerivedDuration =>
-                "audioDerivedDuration",
-            UnsupportedAuthoringFeature.ControlSignalDerivedDuration =>
-                "controlSignalDerivedDuration",
-            UnsupportedAuthoringFeature.StageLoras => "stageLoras",
-            UnsupportedAuthoringFeature.IcLora => "icLora",
-            UnsupportedAuthoringFeature.Hdr => "hdr",
-            UnsupportedAuthoringFeature.Upscale => "upscale",
-            _ => throw new ArgumentOutOfRangeException(nameof(feature)),
-        };
+        UnsupportedAuthoringFeature feature) =>
+        ArchitectureFeatureVocabulary.AuthoringKey(feature);
 
     private static string SerializeBoundaryMode(BoundaryExecutionMode mode) => mode switch
     {

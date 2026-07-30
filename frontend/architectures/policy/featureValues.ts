@@ -1,32 +1,20 @@
 import { isAllowedAudioSource } from "../../audioSource";
+import {
+    AUTHORING_FEATURE_CAPABILITIES,
+    AUTHORING_FEATURE_LABELS,
+    type GeneratedAuthoringFeatureCapability,
+} from "../generatedFeatures";
 import type { ArchitectureCapabilities } from "../types";
 import type { AuthoringFeature, ClipCapabilityView } from "./types";
-
-const FEATURE_LABEL: Record<AuthoringFeature, string> = {
-    multiStage: "Multiple stages",
-    sourceVideo: "Source video",
-    frameReferences: "Frame references",
-    referenceFraming: "Reference framing",
-    retake: "Retakes",
-    majorPrompt: "Major prompts",
-    promptRelay: "Relay prompts",
-    clipAudio: "Clip audio",
-    audioReuse: "Captured stage audio reuse",
-    audioDerivedDuration: "Audio-derived clip duration",
-    controlSignalDerivedDuration: "Control-signal-derived clip duration",
-    stageLoras: "LoRAs",
-    icLora: "IC-LoRA",
-    hdr: "HDR",
-    upscale: "Stage upscaling",
-};
 
 export const architectureReason = (
     label: string,
     feature: AuthoringFeature,
-): string => `${FEATURE_LABEL[feature]} is not supported by ${label}.`;
+): string =>
+    `${AUTHORING_FEATURE_LABELS[feature]} is not supported by ${label}.`;
 
 export const noArchitectureReason = (feature: AuthoringFeature): string =>
-    `${FEATURE_LABEL[feature]} requires a generated clip with a known architecture.`;
+    `${AUTHORING_FEATURE_LABELS[feature]} requires a generated clip with a known architecture.`;
 
 export const isAudioSourceSupported = (
     view: ClipCapabilityView,
@@ -71,60 +59,33 @@ export const architectureFeatureSupport = (
     scope: FeatureSupportScope,
 ): boolean => {
     const capability = scope.capabilities;
-    const extras = scope.extras;
-    const has = (
-        extra: string,
-        legacy: readonly string[],
-        legacyValue: string = extra,
-    ): boolean =>
-        extras === undefined
-            ? legacy.includes(legacyValue)
-            : extras.includes(extra);
-    switch (feature) {
-        case "multiStage":
-            return has("multi-stage", capability.architecture);
-        case "sourceVideo":
-            return has("source-video", capability.clip);
-        case "frameReferences":
-            return has("frame-references", capability.stage);
-        case "referenceFraming":
-            return has("reference-framing", capability.clip);
-        case "retake":
-            return has("retake", capability.clip);
-        case "majorPrompt":
-            return has("prompts", capability.clip);
-        case "promptRelay":
-            return has("prompt-relay", capability.clip);
-        case "clipAudio":
-            return (
-                has("audio-sources", capability.clip) &&
-                (scope.audioSource === undefined ||
-                    isAllowedAudioSource(
-                        capability.audioSourceKinds,
-                        scope.audioSource,
-                    ))
-            );
-        case "audioReuse":
-            return has("audio-reuse", capability.clip);
-        case "audioDerivedDuration":
-            return has("audio-derived-duration", capability.clip);
-        case "controlSignalDerivedDuration":
-            return has("control-signal-derived-duration", capability.clip);
-        case "stageLoras":
-            return has("lora", capability.stage);
-        case "icLora":
-            return has("ic-lora", capability.stage);
-        case "hdr":
-            return has("hdr", capability.stage);
-        case "upscale":
-            return scope.upscaleMethod === undefined
-                ? ["pixel", "model", "latent", "latent-model"].some((mode) =>
-                      has(`${mode}-upscale`, capability.upscaleModes, mode),
-                  )
-                : has(
-                      `${upscaleModeForMethod(scope.upscaleMethod)}-upscale`,
-                      capability.upscaleModes,
-                      upscaleModeForMethod(scope.upscaleMethod),
-                  );
+    const supports = (
+        binding: GeneratedAuthoringFeatureCapability,
+    ): boolean => {
+        const [capabilityScope, wireName, upscaleMode] = binding;
+        if (scope.extras !== undefined) {
+            return scope.extras.includes(wireName);
+        }
+        return upscaleMode === null
+            ? capability[capabilityScope].includes(wireName)
+            : capability.upscaleModes.includes(upscaleMode);
+    };
+
+    let bindings = AUTHORING_FEATURE_CAPABILITIES[feature];
+    if (feature === "upscale" && scope.upscaleMethod !== undefined) {
+        const requestedMode = upscaleModeForMethod(scope.upscaleMethod);
+        bindings = bindings.filter(
+            ([, , upscaleMode]) => upscaleMode === requestedMode,
+        );
     }
+    if (!bindings.some(supports)) {
+        return false;
+    }
+    if (feature === "clipAudio" && scope.audioSource !== undefined) {
+        return isAllowedAudioSource(
+            capability.audioSourceKinds,
+            scope.audioSource,
+        );
+    }
+    return true;
 };

@@ -1545,8 +1545,59 @@
     return options;
   };
 
-  // frontend/architectures/policy/featureValues.ts
-  var FEATURE_LABEL = {
+  // frontend/architectures/generatedFeatures.ts
+  var CAPABILITY_WIRE_NAMES = {
+    architecture: {
+      generatedEntry: "generated-entry",
+      sourcedEntry: "sourced-entry",
+      multiStage: "multi-stage",
+      nativeAudio: "native-audio",
+      decodedOutput: "decoded-output"
+    },
+    clip: {
+      sourceVideo: "source-video",
+      prompts: "prompts",
+      promptRelay: "prompt-relay",
+      references: "references",
+      referenceFraming: "reference-framing",
+      retake: "retake",
+      audioSources: "audio-sources",
+      audioSegments: "audio-segments",
+      audioReuse: "audio-reuse",
+      audioDerivedDuration: "audio-derived-duration",
+      controlSignalDerivedDuration: "control-signal-derived-duration"
+    },
+    stage: {
+      imageInput: "image-input",
+      videoInput: "video-input",
+      pixelUpscale: "pixel-upscale",
+      modelUpscale: "model-upscale",
+      latentUpscale: "latent-upscale",
+      latentModelUpscale: "latent-model-upscale",
+      lora: "lora",
+      icLora: "ic-lora",
+      hdr: "hdr",
+      frameReferences: "frame-references"
+    }
+  };
+  var AUTHORING_FEATURES = [
+    "multiStage",
+    "sourceVideo",
+    "frameReferences",
+    "referenceFraming",
+    "retake",
+    "majorPrompt",
+    "promptRelay",
+    "clipAudio",
+    "audioReuse",
+    "audioDerivedDuration",
+    "controlSignalDerivedDuration",
+    "stageLoras",
+    "icLora",
+    "hdr",
+    "upscale"
+  ];
+  var AUTHORING_FEATURE_LABELS = {
     multiStage: "Multiple stages",
     sourceVideo: "Source video",
     frameReferences: "Frame references",
@@ -1563,8 +1614,46 @@
     hdr: "HDR",
     upscale: "Stage upscaling"
   };
-  var architectureReason = (label, feature) => `${FEATURE_LABEL[feature]} is not supported by ${label}.`;
-  var noArchitectureReason = (feature) => `${FEATURE_LABEL[feature]} requires a generated clip with a known architecture.`;
+  var AUTHORING_FEATURE_CAPABILITIES = {
+    multiStage: [
+      ["architecture", CAPABILITY_WIRE_NAMES.architecture.multiStage, null]
+    ],
+    sourceVideo: [["clip", CAPABILITY_WIRE_NAMES.clip.sourceVideo, null]],
+    frameReferences: [
+      ["stage", CAPABILITY_WIRE_NAMES.stage.frameReferences, null]
+    ],
+    referenceFraming: [
+      ["clip", CAPABILITY_WIRE_NAMES.clip.referenceFraming, null]
+    ],
+    retake: [["clip", CAPABILITY_WIRE_NAMES.clip.retake, null]],
+    majorPrompt: [["clip", CAPABILITY_WIRE_NAMES.clip.prompts, null]],
+    promptRelay: [["clip", CAPABILITY_WIRE_NAMES.clip.promptRelay, null]],
+    clipAudio: [["clip", CAPABILITY_WIRE_NAMES.clip.audioSources, null]],
+    audioReuse: [["clip", CAPABILITY_WIRE_NAMES.clip.audioReuse, null]],
+    audioDerivedDuration: [
+      ["clip", CAPABILITY_WIRE_NAMES.clip.audioDerivedDuration, null]
+    ],
+    controlSignalDerivedDuration: [
+      ["clip", CAPABILITY_WIRE_NAMES.clip.controlSignalDerivedDuration, null]
+    ],
+    stageLoras: [["stage", CAPABILITY_WIRE_NAMES.stage.lora, null]],
+    icLora: [["stage", CAPABILITY_WIRE_NAMES.stage.icLora, null]],
+    hdr: [["stage", CAPABILITY_WIRE_NAMES.stage.hdr, null]],
+    upscale: [
+      ["stage", CAPABILITY_WIRE_NAMES.stage.pixelUpscale, "pixel"],
+      ["stage", CAPABILITY_WIRE_NAMES.stage.modelUpscale, "model"],
+      ["stage", CAPABILITY_WIRE_NAMES.stage.latentUpscale, "latent"],
+      [
+        "stage",
+        CAPABILITY_WIRE_NAMES.stage.latentModelUpscale,
+        "latent-model"
+      ]
+    ]
+  };
+
+  // frontend/architectures/policy/featureValues.ts
+  var architectureReason = (label, feature) => `${AUTHORING_FEATURE_LABELS[feature]} is not supported by ${label}.`;
+  var noArchitectureReason = (feature) => `${AUTHORING_FEATURE_LABELS[feature]} requires a generated clip with a known architecture.`;
   var upscaleModeForMethod = (method) => {
     const normalized = method.trim().toLowerCase();
     const hasMethodName = (prefix) => normalized.startsWith(prefix) && normalized.slice(prefix.length).trim().length > 0;
@@ -1576,49 +1665,30 @@
   };
   var architectureFeatureSupport = (feature, scope) => {
     const capability = scope.capabilities;
-    const extras = scope.extras;
-    const has = (extra, legacy, legacyValue = extra) => extras === void 0 ? legacy.includes(legacyValue) : extras.includes(extra);
-    switch (feature) {
-      case "multiStage":
-        return has("multi-stage", capability.architecture);
-      case "sourceVideo":
-        return has("source-video", capability.clip);
-      case "frameReferences":
-        return has("frame-references", capability.stage);
-      case "referenceFraming":
-        return has("reference-framing", capability.clip);
-      case "retake":
-        return has("retake", capability.clip);
-      case "majorPrompt":
-        return has("prompts", capability.clip);
-      case "promptRelay":
-        return has("prompt-relay", capability.clip);
-      case "clipAudio":
-        return has("audio-sources", capability.clip) && (scope.audioSource === void 0 || isAllowedAudioSource(
-          capability.audioSourceKinds,
-          scope.audioSource
-        ));
-      case "audioReuse":
-        return has("audio-reuse", capability.clip);
-      case "audioDerivedDuration":
-        return has("audio-derived-duration", capability.clip);
-      case "controlSignalDerivedDuration":
-        return has("control-signal-derived-duration", capability.clip);
-      case "stageLoras":
-        return has("lora", capability.stage);
-      case "icLora":
-        return has("ic-lora", capability.stage);
-      case "hdr":
-        return has("hdr", capability.stage);
-      case "upscale":
-        return scope.upscaleMethod === void 0 ? ["pixel", "model", "latent", "latent-model"].some(
-          (mode) => has(`${mode}-upscale`, capability.upscaleModes, mode)
-        ) : has(
-          `${upscaleModeForMethod(scope.upscaleMethod)}-upscale`,
-          capability.upscaleModes,
-          upscaleModeForMethod(scope.upscaleMethod)
-        );
+    const supports = (binding) => {
+      const [capabilityScope, wireName, upscaleMode] = binding;
+      if (scope.extras !== void 0) {
+        return scope.extras.includes(wireName);
+      }
+      return upscaleMode === null ? capability[capabilityScope].includes(wireName) : capability.upscaleModes.includes(upscaleMode);
+    };
+    let bindings = AUTHORING_FEATURE_CAPABILITIES[feature];
+    if (feature === "upscale" && scope.upscaleMethod !== void 0) {
+      const requestedMode = upscaleModeForMethod(scope.upscaleMethod);
+      bindings = bindings.filter(
+        ([, , upscaleMode]) => upscaleMode === requestedMode
+      );
     }
+    if (!bindings.some(supports)) {
+      return false;
+    }
+    if (feature === "clipAudio" && scope.audioSource !== void 0) {
+      return isAllowedAudioSource(
+        capability.audioSourceKinds,
+        scope.audioSource
+      );
+    }
+    return true;
   };
 
   // frontend/architectures/temporalGrid.ts
@@ -1735,25 +1805,6 @@
     const resolution = resolveClipFrameGrid(clip, catalog, scope);
     return resolution.status === "resolved" ? resolution.frameGrid : 1;
   };
-
-  // frontend/architectures/types.ts
-  var AUTHORING_FEATURES = [
-    "multiStage",
-    "sourceVideo",
-    "frameReferences",
-    "referenceFraming",
-    "retake",
-    "majorPrompt",
-    "promptRelay",
-    "clipAudio",
-    "audioReuse",
-    "audioDerivedDuration",
-    "controlSignalDerivedDuration",
-    "stageLoras",
-    "icLora",
-    "hdr",
-    "upscale"
-  ];
 
   // frontend/architectures/catalogWire.ts
   var BOUNDARY_MODES = ["cut", "continue", "crossfade"];
@@ -5881,7 +5932,10 @@
       const decision = (feature) => {
         if (feature === "stageLoras" && descriptor) {
           const extras = resolvedModel?.enhancements?.extras ?? descriptor.extras;
-          const supported2 = extras === void 0 ? descriptor.capabilities.stage.includes("lora") : extras.includes("lora");
+          const supported2 = architectureFeatureSupport(feature, {
+            capabilities: descriptor.capabilities,
+            extras
+          });
           const architectureRule = supported2 ? conditionalRule(
             descriptor.rules,
             CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage

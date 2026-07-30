@@ -1,25 +1,10 @@
 export type VideoArchitectureId = string;
 export type ModelProfileId = string;
 
-export const AUTHORING_FEATURES = [
-    "multiStage",
-    "sourceVideo",
-    "frameReferences",
-    "referenceFraming",
-    "retake",
-    "majorPrompt",
-    "promptRelay",
-    "clipAudio",
-    "audioReuse",
-    "audioDerivedDuration",
-    "controlSignalDerivedDuration",
-    "stageLoras",
-    "icLora",
-    "hdr",
-    "upscale",
-] as const;
+import type { GeneratedAuthoringFeature } from "./generatedFeatures";
 
-export type CatalogAuthoringFeature = (typeof AUTHORING_FEATURES)[number];
+export { AUTHORING_FEATURES } from "./generatedFeatures";
+export type CatalogAuthoringFeature = GeneratedAuthoringFeature;
 
 export type CapabilitySupport = "supported" | "unsupported" | "conditional";
 export type CapabilityRuleScope =
