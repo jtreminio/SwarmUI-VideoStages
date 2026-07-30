@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 
@@ -37,7 +36,8 @@ internal sealed class LtxClipRefResolver(
             WGNodeData raw = ResolveClipRefSourceMedia(reference, refStore, postVideoChain);
             if (raw is null)
             {
-                Logs.Warning(
+                PlanDiagnosticReporter.TrackRequestWarning(
+                    g.UserInput,
                     $"VideoStages: Stage {stage.StageId} clip reference {i} ({reference.RawSource}) could not be resolved; "
                     + "skipping.");
                 continue;
@@ -138,7 +138,8 @@ internal sealed class LtxClipRefResolver(
         {
             if (!string.IsNullOrWhiteSpace(reference.RawSource))
             {
-                Logs.Warning(
+                PlanDiagnosticReporter.TrackRequestWarning(
+                    g.UserInput,
                     $"VideoStages: Unsupported or unresolved clip reference source '{reference.RawSource}'.");
             }
             return null;

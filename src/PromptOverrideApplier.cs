@@ -1,6 +1,5 @@
 using System.Globalization;
 using Newtonsoft.Json.Linq;
-using SwarmUI.Utils;
 
 namespace VideoStages;
 
@@ -40,13 +39,19 @@ internal static class PromptOverrideApplier
         };
 
     public static (int? Width, int? Height, int? FPS) ApplyTopLevel(
-        PromptParser.VideoStageTagData tags, int? width, int? height, int? fps)
+        PromptParser.VideoStageTagData tags,
+        int? width,
+        int? height,
+        int? fps,
+        Action<string> warn = null)
     {
         foreach ((string field, string value) in tags.TopLevelOverrides)
         {
             if (!int.TryParse(value?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) || parsed <= 0)
             {
-                Logs.Warning($"VideoStages: ignoring invalid top-level override '{field}' = '{value}'.");
+                VideoStagesJsonReader.Warn(
+                    warn,
+                    $"VideoStages: ignoring invalid top-level override '{field}' = '{value}'.");
                 continue;
             }
             if (string.Equals(field, "width", StringComparison.OrdinalIgnoreCase)) { width = parsed; }
@@ -58,36 +63,55 @@ internal static class PromptOverrideApplier
 
     public static void ApplyClipAndStage(
         List<JObject> rawEntries,
-        PromptParser.VideoStageTagData tags)
+        PromptParser.VideoStageTagData tags,
+        Action<string> warn = null)
     {
         foreach ((int clipIndex, List<(string Field, string Value)> overrides) in tags.ClipOverrides)
         {
             if (clipIndex < 0 || clipIndex >= rawEntries.Count)
             {
-                Logs.Warning($"VideoStages: clip override targets out-of-range clip {clipIndex}; ignoring.");
+                VideoStagesJsonReader.Warn(
+                    warn,
+                    $"VideoStages: clip override targets out-of-range clip {clipIndex}; ignoring.");
                 continue;
             }
             foreach ((string field, string value) in overrides)
             {
-                ApplyScalar(rawEntries[clipIndex], field, value, ClipFields, $"clip {clipIndex}");
+                ApplyScalar(
+                    rawEntries[clipIndex],
+                    field,
+                    value,
+                    ClipFields,
+                    $"clip {clipIndex}",
+                    warn);
             }
         }
         foreach (((int clipIndex, int stageIndex), List<(string Field, string Value)> overrides) in tags.StageOverrides)
         {
             if (clipIndex < 0 || clipIndex >= rawEntries.Count)
             {
-                Logs.Warning($"VideoStages: stage override targets out-of-range clip {clipIndex}; ignoring.");
+                VideoStagesJsonReader.Warn(
+                    warn,
+                    $"VideoStages: stage override targets out-of-range clip {clipIndex}; ignoring.");
                 continue;
             }
             JObject stage = GetStage(rawEntries[clipIndex], stageIndex);
             if (stage is null)
             {
-                Logs.Warning($"VideoStages: stage override targets out-of-range stage {stageIndex} on clip {clipIndex}; ignoring.");
+                VideoStagesJsonReader.Warn(
+                    warn,
+                    $"VideoStages: stage override targets out-of-range stage {stageIndex} on clip {clipIndex}; ignoring.");
                 continue;
             }
             foreach ((string field, string value) in overrides)
             {
-                ApplyScalar(stage, field, value, StageFields, $"clip {clipIndex} stage {stageIndex}");
+                ApplyScalar(
+                    stage,
+                    field,
+                    value,
+                    StageFields,
+                    $"clip {clipIndex} stage {stageIndex}",
+                    warn);
             }
         }
     }
@@ -97,11 +121,14 @@ internal static class PromptOverrideApplier
         string field,
         string value,
         Dictionary<string, (string Canonical, OverrideKind Kind)> allowed,
-        string location)
+        string location,
+        Action<string> warn)
     {
         if (!allowed.TryGetValue(field?.Trim() ?? "", out (string Canonical, OverrideKind Kind) spec))
         {
-            Logs.Warning($"VideoStages: ignoring unknown or non-overridable {location} field '{field}'.");
+            VideoStagesJsonReader.Warn(
+                warn,
+                $"VideoStages: ignoring unknown or non-overridable {location} field '{field}'.");
             return;
         }
         string trimmed = value?.Trim() ?? "";
@@ -121,7 +148,9 @@ internal static class PromptOverrideApplier
                 parsedToken = trimmed;
                 break;
             default:
-                Logs.Warning($"VideoStages: ignoring {location} override '{spec.Canonical}' with invalid value '{value}'.");
+                VideoStagesJsonReader.Warn(
+                    warn,
+                    $"VideoStages: ignoring {location} override '{spec.Canonical}' with invalid value '{value}'.");
                 return;
         }
         target[spec.Canonical] = parsedToken;
@@ -136,4 +165,5 @@ internal static class PromptOverrideApplier
         List<JObject> stages = [.. array.OfType<JObject>()];
         return stageIndex >= 0 && stageIndex < stages.Count ? stages[stageIndex] : null;
     }
+
 }

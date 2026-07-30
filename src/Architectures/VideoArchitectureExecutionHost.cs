@@ -59,7 +59,7 @@ internal sealed class VideoArchitectureExecutionHost
         {
             diagnostics.AddRange(provider.PreflightRequest(context) ?? []);
         }
-        PlanDiagnosticReporter.Report(diagnostics);
+        PlanDiagnosticReporter.ReportToRequest(diagnostics, _generator.UserInput);
         PlanDiagnosticReporter.ThrowIfBlocking(
             diagnostics,
             "VideoStages cannot run this request");

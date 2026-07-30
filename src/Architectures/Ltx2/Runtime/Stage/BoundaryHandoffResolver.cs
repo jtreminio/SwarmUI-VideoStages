@@ -1,5 +1,4 @@
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -38,10 +37,10 @@ internal sealed class BoundaryHandoffResolver(
         {
             if (nextClipIsSourced)
             {
-                Logs.Warning(
+                assembly.ReportWarning(
                     $"VideoStages: Clip {previousClip.ClipId} boundary 'continue' flows into "
                     + $"sourced Clip {nextClip.ClipId}; treating the boundary as a cut.");
-                assembly.DegradeToCut(previousClip.ClipId, "target clip is sourced footage");
+                assembly.DegradeToCut(previousClip.ClipId);
                 return null;
             }
 
@@ -56,9 +55,7 @@ internal sealed class BoundaryHandoffResolver(
                     clipContext.Plan.FramesPerSecond));
             if (clipContext.ContinuityFrame is null)
             {
-                assembly.DegradeToCut(
-                    previousClip.ClipId,
-                    "continuity input could not be built");
+                assembly.DegradeToCut(previousClip.ClipId);
                 return null;
             }
         }
@@ -78,9 +75,7 @@ internal sealed class BoundaryHandoffResolver(
             // The carry conditioning is part of this boundary's contract; without it the merge
             // would still trim the overlap, shortening audio for an overlap nothing produced.
             clipContext.ContinuityFrame = null;
-            assembly.DegradeToCut(
-                previousClip.ClipId,
-                "boundary audio carry input could not be built");
+            assembly.DegradeToCut(previousClip.ClipId);
         }
         return carry;
     }

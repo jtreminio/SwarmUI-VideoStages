@@ -67,7 +67,8 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
                         index,
                         out WGNodeData controlImage))
                 {
-                    Logs.Warning(
+                    PlanDiagnosticReporter.TrackRequestWarning(
+                        g.UserInput,
                         $"VideoStages: planned IC-LoRA entry {entry.EntryIndex} requires ControlNet "
                         + $"{(entry.MediaInput.ControlNetIndex ?? -1) + 1} drive media, but it is unavailable; "
                         + "applying the model patch without a guide.");
@@ -81,7 +82,8 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
             case IcLoraMediaSourceKind.LoaderOnly:
                 return false;
             default:
-                Logs.Warning(
+                PlanDiagnosticReporter.TrackRequestWarning(
+                    g.UserInput,
                     $"VideoStages: planned IC-LoRA entry {entry.EntryIndex} has no usable drive-media "
                     + "identity; applying the model patch without a guide.");
                 return false;
@@ -112,7 +114,8 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         }
         if (string.IsNullOrWhiteSpace(data))
         {
-            Logs.Warning(
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
                 $"VideoStages: planned IC-LoRA entry {entryIndex} requires uploaded drive media, "
                 + "but the planned media identity is empty; applying the model patch without a guide.");
             return null;
@@ -138,7 +141,8 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         }
         else
         {
-            Logs.Warning(
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
                 $"VideoStages: planned IC-LoRA entry {entryIndex} has unsupported uploaded drive-media "
                 + "kind; applying the model patch without a guide.");
             return null;

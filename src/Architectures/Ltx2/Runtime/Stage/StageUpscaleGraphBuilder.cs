@@ -4,7 +4,6 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 using VideoStages.Planning;
 
 using VideoStages.Architectures.Ltx2.Planning;
@@ -94,7 +93,8 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
                 targetHeight);
         }
 
-        Logs.Warning(
+        PlanDiagnosticReporter.TrackRequestWarning(
+            g.UserInput,
             $"VideoStages: Stage {stage.StageId} uses unsupported upscale method "
             + $"'{upscale.RawMethod}'. Ignoring upscale.");
         g.CurrentMedia = source;

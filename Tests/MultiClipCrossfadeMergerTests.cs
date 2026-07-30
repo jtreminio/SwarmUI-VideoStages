@@ -448,6 +448,13 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
         Assert.Equal(512, g.CurrentMedia.Width);
         Assert.Equal(34 - 8, g.CurrentMedia.Frames);
+        List<string> warnings = Assert.IsType<List<string>>(
+            g.UserInput.ExtraMeta["parser_warnings"]);
+        Assert.Contains(
+            warnings,
+            warning => warning.Contains(
+                "finished at 640x640@24 and was conformed to 512x512@24",
+                StringComparison.Ordinal));
     }
 
     [Fact]

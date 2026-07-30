@@ -291,12 +291,19 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: Constants.AudioSourceNative);
         string json = JsonConvert.SerializeObject(new JArray(clip));
+        WorkflowGenerator parser =
+            BuildParser(json, "<videoclip[0,bogusfield]:whatever>");
 
         ClipSpec parsed = Assert.Single(
-            VideoStagesSpecParser.Parse(BuildParser(json, "<videoclip[0,bogusfield]:whatever>")).Clips);
+            VideoStagesSpecParser.Parse(parser).Clips);
 
         // Parse still succeeds; the unknown field left the clip untouched.
         Assert.Equal(Constants.AudioSourceNative, parsed.AudioSource);
+        Assert.Contains(
+            Assert.IsType<List<string>>(parser.UserInput.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains(
+                "ignoring unknown or non-overridable clip 0 field 'bogusfield'",
+                StringComparison.Ordinal));
     }
 
     [Fact]

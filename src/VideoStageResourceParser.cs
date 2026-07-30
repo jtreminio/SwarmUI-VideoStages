@@ -1,6 +1,5 @@
 using System.Globalization;
 using Newtonsoft.Json.Linq;
-using SwarmUI.Utils;
 
 namespace VideoStages;
 
@@ -9,14 +8,21 @@ namespace VideoStages;
 /// </summary>
 internal static class VideoStageResourceParser
 {
-    public static IReadOnlyList<ImageRefSpec> ParseImageReferences(JObject clipObject, int clipIndex)
+    public static IReadOnlyList<ImageRefSpec> ParseImageReferences(
+        JObject clipObject,
+        int clipIndex,
+        Action<string> warn = null)
     {
         List<JObject> rawReferences = VideoStagesJsonReader.GetObjectArray(
             clipObject, UploadContainers.RefsCollection);
         List<ImageRefSpec> references = [];
         for (int index = 0; index < rawReferences.Count; index++)
         {
-            ImageRefSpec parsed = ParseImageReference(rawReferences[index], clipIndex, index);
+            ImageRefSpec parsed = ParseImageReference(
+                rawReferences[index],
+                clipIndex,
+                index,
+                warn);
             if (parsed is not null)
             {
                 references.Add(parsed);
@@ -25,7 +31,9 @@ internal static class VideoStageResourceParser
         return references;
     }
 
-    public static IReadOnlyList<LoraRef> ParseLoras(JObject obj)
+    public static IReadOnlyList<LoraRef> ParseLoras(
+        JObject obj,
+        Action<string> warn = null)
     {
         List<LoraRef> loras = [];
         foreach (JObject entry in VideoStagesJsonReader.GetObjectArray(obj, "loras"))
@@ -37,13 +45,15 @@ internal static class VideoStageResourceParser
             }
 
             double weight = SanitizeWeight(
-                VideoStagesJsonReader.GetOptionalDouble(entry, "weight", 1.0, "lora"), 1.0);
+                VideoStagesJsonReader.GetOptionalDouble(
+                    entry, "weight", 1.0, "lora", warn),
+                1.0);
             double? textEncoderWeight = null;
             if (VideoStagesJsonReader.HasProperty(entry, "textEncoderWeight"))
             {
                 textEncoderWeight = SanitizeWeight(
                     VideoStagesJsonReader.GetOptionalDouble(
-                        entry, "textEncoderWeight", weight, "lora"),
+                        entry, "textEncoderWeight", weight, "lora", warn),
                     weight);
             }
             loras.Add(new LoraRef(name.Trim(), weight, textEncoderWeight));
@@ -88,7 +98,9 @@ internal static class VideoStageResourceParser
         return weights.AsReadOnly();
     }
 
-    public static IReadOnlyList<IcLoraSpec> ParseIcLoras(JObject clipObject)
+    public static IReadOnlyList<IcLoraSpec> ParseIcLoras(
+        JObject clipObject,
+        Action<string> warn = null)
     {
         List<IcLoraSpec> entries = [];
         foreach (JObject entry in VideoStagesJsonReader.GetObjectArray(
@@ -109,12 +121,12 @@ internal static class VideoStageResourceParser
                 Lora: lora,
                 Preset: VideoStagesJsonReader.GetString(entry, "preset")?.Trim(),
                 Stage: Math.Max(-1, (int)VideoStagesJsonReader.GetOptionalDouble(
-                    entry, "stage", -1, "Clip IcLora")),
+                    entry, "stage", -1, "Clip IcLora", warn)),
                 DriveSource: driveSource,
                 Strength: Math.Clamp(VideoStagesJsonReader.GetOptionalDouble(
-                    entry, "strength", 1, "Clip IcLora"), 0, 5),
+                    entry, "strength", 1, "Clip IcLora", warn), 0, 5),
                 AttentionStrength: Math.Clamp(VideoStagesJsonReader.GetOptionalDouble(
-                    entry, "attentionStrength", 1, "Clip IcLora"), 0, 1),
+                    entry, "attentionStrength", 1, "Clip IcLora", warn), 0, 1),
                 ControlType: VideoStagesJsonReader.GetString(entry, "controlType")?.Trim(),
                 DriveMedia: driveMedia,
                 DriveData: ParseDriveData(rawDriveData),
@@ -165,12 +177,17 @@ internal static class VideoStageResourceParser
         ];
     }
 
-    private static ImageRefSpec ParseImageReference(JObject obj, int clipIndex, int refIndex)
+    private static ImageRefSpec ParseImageReference(
+        JObject obj,
+        int clipIndex,
+        int refIndex,
+        Action<string> warn)
     {
         string source = VideoStagesJsonReader.GetString(obj, "source");
         if (string.IsNullOrWhiteSpace(source))
         {
-            Logs.Warning(
+            VideoStagesJsonReader.Warn(
+                warn,
                 $"VideoStages: Clip {clipIndex} reference {refIndex} is missing a Source value; skipping.");
             return null;
         }
@@ -229,4 +246,5 @@ internal static class VideoStageResourceParser
 
     private static bool IsFinite(double value) =>
         !double.IsNaN(value) && !double.IsInfinity(value);
+
 }

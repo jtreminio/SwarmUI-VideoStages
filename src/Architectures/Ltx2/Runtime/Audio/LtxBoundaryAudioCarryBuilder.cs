@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -29,9 +28,11 @@ internal sealed class LtxBoundaryAudioCarryBuilder(WorkflowGenerator g)
             || fps <= 0
             || windowFrames > previousFrames)
         {
-            Logs.Warning(
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
                 $"VideoStages: Clip {previousClip.ClipId} cannot carry audio into "
-                + $"Clip {nextClip.ClipId} because its decoded audio timing is unavailable.");
+                + $"Clip {nextClip.ClipId} because its decoded audio timing is unavailable; "
+                + "treating the boundary as a cut.");
             return null;
         }
 
@@ -39,9 +40,11 @@ internal sealed class LtxBoundaryAudioCarryBuilder(WorkflowGenerator g)
         INodeOutput previousAudio = bridge.ResolvePath(previousAudioPath);
         if (previousAudio is null)
         {
-            Logs.Warning(
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
                 $"VideoStages: Clip {previousClip.ClipId} cannot carry audio into "
-                + $"Clip {nextClip.ClipId} because its decoded audio output cannot be resolved.");
+                + $"Clip {nextClip.ClipId} because its decoded audio output cannot be resolved; "
+                + "treating the boundary as a cut.");
             return null;
         }
 

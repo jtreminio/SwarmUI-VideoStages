@@ -1,5 +1,4 @@
 using Newtonsoft.Json.Linq;
-using SwarmUI.Utils;
 using VideoStages.Architectures;
 
 namespace VideoStages;
@@ -35,7 +34,8 @@ internal static class ClipTimelineSpecParser
         JObject clipObject,
         double durationSeconds,
         int fps,
-        int clipIndex)
+        int clipIndex,
+        Action<string> warn = null)
     {
         UploadedMediaSpec upload = VideoStagesJsonReader.GetEmbeddedUpload(
             clipObject, UploadContainers.ClipSourceVideo);
@@ -45,7 +45,8 @@ internal static class ClipTimelineSpecParser
         }
         if (durationSeconds <= 0 || fps <= 0)
         {
-            Logs.Warning(
+            VideoStagesJsonReader.Warn(
+                warn,
                 $"VideoStages: Clip {clipIndex} has a source video but no usable duration/fps; "
                 + "generating the clip normally instead.");
             return null;
@@ -53,7 +54,7 @@ internal static class ClipTimelineSpecParser
 
         JObject container = VideoStagesJsonReader.GetObject(clipObject, UploadContainers.ClipSourceVideo);
         double start = VideoStagesJsonReader.GetOptionalDouble(
-            container, "startSeconds", 0, $"Clip {clipIndex} SourceVideo");
+            container, "startSeconds", 0, $"Clip {clipIndex} SourceVideo", warn);
         if (!IsFinite(start) || start < 0)
         {
             start = 0;
@@ -65,7 +66,8 @@ internal static class ClipTimelineSpecParser
         JObject clipObject,
         int fps,
         int clipIndex,
-        double clipDurationSeconds)
+        double clipDurationSeconds,
+        Action<string> warn = null)
     {
         JObject retake = VideoStagesJsonReader.GetObject(clipObject, "retake");
         if (retake is null || fps <= 0)
@@ -74,8 +76,10 @@ internal static class ClipTimelineSpecParser
         }
 
         string location = $"Clip {clipIndex} Retake";
-        double startSeconds = VideoStagesJsonReader.GetOptionalDouble(retake, "startSeconds", 0, location);
-        double lengthSeconds = VideoStagesJsonReader.GetOptionalDouble(retake, "lengthSeconds", 0, location);
+        double startSeconds = VideoStagesJsonReader.GetOptionalDouble(
+            retake, "startSeconds", 0, location, warn);
+        double lengthSeconds = VideoStagesJsonReader.GetOptionalDouble(
+            retake, "lengthSeconds", 0, location, warn);
         if (!IsFinite(startSeconds) || !IsFinite(lengthSeconds)
             || startSeconds < 0 || lengthSeconds <= 0)
         {
@@ -96,7 +100,8 @@ internal static class ClipTimelineSpecParser
             return null;
         }
 
-        double strength = VideoStagesJsonReader.GetOptionalDouble(retake, "strength", 1.0, location);
+        double strength = VideoStagesJsonReader.GetOptionalDouble(
+            retake, "strength", 1.0, location, warn);
         strength = IsFinite(strength) ? Math.Clamp(strength, 0.0, 1.0) : 1.0;
         return new RetakeWindowSpec(startFrame, lengthFrames, strength);
     }
@@ -106,4 +111,5 @@ internal static class ClipTimelineSpecParser
 
     private static double RoundTenth(double value) =>
         Math.Round(value * 10) / 10;
+
 }

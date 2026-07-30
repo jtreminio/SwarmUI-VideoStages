@@ -1,6 +1,7 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -25,7 +26,8 @@ internal static class UploadedMediaResolver
 
         if (g.UserInput?.SourceSession is null)
         {
-            Logs.Warning(
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
                 $"VideoStages: {descriptor} uses a server-side path (inputs/, raw/, or Starred/) "
                 + "but no session is available; cannot load the file.");
             return null;
@@ -40,7 +42,8 @@ internal static class UploadedMediaResolver
         }
         catch (SwarmReadableErrorException ex)
         {
-            Logs.Warning(
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
                 $"VideoStages: Could not resolve uploaded {descriptor} path '{material}': {ex.Message}");
             return null;
         }

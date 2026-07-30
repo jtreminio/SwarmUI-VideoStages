@@ -1,6 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
-using SwarmUI.Utils;
 using VideoStages.Planning;
 
 namespace VideoStages;
@@ -43,7 +42,9 @@ internal static class EmbeddedMediaMaterializer
         }
         catch (Exception)
         {
-            Logs.Warning("VideoStages: Ignoring invalid uploaded audio embedded in Video Stages JSON.");
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
+                "VideoStages: Ignoring invalid uploaded audio embedded in Video Stages JSON.");
             return null;
         }
     }
@@ -68,7 +69,9 @@ internal static class EmbeddedMediaMaterializer
             ImageFile video = ImageFile.FromDataString(material);
             if (video?.Type?.MetaType != MediaMetaType.Video)
             {
-                Logs.Warning("VideoStages: Ignoring a clip source video whose media type is not video.");
+                PlanDiagnosticReporter.TrackRequestWarning(
+                    g.UserInput,
+                    "VideoStages: Ignoring a clip source video whose media type is not video.");
                 return null;
             }
             video.SourceFilePath = string.IsNullOrWhiteSpace(source.FileName)
@@ -78,7 +81,9 @@ internal static class EmbeddedMediaMaterializer
         }
         catch (Exception)
         {
-            Logs.Warning("VideoStages: Ignoring invalid source video embedded in Video Stages JSON.");
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
+                "VideoStages: Ignoring invalid source video embedded in Video Stages JSON.");
             return null;
         }
     }

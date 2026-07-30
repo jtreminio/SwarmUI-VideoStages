@@ -1,6 +1,6 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
-using SwarmUI.Utils;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -29,7 +29,9 @@ public static class ImageReference
         string material = inlineData ?? uploadFileName;
         if (string.IsNullOrEmpty(material))
         {
-            Logs.Warning($"VideoStages: Upload {descriptor} is missing inline data and a file name.");
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
+                $"VideoStages: Upload {descriptor} is missing inline data and a file name.");
             return null;
         }
 
@@ -46,7 +48,9 @@ public static class ImageReference
         }
         catch (Exception ex)
         {
-            Logs.Warning($"VideoStages: Ignoring invalid {descriptor} payload: {ex.Message}");
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
+                $"VideoStages: Ignoring invalid {descriptor} payload: {ex.Message}");
             return null;
         }
     }

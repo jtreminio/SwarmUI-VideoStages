@@ -67,7 +67,7 @@ internal sealed class MultiClipParallelMerger(
         PlanDiagnosticReporter.ThrowIfBlocking(
             conform.Diagnostics,
             "VideoStages timeline assembly");
-        PlanDiagnosticReporter.Report(conform.Diagnostics);
+        PlanDiagnosticReporter.ReportToRequest(conform.Diagnostics, g.UserInput);
         IReadOnlyList<DecodedClipArtifact> clips = conform.Clips;
         IReadOnlyList<INodeOutput> videoOutputs = conform.VideoOutputs;
         int sumFrames = clips.Sum(clip => clip.Frames);
@@ -76,7 +76,8 @@ internal sealed class MultiClipParallelMerger(
             BoundaryOverlapPlanner.ValidateRuntime(clips, conform.Boundaries);
         if (runtimeBoundaries.Degraded)
         {
-            Logs.Warning(
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
                 $"VideoStages: overlap boundaries degraded to cuts because "
                 + $"{runtimeBoundaries.Reason}.");
         }

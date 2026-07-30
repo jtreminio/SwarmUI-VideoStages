@@ -2,6 +2,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -13,14 +14,16 @@ internal static class VideoStagesSpecParser
 {
     public static VideoStagesSpec Parse(WorkflowGenerator g)
     {
+        Action<string> warn =
+            warning => PlanDiagnosticReporter.TrackRequestWarning(g.UserInput, warning);
         VideoStagesJsonDocument document = VideoStagesJsonReader.ReadDocument(g);
         PromptParser.VideoStageTagData tags = VideoStagesPromptSection.IsActive(g)
             ? ParseTags(g)
             : new PromptParser.VideoStageTagData();
 
         (int? rawWidth, int? rawHeight, int? rawFps) = PromptOverrideApplier.ApplyTopLevel(
-            tags, document.Width, document.Height, document.Fps);
-        PromptOverrideApplier.ApplyClipAndStage(document.Entries, tags);
+            tags, document.Width, document.Height, document.Fps, warn);
+        PromptOverrideApplier.ApplyClipAndStage(document.Entries, tags, warn);
 
         int width = ResolveWidth(g, rawWidth);
         int height = ResolveHeight(g, rawHeight);
@@ -48,7 +51,8 @@ internal static class VideoStagesSpecParser
             fps,
             refineMode,
             refineSkipStages,
-            tags);
+            tags,
+            warn);
 
         List<ClipSpec> clips = [];
         int globalStageIndex = 0;
@@ -92,7 +96,8 @@ internal static class VideoStagesSpecParser
             hasConfiguredResolution,
             TimelineAudioSegmentSpecParser.Parse(
                 document.AudioTracks,
-                document.Entries));
+                document.Entries,
+                warn));
     }
 
     private static PromptParser.VideoStageTagData ParseTags(WorkflowGenerator g) =>

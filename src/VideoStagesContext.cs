@@ -82,7 +82,7 @@ internal static class VideoStagesContext
             architecturePlanning);
         // Compilation happens once per workflow generator, so this is the one place a plan's
         // non-blocking diagnostics can reach the user without repeating on every phase lookup.
-        PlanDiagnosticReporter.Report(plan.Diagnostics);
+        PlanDiagnosticReporter.ReportToRequest(plan.Diagnostics, g.UserInput);
         return new PlanCacheEntry(new VideoExecutionPlanContext(plan));
     }
 
@@ -99,7 +99,8 @@ internal static class VideoStagesContext
         }
         // Planning declines global-refine semantics here, so this is the only point at which the
         // user can be told why their configured refine source did nothing.
-        Logs.Warning(
+        PlanDiagnosticReporter.TrackRequestWarning(
+            g.UserInput,
             "VideoStages: 'Refine Source Video' was set but its media type is not video. "
             + "Ignoring and falling back to the normal pipeline.");
         return false;

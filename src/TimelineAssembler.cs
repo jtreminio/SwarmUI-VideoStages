@@ -67,7 +67,7 @@ internal sealed class TimelineAssemblySession
         return false;
     }
 
-    public void DegradeToCut(int fromClipId, string reason)
+    public void DegradeToCut(int fromClipId)
     {
         int boundaryIndex = BoundaryIndex(fromClipId);
         if (boundaryIndex < 0
@@ -77,9 +77,10 @@ internal sealed class TimelineAssemblySession
         }
         _effectiveBoundaries[boundaryIndex] =
             BoundaryOverlapPlanner.DegradeToCut(_effectiveBoundaries[boundaryIndex]);
-        Logs.Warning(
-            $"VideoStages: clip {fromClipId} continuity boundary degraded to a cut because {reason}.");
     }
+
+    internal void ReportWarning(string warning) =>
+        PlanDiagnosticReporter.TrackRequestWarning(_generator.UserInput, warning);
 
     public void Assemble(IReadOnlyList<DecodedClipArtifact> clipOutputs)
     {

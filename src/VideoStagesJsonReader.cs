@@ -97,7 +97,12 @@ internal static class VideoStagesJsonReader
             : bool.TryParse(raw.Trim(), out bool value) ? value : defaultValue;
     }
 
-    public static int GetOptionalInt(JObject obj, string key, int defaultValue, string location)
+    public static int GetOptionalInt(
+        JObject obj,
+        string key,
+        int defaultValue,
+        string location,
+        Action<string> warn = null)
     {
         JToken token = Read(obj, key);
         if (token is null || token.Type == JTokenType.Null)
@@ -119,13 +124,19 @@ internal static class VideoStagesJsonReader
             return value;
         }
 
-        Logs.Warning(
+        Warn(
+            warn,
             $"VideoStages: {location} has invalid integer field '{key}' value '{raw}'. "
             + $"Using default '{defaultValue}'.");
         return defaultValue;
     }
 
-    public static double GetOptionalDouble(JObject obj, string key, double defaultValue, string location)
+    public static double GetOptionalDouble(
+        JObject obj,
+        string key,
+        double defaultValue,
+        string location,
+        Action<string> warn = null)
     {
         JToken token = Read(obj, key);
         if (token is null || token.Type == JTokenType.Null)
@@ -147,7 +158,8 @@ internal static class VideoStagesJsonReader
             return value;
         }
 
-        Logs.Warning(
+        Warn(
+            warn,
             $"VideoStages: {location} has invalid numeric field '{key}' value '{raw}'. "
             + $"Using default '{defaultValue}'.");
         return defaultValue;
@@ -158,7 +170,8 @@ internal static class VideoStagesJsonReader
         string key,
         string defaultValue,
         string location,
-        bool allowEmpty)
+        bool allowEmpty,
+        Action<string> warn = null)
     {
         string value = GetString(obj, key);
         if (value is null)
@@ -169,7 +182,9 @@ internal static class VideoStagesJsonReader
         value = value.Trim();
         if (!allowEmpty && string.IsNullOrWhiteSpace(value))
         {
-            Logs.Warning($"VideoStages: {location} has empty field '{key}'. Using default '{defaultValue}'.");
+            Warn(
+                warn,
+                $"VideoStages: {location} has empty field '{key}'. Using default '{defaultValue}'.");
             return defaultValue;
         }
         return value;
@@ -216,5 +231,16 @@ internal static class VideoStagesJsonReader
             : int.TryParse(raw.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
                 ? value
                 : null;
+    }
+
+    /// <summary>Emits a parse fallback through its request sink when production supplied one.</summary>
+    internal static void Warn(Action<string> warn, string message)
+    {
+        if (warn is null)
+        {
+            Logs.Warning(message);
+            return;
+        }
+        warn(message);
     }
 }

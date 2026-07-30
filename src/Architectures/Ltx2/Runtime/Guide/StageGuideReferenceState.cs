@@ -1,5 +1,4 @@
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
@@ -62,7 +61,9 @@ internal sealed class StageGuideReferenceState(
     {
         if (_previousStageRef is null)
         {
-            Logs.Warning("VideoStages: ImageReference 'PreviousStage' cannot be used for the first stage.");
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
+                "VideoStages: ImageReference 'PreviousStage' cannot be used for the first stage.");
         }
         return _previousStageRef;
     }
@@ -75,7 +76,8 @@ internal sealed class StageGuideReferenceState(
         {
             return reference;
         }
-        Logs.Warning(
+        PlanDiagnosticReporter.TrackRequestWarning(
+            g.UserInput,
             $"VideoStages: ImageReference '{guide.RawValue}' requested, but stage {stageIndex} does not exist.");
         return null;
     }
@@ -88,22 +90,27 @@ internal sealed class StageGuideReferenceState(
         {
             return reference;
         }
-        Logs.Warning(
+        PlanDiagnosticReporter.TrackRequestWarning(
+            g.UserInput,
             $"VideoStages: ImageReference '{guide.RawValue}' requested, but Base2Edit stage {stageIndex} does not exist.");
         return null;
     }
 
-    private static StageRefStore.StageRef WarnUnknownGuideReference(string rawValue)
+    private StageRefStore.StageRef WarnUnknownGuideReference(string rawValue)
     {
-        Logs.Warning($"VideoStages: Unknown ImageReference value '{rawValue}'.");
+        PlanDiagnosticReporter.TrackRequestWarning(
+            g.UserInput,
+            $"VideoStages: Unknown ImageReference value '{rawValue}'.");
         return null;
     }
 
-    private static StageRefStore.StageRef WarnIfMissing(StageRefStore.StageRef reference, string message)
+    private StageRefStore.StageRef WarnIfMissing(
+        StageRefStore.StageRef reference,
+        string message)
     {
         if (reference is null)
         {
-            Logs.Warning(message);
+            PlanDiagnosticReporter.TrackRequestWarning(g.UserInput, message);
         }
         return reference;
     }

@@ -1,7 +1,7 @@
 using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
+using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
@@ -117,13 +117,17 @@ internal class StageRefStore(WorkflowGenerator g)
         ComfyNode node = bridge.Graph.GetNode(nodeId);
         if (node is null)
         {
-            Logs.Warning($"VideoStages: node '{nodeId}' not found in workflow; treating as not captured.");
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
+                $"VideoStages: node '{nodeId}' not found in workflow; treating as not captured.");
             return null;
         }
         INodeOutput output = node.FindOutput(slot);
         if (output is null)
         {
-            Logs.Warning($"VideoStages: slot {slot} on node '{nodeId}' not found; treating as not captured.");
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
+                $"VideoStages: slot {slot} on node '{nodeId}' not found; treating as not captured.");
             return null;
         }
         return WGNodeDataMarkerCodec.Build(

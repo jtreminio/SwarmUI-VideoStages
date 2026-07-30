@@ -15,7 +15,8 @@ internal static class TimelineAudioSegmentSpecParser
 
     internal static IReadOnlyList<TimelineAudioSegmentSpec> Parse(
         IReadOnlyList<JObject> tracks,
-        IReadOnlyList<JObject> clips)
+        IReadOnlyList<JObject> clips,
+        Action<string> warn = null)
     {
         Dictionary<string, int> clipIds = [];
         for (int clipIndex = 0; clipIndex < clips.Count; clipIndex++)
@@ -57,7 +58,8 @@ internal static class TimelineAudioSegmentSpecParser
                 track,
                 "volume",
                 1,
-                $"Audio track {trackIndex}");
+                $"Audio track {trackIndex}",
+                warn);
             double volume = double.IsFinite(rawVolume)
                 ? Math.Clamp(rawVolume, MinVolume, MaxVolume)
                 : 1;
@@ -73,17 +75,20 @@ internal static class TimelineAudioSegmentSpecParser
                     span,
                     "timelineStartSeconds",
                     double.NaN,
-                    $"Audio track {trackIndex} span {spanIndex}");
+                    $"Audio track {trackIndex} span {spanIndex}",
+                    warn);
                 double length = VideoStagesJsonReader.GetOptionalDouble(
                     span,
                     "timelineLengthSeconds",
                     double.NaN,
-                    $"Audio track {trackIndex} span {spanIndex}");
+                    $"Audio track {trackIndex} span {spanIndex}",
+                    warn);
                 double sourceStart = VideoStagesJsonReader.GetOptionalDouble(
                     span,
                     "sourceStartSeconds",
                     0,
-                    $"Audio track {trackIndex} span {spanIndex}");
+                    $"Audio track {trackIndex} span {spanIndex}",
+                    warn);
                 if (!double.IsFinite(start)
                     || !double.IsFinite(length)
                     || !double.IsFinite(sourceStart)
@@ -106,11 +111,13 @@ internal static class TimelineAudioSegmentSpecParser
                 double? firstOffset = ReadOptionalNonNegative(
                     projection,
                     "clipStartOffsetSeconds",
-                    $"Audio track {trackIndex} span {spanIndex} projection");
+                    $"Audio track {trackIndex} span {spanIndex} projection",
+                    warn);
                 double? lastOffset = ReadOptionalNonNegative(
                     projection,
                     "clipEndOffsetSeconds",
-                    $"Audio track {trackIndex} span {spanIndex} projection");
+                    $"Audio track {trackIndex} span {spanIndex} projection",
+                    warn);
                 bool completeProjection =
                     firstClipId.HasValue
                     && lastClipId.HasValue
@@ -149,7 +156,8 @@ internal static class TimelineAudioSegmentSpecParser
     private static double? ReadOptionalNonNegative(
         JObject obj,
         string key,
-        string location)
+        string location,
+        Action<string> warn)
     {
         if (obj is null || !VideoStagesJsonReader.HasProperty(obj, key))
         {
@@ -159,7 +167,8 @@ internal static class TimelineAudioSegmentSpecParser
             obj,
             key,
             double.NaN,
-            location);
+            location,
+            warn);
         return double.IsFinite(value) && value >= 0 ? value : null;
     }
 }

@@ -128,6 +128,10 @@ public class BoundaryHandoffResolverTests
         Assert.Null(context.ContinuityFrame);
         Assert.False(assembly.TryGetAudioCarryWindow(0, out _));
         Assert.False(assembly.TryGetContinueWindow(0, out _));
+        string warning = Assert.Single(
+            Assert.IsType<List<string>>(g.UserInput.ExtraMeta["parser_warnings"]));
+        Assert.Contains("cannot carry audio", warning, StringComparison.Ordinal);
+        Assert.Contains("treating the boundary as a cut", warning, StringComparison.Ordinal);
     }
 
     [Fact]

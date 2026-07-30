@@ -17,10 +17,10 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class BackendConsolidationTests
 {
-    // --- 5a: one diagnostic type, and warnings that actually reach the user -------------------
+    // --- 5a: one diagnostic type, with warnings persisted through the host output channel -----
 
     [Fact]
-    public void Reporter_sends_warnings_to_the_user_channel_and_keeps_info_in_the_log()
+    public void Reporter_routes_each_severity_to_its_supplied_sink()
     {
         List<string> warnings = [];
         List<string> infos = [];
@@ -39,6 +39,52 @@ public class BackendConsolidationTests
         Assert.Equal(["VideoStages: a boundary degraded (clip 3)"], warnings);
         Assert.Equal(["VideoStages: tracks overlap"], infos);
         Assert.Equal(["VideoStages: no architecture"], errors);
+    }
+
+    [Fact]
+    public void Request_reporter_persists_deduplicated_warnings_in_host_output_metadata()
+    {
+        T2IParamInput input = new(null);
+        PlanDiagnostic warning =
+            new(PlanDiagnosticSeverity.Warning, "w", "a boundary degraded", ClipId: 3);
+
+        PlanDiagnosticReporter.ReportToRequest(
+            [
+                warning,
+                warning,
+                new(PlanDiagnosticSeverity.Info, "i", "tracks overlap"),
+                new(PlanDiagnosticSeverity.Error, "e", "no architecture"),
+            ],
+            input);
+        PlanDiagnosticReporter.ReportToRequest([warning], input);
+
+        List<string> warnings = Assert.IsType<List<string>>(
+            input.ExtraMeta["parser_warnings"]);
+        Assert.Equal(
+            ["VideoStages: a boundary degraded (clip 3)"],
+            warnings);
+        Assert.Equal(
+            "VideoStages: a boundary degraded (clip 3)",
+            input.BuildExtraDataJObject()["parser_warnings"]?[0]?.Value<string>());
+    }
+
+    [Fact]
+    public void Request_reporter_detaches_a_cloned_inputs_shared_prompt_warning_list()
+    {
+        T2IParamInput original = new(null);
+        original.ExtraMeta["parser_warnings"] = new List<string> { "Prompt warning." };
+        T2IParamInput clone = original.Clone();
+
+        PlanDiagnosticReporter.ReportToRequest(
+            [new(PlanDiagnosticSeverity.Warning, "w", "an option was ignored")],
+            clone);
+
+        Assert.Equal(
+            ["Prompt warning."],
+            Assert.IsType<List<string>>(original.ExtraMeta["parser_warnings"]));
+        Assert.Equal(
+            ["Prompt warning.", "VideoStages: an option was ignored"],
+            Assert.IsType<List<string>>(clone.ExtraMeta["parser_warnings"]));
     }
 
     [Fact]

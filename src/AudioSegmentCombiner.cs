@@ -4,7 +4,6 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
-using SwarmUI.Utils;
 using VideoStages.Planning;
 
 namespace VideoStages;
@@ -68,7 +67,8 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
                 }
                 else
                 {
-                    Logs.Warning(
+                    PlanDiagnosticReporter.TrackRequestWarning(
+                        g.UserInput,
                         $"VideoStages: clip {clipId} audio segment references AceStepFun track "
                         + $"'{segment.AceStepFunTrack}', which is not present in the workflow; skipping the segment.");
                 }

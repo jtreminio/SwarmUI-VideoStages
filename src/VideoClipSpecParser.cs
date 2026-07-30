@@ -8,7 +8,8 @@ internal sealed record VideoClipParseContext(
     int Fps,
     bool RefineMode,
     int RefineSkipStages,
-    PromptParser.VideoStageTagData Tags);
+    PromptParser.VideoStageTagData Tags,
+    Action<string> Warn = null);
 
 /// <summary>Assembles one clip from its scalar fields and the focused timeline/resource/stage parsers.</summary>
 internal static class VideoClipSpecParser
@@ -17,7 +18,7 @@ internal static class VideoClipSpecParser
     {
         string location = $"Clip {clipIndex}";
         double duration = VideoStagesJsonReader.GetOptionalDouble(
-            clipObject, "duration", 0, location);
+            clipObject, "duration", 0, location, context.Warn);
         string audioSource = NormalizeAudioSource(
             VideoStagesJsonReader.GetString(clipObject, "audioSource"));
         bool saveAudioTrack = VideoStagesJsonReader.GetOptionalBool(
@@ -29,13 +30,17 @@ internal static class VideoClipSpecParser
         bool reuseAudio = VideoStagesJsonReader.GetOptionalBool(
             clipObject, "reuseAudio", false);
 
-        IReadOnlyList<IcLoraSpec> icLoras = VideoStageResourceParser.ParseIcLoras(clipObject);
+        IReadOnlyList<IcLoraSpec> icLoras =
+            VideoStageResourceParser.ParseIcLoras(clipObject, context.Warn);
         List<JObject> rawStages = VideoStagesJsonReader.GetObjectArray(clipObject, "stages");
 
         IReadOnlyList<ImageRefSpec> references =
-            VideoStageResourceParser.ParseImageReferences(clipObject, clipIndex);
+            VideoStageResourceParser.ParseImageReferences(
+                clipObject,
+                clipIndex,
+                context.Warn);
         SourceVideoSpec sourceVideo = ClipTimelineSpecParser.ParseSourceVideo(
-            clipObject, duration, context.Fps, clipIndex);
+            clipObject, duration, context.Fps, clipIndex, context.Warn);
         List<StageSpec> stages = ParseStages(
             rawStages, clipIndex, references.Count, sourceVideo is not null, context);
         ApplyRetake(stages, clipObject, clipIndex, duration, sourceVideo is not null, context);
@@ -58,7 +63,7 @@ internal static class VideoClipSpecParser
                 clipObject, UploadContainers.ClipAudio),
             ImageRefs: references,
             Stages: stages,
-            Loras: VideoStageResourceParser.ParseLoras(clipObject),
+            Loras: VideoStageResourceParser.ParseLoras(clipObject, context.Warn),
             PromptWindows: SortWindows(context.Tags.ClipWindows.GetValueOrDefault(clipIndex)),
             BoundaryOut: BoundaryPolicy.NormalizeAuthoredMode(
                 VideoStagesJsonReader.GetString(clipObject, "boundaryOut")),
@@ -68,7 +73,8 @@ internal static class VideoClipSpecParser
                     clipObject,
                     "boundaryOutOverlap",
                     0,
-                    location)),
+                    location,
+                    context.Warn)),
             SourceVideo: sourceVideo,
             BoundaryOutCarryAudio: VideoStagesJsonReader.GetOptionalBool(
                 clipObject,
@@ -135,7 +141,8 @@ internal static class VideoClipSpecParser
                 context.IsTextToVideoRootWorkflow,
                 context.RefineMode,
                 context.RefineSkipStages,
-                sourcedClip));
+                sourcedClip,
+                context.Warn));
         }
         return stages;
     }
@@ -154,7 +161,7 @@ internal static class VideoClipSpecParser
         }
 
         RetakeWindowSpec retake = ClipTimelineSpecParser.ParseRetake(
-            clipObject, context.Fps, clipIndex, duration);
+            clipObject, context.Fps, clipIndex, duration, context.Warn);
         if (retake is not null)
         {
             stages[^1] = stages[^1] with { RetakeWindow = retake };
