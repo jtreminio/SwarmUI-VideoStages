@@ -9,7 +9,9 @@ namespace VideoStages.Architectures.HostVideo;
 /// Last-priority baseline for model classes whose stock SwarmUI video graph is known to work.
 /// This table is intentionally proof-based: optimistic host video flags alone are not admission.
 /// </summary>
-internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
+internal sealed class HostVideoArchitectureModule :
+    IVideoArchitectureModule,
+    IArchitectureEffectiveRequestProjector
 {
     private sealed record ProvenHostPath(
         string CompatibilityClassId,
@@ -84,6 +86,23 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
             VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo),
     ];
 
+    private static IReadOnlySet<UnsupportedAuthoringFeature>
+        UnsupportedProjectionFeatures { get; } =
+            new HashSet<UnsupportedAuthoringFeature>
+            {
+                UnsupportedAuthoringFeature.FrameReferences,
+                UnsupportedAuthoringFeature.ReferenceFraming,
+                UnsupportedAuthoringFeature.Retake,
+                UnsupportedAuthoringFeature.PromptRelay,
+                UnsupportedAuthoringFeature.ClipAudio,
+                UnsupportedAuthoringFeature.AudioReuse,
+                UnsupportedAuthoringFeature.AudioDerivedDuration,
+                UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
+                UnsupportedAuthoringFeature.IcLora,
+                UnsupportedAuthoringFeature.Hdr,
+                UnsupportedAuthoringFeature.Upscale,
+            };
+
     internal static HostVideoArchitectureModule Instance { get; } = new();
 
     public ArchitectureResolutionTier ResolutionTier =>
@@ -121,21 +140,11 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
         FrameGrid = 1,
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
-        IgnoredUnsupportedFeatures = new HashSet<UnsupportedAuthoringFeature>
-        {
-            UnsupportedAuthoringFeature.FrameReferences,
-            UnsupportedAuthoringFeature.ReferenceFraming,
-            UnsupportedAuthoringFeature.Retake,
-            UnsupportedAuthoringFeature.PromptRelay,
-            UnsupportedAuthoringFeature.ClipAudio,
-            UnsupportedAuthoringFeature.AudioReuse,
-            UnsupportedAuthoringFeature.AudioDerivedDuration,
-            UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
-            UnsupportedAuthoringFeature.IcLora,
-            UnsupportedAuthoringFeature.Hdr,
-            UnsupportedAuthoringFeature.Upscale,
-        },
+        IgnoredUnsupportedFeatures = UnsupportedProjectionFeatures,
     };
+
+    public IReadOnlySet<UnsupportedAuthoringFeature> ProjectedUnsupportedFeatures =>
+        UnsupportedProjectionFeatures;
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
     {
@@ -169,6 +178,59 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
             HostFactsAuthoritative = true,
         };
         return true;
+    }
+
+    public ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
+        ArchitectureEffectiveRequestProjectionContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        ArchitectureProjectedEffectiveClip[] clips = context.OwnedClips
+            .Select(owned =>
+            {
+                EffectiveClipProjection baseline =
+                    BaselineVideoEffectiveRequestProjector.ProjectBaseline(
+                        owned.Clip,
+                        preserveFrameReferences: false,
+                        Descriptor,
+                        "generic host-video",
+                        "host-video");
+                EffectiveClipProjection enhancements =
+                    BaselineVideoEffectiveRequestProjector
+                        .ProjectUnsupportedEnhancements(
+                            baseline.Clip,
+                            "generic host video",
+                            "host-video");
+                return new ArchitectureProjectedEffectiveClip(
+                    owned.TimelineIndex,
+                    enhancements.Clip,
+                    Array.AsReadOnly<EffectiveRequestDecision>(
+                    [
+                        .. baseline.Decisions,
+                        .. enhancements.Decisions,
+                    ]));
+            })
+            .ToArray();
+        EffectiveRequestDecision[] requestDecisions =
+            context.LegacyVideoSwap?.IsConfigured == true
+                && context.AuthoredRootTimelineIndex.HasValue
+                && context.OwnedClips.Any(
+                    owned =>
+                        owned.TimelineIndex
+                        == context.AuthoredRootTimelineIndex.Value)
+            ?
+            [
+                EffectiveRequestDecision.Ignore(
+                    "effective-request.host-video-swap-ignored",
+                    "Generic VideoStages ignores SwarmUI's request-global Video Swap Model, "
+                        + "Video Swap Percent, and Video Swap section settings. The authored "
+                        + "values remain in request metadata. Create separate timeline stages "
+                        + "instead."),
+            ]
+            : [];
+        return new(
+            Array.AsReadOnly(clips),
+            Array.AsReadOnly(requestDecisions));
     }
 
     public ArchitectureClipCompilation ValidateAndCompileClip(

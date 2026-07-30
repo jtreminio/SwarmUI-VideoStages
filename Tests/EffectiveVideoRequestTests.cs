@@ -279,6 +279,20 @@ public sealed class EffectiveVideoRequestTests
         Assert.Empty(effective.IcLoras);
         Assert.All(effective.Stages, stage => Assert.Empty(stage.IcLoraStrengths));
         Assert.Equal(1, effective.Stages[0].Upscale);
+        Assert.Contains(
+            request.Decisions,
+            decision => decision.Code
+                    == "effective-request.host-video-ic-lora-ignored"
+                && decision.Message.Contains(
+                    "generic host video does not support",
+                    StringComparison.Ordinal));
+        Assert.Contains(
+            request.Decisions,
+            decision => decision.Code
+                    == "effective-request.host-video-advanced-upscale-ignored"
+                && decision.Message.Contains(
+                    "unsupported generic host video upscale",
+                    StringComparison.Ordinal));
 
         // Supported authoring remains intact while the unsupported fields are
         // projected away.
@@ -352,6 +366,217 @@ public sealed class EffectiveVideoRequestTests
             plan.Diagnostics,
             diagnostic => diagnostic.Code == "boundary-cross-architecture-non-cut"
                 || diagnostic.Code == "boundary-architectureruleunsupported");
+    }
+
+    [Fact]
+    public void Projection_routes_once_through_the_resolved_module_after_identity_canonicalization()
+    {
+        ClipSpec root = Clip(Stage(0, rawIndex: 0)) with
+        {
+            AuthoredArchitectureId = "stale-architecture",
+            AuthoredModelProfileId = "stale-profile",
+            PromptWindows = [new("must remain", 0, 1)],
+        };
+        ClipSpec dormant = Clip(Stage(0, rawIndex: 0)) with
+        {
+            Id = 1,
+            Stages = [],
+        };
+        VideoStagesSpec authored = Spec(root, dormant);
+        RecordingProjectionModule module = new(
+            WanArchitectureModule.Instance.Descriptor,
+            context =>
+            {
+                Assert.Equal([0, 1], context.OwnedClips
+                    .Select(owned => owned.TimelineIndex));
+                Assert.Equal(
+                    WanArchitectureModule.ArchitectureId.Value,
+                    context.OwnedClips[0].Clip.AuthoredArchitectureId);
+                Assert.Equal(
+                    WanArchitectureModule.ImageToVideoProfileId.Value,
+                    context.OwnedClips[0].Clip.AuthoredModelProfileId);
+                Assert.Equal(0, context.AuthoredRootTimelineIndex);
+                return new(
+                    context.OwnedClips
+                        .Select(owned => new ArchitectureProjectedEffectiveClip(
+                            owned.TimelineIndex,
+                            owned.Clip,
+                            []))
+                        .ToArray(),
+                    [
+                        EffectiveRequestDecision.Ignore(
+                            "effective-request.test-module-routed",
+                            "The selected module owns this projection."),
+                    ]);
+            });
+        ArchitecturePlanningResult architectures = Resolve(
+            authored,
+            _ => module,
+            _ => module.Descriptor);
+
+        EffectiveVideoRequest request =
+            EffectiveVideoRequestProjector.Project(authored, architectures);
+
+        Assert.Equal(1, module.ProjectionCount);
+        Assert.Single(request.Spec.Clips[0].PromptWindows);
+        Assert.Contains(
+            request.Decisions,
+            decision => decision.Code == "effective-request.test-module-routed");
+        Assert.DoesNotContain(
+            request.Decisions,
+            decision => decision.Code.StartsWith(
+                "effective-request.wan-",
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Projection_rejects_a_module_replacing_an_unowned_timeline_clip()
+    {
+        ClipSpec clip = Clip(Stage(0, rawIndex: 0));
+        VideoStagesSpec authored = Spec(clip);
+        RecordingProjectionModule module = new(
+            WanArchitectureModule.Instance.Descriptor,
+            _ => new(
+                [new(99, clip, [])],
+                []));
+        ArchitecturePlanningResult architectures = Resolve(
+            authored,
+            _ => module,
+            _ => module.Descriptor);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => EffectiveVideoRequestProjector.Project(authored, architectures));
+
+        Assert.Contains("unowned", error.Message);
+        Assert.Contains(WanArchitectureModule.ArchitectureId.Value, error.Message);
+    }
+
+    [Fact]
+    public void Projection_rejects_missing_owned_clip_results()
+    {
+        ClipSpec first = Clip(Stage(0, rawIndex: 0));
+        ClipSpec second = Clip(Stage(0, rawIndex: 0)) with { Id = 1 };
+        VideoStagesSpec authored = Spec(first, second);
+        RecordingProjectionModule module = new(
+            WanArchitectureModule.Instance.Descriptor,
+            context => new(
+                [
+                    new(
+                        context.OwnedClips[0].TimelineIndex,
+                        context.OwnedClips[0].Clip,
+                        []),
+                ],
+                []));
+        ArchitecturePlanningResult architectures = Resolve(
+            authored,
+            _ => module,
+            _ => module.Descriptor);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => EffectiveVideoRequestProjector.Project(authored, architectures));
+
+        Assert.Contains("every owned clip", error.Message);
+    }
+
+    [Fact]
+    public void Projection_rejects_null_collections_and_request_global_blocks()
+    {
+        ClipSpec clip = Clip(Stage(0, rawIndex: 0));
+        VideoStagesSpec authored = Spec(clip);
+
+        InvalidOperationException nullCollections = AssertContractViolation(
+            authored,
+            _ => new(null, null));
+        Assert.Contains("null projection collections", nullCollections.Message);
+
+        InvalidOperationException nullLocalDecisions = AssertContractViolation(
+            authored,
+            context => new(
+                [new(0, context.OwnedClips[0].Clip, null)],
+                []));
+        Assert.Contains("null decisions", nullLocalDecisions.Message);
+
+        InvalidOperationException globalBlock = AssertContractViolation(
+            authored,
+            context => new(
+                [new(0, context.OwnedClips[0].Clip, [])],
+                [
+                    EffectiveRequestDecision.Block(
+                        "effective-request.test-global-block",
+                        "Global blocks are not a supported hook result."),
+                ]));
+        Assert.Contains("identity-free warning", globalBlock.Message);
+    }
+
+    [Fact]
+    public void Projection_reports_null_projected_stages_as_a_contract_error()
+    {
+        ClipSpec clip = Clip(Stage(0, rawIndex: 0));
+        VideoStagesSpec authored = Spec(clip);
+
+        InvalidOperationException error = AssertContractViolation(
+            authored,
+            context => new(
+                [
+                    new(
+                        0,
+                        context.OwnedClips[0].Clip with
+                        {
+                            Stages = new StageSpec[] { null },
+                        },
+                        []),
+                ],
+                []));
+
+        Assert.Contains("changed resolved topology", error.Message);
+    }
+
+    [Fact]
+    public void Request_global_warnings_follow_first_module_appearance()
+    {
+        StageSpec hostStage = Stage(0, rawIndex: 0, model: "host-model");
+        ClipSpec host = Clip(hostStage) with
+        {
+            AuthoredArchitectureId =
+                HostVideoArchitectureModule.ArchitectureId.Value,
+            AuthoredModelProfileId =
+                HostVideoArchitectureModule.ProfileId.Value,
+            AuthoredStages =
+            [
+                new(
+                    0,
+                    hostStage.Model,
+                    HostVideoArchitectureModule.ProfileId.Value,
+                    false),
+            ],
+        };
+        ClipSpec wan = Clip(Stage(0, rawIndex: 0)) with { Id = 1 };
+        VideoStagesSpec authored = Spec(host, wan) with
+        {
+            LegacyVideoSwap = new("legacy-swap-model"),
+        };
+        ArchitecturePlanningResult architectures = Resolve(
+            authored,
+            clip => clip.Id == 0
+                ? HostVideoArchitectureModule.Instance
+                : WanArchitectureModule.Instance,
+            clip => clip.Id == 0
+                ? HostVideoArchitectureModule.Instance.Descriptor
+                : WanArchitectureModule.Instance.Descriptor);
+
+        EffectiveVideoRequest request =
+            EffectiveVideoRequestProjector.Project(authored, architectures);
+
+        Assert.Equal(
+            [
+                "effective-request.host-video-swap-ignored",
+                "effective-request.wan-video-swap-ignored",
+            ],
+            request.Decisions
+                .Where(decision => decision.Code.EndsWith(
+                    "video-swap-ignored",
+                    StringComparison.Ordinal))
+                .Select(decision => decision.Code));
     }
 
     [Fact]
@@ -622,18 +847,45 @@ public sealed class EffectiveVideoRequestTests
         return new(assignments, []);
     }
 
-    private sealed class RecordingWanModule : IVideoArchitectureModule
+    private static InvalidOperationException AssertContractViolation(
+        VideoStagesSpec authored,
+        Func<
+            ArchitectureEffectiveRequestProjectionContext,
+            ArchitectureEffectiveRequestProjection> project)
+    {
+        RecordingProjectionModule module = new(
+            WanArchitectureModule.Instance.Descriptor,
+            project);
+        ArchitecturePlanningResult architectures = Resolve(
+            authored,
+            _ => module,
+            _ => module.Descriptor);
+        return Assert.Throws<InvalidOperationException>(
+            () => EffectiveVideoRequestProjector.Project(authored, architectures));
+    }
+
+    private sealed class RecordingWanModule :
+        IVideoArchitectureModule,
+        IArchitectureEffectiveRequestProjector
     {
         internal int CompileCount { get; private set; }
 
         public VideoArchitectureDescriptor Descriptor =>
             WanArchitectureModule.Instance.Descriptor;
 
+        public IReadOnlySet<UnsupportedAuthoringFeature>
+            ProjectedUnsupportedFeatures =>
+                WanArchitectureModule.Instance.ProjectedUnsupportedFeatures;
+
         public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
         {
             resolved = null;
             return false;
         }
+
+        public ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
+            ArchitectureEffectiveRequestProjectionContext context) =>
+            WanArchitectureModule.Instance.ProjectEffectiveRequest(context);
 
         public ArchitectureClipCompilation ValidateAndCompileClip(
             ClipSpec clip,
@@ -644,5 +896,41 @@ public sealed class EffectiveVideoRequestTests
             throw new InvalidOperationException(
                 "A blocked effective request must not reach architecture compilation.");
         }
+    }
+
+    private sealed class RecordingProjectionModule(
+        VideoArchitectureDescriptor descriptor,
+        Func<
+            ArchitectureEffectiveRequestProjectionContext,
+            ArchitectureEffectiveRequestProjection> project) :
+        IVideoArchitectureModule,
+        IArchitectureEffectiveRequestProjector
+    {
+        internal int ProjectionCount { get; private set; }
+
+        public VideoArchitectureDescriptor Descriptor => descriptor;
+
+        public IReadOnlySet<UnsupportedAuthoringFeature>
+            ProjectedUnsupportedFeatures =>
+                descriptor.IgnoredUnsupportedFeatures;
+
+        public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
+        {
+            resolved = null;
+            return false;
+        }
+
+        public ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
+            ArchitectureEffectiveRequestProjectionContext context)
+        {
+            ProjectionCount++;
+            return project(context);
+        }
+
+        public ArchitectureClipCompilation ValidateAndCompileClip(
+            ClipSpec clip,
+            IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
+            ArchitectureClipCompileContext context) =>
+            throw new NotSupportedException();
     }
 }

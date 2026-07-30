@@ -94,6 +94,20 @@ internal static class UnitTestStubs
                 GetValues: (_) => ["pixel-lanczos", "model-unit-test-upscaler"]
             ));
         }
+
+        if (ComfyUIBackendExtension.FinalUpscaleMethod is null)
+        {
+            ComfyUIBackendExtension.FinalUpscaleMethod = T2IParamTypes.Register<string>(
+                new T2IParamType(
+                    Name: "Final Upscale Method (UnitTest Stub)",
+                    Description: "Stub final upscale method used by VideoStages unit tests.",
+                    Default: "pixel-lanczos",
+                    FeatureFlag: "comfyui",
+                    Group: T2IParamTypes.GroupRefiners,
+                    Toggleable: true,
+                    GetValues: (_) => ["pixel-lanczos", "model-unit-test-upscaler"]
+                ));
+        }
     }
 
     public static void EnsureComfyControlNetParamsRegistered()

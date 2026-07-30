@@ -524,6 +524,52 @@ public class WanArchitectureTests
     }
 
     [Fact]
+    public void Effective_request_checks_Wan_terminal_reference_before_ignoring_latent_upscale()
+    {
+        StageSpec first = Stage(10, "wan-last") with
+        {
+            ClipStageIndex = 0,
+            ClipStageRawIndex = 0,
+        };
+        StageSpec latentTail = Stage(11, "wan-first") with
+        {
+            Control = 0,
+            Upscale = 2,
+            UpscaleMethod = "latent-detail",
+            ImageReference = "PreviousStage",
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+        };
+        ClipSpec clip = GeneratedClip(0, first, latentTail) with
+        {
+            ImageRefs = [new("Upload", 1, true, "last.png", "last")],
+        };
+        VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
+
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            ResolveWan(
+                spec,
+                referencePositionsByModel:
+                    new Dictionary<string, IReadOnlyList<string>>
+                    {
+                        [first.Model] = ["first", "last"],
+                        [latentTail.Model] = ["first"],
+                    }));
+
+        Assert.Null(Assert.Single(plan.Clips).RequireWanPayload().LastFrameReference);
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.wan-last-frame-reference-ignored");
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.wan-advanced-upscale-ignored");
+    }
+
+    [Fact]
     public void Compilation_attaches_typed_payloads_and_previous_stage_input()
     {
         StageSpec first = Stage(10, "wan-model") with { Control = 1 };

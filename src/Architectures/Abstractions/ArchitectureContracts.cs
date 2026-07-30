@@ -469,6 +469,24 @@ internal interface IVideoArchitectureModule
         ArchitectureClipCompileContext context);
 }
 
+/// <summary>
+/// Optional architecture-owned projection after model resolution and before
+/// capability validation or workflow mutation. It runs once per selected
+/// module and may replace only the clips listed in its context.
+/// </summary>
+internal interface IArchitectureEffectiveRequestProjector
+{
+    /// <summary>
+    /// Unsupported authoring features this projector safely removes from the
+    /// effective copy. The registry requires exact agreement with the
+    /// descriptor contract published to the frontend.
+    /// </summary>
+    IReadOnlySet<UnsupportedAuthoringFeature> ProjectedUnsupportedFeatures { get; }
+
+    ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
+        ArchitectureEffectiveRequestProjectionContext context);
+}
+
 internal sealed record ArchitectureClipCompileContext(
     int Width,
     int Height,

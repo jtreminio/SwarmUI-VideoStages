@@ -1352,6 +1352,45 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
+    public void Registry_rejects_an_ignore_contract_without_an_owned_projector()
+    {
+        VideoArchitectureDescriptor descriptor = Descriptor("fake", "profile") with
+        {
+            IgnoredUnsupportedFeatures =
+                new HashSet<UnsupportedAuthoringFeature>
+                {
+                    UnsupportedAuthoringFeature.PromptRelay,
+                },
+        };
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => new VideoArchitectureRegistry([new MatchingModule(descriptor)]));
+
+        Assert.Contains("effective-request projector", error.Message);
+        Assert.Contains("'fake'", error.Message);
+    }
+
+    [Fact]
+    public void Registry_rejects_a_projector_disposition_set_that_differs_from_its_descriptor()
+    {
+        VideoArchitectureDescriptor descriptor = Descriptor("fake", "profile") with
+        {
+            IgnoredUnsupportedFeatures =
+                new HashSet<UnsupportedAuthoringFeature>
+                {
+                    UnsupportedAuthoringFeature.PromptRelay,
+                },
+        };
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => new VideoArchitectureRegistry(
+                [new MismatchedProjectionModule(descriptor)]));
+
+        Assert.Contains("do not match", error.Message);
+        Assert.Contains("'fake'", error.Message);
+    }
+
+    [Fact]
     public void Registry_accepts_a_stale_default_profile_alias()
     {
         VideoArchitectureDescriptor descriptor = Descriptor("fake", "declared") with
@@ -1993,6 +2032,41 @@ public class ArchitectureFoundationTests
                     stage => stage.ClipStageRawIndex,
                     _ => (IArchitectureStagePayload)new FakeStagePayload(descriptor.Id)),
                 []);
+    }
+
+    private sealed class MismatchedProjectionModule(
+        VideoArchitectureDescriptor descriptor) :
+        IVideoArchitectureModule,
+        IArchitectureEffectiveRequestProjector
+    {
+        public VideoArchitectureDescriptor Descriptor => descriptor;
+
+        public IReadOnlySet<UnsupportedAuthoringFeature>
+            ProjectedUnsupportedFeatures { get; } =
+                new HashSet<UnsupportedAuthoringFeature>();
+
+        public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
+        {
+            resolved = null;
+            return false;
+        }
+
+        public ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
+            ArchitectureEffectiveRequestProjectionContext context) =>
+            new(
+                context.OwnedClips
+                    .Select(owned => new ArchitectureProjectedEffectiveClip(
+                        owned.TimelineIndex,
+                        owned.Clip,
+                        []))
+                    .ToArray(),
+                []);
+
+        public ArchitectureClipCompilation ValidateAndCompileClip(
+            ClipSpec clip,
+            IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
+            ArchitectureClipCompileContext context) =>
+            throw new NotSupportedException();
     }
 
     private sealed record FakePayload(

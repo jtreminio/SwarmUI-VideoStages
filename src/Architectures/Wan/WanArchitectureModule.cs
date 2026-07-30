@@ -9,7 +9,9 @@ namespace VideoStages.Architectures.Wan;
 /// WAN models recognized from the host's compatibility and checkpoint facts. Exact legacy
 /// profiles remain aliases for established paths; entry authorization is family-wide.
 /// </summary>
-internal sealed class WanArchitectureModule : IVideoArchitectureModule
+internal sealed class WanArchitectureModule :
+    IVideoArchitectureModule,
+    IArchitectureEffectiveRequestProjector
 {
     private sealed record RecognizedProfile(
         string ModelClassId,
@@ -64,6 +66,22 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
             RuleScope.Stage,
             new MinimumStageControlRuleConstraints(0));
 
+    private static IReadOnlySet<UnsupportedAuthoringFeature>
+        UnsupportedProjectionFeatures { get; } =
+            new HashSet<UnsupportedAuthoringFeature>
+            {
+                UnsupportedAuthoringFeature.ReferenceFraming,
+                UnsupportedAuthoringFeature.Retake,
+                UnsupportedAuthoringFeature.PromptRelay,
+                UnsupportedAuthoringFeature.ClipAudio,
+                UnsupportedAuthoringFeature.AudioReuse,
+                UnsupportedAuthoringFeature.AudioDerivedDuration,
+                UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
+                UnsupportedAuthoringFeature.IcLora,
+                UnsupportedAuthoringFeature.Hdr,
+                UnsupportedAuthoringFeature.Upscale,
+            };
+
     internal static WanArchitectureModule Instance { get; } = new();
 
     public VideoArchitectureDescriptor Descriptor { get; } = new(
@@ -116,20 +134,11 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
         Rules = [NormalLoraRequiresSamplingStageRule],
-        IgnoredUnsupportedFeatures = new HashSet<UnsupportedAuthoringFeature>
-        {
-            UnsupportedAuthoringFeature.ReferenceFraming,
-            UnsupportedAuthoringFeature.Retake,
-            UnsupportedAuthoringFeature.PromptRelay,
-            UnsupportedAuthoringFeature.ClipAudio,
-            UnsupportedAuthoringFeature.AudioReuse,
-            UnsupportedAuthoringFeature.AudioDerivedDuration,
-            UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
-            UnsupportedAuthoringFeature.IcLora,
-            UnsupportedAuthoringFeature.Hdr,
-            UnsupportedAuthoringFeature.Upscale,
-        },
+        IgnoredUnsupportedFeatures = UnsupportedProjectionFeatures,
     };
+
+    public IReadOnlySet<UnsupportedAuthoringFeature> ProjectedUnsupportedFeatures =>
+        UnsupportedProjectionFeatures;
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
     {
@@ -251,6 +260,10 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         }
         return false;
     }
+
+    public ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
+        ArchitectureEffectiveRequestProjectionContext context) =>
+        WanEffectiveRequestProjector.Project(context, Descriptor);
 
     public ArchitectureClipCompilation ValidateAndCompileClip(
         ClipSpec clip,
