@@ -1,6 +1,7 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan;
@@ -74,7 +75,10 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        WanRootMediaHandoff handoff = new(generator);
+        HostVideoRootMediaHandoff handoff = new(
+            generator,
+            WanArchitectureModule.ArchitectureId,
+            "Wan");
         switch (context.Phase)
         {
             case ArchitectureHostPhase.CapturePreCoreMedia:

@@ -2,26 +2,50 @@ using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
-using VideoStages.Planning;
+using VideoStages.Architectures.Abstractions;
 
-namespace VideoStages.Architectures.Wan;
+namespace VideoStages.HostVideo.Runtime;
 
 /// <summary>
-/// Wan's host-root handoff. A Wan clip entering from host-owned root media compiles to
-/// <see cref="HostCoreDisposition"/>.Handoff: the host still runs its own image-to-video
-/// pass, so the media it started from is captured before that happens, restored afterwards, and
-/// everything the host added in between is pruned. Wan then generates from that media itself.
-/// Both host phases build a fresh adapter, so the capture lives in node helpers rather than in
-/// this object.
+/// A host-video architecture's root-media handoff. An architecture entering from host-owned root
+/// media can capture the media before the host's image-to-video pass, restore it afterwards, and
+/// prune everything the host added in between. Both host phases build a fresh participant, so the
+/// capture lives in node helpers rather than in this object.
 /// </summary>
-internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
+internal sealed class HostVideoRootMediaHandoff
 {
     private const string NullMarker = "<null>";
-    private readonly WanRuntimeKeyScope _keys = new();
+    private readonly WorkflowGenerator _generator;
+    private readonly string _architectureDisplayLabel;
+    private readonly string _preCoreMediaKey;
+    private readonly string _preCoreVaeKey;
+    private readonly string _preCoreNodeIdsKey;
+
+    internal HostVideoRootMediaHandoff(
+        WorkflowGenerator generator,
+        ArchitectureId architectureId,
+        string architectureDisplayLabel)
+    {
+        ArgumentNullException.ThrowIfNull(generator);
+        if (string.IsNullOrWhiteSpace(architectureId.Value))
+        {
+            throw new ArgumentException(
+                "Architecture id cannot be empty.",
+                nameof(architectureId));
+        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(architectureDisplayLabel);
+        _generator = generator;
+        _architectureDisplayLabel = architectureDisplayLabel;
+        string prefix = $"videostages.arch.{architectureId}";
+        _preCoreMediaKey = $"{prefix}.pre-core.media";
+        _preCoreVaeKey = $"{prefix}.pre-core.vae";
+        _preCoreNodeIdsKey = $"{prefix}.pre-core-node-ids";
+    }
 
     internal void CapturePreCoreMedia()
     {
-        if (!new RootExecutionPolicy(g.RequireVideoExecutionPlanContext().Plan).InterceptsHostCore)
+        if (!new RootExecutionPolicy(
+                _generator.RequireVideoExecutionPlanContext().Plan).InterceptsHostCore)
         {
             Cleanup();
             return;
@@ -29,11 +53,14 @@ internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
         Cleanup();
         try
         {
-            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-            string media = EncodeRequiredMarker(bridge, g.CurrentMedia, "host root media");
-            string vae = g.CurrentVae is null
+            using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+            string media = EncodeRequiredMarker(
+                bridge,
+                _generator.CurrentMedia,
+                "host root media");
+            string vae = _generator.CurrentVae is null
                 ? NullMarker
-                : EncodeRequiredMarker(bridge, g.CurrentVae, "host root VAE");
+                : EncodeRequiredMarker(bridge, _generator.CurrentVae, "host root VAE");
             string snapshot = string.Join(",", bridge.Graph.Nodes.Keys);
             if (string.IsNullOrWhiteSpace(snapshot))
             {
@@ -42,9 +69,9 @@ internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
 
             // Publish only after every captured value has been validated, so a failed capture
             // cannot leave a partial handoff that looks usable to the post-core phase.
-            g.NodeHelpers[_keys.PreCoreMedia] = media;
-            g.NodeHelpers[_keys.PreCoreVae] = vae;
-            g.NodeHelpers[_keys.PreCoreNodeIds] = snapshot;
+            _generator.NodeHelpers[_preCoreMediaKey] = media;
+            _generator.NodeHelpers[_preCoreVaeKey] = vae;
+            _generator.NodeHelpers[_preCoreNodeIdsKey] = snapshot;
         }
         catch
         {
@@ -55,7 +82,8 @@ internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
 
     internal void DropCoreOutput()
     {
-        if (!new RootExecutionPolicy(g.RequireVideoExecutionPlanContext().Plan).InterceptsHostCore)
+        if (!new RootExecutionPolicy(
+                _generator.RequireVideoExecutionPlanContext().Plan).InterceptsHostCore)
         {
             Cleanup();
             return;
@@ -63,16 +91,16 @@ internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
 
         try
         {
-            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
             WGNodeData vae = LoadCapturedVae(bridge);
             WGNodeData media = LoadRequiredMarker(
                 bridge,
-                _keys.PreCoreMedia,
+                _preCoreMediaKey,
                 "host root media",
                 fallbackVae: vae);
             HashSet<string> preCoreIds = LoadRequiredSnapshot(bridge);
-            g.CurrentMedia = media;
-            g.CurrentVae = vae;
+            _generator.CurrentMedia = media;
+            _generator.CurrentVae = vae;
             PruneCoreNodes(bridge, preCoreIds);
         }
         finally
@@ -93,14 +121,16 @@ internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
                 newId,
                 preCoreIds));
         }
-        WorkflowGraphCleanup.InvalidateNodeHelperCacheForRemovedIds(g.NodeHelpers, removed);
+        WorkflowGraphCleanup.InvalidateNodeHelperCacheForRemovedIds(
+            _generator.NodeHelpers,
+            removed);
     }
 
     /// <summary>
     /// Deliberately narrower than LTX's stage-ref marker: this handoff only intercepts host root
     /// image media today, so it carries no frame count, frame rate, or attached audio to preserve.
     /// </summary>
-    private static string EncodeRequiredMarker(
+    private string EncodeRequiredMarker(
         WorkflowBridge bridge,
         WGNodeData data,
         string description)
@@ -122,13 +152,17 @@ internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
 
     private WGNodeData LoadCapturedVae(WorkflowBridge bridge)
     {
-        if (!g.NodeHelpers.TryGetValue(_keys.PreCoreVae, out string encoded))
+        if (!_generator.NodeHelpers.TryGetValue(_preCoreVaeKey, out string encoded))
         {
             throw HandoffError("the captured host root VAE state is missing");
         }
         return encoded == NullMarker
             ? null
-            : LoadRequiredMarker(bridge, _keys.PreCoreVae, "host root VAE", fallbackVae: null);
+            : LoadRequiredMarker(
+                bridge,
+                _preCoreVaeKey,
+                "host root VAE",
+                fallbackVae: null);
     }
 
     private WGNodeData LoadRequiredMarker(
@@ -137,7 +171,7 @@ internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
         string description,
         WGNodeData fallbackVae)
     {
-        if (!g.NodeHelpers.TryGetValue(key, out string encoded)
+        if (!_generator.NodeHelpers.TryGetValue(key, out string encoded)
             || string.IsNullOrWhiteSpace(encoded))
         {
             throw HandoffError($"the captured {description} marker is missing");
@@ -156,7 +190,7 @@ internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
                 $"the captured {description} node '{parts[0]}' output {slot} was removed");
         }
         return WGNodeDataMarkerCodec.Build(
-            g,
+            _generator,
             output,
             parts[2],
             parts[5],
@@ -169,7 +203,7 @@ internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
 
     private HashSet<string> LoadRequiredSnapshot(WorkflowBridge bridge)
     {
-        if (!g.NodeHelpers.TryGetValue(_keys.PreCoreNodeIds, out string snapshot)
+        if (!_generator.NodeHelpers.TryGetValue(_preCoreNodeIdsKey, out string snapshot)
             || string.IsNullOrWhiteSpace(snapshot))
         {
             throw HandoffError("the pre-core workflow snapshot is missing");
@@ -179,20 +213,23 @@ internal sealed class WanRootMediaHandoff(WorkflowGenerator g)
             || ids.Any(string.IsNullOrWhiteSpace)
             || ids.Any(id => bridge.Graph.GetNode(id) is null))
         {
-            throw HandoffError("the pre-core workflow snapshot is malformed or references removed nodes");
+            throw HandoffError(
+                "the pre-core workflow snapshot is malformed or references removed nodes");
         }
         return [.. ids];
     }
 
     private void Cleanup()
     {
-        VideoGraphHelpers.RemoveCached(g, _keys.PreCoreMedia);
-        VideoGraphHelpers.RemoveCached(g, _keys.PreCoreVae);
-        VideoGraphHelpers.RemoveCached(g, _keys.PreCoreNodeIds);
+        VideoGraphHelpers.RemoveCached(_generator, _preCoreMediaKey);
+        VideoGraphHelpers.RemoveCached(_generator, _preCoreVaeKey);
+        VideoGraphHelpers.RemoveCached(_generator, _preCoreNodeIdsKey);
     }
 
-    private static SwarmUserErrorException HandoffError(string detail) =>
-        new($"VideoStages: Wan could not restore the host root because {detail}.");
+    private SwarmUserErrorException HandoffError(string detail) =>
+        new(
+            $"VideoStages: {_architectureDisplayLabel} could not restore the host root because "
+            + $"{detail}.");
 
     private static int? Nullable(string value) =>
         int.TryParse(value, out int parsed) ? parsed : null;

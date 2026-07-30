@@ -3300,26 +3300,28 @@ public class WanRuntimeFlowTests
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         WorkflowGenerator captured = null;
-        WanRuntimeKeyScope keys = new();
+        string keyPrefix = $"videostages.arch.{WanArchitectureModule.ArchitectureId}";
+        string preCoreMediaKey = $"{keyPrefix}.pre-core.media";
+        string preCoreNodeIdsKey = $"{keyPrefix}.pre-core-node-ids";
         WorkflowGenerator.WorkflowGenStep remember =
             new(g => captured = g, Constants.WorkflowStepPriority.CapturePreCoreVideoMedia - 0.1);
         WorkflowGenerator.WorkflowGenStep corrupt = new(g =>
         {
             if (corruption == "missing-media")
             {
-                g.NodeHelpers.Remove(keys.PreCoreMedia);
+                g.NodeHelpers.Remove(preCoreMediaKey);
             }
             else if (corruption == "malformed-media")
             {
-                g.NodeHelpers[keys.PreCoreMedia] = "not-a-marker";
+                g.NodeHelpers[preCoreMediaKey] = "not-a-marker";
             }
             else if (corruption == "missing-snapshot")
             {
-                g.NodeHelpers.Remove(keys.PreCoreNodeIds);
+                g.NodeHelpers.Remove(preCoreNodeIdsKey);
             }
             else
             {
-                string nodeId = g.NodeHelpers[keys.PreCoreMedia]
+                string nodeId = g.NodeHelpers[preCoreMediaKey]
                     .Split(VideoGraphHelpers.MarkerSeparator)[0];
                 using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
                 bridge.RemoveNode(nodeId);

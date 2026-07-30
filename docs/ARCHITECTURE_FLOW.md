@@ -386,7 +386,7 @@ LTX root policy, so it happens only when LTX owns the host root; the source-only
 path retains the raw capture.
 The remaining LTX host phases handle base/refiner references, pre-core handoff,
 core-output drop, and root audio-mask sizing.
-When Wan owns the image-to-video root, `WanRootMediaHandoff` captures the
+When Wan owns the image-to-video root, `HostVideoRootMediaHandoff` captures the
 resolvable root image, its VAE state (which may be explicitly absent), and a
 node snapshot, then restores them and prunes the host core video pass. Missing
 or corrupt handoff state fails closed and clears all
@@ -577,7 +577,7 @@ exclusive finalization only for an all-LTX HDR timeline.
 | Invalid Wan option or unsupported host video parameter | Wan compiler / `WanExecutionAdapter.PreflightRequest` |
 | Invalid common geometry, boundary, or audio plan | Common compiler diagnostics |
 | Missing IC-LoRA dependencies | `Ltx2RequestPreflight` before later VideoStages mutation |
-| Missing or corrupt Wan root handoff | `WanRootMediaHandoff` with complete key cleanup |
+| Missing or corrupt Wan root handoff | `HostVideoRootMediaHandoff` with complete key cleanup |
 | Missing provider/session | `VideoArchitectureExecutionHost` / `ArchitectureRuntimeDispatcher` |
 | Wrong returned identity or decoded media | Dispatcher identity checks / `DecodedClipArtifact.ValidateDecoded` |
 | Invalid cross-architecture non-cut run | `MultiClipParallelMerger` |

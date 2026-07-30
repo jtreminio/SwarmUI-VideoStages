@@ -5,6 +5,7 @@ using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Execution;
+using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan;
@@ -87,10 +88,11 @@ internal sealed class WanGenerationSession(
             g.CurrentMedia.AttachedAudio = null;
         }
 
-        WanDecodedVideoStageInput stageInput = new(
+        HostVideoDecodedStageInput stageInput = new(
             g,
             plan.FramesPerSecond,
-            _trimmer);
+            _trimmer,
+            "Wan");
         foreach (StagePlan stage in clip.Stages)
         {
             ApplyPixelUpscale(stage);
@@ -122,7 +124,7 @@ internal sealed class WanGenerationSession(
     private void ExecuteGeneratingStage(
         ClipPlan clip,
         StagePlan stage,
-        WanDecodedVideoStageInput stageInput)
+        HostVideoDecodedStageInput stageInput)
     {
         WanStagePayload payload = stage.RequireWanPayload();
         int sectionId = hostScope.ApplyStageOverrides(clip, stage);
@@ -154,7 +156,12 @@ internal sealed class WanGenerationSession(
                     stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
                     return;
                 }
-                stageInput.Configure(clip, stage, genInfo);
+                int startStep = stage.Input == StageInputKind.RootMedia
+                    ? 0
+                    : WanStageSchedulePolicy.StartStep(
+                        payload.Steps,
+                        payload.Control);
+                stageInput.Configure(clip, stage, genInfo, startStep);
                 // SwarmUI's generic builder creates latent audio whenever CurrentAudioVae is
                 // set. Another architecture can leave one ambient on a mixed timeline, but
                 // Wan's declared output is video-only, so isolate every pass and restore the

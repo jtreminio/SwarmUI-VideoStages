@@ -4,26 +4,43 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
-using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Planning;
 
-namespace VideoStages.Architectures.Wan;
+namespace VideoStages.HostVideo.Runtime;
 
 /// <summary>
-/// Adapts a completed Wan stage into the host image-to-video builder's decoded-video refinement
-/// contract. The host owns conditioning and latent encoding; this collaborator supplies the
+/// Adapts a completed decoded stage into the host image-to-video builder's refinement contract.
+/// The host owns conditioning and latent encoding; this collaborator supplies the caller's
 /// denoise start step, verifies live decoded media, and removes the host's per-pass global trim
 /// wrapper.
 /// </summary>
-internal sealed class WanDecodedVideoStageInput(
-    WorkflowGenerator g,
-    int framesPerSecond,
-    GlobalVideoFrameTrimmer trimmer)
+internal sealed class HostVideoDecodedStageInput
 {
+    private readonly WorkflowGenerator _generator;
+    private readonly int _framesPerSecond;
+    private readonly GlobalVideoFrameTrimmer _trimmer;
+    private readonly string _architectureDisplayLabel;
+
+    internal HostVideoDecodedStageInput(
+        WorkflowGenerator generator,
+        int framesPerSecond,
+        GlobalVideoFrameTrimmer trimmer,
+        string architectureDisplayLabel)
+    {
+        ArgumentNullException.ThrowIfNull(generator);
+        ArgumentNullException.ThrowIfNull(trimmer);
+        ArgumentException.ThrowIfNullOrWhiteSpace(architectureDisplayLabel);
+        _generator = generator;
+        _framesPerSecond = framesPerSecond;
+        _trimmer = trimmer;
+        _architectureDisplayLabel = architectureDisplayLabel;
+    }
+
     internal void Configure(
         ClipPlan clip,
         StagePlan stage,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        int startStep)
     {
         ArgumentNullException.ThrowIfNull(clip);
         ArgumentNullException.ThrowIfNull(stage);
@@ -33,10 +50,6 @@ internal sealed class WanDecodedVideoStageInput(
             return;
         }
 
-        WanStagePayload payload = stage.RequireWanPayload();
-        int startStep = WanStageSchedulePolicy.StartStep(
-            payload.Steps,
-            payload.Control);
         ValidateDecodedInput(clip, stage, genInfo.Frames);
         genInfo.BatchIndex = 0;
         genInfo.BatchLen = 1;
@@ -51,7 +64,7 @@ internal sealed class WanDecodedVideoStageInput(
         ArgumentNullException.ThrowIfNull(clip);
         ArgumentNullException.ThrowIfNull(stage);
         ValidateDecodedInput(clip, stage, expectedFrames);
-        g.CurrentMedia.AttachedAudio = null;
+        _generator.CurrentMedia.AttachedAudio = null;
     }
 
     internal void NormalizeDecodedOutput(
@@ -60,34 +73,37 @@ internal sealed class WanDecodedVideoStageInput(
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
         DropHostStageTrim();
-        if (g.CurrentMedia is null)
+        if (_generator.CurrentMedia is null)
         {
             throw new SwarmUserErrorException(
-                $"VideoStages: clip {clip.ClipId} stage {stage.StageId} produced no Wan video.");
+                $"VideoStages: clip {clip.ClipId} stage {stage.StageId} produced no "
+                + $"{_architectureDisplayLabel} video.");
         }
-        g.CurrentMedia.Frames = genInfo.Frames ?? g.CurrentMedia.Frames;
-        g.CurrentMedia.FPS = genInfo.VideoFPS ?? g.CurrentMedia.FPS;
-        g.CurrentMedia.AttachedAudio = null;
-        g.CurrentVae = genInfo.Vae;
+        _generator.CurrentMedia.Frames =
+            genInfo.Frames ?? _generator.CurrentMedia.Frames;
+        _generator.CurrentMedia.FPS =
+            genInfo.VideoFPS ?? _generator.CurrentMedia.FPS;
+        _generator.CurrentMedia.AttachedAudio = null;
+        _generator.CurrentVae = genInfo.Vae;
 
-        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        if (g.CurrentMedia.DataType != WGNodeData.DT_VIDEO
-            || g.CurrentMedia.Path is not JArray { Count: 2 } path
+        using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+        if (_generator.CurrentMedia.DataType != WGNodeData.DT_VIDEO
+            || _generator.CurrentMedia.Path is not JArray { Count: 2 } path
             || bridge.ResolvePath(path) is null)
         {
             throw new SwarmUserErrorException(
                 $"VideoStages: clip {clip.ClipId} stage {stage.StageId} did not produce a "
-                + "resolvable decoded Wan video.");
+                + $"resolvable decoded {_architectureDisplayLabel} video.");
         }
     }
 
     private void ValidateDecodedInput(ClipPlan clip, StagePlan stage, int? expectedFrames)
     {
-        WGNodeData media = g.CurrentMedia;
+        WGNodeData media = _generator.CurrentMedia;
         string owner = stage.Input == StageInputKind.SourceVideo
             ? "conformed source video"
             : "immediately previous stage's decoded video";
-        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
         if (media?.DataType != WGNodeData.DT_VIDEO
             || media.Path is not JArray { Count: 2 } path
             || bridge.ResolvePath(path) is null)
@@ -96,12 +112,12 @@ internal sealed class WanDecodedVideoStageInput(
                 $"VideoStages: clip {clip.ClipId} stage {stage.StageId} requires its resolvable "
                 + $"{owner}.");
         }
-        if (media.GetRawFPS() != framesPerSecond
+        if (media.GetRawFPS() != _framesPerSecond
             || expectedFrames is int frames && media.Frames != frames)
         {
             throw new SwarmUserErrorException(
                 $"VideoStages: clip {clip.ClipId} stage {stage.StageId} requires its {owner} at "
-                + $"{expectedFrames} frames and {framesPerSecond} fps, but received "
+                + $"{expectedFrames} frames and {_framesPerSecond} fps, but received "
                 + $"{media.Frames} frames and {media.GetRawFPS()} fps.");
         }
     }
@@ -112,17 +128,18 @@ internal sealed class WanDecodedVideoStageInput(
     /// </summary>
     private void DropHostStageTrim()
     {
-        if (!trimmer.IsRequested || g.CurrentMedia?.Path is not JArray { Count: 2 } path)
+        if (!_trimmer.IsRequested
+            || _generator.CurrentMedia?.Path is not JArray { Count: 2 } path)
         {
             return;
         }
-        using WorkflowBridge bridge = BridgeSync.For(g);
+        using WorkflowBridge bridge = BridgeSync.For(_generator);
         if (bridge.NodeAt<SwarmTrimFramesNode>(path)?.Image.Connection is not INodeOutput source)
         {
             return;
         }
         string trimNodeId = $"{path[0]}";
-        g.CurrentMedia = g.CurrentMedia.WithPath(source.ToPath());
-        VideoGraphHelpers.RemoveNode(g, bridge, trimNodeId);
+        _generator.CurrentMedia = _generator.CurrentMedia.WithPath(source.ToPath());
+        VideoGraphHelpers.RemoveNode(_generator, bridge, trimNodeId);
     }
 }
