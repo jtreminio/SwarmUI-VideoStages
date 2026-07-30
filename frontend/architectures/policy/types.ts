@@ -14,8 +14,6 @@ export type AuthoringFeature = CatalogAuthoringFeature;
  * fields simply leave the dependent rules inert.
  */
 export interface CapabilityRuleScopeContext {
-    /** True only while authoring an explicit global Refine Video invocation. */
-    globalRefineMode?: boolean;
     /** Executable timeline clips, for timeline-uniformity rules. */
     timelineClips?: readonly Clip[];
 }

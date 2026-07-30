@@ -104,17 +104,12 @@ type TemporalClip = Pick<Clip, "stages"> &
         >
     >;
 
-export interface TemporalGridScope {
-    globalRefineMode?: boolean;
-}
-
 const effectiveGridModels = (
     clip: TemporalClip,
     modelForName: (model: string) => ArchitectureModelEntry | undefined,
     architectureForId: (
         architectureId: string,
     ) => ArchitectureCatalogEntryDto | undefined,
-    scope: TemporalGridScope,
 ): string[] => {
     const stages = clip.stages.slice(0, activeStageCount(clip));
     if (stages.length === 0) {
@@ -130,7 +125,7 @@ const effectiveGridModels = (
     const retakeCanExecute =
         clip.retake !== null &&
         clip.retake !== undefined &&
-        (clip.sourceVideo != null || scope.globalRefineMode === true) &&
+        clip.sourceVideo != null &&
         (!clipDescriptor ||
             !clipCapabilities ||
             architectureFeatureSupport("retake", {
@@ -139,11 +134,7 @@ const effectiveGridModels = (
 
     return stages
         .filter((stage, stageIndex) => {
-            if (
-                stageIndex === 0 &&
-                clip.sourceVideo == null &&
-                scope.globalRefineMode !== true
-            ) {
+            if (stageIndex === 0 && clip.sourceVideo == null) {
                 return true;
             }
             if (
@@ -180,7 +171,6 @@ export const resolveClipFrameGridForLookup = (
     architectureForId: (
         architectureId: string,
     ) => ArchitectureCatalogEntryDto | undefined,
-    scope: TemporalGridScope = {},
 ): FrameGridResolution => {
     const activeStages = clip.stages.slice(0, activeStageCount(clip));
     if (activeStages.length === 0) {
@@ -237,12 +227,7 @@ export const resolveClipFrameGridForLookup = (
     ) {
         return { status: "not-applicable" };
     }
-    const models = effectiveGridModels(
-        clip,
-        modelForName,
-        architectureForId,
-        scope,
-    );
+    const models = effectiveGridModels(clip, modelForName, architectureForId);
     return resolveFrameGridForModelLookup(
         models,
         (model) => modelForName(model)?.frameGrid ?? null,
@@ -252,7 +237,6 @@ export const resolveClipFrameGridForLookup = (
 export const resolveClipFrameGrid = (
     clip: TemporalClip,
     catalog: ArchitectureModelCatalog | null,
-    scope: TemporalGridScope = {},
 ): FrameGridResolution => {
     if (!catalog) {
         const activeCount = activeStageCount(clip);
@@ -265,15 +249,13 @@ export const resolveClipFrameGrid = (
         (model) => modelCatalogEntry(catalog, model) ?? undefined,
         (architectureId) =>
             architectureDescriptor(catalog, architectureId) ?? undefined,
-        scope,
     );
 };
 
 export const resolvedClipFrameGrid = (
     clip: TemporalClip,
     catalog: ArchitectureModelCatalog | null,
-    scope: TemporalGridScope = {},
 ): number => {
-    const resolution = resolveClipFrameGrid(clip, catalog, scope);
+    const resolution = resolveClipFrameGrid(clip, catalog);
     return resolution.status === "resolved" ? resolution.frameGrid : 1;
 };

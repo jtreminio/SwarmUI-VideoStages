@@ -304,13 +304,6 @@ describe("catalog-backed authoring policy", () => {
             visible: true,
             enabled: false,
         });
-
-        // An explicit global Refine Video invocation supplies the footage.
-        expect(
-            createCapabilityViewResolver(models, { globalRefineMode: true })
-                .forClip(minimalClip())
-                .decision("retake").supported,
-        ).toBe(true);
     });
 
     it("routes the retake/reference exclusion through the same decision", () => {

@@ -23,8 +23,6 @@ export interface AuthoringDiagnostic {
 }
 
 export interface AuthoringDiagnosticContext {
-    /** True only while authoring an explicit global Refine Video invocation. */
-    globalRefineMode?: boolean;
     /** Backend-projected catalog. Without it, architecture-owned rules are not inferred. */
     catalog?: ArchitectureModelCatalog;
 }
@@ -111,7 +109,6 @@ export const deriveAuthoringDiagnostics = (
             clip.retake &&
             evaluateConditionalRule(retakeSourceRule, {
                 clip,
-                globalRefineMode: context.globalRefineMode,
             })
         ) {
             diagnostics.push(
@@ -128,7 +125,6 @@ export const deriveAuthoringDiagnostics = (
             clip.retake &&
             evaluateConditionalRule(retakeReferenceRule, {
                 clip,
-                globalRefineMode: context.globalRefineMode,
             })
         ) {
             diagnostics.push(

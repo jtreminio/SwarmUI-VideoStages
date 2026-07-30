@@ -21,7 +21,6 @@ export const isKnownConditionalRuleCode = (
 export interface ConditionalRuleContext {
     clip?: Clip;
     stage?: Stage;
-    globalRefineMode?: boolean;
     timelineClips?: readonly Clip[];
     hasActiveHdr?: (clip: Clip) => boolean;
 }
@@ -85,14 +84,10 @@ export const evaluateConditionalRule = (
             return (
                 clip !== undefined &&
                 clip.refs.length > 0 &&
-                (clip.sourceVideo !== null || context.globalRefineMode === true)
+                clip.sourceVideo !== null
             );
         case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-            return (
-                clip !== undefined &&
-                clip.sourceVideo === null &&
-                context.globalRefineMode !== true
-            );
+            return clip !== undefined && clip.sourceVideo === null;
         case CONDITIONAL_RULE_CODES.uniformTimelineHdr: {
             const clips = context.timelineClips;
             const hasActiveHdr = context.hasActiveHdr;

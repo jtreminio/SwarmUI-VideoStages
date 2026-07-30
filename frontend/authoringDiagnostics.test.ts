@@ -102,7 +102,7 @@ describe("backend-aligned authoring diagnostics", () => {
         expect(diagnostic?.severity).toBe("error");
     });
 
-    it("allows retake source preconditions in sourced or global-refine flows", () => {
+    it("allows retake source preconditions in sourced flows", () => {
         const retake = {
             startSeconds: 0,
             lengthSeconds: 1,
@@ -120,12 +120,6 @@ describe("backend-aligned authoring diagnostics", () => {
             },
         });
         expect(codes([sourced])).not.toContain("retake-source-required");
-        expect(
-            deriveAuthoringDiagnostics([minimalClip({ retake })], {
-                globalRefineMode: true,
-                catalog: testArchitectureCatalog(),
-            }).map((item) => item.code),
-        ).not.toContain("retake-source-required");
     });
 
     it("rejects frame references combined with an executable retake", () => {
@@ -291,7 +285,6 @@ describe("backend-aligned authoring diagnostics", () => {
 
         const diagnostics = deriveAuthoringDiagnostics([clip], {
             catalog: models,
-            globalRefineMode: true,
         }).map((item) => item.code);
 
         expect(diagnostics).not.toEqual(

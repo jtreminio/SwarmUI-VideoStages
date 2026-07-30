@@ -175,18 +175,6 @@ describe("resolved temporal grid", () => {
         });
     });
 
-    it("does not force a passthrough root while global refine owns the root", () => {
-        const clip = minimalClip({
-            stages: [minimalStage({ model: "ltx", control: 0 })],
-        });
-
-        expect(
-            resolveClipFrameGrid(clip, testArchitectureCatalog(), {
-                globalRefineMode: true,
-            }),
-        ).toEqual({ status: "not-applicable" });
-    });
-
     it("stays neutral instead of guessing when any active model is unresolved", () => {
         const clip = minimalClip({
             stages: [

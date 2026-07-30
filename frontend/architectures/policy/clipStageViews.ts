@@ -73,7 +73,6 @@ const conditionalRuleFor = (
             rule &&
             evaluateConditionalRule(rule, {
                 clip,
-                globalRefineMode: scope.globalRefineMode,
                 timelineClips: scope.timelineClips,
                 hasActiveHdr: (target) =>
                     clipHasActiveHdrForArchitecture(
@@ -156,7 +155,6 @@ export const createClipStageCapabilityViews = (
             clip,
             (model) => modelByName.get(model),
             (architectureId) => architectureById.get(architectureId),
-            { globalRefineMode: scope.globalRefineMode },
         );
         return {
             architectureId,
