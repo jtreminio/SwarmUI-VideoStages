@@ -27,21 +27,8 @@ internal static class ArchitectureCapabilityValidator
             }
         }
 
-        if (!hasActiveStages)
+        if (hasActiveStages)
         {
-            VideoModelProfileDescriptor defaultProfile = descriptor.Profiles.SingleOrDefault(
-                profile => profile.Id == descriptor.DefaultProfileId);
-            Require(
-                configured: true,
-                defaultProfile?.EntryModes?.Contains(entryMode) == true,
-                $"entry mode '{entryMode}' for the default model profile");
-        }
-        else
-        {
-            Require(
-                configured: true,
-                descriptor.EntryModes.Contains(entryMode),
-                $"entry mode '{entryMode}'");
             ValidateModelEntryRoles(
                 clip,
                 descriptor,
@@ -69,7 +56,10 @@ internal static class ArchitectureCapabilityValidator
             "multiple active stages");
         Require(
             clip.SaveAudioTrack,
-            Has(descriptor.Capabilities.Output, OutputCapability.StandaloneAudio),
+            Has(
+                descriptor.Capabilities.Architecture,
+                ArchitectureCapability.NativeAudio)
+                && descriptor.AudioSourceKinds.Contains(AudioSourceKind.Native),
             "standalone audio output");
         Require(
             clip.Stages is { Count: > 0 }
@@ -145,7 +135,7 @@ internal static class ArchitectureCapabilityValidator
             Has(descriptor.Capabilities.Stage, StageCapability.Lora),
             "normal LoRA");
         ValidateAudioSourceKind(clip, descriptor, diagnostics);
-        ValidateStages(clip, descriptor, stageModels, diagnostics);
+        ValidateStages(clip, descriptor, diagnostics);
         return diagnostics.AsReadOnly();
     }
 
@@ -262,7 +252,6 @@ internal static class ArchitectureCapabilityValidator
     private static void ValidateStages(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,
-        IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
         ICollection<PlanDiagnostic> diagnostics)
     {
         IReadOnlyList<StageSpec> stages = clip.Stages ?? [];
@@ -311,26 +300,6 @@ internal static class ArchitectureCapabilityValidator
                         stage.Id));
                 }
             }
-
-            if (!stageModels.TryGetValue(
-                    stage.ClipStageRawIndex,
-                    out ResolvedVideoModel resolved)
-                || resolved is null)
-            {
-                continue;
-            }
-            VideoModelProfileDescriptor profile = descriptor.Profiles.SingleOrDefault(
-                candidate => candidate.Id == resolved.ModelProfileId);
-            RequireProfileCapability(
-                HasNormalLora(clip, stage),
-                ModelProfileCapability.NormalLora,
-                "normal LoRA",
-                clip,
-                descriptor,
-                stage,
-                resolved,
-                profile,
-                diagnostics);
         }
     }
 
@@ -359,28 +328,6 @@ internal static class ArchitectureCapabilityValidator
             }
         }
         return false;
-    }
-
-    private static void RequireProfileCapability(
-        bool configured,
-        ModelProfileCapability capability,
-        string option,
-        ClipSpec clip,
-        VideoArchitectureDescriptor descriptor,
-        StageSpec stage,
-        ResolvedVideoModel resolved,
-        VideoModelProfileDescriptor profile,
-        ICollection<PlanDiagnostic> diagnostics)
-    {
-        if (configured
-            && (profile is null || !Has(profile.Capabilities, capability)))
-        {
-            diagnostics.Add(Unsupported(
-                clip,
-                descriptor,
-                $"{option} for model profile '{resolved.ModelProfileId}'",
-                stage.Id));
-        }
     }
 
     private static PlanDiagnostic Unsupported(

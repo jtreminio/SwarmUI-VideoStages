@@ -16,7 +16,6 @@ internal sealed record WanFrameReferencePlan(
 /// </summary>
 internal sealed record WanStagePayload(
     string Model,
-    ModelProfileId ProfileId,
     double Control,
     int Steps,
     double CfgScale,
@@ -35,7 +34,6 @@ internal sealed record WanStagePayload(
 
 internal sealed record WanClipPayload(
     int ClipId,
-    ModelProfileId ProfileId,
     WanFrameReferencePlan FirstFrameReference = null,
     WanFrameReferencePlan LastFrameReference = null) :
     IArchitectureClipPayload,

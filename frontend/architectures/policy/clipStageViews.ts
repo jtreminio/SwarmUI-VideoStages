@@ -33,7 +33,6 @@ type ModelLookup = ReadonlyMap<string, ArchitectureModelEntry>;
 
 interface EffectiveCatalogIdentity {
     architectureId: string;
-    profileId: string;
     descriptor: ArchitectureCatalogEntryDto | undefined;
 }
 
@@ -89,11 +88,6 @@ export interface FeatureSupportScope {
     capabilities: ArchitectureCapabilities;
     /** Canonical flat feature set. Scoped capability arrays remain migration aliases. */
     extras?: readonly string[];
-    /**
-     * Model-profile capability list. `undefined` means "no profile scoping" —
-     * the architecture-level answer stands.
-     */
-    profileCapabilities?: readonly string[];
     /** Persisted audio source, when the caller needs the value checked too. */
     audioSource?: string;
     /** Persisted upscale method, when the caller needs the mode checked too. */
@@ -185,12 +179,8 @@ export const createClipStageCapabilityViews = (
         const architectureId = sourceOnly
             ? NONE_ARCHITECTURE_ID
             : (resolvedModel?.architectureId ?? clip.architecture);
-        const profileId = sourceOnly
-            ? NONE_ARCHITECTURE_ID
-            : (resolvedModel?.modelProfileId ?? clip.modelProfileId);
         return {
             architectureId,
-            profileId,
             descriptor: architectureById.get(architectureId),
         };
     };
@@ -264,32 +254,26 @@ export const createClipStageCapabilityViews = (
         const architectureId =
             resolvedModel?.architectureId ?? view.architectureId;
         const descriptor = architectureById.get(architectureId);
-        const profileId = sourceOnly
-            ? NONE_ARCHITECTURE_ID
-            : (resolvedModel?.modelProfileId ?? stage.modelProfileId);
-        const profile = descriptor?.profiles.find(
-            (entry) => entry.id === profileId,
-        );
         const decision = (
             feature: "stageLoras" | "upscale" | "sampler" | "scheduler",
         ): CapabilityDecision => {
             if (feature === "stageLoras" && descriptor) {
-                const modelExtras = resolvedModel?.enhancements?.extras;
-                const supported = modelExtras
-                    ? modelExtras.includes("lora") &&
-                      modelExtras.includes("normal-lora")
-                    : descriptor.capabilities.stage.includes("lora") &&
-                      profile?.capabilities.includes("normal-lora") === true;
-                const profileRule = supported
+                const extras =
+                    resolvedModel?.enhancements?.extras ?? descriptor.extras;
+                const supported =
+                    extras === undefined
+                        ? descriptor.capabilities.stage.includes("lora")
+                        : extras.includes("lora");
+                const architectureRule = supported
                     ? conditionalRule(
-                          profile?.rules ?? [],
+                          descriptor.rules,
                           CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
                       )
                     : null;
                 const violatedRule =
-                    profileRule &&
-                    evaluateConditionalRule(profileRule, { clip, stage })
-                        ? profileRule
+                    architectureRule &&
+                    evaluateConditionalRule(architectureRule, { clip, stage })
+                        ? architectureRule
                         : null;
                 return {
                     supported: supported && !violatedRule,
@@ -297,23 +281,21 @@ export const createClipStageCapabilityViews = (
                         supported && !violatedRule
                             ? ""
                             : (violatedRule?.reason ??
-                              `LoRAs require normal-LoRA support in ${descriptor.label}.`),
+                              `LoRAs are not supported by ${descriptor.label}.`),
                     rule: violatedRule,
                 };
             }
             if (feature === "sampler" || feature === "scheduler") {
-                const required =
-                    feature === "sampler"
-                        ? "sampler-selection"
-                        : "scheduler-selection";
                 const supported =
-                    resolvedModel?.enhancements?.extras.includes(required) ??
-                    profile?.capabilities.includes(required) === true;
+                    descriptor !== undefined &&
+                    resolvedModel !== undefined &&
+                    ((resolvedModel.entryAbilities?.length ?? 0) > 0 ||
+                        resolvedModel.entryModes.length > 0);
                 return {
                     supported,
                     reason: supported
                         ? ""
-                        : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection is not supported by this model profile.`,
+                        : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection requires a resolved generating video model.`,
                     rule: null,
                 };
             }

@@ -332,7 +332,7 @@ describe("stage architecture model filtering", () => {
         const models = catalog();
         const reason =
             "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.";
-        models.architectures[0].profiles[0].rules = [
+        models.architectures[0].rules = [
             {
                 support: "conditional",
                 code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
@@ -1007,7 +1007,7 @@ describe("stage architecture model filtering", () => {
         expect(notifications).toEqual(["detail-strip", "history", "history"]);
     });
 
-    it("disables sampler and scheduler controls when the profile omits those capabilities", () => {
+    it("enables sampler and scheduler controls for a resolved generating model", () => {
         const models = catalog();
         const stage = minimalStage({
             model: "test-video.safetensors",
@@ -1033,9 +1033,9 @@ describe("stage architecture model filtering", () => {
                 candidate.querySelector("label")?.textContent?.includes(label),
             );
 
-        expect(field("Sampler")?.querySelector("select")?.disabled).toBe(true);
+        expect(field("Sampler")?.querySelector("select")?.disabled).toBe(false);
         expect(field("Scheduler")?.querySelector("select")?.disabled).toBe(
-            true,
+            false,
         );
     });
 

@@ -135,18 +135,6 @@ internal static class ArchitecturePlanResolver
                 continue;
             }
             stageModels[authored.RawIndex] = stageModel;
-            if (!stageModel.Architecture.Profiles.Any(profile =>
-                profile.Id == stageModel.ModelProfileId))
-            {
-                diagnostics.Add(Error(
-                    "architecture-resolved-profile-not-declared",
-                    $"Clip {clip.Id} authored stage {authored.RawIndex} model '{authored.Model}' "
-                        + $"resolved undeclared profile '{stageModel.ModelProfileId}' for "
-                        + $"architecture '{stageModel.ArchitectureId}'.",
-                    clip.Id,
-                    stageId: null,
-                    rawStageIndex: authored.RawIndex));
-            }
         }
         return stageModels;
     }

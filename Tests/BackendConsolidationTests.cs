@@ -284,14 +284,13 @@ public class BackendConsolidationTests
             StableNodeIds.AudioWindowMask.Width));
     }
 
-    // --- 5e: the frame grid is a declared model-profile fact ----------------------------------
+    // --- 5e: the frame grid is a declared architecture fact ------------------------------------
 
     [Fact]
-    public void Frame_grid_comes_from_the_model_profile_not_a_neutral_literal()
+    public void Frame_grid_comes_from_the_architecture_not_a_neutral_literal()
     {
         int declared = VideoArchitectureRegistry.Production.Catalog
-            .SelectMany(architecture => architecture.Profiles)
-            .Select(profile => profile.FrameGrid)
+            .Select(architecture => architecture.FrameGrid)
             .Max();
 
         Assert.Equal(Ltx2ArchitectureModule.FrameGrid, declared);

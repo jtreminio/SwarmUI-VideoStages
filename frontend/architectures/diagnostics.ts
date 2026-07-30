@@ -14,7 +14,6 @@ import {
     conditionalRule,
     evaluateConditionalRule,
 } from "./conditionalRules";
-import { modelSupportsStageEntry } from "./conversion/entryModePolicy";
 import { NONE_ARCHITECTURE_ID } from "./none/identity";
 import { createBoundaryCapabilityViews } from "./policy/boundaryPolicy";
 import {
@@ -46,6 +45,7 @@ const persistedCapabilityIssues = (
     clipIdx: number,
     architectureId: string,
     capabilities: ArchitectureCapabilities,
+    extras?: readonly string[],
 ): ArchitectureDiagnostic[] => {
     const diagnostics: ArchitectureDiagnostic[] = [];
     const backendProjectsUnsupported =
@@ -54,7 +54,7 @@ const persistedCapabilityIssues = (
         feature: AuthoringFeature,
         value?: { audioSource?: string; upscaleMethod?: string },
     ): boolean =>
-        architectureFeatureSupport(feature, { capabilities, ...value });
+        architectureFeatureSupport(feature, { capabilities, extras, ...value });
     const unsupported = (
         active: boolean,
         key: string,
@@ -244,7 +244,7 @@ export const effectiveArchitectureIdForClip = (
 export const deriveArchitectureDiagnostics = (
     clips: readonly Clip[],
     catalog: ArchitectureModelCatalog,
-    generatedEntryMode: "text-to-video" | "image-to-video" = "text-to-video",
+    _generatedEntryMode: "text-to-video" | "image-to-video" = "text-to-video",
 ): ArchitectureDiagnostic[] => {
     const diagnostics: ArchitectureDiagnostic[] = [];
     const architectureById = new Map(
@@ -333,33 +333,10 @@ export const deriveArchitectureDiagnostics = (
                     clipIdx,
                     effectiveArchitectureId,
                     architecture.capabilities,
+                    resolvedFirstModel?.enhancements?.extras ??
+                        architecture.extras,
                 ),
             );
-            if (
-                !sourceOnly &&
-                activeStageCount(clip) > 0 &&
-                !clip.stages.every((stage, stageIdx) => {
-                    if (stage.skipped) return true;
-                    const resolved = modelByName.get(stage.model);
-                    return (
-                        resolved !== undefined &&
-                        modelSupportsStageEntry(
-                            resolved,
-                            clip,
-                            stageIdx,
-                            generatedEntryMode,
-                        )
-                    );
-                })
-            ) {
-                diagnostics.push(
-                    issue(
-                        "architecture.entry-mode-unsupported",
-                        `Clip ${clipIdx} has an active stage whose model cannot accept the input required at that stage.`,
-                        clipIdx,
-                    ),
-                );
-            }
         }
 
         let dormantArchitecture: string | null = null;
@@ -419,33 +396,13 @@ export const deriveArchitectureDiagnostics = (
                     ),
                 );
             }
-            const resolvedProfile = architectureById
-                .get(resolved.architectureId)
-                ?.profiles.find(
-                    (profile) => profile.id === resolved.modelProfileId,
-                );
             const hasEffectiveNormalLora = clip.loras.some(
                 (_, index) => (stage.loraWeights[index] ?? 1) !== 0,
             );
-            if (
-                hasEffectiveNormalLora &&
-                resolvedProfile &&
-                !resolvedProfile.capabilities.includes("normal-lora")
-            ) {
-                diagnostics.push(
-                    issue(
-                        "architecture.unsupported.stage-loras-profile",
-                        `Clip ${clipIdx} Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} has normal LoRAs, but model profile '${resolvedProfile.id}' does not support them.`,
-                        clipIdx,
-                    ),
-                );
-            }
-            const samplingStageRule = resolvedProfile
-                ? conditionalRule(
-                      resolvedProfile.rules,
-                      CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
-                  )
-                : null;
+            const samplingStageRule = conditionalRule(
+                architectureById.get(resolved.architectureId)?.rules ?? [],
+                CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
+            );
             if (
                 executableClipIndexSet.has(clipIdx) &&
                 stageIdx < activeStageCount(clip) &&

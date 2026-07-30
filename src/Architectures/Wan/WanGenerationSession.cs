@@ -189,7 +189,10 @@ internal sealed class WanGenerationSession(
                 // shared host value.
                 WGNodeData ambientAudioVae = g.CurrentAudioVae;
                 HashSet<string> preHostNodeIds = null;
-                if (payload.ProfileId == WanArchitectureModule.Ti2v5bProfileId
+                if (string.Equals(
+                        payload.ModelClassId,
+                        WanArchitectureModule.Ti2v5bModelClassId,
+                        StringComparison.OrdinalIgnoreCase)
                     && genInfo.StartStep > 0)
                 {
                     preHostNodeIds = [

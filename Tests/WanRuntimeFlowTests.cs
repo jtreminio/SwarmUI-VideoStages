@@ -1005,7 +1005,7 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Wan5b_partial_host_failure_prunes_only_new_unused_latent_and_restores_scopes()
+    public void Wan5b_cleanup_uses_model_class_despite_forged_profile_aliases()
     {
         using SwarmUiTestContext context = new();
         EnableHostLoraLoading();
@@ -1017,6 +1017,8 @@ public class WanRuntimeFlowTests
             control: 0.5,
             steps: 12);
         JObject stage = (JObject)((JArray)clip["stages"])[0];
+        clip["modelProfileId"] = "forged-non-5b-profile";
+        stage["modelProfileId"] = "forged-non-5b-profile";
         stage["loras"] = new JArray(new JObject
         {
             ["name"] = "UnitTest_Wan5b_Failure_Persisted",
@@ -2637,15 +2639,13 @@ public class WanRuntimeFlowTests
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.Equal(512, generator.CurrentMedia.Width);
         Assert.Equal(512, generator.CurrentMedia.Height);
-        VideoModelProfileDescriptor profile =
-            WanArchitectureModule.Instance.Descriptor.Profiles.Single(
-                candidate => candidate.Id
-                    == WanArchitectureModule.ImageToVideoProfileId);
         // The host asked for 16 frames; Wan generates whole latent frames, so the graph makes 13
-        // according to its resolved profile metadata, and the artifact reports what it makes
+        // according to its resolved architecture metadata, and the artifact reports what it makes
         // rather than what was asked for.
         Assert.Equal(
-            StaticGeneratedFrameGrid.SnapDown(16, profile.FrameGrid),
+            StaticGeneratedFrameGrid.SnapDown(
+                16,
+                WanArchitectureModule.Instance.Descriptor.FrameGrid),
             generator.CurrentMedia.Frames);
         Assert.Equal(13, generator.CurrentMedia.Frames);
         Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
@@ -2670,11 +2670,9 @@ public class WanRuntimeFlowTests
         (JObject _, WorkflowGenerator generator) =
             WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
 
-        VideoModelProfileDescriptor profile =
-            WanArchitectureModule.Instance.Descriptor.Profiles.Single(
-                candidate => candidate.Id
-                    == WanArchitectureModule.ImageToVideoProfileId);
-        Assert.True(StaticGeneratedFrameGrid.IsAligned(17, profile.FrameGrid));
+        Assert.True(StaticGeneratedFrameGrid.IsAligned(
+            17,
+            WanArchitectureModule.Instance.Descriptor.FrameGrid));
         Assert.Equal(17, generator.CurrentMedia.Frames);
     }
 
@@ -3360,7 +3358,7 @@ public class WanRuntimeFlowTests
             new Image([0x08, 0x09], MediaType.VideoMp4));
         input.Set(VideoStagesExtension.RefineSkipStages, 0);
 
-        AssertPreflightRefusalBeforeMutation(input, "entry mode 'RefineVideo'");
+        AssertPreflightRefusalBeforeMutation(input, "request-global refine-video entry");
     }
 
     [Theory]
@@ -3497,7 +3495,7 @@ public class WanRuntimeFlowTests
             new Image([0x01, 0x02], MediaType.VideoMp4));
         input.Set(T2IParamTypes.VideoEndFrame, new Image([0x03], MediaType.ImagePng));
 
-        AssertPreflightRefusalBeforeMutation(input, "entry mode 'RefineVideo'");
+        AssertPreflightRefusalBeforeMutation(input, "request-global refine-video entry");
     }
 
     [Fact]

@@ -8,7 +8,7 @@ internal readonly record struct WanStaticGeneratedFrameResolution(
     int FrameGrid);
 
 /// <summary>
-/// Resolves a known static Wan generated-frame request against the active model profile. Host
+/// Resolves a known static Wan generated-frame request against the active architecture. Host
 /// input lookup, diagnostics, graph mutation, and artifact publication remain runtime concerns.
 /// </summary>
 internal static class WanStaticGeneratedFrameResolver
@@ -24,13 +24,9 @@ internal static class WanStaticGeneratedFrameResolver
             throw new InvalidOperationException(
                 $"Clip {clipId} stage {stageId} has no resolved video model.");
         }
-        VideoModelProfileDescriptor profile = resolvedModel.Architecture.Profiles.SingleOrDefault(
-            candidate => candidate.Id == resolvedModel.ModelProfileId)
-            ?? throw new InvalidOperationException(
-                $"Clip {clipId} stage {stageId} resolved undeclared model profile "
-                    + $"'{resolvedModel.ModelProfileId}'.");
+        int frameGrid = resolvedModel.Architecture.FrameGrid;
         return new(
-            StaticGeneratedFrameGrid.SnapDown(requestedPixelFrames, profile.FrameGrid),
-            profile.FrameGrid);
+            StaticGeneratedFrameGrid.SnapDown(requestedPixelFrames, frameGrid),
+            frameGrid);
     }
 }

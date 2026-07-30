@@ -10,12 +10,11 @@ internal static class ClipTimelineSpecParser
 {
     /// <summary>
     /// The frame grid authored durations snap to. It is a model-family fact, so it is read from the
-    /// registered model profiles rather than hardcoded here; the coarsest declared grid is used
+    /// registered architectures rather than hardcoded here; the coarsest declared grid is used
     /// because it also satisfies every finer one.
     /// </summary>
     private static readonly Lazy<int> Grid = new(() => VideoArchitectureRegistry.Production.Catalog
-        .SelectMany(architecture => architecture.Profiles)
-        .Select(profile => profile.FrameGrid)
+        .Select(architecture => architecture.FrameGrid)
         .Where(grid => grid > 0)
         .DefaultIfEmpty(1)
         .Max());

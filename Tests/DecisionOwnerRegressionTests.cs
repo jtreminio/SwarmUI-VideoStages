@@ -553,13 +553,11 @@ public class DecisionOwnerRegressionTests
                 profileId,
                 profileId.Value,
                 [ArchitectureEntryMode.ImageToVideo],
-                ModelProfileCapability.None,
                 [])],
             new(
                 ArchitectureCapability.GeneratedEntry,
                 ClipCapability.None,
-                StageCapability.ImageInput,
-                OutputCapability.Video),
+                StageCapability.ImageInput),
             new ArchitectureBoundaryPolicy(
                 new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>()));
     }

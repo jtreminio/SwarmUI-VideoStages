@@ -369,7 +369,7 @@ describe("catalog-backed authoring policy", () => {
         );
     });
 
-    it("does not treat a profile without normal-lora as Stage-LoRA support", () => {
+    it("does not let a legacy profile capability remove architecture LoRA support", () => {
         const models = catalog();
         const ltx = models.architectures.find((entry) => entry.id === "ltx2");
         if (!ltx) throw new Error("missing LTX architecture");
@@ -379,8 +379,7 @@ describe("catalog-backed authoring policy", () => {
             .forStage(clip, clip.stages[0])
             .decision("stageLoras");
 
-        expect(decision.supported).toBe(false);
-        expect(decision.reason).toContain("normal-LoRA");
+        expect(decision.supported).toBe(true);
     });
 
     it("uses the actual WAN stage model instead of stale LTX identity and profile hints", () => {
@@ -409,8 +408,8 @@ describe("catalog-backed authoring policy", () => {
         expect(clipView.decision("stageLoras").supported).toBe(false);
         expect(stageView.upscaleModes).toEqual(["pixel"]);
         expect(stageView.decision("upscale").supported).toBe(true);
-        expect(stageView.decision("sampler").supported).toBe(false);
-        expect(stageView.decision("scheduler").supported).toBe(false);
+        expect(stageView.decision("sampler").supported).toBe(true);
+        expect(stageView.decision("scheduler").supported).toBe(true);
         expect(stageView.decision("stageLoras").supported).toBe(false);
         expect(clip).toEqual(before);
     });
@@ -449,10 +448,10 @@ describe("catalog-backed authoring policy", () => {
         });
     });
 
-    it("applies a profile stage-control rule only to stage LoRA authoring", () => {
+    it("applies an architecture stage-control rule only to stage LoRA authoring", () => {
         const models = catalog();
-        const profile = models.architectures[0].profiles[0];
-        profile.rules = [
+        const architecture = models.architectures[0];
+        architecture.rules = [
             {
                 support: "conditional",
                 code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
@@ -473,7 +472,7 @@ describe("catalog-backed authoring policy", () => {
 
         expect(stageDecision).toMatchObject({
             supported: false,
-            reason: profile.rules[0].reason,
+            reason: architecture.rules[0].reason,
             rule: {
                 code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
             },

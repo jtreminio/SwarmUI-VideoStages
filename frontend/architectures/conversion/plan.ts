@@ -24,8 +24,9 @@ export interface ArchitectureConversionPlan {
 type ResolvedArchitectureRetarget = ArchitectureRetargetPlan;
 
 /**
- * Resolves a caller-supplied target against the catalog. Every supplied
- * identity must match; caller-supplied capability arrays never self-authorize.
+ * Resolves a caller-supplied target against model and architecture facts. The
+ * profile id is a migration hint; caller-supplied capability arrays never
+ * self-authorize.
  */
 export const resolveArchitectureRetarget = (
     requested: Pick<

@@ -101,8 +101,11 @@ export interface ArchitectureCatalogEntryDto {
 export interface VideoModelProfileDescriptor {
     id: ModelProfileId;
     label: string;
+    /** Legacy aliases retained for older catalogs and saved profile hints. */
     entryModes: string[];
+    /** Legacy transport only; production feature policy ignores this list. */
     capabilities: string[];
+    /** Legacy transport only; architecture rules own executable policy. */
     rules: CapabilityRuleDecision[];
 }
 

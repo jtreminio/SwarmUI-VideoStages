@@ -1456,20 +1456,11 @@
         return null;
       }
       const profileIds = raw.profiles.map((profile) => profile.id);
-      const overviewEntryModes = new Set(raw.capabilities.entryModes);
-      const profileEntryModes = new Set(
-        raw.profiles.flatMap((profile) => profile.entryModes)
-      );
-      const allCodes = [
+      const executableRuleCodes = [
         ...Object.values(raw.boundaryRules).map((rule) => rule.code),
-        ...raw.rules.map((rule) => rule.code),
-        ...raw.profiles.flatMap(
-          (profile) => profile.rules.map((rule) => rule.code)
-        )
+        ...raw.rules.map((rule) => rule.code)
       ];
-      if (architectureIds.has(raw.id) || new Set(profileIds).size !== profileIds.length || !profileIds.includes(raw.defaultProfileId) || overviewEntryModes.size !== profileEntryModes.size || ![...overviewEntryModes].every(
-        (mode) => profileEntryModes.has(mode)
-      ) || new Set(allCodes).size !== allCodes.length) {
+      if (architectureIds.has(raw.id) || new Set(profileIds).size !== profileIds.length || new Set(executableRuleCodes).size !== executableRuleCodes.length) {
         return null;
       }
       architectureIds.add(raw.id);
@@ -1495,12 +1486,7 @@
       ))) {
         return null;
       }
-      const descriptor = architectures.find(
-        (architecture) => architecture.id === raw.architectureId
-      );
-      if (modelNames.has(raw.modelName) || !descriptor?.profiles.some(
-        (profile) => profile.id === raw.modelProfileId
-      )) {
+      if (modelNames.has(raw.modelName)) {
         return null;
       }
       modelNames.add(raw.modelName);
@@ -3612,7 +3598,9 @@
         ...authoredIdentity
       };
     }
-    const validEmptyIdentity = catalog.architectures.find((architecture) => architecture.id === clip.architecture)?.profiles.some((profile) => profile.id === clip.modelProfileId) ?? false;
+    const validEmptyIdentity = catalog.architectures.some(
+      (architecture) => architecture.id === clip.architecture
+    );
     return validEmptyIdentity ? {
       architectureId: clip.architecture,
       modelProfileId: clip.modelProfileId,
@@ -4147,10 +4135,7 @@
       catalog,
       targetEntry?.architectureId
     );
-    const targetProfile = targetDescriptor?.profiles.find(
-      (profile) => profile.id === targetEntry?.modelProfileId
-    );
-    if (!catalog || !sourceArchitectureId || !targetStage || !targetEntry?.architectureId || !targetEntry.modelProfileId || !targetDescriptor || !targetProfile || targetEntry.architectureId !== nextIdentity?.authoredArchitectureId || targetEntry.modelProfileId !== targetStage.modelProfileId) {
+    if (!catalog || !sourceArchitectureId || !targetStage || !targetEntry?.architectureId || !targetEntry.modelProfileId || !targetDescriptor || targetEntry.architectureId !== nextIdentity?.authoredArchitectureId) {
       throw new DocumentDiffError("architecture-invariant");
     }
     const target = {
@@ -4158,7 +4143,7 @@
       modelProfileId: targetEntry.modelProfileId,
       model: targetEntry.value,
       capabilities: clone(targetDescriptor.capabilities),
-      entryModes: clone(targetProfile.entryModes)
+      entryModes: clone(targetEntry.entryModes)
     };
     const requestedForCleanup = clone(next);
     requestedForCleanup.architecture = sourceArchitectureId;
@@ -5507,10 +5492,8 @@
       const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
       const resolvedModel = sourceOnly ? void 0 : modelByName.get(clip.stages[0]?.model ?? "");
       const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? clip.architecture;
-      const profileId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.modelProfileId ?? clip.modelProfileId;
       return {
         architectureId,
-        profileId,
         descriptor: architectureById.get(architectureId)
       };
     };
@@ -5566,31 +5549,26 @@
       const resolvedModel = sourceOnly ? void 0 : modelByName.get(stage.model);
       const architectureId = resolvedModel?.architectureId ?? view.architectureId;
       const descriptor = architectureById.get(architectureId);
-      const profileId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.modelProfileId ?? stage.modelProfileId;
-      const profile = descriptor?.profiles.find(
-        (entry) => entry.id === profileId
-      );
       const decision = (feature) => {
         if (feature === "stageLoras" && descriptor) {
-          const modelExtras = resolvedModel?.enhancements?.extras;
-          const supported2 = modelExtras ? modelExtras.includes("lora") && modelExtras.includes("normal-lora") : descriptor.capabilities.stage.includes("lora") && profile?.capabilities.includes("normal-lora") === true;
-          const profileRule = supported2 ? conditionalRule(
-            profile?.rules ?? [],
+          const extras = resolvedModel?.enhancements?.extras ?? descriptor.extras;
+          const supported2 = extras === void 0 ? descriptor.capabilities.stage.includes("lora") : extras.includes("lora");
+          const architectureRule = supported2 ? conditionalRule(
+            descriptor.rules,
             CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
           ) : null;
-          const violatedRule = profileRule && evaluateConditionalRule(profileRule, { clip, stage }) ? profileRule : null;
+          const violatedRule = architectureRule && evaluateConditionalRule(architectureRule, { clip, stage }) ? architectureRule : null;
           return {
             supported: supported2 && !violatedRule,
-            reason: supported2 && !violatedRule ? "" : violatedRule?.reason ?? `LoRAs require normal-LoRA support in ${descriptor.label}.`,
+            reason: supported2 && !violatedRule ? "" : violatedRule?.reason ?? `LoRAs are not supported by ${descriptor.label}.`,
             rule: violatedRule
           };
         }
         if (feature === "sampler" || feature === "scheduler") {
-          const required = feature === "sampler" ? "sampler-selection" : "scheduler-selection";
-          const supported2 = resolvedModel?.enhancements?.extras.includes(required) ?? profile?.capabilities.includes(required) === true;
+          const supported2 = descriptor !== void 0 && resolvedModel !== void 0 && ((resolvedModel.entryAbilities?.length ?? 0) > 0 || resolvedModel.entryModes.length > 0);
           return {
             supported: supported2,
-            reason: supported2 ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection is not supported by this model profile.`,
+            reason: supported2 ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection requires a resolved generating video model.`,
             rule: null
           };
         }
@@ -5650,10 +5628,10 @@
 
   // frontend/architectures/diagnostics.ts
   var issue = (code, message, clipIdx, severity = "error") => ({ severity, code, message, clipIdx });
-  var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities) => {
+  var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities, extras) => {
     const diagnostics = [];
     const backendProjectsUnsupported = architectureId === "wan22" || architectureId === "host-video";
-    const supports = (feature, value) => architectureFeatureSupport(feature, { capabilities, ...value });
+    const supports = (feature, value) => architectureFeatureSupport(feature, { capabilities, extras, ...value });
     const unsupported = (active, key, label, severity) => {
       if (active) {
         const effectiveSeverity = severity ?? (backendProjectsUnsupported ? "warning" : "error");
@@ -5793,7 +5771,7 @@
     ) : void 0;
     return firstAuthoredModel?.architectureId ?? clip.architecture;
   };
-  var deriveArchitectureDiagnostics = (clips, catalog, generatedEntryMode = "text-to-video") => {
+  var deriveArchitectureDiagnostics = (clips, catalog, _generatedEntryMode = "text-to-video") => {
     const diagnostics = [];
     const architectureById = new Map(
       catalog.architectures.map((entry) => [entry.id, entry])
@@ -5861,27 +5839,10 @@
             clip,
             clipIdx,
             effectiveArchitectureId,
-            architecture.capabilities
+            architecture.capabilities,
+            resolvedFirstModel?.enhancements?.extras ?? architecture.extras
           )
         );
-        if (!sourceOnly && activeStageCount(clip) > 0 && !clip.stages.every((stage, stageIdx) => {
-          if (stage.skipped) return true;
-          const resolved = modelByName.get(stage.model);
-          return resolved !== void 0 && modelSupportsStageEntry(
-            resolved,
-            clip,
-            stageIdx,
-            generatedEntryMode
-          );
-        })) {
-          diagnostics.push(
-            issue(
-              "architecture.entry-mode-unsupported",
-              `Clip ${clipIdx} has an active stage whose model cannot accept the input required at that stage.`,
-              clipIdx
-            )
-          );
-        }
       }
       let dormantArchitecture = null;
       let dormantCompatibilityClass = null;
@@ -5921,25 +5882,13 @@
             )
           );
         }
-        const resolvedProfile = architectureById.get(resolved.architectureId)?.profiles.find(
-          (profile) => profile.id === resolved.modelProfileId
-        );
         const hasEffectiveNormalLora = clip.loras.some(
           (_, index) => (stage.loraWeights[index] ?? 1) !== 0
         );
-        if (hasEffectiveNormalLora && resolvedProfile && !resolvedProfile.capabilities.includes("normal-lora")) {
-          diagnostics.push(
-            issue(
-              "architecture.unsupported.stage-loras-profile",
-              `Clip ${clipIdx} Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} has normal LoRAs, but model profile '${resolvedProfile.id}' does not support them.`,
-              clipIdx
-            )
-          );
-        }
-        const samplingStageRule = resolvedProfile ? conditionalRule(
-          resolvedProfile.rules,
+        const samplingStageRule = conditionalRule(
+          architectureById.get(resolved.architectureId)?.rules ?? [],
           CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
-        ) : null;
+        );
         if (executableClipIndexSet.has(clipIdx) && stageIdx < activeStageCount(clip) && hasEffectiveNormalLora && samplingStageRule && evaluateConditionalRule(samplingStageRule, { clip, stage })) {
           diagnostics.push(
             issue(

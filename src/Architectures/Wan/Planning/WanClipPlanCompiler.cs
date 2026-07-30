@@ -42,7 +42,9 @@ internal static class WanClipPlanCompiler
         Dictionary<int, WanStagePayload> stages = [];
         IReadOnlyList<StageSpec> authoredStages = clip.Stages ?? [];
         bool sourcedEntry = clip.SourceVideo is not null;
-        ModelProfileId? clipProfile = null;
+        Refuse(
+            context.EntryMode == ArchitectureEntryMode.RefineVideo,
+            "request-global refine-video entry");
         string clipCompatibilityClassId = null;
         foreach ((int rawStageIndex, ResolvedVideoModel resolved) in stageModels
             .OrderBy(pair => pair.Key))
@@ -93,31 +95,25 @@ internal static class WanClipPlanCompiler
             bool resolvedStage = stageModels.TryGetValue(
                     stage.ClipStageRawIndex,
                     out ResolvedVideoModel resolved);
-            bool supportedProfile =
+            bool supportedModel =
                 resolvedStage
                 && resolved is not null
                 && resolved.ArchitectureId == WanArchitectureModule.ArchitectureId
-                && WanArchitectureModule.IsSupportedProfile(resolved.ModelProfileId);
-            if (!supportedProfile)
+                && !string.IsNullOrWhiteSpace(resolved.ModelClassId)
+                && !string.IsNullOrWhiteSpace(resolved.CompatibilityClassId)
+                && resolved.EntryAbilities != VideoModelEntryAbility.None;
+            if (!supportedModel)
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Error,
-                    "wan22.stage-profile.unsupported",
+                    "wan22.stage-model.unsupported",
                     $"Clip {clip.Id} stage {stage.Id} must resolve to architecture "
-                        + $"'{WanArchitectureModule.ArchitectureId}' and one of its supported "
-                        + $"profiles "
-                        + $"'{string.Join(
-                            "', '",
-                            WanArchitectureModule.Instance.Descriptor.Profiles.Select(
-                                profile => profile.Id))}', but resolved "
+                        + $"'{WanArchitectureModule.ArchitectureId}' with usable host model "
+                        + "facts, but resolved "
                         + $"architecture '{resolved?.ArchitectureId.ToString() ?? "<missing>"}' "
-                        + $"profile '{resolved?.ModelProfileId.ToString() ?? "<missing>"}'.",
+                        + $"model class '{resolved?.ModelClassId ?? "<missing>"}'.",
                     clip.Id,
                     stage.Id));
-            }
-            else if (clipProfile is null)
-            {
-                clipProfile = resolved.ModelProfileId;
             }
             bool firstStage = stageIndex == 0;
             bool decodedStageInput = sourcedEntry || !firstStage;
@@ -182,8 +178,6 @@ internal static class WanClipPlanCompiler
                 stage.Id);
             WanStagePayload payload = new(
                     resolved?.ModelName ?? stage.Model,
-                    resolved?.ModelProfileId
-                        ?? WanArchitectureModule.ImageToVideoProfileId,
                     stage.Control,
                     stage.Steps,
                     stage.CfgScale,
@@ -206,7 +200,6 @@ internal static class WanClipPlanCompiler
         return new(
             new WanClipPayload(
                 clip.Id,
-                clipProfile ?? WanArchitectureModule.ImageToVideoProfileId,
                 firstReference,
                 lastReference)
             {

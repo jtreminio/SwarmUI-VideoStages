@@ -2128,9 +2128,9 @@ describe("createTimelineDetailStrip", () => {
         expect(savedClips(saveSpy)[0].stages[0].loraWeights).toEqual([0.65]);
     });
 
-    it("zeros add and replace weights on stages rejected by a profile rule", async () => {
+    it("zeros add and replace weights on stages rejected by an architecture rule", async () => {
         const catalog = testArchitectureCatalog();
-        catalog.architectures[0].profiles[0].rules = [
+        catalog.architectures[0].rules = [
             {
                 support: "conditional",
                 code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
@@ -2196,7 +2196,7 @@ describe("createTimelineDetailStrip", () => {
         const reason =
             "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.";
         const catalog = testArchitectureCatalog();
-        catalog.architectures[0].profiles[0].rules = [
+        catalog.architectures[0].rules = [
             {
                 support: "conditional",
                 code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,

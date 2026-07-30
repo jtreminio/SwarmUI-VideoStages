@@ -24,7 +24,8 @@ internal static class ArchitectureCatalogSerializer
         ["defaultProfileId"] = descriptor.DefaultProfileId.Value,
         ["extras"] = new JArray(ArchitectureExtras(descriptor)),
         ["capabilities"] = SerializeCapabilities(descriptor),
-        ["profiles"] = new JArray(descriptor.Profiles.Select(Serialize)),
+        ["profiles"] = new JArray(descriptor.Profiles.Select(profile =>
+            Serialize(profile, descriptor))),
         ["boundaryRules"] = new JObject(descriptor.BoundaryRules.Select(pair =>
             new JProperty(
                 SerializeBoundaryMode(pair.Key),
@@ -38,7 +39,8 @@ internal static class ArchitectureCatalogSerializer
         ["architecture"] = new JArray(ArchitectureCapabilities(descriptor.Capabilities.Architecture)),
         ["clip"] = new JArray(ClipCapabilities(descriptor.Capabilities.Clip)),
         ["stage"] = new JArray(StageCapabilities(descriptor.Capabilities.Stage)),
-        ["output"] = new JArray(OutputCapabilities(descriptor.Capabilities.Output)),
+        // Legacy transport field, derived from real architecture/audio facts.
+        ["output"] = new JArray(OutputCapabilities(descriptor)),
         ["upscaleModes"] = new JArray(UpscaleModes(descriptor.Capabilities.Stage)),
 
         // Exact inputs that are not representable as flag sets.
@@ -110,12 +112,15 @@ internal static class ArchitectureCatalogSerializer
                 "Unknown architecture rule constraint type."),
         };
 
-    private static JObject Serialize(VideoModelProfileDescriptor profile) => new()
+    private static JObject Serialize(
+        VideoModelProfileDescriptor profile,
+        VideoArchitectureDescriptor descriptor) => new()
     {
         ["id"] = profile.Id.Value,
         ["label"] = profile.DisplayName,
         ["entryModes"] = new JArray(profile.EntryModes.Select(SerializeEntryMode)),
-        ["capabilities"] = new JArray(ProfileCapabilities(profile.Capabilities)),
+        // Legacy transport field. Profiles are migration aliases, not capability owners.
+        ["capabilities"] = new JArray(LegacyProfileCapabilities(descriptor)),
         ["rules"] = new JArray(profile.Rules.Select(SerializeRule)),
     };
 
@@ -131,10 +136,7 @@ internal static class ArchitectureCatalogSerializer
         {
             ["extras"] = new JArray(
                 ArchitectureExtras(model.Architecture)
-                    .Concat(ProfileCapabilities(
-                        model.Architecture.Profiles
-                            .Single(profile => profile.Id == model.ModelProfileId)
-                            .Capabilities))
+                    .Concat(LegacyProfileCapabilities(model.Architecture))
                     .Concat(model.Enhancements ?? [])
                     .Distinct(StringComparer.Ordinal)),
             ["referencePositions"] = new JArray(model.ReferencePositions ?? []),
@@ -161,7 +163,7 @@ internal static class ArchitectureCatalogSerializer
         ArchitectureCapabilities(descriptor.Capabilities.Architecture)
             .Concat(ClipCapabilities(descriptor.Capabilities.Clip))
             .Concat(StageCapabilities(descriptor.Capabilities.Stage))
-            .Concat(OutputCapabilities(descriptor.Capabilities.Output))
+            .Concat(OutputCapabilities(descriptor))
             .Distinct(StringComparer.Ordinal);
 
     private static IEnumerable<string> ModelEntryModes(VideoModelEntryAbility abilities)
@@ -294,17 +296,23 @@ internal static class ArchitectureCatalogSerializer
         }
     }
 
-    private static IEnumerable<string> OutputCapabilities(OutputCapability value)
+    private static IEnumerable<string> OutputCapabilities(
+        VideoArchitectureDescriptor descriptor)
     {
-        if (Has(value, OutputCapability.Video))
+        if (Has(
+            descriptor.Capabilities.Architecture,
+            ArchitectureCapability.DecodedOutput))
         {
             yield return "video";
         }
-        if (Has(value, OutputCapability.AttachedAudio))
+        if (descriptor.AudioSourceKinds.Any(kind => kind != AudioSourceKind.Disabled))
         {
             yield return "attached-audio";
         }
-        if (Has(value, OutputCapability.StandaloneAudio))
+        if (Has(
+                descriptor.Capabilities.Architecture,
+                ArchitectureCapability.NativeAudio)
+            && descriptor.AudioSourceKinds.Contains(AudioSourceKind.Native))
         {
             yield return "standalone-audio";
         }
@@ -330,25 +338,19 @@ internal static class ArchitectureCatalogSerializer
         }
     }
 
-    private static IEnumerable<string> ProfileCapabilities(ModelProfileCapability value)
+    private static IEnumerable<string> LegacyProfileCapabilities(
+        VideoArchitectureDescriptor descriptor)
     {
-        if (Has(value, ModelProfileCapability.SamplerSelection))
+        if (Has(
+            descriptor.Capabilities.Architecture,
+            ArchitectureCapability.GeneratedEntry))
         {
             yield return "sampler-selection";
-        }
-        if (Has(value, ModelProfileCapability.SchedulerSelection))
-        {
             yield return "scheduler-selection";
-        }
-        if (Has(value, ModelProfileCapability.DimensionRules))
-        {
             yield return "dimension-rules";
-        }
-        if (Has(value, ModelProfileCapability.FrameRules))
-        {
             yield return "frame-rules";
         }
-        if (Has(value, ModelProfileCapability.NormalLora))
+        if (Has(descriptor.Capabilities.Stage, StageCapability.Lora))
         {
             yield return "normal-lora";
         }

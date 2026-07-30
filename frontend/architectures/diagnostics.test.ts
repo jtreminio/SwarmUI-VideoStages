@@ -363,25 +363,6 @@ describe("architecture diagnostics", () => {
         ).toContain("architecture.mixed-stage");
     });
 
-    it("requires image entry for a later active stage", () => {
-        const models = combinedCatalog();
-        const textOnly = models.entries.find((entry) => entry.value === "ltx");
-        if (!textOnly) throw new Error("missing LTX alias");
-        textOnly.entryModes = ["text-to-video"];
-        const clip = minimalClip({
-            stages: [
-                minimalStage({ model: "ltx-2.3.safetensors" }),
-                minimalStage({ model: "ltx" }),
-            ],
-        });
-
-        expect(
-            deriveArchitectureDiagnostics([clip], models).map(
-                ({ code }) => code,
-            ),
-        ).toContain("architecture.entry-mode-unsupported");
-    });
-
     it("reports preserved length flags the clip's own state cannot honor", () => {
         const clip = minimalClip({
             audioSource: "Native",
@@ -803,31 +784,7 @@ describe("architecture diagnostics", () => {
         ).toContain("architecture.unsupported.multi-stage");
     });
 
-    it("diagnoses normal LoRAs when the profile omits normal-lora, including skipped stages", () => {
-        const models = combinedCatalog();
-        const ltx = models.architectures.find((entry) => entry.id === "ltx2");
-        if (!ltx) throw new Error("missing LTX architecture");
-        ltx.profiles[0].capabilities = [];
-        const clip = minimalClip({
-            loras: [{ name: "normal-lora.safetensors" }],
-            stages: [
-                minimalStage({ model: "ltx", loraWeights: [1] }),
-                minimalStage({
-                    skipped: true,
-                    model: "ltx",
-                    loraWeights: [1],
-                }),
-            ],
-        });
-
-        expect(
-            deriveArchitectureDiagnostics([clip], models).map(
-                ({ code }) => code,
-            ),
-        ).toContain("architecture.unsupported.stage-loras-profile");
-    });
-
-    it("does not diagnose a clip LoRA disabled with zero weight on an unsupported profile", () => {
+    it("does not diagnose a disabled clip LoRA from legacy profile metadata", () => {
         const models = combinedCatalog();
         const ltx = models.architectures.find((entry) => entry.id === "ltx2");
         if (!ltx) throw new Error("missing LTX architecture");
@@ -848,8 +805,8 @@ describe("architecture diagnostics", () => {
 
     it("diagnoses the sampling-stage LoRA rule only on active effective stages", () => {
         const models = combinedCatalog();
-        const profile = models.architectures[0].profiles[0];
-        profile.rules = [
+        const architecture = models.architectures[0];
+        architecture.rules = [
             {
                 support: "conditional",
                 code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
@@ -910,41 +867,6 @@ describe("architecture diagnostics", () => {
                 ({ code }) => code,
             ),
         ).toContain("architecture.unsupported.upscale");
-    });
-
-    it("diagnoses host-entry incompatibility from the explicit generated entry hint", () => {
-        const models = combinedCatalog();
-        const fake = models.architectures.find(
-            (entry) => entry.id === "test-video",
-        );
-        if (!fake) throw new Error("missing fake architecture");
-        fake.profiles[0].entryModes = ["text-to-video"];
-        const fakeModel = models.entries.find(
-            (entry) => entry.value === "test-video.safetensors",
-        );
-        if (!fakeModel) throw new Error("missing fake model");
-        fakeModel.entryModes = ["text-to-video"];
-        const clip = minimalClip({
-            architecture: "test-video",
-            modelProfileId: "test-profile",
-            stages: [
-                minimalStage({
-                    model: "test-video.safetensors",
-                    modelProfileId: "test-profile",
-                }),
-            ],
-        });
-
-        expect(
-            deriveArchitectureDiagnostics([clip], models, "image-to-video").map(
-                ({ code }) => code,
-            ),
-        ).toContain("architecture.entry-mode-unsupported");
-        expect(
-            deriveArchitectureDiagnostics([clip], models, "text-to-video").map(
-                ({ code }) => code,
-            ),
-        ).not.toContain("architecture.entry-mode-unsupported");
     });
 
     it("keeps text entry exact when a WAN clip has a frame-1 reference", () => {

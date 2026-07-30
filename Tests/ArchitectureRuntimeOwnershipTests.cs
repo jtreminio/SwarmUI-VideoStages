@@ -179,13 +179,11 @@ public class ArchitectureRuntimeOwnershipTests
                 profileId,
                 profileId.Value,
                 [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo],
-                ModelProfileCapability.None,
                 [])],
             new(
                 ArchitectureCapability.GeneratedEntry | ArchitectureCapability.SourcedEntry,
                 ClipCapability.SourceVideo,
-                StageCapability.ImageInput | StageCapability.VideoInput,
-                OutputCapability.Video),
+                StageCapability.ImageInput | StageCapability.VideoInput),
             new ArchitectureBoundaryPolicy(
                 new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>()));
     }

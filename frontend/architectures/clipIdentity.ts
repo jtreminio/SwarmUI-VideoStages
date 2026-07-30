@@ -105,11 +105,9 @@ export const deriveClipArchitectureIdentity = (
             ...authoredIdentity,
         };
     }
-    const validEmptyIdentity =
-        catalog.architectures
-            .find((architecture) => architecture.id === clip.architecture)
-            ?.profiles.some((profile) => profile.id === clip.modelProfileId) ??
-        false;
+    const validEmptyIdentity = catalog.architectures.some(
+        (architecture) => architecture.id === clip.architecture,
+    );
     return validEmptyIdentity
         ? {
               architectureId: clip.architecture,

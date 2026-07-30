@@ -59,17 +59,6 @@ internal enum ArchitectureCapability
 }
 
 [Flags]
-internal enum ModelProfileCapability
-{
-    None = 0,
-    SamplerSelection = 1 << 0,
-    SchedulerSelection = 1 << 1,
-    DimensionRules = 1 << 2,
-    FrameRules = 1 << 3,
-    NormalLora = 1 << 4,
-}
-
-[Flags]
 internal enum ClipCapability
 {
     None = 0,
@@ -100,15 +89,6 @@ internal enum StageCapability
     IcLora = 1 << 7,
     Hdr = 1 << 8,
     FrameReferences = 1 << 9,
-}
-
-[Flags]
-internal enum OutputCapability
-{
-    None = 0,
-    Video = 1 << 0,
-    AttachedAudio = 1 << 1,
-    StandaloneAudio = 1 << 2,
 }
 
 internal enum RuleSupport
@@ -217,8 +197,7 @@ internal sealed record RuleDecision(
 internal sealed record ArchitectureCapabilityDescriptor(
     ArchitectureCapability Architecture,
     ClipCapability Clip,
-    StageCapability Stage,
-    OutputCapability Output);
+    StageCapability Stage);
 
 /// <summary>
 /// One typed boundary rule used for both catalog publication and backend planning.
@@ -312,16 +291,7 @@ internal sealed record VideoModelProfileDescriptor(
     ModelProfileId Id,
     string DisplayName,
     IReadOnlyList<ArchitectureEntryMode> EntryModes,
-    ModelProfileCapability Capabilities,
-    IReadOnlyList<RuleDecision> Rules)
-{
-    /// <summary>
-    /// The frame-count grid this profile generates on. Authored durations snap to it, and boundary
-    /// windows step on it. Architecture-neutral code reads it from here instead of hardcoding a
-    /// model family's number.
-    /// </summary>
-    public int FrameGrid { get; init; } = 1;
-}
+    IReadOnlyList<RuleDecision> Rules);
 
 internal sealed record VideoArchitectureDescriptor(
     ArchitectureId Id,
@@ -333,6 +303,12 @@ internal sealed record VideoArchitectureDescriptor(
     IArchitectureBoundaryPolicy BoundaryPolicy)
 {
     /// <summary>
+    /// The generated-frame grid shared by this architecture. It is an architecture/runtime fact,
+    /// not authorization attached to a persisted profile alias.
+    /// </summary>
+    public int FrameGrid { get; init; } = 1;
+
+    /// <summary>
     /// The effective stage guide selectors this architecture can execute. Fail closed so a new
     /// architecture must opt into every selector beyond the generated root.
     /// </summary>
@@ -343,12 +319,9 @@ internal sealed record VideoArchitectureDescriptor(
     public IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> BoundaryRules =>
         BoundaryPolicy.PublishedRules;
 
-    public IReadOnlyList<ModelProfileId> ModelProfiles =>
-        Array.AsReadOnly(Profiles.Select(profile => profile.Id).ToArray());
-
     /// <summary>
     /// Overview/backward catalog projection only. Entry authorization belongs exclusively to the
-    /// selected model profiles and must never consult this union.
+    /// resolved model facts and must never consult this union.
     /// </summary>
     public IReadOnlyList<ArchitectureEntryMode> EntryModes =>
         Array.AsReadOnly(Profiles
@@ -374,7 +347,7 @@ internal sealed record ResolvedVideoModel(
     public string CompatibilityClassId { get; init; } = ArchitectureId.Value;
 
     public VideoModelEntryAbility EntryAbilities { get; init; } =
-        VideoModelEntryPolicy.FromProfileAlias(Architecture, ModelProfileId);
+        VideoModelEntryPolicy.FromArchitectureLegacyAlias(Architecture);
 
     /// <summary>
     /// Optional model-level refinements of the architecture's feature set. Most features are
@@ -393,13 +366,14 @@ internal sealed record ResolvedVideoModel(
 
 internal static class VideoModelEntryPolicy
 {
-    internal static VideoModelEntryAbility FromProfileAlias(
-        VideoArchitectureDescriptor architecture,
-        ModelProfileId profileId)
+    /// <summary>
+    /// Compatibility fallback for synthetic/test adapters that predate host model facts. Production
+    /// registry resolutions must publish explicit abilities and authoritative host facts.
+    /// </summary>
+    internal static VideoModelEntryAbility FromArchitectureLegacyAlias(
+        VideoArchitectureDescriptor architecture)
     {
-        IReadOnlyList<ArchitectureEntryMode> entryModes = architecture?.Profiles
-            ?.SingleOrDefault(profile => profile.Id == profileId)
-            ?.EntryModes ?? [];
+        IReadOnlyList<ArchitectureEntryMode> entryModes = architecture?.EntryModes ?? [];
         return (entryModes.Contains(ArchitectureEntryMode.TextToVideo)
                 ? VideoModelEntryAbility.TextToVideo
                 : VideoModelEntryAbility.None)

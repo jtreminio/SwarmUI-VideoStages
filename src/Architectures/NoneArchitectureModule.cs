@@ -41,7 +41,6 @@ internal static class NoneArchitecture
                 ProfileId,
                 "Decoded source only",
                 [ArchitectureEntryMode.SourceVideo],
-                ModelProfileCapability.None,
                 [])
         ],
         new(
@@ -49,10 +48,10 @@ internal static class NoneArchitecture
             ClipCapability.SourceVideo
                 | ClipCapability.AudioSources
                 | ClipCapability.AudioSegments,
-            StageCapability.None,
-            OutputCapability.Video | OutputCapability.AttachedAudio),
+            StageCapability.None),
         BoundaryPolicy)
     {
+        FrameGrid = 1,
         StageGuideReferences = StageGuideReferencePolicy.GeneratedOnly,
     };
 

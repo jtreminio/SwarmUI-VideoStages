@@ -8,7 +8,7 @@ internal static class StaticGeneratedFrameGrid
 {
     /// <summary>
     /// Whether a positive static generated pixel-frame request is exactly representable on the
-    /// profile grid, whose first pixel frame occupies the grid origin.
+    /// architecture grid, whose first pixel frame occupies the grid origin.
     /// </summary>
     internal static bool IsAligned(int requestedPixelFrames, int frameGrid)
     {
@@ -18,7 +18,8 @@ internal static class StaticGeneratedFrameGrid
     }
 
     /// <summary>
-    /// Snaps a known static generated pixel-frame request down to the nearest profile-grid count.
+    /// Snaps a known static generated pixel-frame request down to the nearest architecture-grid
+    /// count.
     /// Non-positive requests retain Wan's existing minimum-one-frame behavior.
     /// </summary>
     internal static int SnapDown(int requestedPixelFrames, int frameGrid)

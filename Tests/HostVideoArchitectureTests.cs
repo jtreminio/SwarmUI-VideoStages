@@ -208,13 +208,11 @@ public class HostVideoArchitectureTests
                 profileId,
                 "Video",
                 [ArchitectureEntryMode.TextToVideo],
-                ModelProfileCapability.NormalLora,
                 [])],
             new(
                 ArchitectureCapability.GeneratedEntry,
                 ClipCapability.Prompts,
-                StageCapability.Lora,
-                OutputCapability.Video),
+                StageCapability.Lora),
             new ArchitectureBoundaryPolicy(new Dictionary<
                 BoundaryExecutionMode,
                 ArchitectureBoundaryModePolicy>

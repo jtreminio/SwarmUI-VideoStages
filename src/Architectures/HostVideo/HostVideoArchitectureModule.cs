@@ -103,16 +103,7 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
                     ArchitectureEntryMode.ImageToVideo,
                     ArchitectureEntryMode.SourceVideo,
                 ],
-                ModelProfileCapability.SamplerSelection
-                    | ModelProfileCapability.SchedulerSelection
-                    | ModelProfileCapability.DimensionRules
-                    | ModelProfileCapability.FrameRules
-                    | ModelProfileCapability.NormalLora,
                 [])
-            {
-                // Unknown video families do not share one trustworthy temporal grid.
-                FrameGrid = 1,
-            },
         ],
         new(
             ArchitectureCapability.GeneratedEntry
@@ -123,10 +114,11 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
             StageCapability.ImageInput
                 | StageCapability.VideoInput
                 | StageCapability.PixelUpscale
-                | StageCapability.Lora,
-            OutputCapability.Video),
+                | StageCapability.Lora),
         CreateBoundaryPolicy())
     {
+        // Unknown video families do not share one trustworthy temporal grid.
+        FrameGrid = 1,
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
     };
@@ -217,10 +209,12 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
         foreach (StageSpec stage in clip.Stages ?? [])
         {
             if (!stageModels.TryGetValue(
-                    stage.ClipStageRawIndex,
+                stage.ClipStageRawIndex,
                     out ResolvedVideoModel resolved)
                 || resolved?.ArchitectureId != ArchitectureId
-                || resolved.ModelProfileId != ProfileId)
+                || string.IsNullOrWhiteSpace(resolved.ModelClassId)
+                || string.IsNullOrWhiteSpace(resolved.CompatibilityClassId)
+                || resolved.EntryAbilities == VideoModelEntryAbility.None)
             {
                 diagnostics.Add(Error(
                     clip,

@@ -230,26 +230,14 @@ export const parseVideoArchitectureCatalog = (
             return null;
         }
         const profileIds = raw.profiles.map((profile) => profile.id);
-        const overviewEntryModes = new Set(raw.capabilities.entryModes);
-        const profileEntryModes = new Set(
-            raw.profiles.flatMap((profile) => profile.entryModes),
-        );
-        const allCodes = [
+        const executableRuleCodes = [
             ...Object.values(raw.boundaryRules).map((rule) => rule.code),
             ...raw.rules.map((rule) => rule.code),
-            ...raw.profiles.flatMap((profile) =>
-                profile.rules.map((rule) => rule.code),
-            ),
         ];
         if (
             architectureIds.has(raw.id) ||
             new Set(profileIds).size !== profileIds.length ||
-            !profileIds.includes(raw.defaultProfileId) ||
-            overviewEntryModes.size !== profileEntryModes.size ||
-            ![...overviewEntryModes].every((mode) =>
-                profileEntryModes.has(mode),
-            ) ||
-            new Set(allCodes).size !== allCodes.length
+            new Set(executableRuleCodes).size !== executableRuleCodes.length
         ) {
             return null;
         }
@@ -293,15 +281,7 @@ export const parseVideoArchitectureCatalog = (
         ) {
             return null;
         }
-        const descriptor = architectures.find(
-            (architecture) => architecture.id === raw.architectureId,
-        );
-        if (
-            modelNames.has(raw.modelName) ||
-            !descriptor?.profiles.some(
-                (profile) => profile.id === raw.modelProfileId,
-            )
-        ) {
+        if (modelNames.has(raw.modelName)) {
             return null;
         }
         modelNames.add(raw.modelName);

@@ -63,12 +63,10 @@ internal sealed class Ltx2ArchitectureModule :
                 | StageCapability.Lora
                 | StageCapability.IcLora
                 | StageCapability.Hdr
-                | StageCapability.FrameReferences,
-            OutputCapability.Video
-                | OutputCapability.AttachedAudio
-                | OutputCapability.StandaloneAudio),
+                | StageCapability.FrameReferences),
         Ltx2BoundaryPolicy.Instance)
     {
+        FrameGrid = FrameGrid,
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated
                 | StageGuideReferenceKind.Base
@@ -142,15 +140,7 @@ internal sealed class Ltx2ArchitectureModule :
                 ArchitectureEntryMode.SourceVideo,
                 ArchitectureEntryMode.RefineVideo,
             ],
-            ModelProfileCapability.SamplerSelection
-                | ModelProfileCapability.SchedulerSelection
-                | ModelProfileCapability.DimensionRules
-                | ModelProfileCapability.FrameRules
-                | ModelProfileCapability.NormalLora,
-            [])
-        {
-            FrameGrid = FrameGrid,
-        };
+            []);
 }
 
 internal sealed record Ltx2ClipPayload(

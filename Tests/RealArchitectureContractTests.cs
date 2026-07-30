@@ -123,7 +123,7 @@ public class RealArchitectureContractTests
         Assert.Contains(
             descriptor.Profiles,
             profile => profile.Id == descriptor.DefaultProfileId);
-        Assert.All(descriptor.Profiles, profile => Assert.True(profile.FrameGrid > 0));
+        Assert.True(descriptor.FrameGrid > 0);
         Assert.All(
             Enum.GetValues<BoundaryExecutionMode>(),
             mode => Assert.True(descriptor.BoundaryRules.ContainsKey(mode)));
@@ -133,8 +133,8 @@ public class RealArchitectureContractTests
         Assert.True(
             descriptor.Capabilities.Architecture.HasFlag(
                 ArchitectureCapability.DecodedOutput));
-        Assert.True(
-            descriptor.Capabilities.Output.HasFlag(OutputCapability.Video));
+        Assert.True(descriptor.Capabilities.Architecture.HasFlag(
+            ArchitectureCapability.DecodedOutput));
     }
 
     [Fact]

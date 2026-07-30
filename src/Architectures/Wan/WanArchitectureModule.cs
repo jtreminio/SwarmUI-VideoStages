@@ -20,7 +20,7 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
 
     /// <summary>
     /// Wan's VAE compresses four pixel frames into one latent frame, so authored durations and
-    /// boundary windows step on four. Published as the profile's frame grid.
+    /// boundary windows step on four. Published as an architecture runtime fact.
     /// </summary>
     internal const int FrameGrid = 4;
 
@@ -109,12 +109,13 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
                 | StageCapability.VideoInput
                 | StageCapability.PixelUpscale
                 | StageCapability.Lora
-                | StageCapability.FrameReferences,
-            OutputCapability.Video),
+                | StageCapability.FrameReferences),
         WanBoundaryPolicy.Instance)
     {
+        FrameGrid = FrameGrid,
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
+        Rules = [NormalLoraRequiresSamplingStageRule],
     };
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
@@ -165,10 +166,6 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
             compatibilityClassId,
             T2IModelClassSorter.CompatWan21_1_3b.ID,
             StringComparison.Ordinal);
-
-    internal static bool IsSupportedProfile(ModelProfileId profileId) =>
-        profileId == OrdinaryImageToVideoProfileId
-        || LegacyRecognizedProfiles.Any(candidate => candidate.ProfileId == profileId);
 
     private static bool IsOrdinaryWanModel(T2IModel model)
     {
@@ -265,13 +262,5 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
             id,
             displayName,
             entryModes,
-            ModelProfileCapability.SamplerSelection
-                | ModelProfileCapability.SchedulerSelection
-                | ModelProfileCapability.DimensionRules
-                | ModelProfileCapability.FrameRules
-                | ModelProfileCapability.NormalLora,
-            [NormalLoraRequiresSamplingStageRule])
-        {
-            FrameGrid = FrameGrid,
-        };
+            []);
 }

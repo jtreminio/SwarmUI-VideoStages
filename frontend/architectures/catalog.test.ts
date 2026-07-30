@@ -115,6 +115,25 @@ describe("architecture catalog wire contract", () => {
         expect(legacy?.models[0].entryModes).toEqual(dto.models[0].entryModes);
     });
 
+    it("accepts derived legacy extras when the stored profile alias is stale", () => {
+        const current: VideoArchitectureCatalogDto = structuredClone(dto);
+        current.models[0].modelProfileId = "removed-profile-alias";
+        current.models[0].entryAbilities = ["text", "image"];
+        current.models[0].enhancements = {
+            extras: [
+                "lora",
+                "sampler-selection",
+                "scheduler-selection",
+                "dimension-rules",
+                "frame-rules",
+                "normal-lora",
+            ],
+            referencePositions: ["first", "last"],
+        };
+
+        expect(parseVideoArchitectureCatalog(current)).toEqual(current);
+    });
+
     it("requires host model identity and entry facts", () => {
         for (const key of [
             "modelClassId",
@@ -128,7 +147,7 @@ describe("architecture catalog wire contract", () => {
         }
     });
 
-    it("rejects duplicate and dangling identities", () => {
+    it("rejects duplicate architecture and model identities but accepts profile aliases", () => {
         expect(
             parseVideoArchitectureCatalog({
                 ...dto,
@@ -145,7 +164,7 @@ describe("architecture catalog wire contract", () => {
                     },
                 ],
             }),
-        ).toBeNull();
+        ).not.toBeNull();
         expect(
             parseVideoArchitectureCatalog({
                 ...dto,
@@ -156,7 +175,7 @@ describe("architecture catalog wire contract", () => {
                     },
                 ],
             }),
-        ).toBeNull();
+        ).not.toBeNull();
         expect(
             parseVideoArchitectureCatalog({
                 ...dto,
@@ -198,7 +217,7 @@ describe("architecture catalog wire contract", () => {
         expect(parseVideoArchitectureCatalog(unknownOverview)).toBeNull();
     });
 
-    it("requires overview entry modes to be the exact profile-mode union", () => {
+    it("accepts legacy overview and profile entry-mode aliases independently", () => {
         const reordered = structuredClone(dto);
         reordered.architectures[0].capabilities.entryModes.reverse();
         expect(parseVideoArchitectureCatalog(reordered)).not.toBeNull();
@@ -208,14 +227,16 @@ describe("architecture catalog wire contract", () => {
             missingOverviewMode.architectures[0].capabilities.entryModes.filter(
                 (mode) => mode !== "refine-video",
             );
-        expect(parseVideoArchitectureCatalog(missingOverviewMode)).toBeNull();
+        expect(
+            parseVideoArchitectureCatalog(missingOverviewMode),
+        ).not.toBeNull();
 
         const extraOverviewMode = structuredClone(dto);
         extraOverviewMode.architectures[0].profiles[0].entryModes =
             extraOverviewMode.architectures[0].profiles[0].entryModes.filter(
                 (mode) => mode !== "refine-video",
             );
-        expect(parseVideoArchitectureCatalog(extraOverviewMode)).toBeNull();
+        expect(parseVideoArchitectureCatalog(extraOverviewMode)).not.toBeNull();
     });
 
     it("requires the complete boundary/rule contract and lossless metadata", () => {
@@ -288,6 +309,14 @@ describe("architecture catalog wire contract", () => {
             }
         ).rules = [samplingRule];
         expect(parseVideoArchitectureCatalog(valid)).toEqual(valid);
+
+        const repeatedLegacyAlias = structuredClone(valid);
+        repeatedLegacyAlias.architectures[0].profiles[1].rules = [
+            structuredClone(samplingRule),
+        ];
+        expect(parseVideoArchitectureCatalog(repeatedLegacyAlias)).toEqual(
+            repeatedLegacyAlias,
+        );
 
         const wrongType = structuredClone(valid);
         const constraints = wrongType.architectures[0].profiles[0].rules[0]
@@ -598,7 +627,7 @@ describe("authoritative catalog repository", () => {
         expect(isRootTextToVideoModel()).toBe(true);
     });
 
-    it("classifies a root model by its exact profile instead of the architecture union", async () => {
+    it("classifies a root model by its authoritative entry abilities instead of the architecture union", async () => {
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson: async () => dto,

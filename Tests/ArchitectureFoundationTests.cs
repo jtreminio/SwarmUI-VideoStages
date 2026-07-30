@@ -208,23 +208,6 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Resolver_rejects_module_profile_not_declared_by_descriptor()
-    {
-        ClipSpec clip = GeneratedClip(0, Stage(10, "fake-model")) with
-        {
-            AuthoredStages = [new(0, "fake-model", "ghost-profile", false)],
-        };
-
-        ArchitecturePlanningResult result = ArchitecturePlanResolver.Resolve(
-            Spec(clip),
-            new FakeRegistry(undeclaredFakeProfile: true));
-
-        Assert.Contains(
-            result.Diagnostics,
-            item => item.Code == "architecture-resolved-profile-not-declared");
-    }
-
-    [Fact]
     public void Source_only_clip_is_none_and_rejects_an_authored_generation_architecture()
     {
         ClipSpec clip = SourcedClip(0) with { AuthoredArchitectureId = "ltx2" };
@@ -236,6 +219,26 @@ public class ArchitectureFoundationTests
         Assert.Contains(
             result.Diagnostics,
             item => item.Code == "architecture-source-only-identity-mismatch");
+    }
+
+    [Fact]
+    public void Resolver_treats_an_undeclared_model_profile_as_a_migration_alias()
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10, "fake-model")) with
+        {
+            AuthoredStages = [new(0, "fake-model", "ghost-profile", false)],
+        };
+
+        ArchitecturePlanningResult result = ArchitecturePlanResolver.Resolve(
+            Spec(clip),
+            new FakeRegistry(undeclaredFakeProfile: true));
+
+        Assert.DoesNotContain(
+            result.Diagnostics,
+            item => item.Code == "architecture-resolved-profile-not-declared");
+        Assert.Equal(
+            "ghost-profile",
+            result.Clips[clip.Id].StageModels[0].ModelProfileId.Value);
     }
 
     [Fact]
@@ -814,60 +817,6 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Capability_validation_rejects_lora_when_resolved_profile_lacks_lora()
-    {
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
-            stage: StageCapability.ImageInput
-                | StageCapability.VideoInput
-                | StageCapability.Lora);
-        FakeRegistry registry = new(fakeDescriptor: descriptor);
-        ClipSpec clip = GeneratedClip(
-            0,
-            Stage(10, "fake-model") with
-            {
-                Loras = [new("profile-blocked.safetensors")],
-            }) with
-        {
-            AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
-        };
-        VideoExecutionPlan plan = Compile(clip, registry);
-
-        Assert.Contains(
-            plan.Diagnostics,
-            item => item.Message.Contains(
-                "normal LoRA for model profile 'fake-profile'"));
-        Assert.Equal(0, registry.CompileCounts[new("fake")]);
-    }
-
-    [Fact]
-    public void Capability_validation_rejects_normal_lora_when_profile_omits_normal_lora()
-    {
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
-            stage: StageCapability.ImageInput
-                | StageCapability.VideoInput
-                | StageCapability.Lora,
-            profile: ModelProfileCapability.SamplerSelection);
-        FakeRegistry registry = new(fakeDescriptor: descriptor);
-        ClipSpec clip = GeneratedClip(
-            0,
-            Stage(10, "fake-model") with
-            {
-                Loras = [new("normal-authored.safetensors")],
-            }) with
-        {
-            AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
-        };
-
-        VideoExecutionPlan plan = Compile(clip, registry);
-
-        Assert.Contains(
-            plan.Diagnostics,
-            item => item.Message.Contains(
-                "normal LoRA for model profile 'fake-profile'"));
-        Assert.Equal(0, registry.CompileCounts[new("fake")]);
-    }
-
-    [Fact]
     public void Capability_validation_rejects_the_actual_unsupported_upscale_mode()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
@@ -974,7 +923,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Capability_validation_requires_every_mixed_stage_profile_to_allow_the_entry()
+    public void Capability_validation_requires_every_mixed_stage_model_to_allow_the_entry()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
             architecture: ArchitectureCapability.GeneratedEntry
@@ -987,19 +936,11 @@ public class ArchitectureFoundationTests
                     new("allows-image"),
                     "allows-image",
                     [ArchitectureEntryMode.ImageToVideo],
-                    ModelProfileCapability.SamplerSelection
-                        | ModelProfileCapability.SchedulerSelection
-                        | ModelProfileCapability.DimensionRules
-                        | ModelProfileCapability.FrameRules,
                     []),
                 new(
                     new("text-only"),
                     "text-only",
                     [ArchitectureEntryMode.TextToVideo],
-                    ModelProfileCapability.SamplerSelection
-                        | ModelProfileCapability.SchedulerSelection
-                        | ModelProfileCapability.DimensionRules
-                        | ModelProfileCapability.FrameRules,
                     []),
             ],
             DefaultProfileId = new("allows-image"),
@@ -1038,34 +979,6 @@ public class ArchitectureFoundationTests
             diagnostics,
             item => item.Message.Contains(
                 "entry ability 'ImageToVideo'"));
-    }
-
-    [Fact]
-    public void Capability_validation_uses_the_default_profile_for_a_stageless_clip()
-    {
-        VideoArchitectureDescriptor descriptor = NoneArchitectureModule.Instance.Descriptor;
-        ClipSpec clip = SourcedClip(0);
-
-        IReadOnlyList<PlanDiagnostic> sourcedDiagnostics =
-            ArchitectureCapabilityValidator.Validate(
-                clip,
-                descriptor,
-                ArchitectureEntryMode.SourceVideo,
-                new Dictionary<int, ResolvedVideoModel>());
-        IReadOnlyList<PlanDiagnostic> textDiagnostics =
-            ArchitectureCapabilityValidator.Validate(
-                clip,
-                descriptor,
-                ArchitectureEntryMode.TextToVideo,
-                new Dictionary<int, ResolvedVideoModel>());
-
-        Assert.DoesNotContain(
-            sourcedDiagnostics,
-            item => item.Message.Contains("entry mode"));
-        Assert.Single(
-            textDiagnostics,
-            item => item.Message.Contains(
-                "entry mode 'TextToVideo' for the default model profile"));
     }
 
     [Theory]
@@ -1439,81 +1352,44 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Registry_rejects_default_profile_outside_descriptor_catalog()
+    public void Registry_accepts_a_stale_default_profile_alias()
     {
-        VideoArchitectureDescriptor invalid = Descriptor("fake", "declared") with
+        VideoArchitectureDescriptor descriptor = Descriptor("fake", "declared") with
         {
-            DefaultProfileId = new("missing"),
+            DefaultProfileId = new("removed-default"),
         };
 
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            new VideoArchitectureRegistry([new MatchingModule(invalid)]));
+        VideoArchitectureRegistry registry =
+            new([new MatchingModule(descriptor)]);
 
-        Assert.Contains("default profile 'missing' is not declared", error.Message);
+        Assert.Equal("removed-default", Assert.Single(registry.Catalog).DefaultProfileId.Value);
     }
 
     [Fact]
-    public void Registry_rejects_duplicate_profile_ids()
+    public void Registry_rejects_duplicate_legacy_profile_ids()
     {
+        VideoModelProfileDescriptor profile =
+            Descriptor("fake", "profile").Profiles[0];
         VideoArchitectureDescriptor invalid = Descriptor("fake", "profile") with
         {
-            Profiles =
-            [
-                new(
-                    new("profile"),
-                    "first",
-                    [ArchitectureEntryMode.ImageToVideo],
-                    ModelProfileCapability.None,
-                    []),
-                new(
-                    new("profile"),
-                    "second",
-                    [ArchitectureEntryMode.ImageToVideo],
-                    ModelProfileCapability.None,
-                    []),
-            ],
+            Profiles = [profile, profile],
         };
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
             new VideoArchitectureRegistry([new MatchingModule(invalid)]));
 
-        Assert.Contains("duplicate model profile ids", error.Message);
-    }
-
-    [Fact]
-    public void Registry_rejects_a_profile_without_entry_modes()
-    {
-        VideoArchitectureDescriptor invalid = Descriptor("fake", "profile") with
-        {
-            Profiles =
-            [
-                new(
-                    new("profile"),
-                    "profile",
-                    [],
-                    ModelProfileCapability.None,
-                    []),
-            ],
-        };
-
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            new VideoArchitectureRegistry([new MatchingModule(invalid)]));
-
-        Assert.Contains("must declare at least one entry mode", error.Message);
+        Assert.Contains("duplicate legacy profile ids", error.Message);
     }
 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Registry_rejects_duplicate_or_invalid_profile_entry_modes(bool invalidEnum)
+    public void Registry_rejects_missing_or_invalid_entry_mode_aliases(
+        bool invalidEnum)
     {
         IReadOnlyList<ArchitectureEntryMode> entryModes = invalidEnum
             ? [(ArchitectureEntryMode)int.MaxValue]
-            :
-            [
-                ArchitectureEntryMode.ImageToVideo,
-                ArchitectureEntryMode.ImageToVideo,
-            ];
+            : [];
         VideoArchitectureDescriptor invalid = Descriptor("fake", "profile") with
         {
             Profiles =
@@ -1522,7 +1398,6 @@ public class ArchitectureFoundationTests
                     new("profile"),
                     "profile",
                     entryModes,
-                    ModelProfileCapability.None,
                     []),
             ],
         };
@@ -1530,7 +1405,7 @@ public class ArchitectureFoundationTests
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
             new VideoArchitectureRegistry([new MatchingModule(invalid)]));
 
-        Assert.Contains("duplicate or invalid entry modes", error.Message);
+        Assert.Contains("entry-mode aliases", error.Message);
     }
 
     [Fact]
@@ -1828,11 +1703,6 @@ public class ArchitectureFoundationTests
             ArchitectureCapability.GeneratedEntry | ArchitectureCapability.DecodedOutput,
         StageCapability stage =
             StageCapability.ImageInput | StageCapability.VideoInput,
-        ModelProfileCapability profile =
-            ModelProfileCapability.SamplerSelection
-                | ModelProfileCapability.SchedulerSelection
-                | ModelProfileCapability.DimensionRules
-                | ModelProfileCapability.FrameRules,
         IReadOnlyList<ArchitectureEntryMode> entryModes = null) =>
         Descriptor("fake", "fake-profile") with
         {
@@ -1843,14 +1713,12 @@ public class ArchitectureFoundationTests
                     new("fake-profile"),
                     "fake-profile",
                     entryModes ?? [ArchitectureEntryMode.ImageToVideo],
-                    profile,
                     []),
             ],
             Capabilities = new(
                 architecture,
                 ClipCapability.Prompts,
-                stage,
-                OutputCapability.Video),
+                stage),
         };
 
     private static Session RestrictedSession(params string[] modelPrefixes)
@@ -1921,10 +1789,6 @@ public class ArchitectureFoundationTests
                             ArchitectureEntryMode.TextToVideo,
                             ArchitectureEntryMode.ImageToVideo,
                         ],
-                        ModelProfileCapability.SamplerSelection
-                            | ModelProfileCapability.SchedulerSelection
-                            | ModelProfileCapability.DimensionRules
-                            | ModelProfileCapability.FrameRules,
                         []),
                     new(
                         new("ltx-2.3-profile"),
@@ -1933,10 +1797,6 @@ public class ArchitectureFoundationTests
                             ArchitectureEntryMode.TextToVideo,
                             ArchitectureEntryMode.ImageToVideo,
                         ],
-                        ModelProfileCapability.SamplerSelection
-                            | ModelProfileCapability.SchedulerSelection
-                            | ModelProfileCapability.DimensionRules
-                            | ModelProfileCapability.FrameRules,
                         []),
                 ],
             };
@@ -2050,16 +1910,11 @@ public class ArchitectureFoundationTests
                     ArchitectureEntryMode.TextToVideo,
                     ArchitectureEntryMode.ImageToVideo,
                 ],
-                ModelProfileCapability.SamplerSelection
-                    | ModelProfileCapability.SchedulerSelection
-                    | ModelProfileCapability.DimensionRules
-                    | ModelProfileCapability.FrameRules,
                 [])],
             new(
                 ArchitectureCapability.GeneratedEntry | ArchitectureCapability.DecodedOutput,
                 ClipCapability.Prompts,
-                StageCapability.ImageInput | StageCapability.VideoInput,
-                OutputCapability.Video),
+                StageCapability.ImageInput | StageCapability.VideoInput),
             new ArchitectureBoundaryPolicy(
                 new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
                 {

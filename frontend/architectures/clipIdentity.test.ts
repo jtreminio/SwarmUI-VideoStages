@@ -7,6 +7,22 @@ import {
 } from "./clipIdentity";
 
 describe("clip architecture identity", () => {
+    it("accepts an empty clip's profile as a migration hint, not catalog authorization", () => {
+        const catalog = testArchitectureCatalog();
+        const clip = minimalClip({
+            architecture: "ltx2",
+            modelProfileId: "removed-profile-alias",
+            stages: [],
+        });
+
+        expect(deriveClipArchitectureIdentity(clip, catalog)).toEqual({
+            architectureId: "ltx2",
+            modelProfileId: "removed-profile-alias",
+            authoredArchitectureId: null,
+            authoredModelProfileId: null,
+        });
+    });
+
     it("derives authored Stage 0 separately from a source-only effective identity", () => {
         const catalog = testArchitectureCatalog();
         const clip = minimalClip({

@@ -404,9 +404,6 @@ const clipDiffBase = (
         catalog,
         targetEntry?.architectureId,
     );
-    const targetProfile = targetDescriptor?.profiles.find(
-        (profile) => profile.id === targetEntry?.modelProfileId,
-    );
     if (
         !catalog ||
         !sourceArchitectureId ||
@@ -414,9 +411,7 @@ const clipDiffBase = (
         !targetEntry?.architectureId ||
         !targetEntry.modelProfileId ||
         !targetDescriptor ||
-        !targetProfile ||
-        targetEntry.architectureId !== nextIdentity?.authoredArchitectureId ||
-        targetEntry.modelProfileId !== targetStage.modelProfileId
+        targetEntry.architectureId !== nextIdentity?.authoredArchitectureId
     ) {
         throw new DocumentDiffError("architecture-invariant");
     }
@@ -425,7 +420,7 @@ const clipDiffBase = (
         modelProfileId: targetEntry.modelProfileId,
         model: targetEntry.value,
         capabilities: clone(targetDescriptor.capabilities),
-        entryModes: clone(targetProfile.entryModes),
+        entryModes: clone(targetEntry.entryModes),
     };
     const requestedForCleanup = clone(next);
     requestedForCleanup.architecture = sourceArchitectureId;

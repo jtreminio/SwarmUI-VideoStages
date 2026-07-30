@@ -26,11 +26,6 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
         foreach (VideoArchitectureDescriptor descriptor in resolved.Select(
             module => module.Descriptor))
         {
-            if (descriptor.Profiles is not { Count: > 0 })
-            {
-                throw new InvalidOperationException(
-                    $"Video architecture '{descriptor.Id}' must declare at least one model profile.");
-            }
             ModelProfileId[] duplicateProfiles = [
                 .. descriptor.Profiles
                     .GroupBy(profile => profile.Id)
@@ -40,29 +35,24 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
             if (duplicateProfiles.Length > 0)
             {
                 throw new InvalidOperationException(
-                    $"Video architecture '{descriptor.Id}' has duplicate model profile ids: "
+                    $"Video architecture '{descriptor.Id}' has duplicate legacy profile ids: "
                     + string.Join(", ", duplicateProfiles.Select(id => $"'{id}'")));
             }
             foreach (VideoModelProfileDescriptor profile in descriptor.Profiles)
             {
-                if (profile.EntryModes is not { Count: > 0 })
-                {
-                    throw new InvalidOperationException(
-                        $"Video architecture '{descriptor.Id}' profile '{profile.Id}' must "
-                            + "declare at least one entry mode.");
-                }
                 ArchitectureEntryMode[] duplicateEntryModes = [
                     .. profile.EntryModes
                         .GroupBy(mode => mode)
                         .Where(group => group.Count() > 1)
                         .Select(group => group.Key)
                 ];
-                if (duplicateEntryModes.Length > 0
+                if (profile.EntryModes is not { Count: > 0 }
+                    || duplicateEntryModes.Length > 0
                     || profile.EntryModes.Any(mode => !Enum.IsDefined(mode)))
                 {
                     throw new InvalidOperationException(
-                        $"Video architecture '{descriptor.Id}' profile '{profile.Id}' has "
-                            + "duplicate or invalid entry modes.");
+                        $"Video architecture '{descriptor.Id}' legacy profile '{profile.Id}' "
+                            + "has missing, duplicate, or invalid entry-mode aliases.");
                 }
             }
             BoundaryExecutionMode[] missingBoundaryModes = [
@@ -75,16 +65,6 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                     $"Video architecture '{descriptor.Id}' is missing boundary rules for: "
                     + string.Join(", ", missingBoundaryModes));
             }
-        }
-        VideoArchitectureDescriptor invalidDefault = resolved
-            .Select(module => module.Descriptor)
-            .FirstOrDefault(descriptor => !descriptor.Profiles.Any(
-                profile => profile.Id == descriptor.DefaultProfileId));
-        if (invalidDefault is not null)
-        {
-            throw new InvalidOperationException(
-                $"Video architecture '{invalidDefault.Id}' default profile "
-                + $"'{invalidDefault.DefaultProfileId}' is not declared by its profile catalog.");
         }
         _modules = Array.AsReadOnly(resolved);
     }
@@ -131,9 +111,7 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                     || string.IsNullOrWhiteSpace(match.ModelClassId)
                     || string.IsNullOrWhiteSpace(match.CompatibilityClassId)
                     || match.EntryAbilities == VideoModelEntryAbility.None
-                    || !match.HostFactsAuthoritative
-                    || !module.Descriptor.Profiles.Any(
-                        profile => profile.Id == match.ModelProfileId))
+                    || !match.HostFactsAuthoritative)
                 {
                     throw new InvalidOperationException(
                         $"Video architecture module '{module.Descriptor.Id}' returned an invalid "
