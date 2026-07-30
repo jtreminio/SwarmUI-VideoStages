@@ -37,7 +37,6 @@ const wanCatalog = (): ArchitectureModelCatalog => {
     const wan = structuredClone(template);
     wan.id = "wan22";
     wan.label = "WAN 2.2";
-    wan.defaultProfileId = "wan22-i2v-14b";
     wan.capabilities.stage = wan.capabilities.stage.filter(
         (capability) => capability !== "ic-lora" && capability !== "hdr",
     );
@@ -48,14 +47,6 @@ const wanCatalog = (): ArchitectureModelCatalog => {
             capability !== "audio-reuse",
     );
     wan.capabilities.upscaleModes = ["pixel"];
-    wan.profiles = [
-        {
-            ...wan.profiles[0],
-            id: "wan22-i2v-14b",
-            label: "WAN 2.2 I2V 14B",
-            entryModes: ["image-to-video", "source-video"],
-        },
-    ];
     models.architectures.push(wan);
     models.entries.push({
         value: "wan-14b.safetensors",
@@ -77,7 +68,6 @@ const hostVideoCatalog = (): ArchitectureModelCatalog => {
     const host = structuredClone(template);
     host.id = "host-video";
     host.label = "Host Video";
-    host.defaultProfileId = "host-video";
     host.capabilities.clip = ["prompts", "source-video"];
     host.capabilities.stage = [
         "image-input",
@@ -85,16 +75,8 @@ const hostVideoCatalog = (): ArchitectureModelCatalog => {
         "pixel-upscale",
         "lora",
     ];
-    host.capabilities.output = ["video"];
     host.capabilities.upscaleModes = ["pixel"];
     host.capabilities.audioSourceKinds = ["Disabled"];
-    host.profiles = [
-        {
-            ...host.profiles[0],
-            id: "host-video",
-            label: "Host Video",
-        },
-    ];
     models.architectures.push(host);
     models.entries.push({
         value: "host-video.safetensors",
@@ -875,9 +857,6 @@ describe("architecture diagnostics", () => {
 
     it("does not diagnose a disabled clip LoRA from legacy profile metadata", () => {
         const models = combinedCatalog();
-        const ltx = models.architectures.find((entry) => entry.id === "ltx2");
-        if (!ltx) throw new Error("missing LTX architecture");
-        ltx.profiles[0].capabilities = [];
         const clip = minimalClip({
             loras: [{ name: "normal-lora.safetensors" }],
             stages: [minimalStage({ model: "ltx", loraWeights: [0] })],
@@ -1036,25 +1015,10 @@ describe("architecture diagnostics", () => {
         const wan = structuredClone(template);
         wan.id = "wan22";
         wan.label = "WAN 2.2";
-        wan.defaultProfileId = "wan22-i2v-14b";
         wan.capabilities.entryModes = [
             "text-to-video",
             "image-to-video",
             "source-video",
-        ];
-        wan.profiles = [
-            {
-                ...wan.profiles[0],
-                id: "wan22-i2v-14b",
-                label: "WAN 2.2 I2V 14B",
-                entryModes: ["image-to-video", "source-video"],
-            },
-            {
-                ...wan.profiles[0],
-                id: "wan22-ti2v-5b",
-                label: "WAN 2.2 TI2V 5B",
-                entryModes: ["text-to-video", "image-to-video", "source-video"],
-            },
         ];
         models.architectures.push(wan);
         models.entries.push(

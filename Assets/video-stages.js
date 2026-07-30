@@ -664,9 +664,6 @@
       architectureId,
       modelProfileId: profileId,
       model,
-      extras: [
-        ...entry.enhancements?.extras ?? descriptor.extras ?? []
-      ],
       capabilities: structuredClone(capabilities),
       ...entry.entryAbilities === void 0 ? {} : { entryAbilities: [...entry.entryAbilities] },
       entryModes: [...entry.entryModes]
@@ -1454,7 +1451,6 @@
         ),
         clip: intersect(effective.clip, capabilities.clip),
         stage: intersect(effective.stage, capabilities.stage),
-        output: intersect(effective.output, capabilities.output),
         upscaleModes: intersect(
           effective.upscaleModes,
           capabilities.upscaleModes
@@ -1965,7 +1961,6 @@
   var isRuleArray = (value, allowedScopes) => Array.isArray(value) && value.every(
     (rule) => isRuleDecision(rule, allowedScopes) && isKnownConditionalRuleCode(rule.code) && isKnownExecutableRule(rule)
   ) && new Set(value.map((rule) => rule.code)).size === value.length;
-  var isProfile = (value) => isRecord2(value) && isTrimmedNonEmpty(value.id) && isTrimmedNonEmpty(value.label) && isEntryModeArray(value.entryModes) && value.entryModes.length > 0 && isUniqueStringArray(value.capabilities) && isRuleArray(value.rules, ["model-profile", "stage"]);
   var isCapabilities = (value) => {
     if (!isRecord2(value)) {
       return false;
@@ -1974,7 +1969,6 @@
       value.architecture,
       value.clip,
       value.stage,
-      value.output,
       value.upscaleModes,
       value.audioSourceKinds
     ].every(isUniqueStringArray) && isEntryModeArray(value.entryModes);
@@ -1987,31 +1981,33 @@
     return keys.length === BOUNDARY_MODES.length && BOUNDARY_MODES.every((mode) => isBoundaryRule(value[mode]));
   };
   var parseVideoArchitectureCatalog = (value) => {
-    if (!isRecord2(value) || !Array.isArray(value.architectures) || !Array.isArray(value.models)) {
+    if (!isRecord2(value) || !hasExactKeys(value, ["schemaVersion", "architectures", "models"]) || value.schemaVersion !== 2 || !Array.isArray(value.architectures) || !Array.isArray(value.models)) {
       return null;
     }
     const architectures = [];
     const architectureIds = /* @__PURE__ */ new Set();
     for (const raw of value.architectures) {
-      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isTrimmedNonEmpty(raw.defaultProfileId) || !isCapabilities(raw.capabilities) || raw.extras !== void 0 && !isUniqueStringArray(raw.extras) || !Array.isArray(raw.profiles) || !raw.profiles.every(isProfile) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["architecture", "clip", "stage", "output"])) {
+      if (!isRecord2(raw) || !hasExactKeys(raw, [
+        "id",
+        "label",
+        "capabilities",
+        "boundaryRules",
+        "rules"
+      ]) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isCapabilities(raw.capabilities) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["architecture", "clip", "stage", "output"])) {
         return null;
       }
-      const profileIds = raw.profiles.map((profile) => profile.id);
       const executableRuleCodes = [
         ...Object.values(raw.boundaryRules).map((rule) => rule.code),
         ...raw.rules.map((rule) => rule.code)
       ];
-      if (architectureIds.has(raw.id) || new Set(profileIds).size !== profileIds.length || new Set(executableRuleCodes).size !== executableRuleCodes.length) {
+      if (architectureIds.has(raw.id) || new Set(executableRuleCodes).size !== executableRuleCodes.length) {
         return null;
       }
       architectureIds.add(raw.id);
       architectures.push({
         id: raw.id,
         label: raw.label,
-        defaultProfileId: raw.defaultProfileId,
-        ...raw.extras === void 0 ? {} : { extras: [...raw.extras] },
         capabilities: structuredClone(raw.capabilities),
-        profiles: structuredClone(raw.profiles),
         boundaryRules: structuredClone(raw.boundaryRules),
         rules: structuredClone(raw.rules)
       });
@@ -2022,16 +2018,23 @@
     const modelNames = /* @__PURE__ */ new Set();
     const models = [];
     for (const raw of value.models) {
-      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !isCapabilities(raw.capabilities) || !isEntryModeArray(raw.entryModes) || raw.entryModes.length === 0 || raw.entryAbilities !== void 0 && (!isEntryAbilityArray(raw.entryAbilities) || raw.entryAbilities.length === 0) || raw.enhancements !== void 0 && (!isRecord2(raw.enhancements) || !isUniqueStringArray(raw.enhancements.extras) || !isReferencePositionArray(
-        raw.enhancements.referencePositions
-      ))) {
+      if (!isRecord2(raw) || !hasExactKeys(raw, [
+        "modelName",
+        "architectureId",
+        "modelProfileId",
+        "modelClassId",
+        "compatibilityClassId",
+        "frameGrid",
+        "entryAbilities",
+        "capabilities",
+        "enhancements"
+      ]) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !isCapabilities(raw.capabilities) || !isEntryAbilityArray(raw.entryAbilities) || raw.entryAbilities.length === 0 || !isRecord2(raw.enhancements) || !hasExactKeys(raw.enhancements, ["referencePositions"]) || !isReferencePositionArray(raw.enhancements.referencePositions)) {
         return null;
       }
       if (modelNames.has(raw.modelName)) {
         return null;
       }
       modelNames.add(raw.modelName);
-      const rawEnhancements = raw.enhancements;
       models.push({
         modelName: raw.modelName,
         architectureId: raw.architectureId,
@@ -2040,19 +2043,15 @@
         compatibilityClassId: raw.compatibilityClassId,
         frameGrid: Number(raw.frameGrid),
         capabilities: structuredClone(raw.capabilities),
-        ...raw.entryAbilities === void 0 ? {} : { entryAbilities: [...raw.entryAbilities] },
-        ...rawEnhancements === void 0 ? {} : {
-          enhancements: {
-            extras: [...rawEnhancements.extras],
-            referencePositions: [
-              ...rawEnhancements.referencePositions
-            ]
-          }
-        },
-        entryModes: [...raw.entryModes]
+        entryAbilities: [...raw.entryAbilities],
+        enhancements: {
+          referencePositions: [
+            ...raw.enhancements.referencePositions
+          ]
+        }
       });
     }
-    return { architectures, models };
+    return { schemaVersion: 2, architectures, models };
   };
 
   // frontend/architectures/catalogRepository.ts
@@ -2191,7 +2190,7 @@
               backendModel.enhancements
             )
           },
-          entryModes: [...backendModel?.entryModes ?? []]
+          entryModes: [...backendModel?.capabilities.entryModes ?? []]
         };
       })
     };
@@ -4036,7 +4035,6 @@
       architectureId: descriptor.id,
       modelProfileId: model.modelProfileId,
       model: model.value,
-      extras: [...model.enhancements?.extras ?? descriptor.extras ?? []],
       capabilities: structuredClone(
         model.capabilities ?? descriptor.capabilities
       ),

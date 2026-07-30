@@ -73,9 +73,6 @@ export const buildArchitectureRetargetPlan = (
               architectureId,
               modelProfileId: profileId,
               model,
-              extras: [
-                  ...(entry.enhancements?.extras ?? descriptor.extras ?? []),
-              ],
               capabilities: structuredClone(capabilities),
               ...(entry.entryAbilities === undefined
                   ? {}

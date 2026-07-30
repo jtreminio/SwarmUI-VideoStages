@@ -32,7 +32,6 @@ export interface ArchitectureCapabilities {
     architecture: string[];
     clip: string[];
     stage: string[];
-    output: string[];
     upscaleModes: string[];
     entryModes: string[];
     audioSourceKinds: string[];
@@ -50,12 +49,11 @@ export interface ArchitectureModelEntry {
     capabilities?: ArchitectureCapabilities;
     entryAbilities?: string[];
     enhancements?: ModelEnhancements;
-    /** Legacy alias retained while persisted profile identities migrate. */
+    /** Internal entry-mode projection derived from typed model capabilities. */
     entryModes: string[];
 }
 
 export interface ModelEnhancements {
-    extras: string[];
     referencePositions: string[];
 }
 
@@ -77,7 +75,6 @@ export interface ArchitectureRetargetPlan {
     modelProfileId: ModelProfileId;
     model: string;
     capabilities: ArchitectureCapabilities;
-    extras?: string[];
     entryAbilities?: string[];
     entryModes: string[];
 }
@@ -90,37 +87,21 @@ export interface ArchitectureCatalogModelDto {
     compatibilityClassId: string;
     frameGrid: number;
     capabilities: ArchitectureCapabilities;
-    entryAbilities?: string[];
-    enhancements?: ModelEnhancements;
-    /** Legacy alias retained for older clients. */
-    entryModes: string[];
+    entryAbilities: string[];
+    enhancements: ModelEnhancements;
 }
 
 export interface ArchitectureCatalogEntryDto {
     id: VideoArchitectureId;
     label: string;
-    defaultProfileId: ModelProfileId;
-    extras?: string[];
-    /** Scoped legacy transport; new feature reads use `extras`. */
     capabilities: ArchitectureCapabilities;
-    profiles: VideoModelProfileDescriptor[];
     boundaryRules: Record<string, CapabilityRuleDecision>;
-    rules: CapabilityRuleDecision[];
-}
-
-export interface VideoModelProfileDescriptor {
-    id: ModelProfileId;
-    label: string;
-    /** Legacy aliases retained for older catalogs and saved profile hints. */
-    entryModes: string[];
-    /** Legacy transport only; production feature policy ignores this list. */
-    capabilities: string[];
-    /** Legacy transport only; architecture rules own executable policy. */
     rules: CapabilityRuleDecision[];
 }
 
 /** Serializable projection supplied by the authoritative backend catalog. */
 export interface VideoArchitectureCatalogDto {
+    schemaVersion: 2;
     architectures: ArchitectureCatalogEntryDto[];
     models: ArchitectureCatalogModelDto[];
 }

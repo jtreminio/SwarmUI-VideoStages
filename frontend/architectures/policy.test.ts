@@ -47,7 +47,6 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
     const wan = structuredClone(ltx);
     wan.id = "wan22";
     wan.label = "WAN 2.2";
-    wan.defaultProfileId = "wan22-i2v-14b";
     wan.capabilities.stage = wan.capabilities.stage.filter(
         (capability) =>
             capability !== "lora" &&
@@ -55,14 +54,6 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
             capability !== "hdr",
     );
     wan.capabilities.upscaleModes = ["pixel"];
-    wan.profiles = [
-        {
-            ...wan.profiles[0],
-            id: "wan22-i2v-14b",
-            label: "WAN 2.2 I2V 14B",
-            capabilities: [],
-        },
-    ];
     models.architectures.push(wan);
     models.entries.push({
         value: "wan-14b.safetensors",
@@ -149,10 +140,7 @@ describe("catalog-backed authoring policy", () => {
         if (!descriptor || !first || !second) {
             throw new Error("missing LTX test model facts");
         }
-        first.enhancements = {
-            extras: ["ic-lora", "prompt-relay"],
-            referencePositions: [],
-        };
+        first.enhancements = { referencePositions: [] };
         first.capabilities = structuredClone(descriptor.capabilities);
         first.capabilities.stage = first.capabilities.stage.filter(
             (capability) => capability !== "ic-lora",
@@ -490,11 +478,8 @@ describe("catalog-backed authoring policy", () => {
         );
     });
 
-    it("does not let a legacy profile capability remove architecture LoRA support", () => {
+    it("uses typed architecture LoRA support when no model narrowing exists", () => {
         const models = catalog();
-        const ltx = models.architectures.find((entry) => entry.id === "ltx2");
-        if (!ltx) throw new Error("missing LTX architecture");
-        ltx.profiles[0].capabilities = [];
         const clip = minimalClip();
         const decision = createCapabilityViewResolver(models)
             .forStage(clip, clip.stages[0])
@@ -649,13 +634,6 @@ describe("catalog-backed authoring policy", () => {
             (entry) => entry.id === "ltx2",
         );
         if (!descriptor) throw new Error("missing LTX architecture");
-        descriptor.profiles.push({
-            id: "ltx-alt-profile",
-            label: "Synthetic alternate profile",
-            entryModes: ["text-to-video", "image-to-video"],
-            capabilities: [],
-            rules: [],
-        });
         models.entries.push({
             value: "ltx-alt-profile-model",
             label: "Synthetic alternate model",

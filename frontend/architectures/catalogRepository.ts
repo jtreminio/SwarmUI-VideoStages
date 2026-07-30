@@ -210,7 +210,7 @@ export const buildArchitectureModelCatalog = (
                               backendModel.enhancements,
                           ),
                       }),
-                entryModes: [...(backendModel?.entryModes ?? [])],
+                entryModes: [...(backendModel?.capabilities.entryModes ?? [])],
             };
         }),
     };

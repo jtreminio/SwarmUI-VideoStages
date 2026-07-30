@@ -16,32 +16,13 @@ import {
     parseVideoArchitectureCatalog,
     refreshAuthoritativeArchitectureCatalog,
 } from "./catalog";
-import {
-    CONDITIONAL_RULE_CODES,
-    evaluateConditionalRule,
-} from "./conditionalRules";
+import { evaluateConditionalRule } from "./conditionalRules";
 import { createCapabilityViewResolver } from "./policy";
-import type {
-    CapabilityRuleDecision,
-    VideoArchitectureCatalogDto,
-} from "./types";
+import type { VideoArchitectureCatalogDto } from "./types";
 
-const dto = {
-    architectures: [
-        {
-            ...testArchitectureCatalog().architectures[0],
-            profiles: [
-                ...testArchitectureCatalog().architectures[0].profiles,
-                {
-                    id: "synthetic-profile",
-                    label: "Synthetic Profile",
-                    entryModes: ["image-to-video"],
-                    capabilities: ["normal-lora"],
-                    rules: [],
-                },
-            ],
-        },
-    ],
+const dto: VideoArchitectureCatalogDto = {
+    schemaVersion: 2,
+    architectures: structuredClone(testArchitectureCatalog().architectures),
     models: [
         {
             modelName: "ltx-two.safetensors",
@@ -52,12 +33,8 @@ const dto = {
             frameGrid: 8,
             capabilities:
                 testArchitectureCatalog().architectures[0].capabilities,
-            entryModes: [
-                "text-to-video",
-                "image-to-video",
-                "source-video",
-                "refine-video",
-            ],
+            entryAbilities: ["text", "image"],
+            enhancements: { referencePositions: ["any"] },
         },
         {
             modelName: "ltx-two-three.safetensors",
@@ -66,9 +43,12 @@ const dto = {
             modelClassId: "ltx-image-video",
             compatibilityClassId: "ltx-video",
             frameGrid: 8,
-            capabilities:
-                testArchitectureCatalog().architectures[0].capabilities,
-            entryModes: ["image-to-video"],
+            capabilities: {
+                ...testArchitectureCatalog().architectures[0].capabilities,
+                entryModes: ["image-to-video"],
+            },
+            entryAbilities: ["image"],
+            enhancements: { referencePositions: ["first"] },
         },
     ],
 };
@@ -107,50 +87,49 @@ describe("architecture catalog wire contract", () => {
         ).toBeNull();
     });
 
-    it("decodes model facts and enhancements while retaining the legacy aliases", () => {
-        const current: VideoArchitectureCatalogDto = structuredClone(dto);
-        current.architectures[0].extras = ["multi-stage", "frame-references"];
-        current.models[0].entryAbilities = ["text", "image"];
-        current.models[0].enhancements = {
-            extras: ["multi-stage", "frame-references", "normal-lora"],
-            referencePositions: ["first", "last"],
-        };
-
-        expect(parseVideoArchitectureCatalog(current)).toEqual(current);
-        const legacy = parseVideoArchitectureCatalog(dto);
-        expect(legacy).toEqual(dto);
-        expect(legacy?.models[0]).not.toHaveProperty("entryAbilities");
-        expect(legacy?.models[0]).not.toHaveProperty("enhancements");
-        expect(legacy?.models[0].entryModes).toEqual(dto.models[0].entryModes);
-    });
-
-    it("accepts derived legacy extras when the stored profile alias is stale", () => {
+    it("decodes complete model facts even when the stored profile hint is stale", () => {
         const current: VideoArchitectureCatalogDto = structuredClone(dto);
         current.models[0].modelProfileId = "removed-profile-alias";
-        current.models[0].entryAbilities = ["text", "image"];
-        current.models[0].enhancements = {
-            extras: [
-                "lora",
-                "sampler-selection",
-                "scheduler-selection",
-                "dimension-rules",
-                "frame-rules",
-                "normal-lora",
-            ],
-            referencePositions: ["first", "last"],
-        };
 
         expect(parseVideoArchitectureCatalog(current)).toEqual(current);
     });
 
-    it("requires host model identity and entry facts", () => {
+    it("requires the versioned exact shape and rejects retired aliases", () => {
+        const oldVersion = structuredClone(dto) as unknown as Record<
+            string,
+            unknown
+        >;
+        oldVersion.schemaVersion = 1;
+        expect(parseVideoArchitectureCatalog(oldVersion)).toBeNull();
+
+        const retiredArchitectureAlias = structuredClone(dto) as unknown as {
+            architectures: Array<Record<string, unknown>>;
+        };
+        retiredArchitectureAlias.architectures[0].profiles = [];
+        expect(
+            parseVideoArchitectureCatalog(retiredArchitectureAlias),
+        ).toBeNull();
+
+        const retiredModelAlias = structuredClone(dto) as unknown as {
+            models: Array<Record<string, unknown>>;
+        };
+        retiredModelAlias.models[0].entryModes = ["text-to-video"];
+        expect(parseVideoArchitectureCatalog(retiredModelAlias)).toBeNull();
+    });
+
+    it("requires host model identity, capability, and entry facts", () => {
         for (const key of [
             "modelClassId",
             "compatibilityClassId",
             "frameGrid",
-            "entryModes",
+            "capabilities",
+            "entryAbilities",
+            "enhancements",
         ] as const) {
-            const missing = structuredClone(dto) as Record<string, unknown>;
+            const missing = structuredClone(dto) as unknown as Record<
+                string,
+                unknown
+            >;
             const models = missing.models as Record<string, unknown>[];
             delete models[0][key];
             expect(parseVideoArchitectureCatalog(missing)).toBeNull();
@@ -163,7 +142,10 @@ describe("architecture catalog wire contract", () => {
             2_147_483_648,
             Number.MAX_SAFE_INTEGER + 1,
         ]) {
-            const malformed = structuredClone(dto) as Record<string, unknown>;
+            const malformed = structuredClone(dto) as unknown as Record<
+                string,
+                unknown
+            >;
             const models = malformed.models as Record<string, unknown>[];
             models[0].frameGrid = invalid;
             expect(parseVideoArchitectureCatalog(malformed)).toBeNull();
@@ -173,24 +155,13 @@ describe("architecture catalog wire contract", () => {
         expect(parseVideoArchitectureCatalog(unknownArchitecture)).toBeNull();
     });
 
-    it("rejects duplicate architecture and model identities but accepts profile aliases", () => {
+    it("rejects duplicate architecture and model identities", () => {
         expect(
             parseVideoArchitectureCatalog({
                 ...dto,
                 architectures: [dto.architectures[0], dto.architectures[0]],
             }),
         ).toBeNull();
-        expect(
-            parseVideoArchitectureCatalog({
-                ...dto,
-                architectures: [
-                    {
-                        ...dto.architectures[0],
-                        defaultProfileId: "missing-profile",
-                    },
-                ],
-            }),
-        ).not.toBeNull();
         expect(
             parseVideoArchitectureCatalog({
                 ...dto,
@@ -210,40 +181,14 @@ describe("architecture catalog wire contract", () => {
         ).toBeNull();
     });
 
-    it("requires non-empty unique entry modes on every model profile", () => {
-        const missing = structuredClone(dto);
-        delete (
-            missing.architectures[0].profiles[0] as {
-                entryModes?: string[];
-            }
-        ).entryModes;
-        expect(parseVideoArchitectureCatalog(missing)).toBeNull();
-
-        const empty = structuredClone(dto);
-        empty.architectures[0].profiles[0].entryModes = [];
-        expect(parseVideoArchitectureCatalog(empty)).toBeNull();
-
-        const duplicate = structuredClone(dto);
-        duplicate.architectures[0].profiles[0].entryModes = [
-            "image-to-video",
-            "image-to-video",
-        ];
-        expect(parseVideoArchitectureCatalog(duplicate)).toBeNull();
-    });
-
-    it("rejects unknown profile and overview entry modes", () => {
-        const unknownProfile = structuredClone(dto);
-        unknownProfile.architectures[0].profiles[0].entryModes[0] =
-            "future-video-mode";
-        expect(parseVideoArchitectureCatalog(unknownProfile)).toBeNull();
-
+    it("rejects unknown effective entry modes", () => {
         const unknownOverview = structuredClone(dto);
         unknownOverview.architectures[0].capabilities.entryModes[0] =
             "future-video-mode";
         expect(parseVideoArchitectureCatalog(unknownOverview)).toBeNull();
     });
 
-    it("accepts legacy overview and profile entry-mode aliases independently", () => {
+    it("accepts reordered or narrowed typed entry-mode capability facts", () => {
         const reordered = structuredClone(dto);
         reordered.architectures[0].capabilities.entryModes.reverse();
         expect(parseVideoArchitectureCatalog(reordered)).not.toBeNull();
@@ -257,12 +202,11 @@ describe("architecture catalog wire contract", () => {
             parseVideoArchitectureCatalog(missingOverviewMode),
         ).not.toBeNull();
 
-        const extraOverviewMode = structuredClone(dto);
-        extraOverviewMode.architectures[0].profiles[0].entryModes =
-            extraOverviewMode.architectures[0].profiles[0].entryModes.filter(
-                (mode) => mode !== "refine-video",
-            );
-        expect(parseVideoArchitectureCatalog(extraOverviewMode)).not.toBeNull();
+        const narrowedModelMode = structuredClone(dto);
+        narrowedModelMode.models[0].capabilities.entryModes = [
+            "image-to-video",
+        ];
+        expect(parseVideoArchitectureCatalog(narrowedModelMode)).not.toBeNull();
     });
 
     it("requires the complete boundary/rule contract and lossless metadata", () => {
@@ -284,10 +228,6 @@ describe("architecture catalog wire contract", () => {
         const wrongScope = structuredClone(dto);
         wrongScope.architectures[0].boundaryRules.continue.scope = "clip";
         expect(parseVideoArchitectureCatalog(wrongScope)).toBeNull();
-
-        const whitespaceProfileId = structuredClone(dto);
-        whitespaceProfileId.architectures[0].profiles[0].id = " ltx-2 ";
-        expect(parseVideoArchitectureCatalog(whitespaceProfileId)).toBeNull();
 
         const missingConditionalConstraints = structuredClone(dto);
         missingConditionalConstraints.architectures[0].boundaryRules.continue.constraints =
@@ -323,62 +263,12 @@ describe("architecture catalog wire contract", () => {
             "future-rule-with-unknown-semantics";
         expect(parseVideoArchitectureCatalog(unknownExecutableRule)).toBeNull();
 
-        const unknownProfileRule = structuredClone(dto);
-        unknownProfileRule.architectures[0].profiles[0].rules = [
-            {
-                support: "conditional",
-                code: "future-profile-rule",
-                reason: "A newer server requires behavior this client lacks.",
-                scope: "stage",
-                entityId: null,
-                constraints: {},
-            },
-        ];
-        expect(parseVideoArchitectureCatalog(unknownProfileRule)).toBeNull();
-
         const arbitraryBoundaryCode = structuredClone(dto);
         arbitraryBoundaryCode.architectures[0].boundaryRules.continue.code =
             "future-architecture.boundary.continue";
         expect(parseVideoArchitectureCatalog(arbitraryBoundaryCode)).toEqual(
             arbitraryBoundaryCode,
         );
-    });
-
-    it("validates typed stage-control rules on model profiles", () => {
-        const samplingRule: CapabilityRuleDecision = {
-            support: "conditional",
-            code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
-            reason: "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.",
-            scope: "stage",
-            entityId: null,
-            constraints: { exclusiveMinimumControl: 0 },
-        };
-        const valid = structuredClone(dto);
-        (
-            valid.architectures[0].profiles[0] as {
-                rules: CapabilityRuleDecision[];
-            }
-        ).rules = [samplingRule];
-        expect(parseVideoArchitectureCatalog(valid)).toEqual(valid);
-
-        const repeatedLegacyAlias = structuredClone(valid);
-        repeatedLegacyAlias.architectures[0].profiles[1].rules = [
-            structuredClone(samplingRule),
-        ];
-        expect(parseVideoArchitectureCatalog(repeatedLegacyAlias)).toEqual(
-            repeatedLegacyAlias,
-        );
-
-        const wrongType = structuredClone(valid);
-        const constraints = wrongType.architectures[0].profiles[0].rules[0]
-            .constraints as Record<string, unknown>;
-        constraints.exclusiveMinimumControl = "0";
-        expect(parseVideoArchitectureCatalog(wrongType)).toBeNull();
-
-        const wrongScope = structuredClone(valid);
-        wrongScope.architectures[0].profiles[0].rules[0].scope =
-            "model-profile";
-        expect(parseVideoArchitectureCatalog(wrongScope)).toBeNull();
     });
 
     it("rejects known executable rules with mismatched semantics", () => {
@@ -424,7 +314,7 @@ describe("architecture catalog wire contract", () => {
                 compatibilityClassId: model.compatibilityClassId,
                 frameGrid: model.frameGrid,
                 capabilities: structuredClone(model.capabilities),
-                entryModes: [...model.entryModes],
+                entryModes: [...model.capabilities.entryModes],
             })),
         };
         const stageModel = dto.models[0].modelName;
@@ -690,10 +580,9 @@ describe("authoritative catalog repository", () => {
         expect(isRootTextToVideoModel()).toBe(true);
     });
 
-    it("prefers authoritative entry abilities over contradictory legacy entry modes", async () => {
+    it("uses authoritative entry abilities over the architecture overview", async () => {
         const current: VideoArchitectureCatalogDto = structuredClone(dto);
         current.models[0].entryAbilities = ["image"];
-        current.models[0].entryModes = ["text-to-video", "image-to-video"];
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson: async () => current,
@@ -705,22 +594,6 @@ describe("authoritative catalog repository", () => {
         document.body.appendChild(input);
 
         expect(isRootTextToVideoModel()).toBe(false);
-    });
-
-    it("falls back to legacy entry modes when entry abilities are absent", async () => {
-        const legacy = structuredClone(dto);
-        legacy.models[0].entryModes = ["text-to-video"];
-        setVideoStagesHostBridgeForTests({
-            ...createDefaultVideoStagesHostBridge(),
-            requestJson: async () => legacy,
-        });
-        await loadAuthoritativeArchitectureCatalog();
-        const input = document.createElement("input");
-        input.id = "input_model";
-        input.value = legacy.models[0].modelName;
-        document.body.appendChild(input);
-
-        expect(isRootTextToVideoModel()).toBe(true);
     });
 
     it("classifies a root model by its authoritative entry abilities instead of the architecture union", async () => {
@@ -737,9 +610,7 @@ describe("authoritative catalog repository", () => {
         expect(dto.architectures[0].capabilities.entryModes).toContain(
             "text-to-video",
         );
-        expect(dto.architectures[0].profiles[1].entryModes).not.toContain(
-            "text-to-video",
-        );
+        expect(dto.models[1].entryAbilities).not.toContain("text");
         expect(isRootTextToVideoModel()).toBe(false);
     });
 });

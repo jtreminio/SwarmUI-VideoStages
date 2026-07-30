@@ -275,10 +275,6 @@ public class CrossLanguageMirrorTests
             $"Serialized LTX descriptor drifted from the complete shared contract."
                 + $"\nExpected: {expectedDescriptor}"
                 + $"\nActual: {architecture}");
-        JObject actualProfile = Assert.Single(architecture["profiles"]!.Values<JObject>());
-        Assert.DoesNotContain(
-            fixture["forbiddenProfileCapabilities"]!.Values<string>(),
-            capability => actualProfile["capabilities"]!.Values<string>().Contains(capability));
     }
 
     private sealed class CatalogContractRegistry : IVideoArchitectureRegistry

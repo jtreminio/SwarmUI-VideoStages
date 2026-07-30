@@ -48,7 +48,6 @@ export const effectiveClipCapabilities = (
             ),
             clip: intersect(effective.clip, capabilities.clip),
             stage: intersect(effective.stage, capabilities.stage),
-            output: intersect(effective.output, capabilities.output),
             upscaleModes: intersect(
                 effective.upscaleModes,
                 capabilities.upscaleModes,

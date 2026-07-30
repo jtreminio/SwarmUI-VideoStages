@@ -38,7 +38,6 @@ export const testArchitectureCapabilities = (
         "frame-references",
         "pixel-upscale",
     ],
-    output: ["video", "attached-audio"],
     upscaleModes: ["pixel"],
     entryModes: [
         "text-to-video",
@@ -58,28 +57,7 @@ export const testArchitectureCatalog = (
         {
             id: "ltx2",
             label: "LTX Video 2.3",
-            defaultProfileId: "ltx-2.3",
             capabilities: testArchitectureCapabilities(),
-            profiles: [
-                {
-                    id: "ltx-2.3",
-                    label: "LTX Video 2.3",
-                    entryModes: [
-                        "text-to-video",
-                        "image-to-video",
-                        "source-video",
-                        "refine-video",
-                    ],
-                    capabilities: [
-                        "sampler-selection",
-                        "scheduler-selection",
-                        "dimension-rules",
-                        "frame-rules",
-                        "normal-lora",
-                    ],
-                    rules: [],
-                },
-            ],
             boundaryRules: {
                 cut: {
                     support: "supported",
@@ -219,6 +197,7 @@ export const testArchitectureCatalog = (
 export const testArchitectureCatalogDto = (
     catalog: ArchitectureModelCatalog = testArchitectureCatalog(),
 ): VideoArchitectureCatalogDto => ({
+    schemaVersion: 2,
     architectures: structuredClone(catalog.architectures),
     models: catalog.entries.flatMap((entry) =>
         entry.architectureId && entry.modelProfileId
@@ -242,15 +221,27 @@ export const testArchitectureCatalogDto = (
                       ),
                       ...(entry.entryAbilities
                           ? { entryAbilities: [...entry.entryAbilities] }
-                          : {}),
-                      ...(entry.enhancements
-                          ? {
-                                enhancements: structuredClone(
-                                    entry.enhancements,
-                                ),
-                            }
-                          : {}),
-                      entryModes: [...entry.entryModes],
+                          : {
+                                entryAbilities: [
+                                    ...(entry.entryModes.includes(
+                                        "text-to-video",
+                                    )
+                                        ? ["text"]
+                                        : []),
+                                    ...(entry.entryModes.some((mode) =>
+                                        [
+                                            "image-to-video",
+                                            "source-video",
+                                            "refine-video",
+                                        ].includes(mode),
+                                    )
+                                        ? ["image"]
+                                        : []),
+                                ],
+                            }),
+                      enhancements: structuredClone(
+                          entry.enhancements ?? { referencePositions: [] },
+                      ),
                   },
               ]
             : [],
@@ -260,25 +251,14 @@ export const testArchitectureCatalogDto = (
 export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
     id: "none",
     label: "Decoded source only",
-    defaultProfileId: "none",
     capabilities: testArchitectureCapabilities({
         architecture: ["sourced-entry", "decoded-output"],
         clip: ["source-video", "audio-sources", "audio-segments"],
         stage: [],
-        output: ["video", "attached-audio"],
         upscaleModes: [],
         entryModes: ["source-video"],
         audioSourceKinds: ["Disabled", "Upload"],
     }),
-    profiles: [
-        {
-            id: "none",
-            label: "Decoded source only",
-            entryModes: ["source-video"],
-            capabilities: [],
-            rules: [],
-        },
-    ],
     boundaryRules: {
         cut: {
             support: "supported",
@@ -316,7 +296,6 @@ export const fakeArchitectureCatalog = (
         {
             id: architectureId,
             label: "Test Video",
-            defaultProfileId: "test-profile",
             capabilities: testArchitectureCapabilities({
                 clip: ["prompts"],
                 stage: [],
@@ -324,19 +303,6 @@ export const fakeArchitectureCatalog = (
                 entryModes: ["text-to-video", "image-to-video", "source-video"],
                 audioSourceKinds: ["Native"],
             }),
-            profiles: [
-                {
-                    id: "test-profile",
-                    label: "Test Profile",
-                    entryModes: [
-                        "text-to-video",
-                        "image-to-video",
-                        "source-video",
-                    ],
-                    capabilities: [],
-                    rules: [],
-                },
-            ],
             boundaryRules: {
                 cut: {
                     support: "supported",

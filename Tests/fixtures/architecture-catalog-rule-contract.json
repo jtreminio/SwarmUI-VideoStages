@@ -2,38 +2,6 @@
   "descriptor": {
     "id": "ltx2",
     "label": "LTX Video 2.3",
-    "defaultProfileId": "ltx-2.3",
-    "extras": [
-      "generated-entry",
-      "sourced-entry",
-      "multi-stage",
-      "native-audio",
-      "decoded-output",
-      "source-video",
-      "prompts",
-      "prompt-relay",
-      "references",
-      "reference-framing",
-      "retake",
-      "audio-sources",
-      "audio-segments",
-      "audio-reuse",
-      "audio-derived-duration",
-      "control-signal-derived-duration",
-      "image-input",
-      "video-input",
-      "pixel-upscale",
-      "model-upscale",
-      "latent-upscale",
-      "latent-model-upscale",
-      "lora",
-      "ic-lora",
-      "hdr",
-      "frame-references",
-      "video",
-      "attached-audio",
-      "standalone-audio"
-    ],
     "capabilities": {
       "architecture": [
         "generated-entry",
@@ -67,11 +35,6 @@
         "hdr",
         "frame-references"
       ],
-      "output": [
-        "video",
-        "attached-audio",
-        "standalone-audio"
-      ],
       "upscaleModes": [
         "pixel",
         "model",
@@ -91,26 +54,6 @@
         "AceStepFun"
       ]
     },
-    "profiles": [
-      {
-        "id": "ltx-2.3",
-        "label": "LTX Video 2.3",
-        "entryModes": [
-          "text-to-video",
-          "image-to-video",
-          "source-video",
-          "refine-video"
-        ],
-        "capabilities": [
-          "sampler-selection",
-          "scheduler-selection",
-          "dimension-rules",
-          "frame-rules",
-          "normal-lora"
-        ],
-        "rules": []
-      }
-    ],
     "boundaryRules": {
       "cut": {
         "support": "supported",
@@ -218,8 +161,5 @@
         }
       }
     ]
-  },
-  "forbiddenProfileCapabilities": [
-    "quantized-lora"
-  ]
+  }
 }

@@ -137,13 +137,6 @@ const crossArchitectureCatalog = (): {
 } => {
     const ltx = testArchitectureCatalog();
     const fake = fakeArchitectureCatalog();
-    fake.architectures[0].profiles.push({
-        id: "test-alt",
-        label: "Test Alt",
-        entryModes: ["text-to-video", "image-to-video"],
-        capabilities: [],
-        rules: [],
-    });
     fake.entries.push({
         ...fake.entries[0],
         value: "test-video-alt.safetensors",
@@ -162,7 +155,7 @@ const crossArchitectureCatalog = (): {
             modelProfileId: "test-profile",
             model: "test-video.safetensors",
             capabilities: structuredClone(fake.architectures[0].capabilities),
-            entryModes: [...fake.architectures[0].profiles[0].entryModes],
+            entryModes: [...fake.architectures[0].capabilities.entryModes],
         },
     };
 };

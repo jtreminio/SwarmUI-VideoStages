@@ -232,13 +232,13 @@ describe("cross-language mirror: LTX IC-LoRA Drive Media contracts", () => {
 describe("cross-language mirror: architecture catalog rule contract", () => {
     interface ArchitectureDescriptorContract {
         descriptor: ArchitectureCatalogEntryDto;
-        forbiddenProfileCapabilities: string[];
     }
 
     const contract = loadFixture<ArchitectureDescriptorContract>(
         "architecture-catalog-rule-contract.json",
     );
     const parsed = parseVideoArchitectureCatalog({
+        schemaVersion: 2,
         architectures: [contract.descriptor],
         models: [],
     });
@@ -250,10 +250,5 @@ describe("cross-language mirror: architecture catalog rule contract", () => {
             throw new Error("LTX architecture did not parse");
         }
         expect(architecture).toEqual(contract.descriptor);
-        for (const forbidden of contract.forbiddenProfileCapabilities) {
-            expect(architecture.profiles[0]?.capabilities).not.toContain(
-                forbidden,
-            );
-        }
     });
 });

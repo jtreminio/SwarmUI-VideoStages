@@ -403,13 +403,6 @@ internal sealed record ResolvedVideoModel(
         AudioSourceKindNarrowing ?? Architecture.AudioSourceKinds;
 
     /// <summary>
-    /// Non-authorizing model metadata. Feature support belongs to
-    /// <see cref="EffectiveCapabilities"/>; strings here may describe a specialized implementation
-    /// but must never enable an authoring or execution path.
-    /// </summary>
-    public IReadOnlyList<string> Enhancements { get; init; } = [];
-
-    /// <summary>
     /// Frame positions accepted by this model's native image-conditioning path. Values are
     /// stable wire names such as <c>first</c>, <c>last</c>, and <c>any</c>.
     /// </summary>

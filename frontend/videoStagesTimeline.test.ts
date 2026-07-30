@@ -115,6 +115,7 @@ const flushMicrotasks = async (): Promise<void> => {
 const authoritativeDto = (
     modelNames: readonly string[] = ["ltx-2.3.safetensors"],
 ) => ({
+    schemaVersion: 2,
     architectures: structuredClone(testArchitectureCatalog().architectures),
     models: modelNames.map((modelName) => ({
         modelName,
@@ -126,12 +127,8 @@ const authoritativeDto = (
         capabilities: structuredClone(
             testArchitectureCatalog().architectures[0].capabilities,
         ),
-        entryModes: [
-            "text-to-video",
-            "image-to-video",
-            "source-video",
-            "refine-video",
-        ],
+        entryAbilities: ["text", "image"],
+        enhancements: { referencePositions: ["any"] },
     })),
 });
 
@@ -452,6 +449,7 @@ describe("videoStagesTimeline", () => {
         resetArchitectureCatalogForTests();
 
         const dto = {
+            schemaVersion: 2,
             architectures: testArchitectureCatalog().architectures,
             models: [
                 {
@@ -464,12 +462,8 @@ describe("videoStagesTimeline", () => {
                     capabilities: structuredClone(
                         testArchitectureCatalog().architectures[0].capabilities,
                     ),
-                    entryModes: [
-                        "text-to-video",
-                        "image-to-video",
-                        "source-video",
-                        "refine-video",
-                    ],
+                    entryAbilities: ["text", "image"],
+                    enhancements: { referencePositions: ["any"] },
                 },
             ],
         };

@@ -20,15 +20,7 @@ const catalogWithWan = () => {
     const wan = structuredClone(ltx);
     wan.id = "wan22";
     wan.label = "WAN";
-    wan.defaultProfileId = "wan-profile";
     wan.rules = [];
-    wan.profiles = [
-        {
-            ...wan.profiles[0],
-            id: "wan-profile",
-            label: "WAN",
-        },
-    ];
     catalog.architectures.push(wan);
     catalog.entries.push({
         value: "wan.safetensors",

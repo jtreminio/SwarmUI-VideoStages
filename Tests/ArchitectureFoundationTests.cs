@@ -1670,6 +1670,7 @@ public class ArchitectureFoundationTests
 
         JObject catalog = await VideoStagesApi.VideoStagesGetArchitectureCatalog(null);
 
+        Assert.Equal(2, catalog.Value<int>("schemaVersion"));
         JArray architectures = (JArray)catalog["architectures"];
         Assert.Equal(
             ["none", "ltx2", "wan22", "host-video"],
@@ -1677,7 +1678,9 @@ public class ArchitectureFoundationTests
         JObject none = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "none");
-        Assert.Equal("none", none["defaultProfileId"]);
+        Assert.Null(none["defaultProfileId"]);
+        Assert.Null(none["profiles"]);
+        Assert.Null(none["extras"]);
         Assert.Equal(
             ["sourced-entry", "decoded-output"],
             none["capabilities"]["architecture"].Values<string>());
@@ -1688,21 +1691,14 @@ public class ArchitectureFoundationTests
             ["Disabled", "Upload"],
             none["capabilities"]["audioSourceKinds"].Values<string>());
         Assert.Empty(none["capabilities"]["stage"]);
-        Assert.Equal(
-            ["video", "attached-audio"],
-            none["capabilities"]["output"].Values<string>());
+        Assert.Null(none["capabilities"]["output"]);
         Assert.Empty(none["capabilities"]["upscaleModes"]);
-        Assert.Equal(
-            "none",
-            Assert.Single((JArray)none["profiles"])["id"]);
-
         JObject ltx = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "ltx2");
         Assert.Null(ltx["ignoredUnsupportedFeatures"]);
         Assert.Equal("ltx2", ltx["id"]);
         Assert.Equal("LTX Video 2.3", ltx["label"]);
-        Assert.Equal("ltx-2.3", ltx["defaultProfileId"]);
         JObject capabilities = (JObject)ltx["capabilities"];
         Assert.Null(capabilities["modelProfiles"]);
         Assert.Null(capabilities["boundaryModes"]);
@@ -1736,7 +1732,6 @@ public class ArchitectureFoundationTests
         Assert.Equal(
             ["pixel", "model", "latent", "latent-model"],
             capabilities["upscaleModes"].Values<string>());
-        Assert.Contains("standalone-audio", capabilities["output"].Values<string>());
         Assert.Null(capabilities["sourceVideo"]);
         JObject crossfadeRule = (JObject)ltx["boundaryRules"]["crossfade"];
         Assert.Equal("boundary", crossfadeRule["scope"]);
@@ -1751,11 +1746,6 @@ public class ArchitectureFoundationTests
         JObject continueRule = (JObject)ltx["boundaryRules"]["continue"];
         Assert.Equal(1, continueRule["constraints"]["continuityExtraFrames"]);
         Assert.True(continueRule["constraints"]["targetRequiresGeneratedEntry"].Value<bool>());
-        JObject profile = Assert.Single(
-            ((JArray)ltx["profiles"]).Values<JObject>(),
-            item => item["id"]?.ToString() == "ltx-2.3");
-        Assert.Contains("frame-rules", profile["capabilities"].Values<string>());
-        Assert.NotNull(profile["rules"]);
         JArray rules = (JArray)ltx["rules"];
         Assert.Contains(
             rules.Values<JObject>(),
@@ -1776,45 +1766,8 @@ public class ArchitectureFoundationTests
             item => item["id"]?.ToString() == "wan22");
         Assert.Null(wan["ignoredUnsupportedFeatures"]);
         Assert.Equal(
-            WanArchitectureModule.ImageToVideoProfileId.Value,
-            wan["defaultProfileId"]);
-        Assert.Equal(
             ["text-to-video", "image-to-video", "source-video"],
             wan["capabilities"]["entryModes"].Values<string>());
-        JObject[] wanProfiles = [.. wan["profiles"].Values<JObject>()];
-        Assert.Equal(
-            [
-                WanArchitectureModule.ImageToVideoProfileId.Value,
-                WanArchitectureModule.Ti2v5bProfileId.Value,
-                WanArchitectureModule.OrdinaryImageToVideoProfileId.Value,
-            ],
-            wanProfiles.Select(profile => profile.Value<string>("id")));
-        Assert.All(
-            wanProfiles,
-            wanProfile => Assert.Contains(
-                "normal-lora",
-                wanProfile["capabilities"].Values<string>()));
-        Assert.Equal(
-            ["text-to-video", "image-to-video", "source-video"],
-            wanProfiles.Single(profile =>
-                profile.Value<string>("id")
-                    == WanArchitectureModule.ImageToVideoProfileId.Value)
-                ["entryModes"]
-                .Values<string>());
-        Assert.Equal(
-            ["text-to-video", "image-to-video", "source-video"],
-            wanProfiles.Single(profile =>
-                profile.Value<string>("id")
-                    == WanArchitectureModule.OrdinaryImageToVideoProfileId.Value)
-                ["entryModes"]
-                .Values<string>());
-        Assert.Equal(
-            ["text-to-video", "image-to-video", "source-video"],
-            wanProfiles.Single(profile =>
-                profile.Value<string>("id")
-                    == WanArchitectureModule.Ti2v5bProfileId.Value)
-                ["entryModes"]
-                .Values<string>());
         JObject model = Assert.Single(
             ((JArray)catalog["models"]).Values<JObject>(),
             item => item["modelName"]?.ToString() == models.VideoModel.Name);
@@ -1824,6 +1777,8 @@ public class ArchitectureFoundationTests
         Assert.Equal(
             capabilities["clip"].Values<string>(),
             model["capabilities"]["clip"].Values<string>());
+        Assert.Null(model["entryModes"]);
+        Assert.Null(model["enhancements"]["extras"]);
     }
 
     [Fact]

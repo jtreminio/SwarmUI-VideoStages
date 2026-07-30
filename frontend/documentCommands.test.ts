@@ -139,13 +139,6 @@ const catalogWithSecondLtxProfile = (): ReturnType<
     typeof testArchitectureCatalog
 > => {
     const catalog = testArchitectureCatalog();
-    catalog.architectures[0].profiles.push({
-        id: "ltx-alt",
-        label: "LTX Alternate Profile",
-        entryModes: ["text-to-video", "image-to-video"],
-        capabilities: ["normal-lora"],
-        rules: [],
-    });
     catalog.entries.push({
         ...catalog.entries[0],
         value: "ltx-alt",
@@ -653,7 +646,7 @@ describe("reduceDocumentCommand", () => {
                     modelProfileId: "test-profile",
                     model: "test-video.safetensors",
                     capabilities: fake.architectures[0].capabilities,
-                    entryModes: fake.architectures[0].profiles[0].entryModes,
+                    entryModes: fake.architectures[0].capabilities.entryModes,
                 },
             },
             { architectureCatalog: catalogWithFake(fake) },
@@ -735,7 +728,7 @@ describe("reduceDocumentCommand", () => {
                     modelProfileId: "test-profile",
                     model: "test-video.safetensors",
                     capabilities: fake.architectures[0].capabilities,
-                    entryModes: fake.architectures[0].profiles[0].entryModes,
+                    entryModes: fake.architectures[0].capabilities.entryModes,
                 },
             },
             { architectureCatalog: catalogWithFake(fake) },
@@ -811,7 +804,7 @@ describe("reduceDocumentCommand", () => {
                     modelProfileId: "test-profile",
                     model: "test-video.safetensors",
                     capabilities,
-                    entryModes: fake.architectures[0].profiles[0].entryModes,
+                    entryModes: fake.architectures[0].capabilities.entryModes,
                 },
             },
             { architectureCatalog: catalogWithFake(fake) },
@@ -850,7 +843,7 @@ describe("reduceDocumentCommand", () => {
                     modelProfileId: "test-profile",
                     model: "test-video.safetensors",
                     capabilities: fake.architectures[0].capabilities,
-                    entryModes: fake.architectures[0].profiles[0].entryModes,
+                    entryModes: fake.architectures[0].capabilities.entryModes,
                 },
             },
             { architectureCatalog: catalogWithFake(fake) },
@@ -1105,7 +1098,8 @@ describe("reduceDocumentCommand", () => {
                     modelProfileId: "ltx-2.3",
                     model: "ltx",
                     capabilities: catalog.architectures[0].capabilities,
-                    entryModes: catalog.architectures[0].profiles[0].entryModes,
+                    entryModes:
+                        catalog.architectures[0].capabilities.entryModes,
                 },
             },
             { architectureCatalog: catalog },
@@ -1477,7 +1471,6 @@ describe("reduceDocumentCommand", () => {
         source.clips[0].stages[0].skipped = true;
         const fake = fakeArchitectureCatalog();
         fake.entries[0].entryModes = ["image-to-video"];
-        fake.architectures[0].profiles[0].entryModes = ["image-to-video"];
 
         const result = reduceDocumentCommand(
             source,
@@ -1510,7 +1503,6 @@ describe("reduceDocumentCommand", () => {
         const fake = fakeArchitectureCatalog();
         fake.architectures[0].capabilities.stage = ["lora"];
         fake.architectures[0].capabilities.upscaleModes = ["pixel"];
-        fake.architectures[0].profiles[0].capabilities = [];
         source.clips[1].loras = [{ name: "detail" }];
         source.clips[1].stages = [
             {
@@ -1539,7 +1531,7 @@ describe("reduceDocumentCommand", () => {
                     // This forged capability set deliberately over-claims support.
                     capabilities:
                         testArchitectureCatalog().architectures[0].capabilities,
-                    entryModes: fake.architectures[0].profiles[0].entryModes,
+                    entryModes: fake.architectures[0].capabilities.entryModes,
                 },
             },
             { architectureCatalog: catalogWithFake(fake) },

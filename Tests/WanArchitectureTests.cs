@@ -199,27 +199,21 @@ public class WanArchitectureTests
         Assert.Equal(
             ["first"],
             catalogModel["enhancements"]["referencePositions"].Values<string>());
-        Assert.Contains(
-            "bounded-frame-references",
-            catalogModel["enhancements"]["extras"].Values<string>());
-        Assert.Contains(
-            "lora",
-            catalogModel["enhancements"]["extras"].Values<string>());
         Assert.Equal(
-            ["text-to-video", "image-to-video"],
-            catalogModel["entryModes"].Values<string>());
+            ["text-to-video", "image-to-video", "source-video"],
+            catalogModel["capabilities"]["entryModes"].Values<string>());
+        Assert.Null(catalogModel["entryModes"]);
+        Assert.Null(catalogModel["enhancements"]["extras"]);
 
         JObject architecture = Assert.Single(
             catalog["architectures"].Values<JObject>());
-        Assert.Contains(
-            "frame-references",
-            architecture["extras"].Values<string>());
         Assert.NotNull(architecture["capabilities"]);
-        Assert.NotNull(architecture["profiles"]);
+        Assert.Null(architecture["extras"]);
+        Assert.Null(architecture["profiles"]);
     }
 
     [Fact]
-    public void Catalog_model_extras_derive_legacy_aliases_despite_a_stale_profile_id()
+    public void Catalog_model_capabilities_do_not_depend_on_a_stale_profile_hint()
     {
         VideoArchitectureDescriptor descriptor =
             WanArchitectureModule.Instance.Descriptor;
@@ -238,17 +232,11 @@ public class WanArchitectureTests
         JObject catalog = ArchitectureCatalogSerializer.Serialize(
             new WanCatalogRegistry(resolved));
         JObject model = Assert.Single(catalog["models"].Values<JObject>());
-        string[] extras = model["enhancements"]["extras"].Values<string>().ToArray();
-
         Assert.Equal(
             "removed-profile-alias",
             model.Value<string>("modelProfileId"));
-        Assert.Contains("lora", extras);
-        Assert.Contains("sampler-selection", extras);
-        Assert.Contains("scheduler-selection", extras);
-        Assert.Contains("dimension-rules", extras);
-        Assert.Contains("frame-rules", extras);
-        Assert.Contains("normal-lora", extras);
+        Assert.Contains("lora", model["capabilities"]["stage"].Values<string>());
+        Assert.Null(model["enhancements"]["extras"]);
     }
 
     [Fact]
@@ -672,24 +660,8 @@ public class WanArchitectureTests
         JObject wan = Assert.Single(
             catalog["architectures"].Values<JObject>(),
             item => item.Value<string>("id") == "wan22");
-        JObject[] profiles = [.. wan["profiles"].Values<JObject>()];
-
         Assert.Contains("lora", wan["capabilities"]["stage"].Values<string>());
-        Assert.Equal(3, profiles.Length);
-        Assert.Equal(
-            [
-                WanArchitectureModule.ImageToVideoProfileId.Value,
-                WanArchitectureModule.Ti2v5bProfileId.Value,
-                WanArchitectureModule.OrdinaryImageToVideoProfileId.Value,
-            ],
-            profiles.Select(profile => profile.Value<string>("id")));
-        Assert.All(profiles, profile =>
-        {
-            Assert.Empty(profile["rules"].Values<JObject>());
-            Assert.Contains(
-                "normal-lora",
-                profile["capabilities"].Values<string>());
-        });
+        Assert.Null(wan["profiles"]);
         JObject rule = Assert.Single(wan["rules"].Values<JObject>());
         Assert.Equal(
             WanArchitectureModule.NormalLoraRequiresSamplingStageCode,
@@ -1493,7 +1465,6 @@ public class WanArchitectureTests
                 : T2IModelClassSorter.CompatWan21_14b.ID,
             EntryAbilities = VideoModelEntryAbility.TextToVideo
                 | VideoModelEntryAbility.ImageToVideo,
-            Enhancements = ["bounded-frame-references"],
             ReferencePositions = five ? ["first"] : ["first", "last"],
         };
     }

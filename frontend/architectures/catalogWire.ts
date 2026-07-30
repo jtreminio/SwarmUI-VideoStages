@@ -221,17 +221,6 @@ const isRuleArray = (
     ) &&
     new Set(value.map((rule) => rule.code)).size === value.length;
 
-const isProfile = (
-    value: unknown,
-): value is ArchitectureCatalogEntryDto["profiles"][number] =>
-    isRecord(value) &&
-    isTrimmedNonEmpty(value.id) &&
-    isTrimmedNonEmpty(value.label) &&
-    isEntryModeArray(value.entryModes) &&
-    value.entryModes.length > 0 &&
-    isUniqueStringArray(value.capabilities) &&
-    isRuleArray(value.rules, ["model-profile", "stage"]);
-
 const isCapabilities = (value: unknown): value is ArchitectureCapabilities => {
     if (!isRecord(value)) {
         return false;
@@ -241,7 +230,6 @@ const isCapabilities = (value: unknown): value is ArchitectureCapabilities => {
             value.architecture,
             value.clip,
             value.stage,
-            value.output,
             value.upscaleModes,
             value.audioSourceKinds,
         ].every(isUniqueStringArray) && isEntryModeArray(value.entryModes)
@@ -270,6 +258,8 @@ export const parseVideoArchitectureCatalog = (
 ): VideoArchitectureCatalogDto | null => {
     if (
         !isRecord(value) ||
+        !hasExactKeys(value, ["schemaVersion", "architectures", "models"]) ||
+        value.schemaVersion !== 2 ||
         !Array.isArray(value.architectures) ||
         !Array.isArray(value.models)
     ) {
@@ -280,26 +270,27 @@ export const parseVideoArchitectureCatalog = (
     for (const raw of value.architectures) {
         if (
             !isRecord(raw) ||
+            !hasExactKeys(raw, [
+                "id",
+                "label",
+                "capabilities",
+                "boundaryRules",
+                "rules",
+            ]) ||
             !isTrimmedNonEmpty(raw.id) ||
             !isTrimmedNonEmpty(raw.label) ||
-            !isTrimmedNonEmpty(raw.defaultProfileId) ||
             !isCapabilities(raw.capabilities) ||
-            (raw.extras !== undefined && !isUniqueStringArray(raw.extras)) ||
-            !Array.isArray(raw.profiles) ||
-            !raw.profiles.every(isProfile) ||
             !hasCompleteBoundaryRules(raw.boundaryRules) ||
             !isRuleArray(raw.rules, ["architecture", "clip", "stage", "output"])
         ) {
             return null;
         }
-        const profileIds = raw.profiles.map((profile) => profile.id);
         const executableRuleCodes = [
             ...Object.values(raw.boundaryRules).map((rule) => rule.code),
             ...raw.rules.map((rule) => rule.code),
         ];
         if (
             architectureIds.has(raw.id) ||
-            new Set(profileIds).size !== profileIds.length ||
             new Set(executableRuleCodes).size !== executableRuleCodes.length
         ) {
             return null;
@@ -308,10 +299,7 @@ export const parseVideoArchitectureCatalog = (
         architectures.push({
             id: raw.id,
             label: raw.label,
-            defaultProfileId: raw.defaultProfileId,
-            ...(raw.extras === undefined ? {} : { extras: [...raw.extras] }),
             capabilities: structuredClone(raw.capabilities),
-            profiles: structuredClone(raw.profiles),
             boundaryRules: structuredClone(raw.boundaryRules),
             rules: structuredClone(raw.rules),
         });
@@ -324,6 +312,17 @@ export const parseVideoArchitectureCatalog = (
     for (const raw of value.models) {
         if (
             !isRecord(raw) ||
+            !hasExactKeys(raw, [
+                "modelName",
+                "architectureId",
+                "modelProfileId",
+                "modelClassId",
+                "compatibilityClassId",
+                "frameGrid",
+                "entryAbilities",
+                "capabilities",
+                "enhancements",
+            ]) ||
             !isTrimmedNonEmpty(raw.modelName) ||
             !isTrimmedNonEmpty(raw.architectureId) ||
             !architectureIds.has(raw.architectureId) ||
@@ -334,17 +333,11 @@ export const parseVideoArchitectureCatalog = (
             Number(raw.frameGrid) < 1 ||
             Number(raw.frameGrid) > MAX_FRAME_GRID ||
             !isCapabilities(raw.capabilities) ||
-            !isEntryModeArray(raw.entryModes) ||
-            raw.entryModes.length === 0 ||
-            (raw.entryAbilities !== undefined &&
-                (!isEntryAbilityArray(raw.entryAbilities) ||
-                    raw.entryAbilities.length === 0)) ||
-            (raw.enhancements !== undefined &&
-                (!isRecord(raw.enhancements) ||
-                    !isUniqueStringArray(raw.enhancements.extras) ||
-                    !isReferencePositionArray(
-                        raw.enhancements.referencePositions,
-                    )))
+            !isEntryAbilityArray(raw.entryAbilities) ||
+            raw.entryAbilities.length === 0 ||
+            !isRecord(raw.enhancements) ||
+            !hasExactKeys(raw.enhancements, ["referencePositions"]) ||
+            !isReferencePositionArray(raw.enhancements.referencePositions)
         ) {
             return null;
         }
@@ -352,9 +345,6 @@ export const parseVideoArchitectureCatalog = (
             return null;
         }
         modelNames.add(raw.modelName);
-        const rawEnhancements = raw.enhancements as
-            | { extras: string[]; referencePositions: string[] }
-            | undefined;
         models.push({
             modelName: raw.modelName,
             architectureId: raw.architectureId,
@@ -363,21 +353,13 @@ export const parseVideoArchitectureCatalog = (
             compatibilityClassId: raw.compatibilityClassId,
             frameGrid: Number(raw.frameGrid),
             capabilities: structuredClone(raw.capabilities),
-            ...(raw.entryAbilities === undefined
-                ? {}
-                : { entryAbilities: [...raw.entryAbilities] }),
-            ...(rawEnhancements === undefined
-                ? {}
-                : {
-                      enhancements: {
-                          extras: [...rawEnhancements.extras],
-                          referencePositions: [
-                              ...rawEnhancements.referencePositions,
-                          ],
-                      },
-                  }),
-            entryModes: [...raw.entryModes],
+            entryAbilities: [...raw.entryAbilities],
+            enhancements: {
+                referencePositions: [
+                    ...(raw.enhancements.referencePositions as string[]),
+                ],
+            },
         });
     }
-    return { architectures, models };
+    return { schemaVersion: 2, architectures, models };
 };

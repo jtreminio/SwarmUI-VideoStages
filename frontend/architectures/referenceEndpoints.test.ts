@@ -11,7 +11,6 @@ describe("referenceEndpointPolicy", () => {
         const catalog = testArchitectureCatalog();
         const first = catalog.entries[0];
         first.enhancements = {
-            extras: ["frame-references"],
             referencePositions: ["first"],
         };
         catalog.entries.push(
@@ -19,7 +18,6 @@ describe("referenceEndpointPolicy", () => {
                 ...first,
                 value: "terminal-with-last.safetensors",
                 enhancements: {
-                    extras: ["frame-references"],
                     referencePositions: ["last"],
                 },
             },
@@ -27,7 +25,6 @@ describe("referenceEndpointPolicy", () => {
                 ...first,
                 value: "passthrough-without-last.safetensors",
                 enhancements: {
-                    extras: ["frame-references"],
                     referencePositions: ["first"],
                 },
             },
@@ -58,14 +55,12 @@ describe("referenceEndpointPolicy", () => {
         const catalog = testArchitectureCatalog();
         const first = catalog.entries[0];
         first.enhancements = {
-            extras: ["frame-references"],
             referencePositions: ["first", "last"],
         };
         catalog.entries.push({
             ...first,
             value: "terminal-first-only.safetensors",
             enhancements: {
-                extras: ["frame-references"],
                 referencePositions: ["first"],
             },
         });

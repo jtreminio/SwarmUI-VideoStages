@@ -73,7 +73,6 @@ describe("buildRefBody", () => {
         const catalog = testArchitectureCatalog();
         const model = catalog.entries[0];
         model.enhancements = {
-            extras: ["frame-references"],
             referencePositions: ["first", "last"],
         };
         setVideoStagesHostBridgeForTests({
@@ -126,7 +125,6 @@ describe("buildRefBody", () => {
         const catalog = testArchitectureCatalog();
         const model = catalog.entries[0];
         model.enhancements = {
-            extras: ["frame-references"],
             referencePositions: ["first"],
         };
         setVideoStagesHostBridgeForTests({

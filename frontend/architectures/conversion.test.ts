@@ -9,7 +9,6 @@ import {
     minimalStage,
 } from "../__test_helpers__/clipFixtures";
 import { createTimelineHistory } from "../timelineHistory";
-import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
 import { modelSupportsStageEntry } from "./conversion/entryModePolicy";
 import { planArchitectureConversion } from "./conversion/plan";
 import {
@@ -29,7 +28,7 @@ describe("architecture conversion policy", () => {
             modelProfileId: "test-profile",
             model: "test-video.safetensors",
             capabilities: fake.architectures[0].capabilities,
-            entryModes: fake.architectures[0].profiles[0].entryModes,
+            entryModes: fake.architectures[0].capabilities.entryModes,
         };
         const clip = minimalClip({
             loras: [{ name: "detail" }],
@@ -72,7 +71,7 @@ describe("architecture conversion policy", () => {
                 capabilities:
                     testArchitectureCatalog().architectures[0].capabilities,
                 entryModes:
-                    fakeArchitectureCatalog().architectures[0].profiles[0]
+                    fakeArchitectureCatalog().architectures[0].capabilities
                         .entryModes,
             },
             fakeArchitectureCatalog(),
@@ -87,7 +86,7 @@ describe("architecture conversion policy", () => {
                 capabilities:
                     testArchitectureCatalog().architectures[0].capabilities,
                 entryModes:
-                    testArchitectureCatalog().architectures[0].profiles[0]
+                    testArchitectureCatalog().architectures[0].capabilities
                         .entryModes,
             },
             testArchitectureCatalog(),
@@ -124,7 +123,7 @@ describe("architecture conversion policy", () => {
                 capabilities:
                     testArchitectureCatalog().architectures[0].capabilities,
                 entryModes:
-                    testArchitectureCatalog().architectures[0].profiles[0]
+                    testArchitectureCatalog().architectures[0].capabilities
                         .entryModes,
             },
             testArchitectureCatalog(),
@@ -148,7 +147,7 @@ describe("architecture conversion policy", () => {
             modelProfileId: "ltx-2.3",
             model: "ltx",
             capabilities: catalog.architectures[0].capabilities,
-            entryModes: catalog.architectures[0].profiles[0].entryModes,
+            entryModes: catalog.architectures[0].capabilities.entryModes,
         };
         const staleHint = planArchitectureConversion(
             minimalClip({
@@ -296,7 +295,6 @@ describe("architecture conversion policy", () => {
     it("rejects an image-only whole-clip target when the first active stage needs text entry", () => {
         const catalog = fakeArchitectureCatalog();
         catalog.entries[0].entryModes = ["image-to-video"];
-        catalog.architectures[0].profiles[0].entryModes = ["image-to-video"];
         const clip = minimalClip({
             stages: [
                 minimalStage({ skipped: true }),
@@ -327,7 +325,6 @@ describe("architecture conversion policy", () => {
                 (capability) => capability !== "multi-stage",
             );
         catalog.entries[0].entryModes = ["text-to-video"];
-        catalog.architectures[0].profiles[0].entryModes = ["text-to-video"];
         const source = minimalClip({
             stages: [minimalStage(), minimalStage()],
         });
@@ -353,7 +350,6 @@ describe("architecture conversion policy", () => {
     it("preserves source video when an image-capable target can refine it", () => {
         const catalog = fakeArchitectureCatalog();
         catalog.entries[0].entryModes = ["image-to-video"];
-        catalog.architectures[0].profiles[0].entryModes = ["image-to-video"];
         const source = minimalClip({
             sourceVideo: {
                 data: "data:video/mp4;base64,AA==",
@@ -406,16 +402,6 @@ describe("architecture conversion policy", () => {
 
     it("retains clip LoRAs and dormant samplerless weights", () => {
         const catalog = testArchitectureCatalog();
-        catalog.architectures[0].profiles[0].rules = [
-            {
-                support: "conditional",
-                code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
-                reason: "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.",
-                scope: "stage",
-                entityId: null,
-                constraints: { exclusiveMinimumControl: 0 },
-            },
-        ];
         const source = minimalClip({
             loras: [{ name: "detail" }, { name: "motion" }],
             stages: [
@@ -430,7 +416,7 @@ describe("architecture conversion policy", () => {
                 modelProfileId: "ltx-2.3",
                 model: "ltx",
                 capabilities: catalog.architectures[0].capabilities,
-                entryModes: catalog.architectures[0].profiles[0].entryModes,
+                entryModes: catalog.architectures[0].capabilities.entryModes,
             },
             catalog,
         );
@@ -450,7 +436,7 @@ describe("architecture conversion policy", () => {
             model: "test-video.safetensors",
             capabilities:
                 testArchitectureCatalog().architectures[0].capabilities,
-            entryModes: catalog.architectures[0].profiles[0].entryModes,
+            entryModes: catalog.architectures[0].capabilities.entryModes,
         };
         const source = minimalClip({
             // Including the dropped payload: undo has to restore it too.

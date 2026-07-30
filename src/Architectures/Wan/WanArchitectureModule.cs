@@ -150,7 +150,6 @@ internal sealed class WanArchitectureModule :
             CompatibilityClassId = compatClassId,
             EntryAbilities = VideoModelEntryAbility.TextToVideo
                 | VideoModelEntryAbility.ImageToVideo,
-            Enhancements = ["bounded-frame-references"],
             ReferencePositions = SupportsHostEndFrame(compatClassId)
                 ? ["first", "last"]
                 : ["first"],
