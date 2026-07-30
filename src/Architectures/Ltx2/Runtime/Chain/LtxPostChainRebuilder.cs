@@ -246,14 +246,11 @@ internal static class LtxPostChainRebuilder
             return;
         }
 
-        int retargeted = bridge.Graph.RetargetConnections(
+        bridge.Graph.RetargetConnections(
             oldSeparate.AudioLatent,
             newSeparate.AudioLatent,
             (node, input) => node.Id == audioDecode.Id
                           && input.Name == "samples");
-        if (retargeted > 0)
-        {
-        }
 
         if (!HasAudioDecodeConnectedToSeparate(bridge, audioDecode.Id, newSeparate.Id))
         {

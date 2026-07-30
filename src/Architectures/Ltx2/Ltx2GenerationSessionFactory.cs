@@ -8,7 +8,6 @@ internal sealed class Ltx2GenerationSessionFactory(
     WorkflowGenerator generator,
     AudioTimelineExecutor audioTimeline,
     StageSequenceRootSetup rootSetup,
-    StageGuideReferenceState guideReferences,
     StageClipExecutor clipExecutor) : IArchitectureGenerationSessionFactory
 {
     private StageSequenceRootSources _rootSources;
@@ -27,7 +26,6 @@ internal sealed class Ltx2GenerationSessionFactory(
 
     public void PrepareTimeline(ArchitectureTimelinePreparationContext context)
     {
-        guideReferences.BeginClip();
         if (context.OwnsGeneratedRoot)
         {
             audioTimeline.PrepareRootAudio(

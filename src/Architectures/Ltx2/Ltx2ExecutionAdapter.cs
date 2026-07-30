@@ -84,7 +84,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             generator,
             audioTimelineExecutor,
             rootSetup,
-            guideReferences,
             clipExecutor);
     }
 
