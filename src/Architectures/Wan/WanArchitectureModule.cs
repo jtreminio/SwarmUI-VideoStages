@@ -150,9 +150,6 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         profileId == OrdinaryImageToVideoProfileId
         || LegacyRecognizedProfiles.Any(candidate => candidate.ProfileId == profileId);
 
-    internal static bool IsLegacySpecialProfile(ModelProfileId profileId) =>
-        LegacyRecognizedProfiles.Any(candidate => candidate.ProfileId == profileId);
-
     private static bool IsOrdinaryWanImageModel(T2IModel model)
     {
         T2IModelClass modelClass = model?.ModelClass;

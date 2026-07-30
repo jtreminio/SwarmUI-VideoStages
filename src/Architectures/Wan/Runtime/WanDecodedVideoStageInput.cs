@@ -65,30 +65,6 @@ internal sealed class WanDecodedVideoStageInput(
                 $"Clip {clip.ClipId} stage {stage.StageId} reached the Wan runtime with partial "
                 + $"control '{payload.Control}' that quantizes to sampler start step 0.");
         }
-        if (payload.Control < 1 && genInfo.VideoSwapModel is not null)
-        {
-            if (!double.IsFinite(genInfo.VideoSwapPercent)
-                || genInfo.VideoSwapPercent < 0
-                || genInfo.VideoSwapPercent > 1)
-            {
-                throw new InvalidOperationException(
-                    $"Clip {clip.ClipId} stage {stage.StageId} reached the Wan runtime with "
-                    + $"invalid swap percent '{genInfo.VideoSwapPercent}'.");
-            }
-            if (!WanStageSchedulePolicy.HasSwapHighNoiseWindow(
-                    payload.Steps,
-                    payload.Control,
-                    genInfo.VideoSwapPercent))
-            {
-                int highEndStep = WanStageSchedulePolicy.HostHighEndStep(
-                    payload.Steps,
-                    genInfo.VideoSwapPercent);
-                throw new InvalidOperationException(
-                    $"Clip {clip.ClipId} stage {stage.StageId} reached the Wan runtime with no "
-                    + $"high-noise sampling window: start step {startStep} must be less than "
-                    + $"swap high-noise end step {highEndStep}.");
-            }
-        }
         ValidateDecodedInput(clip, stage, genInfo.Frames);
         genInfo.BatchIndex = 0;
         genInfo.BatchLen = 1;

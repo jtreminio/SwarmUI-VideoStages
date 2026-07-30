@@ -208,37 +208,6 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Swap_compatibility_requires_the_same_architecture_and_profile()
-    {
-        VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
-        ResolvedVideoModel swap = new(
-            "wan-low",
-            descriptor.Id,
-            WanArchitectureModule.ImageToVideoProfileId,
-            descriptor);
-        ResolvedVideoModel sameProfile = swap with { ModelName = "wan-high" };
-        ResolvedVideoModel otherProfile = sameProfile with
-        {
-            ModelProfileId = new("synthetic-other-wan-profile"),
-        };
-        ResolvedVideoModel otherArchitecture = sameProfile with
-        {
-            ArchitectureId = new("synthetic-other-architecture"),
-        };
-
-        Assert.True(WanExecutionAdapter.IsSwapCompatible(swap, sameProfile));
-        Assert.False(WanExecutionAdapter.IsSwapCompatible(swap, otherProfile));
-        Assert.False(WanExecutionAdapter.IsSwapCompatible(swap, otherArchitecture));
-        Assert.False(WanExecutionAdapter.IsSwapCompatible(swap, null));
-        string mismatch =
-            WanExecutionAdapter.DescribeSwapIncompatibility(swap, 2, 10, otherProfile);
-        Assert.Contains("'wan-low'", mismatch);
-        Assert.Contains("clip 2 stage 10", mismatch);
-        Assert.Contains("'wan-high'", mismatch);
-        Assert.Contains("'synthetic-other-wan-profile'", mismatch);
-    }
-
-    [Fact]
     public void Effective_request_accepts_pixel_upscale_and_ignores_advanced_upscalers_and_ic_lora()
     {
         StageSpec stage = Stage(10, "wan-model");
@@ -609,11 +578,6 @@ public class WanArchitectureTests
         Assert.All(
             compiled.Stages.Values,
             payload => Assert.False(payload.OwnsVideoEndFrame));
-        ResolvedVideoModel ordinaryModel = ResolvedWan(
-            ordinary.Model,
-            WanArchitectureModule.OrdinaryImageToVideoProfileId,
-            WanArchitectureModule.Instance.Descriptor);
-        Assert.False(WanExecutionAdapter.IsSwapCompatible(ordinaryModel, ordinaryModel));
     }
 
     [Fact]

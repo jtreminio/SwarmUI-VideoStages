@@ -14,6 +14,7 @@ internal static class VideoStagesSpecParser
 {
     public static VideoStagesSpec Parse(WorkflowGenerator g)
     {
+        LegacyVideoSwapRequestSnapshot legacyVideoSwap = CaptureLegacyVideoSwap(g.UserInput);
         Action<string> warn =
             warning => PlanDiagnosticReporter.TrackRequestWarning(g.UserInput, warning);
         VideoStagesJsonDocument document = VideoStagesJsonReader.ReadDocument(g);
@@ -40,7 +41,10 @@ internal static class VideoStagesSpecParser
                 fps,
                 isTextToVideo,
                 [],
-                hasConfiguredResolution);
+                hasConfiguredResolution)
+            {
+                LegacyVideoSwap = legacyVideoSwap,
+            };
         }
 
         ValidateClipShapes(document.Entries);
@@ -97,7 +101,27 @@ internal static class VideoStagesSpecParser
             TimelineAudioSegmentSpecParser.Parse(
                 document.AudioTracks,
                 document.Entries,
-                warn));
+                warn))
+        {
+            LegacyVideoSwap = legacyVideoSwap,
+        };
+    }
+
+    private static LegacyVideoSwapRequestSnapshot CaptureLegacyVideoSwap(T2IParamInput input)
+    {
+        T2IModel swapModel = input.Get(T2IParamTypes.VideoSwapModel, null);
+        bool hasExplicitPercent =
+            input.TryGet(T2IParamTypes.VideoSwapPercent, out double swapPercent);
+        bool hasSwapSectionOverrides =
+            input.SectionParamOverrides.TryGetValue(
+                T2IParamInput.SectionID_VideoSwap,
+                out T2IParamSet swapSection)
+            && swapSection.ValuesInput.Count > 0;
+        return new(
+            swapModel?.Name,
+            hasExplicitPercent,
+            hasExplicitPercent ? swapPercent : null,
+            hasSwapSectionOverrides);
     }
 
     private static PromptParser.VideoStageTagData ParseTags(WorkflowGenerator g) =>

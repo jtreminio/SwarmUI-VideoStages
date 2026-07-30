@@ -217,5 +217,23 @@ public sealed record VideoStagesSpec(
     bool IsTextToVideo,
     IReadOnlyList<ClipSpec> Clips,
     bool HasConfiguredResolution = true,
-    IReadOnlyList<TimelineAudioSegmentSpec> TimelineAudioSegments = null
-);
+    IReadOnlyList<TimelineAudioSegmentSpec> TimelineAudioSegments = null)
+{
+    public LegacyVideoSwapRequestSnapshot LegacyVideoSwap { get; init; } = new();
+}
+
+/// <summary>
+/// Immutable authored facts from SwarmUI's legacy request-global video-swap controls. VideoStages
+/// keeps these only to explain why they are ignored; execution never consumes them.
+/// </summary>
+public sealed record LegacyVideoSwapRequestSnapshot(
+    string VideoSwapModelName = null,
+    bool HasExplicitVideoSwapPercent = false,
+    double? ExplicitVideoSwapPercent = null,
+    bool HasVideoSwapSectionOverrides = false)
+{
+    public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(VideoSwapModelName)
+        || HasExplicitVideoSwapPercent
+        || HasVideoSwapSectionOverrides;
+}

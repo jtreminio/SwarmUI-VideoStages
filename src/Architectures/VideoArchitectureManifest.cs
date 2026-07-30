@@ -33,12 +33,12 @@ internal static class VideoArchitectureManifest
             RootVideoStageResizer.RegisterHandlers,
             Ltx2ApiRoutes.Register,
             Ltx2HostIntegration.RegisterDependencies),
-        // Wan needs no host handlers, routes, or custom nodes: its graph is built by SwarmUI's own
-        // image-to-video step out of stock ComfyUI nodes.
+        // Wan's graph is built by SwarmUI's stock image-to-video path. Its one host callback
+        // prevents legacy request-global swap controls from adding a second, unauthored pass.
         new(
             WanArchitectureModule.Instance,
             generator => new WanExecutionAdapter(generator),
-            static () => { },
+            WanLegacySwapIsolation.RegisterHandlers,
             static () => { },
             static () => { }),
     ];

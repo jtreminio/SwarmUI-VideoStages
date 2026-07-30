@@ -16,9 +16,10 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
 
     /// <summary>
-    /// Validates request-global host video parameters before any host graph phase runs. Supported
-    /// swap settings are passed through to the host builder; the remaining settings still change
-    /// the result enough that silently omitting them would be the wrong answer.
+    /// Validates request-global host video parameters before any host graph phase runs. Legacy
+    /// request-global swap settings are projected to one warning and isolated by the host handler;
+    /// the remaining settings still change the result enough that silently omitting them would be
+    /// the wrong answer.
     /// </summary>
     public IReadOnlyList<PlanDiagnostic> PreflightRequest(
         ArchitectureRequestPreflightContext context)
@@ -36,97 +37,6 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
             diagnostics.Add(Refuse(
                 "'Refine Source Video' is a request-global donor and cannot coexist with a "
                 + "clip-local sourced Wan timeline."));
-        }
-        bool has5bStage = context.Plan.Clips
-            .Where(clip => clip.Architecture?.Id == ArchitectureId)
-            .SelectMany(clip => clip.Stages)
-            .Any(stage =>
-                stage.ResolvedModel?.ModelProfileId
-                    == WanArchitectureModule.Ti2v5bProfileId);
-        T2IModel swapModel = generator.UserInput.Get(T2IParamTypes.VideoSwapModel, null);
-        if (swapModel is not null && has5bStage)
-        {
-            diagnostics.Add(Refuse(
-                $"'Video Swap Model' '{swapModel.Name}' is not supported when any active Wan "
-                    + $"stage uses profile '{WanArchitectureModule.Ti2v5bProfileId}'."));
-        }
-        else if (swapModel is not null)
-        {
-            if (!WanArchitectureModule.Instance.TryResolveModel(swapModel, out ResolvedVideoModel swap))
-            {
-                diagnostics.Add(Refuse(
-                    $"'Video Swap Model' '{swapModel.Name}' is not a supported Wan 2.2 "
-                    + "image-to-video model."));
-            }
-            else
-            {
-                foreach (ClipPlan clip in context.Plan.Clips.Where(
-                    clip => clip.Architecture.Id == ArchitectureId))
-                {
-                    foreach (StagePlan stage in clip.Stages.Where(stage => !stage.IsPassthrough))
-                    {
-                        string mismatch = DescribeSwapIncompatibility(
-                            swap,
-                            clip.ClipId,
-                            stage.StageId,
-                            stage.ResolvedModel);
-                        if (mismatch is null)
-                        {
-                            continue;
-                        }
-                        diagnostics.Add(Refuse(
-                            mismatch,
-                            clip.ClipId,
-                            stage.StageId));
-                    }
-                }
-            }
-            double swapPercent = generator.UserInput.Get(T2IParamTypes.VideoSwapPercent, 0.5);
-            bool validSwapPercent =
-                double.IsFinite(swapPercent)
-                && swapPercent >= 0
-                && swapPercent <= 1;
-            if (!validSwapPercent)
-            {
-                diagnostics.Add(Refuse(
-                    $"'Video Swap Percent' must be finite and between 0 and 1, but was "
-                    + $"'{swapPercent}'."));
-            }
-            else
-            {
-                foreach (ClipPlan clip in context.Plan.Clips.Where(
-                    clip => clip.Architecture.Id == ArchitectureId))
-                {
-                    foreach (StagePlan stage in clip.Stages.Where(
-                        stage => !stage.IsPassthrough
-                            && stage.Input is StageInputKind.SourceVideo
-                                or StageInputKind.PreviousStage))
-                    {
-                        WanStagePayload payload = stage.RequireWanPayload();
-                        if (payload.Control >= 1
-                            || WanStageSchedulePolicy.HasSwapHighNoiseWindow(
-                                payload.Steps,
-                                payload.Control,
-                                swapPercent))
-                        {
-                            continue;
-                        }
-                        int startStep = WanStageSchedulePolicy.StartStep(
-                            payload.Steps,
-                            payload.Control);
-                        int highEndStep = WanStageSchedulePolicy.HostHighEndStep(
-                            payload.Steps,
-                            swapPercent);
-                        diagnostics.Add(Refuse(
-                            $"'Video Swap Model' gives clip {clip.ClipId} stage {stage.StageId} "
-                                + $"no high-noise sampling window: the partial-control start step "
-                                + $"{startStep} must be less than the swap high-noise end step "
-                                + $"{highEndStep}.",
-                            clip.ClipId,
-                            stage.StageId));
-                    }
-                }
-            }
         }
         if (generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null) is not null)
         {
@@ -227,29 +137,6 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
 
     public IArchitectureGenerationSessionFactory CreateFactory() =>
         new WanGenerationSessionFactory(generator);
-
-    internal static bool IsSwapCompatible(
-        ResolvedVideoModel swap,
-        ResolvedVideoModel stage) =>
-        swap is not null
-        && stage is not null
-        && swap.ArchitectureId == stage.ArchitectureId
-        && swap.ModelProfileId == stage.ModelProfileId
-        && WanArchitectureModule.IsLegacySpecialProfile(swap.ModelProfileId);
-
-    internal static string DescribeSwapIncompatibility(
-        ResolvedVideoModel swap,
-        int clipId,
-        int stageId,
-        ResolvedVideoModel stage) =>
-        IsSwapCompatible(swap, stage)
-            ? null
-            : $"'Video Swap Model' '{swap?.ModelName ?? "<unresolved>"}' resolves to architecture "
-                + $"'{swap?.ArchitectureId.ToString() ?? "<unresolved>"}' profile "
-                + $"'{swap?.ModelProfileId.ToString() ?? "<unresolved>"}', but clip {clipId} stage "
-                + $"{stageId} uses model '{stage?.ModelName ?? "<unresolved>"}' architecture "
-                + $"'{stage?.ArchitectureId.ToString() ?? "<unresolved>"}' profile "
-                + $"'{stage?.ModelProfileId.ToString() ?? "<unresolved>"}'.";
 
     private static PlanDiagnostic Refuse(
         string message,

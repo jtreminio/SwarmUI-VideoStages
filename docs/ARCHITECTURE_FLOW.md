@@ -83,17 +83,21 @@ plan compilation, always carry a request session.
   (case-insensitive).
 
 It returns `ArchitectureId("ltx2")` and `ModelProfileId("ltx-2.3")`.
-`WanArchitectureModule.TryResolveModel` recognizes two exact class/compatibility
-pairs:
+`WanArchitectureModule.TryResolveModel` accepts ordinary WAN 2.1/2.2
+image-entry models when SwarmUI reports a WAN image-to-video compatibility
+class and authoritative entry abilities. It explicitly rejects text-only,
+VACE, LoRA, and VAE component classes. Two exact legacy pairs retain special
+profile aliases:
 
 - `wan-2_2-image2video-14b` / `wan-21-14b` resolves to `wan22` /
   `wan-2.2-i2v-14b`; and
 - `wan-2_2-ti2v-5b` / `wan-22-5b` resolves to `wan22` /
   `wan-2.2-ti2v-5b`.
 
-The 5B `/lora` class, a correct class with a spoofed compatibility class, and
-Wan 2.1/VACE/FLF classes do not resolve. The 14B profile remains the descriptor
-default.
+The exact identifiers are compatibility aliases rather than the recognition
+allowlist. Other ordinary WAN image-entry models resolve to the generic
+`wan-i2v` profile; first/last-frame and native 5B behavior are not inferred for
+that alias. The 14B profile remains the descriptor default.
 `NoneArchitectureModule.TryResolveModel` always returns false; common planning
 assigns `none` only to source-video clips with no active stages.
 
@@ -348,18 +352,17 @@ ComfyUI-LTXVideo nodes/features and resolvable IC-LoRA weights. Blocking
 diagnostics stop the request before later VideoStages host phases mutate the
 graph.
 `WanExecutionAdapter.PreflightRequest` similarly refuses host-only options the
-slice cannot honor. A compatible 14B swap model is delegated to the host adapter,
-but every decoded partial input — sourced stage 0 or a later stage — must retain
-a non-empty high-noise interval under the request-global swap split. Global
-end-frame is limited to exactly one pure generated 14B ImageToVideo clip. Its
-immutable stage payload assigns sole ownership to the last non-passthrough
-stage, so earlier generators receive no final-frame input and trailing
-passthrough does not consume it. A terminal swap stage applies that owned frame
-to both its high- and low-noise conditioning branches. Multi-clip,
-mixed-family, sourced, refine, text, active or forged 5B/cross-profile, and
-missing or forged ownership contracts refuse the option before mutation.
-Global creativity remains refused in favor of the authored clip-local
-controls.
+slice cannot honor. Legacy request-global video-swap values are not preflight
+errors: effective-request projection emits one warning and
+`WanLegacySwapIsolation` clears them only from host generation info, without
+editing `T2IParamInput`. High- and low-noise work is expressed as ordinary
+authored stages. Global end-frame is limited to exactly one pure generated 14B
+ImageToVideo clip. Its immutable stage payload assigns sole ownership to the
+last non-passthrough stage, so earlier generators receive no final-frame input
+and trailing passthrough does not consume it. Multi-clip, mixed-family,
+sourced, refine, text, active or forged 5B/cross-profile, and missing or forged
+ownership contracts refuse the option before mutation. Global creativity
+remains refused in favor of the authored clip-local controls.
 
 “Before mutation” here means before **VideoStages** mutation. SwarmUI may
 already have built host graph state that VideoStages captures or replaces.
@@ -493,6 +496,17 @@ otherwise-unused upstream nodes. This pruning also runs when the host builder
 throws. If pruning then fails, the original host failure remains authoritative;
 without a host failure, a pruning failure is surfaced.
 
+The removed host swap path reused the high-noise sampler's unfinished latent
+directly for the low-noise sampler. It avoided a VAE decode/re-encode boundary,
+so it could be cheaper and avoid possible VAE reconstruction loss. Ordinary
+authored stages deliberately use the product's normal decoded contract: one
+stage decodes its result, and a later partial-control stage re-encodes that
+decoded video before sampling. This adds work and may add small VAE loss, but
+it gives each visible stage correct ownership of its model, prompts, LoRAs,
+steps, CFG, sampler, scheduler, and intermediate output. Any future direct
+latent reuse must be a benchmarked, architecture-neutral optimization based on
+compatible adjacent-stage facts, with decoded handoff as the safe fallback.
+
 For every generating pass, `PromptParser.ApplyLoraScope` first projects the
 matching bare, clip, and stage prompt-section rows into host
 `SectionID_Video`; nested inside it, `LoraParams.ApplyNormalLoras` appends the
@@ -501,32 +515,27 @@ model weight is zero while retaining the stored text-encoder weight on every
 nonzero-model row. That prompt-before-persisted order is deterministic.
 Both scopes are absent for passthrough stages and restore the original four
 host LoRA parameter lists in reverse nesting order on success or failure.
-Before the host builder runs, Wan evicts the high-pass
+Before the host builder runs, Wan evicts the stage
 `modelloader_{model}_image2video` cache marker even when the compiled list is
 empty, because that marker does not encode scoped LoRA state; existing live
-graph nodes are not pruned. With VideoSwap, stage-authored rows therefore
-belong only to the high branch. Prompt-scoped rows have the same high-only
-ownership. The low branch remains owned by the host's
-`SectionID_VideoSwap` LoRAs and is never injected from the stage payload. If
-both branches select the same model, Wan drops that shared marker again after
-high model preparation so the swap loader still runs under the host's low-pass
-scope. A loader tuple built under nonempty planned LoRAs, or left under that
-same-model swap scope, is transient. A tuple built under a nonempty prompt
-scope is transient too: Wan removes its marker in a `finally` before either
-parameter snapshot is restored, including when construction or normalization
-fails. An empty final high pass with a distinct or absent swap keeps its
-durable unscoped tuple. Marker eviction never removes live graph nodes.
+graph nodes are not pruned. A loader tuple built under nonempty planned LoRAs
+is transient. A tuple built under a nonempty prompt scope is transient too:
+Wan removes its marker in a `finally` before either parameter snapshot is
+restored, including when construction or normalization fails. An unscoped
+stage may keep its durable tuple. Marker eviction never removes live graph
+nodes.
 
-For both supported WAN compatibility classes, SwarmUI's generic LoRA loader
+For ordinary supported WAN image-entry families, SwarmUI's generic LoRA loader
 targets the model only (`LorasTargetTextEnc=false`). VideoStages uses that
 existing generic path for both persisted and prompt-section rows; text-encoder
-weights remain round-trippable host parameter data but do not make a
-model-zero WAN row effectful. VideoStages does not claim to solve core's
-automatic 5B-LoRA classifier TODO.
+weights remain round-trippable host parameter data but do not make a model-zero
+WAN row effectful. VideoStages does not claim to solve core's automatic
+5B-LoRA classifier TODO.
 
-Wan 2.1/VACE/FLF, same-clip cross-profile switching, 5B swap, transition
-expansion, advanced references, audio, refine-source, and HDR remain outside
-the WAN contract.
+VACE, text-only 14B entry, transition expansion, advanced references, audio,
+refine-source, and HDR remain outside the WAN contract. Ordinary WAN 2.1/2.2
+image-entry variants are accepted from host facts. Legacy swap controls are
+warned and ignored; two noise models are two authored stages.
 
 The session publishes authored intermediates and
 removes every host per-pass trim. For a terminal single-clip session it applies

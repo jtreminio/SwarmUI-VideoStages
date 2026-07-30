@@ -87,12 +87,34 @@ internal static class EffectiveVideoRequestProjector
             decisions,
             authoredBoundaryModes,
             projectedBoundaryFallbacks);
+        ProjectLegacyWanSwap(authored, architecturePlanning, decisions);
         return new(
             authored with { Clips = Array.AsReadOnly(effectiveClips) },
             architecturePlanning,
             decisions.AsReadOnly(),
             authoredBoundaryModes,
             projectedBoundaryFallbacks);
+    }
+
+    private static void ProjectLegacyWanSwap(
+        VideoStagesSpec authored,
+        ArchitecturePlanningResult architecturePlanning,
+        ICollection<EffectiveRequestDecision> decisions)
+    {
+        if (authored.LegacyVideoSwap?.IsConfigured != true
+            || !architecturePlanning.Clips.Values.Any(
+                assignment =>
+                    assignment?.Architecture?.Id == WanArchitectureModule.ArchitectureId))
+        {
+            return;
+        }
+
+        decisions.Add(Ignore(
+            "effective-request.wan-video-swap-ignored",
+            "WAN VideoStages ignores SwarmUI's request-global Video Swap Model, Video Swap "
+                + "Percent, and Video Swap section settings. The authored values remain in "
+                + "request metadata. Create separate high-noise and low-noise timeline stages "
+                + "instead."));
     }
 
     private static ClipSpec ProjectClip(
