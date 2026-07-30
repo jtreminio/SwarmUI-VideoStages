@@ -18,6 +18,7 @@ import {
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
 import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
+import { createCapabilityViewResolver } from "./architectures/policy";
 import { createGestureRouter } from "./gestureRouter";
 import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
@@ -53,7 +54,7 @@ interface ClipFixture {
 const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     duration: clip.duration,
     audioSource: "Native",
-    stages: [{}],
+    stages: [{ model: "ltx-2.3.safetensors" }],
     refs: (clip.refs ?? []).map((ref) => ({
         source: ref.source ?? "Refiner",
         frame: ref.frame ?? 1,
@@ -112,11 +113,21 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         document.body.innerHTML = "";
     });
 
-    const setup = (fixtures: ClipFixture[], fps?: number): HTMLElement => {
+    const setup = (
+        fixtures: ClipFixture[],
+        fps?: number,
+        referencePositions: string[] = ["any"],
+    ): HTMLElement => {
         mountPrompt(fixtures, fps);
         const body = makeBody();
         renderRefs(body, persistence.getClips());
-        track = createTimelineReferencesTrack();
+        const catalog = testArchitectureCatalog();
+        for (const entry of catalog.entries) {
+            entry.enhancements = { referencePositions };
+        }
+        track = createTimelineReferencesTrack(() =>
+            createCapabilityViewResolver(catalog),
+        );
         router = createGestureRouter();
         track.attach(body, router);
         router.attach(body);
@@ -246,6 +257,16 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         expect(getSelection()).toEqual({ kind: "ref", clipIdx: 0, refIdx: 0 });
     });
 
+    it("does not add a reference when the model publishes no positions", () => {
+        const body = setup([{ duration: 5, refs: [] }], undefined, []);
+        body.querySelector<HTMLElement>(
+            '.vst-refs-lane[data-clip-idx="0"]',
+        )?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+        expect(saveSpy).not.toHaveBeenCalled();
+        expect(getSelection()).toEqual({ kind: "none" });
+    });
+
     it("adding a ref selects the NEW ref even while another ref is selected", () => {
         const body = setup([{ duration: 5, refs: [{ source: "Refiner" }] }]);
         setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
@@ -337,12 +358,16 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
             options: [model.value],
             value: model.value,
         });
-        const body = setup([
-            {
-                duration: 5,
-                refs: [{ frame: 1, fromEnd: false }],
-            },
-        ]);
+        const body = setup(
+            [
+                {
+                    duration: 5,
+                    refs: [{ frame: 1, fromEnd: false }],
+                },
+            ],
+            undefined,
+            ["first", "last"],
+        );
         stubLaneRect(body, 0, 0, 120);
 
         dragThumb(markEl(body, 0, 0), 0, 100);
@@ -412,7 +437,13 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         mountPrompt([{ duration: 5, refs: [{ frame: 1 }] }]);
         const body = makeBody();
         renderTimeline(body, persistence.getClips(), { pxPerSecond: PPS });
-        track = createTimelineReferencesTrack();
+        const catalog = testArchitectureCatalog();
+        for (const entry of catalog.entries) {
+            entry.enhancements = { referencePositions: ["any"] };
+        }
+        track = createTimelineReferencesTrack(() =>
+            createCapabilityViewResolver(catalog),
+        );
         router = createGestureRouter();
         track.attach(body, router);
         router.attach(body);

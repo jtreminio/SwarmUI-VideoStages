@@ -168,6 +168,7 @@ export const testArchitectureCatalog = (
             modelClassId: "ltx-video",
             compatibilityClassId: "ltx-video",
             frameGrid: 8,
+            enhancements: { referencePositions: ["any"] },
             entryModes: [
                 "text-to-video",
                 "image-to-video",
@@ -183,6 +184,7 @@ export const testArchitectureCatalog = (
             modelClassId: "ltx-video",
             compatibilityClassId: "ltx-video",
             frameGrid: 8,
+            enhancements: { referencePositions: ["any"] },
             entryModes: [
                 "text-to-video",
                 "image-to-video",

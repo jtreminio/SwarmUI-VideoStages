@@ -38,6 +38,11 @@ export const buildRefSection = (
         .capabilities()
         .forClip(clip)
         .decision("frameReferences");
+    const endpointPolicy = referenceEndpointPolicy(
+        clip,
+        ctx.rootDefaults().modelCatalog,
+    );
+    const hasSupportedEndpoint = endpointPolicy.available;
     const activeRefIdx =
         clip.refs.length === 0
             ? null
@@ -60,12 +65,14 @@ export const buildRefSection = (
                 onShiftDelete: () => ctx.deleteRefEntry(clipIdx, refIdx),
             })),
             add: {
-                title: decision.supported
-                    ? "Add a reference image"
-                    : decision.reason,
+                title: !decision.supported
+                    ? decision.reason
+                    : hasSupportedEndpoint
+                      ? "Add a reference image"
+                      : "The selected models do not publish a supported frame-reference endpoint.",
                 label: "+ Add Reference Image",
                 className: "vst-detail-add-ref",
-                disabled: !decision.supported,
+                disabled: !decision.supported || !hasSupportedEndpoint,
                 onClick: () => ctx.addRefEntry(clipIdx),
             },
             remove: {
@@ -140,10 +147,6 @@ export const buildRefSection = (
             clip,
             getState().fps,
         );
-        const endpointPolicy = referenceEndpointPolicy(
-            clip,
-            defaults.modelCatalog,
-        );
         const boundedPositions = endpointPolicy.bounded;
         const supportsFirst = endpointPolicy.supportsFirst;
         const supportsLast = endpointPolicy.supportsLast;
@@ -173,6 +176,7 @@ export const buildRefSection = (
             "data-vst-focus-key",
             `ref-${editorRefIdx}-frame`,
         );
+        frameInput.disabled = !hasSupportedEndpoint;
         fields.appendChild(
             buildField(
                 "Attach at Frame",
@@ -200,9 +204,10 @@ export const buildRefSection = (
                 },
                 {
                     disabled:
-                        boundedPositions &&
-                        currentPositionSupported &&
-                        !(supportsFirst && supportsLast),
+                        !hasSupportedEndpoint ||
+                        (boundedPositions &&
+                            currentPositionSupported &&
+                            !(supportsFirst && supportsLast)),
                     help:
                         boundedReferenceToggleHelp(endpointPolicy) ??
                         (boundedPositions

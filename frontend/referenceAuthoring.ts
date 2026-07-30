@@ -61,7 +61,7 @@ export const nextAllowedReferencePosition = (
     rawFrameMax: number,
     allowed: readonly string[],
 ): { frame: number; fromEnd: boolean } | null => {
-    if (allowed.includes("any") || allowed.length === 0) {
+    if (allowed.includes("any")) {
         const frame = nextAvailableReferenceFrame(refs, rawFrameMax);
         return frame === null ? null : { frame, fromEnd: false };
     }

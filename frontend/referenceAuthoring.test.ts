@@ -58,6 +58,14 @@ describe("nextAvailableReferenceFrame", () => {
 });
 
 describe("nextAllowedReferencePosition", () => {
+    it("distinguishes unrestricted positions from no supported positions", () => {
+        expect(nextAllowedReferencePosition([], 121, ["any"])).toEqual({
+            frame: 1,
+            fromEnd: false,
+        });
+        expect(nextAllowedReferencePosition([], 121, [])).toBeNull();
+    });
+
     it("allocates only the advertised first and last positions", () => {
         expect(
             nextAllowedReferencePosition([], 121, ["first", "last"]),

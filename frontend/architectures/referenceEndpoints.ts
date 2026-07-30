@@ -5,6 +5,7 @@ import type { ArchitectureModelCatalog } from "./types";
 
 export interface ClipReferenceEndpointPolicy {
     positions: string[];
+    available: boolean;
     bounded: boolean;
     supportsFirst: boolean;
     supportsLast: boolean;
@@ -34,6 +35,7 @@ export const referenceEndpointPolicy = (
     if (firstPositions.includes("any")) {
         return {
             positions: ["any"],
+            available: true,
             bounded: false,
             supportsFirst: true,
             supportsLast: true,
@@ -47,6 +49,7 @@ export const referenceEndpointPolicy = (
     ];
     return {
         positions,
+        available: positions.length > 0,
         bounded: positions.length > 0,
         supportsFirst,
         supportsLast,
@@ -56,6 +59,9 @@ export const referenceEndpointPolicy = (
 export const boundedReferencePositionHelp = (
     policy: ClipReferenceEndpointPolicy,
 ): string | undefined => {
+    if (!policy.available) {
+        return "This clip does not accept frame-reference endpoints.";
+    }
     if (!policy.bounded) {
         return undefined;
     }
@@ -71,6 +77,9 @@ export const boundedReferencePositionHelp = (
 export const boundedReferenceToggleHelp = (
     policy: ClipReferenceEndpointPolicy,
 ): string | undefined => {
+    if (!policy.available) {
+        return "This clip does not publish a supported frame-reference endpoint.";
+    }
     if (!policy.bounded) {
         return undefined;
     }

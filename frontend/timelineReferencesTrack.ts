@@ -70,7 +70,11 @@ export const createTimelineReferencesTrack = (
     const referencePositions = (
         clip: ReturnType<typeof getClips>[number],
         modelCatalog = getRootDefaults().modelCatalog,
-    ): string[] => referenceEndpointPolicy(clip, modelCatalog).positions;
+    ): string[] =>
+        referenceEndpointPolicy(
+            clip,
+            getCapabilities?.().catalog ?? modelCatalog,
+        ).positions;
 
     const findArrow = (clipIdx: number, refIdx: number): HTMLElement | null =>
         boundBody?.querySelector<HTMLElement>(
@@ -120,7 +124,7 @@ export const createTimelineReferencesTrack = (
                 );
                 const allowed = referencePositions(clip, defaults.modelCatalog);
                 const ref = buildDefaultRef();
-                if (allowed.length === 0 || allowed.includes("any")) {
+                if (allowed.includes("any")) {
                     ref.frame = clamp(
                         Math.round(frame),
                         REF_FRAME_MIN,
@@ -308,6 +312,14 @@ export const createTimelineReferencesTrack = (
         const fps = documentFps(getState());
         const defaults = getRootDefaults();
         const frameMax = getReferenceFrameMax(() => defaults, clip, fps);
+        const allowedPositions = referencePositions(
+            clip,
+            defaults.modelCatalog,
+        );
+        if (allowedPositions.length === 0) {
+            me.preventDefault();
+            return claimOnly();
+        }
         me.preventDefault();
         return dragSession(body, {
             clipIdx,
@@ -325,7 +337,7 @@ export const createTimelineReferencesTrack = (
             fps,
             frameGrid: resolvedClipFrameGrid(clip, defaults.modelCatalog),
             frameMax,
-            allowedPositions: referencePositions(clip, defaults.modelCatalog),
+            allowedPositions,
             fromEnd: ref.fromEnd === true,
             sourceRevision: currentRevision(),
         });

@@ -38,13 +38,16 @@ describe("buildRefBody", () => {
             clips: [
                 {
                     duration: 5,
-                    stages: [{}],
+                    stages: [{ model: "ltx-2.3.safetensors" }],
                     refs: [{ source: "Base", frame: 1 }],
                 },
             ],
         });
 
         const catalog = testArchitectureCatalog();
+        catalog.entries[0].enhancements = {
+            referencePositions: ["any"],
+        };
         const body = buildRefBody(
             {
                 capabilities: () => createCapabilityViewResolver(catalog),

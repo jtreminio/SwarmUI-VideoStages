@@ -3,6 +3,7 @@ import { testArchitectureCatalog } from "../__test_helpers__/architectureFixture
 import { minimalClip, minimalStage } from "../__test_helpers__/clipFixtures";
 import {
     boundedReferencePositionHelp,
+    boundedReferenceToggleHelp,
     referenceEndpointPolicy,
 } from "./referenceEndpoints";
 
@@ -45,6 +46,7 @@ describe("referenceEndpointPolicy", () => {
 
         expect(referenceEndpointPolicy(clip, catalog)).toEqual({
             positions: ["first", "last"],
+            available: true,
             bounded: true,
             supportsFirst: true,
             supportsLast: true,
@@ -78,6 +80,26 @@ describe("referenceEndpointPolicy", () => {
         expect(policy.positions).toEqual(["first"]);
         expect(boundedReferencePositionHelp(policy)).toBe(
             "This clip accepts an image only at the first frame.",
+        );
+    });
+
+    it("treats an empty published position set as unavailable, not unrestricted", () => {
+        const catalog = testArchitectureCatalog();
+        catalog.entries[0].enhancements = { referencePositions: [] };
+        const policy = referenceEndpointPolicy(minimalClip(), catalog);
+
+        expect(policy).toEqual({
+            positions: [],
+            available: false,
+            bounded: false,
+            supportsFirst: false,
+            supportsLast: false,
+        });
+        expect(boundedReferencePositionHelp(policy)).toBe(
+            "This clip does not accept frame-reference endpoints.",
+        );
+        expect(boundedReferenceToggleHelp(policy)).toBe(
+            "This clip does not publish a supported frame-reference endpoint.",
         );
     });
 });

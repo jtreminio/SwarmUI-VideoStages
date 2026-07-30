@@ -86,6 +86,25 @@ afterEach(() => {
 });
 
 describe("persisted-but-unsupported repair contract", () => {
+    it("disables new references when no model publishes an endpoint", () => {
+        const models = testArchitectureCatalog();
+        models.entries[0].enhancements = { referencePositions: [] };
+        const clip = minimalClip();
+        const body = buildClipBody(
+            context(models, [clip]),
+            { kind: "clip", clipIdx: 0, stageIdx: 0 },
+            [clip],
+        );
+
+        const add = body.querySelector<HTMLButtonElement>(
+            ".vst-detail-add-ref",
+        );
+        expect(add?.disabled).toBe(true);
+        expect(add?.title).toContain(
+            "do not publish a supported frame-reference endpoint",
+        );
+    });
+
     it("keeps the delete of an unsupported persisted reference operable", () => {
         const models = restrictedCatalog();
         const clip = minimalClip({ refs: [minimalRef()] });
