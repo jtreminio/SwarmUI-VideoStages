@@ -1,5 +1,6 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.HostVideo;
 using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.None;
 using VideoStages.Architectures.Wan;
@@ -40,6 +41,14 @@ internal static class VideoArchitectureManifest
             WanArchitectureModule.Instance,
             generator => new WanExecutionAdapter(generator),
             WanHostHandlers.Register,
+            static () => { },
+            static () => { }),
+        // The fallback resolves only exact model classes with proven stock host video branches.
+        // Its resolution tier keeps every specialized module authoritative.
+        new(
+            HostVideoArchitectureModule.Instance,
+            generator => new HostVideoExecutionAdapter(generator),
+            HostVideoCorePassIsolation.RegisterHandlers,
             static () => { },
             static () => { }),
     ];

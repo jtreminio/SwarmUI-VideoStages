@@ -10,11 +10,11 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan;
 
-/// <summary>The host media every Wan clip enters from, snapshotted once per timeline.</summary>
+/// <summary>The host media every WAN clip enters from, snapshotted once per timeline.</summary>
 internal sealed record WanRootSources(WGNodeData Media, WGNodeData Vae);
 
 /// <summary>
-/// Runs one Wan clip. Host primitives own graph construction: this session resolves the compiled
+/// Runs one WAN clip. Host primitives own graph construction: this session resolves the compiled
 /// stage settings, delegates image/video inputs to
 /// <see cref="WorkflowGenerator.CreateImageToVideo"/>, composes the same public primitives for a
 /// native WAN text latent, and reconciles the result with the committed timeline semantics.
@@ -48,7 +48,7 @@ internal sealed class WanGenerationSession(
         {
             SourceVideoPlan source = clip.SourceVideo
                 ?? throw new InvalidOperationException(
-                    $"Sourced Wan clip {clip.ClipId} has no source-video plan.");
+                    $"Sourced WAN clip {clip.ClipId} has no source-video plan.");
             ClipPlan sourceInstallPlan = clip with
             {
                 SourceVideo = source with

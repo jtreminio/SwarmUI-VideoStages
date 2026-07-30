@@ -68,13 +68,13 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
 
     public VideoArchitectureDescriptor Descriptor { get; } = new(
         ArchitectureId,
-        "Wan 2.2",
+        "WAN Video",
         ImageToVideoProfileId,
         [AudioSourceKind.Disabled],
         [
             Profile(
                 ImageToVideoProfileId,
-                "Wan 2.2 Image2Video 14B",
+                "WAN Video",
                 [
                     ArchitectureEntryMode.TextToVideo,
                     ArchitectureEntryMode.ImageToVideo,
@@ -82,7 +82,7 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
                 ]),
             Profile(
                 Ti2v5bProfileId,
-                "Wan 2.2 Text/Image2Video 5B",
+                "WAN Video",
                 [
                     ArchitectureEntryMode.TextToVideo,
                     ArchitectureEntryMode.ImageToVideo,
@@ -90,7 +90,7 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
                 ]),
             Profile(
                 OrdinaryImageToVideoProfileId,
-                "Wan Video",
+                "WAN Video",
                 [
                     ArchitectureEntryMode.TextToVideo,
                     ArchitectureEntryMode.ImageToVideo,

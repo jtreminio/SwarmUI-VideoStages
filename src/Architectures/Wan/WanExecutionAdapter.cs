@@ -35,7 +35,7 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
         {
             diagnostics.Add(Refuse(
                 "'Refine Source Video' is a request-global donor and cannot coexist with a "
-                + "clip-local sourced Wan timeline."));
+                + "clip-local sourced WAN timeline."));
         }
         if (generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null) is not null)
         {
@@ -53,7 +53,7 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
                     PlanDiagnosticSeverity.Warning,
                     "wan.end-frame.ignored",
                     "'Video End Frame' was ignored because it can only target the final "
-                        + "generating stage of one WAN image-to-video clip, and that stage must "
+                        + "generating stage of one WAN clip, and that stage must "
                         + "use a WAN model whose host workflow supports a final image. "
                         + $"This request has {context.Plan.Clips.Count} clip(s) across "
                         + $"architecture(s): {families}."));

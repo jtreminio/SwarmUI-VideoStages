@@ -10,18 +10,19 @@ For the detailed execution and frontend designs, continue to
 [`ARCHITECTURE.md`](../ARCHITECTURE.md) and
 [`FRONTEND_ARCHITECTURE.md`](../FRONTEND_ARCHITECTURE.md).
 
-VideoStages is a closed-world modular monolith. Production registers the
-source-only `none` architecture, LTX Video 2.3 (`ltx2`), and the cut-only Wan
-2.2 Image2Video 14B and Text/Image2Video 5B profiles
-(`wan22`).
+VideoStages is a modular monolith with specialized overlays and a conservative
+host-video fallback. Production registers the source-only `none` architecture,
+specialized LTX Video 2.3 (`ltx2`), the WAN family (`wan22`), and a cut-only
+generic profile (`host-video`) for exact SwarmUI model classes whose stock video
+graph branches have been verified.
 
 ## Ownership
 
 | Concern | Owner | Concrete entry points |
 |---|---|---|
 | Production registration | SwarmUI adapter | `VideoStagesExtension.OnInit`, `VideoArchitectureManifest` |
-| Exact model recognition | Backend architecture module | `VideoArchitectureRegistry.TryResolveModel`, `Ltx2ArchitectureModule.TryResolveModel`, `WanArchitectureModule.TryResolveModel` |
-| Capabilities and rules | Backend architecture module | `Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`, `NoneArchitecture.Descriptor` |
+| Exact model recognition | Backend architecture module | `VideoArchitectureRegistry.TryResolveModel`, `Ltx2ArchitectureModule.TryResolveModel`, `WanArchitectureModule.TryResolveModel`, `HostVideoArchitectureModule.TryResolveModel` |
+| Capabilities and rules | Backend architecture module | `Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`, `HostVideoArchitectureModule.Descriptor`, `NoneArchitecture.Descriptor` |
 | Catalog transport | Common backend + SwarmUI authorization | `VideoStagesApi.VideoStagesGetArchitectureCatalog`, `AuthorizedArchitectureRegistry`, `ArchitectureCatalogSerializer.Serialize` |
 | Catalog loading and feature policy | Common frontend | `getArchitectureCatalogSnapshot`, `loadAuthoritativeArchitectureCatalog`, `refreshAuthoritativeArchitectureCatalog`, `parseVideoArchitectureCatalog`, `createCapabilityViewResolver` |
 | Architecture-specific authoring behavior | Frontend local behavior maps | `architectureBehavior`, `ltx2Behavior`, `authoringPanels.ts`, architecture ID identity modules |
@@ -65,7 +66,9 @@ together.
 `Program.MainSDModels.Models` and asks each registered
 `IVideoArchitectureModule.TryResolveModel` to recognize each installed model.
 The registry rejects duplicate architecture/profile IDs, invalid module
-results, ambiguous model matches, and invalid default profiles. API projection
+results, ambiguous model matches within the winning resolution tier, and
+invalid default profiles. Specialized matches win over fallback matches, so a
+generic registration cannot steal an LTX or WAN model. API projection
 and planning wrap that registry in `AuthorizedArchitectureRegistry`, which
 removes models the requesting SwarmUI session is not allowed to see. It
 authorizes the canonical resolved model name rather than the authored spelling,
@@ -83,11 +86,10 @@ plan compilation, always carry a request session.
   (case-insensitive).
 
 It returns `ArchitectureId("ltx2")` and `ModelProfileId("ltx-2.3")`.
-`WanArchitectureModule.TryResolveModel` accepts ordinary WAN 2.1/2.2
-image-entry models when SwarmUI reports a WAN image-to-video compatibility
-class and authoritative entry abilities. It explicitly rejects text-only,
-VACE, LoRA, and VAE component classes. Two exact legacy pairs retain special
-profile aliases:
+`WanArchitectureModule.TryResolveModel` accepts ordinary WAN 2.1/2.2 video
+models and gives the family text and image entry. It explicitly rejects VACE,
+LoRA, and VAE component classes. Two exact legacy pairs retain special profile
+aliases:
 
 - `wan-2_2-image2video-14b` / `wan-21-14b` resolves to `wan22` /
   `wan-2.2-i2v-14b`; and
@@ -95,9 +97,18 @@ profile aliases:
   `wan-2.2-ti2v-5b`.
 
 The exact identifiers are compatibility aliases rather than the recognition
-allowlist. Other ordinary WAN image-entry models resolve to the generic
+allowlist. Other ordinary WAN models resolve to the generic
 `wan-i2v` profile; first/last-frame and native 5B behavior are not inferred for
-that alias. The 14B profile remains the descriptor default.
+that alias. The 14B profile remains the descriptor default for compatible
+runtime routing, but these aliases are not separate user-facing
+text-versus-image families.
+`HostVideoArchitectureModule.TryResolveModel` is the last-priority baseline. It
+does not trust `IsText2Video` / `IsImage2Video` by themselves. Its proof table
+admits exact stock branches for Hunyuan Video, Hunyuan Video 1.5, Mochi,
+Cosmos 1, Kandinsky 5 Video, LTX Video 1, and non-2.3 LTX Video 2. Each row
+publishes only the entry abilities its real host branch can perform. Cosmos
+Predict2, SVD, component LoRA/VAE checkpoints, Hunyuan 1.5 SR, and unknown
+synthetic video classes remain unresolved.
 `NoneArchitectureModule.TryResolveModel` always returns false; common planning
 assigns `none` only to source-video clips with no active stages.
 
@@ -106,27 +117,37 @@ or frontend classification cannot authorize an unsupported model.
 
 ### A2. Capability declaration and transport
 
-`Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`, and
-`NoneArchitecture.Descriptor` are typed `VideoArchitectureDescriptor` values.
+`Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`,
+`HostVideoArchitectureModule.Descriptor`, and `NoneArchitecture.Descriptor`
+are typed `VideoArchitectureDescriptor` values.
 Entry modes are owned by each model profile. The descriptor's entry-mode list
 is only the distinct catalog projection used for architecture overviews; model
 selection, diagnostics, conversion, planning, and runtime authorization all
-resolve the exact selected profile. The WAN 14B profile publishes
-`ImageToVideo` and `SourceVideo`; the 5B profile additionally publishes
-`TextToVideo`.
+resolve the exact selected profile. Every accepted WAN model publishes text,
+image, and source entry. Those entry modes describe the current request's
+input, not different user-facing WAN model categories.
 
-Wan publishes same-profile multi-stage chaining, video-only output, a
-four-frame profile grid, and cut-only boundaries. Both profiles publish
-ordinary persisted clip/stage and prompt-section LoRAs. Image-generated stage
-0 uses the host root at full control. Native 5B text stage 0 uses an empty
-latent and does not decode or reinterpret the host's donor image.
+WAN publishes same-compatibility-family multi-stage chaining, video-only output, a
+four-frame profile grid, and cut-only boundaries. Every WAN compatibility alias
+publishes ordinary persisted clip/stage and prompt-section LoRAs.
+Image-generated stage 0 uses the host root at full control. WAN text entry uses
+an empty latent and does not decode or reinterpret the host's donor image.
 Sourced stage 0 uses its conformed source at finite control in `[0, 1]`; each
 later stage uses `PreviousStage` with the same bound. Exact control `0` is a
 samplerless decoded-video passthrough for those two decoded inputs, while
 positive partial control still must quantize to a nonzero start step.
 Refine-video and audio capabilities remain absent. A request-global refine
-source cannot coexist with a clip-local sourced Wan timeline. The same typed
+source cannot coexist with a clip-local sourced WAN timeline. The same typed
 boundary/rule objects feed backend validation and frontend publication.
+
+The generic descriptor publishes one user-facing `Video` profile and supports
+source entry through the same neutral conformance path used by WAN. Model-level
+facts still say whether a checkpoint can enter from text, image, or both, so a
+text-only model such as Mochi cannot occupy a decoded later-stage role. The
+baseline advertises prompts, ordinary LoRAs, source video, pixel resize, decoded output, and
+hard-cut multi-stage execution where selected models have image entry. It does
+not advertise arbitrary authored references, audio, IC-LoRA,
+advanced upscalers, end-frame conditioning, swap, or HDR.
 
 `ArchitectureCatalogSerializer.Serialize` projects the descriptor catalog and
 the currently resolved, session-authorized host models to:
@@ -317,16 +338,24 @@ For LTX, `Ltx2ClipPlanCompiler.Compile` produces `Ltx2ClipPayload` and
 `Ltx2StagePayload` instructions for LTX audio, prompt relay, guides, upscale,
 LoRA, IC-LoRA, retake, frame references, and stage audio actions. Common
 orchestration carries these values; it must not interpret their graph meaning.
-`NormalLoraPlanCompiler` is common graph-free planning shared by LTX and Wan:
+`NormalLoraPlanCompiler` is common graph-free planning shared by LTX, WAN, and
+generic host video:
 it resolves each stage's effective clip rows, keeps clip-before-stage ordering,
 and leaves the resulting immutable array inside the selected architecture's
 stage payload rather than common `StagePlan`. Its default model-and-text target
 policy preserves LTX/generic text-encoder-only rows. WAN explicitly selects the
 model-only policy at this seam.
-For Wan, `WanClipPlanCompiler.Compile` produces the smaller `WanClipPayload`
-and `WanStagePayload`; both preserve canonical profile identity. It accepts
-only the two supported `wan22` profiles and requires one profile throughout a
-clip. A hard cut starts a new clip and may select the other profile. The
+Generic planning preserves same-clip compatibility-class uniformity and
+selects the proven host family's model-only or model-and-text-encoder target
+policy. Unsupported optional data is removed only from the effective request,
+with a browser-visible warning; authored data is unchanged. This includes
+architecture-specific references, prompt relay, retakes, audio options,
+ControlNet strength, IC-LoRA, and advanced upscalers. Ordinary root-image
+entry, source video, decoded stages, pixel resize, and normal LoRA remain.
+For WAN, `WanClipPlanCompiler.Compile` produces the smaller `WanClipPayload`
+and `WanStagePayload`; both preserve resolved host identity. It requires one
+host compatibility class throughout a clip. A hard cut starts a new clip and
+may select another family. The
 compiler also enforces the generated-root / source-video / previous-stage
 chain, refuses an effective LoRA plan on a samplerless passthrough, and refuses
 unsupported or empty integer schedules that the common capability validator
@@ -351,18 +380,16 @@ active runtime provider with graph-free
 ComfyUI-LTXVideo nodes/features and resolvable IC-LoRA weights. Blocking
 diagnostics stop the request before later VideoStages host phases mutate the
 graph.
-`WanExecutionAdapter.PreflightRequest` similarly refuses host-only options the
-slice cannot honor. Legacy request-global video-swap values are not preflight
-errors: effective-request projection emits one warning and
+`WanExecutionAdapter.PreflightRequest` checks the few request-global host
+options that need special WAN handling. Legacy request-global video-swap
+values are not preflight errors: effective-request projection emits one warning and
 `WanLegacySwapIsolation` clears them only from host generation info, without
 editing `T2IParamInput`. High- and low-noise work is expressed as ordinary
-authored stages. Global end-frame is limited to exactly one pure generated 14B
-ImageToVideo clip. Its immutable stage payload assigns sole ownership to the
-last non-passthrough stage, so earlier generators receive no final-frame input
-and trailing passthrough does not consume it. Multi-clip, mixed-family,
-sourced, refine, text, active or forged 5B/cross-profile, and missing or forged
-ownership contracts refuse the option before mutation. Global creativity
-remains refused in favor of the authored clip-local controls.
+authored stages. WAN first/last-frame conditioning is a bounded family
+enhancement, not a different user-facing model category. When the selected
+host path can use a final image, the last sampling stage owns it. When the
+request shape cannot use it safely, VideoStages warns and continues without
+it. Global creativity is expressed through authored stage Control values.
 
 “Before mutation” here means before **VideoStages** mutation. SwarmUI may
 already have built host graph state that VideoStages captures or replaces.
@@ -386,7 +413,7 @@ LTX root policy, so it happens only when LTX owns the host root; the source-only
 path retains the raw capture.
 The remaining LTX host phases handle base/refiner references, pre-core handoff,
 core-output drop, and root audio-mask sizing.
-When Wan owns the image-to-video root, `HostVideoRootMediaHandoff` captures the
+When WAN owns the generated host root, `HostVideoRootMediaHandoff` captures the
 resolvable root image, its VAE state (which may be explicitly absent), and a
 node snapshot, then restores them and prunes the host core video pass. Missing
 or corrupt handoff state fails closed and clears all
@@ -459,20 +486,22 @@ splitting, IC-LoRA, and post-video-chain behavior remain under
 The `none` path uses `SourceOnlyGenerationSession` and
 `SourcedClipInstaller`; it builds no generation latent, VAE, or stage runtime.
 
-### B6b. Wan direct runtime execution
+### B6b. WAN direct runtime execution
 
 `WanGenerationSessionFactory` snapshots the host root media and VAE.
 `WanGenerationSession` prepares each hard-cut clip independently, then loops
 its compiled stages. Generated stage 0 resets to the captured root and
-delegates that image to SwarmUI's
-`WorkflowGenerator.CreateImageToVideo`. Native 5B text stage 0 prepares the
-authored model and prompt conditioning through the host loader, constructs
-`Wan22ImageToVideoLatent` without `start_image`, samples it with the authored
-steps, CFG, sampler, scheduler, seed, dimensions, and frame count, and decodes
-the result with the prepared VAE. An authored clip duration wins; otherwise
-text stage 0 uses the host text-to-video frame setting (default 81), and later
-stages inherit the preceding decoded frame count. All counts are snapped to
-the selected profile's frame grid. A sourced clip instead uses
+delegates that first-image input to SwarmUI's
+`WorkflowGenerator.CreateImageToVideo`. A text-input stage 0 prepares the
+authored model and prompt conditioning through the host loader and creates an
+unconditioned WAN latent without a start image. The exact internal node path
+still follows the selected checkpoint's SwarmUI support, but it is not exposed
+as a separate WAN model category. The stage samples with the authored steps,
+CFG, sampler, scheduler, seed, dimensions, and frame count, then decodes the
+result with the prepared VAE. An authored clip duration wins; otherwise text
+entry uses the host text-to-video frame setting (default 81), and later stages
+inherit the preceding decoded frame count. All counts are snapped to the
+selected model's frame grid. A sourced clip instead uses
 `SourcedClipInstaller` to resample, window, and resize its exact clip-local
 footage to WAN's snapped dimensions and requests video-only installation, so
 the source-audio trim branch is never built. Exact control `0` preserves that
@@ -525,17 +554,18 @@ restored, including when construction or normalization fails. An unscoped
 stage may keep its durable tuple. Marker eviction never removes live graph
 nodes.
 
-For ordinary supported WAN image-entry families, SwarmUI's generic LoRA loader
+For ordinary supported WAN models, SwarmUI's generic LoRA loader
 targets the model only (`LorasTargetTextEnc=false`). VideoStages uses that
 existing generic path for both persisted and prompt-section rows; text-encoder
 weights remain round-trippable host parameter data but do not make a model-zero
 WAN row effectful. VideoStages does not claim to solve core's automatic
 5B-LoRA classifier TODO.
 
-VACE, text-only 14B entry, transition expansion, advanced references, audio,
-refine-source, and HDR remain outside the WAN contract. Ordinary WAN 2.1/2.2
-image-entry variants are accepted from host facts. Legacy swap controls are
-warned and ignored; two noise models are two authored stages.
+VACE, transition expansion, arbitrary middle-frame references, audio, and
+refine-source remain outside the WAN contract. Ordinary WAN 2.1/2.2 video
+models are accepted from host facts and can use text, first-image, or source
+entry as request inputs. Legacy swap controls are warned and ignored; two noise
+models are two authored stages.
 
 The session publishes authored intermediates and
 removes every host per-pass trim. For a terminal single-clip session it applies
@@ -544,6 +574,27 @@ assembly applies that trim once over the joined timeline. The session returns
 the final decoded video-only artifact. A new generated hard-cut clip resets to
 the captured root rather than consuming the previous clip. LTX/Wan boundaries
 are neutral hard cuts; no family assembler crosses the architecture boundary.
+
+### B6c. Generic host-video runtime execution
+
+`HostVideoGenerationSession` calls the same proven stock
+`WorkflowGenerator.CreateImageToVideo` branch that SwarmUI uses for an
+image-entry model. A later stage receives the immediately previous decoded
+video, optionally pixel-resizes it, and lets the host encode and refine it with
+the stage's model, prompt, ordinary LoRAs, steps, CFG, sampler, scheduler, and
+Control start step. This root image is the ordinary host image-to-video entry;
+it is not a claim that the generic profile supports clip-authored frame
+references.
+
+Text entry prepares the selected host model and conditioning, then calls the
+host's family-specific `EmptyImage` video-latent primitive before sampling and
+decoding. `HostVideoRootMediaHandoff` and `HostVideoDecodedStageInput` contain
+the root restoration and decoded-media boundary mechanics shared with WAN;
+family scheduling stays in each architecture session. Generic passes clear
+ambient audio, native audio-reference input, swap, and end-frame values inside
+reversible scopes. A core-pass pre-handler also neutralizes request-global
+swap, end-frame, and creativity-derived start-step state on the discarded host
+pass only; authored stage sections are not intercepted.
 
 ### B7. Return neutral artifacts and publish
 

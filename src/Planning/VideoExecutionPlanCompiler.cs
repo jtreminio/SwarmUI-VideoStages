@@ -169,16 +169,60 @@ internal static class VideoExecutionPlanCompiler
             Array.AsReadOnly(clips.ToArray()),
             Array.AsReadOnly(resolvedBoundaries.ToArray()),
             Array.AsReadOnly(diagnostics.ToArray()));
+        HashSet<int> audioSegmentUnsupportedClipIds = [
+            .. plan.Clips
+                .Where(clip =>
+                    clip.Architecture is not null
+                    && !clip.Architecture.Capabilities.Clip.HasFlag(
+                        ClipCapability.AudioSegments))
+                .Select(clip => clip.ClipId),
+        ];
+        bool noClipSupportsAudioSegments =
+            plan.Clips.Count > 0
+            && audioSegmentUnsupportedClipIds.Count == plan.Clips.Count;
+        bool authoredTimelineAudio =
+            spec.TimelineAudioSegments is { Count: > 0 };
         AudioTimelineCompilation audio = AudioTimelinePlanCompiler.Compile(
             plan,
-            spec.TimelineAudioSegments);
+            noClipSupportsAudioSegments ? null : spec.TimelineAudioSegments);
         AudioTimelinePlan audioTimeline = audio.Plan;
+        HashSet<string> authoredTrackIds = audio.AuthoredTracks
+            .Select(track => track.TrackId)
+            .ToHashSet(StringComparer.Ordinal);
+        HashSet<int> suppressedTimelineAudioClipIds = [
+            .. audioTimeline.Tracks
+                .Where(track => authoredTrackIds.Contains(track.TrackId))
+                .SelectMany(track => track.Windows)
+                .Select(window => window.ClipId)
+                .Where(audioSegmentUnsupportedClipIds.Contains),
+        ];
+        if (noClipSupportsAudioSegments && authoredTimelineAudio)
+        {
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Warning,
+                "effective-request.audio-segments-ignored",
+                "None of the selected video architectures use timeline audio tracks. The "
+                    + "authored tracks remain saved and are ignored for this generation."));
+        }
+        else
+        {
+            foreach (int clipId in suppressedTimelineAudioClipIds)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
+                    "effective-request.audio-segments-ignored",
+                    $"Timeline audio overlaps clip {clipId}, whose selected video architecture "
+                        + "does not use audio segments. The authored track remains saved and is "
+                        + "ignored for that clip.",
+                    clipId));
+            }
+        }
         IReadOnlyList<ClipPlan> clipsWithTimelineAudio =
             TimelineAudioSegmentPlanProjector.Apply(
                 plan.Clips,
                 audioTimeline,
-                audio.AuthoredTracks.Select(track => track.TrackId).ToHashSet(
-                    StringComparer.Ordinal));
+                authoredTrackIds,
+                suppressedTimelineAudioClipIds);
         // Audio diagnostics are collected only once the timeline projection has run, because the
         // projected segments are what a clip's audio plan finally owns.
         foreach (ClipPlan clipPlan in clipsWithTimelineAudio)

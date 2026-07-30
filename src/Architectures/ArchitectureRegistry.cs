@@ -145,10 +145,20 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                 });
             }
         }
+        if (matches.Count > 0)
+        {
+            ArchitectureResolutionTier winningTier = matches.Min(match =>
+                GetModule(match.ArchitectureId).ResolutionTier);
+            matches = matches
+                .Where(match =>
+                    GetModule(match.ArchitectureId).ResolutionTier == winningTier)
+                .ToList();
+        }
         if (matches.Count > 1)
         {
             throw new InvalidOperationException(
-                $"Model '{model?.Name}' ambiguously resolves to architectures "
+                $"Model '{model?.Name}' ambiguously resolves within the winning architecture "
+                + "tier to "
                 + string.Join(", ", matches.Select(match => $"'{match.ArchitectureId}'")));
         }
         resolved = matches.SingleOrDefault();

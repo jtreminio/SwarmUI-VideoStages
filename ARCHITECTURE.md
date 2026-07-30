@@ -5,10 +5,11 @@ video architecture; all authored stages in that clip, including skipped
 stages, must resolve to the same architecture. Different executable clips may
 use different architectures.
 
-Production registers source-only `none`, LTX Video 2.3, and the cut-only Wan
-2.2 Image2Video 14B plus Text/Image2Video 5B image-conditioned profiles. The
-registry, planning contracts, runtime dispatch, and timeline assembly host all
-three architectures without architecture branches in common code.
+Production registers source-only `none`, specialized LTX Video 2.3, the WAN
+family, and a cut-only generic fallback for video models with verified SwarmUI
+graph paths. The registry, planning contracts, runtime dispatch, and timeline
+assembly host all four architectures without architecture branches in common
+code.
 
 ## The execution model
 
@@ -154,9 +155,9 @@ without a capability-definition mirror. Frontend architecture IDs may select
 local behavior or DOM panels, but those maps do not recognize models or declare
 profiles, labels, capabilities, or rules.
 
-Wan recognizes ordinary WAN 2.1 and 2.2 image-entry models from SwarmUI's
-authoritative class, compatibility, and entry facts. Text-only, VACE, LoRA, and
-VAE components are excluded. The exact 14B and 5B identifiers remain
+WAN recognizes ordinary WAN 2.1 and 2.2 video models from SwarmUI's
+authoritative class, compatibility, and entry facts. VACE, LoRA, and VAE
+components are excluded. The exact 14B and 5B identifiers remain
 compatibility aliases for their existing special behavior; they are not a
 model allowlist. One clip may chain full, partial, and decoded passthrough
 stages when every authored stage has the same compatibility class, even when
@@ -172,13 +173,12 @@ the authored values remain untouched, and an idempotent host pre-handler
 prevents SwarmUI from appending an unauthored second sampling pass. High- and
 low-noise models are represented as ordinary user-authored stages. A
 request-global end-frame remains accepted only for exactly one pure generated
-14B ImageToVideo clip. The compiled plan assigns it structurally to the last
-non-passthrough stage; earlier generating stages receive no end-frame and a
-trailing passthrough does not take ownership. Multi-clip, mixed-family,
-sourced, refine, text, active or forged 5B/cross-profile, and ownerless
-timelines refuse the option before VideoStages mutation. VACE, text-only 14B
-entry, transition expansion, advanced references, audio, refine-source, and HDR
-remain unsupported rather than silently omitted.
+clip whose selected SwarmUI path supports a final image. The compiled plan
+assigns it structurally to the last non-passthrough stage; earlier generating
+stages receive no end-frame and a trailing passthrough does not take ownership.
+Other request shapes warn and continue without the last image. VACE, transition
+expansion, arbitrary middle-frame references, audio, and refine-source remain
+outside the WAN contract.
 
 ## Capability catalog
 

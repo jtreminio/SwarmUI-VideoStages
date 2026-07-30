@@ -53,7 +53,7 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
         {
             ...wan.profiles[0],
             id: "wan-i2v",
-            label: "WAN Image2Video",
+            label: "WAN Video",
         },
     ];
     models.architectures.push(wan);

@@ -3,6 +3,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.HostVideo;
 using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.Wan;
 using VideoStages.Architectures.Wan.Planning;
@@ -127,6 +128,50 @@ public sealed class EffectiveVideoRequestTests
         WanStagePayload payload = plan.Clips[0].Stages[1].RequireWanPayload();
         Assert.Equal(StageUpscaleMode.None, payload.Upscale.Mode);
         Assert.Equal(1, payload.Upscale.Factor);
+    }
+
+    [Fact]
+    public void Generic_projection_warns_for_stage_only_reference_payload()
+    {
+        StageSpec stage = Stage(
+            0,
+            rawIndex: 0,
+            model: "host-model") with
+        {
+            ImageRefStrengths = [0.7],
+        };
+        ClipSpec clip = Clip(stage) with
+        {
+            AuthoredArchitectureId =
+                HostVideoArchitectureModule.ArchitectureId.Value,
+            AuthoredModelProfileId =
+                HostVideoArchitectureModule.ProfileId.Value,
+            AuthoredStages =
+            [
+                new(
+                    0,
+                    stage.Model,
+                    HostVideoArchitectureModule.ProfileId.Value,
+                    false),
+            ],
+        };
+        VideoStagesSpec authored = Spec(clip);
+        ArchitecturePlanningResult architectures = Resolve(
+            authored,
+            _ => HostVideoArchitectureModule.Instance,
+            _ => HostVideoArchitectureModule.Instance.Descriptor);
+
+        EffectiveVideoRequest request =
+            EffectiveVideoRequestProjector.Project(authored, architectures);
+
+        Assert.Equal([0.7], authored.Clips[0].Stages[0].ImageRefStrengths);
+        Assert.Empty(request.Spec.Clips[0].Stages[0].ImageRefStrengths);
+        Assert.Contains(
+            request.Decisions,
+            decision => decision.Code
+                    == "effective-request.host-video-references-ignored"
+                && decision.Disposition
+                    == EffectiveRequestDisposition.IgnoreWithWarning);
     }
 
     [Fact]

@@ -1603,7 +1603,7 @@ public class ArchitectureFoundationTests
 
         JArray architectures = (JArray)catalog["architectures"];
         Assert.Equal(
-            ["none", "ltx2", "wan22"],
+            ["none", "ltx2", "wan22", "host-video"],
             architectures.Values<JObject>().Select(item => item["id"]?.ToString()));
         JObject none = Assert.Single(
             architectures.Values<JObject>(),

@@ -1,5 +1,6 @@
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.HostVideo;
 using VideoStages.Architectures.Wan;
 
 namespace VideoStages.Planning;
@@ -88,12 +89,32 @@ internal static class EffectiveVideoRequestProjector
             authoredBoundaryModes,
             projectedBoundaryFallbacks);
         ProjectLegacyWanSwap(authored, architecturePlanning, decisions);
+        ProjectLegacyHostVideoSwap(authored, architecturePlanning, decisions);
         return new(
             authored with { Clips = Array.AsReadOnly(effectiveClips) },
             architecturePlanning,
             decisions.AsReadOnly(),
             authoredBoundaryModes,
             projectedBoundaryFallbacks);
+    }
+
+    private static void ProjectLegacyHostVideoSwap(
+        VideoStagesSpec authored,
+        ArchitecturePlanningResult architecturePlanning,
+        ICollection<EffectiveRequestDecision> decisions)
+    {
+        if (authored.LegacyVideoSwap?.IsConfigured != true
+            || ResolveAuthoredRootOwner(authored, architecturePlanning)
+                != HostVideoArchitectureModule.ArchitectureId)
+        {
+            return;
+        }
+
+        decisions.Add(Ignore(
+            "effective-request.host-video-swap-ignored",
+            "Generic VideoStages ignores SwarmUI's request-global Video Swap Model, Video Swap "
+                + "Percent, and Video Swap section settings. The authored values remain in "
+                + "request metadata. Create separate timeline stages instead."));
     }
 
     private static void ProjectLegacyWanSwap(
@@ -133,10 +154,20 @@ internal static class EffectiveVideoRequestProjector
             authored,
             assignment,
             decisions);
-        if (assignment.Architecture.Id != WanArchitectureModule.ArchitectureId)
+        bool isWan =
+            assignment.Architecture.Id == WanArchitectureModule.ArchitectureId;
+        bool isHostVideo =
+            assignment.Architecture.Id == HostVideoArchitectureModule.ArchitectureId;
+        if (!isWan && !isHostVideo)
         {
             return effective;
         }
+        if (isHostVideo)
+        {
+            effective = ProjectHostVideoClip(effective, decisions);
+        }
+        string architectureName = isWan ? "WAN" : "generic host video";
+        string codePrefix = isWan ? "wan" : "host-video";
 
         bool hasIcLoraData = effective.IcLoras is { Count: > 0 }
             || (effective.Stages?.Any(stage => stage.IcLoraStrengths is { Count: > 0 })
@@ -144,8 +175,8 @@ internal static class EffectiveVideoRequestProjector
         if (hasIcLoraData)
         {
             decisions.Add(Ignore(
-                "effective-request.wan-ic-lora-ignored",
-                $"Clip {effective.Id} configures IC-LoRA data, but WAN does not support "
+                $"effective-request.{codePrefix}-ic-lora-ignored",
+                $"Clip {effective.Id} configures IC-LoRA data, but {architectureName} does not support "
                     + "IC-LoRA. The setting remains authored and is ignored for this generation.",
                 effective.Id));
             effective = effective with
@@ -172,7 +203,7 @@ internal static class EffectiveVideoRequestProjector
             if (stage.IsPixelUpscale)
             {
                 decisions.Add(Execute(
-                    "effective-request.wan-pixel-upscale",
+                    $"effective-request.{codePrefix}-pixel-upscale",
                     $"Clip {effective.Id} Stage {stage.Id} executes its pixel upscale.",
                     effective.Id,
                     stage.Id,
@@ -193,8 +224,8 @@ internal static class EffectiveVideoRequestProjector
                 continue;
             }
             decisions.Add(Ignore(
-                "effective-request.wan-advanced-upscale-ignored",
-                $"Clip {effective.Id} Stage {stage.Id} requests unsupported WAN upscale "
+                $"effective-request.{codePrefix}-advanced-upscale-ignored",
+                $"Clip {effective.Id} Stage {stage.Id} requests unsupported {architectureName} upscale "
                     + $"method '{stage.UpscaleMethod}'. The authored setting remains saved, "
                     + "but this generation runs the stage at 1×.",
                 effective.Id,
@@ -207,6 +238,134 @@ internal static class EffectiveVideoRequestProjector
             };
         }
         return effective with { Stages = Array.AsReadOnly(stages) };
+    }
+
+    private static ClipSpec ProjectHostVideoClip(
+        ClipSpec effective,
+        ICollection<EffectiveRequestDecision> decisions)
+    {
+        void IgnoreConfigured(bool configured, string feature, string code)
+        {
+            if (!configured)
+            {
+                return;
+            }
+            decisions.Add(Ignore(
+                $"effective-request.host-video-{code}-ignored",
+                $"Clip {effective.Id} configures {feature}, which the generic host-video "
+                    + "fallback does not use. The authored setting remains saved and is ignored "
+                    + "for this generation.",
+                effective.Id));
+        }
+
+        IgnoreConfigured(
+            effective.ImageRefs is { Count: > 0 }
+                || effective.Stages?.Any(
+                    stage => stage.ImageRefStrengths is { Count: > 0 }) == true,
+            "image/frame references",
+            "references");
+        IgnoreConfigured(
+            effective.PromptWindows is { Count: > 0 },
+            "prompt relay windows",
+            "prompt-relay");
+        IgnoreConfigured(
+            effective.Stages?.Any(stage => stage.RetakeWindow is not null) == true,
+            "a retake window",
+            "retake");
+        IgnoreConfigured(
+            effective.Stages?.Any(stage => stage.ControlNetStrength.HasValue) == true,
+            "stage ControlNet strength",
+            "controlnet");
+        IgnoreConfigured(
+            effective.UploadedAudio is not null
+                || !string.Equals(
+                    effective.AudioSource,
+                    Constants.AudioSourceNative,
+                    StringComparison.OrdinalIgnoreCase),
+            "a clip audio source",
+            "audio-source");
+        IgnoreConfigured(
+            effective.SaveAudioTrack,
+            "standalone audio output",
+            "audio-output");
+        IgnoreConfigured(
+            effective.ClipLengthFromAudio,
+            "audio-derived clip duration",
+            "audio-duration");
+        IgnoreConfigured(
+            effective.ClipLengthFromControlNet,
+            "control-derived clip duration",
+            "control-duration");
+        IgnoreConfigured(
+            effective.ReuseAudio,
+            "captured stage audio reuse",
+            "audio-reuse");
+        IgnoreConfigured(
+            effective.BoundaryOutCarryAudio,
+            "audio boundary carry",
+            "audio-boundary");
+        IgnoreConfigured(
+            effective.ReferenceFraming != ReferenceFramingMode.Crop,
+            "non-default reference framing",
+            "reference-framing");
+
+        StageSpec[] stages = (effective.Stages ?? [])
+            .Select((stage, index) =>
+            {
+                StageGuideReferenceSelection guide =
+                    StageGuideReferencePolicy.Classify(stage.ImageReference);
+                bool supportedGuide =
+                    HostVideoArchitectureModule.Instance.Descriptor
+                        .StageGuideReferences.Allows(guide);
+                if (!supportedGuide)
+                {
+                    decisions.Add(Ignore(
+                        "effective-request.host-video-stage-reference-ignored",
+                        $"Clip {effective.Id} Stage {stage.Id} uses image selector "
+                            + $"'{stage.ImageReference}', which the generic host-video fallback "
+                            + "does not use. The authored selector remains saved; this generation "
+                            + $"uses '{(index == 0 ? "Generated" : "PreviousStage")}'.",
+                        effective.Id,
+                        stage.Id,
+                        stage.ClipStageRawIndex));
+                }
+                return stage with
+                {
+                    ImageReference = supportedGuide
+                        ? stage.ImageReference
+                        : index == 0 ? "Generated" : "PreviousStage",
+                    ImageRefStrengths = [],
+                    RetakeWindow = null,
+                    ControlNetStrength = null,
+                };
+            })
+            .ToArray();
+        return effective with
+        {
+            AudioSource = Constants.AudioSourceNative,
+            SaveAudioTrack = false,
+            ClipLengthFromAudio = false,
+            ClipLengthFromControlNet = false,
+            ReuseAudio = false,
+            UploadedAudio = null,
+            ImageRefs = [],
+            PromptWindows = [],
+            BoundaryOutCarryAudio = false,
+            ReferenceFraming = ReferenceFramingMode.Crop,
+            Stages = Array.AsReadOnly(stages),
+        };
+    }
+
+    private static ArchitectureId? ResolveAuthoredRootOwner(
+        VideoStagesSpec authored,
+        ArchitecturePlanningResult architecturePlanning)
+    {
+        ClipSpec root = (authored.Clips ?? []).FirstOrDefault(
+            clip => clip.SourceVideo is null && clip.Stages is { Count: > 0 });
+        return root is null
+            ? null
+            : architecturePlanning.Clips.GetValueOrDefault(root.Id)
+                ?.Architecture?.Id;
     }
 
     private static ClipSpec CanonicalizeResolvedIdentityHints(

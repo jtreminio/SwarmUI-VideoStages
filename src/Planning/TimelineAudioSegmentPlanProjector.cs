@@ -10,7 +10,8 @@ internal static class TimelineAudioSegmentPlanProjector
     internal static IReadOnlyList<ClipPlan> Apply(
         IReadOnlyList<ClipPlan> clips,
         AudioTimelinePlan timeline,
-        IReadOnlySet<string> authoredTrackIds)
+        IReadOnlySet<string> authoredTrackIds,
+        IReadOnlySet<int> suppressedClipIds = null)
     {
         Dictionary<int, AudioTimelineClipWindow> clipWindows =
             timeline.ClipWindows.ToDictionary(window => window.ClipId);
@@ -24,6 +25,10 @@ internal static class TimelineAudioSegmentPlanProjector
             }
             foreach (AudioTrackClipWindow window in track.Windows)
             {
+                if (suppressedClipIds?.Contains(window.ClipId) == true)
+                {
+                    continue;
+                }
                 if (!clipWindows.TryGetValue(window.ClipId, out AudioTimelineClipWindow clipWindow)
                     || !clipWindow.IsResolved)
                 {

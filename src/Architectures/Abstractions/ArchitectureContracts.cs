@@ -417,9 +417,22 @@ internal static class VideoModelEntryPolicy
     }
 }
 
+/// <summary>
+/// Specialized modules win model resolution over the generic host-video fallback. Ambiguity
+/// remains an error within the winning tier so registration order never silently changes policy.
+/// </summary>
+internal enum ArchitectureResolutionTier
+{
+    Specialized,
+    Fallback,
+}
+
 internal interface IVideoArchitectureModule
 {
     VideoArchitectureDescriptor Descriptor { get; }
+
+    ArchitectureResolutionTier ResolutionTier =>
+        ArchitectureResolutionTier.Specialized;
 
     bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved);
 
