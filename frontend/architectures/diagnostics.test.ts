@@ -94,7 +94,7 @@ const hostVideoCatalog = (): ArchitectureModelCatalog => {
 describe("architecture diagnostics", () => {
     it("reports one precise model error when Stage 0 is unresolved", () => {
         const clip = minimalClip({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             stages: [minimalStage({ model: "removed-model.safetensors" })],
         });
@@ -110,7 +110,7 @@ describe("architecture diagnostics", () => {
 
     it("warns for stale resolved identity hints without changing the authored clip", () => {
         const clip = minimalClip({
-            architecture: "removed-cache",
+            architectureHint: "removed-cache",
             modelProfileId: "old-profile",
             stages: [
                 minimalStage({
@@ -141,7 +141,7 @@ describe("architecture diagnostics", () => {
 
     it("resolves stale hints from the first authored model even when every stage is skipped", () => {
         const clip = minimalClip({
-            architecture: "removed-cache",
+            architectureHint: "removed-cache",
             modelProfileId: "old-profile",
             stages: [
                 minimalStage({
@@ -173,7 +173,7 @@ describe("architecture diagnostics", () => {
 
     it("uses the resolved WAN identity for existing HDR and IC-LoRA source checks", () => {
         const clip = minimalClip({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             clipLengthFromControlNet: true,
             icLoras: [
@@ -201,7 +201,7 @@ describe("architecture diagnostics", () => {
 
     it("warns for safely ignored WAN IC-LoRA and advanced upscale values", () => {
         const clip = minimalClip({
-            architecture: "wan22",
+            architectureHint: "wan22",
             modelProfileId: "wan22-i2v-14b",
             icLoras: [hdrIcLoraFixture({ hdr: false })],
             refFraming: "fit",
@@ -240,7 +240,7 @@ describe("architecture diagnostics", () => {
 
     it("warns for optional generic host data that backend projection safely ignores", () => {
         const clip = minimalClip({
-            architecture: "host-video",
+            architectureHint: "host-video",
             modelProfileId: "host-video",
             refs: [minimalRef()],
             refFraming: "fit",
@@ -283,7 +283,7 @@ describe("architecture diagnostics", () => {
         model.architectureId = host.id;
 
         const clip = minimalClip({
-            architecture: host.id,
+            architectureHint: host.id,
             refs: [minimalRef()],
             promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
             stages: [
@@ -321,7 +321,7 @@ describe("architecture diagnostics", () => {
             (capability) => capability !== "multi-stage",
         );
         const clip = minimalClip({
-            architecture: host.id,
+            architectureHint: host.id,
             stages: [
                 minimalStage({
                     model: "host-video.safetensors",
@@ -343,7 +343,7 @@ describe("architecture diagnostics", () => {
 
     it("keeps an unclassifiable WAN upscale blocking", () => {
         const clip = minimalClip({
-            architecture: "wan22",
+            architectureHint: "wan22",
             modelProfileId: "wan22-i2v-14b",
             stages: [
                 minimalStage({
@@ -364,7 +364,7 @@ describe("architecture diagnostics", () => {
 
     it("keeps an unclassifiable generic host upscale blocking", () => {
         const clip = minimalClip({
-            architecture: "host-video",
+            architectureHint: "host-video",
             modelProfileId: "host-video",
             stages: [
                 minimalStage({
@@ -460,7 +460,7 @@ describe("architecture diagnostics", () => {
 
     it("reports captured audio reuse independently from supported clip audio", () => {
         const clip = minimalClip({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
             sourceVideo: sourceVideoFixture(),
             stages: [],
@@ -480,7 +480,7 @@ describe("architecture diagnostics", () => {
 
     it("reports unsupported audio-derived duration without rejecting None upload audio", () => {
         const clip = minimalClip({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
             sourceVideo: sourceVideoFixture(),
             stages: [],
@@ -512,7 +512,7 @@ describe("architecture diagnostics", () => {
 
     it("reports unsupported control-signal duration without inventing an audio-source issue", () => {
         const clip = minimalClip({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
             sourceVideo: sourceVideoFixture(),
             stages: [],
@@ -587,7 +587,7 @@ describe("architecture diagnostics", () => {
         if (!fake) throw new Error("missing fake architecture");
         fake.capabilities.clip = [];
         const clip = minimalClip({
-            architecture: "test-video",
+            architectureHint: "test-video",
             modelProfileId: "test-profile",
             loras: [{ name: "detail" }],
             prompt: "persisted major prompt",
@@ -638,7 +638,7 @@ describe("architecture diagnostics", () => {
     it("warns when cross-architecture non-cut joins will execute as cuts", () => {
         const left = minimalClip({ boundaryOut: "continue" });
         const right = minimalClip({
-            architecture: "test-video",
+            architectureHint: "test-video",
             modelProfileId: "test-profile",
             stages: [
                 minimalStage({
@@ -669,7 +669,7 @@ describe("architecture diagnostics", () => {
         };
         const staleWanClip = (boundaryOut: Clip["boundaryOut"]) =>
             minimalClip({
-                architecture: "ltx2",
+                architectureHint: "ltx2",
                 modelProfileId: "ltx-2.3",
                 boundaryOut,
                 stages: [
@@ -739,7 +739,7 @@ describe("architecture diagnostics", () => {
 
     it("retains and diagnoses a persisted source-only architecture mismatch", () => {
         const sourceOnly = minimalClip({
-            architecture: "removed-architecture",
+            architectureHint: "removed-architecture",
             modelProfileId: "removed-profile",
             sourceVideo: {
                 data: "data:video/mp4;base64,AAAA",
@@ -757,12 +757,12 @@ describe("architecture diagnostics", () => {
                 ({ code }) => code,
             ),
         ).toEqual(["architecture.source-only-requires-none"]);
-        expect(sourceOnly.architecture).toBe("removed-architecture");
+        expect(sourceOnly.architectureHint).toBe("removed-architecture");
     });
 
     it("validates same-architecture dormant stages without comparing them to none", () => {
         const sourceOnly = minimalClip({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
             sourceVideo: {
                 data: "data:video/mp4;base64,AAAA",
@@ -793,7 +793,7 @@ describe("architecture diagnostics", () => {
 
     it("diagnoses mixed architectures among dormant source-only stages", () => {
         const sourceOnly = minimalClip({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
             sourceVideo: {
                 data: "data:video/mp4;base64,AAAA",
@@ -834,7 +834,7 @@ describe("architecture diagnostics", () => {
             (capability) => capability !== "multi-stage",
         );
         const clip = minimalClip({
-            architecture: "test-video",
+            architectureHint: "test-video",
             modelProfileId: "test-profile",
             stages: [
                 minimalStage({
@@ -1045,7 +1045,7 @@ describe("architecture diagnostics", () => {
         );
         const guidedClip = (model: string, modelProfileId: string) =>
             minimalClip({
-                architecture: "wan22",
+                architectureHint: "wan22",
                 modelProfileId,
                 refs: [minimalRef({ frame: 1 })],
                 stages: [

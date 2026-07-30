@@ -1670,7 +1670,7 @@ describe("createTimelineDetailStrip", () => {
         add?.click();
 
         expect(persistence.getClips()[0].stages).toHaveLength(1);
-        expect(persistence.getClips()[0].architecture).not.toBe("none");
+        expect(persistence.getClips()[0].architectureHint).not.toBe("none");
         expect(activeRailLabel()).toBe("S0");
     });
 

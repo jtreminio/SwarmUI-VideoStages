@@ -153,8 +153,8 @@ public class AuthoringDocumentContractTests
         Assert.Equal(8, clip.BoundaryOutOverlap);
         Assert.True(clip.BoundaryOutCarryAudio);
         Assert.Equal(ReferenceFramingMode.FitGreen, clip.ReferenceFraming);
-        Assert.Equal("ltx2", clip.AuthoredArchitectureId);
-        Assert.Equal("ltx-2.3", clip.AuthoredModelProfileId);
+        Assert.Equal("ltx2", clip.AuthoredArchitectureHint);
+        Assert.Equal("ltx-2.3", clip.AuthoredModelProfileHint);
         Assert.Equal("data:audio/wav;base64,QUJD", clip.UploadedAudio.Data);
         Assert.Equal("clip.wav", clip.UploadedAudio.FileName);
         Assert.Equal("source.mp4", clip.SourceVideo.FileName);
@@ -222,12 +222,32 @@ public class AuthoringDocumentContractTests
     public void RejectsAnUnsupportedSchemaVersion()
     {
         JObject document = JObject.Parse(FixtureJson());
-        document["schemaVersion"] = VideoStagesJsonReader.SupportedSchemaVersion - 1;
+        document["schemaVersion"] = VideoStagesJsonReader.SupportedSchemaVersion - 2;
         T2IParamInput input = new(null);
         Fixtures.SetVideoStagesConfig(input, document.ToString());
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
             () => VideoStagesSpecParser.Parse(new WorkflowGenerator { UserInput = input }));
         Assert.Contains("document version", error.Message);
+    }
+
+    [Fact]
+    public void MigratesTheVersionFiveArchitectureFieldToAnExplicitHint()
+    {
+        JObject document = JObject.Parse(FixtureJson());
+        document["schemaVersion"] = 5;
+        foreach (JObject clip in document["clips"].Values<JObject>())
+        {
+            clip["architecture"] = clip["architectureHint"];
+            clip.Remove("architectureHint");
+        }
+        T2IParamInput input = new(null);
+        Fixtures.SetVideoStagesConfig(input, "{}");
+        input.Set(VideoStagesExtension.Data, document.ToString());
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(
+            new WorkflowGenerator { UserInput = input });
+
+        Assert.Equal("ltx2", spec.Clips[0].AuthoredArchitectureHint);
     }
 
     [Fact]

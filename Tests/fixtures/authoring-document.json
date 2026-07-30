@@ -1,11 +1,11 @@
 {
-    "schemaVersion": 5,
+    "schemaVersion": 6,
     "width": 768,
     "height": 512,
     "clips": [
         {
             "id": "clip-0",
-            "architecture": "ltx2",
+            "architectureHint": "ltx2",
             "modelProfileId": "ltx-2.3",
             "architecturePayload": null,
             "skipped": false,
@@ -126,7 +126,7 @@
         },
         {
             "id": "clip-1",
-            "architecture": "ltx2",
+            "architectureHint": "ltx2",
             "modelProfileId": "ltx-2.3",
             "architecturePayload": null,
             "skipped": false,

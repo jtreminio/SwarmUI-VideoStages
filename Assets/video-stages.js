@@ -726,7 +726,7 @@
         ...authoredIdentity
       };
     }
-    if (clip.architecture === NONE_ARCHITECTURE_ID && clip.modelProfileId === NONE_ARCHITECTURE_ID) {
+    if (clip.architectureHint === NONE_ARCHITECTURE_ID && clip.modelProfileId === NONE_ARCHITECTURE_ID) {
       return {
         architectureId: NONE_ARCHITECTURE_ID,
         modelProfileId: NONE_ARCHITECTURE_ID,
@@ -734,10 +734,10 @@
       };
     }
     const validEmptyIdentity = catalog.architectures.some(
-      (architecture) => architecture.id === clip.architecture
+      (architecture) => architecture.id === clip.architectureHint
     );
     return validEmptyIdentity ? {
-      architectureId: clip.architecture,
+      architectureId: clip.architectureHint,
       modelProfileId: clip.modelProfileId,
       ...authoredIdentity
     } : null;
@@ -745,7 +745,7 @@
   var reconcileClipArchitectureIdentity = (clip, catalog) => {
     const identity = deriveClipArchitectureIdentity(clip, catalog);
     if (!identity) return false;
-    clip.architecture = identity.architectureId;
+    clip.architectureHint = identity.architectureId;
     clip.modelProfileId = identity.modelProfileId;
     return true;
   };
@@ -2334,7 +2334,7 @@
   };
 
   // frontend/types.ts
-  var CURRENT_AUTHORING_SCHEMA_VERSION = 5;
+  var CURRENT_AUTHORING_SCHEMA_VERSION = 6;
   var REF_SOURCE_BASE = "Base";
   var REF_SOURCE_REFINER = "Refiner";
   var REF_SOURCE_UPLOAD = "Upload";
@@ -2650,14 +2650,14 @@
         includeDefaultRef ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH : STAGE_REF_STRENGTH_DEFAULT
       )
     };
-    const architecture = (previousClip?.architecture !== NONE_ARCHITECTURE_ID ? previousClip?.architecture : null) ?? architectureForModel(defaults.modelCatalog, firstStage.model) ?? "unsupported";
+    const architecture = (previousClip?.architectureHint !== NONE_ARCHITECTURE_ID ? previousClip?.architectureHint : null) ?? architectureForModel(defaults.modelCatalog, firstStage.model) ?? "unsupported";
     const continueRule = architectureDescriptor(
       defaults.modelCatalog,
       architecture
     )?.boundaryRules.continue;
     return {
-      architecture,
-      modelProfileId: (previousClip?.architecture !== NONE_ARCHITECTURE_ID ? previousClip?.modelProfileId : null) ?? modelProfileForModel(defaults.modelCatalog, firstStage.model) ?? firstStage.modelProfileId,
+      architectureHint: architecture,
+      modelProfileId: (previousClip?.architectureHint !== NONE_ARCHITECTURE_ID ? previousClip?.modelProfileId : null) ?? modelProfileForModel(defaults.modelCatalog, firstStage.model) ?? firstStage.modelProfileId,
       architecturePayload: null,
       skipped: previousClip?.skipped === true,
       hue: UNASSIGNED_HUE,
@@ -2770,7 +2770,7 @@
     );
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const stageZero = stages[0] ?? null;
-    const persistedArchitecture = trimmedText(rawClip.architecture);
+    const persistedArchitecture = trimmedText(rawClip.architectureHint);
     const persistedProfile = trimmedText(rawClip.modelProfileId);
     const isSourceOnly = sourceVideo !== null && stages.every((stage) => stage.skipped);
     const architecture = isSourceOnly ? persistedArchitecture || "none" : normalizeClipArchitecture(
@@ -2815,7 +2815,7 @@
     )?.boundaryRules[boundaryOut];
     return {
       id: normalizeOptionalEntityId(rawClip.id),
-      architecture,
+      architectureHint: architecture,
       modelProfileId,
       architecturePayload: preserveArchitecturePayload(
         rawClip.architecturePayload
@@ -3625,7 +3625,7 @@
     return clips.map(
       (clip) => ({
         id: clip.id,
-        architecture: clip.architecture,
+        architectureHint: clip.architectureHint,
         modelProfileId: clip.modelProfileId,
         architecturePayload: clip.architecturePayload,
         skipped: clip.skipped,
@@ -3907,27 +3907,49 @@
     noticedDivergentProjection = serialized;
     getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
   };
+  var ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION = 5;
+  var migrateStoredDocument = (parsed) => {
+    if (parsed.schemaVersion === CURRENT_AUTHORING_SCHEMA_VERSION) {
+      return parsed;
+    }
+    if (parsed.schemaVersion !== ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION || !Array.isArray(parsed.clips)) {
+      return null;
+    }
+    const migrated = structuredClone(parsed);
+    migrated.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    for (const rawClip of migrated.clips) {
+      if (!isRecord(rawClip)) {
+        continue;
+      }
+      if (rawClip.architectureHint === void 0) {
+        rawClip.architectureHint = rawClip.architecture;
+      }
+      delete rawClip.architecture;
+    }
+    return migrated;
+  };
   var decodeStoredDocument = (serialized, inherited) => {
     try {
       const parsed = JSON.parse(serialized);
       if (!isRecord(parsed)) {
         return null;
       }
-      if (parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION) {
+      const current = migrateStoredDocument(parsed);
+      if (!current) {
         noticeOutdatedSchema(serialized);
         return null;
       }
-      if (!hasValidStoredCollections(parsed)) {
+      if (!hasValidStoredCollections(current)) {
         return null;
       }
-      if (hasDivergentSpanProjection(parsed)) {
+      if (hasDivergentSpanProjection(current)) {
         noticeDivergentProjection(serialized);
       }
       const dims = resolveRootDims(inherited, {
-        width: parsed.width,
-        height: parsed.height
+        width: current.width,
+        height: current.height
       });
-      const clips = parsed.clips.map(
+      const clips = current.clips.map(
         (entry) => normalizeClip(
           entry,
           getRootDefaults,
@@ -3946,7 +3968,7 @@
       return {
         dims,
         clips,
-        audioTracks: normalizeAudioTracks(parsed.audioTracks)
+        audioTracks: normalizeAudioTracks(current.audioTracks)
       };
     } catch {
       return null;
@@ -4328,7 +4350,7 @@
       return null;
     }
     const clip = structuredClone(source);
-    clip.architecture = target.architectureId;
+    clip.architectureHint = target.architectureId;
     clip.modelProfileId = target.modelProfileId;
     for (const stage of clip.stages) {
       stage.model = target.model;
@@ -4394,7 +4416,7 @@
     ],
     reservedKeys: [
       "id",
-      "architecture",
+      "architectureHint",
       "modelProfileId",
       "promptWindows",
       "retake",
@@ -4698,7 +4720,7 @@
     diffRetake(before, after, phases);
   };
   var clipDiffBase = (previous, next, phases, context) => {
-    const changesEffectiveIdentity = previous.architecture !== next.architecture || previous.modelProfileId !== next.modelProfileId;
+    const changesEffectiveIdentity = previous.architectureHint !== next.architectureHint || previous.modelProfileId !== next.modelProfileId;
     const previousIdentity = deriveClipArchitectureIdentity(
       previous,
       context.architectureCatalog
@@ -4717,7 +4739,7 @@
     );
     const repairsUnresolvedStageZero = previous.stages[0]?.model !== next.stages[0]?.model && previousStageZeroIdentity === null && nextStageZeroIdentity !== null;
     if (changesEffectiveIdentity) {
-      if (!nextIdentity || nextIdentity.architectureId !== next.architecture || nextIdentity.modelProfileId !== next.modelProfileId) {
+      if (!nextIdentity || nextIdentity.architectureId !== next.architectureHint || nextIdentity.modelProfileId !== next.modelProfileId) {
         throw new DocumentDiffError("architecture-invariant");
       }
     }
@@ -5153,7 +5175,7 @@
       case "clip.move":
         return list(document2, "clip", "move", command, context);
       case "clip.patch": {
-        if (hasOwn(command.patch, "architecture") || hasOwn(command.patch, "modelProfileId")) {
+        if (hasOwn(command.patch, "architectureHint") || hasOwn(command.patch, "modelProfileId")) {
           return failure(document2, "architecture-invariant");
         }
         const clip = findClip(document2, command.clipId);
@@ -6288,11 +6310,11 @@
       );
       const effectiveModelProfileId = resolvedFirstModel?.modelProfileId ?? clip.modelProfileId;
       const effectiveCompatibilityClassId = resolvedFirstModel?.compatibilityClassId ?? null;
-      if (resolvedFirstModel?.architectureId && resolvedFirstModel.architectureId !== clip.architecture) {
+      if (resolvedFirstModel?.architectureId && resolvedFirstModel.architectureId !== clip.architectureHint) {
         diagnostics.push(
           issue(
             "architecture.stale-identity-hint",
-            `Clip ${clipIdx} caches architecture '${clip.architecture}', but model '${clip.stages[0].model}' resolves to '${resolvedFirstModel.architectureId}'. Generation uses the resolved architecture and preserves the authored hint.`,
+            `Clip ${clipIdx} caches architecture hint '${clip.architectureHint}', but model '${clip.stages[0].model}' resolves to '${resolvedFirstModel.architectureId}'. Generation uses the resolved architecture and preserves the authored hint.`,
             clipIdx,
             "warning"
           )
@@ -6309,7 +6331,7 @@
         );
       }
       if (sourceOnly) {
-        if (clip.architecture !== NONE_ARCHITECTURE_ID || clip.modelProfileId !== NONE_ARCHITECTURE_ID) {
+        if (clip.architectureHint !== NONE_ARCHITECTURE_ID || clip.modelProfileId !== NONE_ARCHITECTURE_ID) {
           diagnostics.push(
             issue(
               "architecture.source-only-requires-none",
@@ -12596,7 +12618,7 @@ The conversion is one undoable change.`;
           const fromLabel = (ownerArchitectureId ? architectureDescriptor(
             defaults.modelCatalog,
             ownerArchitectureId
-          )?.label : null) ?? (clip.architecture ? `${clip.architecture} (unresolved hint)` : "Unresolved model");
+          )?.label : null) ?? (clip.architectureHint ? `${clip.architectureHint} (unresolved hint)` : "Unresolved model");
           const toLabel = architectureDescriptor(
             defaults.modelCatalog,
             plan.architectureId

@@ -137,8 +137,8 @@ export const appendStageModelSection = ({
                               ownerArchitectureId,
                           )?.label
                         : null) ??
-                    (clip.architecture
-                        ? `${clip.architecture} (unresolved hint)`
+                    (clip.architectureHint
+                        ? `${clip.architectureHint} (unresolved hint)`
                         : "Unresolved model");
                 const toLabel =
                     architectureDescriptor(

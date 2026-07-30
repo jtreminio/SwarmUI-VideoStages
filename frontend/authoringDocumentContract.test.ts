@@ -42,7 +42,7 @@ const contractState = (): VideoStagesConfig => ({
     clips: [
         {
             id: "clip-0",
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             architecturePayload: null,
             skipped: false,
@@ -150,7 +150,7 @@ const contractState = (): VideoStagesConfig => ({
         },
         {
             id: "clip-1",
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             architecturePayload: null,
             skipped: false,
@@ -277,7 +277,7 @@ describe("authoring document contract fixture", () => {
                 },
             },
         };
-        populatedClip.architecture = "future-video";
+        populatedClip.architectureHint = "future-video";
         populatedClip.modelProfileId = "future-video-v1";
         populatedClip.architecturePayload = opaquePayload;
         for (const [index, stage] of (
@@ -323,7 +323,7 @@ describe("authoring document contract fixture", () => {
         expect(serializedAgain).toBe(serialized);
         const roundTripped = JSON.parse(serialized) as {
             clips: {
-                architecture: string;
+                architectureHint: string;
                 modelProfileId: string;
                 architecturePayload: Record<string, unknown> | null;
                 stages: {
@@ -342,7 +342,7 @@ describe("authoring document contract fixture", () => {
             }[];
         };
         expect(roundTripped.clips[0]).toMatchObject({
-            architecture: "future-video",
+            architectureHint: "future-video",
             modelProfileId: "future-video-v1",
             architecturePayload: opaquePayload,
             stages: [

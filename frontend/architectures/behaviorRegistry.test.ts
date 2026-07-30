@@ -101,14 +101,14 @@ describe("architecture behavior registry", () => {
             stage: 0,
         };
         const ltx = {
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             skipped: false,
             sourceVideo: null,
             stages: [{ model: "ltx", skipped: false }],
             icLoras: [incoming],
         } as unknown as Clip;
         const foreign = {
-            architecture: "future-video",
+            architectureHint: "future-video",
             skipped: false,
             sourceVideo: null,
             stages: [{ model: "future-model", skipped: false }],
@@ -134,7 +134,7 @@ describe("architecture behavior registry", () => {
         };
         const clip = (architecture: string, model: string): Clip =>
             ({
-                architecture,
+                architectureHint: architecture,
                 skipped: false,
                 sourceVideo: null,
                 stages: [{ model, skipped: false }],

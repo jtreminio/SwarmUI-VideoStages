@@ -179,7 +179,7 @@ describe("backend-aligned authoring diagnostics", () => {
 
     it("does not apply stale LTX HDR ownership to a model that resolves as WAN", () => {
         const staleWan = minimalClip({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             icLoras: [
                 {
@@ -244,7 +244,7 @@ describe("backend-aligned authoring diagnostics", () => {
     it("does not diagnose architectures after the first skipped clip", () => {
         const catalog = fakeArchitectureCatalog();
         const fakeClip = minimalClip({
-            architecture: "test-video",
+            architectureHint: "test-video",
             modelProfileId: "test-profile",
             stages: [
                 minimalStage({
@@ -255,7 +255,7 @@ describe("backend-aligned authoring diagnostics", () => {
         });
         const invalidTail = minimalClip({
             skipped: true,
-            architecture: "removed-architecture",
+            architectureHint: "removed-architecture",
             modelProfileId: "removed-profile",
             stages: [minimalStage({ model: "removed-model.safetensors" })],
         });
@@ -270,7 +270,7 @@ describe("backend-aligned authoring diagnostics", () => {
     it("does not apply LTX combination rules to a future architecture that omits them", () => {
         const models = fakeArchitectureCatalog();
         const clip = minimalClip({
-            architecture: "test-video",
+            architectureHint: "test-video",
             modelProfileId: "test-profile",
             reuseAudio: true,
             clipLengthFromAudio: true,

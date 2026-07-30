@@ -176,7 +176,7 @@ describe("detail structural stage operations", () => {
 
         expect(clips[0].stages).toHaveLength(1);
         expect(clips[0]).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
         });
         expect(selection).toBeNull();
@@ -185,7 +185,7 @@ describe("detail structural stage operations", () => {
     it("does not add a later stage when the architecture lacks multi-stage support", () => {
         const clips = [
             minimalClip({
-                architecture: "test-video",
+                architectureHint: "test-video",
                 modelProfileId: "test-profile",
             }),
         ];
@@ -217,7 +217,7 @@ describe("detail structural stage operations", () => {
         });
         const clips = [
             minimalClip({
-                architecture: "ltx2",
+                architectureHint: "ltx2",
                 modelProfileId: "stale-profile",
                 loras: [{ name: "detail.safetensors" }],
                 icLoras: [hdrIcLoraFixture()],
@@ -238,7 +238,7 @@ describe("detail structural stage operations", () => {
         operations.addStage(0);
 
         expect(clips[0]).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
         });
         expect(clips[0].stages).toHaveLength(1);
@@ -257,7 +257,7 @@ describe("detail structural stage operations", () => {
         mountVideoStagesData({
             clips: [
                 minimalClip({
-                    architecture: "none",
+                    architectureHint: "none",
                     modelProfileId: "none",
                     stages: [],
                     sourceVideo: {
@@ -330,7 +330,7 @@ describe("detail structural stage operations", () => {
         expect(state.revision).toBe(revisionBefore + 1);
         expect(notifications).toEqual(["detail-strip"]);
         expect(state.state.clips[0]).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
         });
         expect(state.state.clips[0].stages).toHaveLength(1);

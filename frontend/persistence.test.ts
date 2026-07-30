@@ -146,6 +146,36 @@ describe("persistence", () => {
             );
         });
 
+        it("migrates the version-five architecture field to an explicit hint", () => {
+            const decoded = decode({
+                schemaVersion: 5,
+                clips: [
+                    {
+                        architecture: "removed-architecture",
+                        modelProfileId: "removed-profile",
+                        stages: [{ model: "removed-model.safetensors" }],
+                    },
+                ],
+            });
+
+            expect(decoded?.clips[0].architectureHint).toBe(
+                "removed-architecture",
+            );
+            const reencoded = JSON.parse(
+                serializeStateForStorage({
+                    schemaVersion: 6,
+                    ...decoded?.dims,
+                    clips: decoded?.clips ?? [],
+                    audioTracks: decoded?.audioTracks ?? [],
+                } as VideoStagesConfig),
+            ) as { schemaVersion: number; clips: Record<string, unknown>[] };
+            expect(reencoded.schemaVersion).toBe(6);
+            expect(reencoded.clips[0].architectureHint).toBe(
+                "removed-architecture",
+            );
+            expect(reencoded.clips[0].architecture).toBeUndefined();
+        });
+
         it("accepts omitted optional collections without inventing stored items", () => {
             const decoded = decode({ schemaVersion: 5, clips: [{}] });
 
@@ -250,7 +280,7 @@ describe("persistence", () => {
             const expected: StoredClip[] = [
                 {
                     id: clips[0].id as string,
-                    architecture: "ltx2",
+                    architectureHint: "ltx2",
                     modelProfileId: "ltx-2.3",
                     architecturePayload: null,
                     skipped: false,
@@ -679,7 +709,7 @@ describe("persistence", () => {
         it("rejects whole-document attempts to bypass named architecture conversion", () => {
             saveClips([minimalClip()], { notifyDomChange: false });
             const clips = getClips();
-            clips[0].architecture = "forged-architecture";
+            clips[0].architectureHint = "forged-architecture";
             clips[0].modelProfileId = "forged-profile";
             const error = jest
                 .spyOn(console, "error")
@@ -690,7 +720,7 @@ describe("persistence", () => {
             );
             expect(error).toHaveBeenCalled();
             expect(getClips()[0]).toMatchObject({
-                architecture: "ltx2",
+                architectureHint: "ltx2",
                 modelProfileId: "ltx-2.3",
             });
         });
@@ -717,7 +747,7 @@ describe("persistence", () => {
                 schemaVersion: 5,
                 clips: [
                     {
-                        architecture: "removed-architecture",
+                        architectureHint: "removed-architecture",
                         modelProfileId: "removed-profile",
                         duration: 3,
                         stages: [
@@ -734,7 +764,7 @@ describe("persistence", () => {
             const clip = getState().clips[0];
 
             expect(clip).toMatchObject({
-                architecture: "removed-architecture",
+                architectureHint: "removed-architecture",
                 modelProfileId: "removed-profile",
                 stages: [
                     {

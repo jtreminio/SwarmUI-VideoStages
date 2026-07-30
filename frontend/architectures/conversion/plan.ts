@@ -87,7 +87,7 @@ export const planArchitectureConversion = (
     }
 
     const clip = structuredClone(source);
-    clip.architecture = target.architectureId;
+    clip.architectureHint = target.architectureId;
     clip.modelProfileId = target.modelProfileId;
     for (const stage of clip.stages) {
         stage.model = target.model;

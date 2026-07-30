@@ -212,7 +212,7 @@ describe("stage architecture model filtering", () => {
                         : "wan22-ti2v-5b",
             });
             const clip = minimalClip({
-                architecture: "wan22",
+                architectureHint: "wan22",
                 modelProfileId: "wan22-ti2v-5b",
                 sourceVideo: sourceVideo
                     ? {
@@ -414,7 +414,7 @@ describe("stage architecture model filtering", () => {
     it("uses the removal-only IC-LoRA panel when Stage 0 is unresolved", () => {
         const models = catalog();
         const clip = minimalClip({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             icLoras: [
                 {
                     lora: "persisted-ic-lora.safetensors",
@@ -730,7 +730,7 @@ describe("stage architecture model filtering", () => {
     it("offers whole-clip repair when Stage 0 and sibling models are unresolved", () => {
         const models = catalog();
         const clip = minimalClip({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             stages: [
                 minimalStage({ model: "removed-root.safetensors" }),
@@ -817,7 +817,7 @@ describe("stage architecture model filtering", () => {
             modelProfileId: "test-profile",
         });
         const clip = minimalClip({
-            architecture: "test-video",
+            architectureHint: "test-video",
             modelProfileId: "test-profile",
             sourceVideo: {
                 data: "data:video/mp4;base64,AA==",
@@ -878,7 +878,7 @@ describe("stage architecture model filtering", () => {
     it("uses authored WAN ownership instead of a stale cached LTX hint for an ordinary WAN retarget", () => {
         const models = catalogWithWan();
         const clip = minimalClip({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             stages: [
                 minimalStage({
@@ -910,7 +910,7 @@ describe("stage architecture model filtering", () => {
     it("uses authored WAN ownership instead of a stale cached LTX hint for whole-clip LTX conversion", () => {
         const models = catalogWithWan();
         const clip = minimalClip({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             architecturePayload: { wan22: { tuning: "private" } },
             stages: [
@@ -1040,7 +1040,7 @@ describe("stage architecture model filtering", () => {
         // the model picker must not trigger a second paint itself.
         expect(panelContext.render).not.toHaveBeenCalled();
         expect(getState().clips[0]).toMatchObject({
-            architecture: "test-video",
+            architectureHint: "test-video",
             modelProfileId: "test-profile",
             stages: [
                 {
@@ -1067,7 +1067,7 @@ describe("stage architecture model filtering", () => {
             modelProfileId: "test-profile",
         });
         const clip = minimalClip({
-            architecture: "test-video",
+            architectureHint: "test-video",
             modelProfileId: "test-profile",
             stages: [stage],
         });
@@ -1110,7 +1110,7 @@ describe("stage architecture model filtering", () => {
             modelProfileId: "test-profile",
         });
         const textClip = minimalClip({
-            architecture: "test-video",
+            architectureHint: "test-video",
             modelProfileId: "test-profile",
             stages: [textStage],
         });

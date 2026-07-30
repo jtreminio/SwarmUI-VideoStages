@@ -71,7 +71,7 @@ const makeClipsJson = (count: number, duration = 2): string =>
     JSON.stringify({
         schemaVersion: 5,
         clips: Array.from({ length: count }, () => ({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             duration,
             stages: [
@@ -523,7 +523,7 @@ describe("videoStagesTimeline", () => {
         expect(showError).not.toHaveBeenCalled();
         expect(getClips()).toHaveLength(1);
         expect(getClips()[0]).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             stages: [
                 {
@@ -879,7 +879,7 @@ describe("videoStagesTimeline", () => {
         timeline = videoStagesTimeline();
         timeline.init();
         expect(getClips()[0]).toMatchObject({
-            architecture: "unsupported",
+            architectureHint: "unsupported",
             modelProfileId: "unsupported",
             stages: [{ modelProfileId: "unsupported" }],
         });
@@ -893,7 +893,7 @@ describe("videoStagesTimeline", () => {
 
         const adopted = getClips()[0];
         expect(adopted).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             stages: [{ modelProfileId: "ltx-2.3" }],
         });
@@ -906,7 +906,7 @@ describe("videoStagesTimeline", () => {
         body.querySelector<HTMLButtonElement>("[data-vst-undo]")?.click();
 
         expect(getClips()[0]).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             duration: adoptedDuration,
             stages: [{ modelProfileId: "ltx-2.3" }],

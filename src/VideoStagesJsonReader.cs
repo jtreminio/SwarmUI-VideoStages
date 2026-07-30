@@ -22,7 +22,9 @@ internal static class VideoStagesJsonReader
 {
     /// <summary>The single authoring document schema version this build parses. Must match the
     /// frontend's <c>CURRENT_AUTHORING_SCHEMA_VERSION</c>.</summary>
-    public const int SupportedSchemaVersion = 5;
+    public const int SupportedSchemaVersion = 6;
+
+    private const int ArchitectureHintLegacySchemaVersion = 5;
 
     /// <summary>Test-only observer of every document key lookup the parser performs, used by the
     /// contract fixture test to prove no reader names a key the frontend never emits.</summary>
@@ -43,12 +45,24 @@ internal static class VideoStagesJsonReader
                 throw new SwarmUserErrorException(
                     "VideoStages: The Video Stages document must be a JSON object.");
             }
-            ValidateSchemaVersion(obj);
+            int schemaVersion = ValidateSchemaVersion(obj);
+            List<JObject> entries = GetObjectArray(obj, "clips");
+            if (schemaVersion == ArchitectureHintLegacySchemaVersion)
+            {
+                foreach (JObject entry in entries)
+                {
+                    if (!entry.ContainsKey("architectureHint"))
+                    {
+                        entry["architectureHint"] = entry["architecture"];
+                    }
+                    entry.Remove("architecture");
+                }
+            }
             return new VideoStagesJsonDocument(
                 GetOptionalNullableInt(obj, "width"),
                 GetOptionalNullableInt(obj, "height"),
                 GetOptionalNullableInt(obj, "fps"),
-                GetObjectArray(obj, "clips"),
+                entries,
                 GetObjectArray(obj, "audioTracks"));
         }
         catch (JsonException ex)
@@ -58,16 +72,17 @@ internal static class VideoStagesJsonReader
         }
     }
 
-    private static void ValidateSchemaVersion(JObject obj)
+    private static int ValidateSchemaVersion(JObject obj)
     {
         int? version = GetOptionalNullableInt(obj, "schemaVersion");
-        if (version != SupportedSchemaVersion)
+        if (version is not SupportedSchemaVersion and not ArchitectureHintLegacySchemaVersion)
         {
             throw new SwarmUserErrorException(
                 $"VideoStages: The Video Stages timeline uses document version "
                 + $"'{(object)version ?? "none"}', but this build only supports version "
                 + $"{SupportedSchemaVersion}. Re-save the timeline in the current UI.");
         }
+        return version.Value;
     }
 
     /// <summary>The raw value of <paramref name="key"/>, for readers that must distinguish an

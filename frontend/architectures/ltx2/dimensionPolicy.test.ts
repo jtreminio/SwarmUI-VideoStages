@@ -46,7 +46,7 @@ const icLora = (overrides: Partial<IcLora>): IcLora =>
 
 const clip = (...entries: IcLora[]): Clip =>
     ({
-        architecture: "ltx2",
+        architectureHint: "ltx2",
         sourceVideo: null,
         stages: [{ model: "ltx", skipped: false }],
         icLoras: entries,
@@ -119,9 +119,9 @@ describe("LTX dimension policy", () => {
         const resolvedLtx = clip(
             icLora({ preset: "union-control", lora: "[AUTO]" }),
         );
-        resolvedLtx.architecture = "stale-foreign-hint";
+        resolvedLtx.architectureHint = "stale-foreign-hint";
         const unresolved = structuredClone(resolvedLtx);
-        unresolved.architecture = "ltx2";
+        unresolved.architectureHint = "ltx2";
         unresolved.stages[0].model = "removed-model.safetensors";
 
         expect(

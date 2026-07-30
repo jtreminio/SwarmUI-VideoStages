@@ -8,7 +8,7 @@ import type { Clip, VideoStagesConfig } from "./types";
 
 const clip = (architecture: string): Clip =>
     ({
-        architecture,
+        architectureHint: architecture,
         sourceVideo: null,
         stages: [],
         icLoras: [],

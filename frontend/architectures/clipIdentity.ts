@@ -102,7 +102,7 @@ export const deriveClipArchitectureIdentity = (
         };
     }
     if (
-        clip.architecture === NONE_ARCHITECTURE_ID &&
+        clip.architectureHint === NONE_ARCHITECTURE_ID &&
         clip.modelProfileId === NONE_ARCHITECTURE_ID
     ) {
         return {
@@ -112,11 +112,11 @@ export const deriveClipArchitectureIdentity = (
         };
     }
     const validEmptyIdentity = catalog.architectures.some(
-        (architecture) => architecture.id === clip.architecture,
+        (architecture) => architecture.id === clip.architectureHint,
     );
     return validEmptyIdentity
         ? {
-              architectureId: clip.architecture,
+              architectureId: clip.architectureHint,
               modelProfileId: clip.modelProfileId,
               ...authoredIdentity,
           }
@@ -129,7 +129,7 @@ export const reconcileClipArchitectureIdentity = (
 ): boolean => {
     const identity = deriveClipArchitectureIdentity(clip, catalog);
     if (!identity) return false;
-    clip.architecture = identity.architectureId;
+    clip.architectureHint = identity.architectureId;
     clip.modelProfileId = identity.modelProfileId;
     return true;
 };

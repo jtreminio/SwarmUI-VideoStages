@@ -4,7 +4,6 @@ using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.HostVideo;
-using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.Wan;
 using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Planning;
@@ -577,8 +576,8 @@ public sealed class EffectiveVideoRequestTests
         };
         ClipSpec clip = Clip(first, second) with
         {
-            AuthoredArchitectureId = "stale-architecture",
-            AuthoredModelProfileId = "stale-profile",
+            AuthoredArchitectureHint = "stale-architecture",
+            AuthoredModelProfileHint = "stale-profile",
             AuthoredStages =
             [
                 new(0, first.Model, "old-first-profile", false),
@@ -602,16 +601,16 @@ public sealed class EffectiveVideoRequestTests
             ResolveWan(authored));
 
         ClipSpec effective = Assert.Single(request.Spec.Clips);
-        Assert.Equal("stale-architecture", clip.AuthoredArchitectureId);
-        Assert.Equal("stale-profile", clip.AuthoredModelProfileId);
+        Assert.Equal("stale-architecture", clip.AuthoredArchitectureHint);
+        Assert.Equal("stale-profile", clip.AuthoredModelProfileHint);
         Assert.Single(clip.IcLoras);
         Assert.Equal(2, clip.Stages[1].Upscale);
         Assert.Equal([0.8], clip.Stages[1].IcLoraStrengths);
 
-        Assert.Equal(WanArchitectureModule.ArchitectureId.Value, effective.AuthoredArchitectureId);
+        Assert.Equal(WanArchitectureModule.ArchitectureId.Value, effective.AuthoredArchitectureHint);
         Assert.Equal(
             WanArchitectureModule.ImageToVideoProfileId.Value,
-            effective.AuthoredModelProfileId);
+            effective.AuthoredModelProfileHint);
         Assert.All(
             effective.AuthoredStages,
             stage => Assert.Equal(
@@ -689,9 +688,9 @@ public sealed class EffectiveVideoRequestTests
         };
         ClipSpec clip = Clip(stage) with
         {
-            AuthoredArchitectureId =
+            AuthoredArchitectureHint =
                 HostVideoArchitectureModule.ArchitectureId.Value,
-            AuthoredModelProfileId =
+            AuthoredModelProfileHint =
                 HostVideoArchitectureModule.ProfileId.Value,
             AuthoredStages =
             [
@@ -742,9 +741,9 @@ public sealed class EffectiveVideoRequestTests
             model: "host-model");
         ClipSpec clip = Clip(first, second) with
         {
-            AuthoredArchitectureId =
+            AuthoredArchitectureHint =
                 HostVideoArchitectureModule.ArchitectureId.Value,
-            AuthoredModelProfileId =
+            AuthoredModelProfileHint =
                 HostVideoArchitectureModule.ProfileId.Value,
             AuthoredStages =
             [
@@ -920,8 +919,8 @@ public sealed class EffectiveVideoRequestTests
     {
         ClipSpec root = Clip(Stage(0, rawIndex: 0)) with
         {
-            AuthoredArchitectureId = "stale-architecture",
-            AuthoredModelProfileId = "stale-profile",
+            AuthoredArchitectureHint = "stale-architecture",
+            AuthoredModelProfileHint = "stale-profile",
             PromptWindows = [new("must remain", 0, 1)],
         };
         ClipSpec dormant = Clip(Stage(0, rawIndex: 0)) with
@@ -938,10 +937,10 @@ public sealed class EffectiveVideoRequestTests
                     .Select(owned => owned.TimelineIndex));
                 Assert.Equal(
                     WanArchitectureModule.ArchitectureId.Value,
-                    context.OwnedClips[0].Clip.AuthoredArchitectureId);
+                    context.OwnedClips[0].Clip.AuthoredArchitectureHint);
                 Assert.Equal(
                     WanArchitectureModule.ImageToVideoProfileId.Value,
-                    context.OwnedClips[0].Clip.AuthoredModelProfileId);
+                    context.OwnedClips[0].Clip.AuthoredModelProfileHint);
                 Assert.Equal(0, context.AuthoredRootTimelineIndex);
                 Assert.Single(context.OwnedClips[0].Clip.PromptWindows);
                 return new(
@@ -1085,9 +1084,9 @@ public sealed class EffectiveVideoRequestTests
         StageSpec hostStage = Stage(0, rawIndex: 0, model: "host-model");
         ClipSpec host = Clip(hostStage) with
         {
-            AuthoredArchitectureId =
+            AuthoredArchitectureHint =
                 HostVideoArchitectureModule.ArchitectureId.Value,
-            AuthoredModelProfileId =
+            AuthoredModelProfileHint =
                 HostVideoArchitectureModule.ProfileId.Value,
             AuthoredStages =
             [
@@ -1238,7 +1237,7 @@ public sealed class EffectiveVideoRequestTests
         second["modelProfileId"] = "old-second-profile";
         second["icLoraStrengths"] = new JArray(0.8);
         JObject clip = MakeClip(first, second);
-        clip["architecture"] = "old-wan-cache";
+        clip["architectureHint"] = "old-wan-cache";
         clip["modelProfileId"] = "old-wan-profile";
         clip["icLoras"] = new JArray(new JObject
         {
@@ -1273,8 +1272,8 @@ public sealed class EffectiveVideoRequestTests
         Assert.Contains(warnings, warning => warning.Contains("IC-LoRA data"));
         Assert.Contains(warnings, warning => warning.Contains("unsupported upscale method"));
         ClipSpec authored = Assert.Single(generator.GetVideoStagesSpec().Clips);
-        Assert.Equal("old-wan-cache", authored.AuthoredArchitectureId);
-        Assert.Equal("old-wan-profile", authored.AuthoredModelProfileId);
+        Assert.Equal("old-wan-cache", authored.AuthoredArchitectureHint);
+        Assert.Equal("old-wan-profile", authored.AuthoredModelProfileHint);
         Assert.Single(authored.IcLoras);
         Assert.Equal(2, authored.Stages[1].Upscale);
         Assert.Equal([0.8], authored.Stages[1].IcLoraStrengths);
@@ -1318,8 +1317,8 @@ public sealed class EffectiveVideoRequestTests
             ImageRefs: [],
             Stages: stages)
         {
-            AuthoredArchitectureId = WanArchitectureModule.ArchitectureId.Value,
-            AuthoredModelProfileId = WanArchitectureModule.ImageToVideoProfileId.Value,
+            AuthoredArchitectureHint = WanArchitectureModule.ArchitectureId.Value,
+            AuthoredModelProfileHint = WanArchitectureModule.ImageToVideoProfileId.Value,
             AuthoredStages = stages
                 .Select(stage => new AuthoredStageModelSpec(
                     stage.ClipStageRawIndex,
@@ -1337,8 +1336,8 @@ public sealed class EffectiveVideoRequestTests
             model: "ltx-model");
         return Clip(stage) with
         {
-            AuthoredArchitectureId = Ltx2ArchitectureModule.ArchitectureId.Value,
-            AuthoredModelProfileId = "ltx-2.3",
+            AuthoredArchitectureHint = Ltx2ArchitectureModule.ArchitectureId.Value,
+            AuthoredModelProfileHint = "ltx-2.3",
             AuthoredStages = [new(0, stage.Model, "ltx-2.3", false)],
         };
     }

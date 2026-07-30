@@ -33,7 +33,7 @@ export const STORED_STAGE_KEYS = [
 
 export const STORED_CLIP_KEYS = [
     "id",
-    "architecture",
+    "architectureHint",
     "modelProfileId",
     "architecturePayload",
     "skipped",

@@ -143,23 +143,23 @@ internal static class ArchitecturePlanResolver
         ClipSpec clip,
         ICollection<PlanDiagnostic> diagnostics)
     {
-        if (!string.IsNullOrWhiteSpace(clip.AuthoredArchitectureId)
+        if (!string.IsNullOrWhiteSpace(clip.AuthoredArchitectureHint)
             && !string.Equals(
-                clip.AuthoredArchitectureId,
+                clip.AuthoredArchitectureHint,
                 NoneArchitecture.Id.Value,
                 StringComparison.OrdinalIgnoreCase))
         {
             diagnostics.Add(Error(
                 "architecture-source-only-identity-mismatch",
                 $"Clip {clip.Id} has no generation stages and therefore requires architecture "
-                    + $"'{NoneArchitecture.Id}', but its authored architecture is "
-                    + $"'{clip.AuthoredArchitectureId}'.",
+                    + $"'{NoneArchitecture.Id}', but its authored architecture hint is "
+                    + $"'{clip.AuthoredArchitectureHint}'.",
                 clip.Id,
                 stageId: null));
         }
-        if (!string.IsNullOrWhiteSpace(clip.AuthoredModelProfileId)
+        if (!string.IsNullOrWhiteSpace(clip.AuthoredModelProfileHint)
             && !string.Equals(
-                clip.AuthoredModelProfileId,
+                clip.AuthoredModelProfileHint,
                 NoneArchitecture.Id.Value,
                 StringComparison.OrdinalIgnoreCase))
         {
@@ -167,7 +167,7 @@ internal static class ArchitecturePlanResolver
                 "architecture-source-only-profile-mismatch",
                 $"Clip {clip.Id} has no generation stages and therefore requires model profile "
                     + $"'{NoneArchitecture.Id}', but its authored model profile is "
-                    + $"'{clip.AuthoredModelProfileId}'.",
+                    + $"'{clip.AuthoredModelProfileHint}'.",
                 clip.Id,
                 stageId: null));
         }

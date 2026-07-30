@@ -61,7 +61,7 @@ const retake = (id: string): CanonicalRetake => ({
 
 const clip = (id: string): CanonicalClip => ({
     id,
-    architecture: "ltx2",
+    architectureHint: "ltx2",
     modelProfileId: "ltx-2.3",
     architecturePayload: null,
     skipped: false,
@@ -656,7 +656,7 @@ describe("reduceDocumentCommand", () => {
         const converted = result.document.clips[1];
         expect(converted).toMatchObject({
             id: "clip-b",
-            architecture: "test-video",
+            architectureHint: "test-video",
             modelProfileId: "test-profile",
             boundaryOut: "continue",
             duration: 7,
@@ -714,7 +714,7 @@ describe("reduceDocumentCommand", () => {
         source.clips[0].boundaryOut = "continue";
         source.clips[1].boundaryOut = "continue";
         // Both first joins are authored LTX by model, despite this stale hint.
-        source.clips[1].architecture = "test-video";
+        source.clips[1].architectureHint = "test-video";
         source.clips[1].modelProfileId = "test-profile";
         const fake = fakeArchitectureCatalog();
 
@@ -744,7 +744,7 @@ describe("reduceDocumentCommand", () => {
         source.clips[0].boundaryOut = "continue";
         source.clips[1].skipped = true;
         const foreign = clip("clip-foreign");
-        foreign.architecture = "test-video";
+        foreign.architectureHint = "test-video";
         foreign.modelProfileId = "test-profile";
         foreign.stages = [
             {
@@ -868,7 +868,7 @@ describe("reduceDocumentCommand", () => {
             {
                 type: "clip.patch",
                 clipId: "clip-a",
-                patch: { architecture: "test-video" },
+                patch: { architectureHint: "test-video" },
             } as DocumentCommand,
             { architectureCatalog: catalogWithFake() },
         );
@@ -998,7 +998,7 @@ describe("reduceDocumentCommand", () => {
 
         expect(result.applied).toBe(true);
         expect(result.document.clips[0]).toMatchObject({
-            architecture: "test-video",
+            architectureHint: "test-video",
             modelProfileId: "test-profile",
             stages: [
                 {
@@ -1021,7 +1021,7 @@ describe("reduceDocumentCommand", () => {
             lengthSeconds: 4,
         };
         targetClip.stages = [{ ...targetClip.stages[0], skipped: true }];
-        targetClip.architecture = "none";
+        targetClip.architectureHint = "none";
         targetClip.modelProfileId = "none";
         const catalog = testArchitectureCatalog();
         catalog.entries.push({
@@ -1047,7 +1047,7 @@ describe("reduceDocumentCommand", () => {
 
         expect(result.applied).toBe(true);
         expect(result.document.clips[0]).toMatchObject({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
             stages: [
                 {
@@ -1131,7 +1131,7 @@ describe("reduceDocumentCommand", () => {
         );
         expect(add.applied).toBe(true);
         expect(add.document.clips[0]).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
         });
 
@@ -1177,7 +1177,7 @@ describe("reduceDocumentCommand", () => {
 
         expect(result.applied).toBe(true);
         expect(result.document.clips[0]).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
         });
         expect(result.document.clips[0].stages[0]).toMatchObject({
@@ -1211,7 +1211,7 @@ describe("reduceDocumentCommand", () => {
 
         expect(result.applied).toBe(true);
         expect(result.document.clips[0]).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-alt",
         });
         expect(result.document.clips[0].stages[0]).toMatchObject({
@@ -1266,7 +1266,7 @@ describe("reduceDocumentCommand", () => {
             startSeconds: 0,
             lengthSeconds: 4,
         };
-        source.clips[0].architecture = "none";
+        source.clips[0].architectureHint = "none";
         source.clips[0].modelProfileId = "none";
         source.clips[0].stages[0].skipped = true;
         source.clips[0].stages[1] = {
@@ -1289,7 +1289,7 @@ describe("reduceDocumentCommand", () => {
 
         expect(result.applied).toBe(true);
         expect(result.document.clips[0]).toMatchObject({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
         });
         expect(
@@ -1323,7 +1323,7 @@ describe("reduceDocumentCommand", () => {
             { architectureCatalog: catalog },
         );
         expect(skipped.document.clips[0]).toMatchObject({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
         });
 
@@ -1338,7 +1338,7 @@ describe("reduceDocumentCommand", () => {
             { architectureCatalog: catalog },
         );
         expect(restored.document.clips[0]).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
         });
 
@@ -1352,7 +1352,7 @@ describe("reduceDocumentCommand", () => {
             { architectureCatalog: catalog },
         );
         expect(removed.document.clips[0]).toMatchObject({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
             stages: [],
         });
@@ -1405,7 +1405,7 @@ describe("reduceDocumentCommand", () => {
             { architectureCatalog: catalog },
         );
         expect(attached.document.clips[0]).toMatchObject({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
         });
 
@@ -1419,7 +1419,7 @@ describe("reduceDocumentCommand", () => {
             { architectureCatalog: catalog },
         );
         expect(removed.document.clips[0]).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
         });
     });
@@ -1554,7 +1554,7 @@ describe("reduceDocumentCommand", () => {
         const fake = fakeArchitectureCatalog();
         const catalog = catalogWithFake(fake);
         const targetClip = source.clips[0];
-        targetClip.architecture = "test-video";
+        targetClip.architectureHint = "test-video";
         targetClip.modelProfileId = "test-profile";
         targetClip.stages.forEach((entry) => {
             entry.model = "test-video.safetensors";

@@ -101,10 +101,10 @@ internal static class VideoClipSpecParser
             ReferenceFraming: ReferenceFraming.Parse(
                 VideoStagesJsonReader.GetString(clipObject, "refFraming")))
         {
-            AuthoredArchitectureId = VideoStagesJsonReader.GetString(
+            AuthoredArchitectureHint = VideoStagesJsonReader.GetString(
                 clipObject,
-                "architecture")?.Trim().ToLowerInvariant(),
-            AuthoredModelProfileId = VideoStagesJsonReader.GetString(
+                "architectureHint")?.Trim().ToLowerInvariant(),
+            AuthoredModelProfileHint = VideoStagesJsonReader.GetString(
                 clipObject,
                 "modelProfileId")?.Trim().ToLowerInvariant(),
             // Prompt-tag overrides have already been applied to rawStages by the top-level parser,

@@ -96,7 +96,7 @@ describe("architecture conversion policy", () => {
         // belong to the architecture that wrote the payload.
         const dormant = planArchitectureConversion(
             minimalClip({
-                architecture: "none",
+                architectureHint: "none",
                 modelProfileId: "none",
                 architecturePayload: payload,
                 sourceVideo: {
@@ -151,7 +151,7 @@ describe("architecture conversion policy", () => {
         };
         const staleHint = planArchitectureConversion(
             minimalClip({
-                architecture: "test-video",
+                architectureHint: "test-video",
                 modelProfileId: "test-profile",
                 architecturePayload: payload,
                 stages: [minimalStage({ model: "ltx" })],
@@ -161,7 +161,7 @@ describe("architecture conversion policy", () => {
         );
         const unresolvedHint = planArchitectureConversion(
             minimalClip({
-                architecture: "ltx2",
+                architectureHint: "ltx2",
                 modelProfileId: "ltx-2.3",
                 architecturePayload: payload,
                 stages: [minimalStage({ model: "removed-model.safetensors" })],

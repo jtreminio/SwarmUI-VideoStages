@@ -6,8 +6,6 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Architectures.Ltx2;
-using VideoStages.Architectures.Wan;
 using VideoStages.Execution;
 using VideoStages.Planning;
 using Xunit;
@@ -31,7 +29,7 @@ public class ArchitectureFoundationTests
         FakeRegistry registry = new();
         ClipSpec clip = GeneratedClip(0, Stage(10, "ltx-model")) with
         {
-            AuthoredArchitectureId = "ltx2",
+            AuthoredArchitectureHint = "ltx2",
             AuthoredStages =
             [
                 new(0, "ltx-model", "ltx-profile", Skipped: false),
@@ -55,7 +53,7 @@ public class ArchitectureFoundationTests
     {
         ClipSpec clip = GeneratedClip(0, Stage(10, "ltx-model")) with
         {
-            AuthoredArchitectureId = "fake",
+            AuthoredArchitectureHint = "fake",
             AuthoredStages = [new(0, "ltx-model", "ltx-profile", Skipped: false)],
         };
 
@@ -81,7 +79,7 @@ public class ArchitectureFoundationTests
     {
         ClipSpec clip = GeneratedClip(0, Stage(10, "ltx-model")) with
         {
-            AuthoredArchitectureId = "ltx2",
+            AuthoredArchitectureHint = "ltx2",
             AuthoredStages = [new(0, "ltx-model", "ltx-profile", Skipped: false)],
         };
 
@@ -129,7 +127,7 @@ public class ArchitectureFoundationTests
         string authoredName = Path.GetFileNameWithoutExtension(canonicalName);
         ClipSpec clip = GeneratedClip(0, Stage(10, authoredName)) with
         {
-            AuthoredArchitectureId = "ltx2",
+            AuthoredArchitectureHint = "ltx2",
             AuthoredStages = [new(0, authoredName, "ltx-2.3", Skipped: false)],
         };
 
@@ -154,8 +152,8 @@ public class ArchitectureFoundationTests
     {
         ClipSpec inactive = GeneratedClip(0) with
         {
-            AuthoredArchitectureId = "ltx2",
-            AuthoredModelProfileId = "ltx-profile",
+            AuthoredArchitectureHint = "ltx2",
+            AuthoredModelProfileHint = "ltx-profile",
             AuthoredStages =
             [
                 new(0, "ltx-model", "ltx-profile", Skipped: true),
@@ -187,8 +185,8 @@ public class ArchitectureFoundationTests
     {
         ClipSpec sourced = SourcedClip(0) with
         {
-            AuthoredArchitectureId = "ltx2",
-            AuthoredModelProfileId = "ltx-profile",
+            AuthoredArchitectureHint = "ltx2",
+            AuthoredModelProfileHint = "ltx-profile",
             AuthoredStages =
             [
                 new(0, "ltx-model", "ltx-profile", Skipped: true),
@@ -210,7 +208,7 @@ public class ArchitectureFoundationTests
     [Fact]
     public void Source_only_clip_is_none_and_rejects_an_authored_generation_architecture()
     {
-        ClipSpec clip = SourcedClip(0) with { AuthoredArchitectureId = "ltx2" };
+        ClipSpec clip = SourcedClip(0) with { AuthoredArchitectureHint = "ltx2" };
 
         ArchitecturePlanningResult result =
             ArchitecturePlanResolver.Resolve(Spec(clip), new FakeRegistry());
@@ -246,8 +244,8 @@ public class ArchitectureFoundationTests
     {
         ClipSpec clip = SourcedClip(0) with
         {
-            AuthoredArchitectureId = "none",
-            AuthoredModelProfileId = "none",
+            AuthoredArchitectureHint = "none",
+            AuthoredModelProfileHint = "none",
             AuthoredStages =
             [
                 new(0, "ltx-model", "ltx-profile", Skipped: true),
@@ -275,8 +273,8 @@ public class ArchitectureFoundationTests
     {
         ClipSpec clip = SourcedClip(0) with
         {
-            AuthoredArchitectureId = "none",
-            AuthoredModelProfileId = "none",
+            AuthoredArchitectureHint = "none",
+            AuthoredModelProfileHint = "none",
             AuthoredStages =
             [
                 new(0, "ltx-model", "ltx-profile", Skipped: true),
@@ -303,8 +301,8 @@ public class ArchitectureFoundationTests
     {
         ClipSpec clip = SourcedClip(0) with
         {
-            AuthoredArchitectureId = "none",
-            AuthoredModelProfileId = "none",
+            AuthoredArchitectureHint = "none",
+            AuthoredModelProfileHint = "none",
             AuthoredStages =
             [
                 new(0, "ltx-model", "ltx-profile", Skipped: true),
@@ -329,13 +327,13 @@ public class ArchitectureFoundationTests
     {
         ClipSpec left = GeneratedClip(0, Stage(10, "ltx-model")) with
         {
-            AuthoredArchitectureId = "ltx2",
+            AuthoredArchitectureHint = "ltx2",
             AuthoredStages = [new(0, "ltx-model", "ltx-profile", false)],
         };
         left = left with { BoundaryOut = Constants.BoundaryOutCrossfade };
         ClipSpec right = GeneratedClip(1, Stage(11, "fake-model")) with
         {
-            AuthoredArchitectureId = "fake",
+            AuthoredArchitectureHint = "fake",
             AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
         };
         VideoStagesSpec spec = Spec(left, right);
@@ -368,7 +366,7 @@ public class ArchitectureFoundationTests
     {
         ClipSpec clip = GeneratedClip(0, Stage(10, "ltx-model")) with
         {
-            AuthoredArchitectureId = "ltx2",
+            AuthoredArchitectureHint = "ltx2",
             AuthoredStages = [new(0, "ltx-model", "ltx-profile", false)],
         };
         VideoStagesSpec spec = Spec(clip);
@@ -402,8 +400,8 @@ public class ArchitectureFoundationTests
         };
         ClipSpec clip = GeneratedClip(0, first, second) with
         {
-            AuthoredArchitectureId = "ltx2",
-            AuthoredModelProfileId = "ltx-profile",
+            AuthoredArchitectureHint = "ltx2",
+            AuthoredModelProfileHint = "ltx-profile",
             AuthoredStages =
             [
                 new(0, "ltx-model", "ltx-profile", Skipped: false),
@@ -548,8 +546,8 @@ public class ArchitectureFoundationTests
                     Constants.IcLoraControlNone,
                     null),
             ],
-            AuthoredArchitectureId = "none",
-            AuthoredModelProfileId = "none",
+            AuthoredArchitectureHint = "none",
+            AuthoredModelProfileHint = "none",
             AuthoredStages =
             [
                 new(0, "ltx-model", "ltx-profile", Skipped: true),
@@ -570,8 +568,8 @@ public class ArchitectureFoundationTests
         ClipSpec clip = SourcedClip(0) with
         {
             ReuseAudio = true,
-            AuthoredArchitectureId = "none",
-            AuthoredModelProfileId = "none",
+            AuthoredArchitectureHint = "none",
+            AuthoredModelProfileHint = "none",
         };
 
         VideoExecutionPlan plan = Compile(clip, new FakeRegistry());
@@ -593,8 +591,8 @@ public class ArchitectureFoundationTests
             UploadedAudio = new("data:audio/wav;base64,AA==", "voice.wav"),
             SaveAudioTrack = true,
             ClipLengthFromAudio = true,
-            AuthoredArchitectureId = "none",
-            AuthoredModelProfileId = "none",
+            AuthoredArchitectureHint = "none",
+            AuthoredModelProfileHint = "none",
         };
 
         VideoExecutionPlan plan = Compile(clip, new FakeRegistry());
@@ -621,8 +619,8 @@ public class ArchitectureFoundationTests
         ClipSpec clip = SourcedClip(0) with
         {
             ClipLengthFromControlNet = true,
-            AuthoredArchitectureId = "none",
-            AuthoredModelProfileId = "none",
+            AuthoredArchitectureHint = "none",
+            AuthoredModelProfileHint = "none",
         };
 
         VideoExecutionPlan plan = Compile(clip, new FakeRegistry());
@@ -1006,8 +1004,8 @@ public class ArchitectureFoundationTests
                 index,
                 Stage(index, id == "ltx2" ? "ltx-model" : "fake-model")) with
             {
-                AuthoredArchitectureId = id,
-                AuthoredModelProfileId = $"{(id == "ltx2" ? "ltx" : "fake")}-profile",
+                AuthoredArchitectureHint = id,
+                AuthoredModelProfileHint = $"{(id == "ltx2" ? "ltx" : "fake")}-profile",
                 AuthoredStages =
                 [
                     new(
@@ -1179,7 +1177,7 @@ public class ArchitectureFoundationTests
     {
         ClipSpec clip = GeneratedClip(0, Stage(10, "fake-model")) with
         {
-            AuthoredArchitectureId = "fake",
+            AuthoredArchitectureHint = "fake",
             AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
         };
         VideoStagesSpec spec = Spec(clip);
@@ -1219,13 +1217,13 @@ public class ArchitectureFoundationTests
     {
         ClipSpec first = GeneratedClip(0, Stage(10, "ltx-model")) with
         {
-            AuthoredArchitectureId = "ltx2",
+            AuthoredArchitectureHint = "ltx2",
             AuthoredStages = [new(0, "ltx-model", "ltx-profile", false)],
             BoundaryOut = Constants.BoundaryOutCut,
         };
         ClipSpec second = GeneratedClip(1, Stage(11, "fake-model")) with
         {
-            AuthoredArchitectureId = "fake",
+            AuthoredArchitectureHint = "fake",
             AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
         };
         VideoStagesSpec spec = Spec(first, second);
@@ -1316,7 +1314,7 @@ public class ArchitectureFoundationTests
                 index,
                 Stage(index, id == "ltx2" ? "ltx-model" : "fake-model")) with
             {
-                AuthoredArchitectureId = id,
+                AuthoredArchitectureHint = id,
                 AuthoredStages =
                 [
                     new(
@@ -1896,8 +1894,8 @@ public class ArchitectureFoundationTests
     {
         VideoStagesSpec spec = Spec(clip with
         {
-            AuthoredArchitectureId = "ltx2",
-            AuthoredModelProfileId = "ltx-profile",
+            AuthoredArchitectureHint = "ltx2",
+            AuthoredModelProfileHint = "ltx-profile",
             AuthoredStages =
             [
                 new(

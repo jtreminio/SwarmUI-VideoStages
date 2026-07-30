@@ -308,12 +308,12 @@ export const deriveArchitectureDiagnostics = (
             resolvedFirstModel?.compatibilityClassId ?? null;
         if (
             resolvedFirstModel?.architectureId &&
-            resolvedFirstModel.architectureId !== clip.architecture
+            resolvedFirstModel.architectureId !== clip.architectureHint
         ) {
             diagnostics.push(
                 issue(
                     "architecture.stale-identity-hint",
-                    `Clip ${clipIdx} caches architecture '${clip.architecture}', but model '${clip.stages[0].model}' resolves to '${resolvedFirstModel.architectureId}'. Generation uses the resolved architecture and preserves the authored hint.`,
+                    `Clip ${clipIdx} caches architecture hint '${clip.architectureHint}', but model '${clip.stages[0].model}' resolves to '${resolvedFirstModel.architectureId}'. Generation uses the resolved architecture and preserves the authored hint.`,
                     clipIdx,
                     "warning",
                 ),
@@ -334,7 +334,7 @@ export const deriveArchitectureDiagnostics = (
         }
         if (sourceOnly) {
             if (
-                clip.architecture !== NONE_ARCHITECTURE_ID ||
+                clip.architectureHint !== NONE_ARCHITECTURE_ID ||
                 clip.modelProfileId !== NONE_ARCHITECTURE_ID
             ) {
                 diagnostics.push(

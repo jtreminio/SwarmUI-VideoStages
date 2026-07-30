@@ -360,7 +360,7 @@ const clipDiffBase = (
     context: DocumentDiffContext,
 ): CanonicalClip => {
     const changesEffectiveIdentity =
-        previous.architecture !== next.architecture ||
+        previous.architectureHint !== next.architectureHint ||
         previous.modelProfileId !== next.modelProfileId;
     const previousIdentity = deriveClipArchitectureIdentity(
         previous,
@@ -385,7 +385,7 @@ const clipDiffBase = (
     if (changesEffectiveIdentity) {
         if (
             !nextIdentity ||
-            nextIdentity.architectureId !== next.architecture ||
+            nextIdentity.architectureId !== next.architectureHint ||
             nextIdentity.modelProfileId !== next.modelProfileId
         ) {
             throw new DocumentDiffError("architecture-invariant");

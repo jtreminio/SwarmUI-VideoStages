@@ -204,9 +204,11 @@ public sealed record ClipSpec(
     ReferenceFramingMode ReferenceFraming = ReferenceFramingMode.Crop
 )
 {
-    public string AuthoredArchitectureId { get; init; }
+    /// <summary>Persisted repair/diagnostic hint. Resolved stage models own behavior.</summary>
+    public string AuthoredArchitectureHint { get; init; }
 
-    public string AuthoredModelProfileId { get; init; }
+    /// <summary>Persisted repair/diagnostic hint. Resolved stage models own behavior.</summary>
+    public string AuthoredModelProfileHint { get; init; }
 
     public IReadOnlyList<AuthoredStageModelSpec> AuthoredStages { get; init; } = [];
 

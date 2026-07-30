@@ -75,7 +75,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
     return (clips as CanonicalClip[]).map(
         (clip): StoredClip => ({
             id: clip.id,
-            architecture: clip.architecture,
+            architectureHint: clip.architectureHint,
             modelProfileId: clip.modelProfileId,
             architecturePayload: clip.architecturePayload,
             skipped: clip.skipped,
@@ -501,7 +501,40 @@ const noticeDivergentProjection = (serialized: string): void => {
     getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
 };
 
-/** Strict current decode: any other schema version is rejected outright. */
+const ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION = 5;
+
+/**
+ * The sole v5→v6 migration: the value was already non-authoritative, but its
+ * old name made it look like a behavior selector. Keep recovery intact while
+ * exposing only the accurately named field to normalization and new storage.
+ */
+const migrateStoredDocument = (
+    parsed: Record<string, unknown>,
+): Record<string, unknown> | null => {
+    if (parsed.schemaVersion === CURRENT_AUTHORING_SCHEMA_VERSION) {
+        return parsed;
+    }
+    if (
+        parsed.schemaVersion !== ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION ||
+        !Array.isArray(parsed.clips)
+    ) {
+        return null;
+    }
+    const migrated = structuredClone(parsed);
+    migrated.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    for (const rawClip of migrated.clips as unknown[]) {
+        if (!isRecord(rawClip)) {
+            continue;
+        }
+        if (rawClip.architectureHint === undefined) {
+            rawClip.architectureHint = rawClip.architecture;
+        }
+        delete rawClip.architecture;
+    }
+    return migrated;
+};
+
+/** Strict current decode with the one bounded v5 field-rename migration. */
 export const decodeStoredDocument = (
     serialized: string,
     inherited: InheritedDims,
@@ -511,21 +544,22 @@ export const decodeStoredDocument = (
         if (!isRecord(parsed)) {
             return null;
         }
-        if (parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION) {
+        const current = migrateStoredDocument(parsed);
+        if (!current) {
             noticeOutdatedSchema(serialized);
             return null;
         }
-        if (!hasValidStoredCollections(parsed)) {
+        if (!hasValidStoredCollections(current)) {
             return null;
         }
-        if (hasDivergentSpanProjection(parsed)) {
+        if (hasDivergentSpanProjection(current)) {
             noticeDivergentProjection(serialized);
         }
         const dims = resolveRootDims(inherited, {
-            width: parsed.width,
-            height: parsed.height,
+            width: current.width,
+            height: current.height,
         });
-        const clips = parsed.clips.map((entry) =>
+        const clips = current.clips.map((entry) =>
             normalizeClip(
                 entry,
                 getRootDefaults,
@@ -544,7 +578,7 @@ export const decodeStoredDocument = (
         return {
             dims,
             clips,
-            audioTracks: normalizeAudioTracks(parsed.audioTracks),
+            audioTracks: normalizeAudioTracks(current.audioTracks),
         };
     } catch {
         return null;

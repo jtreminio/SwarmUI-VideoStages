@@ -112,7 +112,7 @@ export const reduceDocumentCommand = (
             return list(document, "clip", "move", command, context);
         case "clip.patch": {
             if (
-                hasOwn(command.patch, "architecture") ||
+                hasOwn(command.patch, "architectureHint") ||
                 hasOwn(command.patch, "modelProfileId")
             ) {
                 return failure(document, "architecture-invariant");

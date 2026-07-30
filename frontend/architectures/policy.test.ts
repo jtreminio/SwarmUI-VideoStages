@@ -69,7 +69,7 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
 
 const fakeClip = () =>
     minimalClip({
-        architecture: "test-video",
+        architectureHint: "test-video",
         modelProfileId: "test-profile",
         stages: [
             minimalStage({
@@ -168,7 +168,7 @@ describe("catalog-backed authoring policy", () => {
 
     it("does not use a persisted architecture hint when Stage 0 is unresolved", () => {
         const clip = minimalClip({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             icLoras: [hdrIcLoraFixture()],
             stages: [
                 minimalStage({
@@ -206,7 +206,7 @@ describe("catalog-backed authoring policy", () => {
         reconcileClipArchitectureIdentity(clip, models);
 
         expect(clip).toMatchObject({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
         });
         const view = createCapabilityViewResolver(models).forClip(clip);
@@ -451,7 +451,7 @@ describe("catalog-backed authoring policy", () => {
 
     it("keeps a zero-stage source-only clip selectable and labels it plainly", () => {
         const clip = minimalClip({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
             sourceVideo: {
                 data: "data:video/mp4;base64,AA==",
@@ -491,7 +491,7 @@ describe("catalog-backed authoring policy", () => {
     it("uses the actual WAN stage model instead of stale LTX identity and profile hints", () => {
         const models = catalogWithWan();
         const clip = minimalClip({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             stages: [
                 minimalStage({
@@ -529,7 +529,7 @@ describe("catalog-backed authoring policy", () => {
         wan.capabilities.stage.push("hdr");
         const wanClip = (icLoras: Clip["icLoras"] = []) =>
             minimalClip({
-                architecture: "ltx2",
+                architectureHint: "ltx2",
                 modelProfileId: "ltx-2.3",
                 icLoras,
                 stages: [
@@ -602,7 +602,7 @@ describe("catalog-backed authoring policy", () => {
     it("repairs none identity from authored Stage 0 after source removal", () => {
         const models = catalog();
         const clip = minimalClip({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
             sourceVideo: null,
             stages: [
@@ -616,14 +616,14 @@ describe("catalog-backed authoring policy", () => {
 
         reconcileClipArchitectureIdentity(clip, models);
         expect(clip).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
         });
 
         clip.stages[0].skipped = false;
         reconcileClipArchitectureIdentity(clip, models);
         expect(clip).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
         });
     });
@@ -644,7 +644,7 @@ describe("catalog-backed authoring policy", () => {
             entryModes: ["text-to-video", "image-to-video"],
         });
         const clip = minimalClip({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
             stages: [
                 minimalStage({
@@ -662,7 +662,7 @@ describe("catalog-backed authoring policy", () => {
         reconcileClipArchitectureIdentity(clip, models);
 
         expect(clip).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
         });
     });

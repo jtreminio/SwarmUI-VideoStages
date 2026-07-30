@@ -10,7 +10,7 @@ describe("clip architecture identity", () => {
     it("accepts an empty clip's profile as a migration hint, not catalog authorization", () => {
         const catalog = testArchitectureCatalog();
         const clip = minimalClip({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "removed-profile-alias",
             stages: [],
         });
@@ -26,7 +26,7 @@ describe("clip architecture identity", () => {
     it("derives authored Stage 0 separately from a source-only effective identity", () => {
         const catalog = testArchitectureCatalog();
         const clip = minimalClip({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
             sourceVideo: {
                 data: "data:video/mp4;base64,AAAA",
@@ -50,7 +50,7 @@ describe("clip architecture identity", () => {
     it("reconciles a sourced clip to its effective source-only identity", () => {
         const catalog = testArchitectureCatalog();
         const clip = minimalClip({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
             sourceVideo: {
                 data: "data:video/mp4;base64,AAAA",
@@ -65,7 +65,7 @@ describe("clip architecture identity", () => {
 
         expect(reconcileClipArchitectureIdentity(clip, catalog)).toBe(true);
         expect(clip).toMatchObject({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
         });
     });
@@ -77,14 +77,14 @@ describe("clip architecture identity", () => {
                 (feature) => feature !== "multi-stage",
             );
         const clip = minimalClip({
-            architecture: "stale-hint",
+            architectureHint: "stale-hint",
             modelProfileId: "stale-profile",
             stages: [minimalStage(), minimalStage({ skipped: true })],
         });
 
         expect(reconcileClipArchitectureIdentity(clip, catalog)).toBe(true);
         expect(clip).toMatchObject({
-            architecture: "ltx2",
+            architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
         });
     });

@@ -55,7 +55,7 @@ export interface VideoStagesConfig {
     audioTracks?: AudioTrack[];
 }
 
-export const CURRENT_AUTHORING_SCHEMA_VERSION = 5;
+export const CURRENT_AUTHORING_SCHEMA_VERSION = 6;
 
 export interface UploadedMedia {
     data: string;
@@ -197,7 +197,8 @@ export interface IcLora {
 
 export interface Clip {
     id?: string;
-    architecture: VideoArchitectureId;
+    /** Cached authoring label/repair hint. Resolved stage-0 model identity owns behavior. */
+    architectureHint: VideoArchitectureId;
     modelProfileId: ModelProfileId;
     architecturePayload: ArchitecturePayload | null;
     skipped: boolean;

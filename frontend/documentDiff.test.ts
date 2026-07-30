@@ -65,7 +65,7 @@ const retake = (id: string): CanonicalRetake => ({
 
 const clip = (id: string): CanonicalClip => ({
     id,
-    architecture: "ltx2",
+    architectureHint: "ltx2",
     modelProfileId: "ltx-2.3",
     architecturePayload: null,
     skipped: false,
@@ -189,7 +189,7 @@ describe("diffDocuments", () => {
     it("fails closed instead of diffing raw clip architecture identities", () => {
         const before = document();
         const after = structuredClone(before);
-        after.clips[0].architecture = "test-video";
+        after.clips[0].architectureHint = "test-video";
         after.clips[0].modelProfileId = "test-profile";
 
         expect(() => diffDocuments(before, after)).toThrow(
@@ -227,7 +227,7 @@ describe("diffDocuments", () => {
         expect(reconcileClipArchitectureIdentity(after.clips[0], catalog)).toBe(
             true,
         );
-        expect(after.clips[0].architecture).toBe("none");
+        expect(after.clips[0].architectureHint).toBe("none");
 
         const command = diffDocuments(before, after, {
             architectureCatalog: catalog,
@@ -238,7 +238,7 @@ describe("diffDocuments", () => {
 
         expect(result.failure).toBeUndefined();
         expect(result.document.clips[0].stages).toEqual([]);
-        expect(result.document.clips[0].architecture).toBe("none");
+        expect(result.document.clips[0].architectureHint).toBe("none");
     });
 
     it("still rejects emptying a clip that has no source video", () => {
@@ -248,7 +248,7 @@ describe("diffDocuments", () => {
         before.clips[0].retake = null;
         const after = structuredClone(before);
         after.clips[0].stages = [];
-        after.clips[0].architecture = "none";
+        after.clips[0].architectureHint = "none";
         after.clips[0].modelProfileId = "none";
 
         expect(() =>
@@ -272,7 +272,7 @@ describe("diffDocuments", () => {
         after.clips[0].stages.forEach((entry) => {
             entry.skipped = true;
         });
-        after.clips[0].architecture = "none";
+        after.clips[0].architectureHint = "none";
         after.clips[0].modelProfileId = "none";
         const catalog = testArchitectureCatalog();
 
@@ -344,7 +344,7 @@ describe("diffDocuments", () => {
         before.clips[0].stages = [
             { ...before.clips[0].stages[0], skipped: true },
         ];
-        before.clips[0].architecture = "none";
+        before.clips[0].architectureHint = "none";
         before.clips[0].modelProfileId = "none";
         const catalog = testArchitectureCatalog();
         catalog.entries.push({
@@ -506,7 +506,7 @@ describe("diffDocuments", () => {
         targetEntry.entryModes = ["image-to-video", "source-video"];
         const after = structuredClone(before);
         after.clips[0].sourceVideo = null;
-        after.clips[0].architecture = target.architectureId;
+        after.clips[0].architectureHint = target.architectureId;
         after.clips[0].modelProfileId = target.modelProfileId;
         after.clips[0].stages.forEach((entry) => {
             entry.model = target.model;
@@ -539,7 +539,7 @@ describe("diffDocuments", () => {
             startSeconds: 0,
             lengthSeconds: 4,
         };
-        after.clips[0].architecture = target.architectureId;
+        after.clips[0].architectureHint = target.architectureId;
         after.clips[0].modelProfileId = target.modelProfileId;
         after.clips[0].stages.forEach((entry) => {
             entry.model = target.model;
@@ -571,7 +571,7 @@ describe("diffDocuments", () => {
         targetEntry.entryModes = ["text-to-video"];
         const after = structuredClone(before);
         after.clips[0].stages = [after.clips[0].stages[0]];
-        after.clips[0].architecture = target.architectureId;
+        after.clips[0].architectureHint = target.architectureId;
         after.clips[0].modelProfileId = target.modelProfileId;
         after.clips[0].stages[0].model = target.model;
         after.clips[0].stages[0].modelProfileId = target.modelProfileId;
@@ -661,7 +661,7 @@ describe("diffDocuments", () => {
                 modelProfileId: "test-profile",
             },
         ];
-        targetClip.architecture = "test-video";
+        targetClip.architectureHint = "test-video";
         targetClip.modelProfileId = "test-profile";
         targetClip.skipped = true;
         targetClip.sourceVideo = {
@@ -688,7 +688,7 @@ describe("diffDocuments", () => {
             },
         ];
         const after = structuredClone(before);
-        after.clips[0].architecture = "ltx2";
+        after.clips[0].architectureHint = "ltx2";
         after.clips[0].modelProfileId = "ltx-2.3";
         after.clips[0].skipped = false;
         after.clips[0].stages[0].model = "ltx";
@@ -748,7 +748,7 @@ describe("diffDocuments", () => {
         before.clips[0].stages.forEach((entry) => {
             entry.skipped = true;
         });
-        before.clips[0].architecture = "none";
+        before.clips[0].architectureHint = "none";
         before.clips[0].modelProfileId = "none";
         const { catalog, target } = crossArchitectureCatalog();
         const fake = catalog.architectures.find(
@@ -768,7 +768,7 @@ describe("diffDocuments", () => {
             true,
         );
         expect(after.clips[0]).toMatchObject({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
         });
 
@@ -843,7 +843,7 @@ describe("diffDocuments", () => {
         const before = document();
         before.clips[1].stages = [];
         const after = structuredClone(before);
-        after.clips[1].architecture = "test-video";
+        after.clips[1].architectureHint = "test-video";
         after.clips[1].modelProfileId = "test-profile";
         const { catalog } = crossArchitectureCatalog();
 

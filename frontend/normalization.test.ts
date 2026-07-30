@@ -149,7 +149,7 @@ describe("normalization", () => {
         );
         const invalid = normalizeClip(
             {
-                architecture: "removed-architecture",
+                architectureHint: "removed-architecture",
                 modelProfileId: "removed-profile",
                 sourceVideo,
                 stages: [],
@@ -159,11 +159,11 @@ describe("normalization", () => {
         );
 
         expect(fresh).toMatchObject({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
         });
         expect(invalid).toMatchObject({
-            architecture: "removed-architecture",
+            architectureHint: "removed-architecture",
             modelProfileId: "removed-profile",
         });
     });
@@ -372,7 +372,7 @@ describe("normalization", () => {
         };
         const rootDefaults = (): RootDefaults => defaults;
         const raw = {
-            architecture: "test-video",
+            architectureHint: "test-video",
             modelProfileId: "test-profile",
             icLoras: [
                 {
@@ -403,7 +403,7 @@ describe("normalization", () => {
             () => "",
         );
         const restoredRaw = structuredClone(reloaded);
-        restoredRaw.architecture = "ltx2";
+        restoredRaw.architectureHint = "ltx2";
         restoredRaw.modelProfileId = "ltx-2.3";
         restoredRaw.stages[0].model = "ltx";
         restoredRaw.stages[0].modelProfileId = "ltx-2.3";
@@ -413,7 +413,7 @@ describe("normalization", () => {
             () => "",
         );
 
-        expect(converted.architecture).toBe("test-video");
+        expect(converted.architectureHint).toBe("test-video");
         expect(converted.icLoras).toHaveLength(1);
         expect(reloaded.icLoras).toEqual(converted.icLoras);
         expect(reloaded.stages[0].icLoraStrengths).toEqual(

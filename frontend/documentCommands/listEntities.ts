@@ -131,7 +131,7 @@ const CLIP_ENTITY = defineList<CanonicalVideoStagesConfig, CanonicalClip>()({
     ],
     reservedKeys: [
         "id",
-        "architecture",
+        "architectureHint",
         "modelProfileId",
         "promptWindows",
         "retake",

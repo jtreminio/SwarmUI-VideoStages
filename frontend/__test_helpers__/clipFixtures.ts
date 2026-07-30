@@ -62,7 +62,7 @@ export const minimalRef = (overrides: Partial<RefImage> = {}): RefImage => ({
 });
 
 export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
-    architecture: "ltx2",
+    architectureHint: "ltx2",
     modelProfileId: "ltx-2.3",
     architecturePayload: null,
     skipped: false,

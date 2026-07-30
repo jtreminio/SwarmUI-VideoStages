@@ -420,8 +420,8 @@ internal static class EffectiveVideoRequestProjector
             || projected.Id != canonical.Id
             || projected.SourceVideo != canonical.SourceVideo
             || !sameStageTopology
-            || projected.AuthoredArchitectureId != canonical.AuthoredArchitectureId
-            || projected.AuthoredModelProfileId != canonical.AuthoredModelProfileId
+            || projected.AuthoredArchitectureHint != canonical.AuthoredArchitectureHint
+            || projected.AuthoredModelProfileHint != canonical.AuthoredModelProfileHint
             || !(projected.AuthoredStages ?? []).SequenceEqual(
                 canonical.AuthoredStages ?? []))
         {
@@ -443,8 +443,8 @@ internal static class EffectiveVideoRequestProjector
         ClipArchitectureAssignment assignment,
         ICollection<EffectiveRequestDecision> decisions)
     {
-        string architectureHint = authored.AuthoredArchitectureId;
-        string profileHint = authored.AuthoredModelProfileId;
+        string architectureHint = authored.AuthoredArchitectureHint;
+        string profileHint = authored.AuthoredModelProfileHint;
         int? firstRawIndex = authored.Stages?.FirstOrDefault()?.ClipStageRawIndex;
         if (!firstRawIndex.HasValue
             && assignment.Architecture.Id != NoneArchitecture.Id)
@@ -465,7 +465,7 @@ internal static class EffectiveVideoRequestProjector
             {
                 decisions.Add(EffectiveRequestDecision.Ignore(
                     "effective-request.stale-architecture-hint",
-                    $"Clip {authored.Id} cached architecture '{architectureHint}' does not match "
+                    $"Clip {authored.Id} cached architecture hint '{architectureHint}' does not match "
                         + $"resolved model '{firstModel.ModelName}'. Using "
                         + $"'{firstModel.ArchitectureId}' for this generation.",
                     authored.Id,
@@ -517,8 +517,8 @@ internal static class EffectiveVideoRequestProjector
             .ToArray();
         return authored with
         {
-            AuthoredArchitectureId = architectureHint,
-            AuthoredModelProfileId = profileHint,
+            AuthoredArchitectureHint = architectureHint,
+            AuthoredModelProfileHint = profileHint,
             AuthoredStages = Array.AsReadOnly(authoredStages),
         };
     }

@@ -116,8 +116,8 @@ export const buildDefaultClip = (
         ),
     };
     const architecture =
-        (previousClip?.architecture !== NONE_ARCHITECTURE_ID
-            ? previousClip?.architecture
+        (previousClip?.architectureHint !== NONE_ARCHITECTURE_ID
+            ? previousClip?.architectureHint
             : null) ??
         architectureForModel(defaults.modelCatalog, firstStage.model) ??
         "unsupported";
@@ -126,9 +126,9 @@ export const buildDefaultClip = (
         architecture,
     )?.boundaryRules.continue;
     return {
-        architecture,
+        architectureHint: architecture,
         modelProfileId:
-            (previousClip?.architecture !== NONE_ARCHITECTURE_ID
+            (previousClip?.architectureHint !== NONE_ARCHITECTURE_ID
                 ? previousClip?.modelProfileId
                 : null) ??
             modelProfileForModel(defaults.modelCatalog, firstStage.model) ??
@@ -269,7 +269,7 @@ export const normalizeClip = (
     );
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const stageZero = stages[0] ?? null;
-    const persistedArchitecture = trimmedText(rawClip.architecture);
+    const persistedArchitecture = trimmedText(rawClip.architectureHint);
     const persistedProfile = trimmedText(rawClip.modelProfileId);
     const isSourceOnly =
         sourceVideo !== null && stages.every((stage) => stage.skipped);
@@ -329,7 +329,7 @@ export const normalizeClip = (
     )?.boundaryRules[boundaryOut];
     return {
         id: normalizeOptionalEntityId(rawClip.id),
-        architecture,
+        architectureHint: architecture,
         modelProfileId,
         architecturePayload: preserveArchitecturePayload(
             rawClip.architecturePayload,

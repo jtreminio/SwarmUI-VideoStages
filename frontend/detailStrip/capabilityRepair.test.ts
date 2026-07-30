@@ -235,7 +235,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const models = testArchitectureCatalog();
         models.architectures.push(testSourceOnlyArchitecture());
         const clip = minimalClip({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
             sourceVideo: sourceVideoFixture(),
             stages: [],
@@ -487,7 +487,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const models = testArchitectureCatalog();
         models.architectures.push(testSourceOnlyArchitecture());
         const clip = minimalClip({
-            architecture: "none",
+            architectureHint: "none",
             modelProfileId: "none",
             sourceVideo: sourceVideoFixture(),
             stages: [],
