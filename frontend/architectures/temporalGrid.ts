@@ -2,6 +2,10 @@ import { activeStageCount } from "../clipSemantics";
 import type { Clip } from "../types";
 import { architectureDescriptor, modelCatalogEntry } from "./catalogQueries";
 import {
+    effectiveClipCapabilities,
+    effectiveModelCapabilities,
+} from "./modelCapabilities";
+import {
     architectureFeatureSupport,
     upscaleModeForMethod,
 } from "./policy/featureValues";
@@ -120,15 +124,17 @@ const effectiveGridModels = (
     const clipDescriptor = firstModel?.architectureId
         ? architectureForId(firstModel.architectureId)
         : undefined;
+    const clipCapabilities = clipDescriptor
+        ? effectiveClipCapabilities(clip, clipDescriptor, modelForName)
+        : null;
     const retakeCanExecute =
         clip.retake !== null &&
         clip.retake !== undefined &&
         (clip.sourceVideo != null || scope.globalRefineMode === true) &&
         (!clipDescriptor ||
+            !clipCapabilities ||
             architectureFeatureSupport("retake", {
-                capabilities: clipDescriptor.capabilities,
-                extras:
-                    firstModel?.enhancements?.extras ?? clipDescriptor.extras,
+                capabilities: clipCapabilities,
             }));
 
     return stages
@@ -160,8 +166,7 @@ const effectiveGridModels = (
             return (
                 !descriptor ||
                 architectureFeatureSupport("upscale", {
-                    capabilities: descriptor.capabilities,
-                    extras: model?.enhancements?.extras ?? descriptor.extras,
+                    capabilities: effectiveModelCapabilities(model, descriptor),
                     upscaleMethod: stage.upscaleMethod ?? "",
                 })
             );
@@ -212,10 +217,15 @@ export const resolveClipFrameGridForLookup = (
     ) {
         return { status: "unknown" };
     }
-    const supportScope = {
-        capabilities: descriptor.capabilities,
-        extras: descriptor.extras,
-    };
+    const capabilities = effectiveClipCapabilities(
+        clip,
+        descriptor,
+        modelForName,
+    );
+    if (!capabilities) {
+        return { status: "unknown" };
+    }
+    const supportScope = { capabilities };
     if (
         (clip.clipLengthFromAudio === true &&
             architectureFeatureSupport("audioDerivedDuration", supportScope)) ||

@@ -17,14 +17,26 @@ internal static class CapabilityDrivenEffectiveRequestProjector
 {
     internal static EffectiveClipProjection ProjectUnsupportedFeatures(
         ClipSpec authored,
-        VideoArchitectureDescriptor descriptor)
+        VideoArchitectureDescriptor descriptor,
+        IReadOnlyDictionary<int, ResolvedVideoModel> stageModels)
     {
         ArgumentNullException.ThrowIfNull(authored);
         ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentNullException.ThrowIfNull(stageModels);
 
+        ArchitectureCapabilityDescriptor capabilities =
+            ResolvedVideoModelCapabilityPolicy.ForClip(
+                authored,
+                descriptor,
+                stageModels);
+        IReadOnlyList<AudioSourceKind> audioSourceKinds =
+            ResolvedVideoModelCapabilityPolicy.AudioSourceKindsForClip(
+                authored,
+                descriptor,
+                stageModels);
         HashSet<UnsupportedAuthoringFeature> ignored =
             ArchitectureFeatureVocabulary
-                .IgnoredWhenUnsupported(descriptor.Capabilities)
+                .IgnoredWhenUnsupported(capabilities)
                 .ToHashSet();
 
         List<EffectiveRequestDecision> decisions = [];
@@ -160,9 +172,9 @@ internal static class CapabilityDrivenEffectiveRequestProjector
             };
         }
         if ((!Has(
-                    descriptor.Capabilities.Architecture,
+                    capabilities.Architecture,
                     ArchitectureCapability.NativeAudio)
-                || !descriptor.AudioSourceKinds.Contains(AudioSourceKind.Native))
+                || !audioSourceKinds.Contains(AudioSourceKind.Native))
             && effective.SaveAudioTrack)
         {
             decisions.Add(EffectiveRequestDecision.Ignore(
@@ -203,7 +215,7 @@ internal static class CapabilityDrivenEffectiveRequestProjector
         }
 
         if (!Has(
-                descriptor.Capabilities.Clip,
+                capabilities.Clip,
                 ClipCapability.AudioSegments)
             && effective.BoundaryOutCarryAudio)
         {
@@ -268,7 +280,12 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                         stage.Id,
                         stage.ClipStageRawIndex));
                 }
-                else if (!Has(descriptor.Capabilities.Stage, required))
+                else if (!Has(
+                    ResolvedVideoModelCapabilityPolicy.ForStage(
+                        stage,
+                        descriptor,
+                        stageModels),
+                    required))
                 {
                     Ignore(
                         configured: true,

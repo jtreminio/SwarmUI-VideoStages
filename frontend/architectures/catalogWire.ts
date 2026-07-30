@@ -333,6 +333,7 @@ export const parseVideoArchitectureCatalog = (
             !Number.isSafeInteger(raw.frameGrid) ||
             Number(raw.frameGrid) < 1 ||
             Number(raw.frameGrid) > MAX_FRAME_GRID ||
+            !isCapabilities(raw.capabilities) ||
             !isEntryModeArray(raw.entryModes) ||
             raw.entryModes.length === 0 ||
             (raw.entryAbilities !== undefined &&
@@ -361,6 +362,7 @@ export const parseVideoArchitectureCatalog = (
             modelClassId: raw.modelClassId,
             compatibilityClassId: raw.compatibilityClassId,
             frameGrid: Number(raw.frameGrid),
+            capabilities: structuredClone(raw.capabilities),
             ...(raw.entryAbilities === undefined
                 ? {}
                 : { entryAbilities: [...raw.entryAbilities] }),

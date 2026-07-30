@@ -232,6 +232,14 @@ export const testArchitectureCatalogDto = (
                           entry.compatibilityClassId ??
                           "test-compatibility-class",
                       frameGrid: entry.frameGrid ?? 1,
+                      capabilities: structuredClone(
+                          entry.capabilities ??
+                              catalog.architectures.find(
+                                  (architecture) =>
+                                      architecture.id === entry.architectureId,
+                              )?.capabilities ??
+                              testArchitectureCapabilities(),
+                      ),
                       ...(entry.entryAbilities
                           ? { entryAbilities: [...entry.entryAbilities] }
                           : {}),

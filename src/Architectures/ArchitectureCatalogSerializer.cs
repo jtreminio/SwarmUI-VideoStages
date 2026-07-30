@@ -133,6 +133,7 @@ internal static class ArchitectureCatalogSerializer
         ["compatibilityClassId"] = model.CompatibilityClassId,
         ["frameGrid"] = model.FrameGrid,
         ["entryAbilities"] = new JArray(ModelEntryAbilities(model.EntryAbilities)),
+        ["capabilities"] = SerializeCapabilities(model),
         ["enhancements"] = new JObject
         {
             ["extras"] = new JArray(
@@ -146,6 +147,23 @@ internal static class ArchitectureCatalogSerializer
         // Migration aliases. Persisted profile hints and older frontends still understand these.
         ["entryModes"] = new JArray(ModelEntryModes(model.EntryAbilities)),
     };
+
+    private static JObject SerializeCapabilities(ResolvedVideoModel model)
+    {
+        ArchitectureCapabilityDescriptor capabilities = model.EffectiveCapabilities;
+        IReadOnlyList<AudioSourceKind> audioKinds = model.EffectiveAudioSourceKinds;
+        return new()
+        {
+            ["architecture"] = new JArray(
+                ArchitectureCapabilities(capabilities.Architecture)),
+            ["clip"] = new JArray(ClipCapabilities(capabilities.Clip)),
+            ["stage"] = new JArray(StageCapabilities(capabilities.Stage)),
+            ["output"] = new JArray(OutputCapabilities(capabilities, audioKinds)),
+            ["upscaleModes"] = new JArray(UpscaleModes(capabilities.Stage)),
+            ["entryModes"] = new JArray(ModelEntryModes(model)),
+            ["audioSourceKinds"] = new JArray(audioKinds.Select(SerializeAudioSourceKind)),
+        };
+    }
 
     private static IEnumerable<string> ModelEntryAbilities(VideoModelEntryAbility abilities)
     {
@@ -181,6 +199,20 @@ internal static class ArchitectureCatalogSerializer
         }
     }
 
+    private static IEnumerable<string> ModelEntryModes(ResolvedVideoModel model)
+    {
+        foreach (ArchitectureEntryMode mode in model.Architecture.EntryModes)
+        {
+            VideoModelEntryAbility required = mode == ArchitectureEntryMode.TextToVideo
+                ? VideoModelEntryAbility.TextToVideo
+                : VideoModelEntryAbility.ImageToVideo;
+            if ((model.EntryAbilities & required) == required)
+            {
+                yield return SerializeEntryMode(mode);
+            }
+        }
+    }
+
     private static IEnumerable<string> ArchitectureCapabilities(ArchitectureCapability value)
         => ArchitectureFeatureVocabulary.WireNames(value);
 
@@ -192,21 +224,26 @@ internal static class ArchitectureCatalogSerializer
 
     private static IEnumerable<string> OutputCapabilities(
         VideoArchitectureDescriptor descriptor)
+        => OutputCapabilities(descriptor.Capabilities, descriptor.AudioSourceKinds);
+
+    private static IEnumerable<string> OutputCapabilities(
+        ArchitectureCapabilityDescriptor capabilities,
+        IReadOnlyList<AudioSourceKind> audioSourceKinds)
     {
         if (Has(
-            descriptor.Capabilities.Architecture,
+            capabilities.Architecture,
             ArchitectureCapability.DecodedOutput))
         {
             yield return "video";
         }
-        if (descriptor.AudioSourceKinds.Any(kind => kind != AudioSourceKind.Disabled))
+        if (audioSourceKinds.Any(kind => kind != AudioSourceKind.Disabled))
         {
             yield return "attached-audio";
         }
         if (Has(
-                descriptor.Capabilities.Architecture,
+                capabilities.Architecture,
                 ArchitectureCapability.NativeAudio)
-            && descriptor.AudioSourceKinds.Contains(AudioSourceKind.Native))
+            && audioSourceKinds.Contains(AudioSourceKind.Native))
         {
             yield return "standalone-audio";
         }

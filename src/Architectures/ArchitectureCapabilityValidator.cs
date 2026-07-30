@@ -14,6 +14,16 @@ internal static class ArchitectureCapabilityValidator
     {
         List<PlanDiagnostic> diagnostics = [];
         bool hasActiveStages = clip.Stages is { Count: > 0 };
+        ArchitectureCapabilityDescriptor capabilities =
+            ResolvedVideoModelCapabilityPolicy.ForClip(
+                clip,
+                descriptor,
+                stageModels);
+        IReadOnlyList<AudioSourceKind> audioSourceKinds =
+            ResolvedVideoModelCapabilityPolicy.AudioSourceKindsForClip(
+                clip,
+                descriptor,
+                stageModels);
         void Require(bool configured, bool supported, string option)
         {
             if (configured && !supported)
@@ -39,62 +49,62 @@ internal static class ArchitectureCapabilityValidator
         Require(
             clip.SourceVideo is null,
             Has(
-                descriptor.Capabilities.Architecture,
+                capabilities.Architecture,
                 ArchitectureCapability.GeneratedEntry),
             "generated entry");
         Require(
             clip.SourceVideo is not null,
             Has(
-                descriptor.Capabilities.Architecture,
+                capabilities.Architecture,
                 ArchitectureCapability.SourcedEntry),
             "sourced entry");
         Require(
             clip.Stages is { Count: > 1 },
             Has(
-                descriptor.Capabilities.Architecture,
+                capabilities.Architecture,
                 ArchitectureCapability.MultiStage),
             "multiple active stages");
         Require(
             clip.SaveAudioTrack,
             Has(
-                descriptor.Capabilities.Architecture,
+                capabilities.Architecture,
                 ArchitectureCapability.NativeAudio)
-                && descriptor.AudioSourceKinds.Contains(AudioSourceKind.Native),
+                && audioSourceKinds.Contains(AudioSourceKind.Native),
             "standalone audio output");
         Require(
             clip.Stages is { Count: > 0 }
                 && entryMode == ArchitectureEntryMode.ImageToVideo,
-            Has(descriptor.Capabilities.Stage, StageCapability.ImageInput),
+            Has(capabilities.Stage, StageCapability.ImageInput),
             "image stage input");
         Require(
             clip.Stages is { Count: > 0 }
                 && entryMode is ArchitectureEntryMode.SourceVideo
                     or ArchitectureEntryMode.RefineVideo,
-            Has(descriptor.Capabilities.Stage, StageCapability.VideoInput),
+            Has(capabilities.Stage, StageCapability.VideoInput),
             "video stage input");
         Require(
             clip.SourceVideo is not null,
-            Has(descriptor.Capabilities.Clip, ClipCapability.SourceVideo),
+            Has(capabilities.Clip, ClipCapability.SourceVideo),
             "source video");
         Require(
             hasActiveStages && clip.PromptWindows is { Count: > 0 },
-            Has(descriptor.Capabilities.Clip, ClipCapability.PromptRelay),
+            Has(capabilities.Clip, ClipCapability.PromptRelay),
             "prompt relay");
         Require(
             hasActiveStages && clip.ImageRefs is { Count: > 0 },
-            Has(descriptor.Capabilities.Clip, ClipCapability.References),
+            Has(capabilities.Clip, ClipCapability.References),
             "image references");
         Require(
             hasActiveStages && clip.ImageRefs is { Count: > 0 },
-            Has(descriptor.Capabilities.Stage, StageCapability.FrameReferences),
+            Has(capabilities.Stage, StageCapability.FrameReferences),
             "frame references");
         Require(
             clip.ReferenceFraming != ReferenceFramingMode.Crop,
-            Has(descriptor.Capabilities.Clip, ClipCapability.ReferenceFraming),
+            Has(capabilities.Clip, ClipCapability.ReferenceFraming),
             "reference framing");
         Require(
             clip.Stages?.Any(stage => stage.RetakeWindow is not null) == true,
-            Has(descriptor.Capabilities.Clip, ClipCapability.Retake),
+            Has(capabilities.Clip, ClipCapability.Retake),
             "retake");
         Require(
             clip.UploadedAudio is not null
@@ -102,10 +112,10 @@ internal static class ArchitectureCapabilityValidator
                     clip.AudioSource,
                     Constants.AudioSourceNative,
                     StringComparison.OrdinalIgnoreCase),
-            Has(descriptor.Capabilities.Clip, ClipCapability.AudioSources),
+            Has(capabilities.Clip, ClipCapability.AudioSources),
             "clip audio source");
         bool supportsAudioDerivedDuration = Has(
-            descriptor.Capabilities.Clip,
+            capabilities.Clip,
             ClipCapability.AudioDerivedDuration);
         Require(
             clip.ClipLengthFromAudio,
@@ -118,24 +128,24 @@ internal static class ArchitectureCapabilityValidator
         Require(
             clip.ClipLengthFromControlNet,
             Has(
-                descriptor.Capabilities.Clip,
+                capabilities.Clip,
                 ClipCapability.ControlSignalDerivedDuration),
             "control-signal-derived clip duration");
         Require(
             clip.ReuseAudio,
-            Has(descriptor.Capabilities.Clip, ClipCapability.AudioReuse),
+            Has(capabilities.Clip, ClipCapability.AudioReuse),
             "captured stage audio reuse");
         Require(
             hasActiveStages && clip.IcLoras is { Count: > 0 },
-            Has(descriptor.Capabilities.Stage, StageCapability.IcLora),
+            Has(capabilities.Stage, StageCapability.IcLora),
             "IC-LoRA");
         Require(
             hasActiveStages
                 && clip.Stages?.Any(stage => HasNormalLora(clip, stage)) == true,
-            Has(descriptor.Capabilities.Stage, StageCapability.Lora),
+            Has(capabilities.Stage, StageCapability.Lora),
             "normal LoRA");
-        ValidateAudioSourceKind(clip, descriptor, diagnostics);
-        ValidateStages(clip, descriptor, diagnostics);
+        ValidateAudioSourceKind(clip, descriptor, audioSourceKinds, diagnostics);
+        ValidateStages(clip, descriptor, stageModels, diagnostics);
         return diagnostics.AsReadOnly();
     }
 
@@ -207,6 +217,7 @@ internal static class ArchitectureCapabilityValidator
     private static void ValidateAudioSourceKind(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,
+        IReadOnlyList<AudioSourceKind> audioSourceKinds,
         ICollection<PlanDiagnostic> diagnostics)
     {
         AudioSourceKind kind = AudioSourceParser.Parse(clip.AudioSource).Kind;
@@ -217,11 +228,11 @@ internal static class ArchitectureCapabilityValidator
             return;
         }
         if (kind == AudioSourceKind.Native
-            && !descriptor.AudioSourceKinds.Contains(AudioSourceKind.Native))
+            && !audioSourceKinds.Contains(AudioSourceKind.Native))
         {
             kind = AudioSourceKind.Disabled;
         }
-        if (descriptor.AudioSourceKinds.Contains(kind))
+        if (audioSourceKinds.Contains(kind))
         {
             return;
         }
@@ -234,12 +245,18 @@ internal static class ArchitectureCapabilityValidator
     private static void ValidateStages(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,
+        IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
         ICollection<PlanDiagnostic> diagnostics)
     {
         IReadOnlyList<StageSpec> stages = clip.Stages ?? [];
         for (int stageIndex = 0; stageIndex < stages.Count; stageIndex++)
         {
             StageSpec stage = stages[stageIndex];
+            StageCapability stageCapabilities =
+                ResolvedVideoModelCapabilityPolicy.ForStage(
+                    stage,
+                    descriptor,
+                    stageModels);
             StageGuideReferenceSelection guide =
                 StageGuideReferencePolicy.Classify(stage.ImageReference);
             if (!descriptor.StageGuideReferences.Allows(guide))
@@ -251,7 +268,7 @@ internal static class ArchitectureCapabilityValidator
                     stage.Id));
             }
             if (stageIndex > 0
-                && !Has(descriptor.Capabilities.Stage, StageCapability.VideoInput))
+                && !Has(stageCapabilities, StageCapability.VideoInput))
             {
                 diagnostics.Add(Unsupported(
                     clip,
@@ -271,7 +288,7 @@ internal static class ArchitectureCapabilityValidator
                                 ? StageCapability.LatentModelUpscale
                                 : StageCapability.None;
                 if (required == StageCapability.None
-                    || !Has(descriptor.Capabilities.Stage, required))
+                    || !Has(stageCapabilities, required))
                 {
                     diagnostics.Add(Unsupported(
                         clip,

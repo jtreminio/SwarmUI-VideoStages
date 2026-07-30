@@ -659,7 +659,7 @@
     const architectureId = entry?.architectureId ?? null;
     const descriptor = architectureDescriptor(catalog, architectureId);
     const profileId = entry?.modelProfileId ?? null;
-    const capabilities = descriptor?.capabilities;
+    const capabilities = entry?.capabilities ?? descriptor?.capabilities;
     return entry && architectureId && profileId && descriptor && capabilities ? {
       architectureId,
       modelProfileId: profileId,
@@ -1431,6 +1431,46 @@
     }
   };
 
+  // frontend/architectures/modelCapabilities.ts
+  var intersect = (left, right) => left.filter((value) => right.includes(value));
+  var effectiveModelCapabilities = (model, architecture) => model?.capabilities ?? architecture.capabilities;
+  var effectiveClipCapabilities = (clip, architecture, modelForName) => {
+    const stages = clip.stages.slice(0, activeStageCount(clip));
+    if (stages.length === 0) {
+      return structuredClone(architecture.capabilities);
+    }
+    const models = stages.map((stage) => modelForName(stage.model));
+    if (models.some(
+      (model) => !model?.architectureId || model.architectureId !== architecture.id
+    )) {
+      return null;
+    }
+    return models.reduce((effective, model) => {
+      const capabilities = effectiveModelCapabilities(model, architecture);
+      return {
+        architecture: intersect(
+          effective.architecture,
+          capabilities.architecture
+        ),
+        clip: intersect(effective.clip, capabilities.clip),
+        stage: intersect(effective.stage, capabilities.stage),
+        output: intersect(effective.output, capabilities.output),
+        upscaleModes: intersect(
+          effective.upscaleModes,
+          capabilities.upscaleModes
+        ),
+        entryModes: intersect(
+          effective.entryModes,
+          capabilities.entryModes
+        ),
+        audioSourceKinds: intersect(
+          effective.audioSourceKinds,
+          capabilities.audioSourceKinds
+        )
+      };
+    }, structuredClone(architecture.capabilities));
+  };
+
   // frontend/selectOption.ts
   var preserveSelectedOption = (options, selectedValue, position, build) => {
     const value = `${selectedValue || ""}`.trim();
@@ -1671,7 +1711,7 @@
     const supports = (binding) => {
       const [capabilityScope, wireName, upscaleMode] = binding;
       const typedCapability = upscaleMode === null ? capability[capabilityScope].includes(wireName) : capability.upscaleModes.includes(upscaleMode);
-      return typedCapability || scope.extras?.includes(wireName) === true;
+      return typedCapability;
     };
     let bindings = AUTHORING_FEATURE_CAPABILITIES[feature];
     if (feature === "upscale" && scope.upscaleMethod !== void 0) {
@@ -1730,9 +1770,9 @@
     }
     const firstModel = modelForName(stages[0].model);
     const clipDescriptor = firstModel?.architectureId ? architectureForId(firstModel.architectureId) : void 0;
-    const retakeCanExecute = clip.retake !== null && clip.retake !== void 0 && (clip.sourceVideo != null || scope.globalRefineMode === true) && (!clipDescriptor || architectureFeatureSupport("retake", {
-      capabilities: clipDescriptor.capabilities,
-      extras: firstModel?.enhancements?.extras ?? clipDescriptor.extras
+    const clipCapabilities = clipDescriptor ? effectiveClipCapabilities(clip, clipDescriptor, modelForName) : null;
+    const retakeCanExecute = clip.retake !== null && clip.retake !== void 0 && (clip.sourceVideo != null || scope.globalRefineMode === true) && (!clipDescriptor || !clipCapabilities || architectureFeatureSupport("retake", {
+      capabilities: clipCapabilities
     }));
     return stages.filter((stage, stageIndex) => {
       if (stageIndex === 0 && clip.sourceVideo == null && scope.globalRefineMode !== true) {
@@ -1748,8 +1788,7 @@
       const model = modelForName(stage.model);
       const descriptor = model?.architectureId ? architectureForId(model.architectureId) : void 0;
       return !descriptor || architectureFeatureSupport("upscale", {
-        capabilities: descriptor.capabilities,
-        extras: model?.enhancements?.extras ?? descriptor.extras,
+        capabilities: effectiveModelCapabilities(model, descriptor),
         upscaleMethod: stage.upscaleMethod ?? ""
       });
     }).map((stage) => stage.model);
@@ -1776,10 +1815,15 @@
     )) {
       return { status: "unknown" };
     }
-    const supportScope = {
-      capabilities: descriptor.capabilities,
-      extras: descriptor.extras
-    };
+    const capabilities = effectiveClipCapabilities(
+      clip,
+      descriptor,
+      modelForName
+    );
+    if (!capabilities) {
+      return { status: "unknown" };
+    }
+    const supportScope = { capabilities };
     if (clip.clipLengthFromAudio === true && architectureFeatureSupport("audioDerivedDuration", supportScope) || clip.clipLengthFromControlNet === true && architectureFeatureSupport(
       "controlSignalDerivedDuration",
       supportScope
@@ -1978,7 +2022,7 @@
     const modelNames = /* @__PURE__ */ new Set();
     const models = [];
     for (const raw of value.models) {
-      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !isEntryModeArray(raw.entryModes) || raw.entryModes.length === 0 || raw.entryAbilities !== void 0 && (!isEntryAbilityArray(raw.entryAbilities) || raw.entryAbilities.length === 0) || raw.enhancements !== void 0 && (!isRecord2(raw.enhancements) || !isUniqueStringArray(raw.enhancements.extras) || !isReferencePositionArray(
+      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !isCapabilities(raw.capabilities) || !isEntryModeArray(raw.entryModes) || raw.entryModes.length === 0 || raw.entryAbilities !== void 0 && (!isEntryAbilityArray(raw.entryAbilities) || raw.entryAbilities.length === 0) || raw.enhancements !== void 0 && (!isRecord2(raw.enhancements) || !isUniqueStringArray(raw.enhancements.extras) || !isReferencePositionArray(
         raw.enhancements.referencePositions
       ))) {
         return null;
@@ -1995,6 +2039,7 @@
         modelClassId: raw.modelClassId,
         compatibilityClassId: raw.compatibilityClassId,
         frameGrid: Number(raw.frameGrid),
+        capabilities: structuredClone(raw.capabilities),
         ...raw.entryAbilities === void 0 ? {} : { entryAbilities: [...raw.entryAbilities] },
         ...rawEnhancements === void 0 ? {} : {
           enhancements: {
@@ -2133,6 +2178,11 @@
           modelClassId: backendModel?.modelClassId ?? null,
           compatibilityClassId: backendModel?.compatibilityClassId ?? null,
           frameGrid: backendModel?.frameGrid ?? null,
+          ...backendModel?.capabilities === void 0 ? {} : {
+            capabilities: structuredClone(
+              backendModel.capabilities
+            )
+          },
           ...backendModel?.entryAbilities === void 0 ? {} : {
             entryAbilities: [...backendModel.entryAbilities]
           },
@@ -3987,7 +4037,9 @@
       modelProfileId: model.modelProfileId,
       model: model.value,
       extras: [...model.enhancements?.extras ?? descriptor.extras ?? []],
-      capabilities: structuredClone(descriptor.capabilities),
+      capabilities: structuredClone(
+        model.capabilities ?? descriptor.capabilities
+      ),
       ...model.entryAbilities === void 0 ? {} : { entryAbilities: [...model.entryAbilities] },
       entryModes: [...model.entryModes]
     };
@@ -4495,7 +4547,9 @@
       architectureId: targetEntry.architectureId,
       modelProfileId: targetEntry.modelProfileId,
       model: targetEntry.value,
-      capabilities: clone(targetDescriptor.capabilities),
+      capabilities: clone(
+        targetEntry.capabilities ?? targetDescriptor.capabilities
+      ),
       entryModes: clone(targetEntry.entryModes)
     };
     const conversionSource = clone(previous);
@@ -5872,10 +5926,14 @@
     const forClip = (clip) => {
       const identity = effectiveClipIdentity(clip);
       const { architectureId, descriptor } = identity;
-      const resolvedModel = modelByName.get(clip.stages[0]?.model ?? "");
+      const capabilities = descriptor ? effectiveClipCapabilities(
+        clip,
+        descriptor,
+        (model) => modelByName.get(model)
+      ) : null;
       const label = descriptor?.label ?? (architectureId === NONE_ARCHITECTURE_ID ? "source-only clips" : `unknown architecture '${architectureId}'`);
       const decision = (feature) => {
-        if (!descriptor) {
+        if (!descriptor || !capabilities) {
           return {
             supported: false,
             reason: noArchitectureReason(feature),
@@ -5890,8 +5948,7 @@
           (target) => effectiveClipIdentity(target).architectureId
         );
         const supported = architectureFeatureSupport(feature, {
-          capabilities: descriptor.capabilities,
-          extras: resolvedModel?.enhancements?.extras ?? descriptor.extras
+          capabilities
         }) && !conditionalRule2;
         return {
           supported,
@@ -5911,7 +5968,7 @@
         known: descriptor !== void 0,
         frameGrid: frameGridResolution.status === "resolved" ? frameGridResolution.frameGrid : 1,
         frameGridResolution,
-        audioSourceKinds: descriptor?.capabilities.audioSourceKinds ?? [],
+        audioSourceKinds: capabilities?.audioSourceKinds ?? [],
         decision,
         authoringState: (feature, persisted) => {
           const result = decision(feature);
@@ -5929,12 +5986,11 @@
       const resolvedModel = sourceOnly ? void 0 : modelByName.get(stage.model);
       const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID;
       const descriptor = architectureById.get(architectureId);
+      const capabilities = descriptor ? effectiveModelCapabilities(resolvedModel, descriptor) : null;
       const decision = (feature) => {
-        if (feature === "stageLoras" && descriptor) {
-          const extras = resolvedModel?.enhancements?.extras ?? descriptor.extras;
+        if (feature === "stageLoras" && descriptor && capabilities) {
           const supported2 = architectureFeatureSupport(feature, {
-            capabilities: descriptor.capabilities,
-            extras
+            capabilities
           });
           const architectureRule = supported2 ? conditionalRule(
             descriptor.rules,
@@ -5955,9 +6011,8 @@
             rule: null
           };
         }
-        const supported = descriptor !== void 0 && architectureFeatureSupport("upscale", {
-          capabilities: descriptor.capabilities,
-          extras: resolvedModel?.enhancements?.extras ?? descriptor.extras
+        const supported = descriptor !== void 0 && capabilities !== null && architectureFeatureSupport("upscale", {
+          capabilities
         });
         return {
           supported,
@@ -5966,7 +6021,7 @@
         };
       };
       return {
-        upscaleModes: descriptor?.capabilities.upscaleModes ?? [],
+        upscaleModes: capabilities?.upscaleModes ?? [],
         decision,
         authoringState: (feature, persisted) => {
           const result = decision(feature);
@@ -6011,9 +6066,9 @@
 
   // frontend/architectures/diagnostics.ts
   var issue = (code, message, clipIdx, severity = "error") => ({ severity, code, message, clipIdx });
-  var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities, extras) => {
+  var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities) => {
     const diagnostics = [];
-    const supports = (feature, value) => architectureFeatureSupport(feature, { capabilities, extras, ...value });
+    const supports = (feature, value) => architectureFeatureSupport(feature, { capabilities, ...value });
     const unsupported = (active, feature, key, label, severity) => {
       if (active) {
         const effectiveSeverity = severity ?? (isIgnoredWhenUnsupportedFeature(feature) ? "warning" : "error");
@@ -6238,15 +6293,21 @@
       }
       const architecture = sourceOnly ? architectureById.get("none") : architectureById.get(effectiveArchitectureId);
       if (architecture) {
-        diagnostics.push(
-          ...persistedCapabilityIssues(
-            clip,
-            clipIdx,
-            effectiveArchitectureId,
-            architecture.capabilities,
-            resolvedFirstModel?.enhancements?.extras ?? architecture.extras
-          )
+        const capabilities = effectiveClipCapabilities(
+          clip,
+          architecture,
+          (model) => modelByName.get(model)
         );
+        if (capabilities) {
+          diagnostics.push(
+            ...persistedCapabilityIssues(
+              clip,
+              clipIdx,
+              effectiveArchitectureId,
+              capabilities
+            )
+          );
+        }
       }
       let dormantArchitecture = null;
       let dormantCompatibilityClass = null;

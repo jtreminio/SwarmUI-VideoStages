@@ -46,6 +46,8 @@ export interface ArchitectureModelEntry {
     modelClassId: string | null;
     compatibilityClassId: string | null;
     frameGrid?: number | null;
+    /** Complete effective support for this resolved model; absent only for host-only unknowns. */
+    capabilities?: ArchitectureCapabilities;
     entryAbilities?: string[];
     enhancements?: ModelEnhancements;
     /** Legacy alias retained while persisted profile identities migrate. */
@@ -87,6 +89,7 @@ export interface ArchitectureCatalogModelDto {
     modelClassId: string;
     compatibilityClassId: string;
     frameGrid: number;
+    capabilities: ArchitectureCapabilities;
     entryAbilities?: string[];
     enhancements?: ModelEnhancements;
     /** Legacy alias retained for older clients. */

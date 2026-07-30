@@ -1004,6 +1004,13 @@ describe("stage architecture model filtering", () => {
                 modelClassId: entry.modelClassId as string,
                 compatibilityClassId: entry.compatibilityClassId as string,
                 frameGrid: entry.frameGrid ?? 1,
+                capabilities: structuredClone(
+                    entry.capabilities ??
+                        models.architectures.find(
+                            (architecture) =>
+                                architecture.id === entry.architectureId,
+                        )?.capabilities,
+                ),
                 entryModes: [...entry.entryModes],
             })),
         };

@@ -43,8 +43,6 @@ export const upscaleModeForMethod = (method: string): UpscaleMethodMode => {
 
 export interface FeatureSupportScope {
     capabilities: ArchitectureCapabilities;
-    /** Additive flat capability aliases/enhancements from the architecture or resolved model. */
-    extras?: readonly string[];
     /** Persisted audio source, when the caller needs the value checked too. */
     audioSource?: string;
     /** Persisted upscale method, when the caller needs the mode checked too. */
@@ -68,7 +66,7 @@ export const architectureFeatureSupport = (
             upscaleMode === null
                 ? capability[capabilityScope].includes(wireName)
                 : capability.upscaleModes.includes(upscaleMode);
-        return typedCapability || scope.extras?.includes(wireName) === true;
+        return typedCapability;
     };
 
     let bindings = AUTHORING_FEATURE_CAPABILITIES[feature];

@@ -176,7 +176,9 @@ internal static class VideoExecutionPlanCompiler
             .. plan.Clips
                 .Where(clip =>
                     clip.Architecture is not null
-                    && !clip.Architecture.Capabilities.Clip.HasFlag(
+                    && !ResolvedVideoModelCapabilityPolicy
+                        .ForPlanClip(clip)
+                        .Clip.HasFlag(
                         ClipCapability.AudioSegments))
                 .Select(clip => clip.ClipId),
         ];

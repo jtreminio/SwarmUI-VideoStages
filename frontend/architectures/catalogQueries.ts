@@ -67,7 +67,7 @@ export const buildArchitectureRetargetPlan = (
     const architectureId = entry?.architectureId ?? null;
     const descriptor = architectureDescriptor(catalog, architectureId);
     const profileId = entry?.modelProfileId ?? null;
-    const capabilities = descriptor?.capabilities;
+    const capabilities = entry?.capabilities ?? descriptor?.capabilities;
     return entry && architectureId && profileId && descriptor && capabilities
         ? {
               architectureId,

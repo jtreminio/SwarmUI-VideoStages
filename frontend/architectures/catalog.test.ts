@@ -50,6 +50,8 @@ const dto = {
             modelClassId: "ltx-video",
             compatibilityClassId: "ltx-video",
             frameGrid: 8,
+            capabilities:
+                testArchitectureCatalog().architectures[0].capabilities,
             entryModes: [
                 "text-to-video",
                 "image-to-video",
@@ -64,6 +66,8 @@ const dto = {
             modelClassId: "ltx-image-video",
             compatibilityClassId: "ltx-video",
             frameGrid: 8,
+            capabilities:
+                testArchitectureCatalog().architectures[0].capabilities,
             entryModes: ["image-to-video"],
         },
     ],
@@ -419,6 +423,7 @@ describe("architecture catalog wire contract", () => {
                 modelClassId: model.modelClassId,
                 compatibilityClassId: model.compatibilityClassId,
                 frameGrid: model.frameGrid,
+                capabilities: structuredClone(model.capabilities),
                 entryModes: [...model.entryModes],
             })),
         };

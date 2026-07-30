@@ -19,6 +19,7 @@ import {
     CAPABILITY_WIRE_NAMES,
     isIgnoredWhenUnsupportedFeature,
 } from "./generatedFeatures";
+import { effectiveClipCapabilities } from "./modelCapabilities";
 import { NONE_ARCHITECTURE_ID } from "./none/identity";
 import { createBoundaryCapabilityViews } from "./policy/boundaryPolicy";
 import { createClipStageCapabilityViews } from "./policy/clipStageViews";
@@ -51,14 +52,13 @@ const persistedCapabilityIssues = (
     clipIdx: number,
     architectureId: string,
     capabilities: ArchitectureCapabilities,
-    extras?: readonly string[],
 ): ArchitectureDiagnostic[] => {
     const diagnostics: ArchitectureDiagnostic[] = [];
     const supports = (
         feature: AuthoringFeature,
         value?: { audioSource?: string; upscaleMethod?: string },
     ): boolean =>
-        architectureFeatureSupport(feature, { capabilities, extras, ...value });
+        architectureFeatureSupport(feature, { capabilities, ...value });
     const unsupported = (
         active: boolean,
         feature: AuthoringFeature,
@@ -351,16 +351,21 @@ export const deriveArchitectureDiagnostics = (
             ? architectureById.get("none")
             : architectureById.get(effectiveArchitectureId);
         if (architecture) {
-            diagnostics.push(
-                ...persistedCapabilityIssues(
-                    clip,
-                    clipIdx,
-                    effectiveArchitectureId,
-                    architecture.capabilities,
-                    resolvedFirstModel?.enhancements?.extras ??
-                        architecture.extras,
-                ),
+            const capabilities = effectiveClipCapabilities(
+                clip,
+                architecture,
+                (model) => modelByName.get(model),
             );
+            if (capabilities) {
+                diagnostics.push(
+                    ...persistedCapabilityIssues(
+                        clip,
+                        clipIdx,
+                        effectiveArchitectureId,
+                        capabilities,
+                    ),
+                );
+            }
         }
 
         let dormantArchitecture: string | null = null;

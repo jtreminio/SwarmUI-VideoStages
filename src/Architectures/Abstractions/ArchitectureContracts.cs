@@ -384,8 +384,28 @@ internal sealed record ResolvedVideoModel(
         VideoModelEntryPolicy.FromArchitectureLegacyAlias(Architecture);
 
     /// <summary>
-    /// Optional model-level refinements of the architecture's feature set. Most features are
-    /// architecture-wide; facts whose support depends on the selected checkpoint belong here.
+    /// Optional complete capability set for this resolved handler/model path. Null inherits the
+    /// architecture contract. A non-null value may only narrow that contract; the registry rejects
+    /// model resolutions that attempt to add capabilities the owning architecture did not declare.
+    /// </summary>
+    public ArchitectureCapabilityDescriptor CapabilityNarrowing { get; init; }
+
+    public ArchitectureCapabilityDescriptor EffectiveCapabilities =>
+        CapabilityNarrowing ?? Architecture.Capabilities;
+
+    /// <summary>
+    /// Optional complete audio-source set for this resolved handler/model path. Like capability
+    /// narrowing, null inherits and a non-null value may only remove architecture-declared kinds.
+    /// </summary>
+    public IReadOnlyList<AudioSourceKind> AudioSourceKindNarrowing { get; init; }
+
+    public IReadOnlyList<AudioSourceKind> EffectiveAudioSourceKinds =>
+        AudioSourceKindNarrowing ?? Architecture.AudioSourceKinds;
+
+    /// <summary>
+    /// Non-authorizing model metadata. Feature support belongs to
+    /// <see cref="EffectiveCapabilities"/>; strings here may describe a specialized implementation
+    /// but must never enable an authoring or execution path.
     /// </summary>
     public IReadOnlyList<string> Enhancements { get; init; } = [];
 

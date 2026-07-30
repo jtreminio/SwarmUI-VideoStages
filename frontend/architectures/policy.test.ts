@@ -137,6 +137,47 @@ describe("catalog-backed authoring policy", () => {
         ).toBe(true);
     });
 
+    it("uses typed model narrowing and intersects every active stage model", () => {
+        const models = catalog();
+        const descriptor = models.architectures.find(
+            (entry) => entry.id === "ltx2",
+        );
+        const first = models.entries.find(
+            (entry) => entry.value === "ltx-2.3.safetensors",
+        );
+        const second = models.entries.find((entry) => entry.value === "ltx");
+        if (!descriptor || !first || !second) {
+            throw new Error("missing LTX test model facts");
+        }
+        first.enhancements = {
+            extras: ["ic-lora", "prompt-relay"],
+            referencePositions: [],
+        };
+        first.capabilities = structuredClone(descriptor.capabilities);
+        first.capabilities.stage = first.capabilities.stage.filter(
+            (capability) => capability !== "ic-lora",
+        );
+        second.capabilities = structuredClone(descriptor.capabilities);
+        second.capabilities.clip = second.capabilities.clip.filter(
+            (capability) => capability !== "prompt-relay",
+        );
+        const clip = minimalClip({
+            stages: [
+                minimalStage({ model: first.value }),
+                minimalStage({ model: second.value }),
+            ],
+        });
+        const resolver = createCapabilityViewResolver(models);
+
+        expect(
+            resolver.forStage(clip, clip.stages[0]).decision("stageLoras"),
+        ).toMatchObject({ supported: true });
+        expect(resolver.forClip(clip).decision("icLora").supported).toBe(false);
+        expect(resolver.forClip(clip).decision("promptRelay").supported).toBe(
+            false,
+        );
+    });
+
     it("does not use a persisted architecture hint when Stage 0 is unresolved", () => {
         const clip = minimalClip({
             architecture: "ltx2",

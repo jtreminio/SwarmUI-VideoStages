@@ -7,6 +7,10 @@ import {
     conditionalRule,
     evaluateConditionalRule,
 } from "../conditionalRules";
+import {
+    effectiveClipCapabilities,
+    effectiveModelCapabilities,
+} from "../modelCapabilities";
 import { NONE_ARCHITECTURE_ID } from "../none/identity";
 import { resolveClipFrameGridForLookup } from "../temporalGrid";
 import type {
@@ -110,14 +114,18 @@ export const createClipStageCapabilityViews = (
     const forClip = (clip: Clip): ClipCapabilityView => {
         const identity = effectiveClipIdentity(clip);
         const { architectureId, descriptor } = identity;
-        const resolvedModel = modelByName.get(clip.stages[0]?.model ?? "");
+        const capabilities = descriptor
+            ? effectiveClipCapabilities(clip, descriptor, (model) =>
+                  modelByName.get(model),
+              )
+            : null;
         const label =
             descriptor?.label ??
             (architectureId === NONE_ARCHITECTURE_ID
                 ? "source-only clips"
                 : `unknown architecture '${architectureId}'`);
         const decision = (feature: AuthoringFeature): CapabilityDecision => {
-            if (!descriptor) {
+            if (!descriptor || !capabilities) {
                 return {
                     supported: false,
                     reason: noArchitectureReason(feature),
@@ -133,10 +141,7 @@ export const createClipStageCapabilityViews = (
             );
             const supported =
                 architectureFeatureSupport(feature, {
-                    capabilities: descriptor.capabilities,
-                    extras:
-                        resolvedModel?.enhancements?.extras ??
-                        descriptor.extras,
+                    capabilities,
                 }) && !conditionalRule;
             return {
                 supported,
@@ -162,7 +167,7 @@ export const createClipStageCapabilityViews = (
                     ? frameGridResolution.frameGrid
                     : 1,
             frameGridResolution,
-            audioSourceKinds: descriptor?.capabilities.audioSourceKinds ?? [],
+            audioSourceKinds: capabilities?.audioSourceKinds ?? [],
             decision,
             authoringState: (feature, persisted) => {
                 const result = decision(feature);
@@ -188,15 +193,15 @@ export const createClipStageCapabilityViews = (
             ? NONE_ARCHITECTURE_ID
             : (resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID);
         const descriptor = architectureById.get(architectureId);
+        const capabilities = descriptor
+            ? effectiveModelCapabilities(resolvedModel, descriptor)
+            : null;
         const decision = (
             feature: "stageLoras" | "upscale" | "sampler" | "scheduler",
         ): CapabilityDecision => {
-            if (feature === "stageLoras" && descriptor) {
-                const extras =
-                    resolvedModel?.enhancements?.extras ?? descriptor.extras;
+            if (feature === "stageLoras" && descriptor && capabilities) {
                 const supported = architectureFeatureSupport(feature, {
-                    capabilities: descriptor.capabilities,
-                    extras,
+                    capabilities,
                 });
                 const architectureRule = supported
                     ? conditionalRule(
@@ -235,11 +240,9 @@ export const createClipStageCapabilityViews = (
             }
             const supported =
                 descriptor !== undefined &&
+                capabilities !== null &&
                 architectureFeatureSupport("upscale", {
-                    capabilities: descriptor.capabilities,
-                    extras:
-                        resolvedModel?.enhancements?.extras ??
-                        descriptor.extras,
+                    capabilities,
                 });
             return {
                 supported,
@@ -252,7 +255,7 @@ export const createClipStageCapabilityViews = (
             };
         };
         return {
-            upscaleModes: descriptor?.capabilities.upscaleModes ?? [],
+            upscaleModes: capabilities?.upscaleModes ?? [],
             decision,
             authoringState: (feature, persisted) => {
                 const result = decision(feature);

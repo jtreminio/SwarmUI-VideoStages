@@ -191,6 +191,13 @@ export const buildArchitectureModelCatalog = (
                 compatibilityClassId:
                     backendModel?.compatibilityClassId ?? null,
                 frameGrid: backendModel?.frameGrid ?? null,
+                ...(backendModel?.capabilities === undefined
+                    ? {}
+                    : {
+                          capabilities: structuredClone(
+                              backendModel.capabilities,
+                          ),
+                      }),
                 ...(backendModel?.entryAbilities === undefined
                     ? {}
                     : {

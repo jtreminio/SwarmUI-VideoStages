@@ -123,6 +123,9 @@ const authoritativeDto = (
         modelClassId: "ltx-video",
         compatibilityClassId: "ltx-video",
         frameGrid: 8,
+        capabilities: structuredClone(
+            testArchitectureCatalog().architectures[0].capabilities,
+        ),
         entryModes: [
             "text-to-video",
             "image-to-video",
@@ -458,6 +461,9 @@ describe("videoStagesTimeline", () => {
                     modelClassId: "ltx-video",
                     compatibilityClassId: "ltx-video",
                     frameGrid: 8,
+                    capabilities: structuredClone(
+                        testArchitectureCatalog().architectures[0].capabilities,
+                    ),
                     entryModes: [
                         "text-to-video",
                         "image-to-video",

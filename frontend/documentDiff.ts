@@ -448,7 +448,9 @@ const clipDiffBase = (
         architectureId: targetEntry.architectureId,
         modelProfileId: targetEntry.modelProfileId,
         model: targetEntry.value,
-        capabilities: clone(targetDescriptor.capabilities),
+        capabilities: clone(
+            targetEntry.capabilities ?? targetDescriptor.capabilities,
+        ),
         entryModes: clone(targetEntry.entryModes),
     };
     // Root input and active-stage topology determine whether the target model
