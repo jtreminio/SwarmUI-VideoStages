@@ -155,3 +155,15 @@ export const AUTHORING_FEATURE_CAPABILITIES: Record<
         ],
     ],
 };
+
+export const CONDITIONAL_RULE_CODES = {
+    audioReuseRequiresStages: "audio.reuse.requires_three_stages",
+    normalLoraRequiresSamplingStage: "normal-lora-requires-sampling-stage",
+    promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
+    retakeExcludesReferences: "retake-frame-references-unsupported",
+    retakeRequiresSource: "retake-source-required",
+    uniformTimelineHdr: "mixed-hdr-timeline-unsupported",
+} as const;
+
+export type GeneratedConditionalRuleCode =
+    (typeof CONDITIONAL_RULE_CODES)[keyof typeof CONDITIONAL_RULE_CODES];

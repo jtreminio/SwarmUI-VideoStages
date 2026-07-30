@@ -42,6 +42,10 @@ internal sealed record CapabilityVocabularyEntry(
         && value.HasFlag(Stage);
 }
 
+internal sealed record ConditionalRuleCodeVocabularyEntry(
+    ConditionalRuleCodeId Id,
+    string Code);
+
 internal sealed record AuthoringFeatureVocabularyEntry(
     UnsupportedAuthoringFeature Feature,
     string AuthoringKey,
@@ -186,6 +190,29 @@ internal static class ArchitectureFeatureVocabulary
                 Capability(StageCapability.LatentModelUpscale),
             ]),
     ];
+
+    internal static IReadOnlyList<ConditionalRuleCodeVocabularyEntry>
+        ConditionalRuleCodes
+    { get; } =
+    [
+        new(
+            ConditionalRuleCodeId.AudioReuseRequiresStages,
+            "audio.reuse.requires_three_stages"),
+        new(
+            ConditionalRuleCodeId.NormalLoraRequiresSamplingStage,
+            "normal-lora-requires-sampling-stage"),
+        new(
+            ConditionalRuleCodeId.PromptRelayRequiresFixedLength,
+            "prompt-relay-dynamic-length-unsupported"),
+        new(
+            ConditionalRuleCodeId.RetakeExcludesReferences,
+            "retake-frame-references-unsupported"),
+        new(ConditionalRuleCodeId.RetakeRequiresSource, "retake-source-required"),
+        new(ConditionalRuleCodeId.UniformTimelineHdr, "mixed-hdr-timeline-unsupported"),
+    ];
+
+    internal static string RuleCode(ConditionalRuleCodeId id) =>
+        ConditionalRuleCodes.Single(entry => entry.Id == id).Code;
 
     internal static IEnumerable<string> WireNames(ArchitectureCapability value) =>
         Capabilities.Where(entry => entry.Supports(value)).Select(entry => entry.WireName);
@@ -357,6 +384,16 @@ internal static class ArchitectureFeatureVocabulary
             Line("    ],");
         }
         Line("};");
+        Line();
+        Line("export const CONDITIONAL_RULE_CODES = {");
+        foreach (ConditionalRuleCodeVocabularyEntry rule in ConditionalRuleCodes)
+        {
+            Line($"    {CamelCase(rule.Id.ToString())}: {Quote(rule.Code)},");
+        }
+        Line("} as const;");
+        Line();
+        Line("export type GeneratedConditionalRuleCode =");
+        Line("    (typeof CONDITIONAL_RULE_CODES)[keyof typeof CONDITIONAL_RULE_CODES];");
 
         return result.ToString();
 

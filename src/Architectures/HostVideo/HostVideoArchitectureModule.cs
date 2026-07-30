@@ -243,7 +243,8 @@ internal sealed class HostVideoArchitectureModule :
             {
                 diagnostics.Add(Error(
                     clip,
-                    "normal-lora-requires-sampling-stage",
+                    ArchitectureFeatureVocabulary.RuleCode(
+                        ConditionalRuleCodeId.NormalLoraRequiresSamplingStage),
                     "Normal LoRAs require a sampling stage and cannot run on a passthrough.",
                     stage.Id,
                     stage.ClipStageRawIndex));

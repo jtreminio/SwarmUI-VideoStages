@@ -1376,7 +1376,114 @@
     return choices;
   };
 
-  // frontend/architectures/conditionalRules.ts
+  // frontend/architectures/generatedFeatures.ts
+  var CAPABILITY_WIRE_NAMES = {
+    architecture: {
+      generatedEntry: "generated-entry",
+      sourcedEntry: "sourced-entry",
+      multiStage: "multi-stage",
+      nativeAudio: "native-audio",
+      decodedOutput: "decoded-output"
+    },
+    clip: {
+      sourceVideo: "source-video",
+      prompts: "prompts",
+      promptRelay: "prompt-relay",
+      references: "references",
+      referenceFraming: "reference-framing",
+      retake: "retake",
+      audioSources: "audio-sources",
+      audioSegments: "audio-segments",
+      audioReuse: "audio-reuse",
+      audioDerivedDuration: "audio-derived-duration",
+      controlSignalDerivedDuration: "control-signal-derived-duration"
+    },
+    stage: {
+      imageInput: "image-input",
+      videoInput: "video-input",
+      pixelUpscale: "pixel-upscale",
+      modelUpscale: "model-upscale",
+      latentUpscale: "latent-upscale",
+      latentModelUpscale: "latent-model-upscale",
+      lora: "lora",
+      icLora: "ic-lora",
+      hdr: "hdr",
+      frameReferences: "frame-references"
+    }
+  };
+  var IGNORED_WHEN_UNSUPPORTED_FEATURES = [
+    "frameReferences",
+    "referenceFraming",
+    "retake",
+    "promptRelay",
+    "clipAudio",
+    "audioReuse",
+    "audioDerivedDuration",
+    "controlSignalDerivedDuration",
+    "stageLoras",
+    "icLora",
+    "hdr",
+    "upscale"
+  ];
+  var AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY = [
+    "frameReferences"
+  ];
+  var doesAuthoringFeatureRequireEveryCapability = (feature) => AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY.includes(feature);
+  var isIgnoredWhenUnsupportedFeature = (feature) => IGNORED_WHEN_UNSUPPORTED_FEATURES.includes(feature);
+  var AUTHORING_FEATURE_LABELS = {
+    multiStage: "Multiple stages",
+    sourceVideo: "Source video",
+    frameReferences: "Frame references",
+    referenceFraming: "Reference framing",
+    retake: "Retakes",
+    majorPrompt: "Major prompts",
+    promptRelay: "Relay prompts",
+    clipAudio: "Clip audio",
+    audioReuse: "Captured stage audio reuse",
+    audioDerivedDuration: "Audio-derived clip duration",
+    controlSignalDerivedDuration: "Control-signal-derived clip duration",
+    stageLoras: "LoRAs",
+    icLora: "IC-LoRA",
+    hdr: "HDR",
+    upscale: "Stage upscaling"
+  };
+  var AUTHORING_FEATURE_CAPABILITIES = {
+    multiStage: [
+      ["architecture", CAPABILITY_WIRE_NAMES.architecture.multiStage, null]
+    ],
+    sourceVideo: [["clip", CAPABILITY_WIRE_NAMES.clip.sourceVideo, null]],
+    frameReferences: [
+      ["clip", CAPABILITY_WIRE_NAMES.clip.references, null],
+      ["stage", CAPABILITY_WIRE_NAMES.stage.frameReferences, null]
+    ],
+    referenceFraming: [
+      ["clip", CAPABILITY_WIRE_NAMES.clip.referenceFraming, null]
+    ],
+    retake: [["clip", CAPABILITY_WIRE_NAMES.clip.retake, null]],
+    majorPrompt: [["clip", CAPABILITY_WIRE_NAMES.clip.prompts, null]],
+    promptRelay: [["clip", CAPABILITY_WIRE_NAMES.clip.promptRelay, null]],
+    clipAudio: [["clip", CAPABILITY_WIRE_NAMES.clip.audioSources, null]],
+    audioReuse: [["clip", CAPABILITY_WIRE_NAMES.clip.audioReuse, null]],
+    audioDerivedDuration: [
+      ["clip", CAPABILITY_WIRE_NAMES.clip.audioDerivedDuration, null]
+    ],
+    controlSignalDerivedDuration: [
+      ["clip", CAPABILITY_WIRE_NAMES.clip.controlSignalDerivedDuration, null]
+    ],
+    stageLoras: [["stage", CAPABILITY_WIRE_NAMES.stage.lora, null]],
+    icLora: [["stage", CAPABILITY_WIRE_NAMES.stage.icLora, null]],
+    hdr: [["stage", CAPABILITY_WIRE_NAMES.stage.hdr, null]],
+    upscale: [
+      ["stage", CAPABILITY_WIRE_NAMES.stage.pixelUpscale, "pixel"],
+      ["stage", CAPABILITY_WIRE_NAMES.stage.modelUpscale, "model"],
+      ["stage", CAPABILITY_WIRE_NAMES.stage.latentUpscale, "latent"],
+      [
+        "stage",
+        CAPABILITY_WIRE_NAMES.stage.latentModelUpscale,
+        "latent-model"
+      ]
+    ]
+  };
   var CONDITIONAL_RULE_CODES = {
     audioReuseRequiresStages: "audio.reuse.requires_three_stages",
     normalLoraRequiresSamplingStage: "normal-lora-requires-sampling-stage",
@@ -1385,6 +1492,8 @@
     retakeRequiresSource: "retake-source-required",
     uniformTimelineHdr: "mixed-hdr-timeline-unsupported"
   };
+
+  // frontend/architectures/conditionalRules.ts
   var KNOWN_CONDITIONAL_RULE_CODES = new Set(
     Object.values(CONDITIONAL_RULE_CODES)
   );
@@ -1579,115 +1688,6 @@
       label: `${value} (unsupported persisted value)`
     }));
     return options;
-  };
-
-  // frontend/architectures/generatedFeatures.ts
-  var CAPABILITY_WIRE_NAMES = {
-    architecture: {
-      generatedEntry: "generated-entry",
-      sourcedEntry: "sourced-entry",
-      multiStage: "multi-stage",
-      nativeAudio: "native-audio",
-      decodedOutput: "decoded-output"
-    },
-    clip: {
-      sourceVideo: "source-video",
-      prompts: "prompts",
-      promptRelay: "prompt-relay",
-      references: "references",
-      referenceFraming: "reference-framing",
-      retake: "retake",
-      audioSources: "audio-sources",
-      audioSegments: "audio-segments",
-      audioReuse: "audio-reuse",
-      audioDerivedDuration: "audio-derived-duration",
-      controlSignalDerivedDuration: "control-signal-derived-duration"
-    },
-    stage: {
-      imageInput: "image-input",
-      videoInput: "video-input",
-      pixelUpscale: "pixel-upscale",
-      modelUpscale: "model-upscale",
-      latentUpscale: "latent-upscale",
-      latentModelUpscale: "latent-model-upscale",
-      lora: "lora",
-      icLora: "ic-lora",
-      hdr: "hdr",
-      frameReferences: "frame-references"
-    }
-  };
-  var IGNORED_WHEN_UNSUPPORTED_FEATURES = [
-    "frameReferences",
-    "referenceFraming",
-    "retake",
-    "promptRelay",
-    "clipAudio",
-    "audioReuse",
-    "audioDerivedDuration",
-    "controlSignalDerivedDuration",
-    "stageLoras",
-    "icLora",
-    "hdr",
-    "upscale"
-  ];
-  var AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY = [
-    "frameReferences"
-  ];
-  var doesAuthoringFeatureRequireEveryCapability = (feature) => AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY.includes(feature);
-  var isIgnoredWhenUnsupportedFeature = (feature) => IGNORED_WHEN_UNSUPPORTED_FEATURES.includes(feature);
-  var AUTHORING_FEATURE_LABELS = {
-    multiStage: "Multiple stages",
-    sourceVideo: "Source video",
-    frameReferences: "Frame references",
-    referenceFraming: "Reference framing",
-    retake: "Retakes",
-    majorPrompt: "Major prompts",
-    promptRelay: "Relay prompts",
-    clipAudio: "Clip audio",
-    audioReuse: "Captured stage audio reuse",
-    audioDerivedDuration: "Audio-derived clip duration",
-    controlSignalDerivedDuration: "Control-signal-derived clip duration",
-    stageLoras: "LoRAs",
-    icLora: "IC-LoRA",
-    hdr: "HDR",
-    upscale: "Stage upscaling"
-  };
-  var AUTHORING_FEATURE_CAPABILITIES = {
-    multiStage: [
-      ["architecture", CAPABILITY_WIRE_NAMES.architecture.multiStage, null]
-    ],
-    sourceVideo: [["clip", CAPABILITY_WIRE_NAMES.clip.sourceVideo, null]],
-    frameReferences: [
-      ["clip", CAPABILITY_WIRE_NAMES.clip.references, null],
-      ["stage", CAPABILITY_WIRE_NAMES.stage.frameReferences, null]
-    ],
-    referenceFraming: [
-      ["clip", CAPABILITY_WIRE_NAMES.clip.referenceFraming, null]
-    ],
-    retake: [["clip", CAPABILITY_WIRE_NAMES.clip.retake, null]],
-    majorPrompt: [["clip", CAPABILITY_WIRE_NAMES.clip.prompts, null]],
-    promptRelay: [["clip", CAPABILITY_WIRE_NAMES.clip.promptRelay, null]],
-    clipAudio: [["clip", CAPABILITY_WIRE_NAMES.clip.audioSources, null]],
-    audioReuse: [["clip", CAPABILITY_WIRE_NAMES.clip.audioReuse, null]],
-    audioDerivedDuration: [
-      ["clip", CAPABILITY_WIRE_NAMES.clip.audioDerivedDuration, null]
-    ],
-    controlSignalDerivedDuration: [
-      ["clip", CAPABILITY_WIRE_NAMES.clip.controlSignalDerivedDuration, null]
-    ],
-    stageLoras: [["stage", CAPABILITY_WIRE_NAMES.stage.lora, null]],
-    icLora: [["stage", CAPABILITY_WIRE_NAMES.stage.icLora, null]],
-    hdr: [["stage", CAPABILITY_WIRE_NAMES.stage.hdr, null]],
-    upscale: [
-      ["stage", CAPABILITY_WIRE_NAMES.stage.pixelUpscale, "pixel"],
-      ["stage", CAPABILITY_WIRE_NAMES.stage.modelUpscale, "model"],
-      ["stage", CAPABILITY_WIRE_NAMES.stage.latentUpscale, "latent"],
-      [
-        "stage",
-        CAPABILITY_WIRE_NAMES.stage.latentModelUpscale,
-        "latent-model"
-      ]
-    ]
   };
 
   // frontend/architectures/policy/featureValues.ts

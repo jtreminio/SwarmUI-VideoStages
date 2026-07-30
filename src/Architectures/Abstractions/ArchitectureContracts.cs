@@ -158,6 +158,21 @@ internal sealed record UniformTimelineFeatureRuleConstraints(
     ConditionalRuleFeature UniformTimelineFeature,
     int MinimumTimelineClips) : RuleConstraints;
 
+/// <summary>
+/// Every conditional rule the frontend evaluates. The wire spelling lives in
+/// <see cref="ArchitectureFeatureVocabulary.ConditionalRuleCodes"/>; publishing a rule whose code is
+/// not registered here fails the vocabulary coverage test.
+/// </summary>
+internal enum ConditionalRuleCodeId
+{
+    AudioReuseRequiresStages,
+    NormalLoraRequiresSamplingStage,
+    PromptRelayRequiresFixedLength,
+    RetakeExcludesReferences,
+    RetakeRequiresSource,
+    UniformTimelineHdr,
+}
+
 internal sealed record RuleDecision(
     RuleSupport Support,
     string Code,

@@ -1,18 +1,14 @@
 import { activeStageCount } from "../clipSemantics";
 import type { Clip, Stage } from "../types";
+import {
+    CONDITIONAL_RULE_CODES,
+    type GeneratedConditionalRuleCode,
+} from "./generatedFeatures";
 import type { CapabilityRuleDecision } from "./types";
 
-export const CONDITIONAL_RULE_CODES = {
-    audioReuseRequiresStages: "audio.reuse.requires_three_stages",
-    normalLoraRequiresSamplingStage: "normal-lora-requires-sampling-stage",
-    promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
-    retakeExcludesReferences: "retake-frame-references-unsupported",
-    retakeRequiresSource: "retake-source-required",
-    uniformTimelineHdr: "mixed-hdr-timeline-unsupported",
-} as const;
+export { CONDITIONAL_RULE_CODES };
 
-export type ConditionalRuleCode =
-    (typeof CONDITIONAL_RULE_CODES)[keyof typeof CONDITIONAL_RULE_CODES];
+export type ConditionalRuleCode = GeneratedConditionalRuleCode;
 
 const KNOWN_CONDITIONAL_RULE_CODES = new Set<string>(
     Object.values(CONDITIONAL_RULE_CODES),

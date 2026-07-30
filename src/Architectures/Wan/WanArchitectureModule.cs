@@ -53,8 +53,9 @@ internal sealed class WanArchitectureModule :
             Ti2v5bProfileId),
     ];
 
-    internal const string NormalLoraRequiresSamplingStageCode =
-        "normal-lora-requires-sampling-stage";
+    internal static string NormalLoraRequiresSamplingStageCode { get; } =
+        ArchitectureFeatureVocabulary.RuleCode(
+            ConditionalRuleCodeId.NormalLoraRequiresSamplingStage);
 
     internal const string NormalLoraRequiresSamplingStageReason =
         "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.";

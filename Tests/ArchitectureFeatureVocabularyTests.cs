@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using Xunit;
 
@@ -44,6 +45,32 @@ public class ArchitectureFeatureVocabularyTests
                 .Where(entry => entry.ConditionalRuleFeature is not null)
                 .Select(entry => entry.ConditionalRuleFeature!.Value)
                 .OrderBy(value => value));
+    }
+
+    [Fact]
+    public void Every_published_conditional_rule_code_is_registered()
+    {
+        Assert.Equal(
+            Enum.GetValues<ConditionalRuleCodeId>().OrderBy(value => value),
+            ArchitectureFeatureVocabulary.ConditionalRuleCodes
+                .Select(entry => entry.Id)
+                .OrderBy(value => value));
+
+        string[] registered =
+        [
+            .. ArchitectureFeatureVocabulary.ConditionalRuleCodes
+                .Select(entry => entry.Code),
+        ];
+        string[] published =
+        [
+            .. VideoArchitectureManifest.ProductionModules
+                .SelectMany(module => module.Descriptor.Rules)
+                .Select(rule => rule.Code)
+                .Distinct(StringComparer.Ordinal),
+        ];
+
+        Assert.Empty(published.Except(registered, StringComparer.Ordinal));
+        Assert.Empty(registered.Except(published, StringComparer.Ordinal));
     }
 
     [Fact]

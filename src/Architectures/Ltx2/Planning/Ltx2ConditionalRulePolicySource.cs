@@ -11,7 +11,8 @@ internal static class Ltx2ConditionalRulePolicySource
 {
     internal static RuleDecision AudioReuseRequiresThreeStages { get; } =
         RuleDecision.Conditional(
-            "audio.reuse.requires_three_stages",
+            ArchitectureFeatureVocabulary.RuleCode(
+                ConditionalRuleCodeId.AudioReuseRequiresStages),
             "Audio reuse needs at least three active stages: generate, capture, then reuse.",
             RuleScope.Clip,
             new MinimumActiveStagesRuleConstraints(
@@ -21,14 +22,16 @@ internal static class Ltx2ConditionalRulePolicySource
 
     internal static RuleDecision PromptRelayRequiresFixedLength { get; } =
         RuleDecision.Conditional(
-            "prompt-relay-dynamic-length-unsupported",
+            ArchitectureFeatureVocabulary.RuleCode(
+                ConditionalRuleCodeId.PromptRelayRequiresFixedLength),
             "Prompt relay requires a fixed frame count and cannot be combined with audio-owned or ControlNet-owned clip length.",
             RuleScope.Clip,
             new FixedFrameCountRuleConstraints(true));
 
     internal static RuleDecision RetakeAndReferencesAreExclusive { get; } =
         RuleDecision.Conditional(
-            "retake-frame-references-unsupported",
+            ArchitectureFeatureVocabulary.RuleCode(
+                ConditionalRuleCodeId.RetakeExcludesReferences),
             "Retake and frame references are mutually exclusive because guide merging would overwrite the retake mask.",
             RuleScope.Stage,
             new MutuallyExclusiveRuleConstraints(
@@ -36,7 +39,8 @@ internal static class Ltx2ConditionalRulePolicySource
 
     internal static RuleDecision RetakeRequiresSource { get; } =
         RuleDecision.Conditional(
-            "retake-source-required",
+            ArchitectureFeatureVocabulary.RuleCode(
+                ConditionalRuleCodeId.RetakeRequiresSource),
             "Retake requires a sourced clip or a global Refine Video source.",
             RuleScope.Clip,
             new RequiredEntryModesRuleConstraints(
@@ -44,7 +48,8 @@ internal static class Ltx2ConditionalRulePolicySource
 
     internal static RuleDecision HdrRequiresUniformTimeline { get; } =
         RuleDecision.Conditional(
-            "mixed-hdr-timeline-unsupported",
+            ArchitectureFeatureVocabulary.RuleCode(
+                ConditionalRuleCodeId.UniformTimelineHdr),
             "HDR IC-LoRA activation must be uniform across the complete timeline.",
             RuleScope.Architecture,
             new UniformTimelineFeatureRuleConstraints(
