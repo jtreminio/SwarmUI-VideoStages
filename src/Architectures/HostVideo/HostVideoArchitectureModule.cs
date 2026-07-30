@@ -13,7 +13,7 @@ internal sealed class HostVideoArchitectureModule :
     IVideoArchitectureModule,
     IArchitectureEffectiveRequestProjector
 {
-    private sealed record ProvenHostPath(
+    internal sealed record ProvenHostPath(
         string CompatibilityClassId,
         string ModelClassId,
         VideoModelEntryAbility EntryAbilities);
@@ -22,7 +22,7 @@ internal sealed class HostVideoArchitectureModule :
 
     internal static ModelProfileId ProfileId { get; } = new("host-video");
 
-    private static readonly IReadOnlyList<ProvenHostPath> ProvenPaths =
+    internal static IReadOnlyList<ProvenHostPath> ProvenPaths { get; } =
     [
         Path(
             T2IModelClassSorter.CompatHunyuanVideo1_5,
