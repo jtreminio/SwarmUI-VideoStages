@@ -8,7 +8,9 @@ This is the start-here map for two end-to-end paths:
 
 For the detailed execution and frontend designs, continue to
 [`ARCHITECTURE.md`](../ARCHITECTURE.md) and
-[`FRONTEND_ARCHITECTURE.md`](../FRONTEND_ARCHITECTURE.md).
+[`FRONTEND_ARCHITECTURE.md`](../FRONTEND_ARCHITECTURE.md). For exact workflow
+priorities, runtime lifetimes, and stage-loop ownership, use
+[`STAGE_RUNTIME.md`](STAGE_RUNTIME.md).
 
 VideoStages is a modular monolith with specialized overlays and a conservative
 host-video fallback. Production registers the source-only `none` architecture,
@@ -120,12 +122,12 @@ or frontend classification cannot authorize an unsupported model.
 `Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`,
 `HostVideoArchitectureModule.Descriptor`, and `NoneArchitecture.Descriptor`
 are typed `VideoArchitectureDescriptor` values.
-Entry modes are owned by each model profile. The descriptor's entry-mode list
-is only the distinct catalog projection used for architecture overviews; model
-selection, diagnostics, conversion, planning, and runtime authorization all
-resolve the exact selected profile. Every accepted WAN model publishes text,
-image, and source entry. Those entry modes describe the current request's
-input, not different user-facing WAN model categories.
+Each resolved model owns its entry abilities and complete effective
+capabilities. The descriptor publishes architecture defaults; model selection,
+diagnostics, conversion, planning, and runtime authorization use the exact
+selected model facts, which may narrow those defaults. Every accepted WAN model
+publishes text, image, and source entry. Those entry modes describe the current
+request's input, not different user-facing WAN model categories.
 
 WAN publishes same-compatibility-family multi-stage chaining, video-only output, a
 four-frame profile grid, and cut-only boundaries. Every WAN compatibility alias
@@ -140,8 +142,8 @@ Refine-video and audio capabilities remain absent. A request-global refine
 source cannot coexist with a clip-local sourced WAN timeline. The same typed
 boundary/rule objects feed backend validation and frontend publication.
 
-The generic descriptor publishes one user-facing `Video` profile and supports
-source entry through the same neutral conformance path used by WAN. Model-level
+The generic descriptor supports source entry through the same neutral
+conformance path used by WAN. Model-level
 facts still say whether a checkpoint can enter from text, image, or both, so a
 text-only model such as Mochi cannot occupy a decoded later-stage role. The
 baseline advertises prompts, ordinary LoRAs, source video, pixel resize, decoded output, and
@@ -153,12 +155,16 @@ advanced upscalers, end-frame conditioning, swap, or HDR.
 the currently resolved, session-authorized host models to:
 
 ```text
-architectures[] = descriptor + capabilities + profiles + rules
-models[]        = modelName + architectureId + modelProfileId
+schemaVersion   = 2
+architectures[] = id + label + complete capabilities + boundary rules + rules
+models[]        = identity + core facts + frame grid + entry abilities
+                  + complete effective capabilities + reference positions
 ```
 
 `VideoStagesApi.VideoStagesGetArchitectureCatalog` exposes that projection as
-the `VideoStagesGetArchitectureCatalog` API call.
+the `VideoStagesGetArchitectureCatalog` API call. The v2 wire deliberately has
+no profile table, extras overlay, duplicate entry-mode alias, or separate
+output-capability alias.
 
 ### A3. Frontend boot and catalog adoption
 
@@ -203,6 +209,11 @@ last-known catalog remains active. Refresh failure enters `stale`, retains
 that exact DTO and its rendered capability-backed UI, and shows a nonblocking
 warning with Retry.
 
+The v2 decoder requires exact root, architecture, model, enhancement, and rule
+keys; it rejects unknown/missing fields, duplicate architecture/model IDs,
+dangling architecture references, unknown capability values, and malformed
+constraints rather than constructing partial authority.
+
 The host param-refresh hook uses forced refresh, so newly installed models can
 appear without a page reload and without a temporary loss of authority.
 `buildArchitectureModelCatalog` uses backend DTO identity only: it may decorate
@@ -214,12 +225,15 @@ capabilities and perform no model recognition.
 
 ### A4. Selection, identity, and feature visibility
 
-`getRootDefaults` builds `RootDefaults.modelCatalog` from the current SwarmUI
-model dropdown and the authoritative backend catalog. Without that catalog the
-model catalog contains no capability or model-identity authority.
+`captureAuthoringTransactionSnapshot` reads catalog state once, then builds
+`RootDefaults.modelCatalog`, the capability resolver, and generated entry mode
+from that exact DTO plus current SwarmUI inputs. One synchronous render, save,
+or command dispatch passes that snapshot through its collaborators instead of
+rereading live state. Without a ready or retained catalog the model catalog
+contains no capability or model-identity authority.
 `appendStageModelSection` uses it to build model options:
 
-- stage 0 may select a model whose exact profile supports the clip's entry mode;
+- stage 0 may select a model whose resolved facts support the clip's entry mode;
 - later stages use `architectureCatalogView` and stay inside the clip's
   architecture;
 - unsupported persisted values remain visible and disabled.
@@ -231,10 +245,22 @@ cannot change the clip architecture.
 
 `deriveClipArchitectureIdentity` verifies catalog identity and same-architecture
 authored stages. A sourced clip with no active stage executes as `none` while
-retaining dormant authored identity for restoration.
+retaining dormant authored identity for restoration. Persisted
+`architectureHint` and profile hints are repair/display data only: a resolved
+stage-0 model outranks them, and an unresolved hint never enables authoring
+controls.
 
-`currentCapabilityViewResolver` creates catalog-backed `ClipCapabilityView`,
-`StageCapabilityView`, and boundary views. Timeline tracks and detail panels ask
+| Fact | Authority | What it controls |
+|---|---|---|
+| Executable architecture/profile identity | Backend-resolved stage-0 model | Planning, runtime dispatch, clip lock |
+| Architecture descriptor capabilities | Backend architecture catalog record | Family overview and default policy |
+| Effective model capabilities, grid, entry abilities, reference positions | Backend resolved-model catalog record | Model picker, sidebar/timeline feature gates, conversion |
+| Persisted `architectureHint` / profile hints | Authoring document | Unresolved-model display and repair only |
+| Local architecture behavior/panel map | Frontend implementation | How an already-authorized bespoke control renders/edits |
+
+The transaction's `CapabilityViewResolver` creates catalog-backed
+`ClipCapabilityView`, `StageCapabilityView`, and boundary views. Timeline
+tracks and detail panels ask
 `decision(feature)` / `authoringState(feature, hasPersistedValue)` to decide
 visibility, enablement, reason text, and repair behavior. Unsupported persisted
 data stays visible for removal rather than disappearing during normalization.
@@ -243,9 +269,10 @@ Architecture-specific *how* behavior dispatches separately by architecture ID
 through the local `ArchitectureBehavior` map. Only the `ltx2` ID selects
 `ltx2Behavior` today, and the interface is mostly IC-LoRA-shaped. LTX DOM
 rendering is keyed directly by the same ID in `authoringPanels.ts`. These maps
-own implementation behavior only; labels, profiles, capabilities, and rules
-remain backend DTO data. Wan needs no custom frontend behavior, so reassess this
-abstraction only when another architecture presents a concrete bespoke-UI need.
+own implementation behavior only; labels, resolved model identities,
+capabilities, and rules remain backend DTO data. WAN needs no custom frontend
+behavior, so reassess this abstraction only when another architecture presents
+a concrete bespoke-UI need.
 
 ### A5. Opaque architecture-owned authoring payloads
 
@@ -259,7 +286,7 @@ not understand that data.
 In Stage 0 the envelope is preservation-only: it is frontend state, no adapter
 parses it, and the backend never reads it (`documentCodec.ts` emits it,
 `AuthoringDocumentContractTests` classifies it as backend-unread). Typed parsing
-would belong to the adapter named by the clip's `architecture` ID, and giving it
+would belong to the adapter selected by resolved clip identity, and giving it
 one means surfacing raw JSON on `ClipSpec` first. Do not confuse this envelope
 with the backend's `IArchitectureClipPayload`, which is a runtime compilation
 produced from the already-parsed common `ClipSpec` and shares only the name.
@@ -306,9 +333,10 @@ VideoStagesJsonReader / VideoStagesSpecParser
     → VideoExecutionPlanContext
 ```
 
-`VideoStagesJsonReader` requires schema version 5.
-`VideoStagesSpecParser` applies prompt overrides and parses clips, authored
-stages, source media, dimensions, FPS, and timeline audio into
+`VideoStagesJsonReader` requires schema version 6 after applying its only
+bounded migration: a version-5 clip's `architecture` field becomes
+`architectureHint`. `VideoStagesSpecParser` applies prompt overrides and parses
+clips, authored stages, source media, dimensions, FPS, and timeline audio into
 `VideoStagesSpec`.
 
 ### B2. Select `ArchitectureId` and compile opaque payloads
@@ -318,9 +346,10 @@ model, including skipped stages, through the same session-authorized backend
 registry used for catalog projection. A forbidden model is unresolved and
 blocks planning before graph mutation. For a generated
 clip, the first authored stage selects the module and `ArchitectureId`;
-`ValidateClipIdentity` checks persisted identity and
-`ValidateSameArchitecture` requires all authored stages to use that
-architecture. A source-only executable clip receives `NoneArchitectureModule`.
+`ValidateClipIdentity` compares persisted hints for diagnostics only, and
+`ValidateSameArchitecture` requires all authored stages to use the resolved
+architecture. A source-only executable clip receives
+`NoneArchitectureModule`.
 
 `VideoExecutionPlanCompiler.Compile` is pure and graph-independent. For each
 clip it:
@@ -372,9 +401,11 @@ Blocking `PlanDiagnostic` values are thrown by
 ### B3. Preflight before VideoStages graph mutation
 
 `Runner.PreflightRequest` is the first registered VideoStages workflow phase.
-It calls `VideoArchitectureExecutionHost.PreflightRequest`, which invokes each
-active runtime provider with graph-free
-`ArchitectureRequestPreflightContext`.
+It is the only caller of `VideoExecutionPlanContext.PrepareRequest`, which
+constructs one `VideoArchitectureExecutionHost` and invokes each active runtime
+provider with graph-free `ArchitectureRequestPreflightContext`. Every later
+phase calls `RequirePrepared`; preparation is never lazy after graph mutation
+has begun.
 
 `Ltx2RequestPreflight.Resolve` checks planned IC-LoRA dependencies: required
 ComfyUI-LTXVideo nodes/features and resolvable IC-LoRA weights. Blocking
@@ -393,6 +424,8 @@ it. Global creativity is expressed through authored stage Control values.
 
 “Before mutation” here means before **VideoStages** mutation. SwarmUI may
 already have built host graph state that VideoStages captures or replaces.
+The full prepared-state machine and exact eight-step priority table are in
+[`STAGE_RUNTIME.md`](STAGE_RUNTIME.md).
 
 ### B4. Host phases prepare selected architecture state
 
@@ -489,9 +522,12 @@ The `none` path uses `SourceOnlyGenerationSession` and
 ### B6b. WAN direct runtime execution
 
 `WanGenerationSessionFactory` snapshots the host root media and VAE.
-`WanGenerationSession` prepares each hard-cut clip independently, then loops
-its compiled stages. Generated stage 0 resets to the captured root and
-delegates that first-image input to SwarmUI's
+`WanGenerationSession` prepares each hard-cut clip independently, then delegates
+common iteration, scope restoration, pixel-upscale ordering, passthrough
+handling, intermediate publication, terminal trim, and artifact capture to
+`HostVideoStageEngine`. WAN supplies only its opaque stage settings,
+passthrough frame-count resolver, and generating-stage callback. Generated stage
+0 resets to the captured root and delegates that first-image input to SwarmUI's
 `WorkflowGenerator.CreateImageToVideo`. A text-input stage 0 prepares the
 authored model and prompt conditioning through the host loader and creates an
 unconditioned WAN latent without a start image. The exact internal node path
@@ -567,13 +603,13 @@ models are accepted from host facts and can use text, first-image, or source
 entry as request inputs. Legacy swap controls are warned and ignored; two noise
 models are two authored stages.
 
-The session publishes authored intermediates and
-removes every host per-pass trim. For a terminal single-clip session it applies
-the global trim after the final stage; for a multi-clip timeline, common
-assembly applies that trim once over the joined timeline. The session returns
-the final decoded video-only artifact. A new generated hard-cut clip resets to
-the captured root rather than consuming the previous clip. LTX/Wan boundaries
-are neutral hard cuts; no family assembler crosses the architecture boundary.
+The shared engine publishes authored intermediates and removes every host
+per-pass trim. For a terminal single-clip session it applies the global trim
+after the final stage; for a multi-clip timeline, common assembly applies that
+trim once over the joined timeline. It returns the final decoded video-only
+artifact. A new generated hard-cut clip resets to the captured root rather than
+consuming the previous clip. LTX/WAN boundaries are neutral hard cuts; no
+family assembler crosses the architecture boundary.
 
 ### B6c. Generic host-video runtime execution
 
@@ -588,13 +624,14 @@ references.
 
 Text entry prepares the selected host model and conditioning, then calls the
 host's family-specific `EmptyImage` video-latent primitive before sampling and
-decoding. `HostVideoRootMediaHandoff` and `HostVideoDecodedStageInput` contain
-the root restoration and decoded-media boundary mechanics shared with WAN;
-family scheduling stays in each architecture session. Generic passes clear
-ambient audio, native audio-reference input, swap, and end-frame values inside
-reversible scopes. A core-pass pre-handler also neutralizes request-global
-swap, end-frame, and creativity-derived start-step state on the discarded host
-pass only; authored stage sections are not intercepted.
+decoding. `HostVideoRootMediaHandoff`, `HostVideoDecodedStageInput`, and
+`HostVideoStageEngine` contain the root restoration, decoded-media boundary,
+and stage-loop mechanics shared with WAN. Generic host video retains its own
+stock-path scheduling callback. Generic passes clear ambient audio, native
+audio-reference input, swap, and end-frame values inside reversible scopes. A
+core-pass pre-handler also neutralizes request-global swap, end-frame, and
+creativity-derived start-step state on the discarded host pass only; authored
+stage sections are not intercepted.
 
 ### B7. Return neutral artifacts and publish
 

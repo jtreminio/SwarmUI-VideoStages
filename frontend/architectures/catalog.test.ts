@@ -115,6 +115,26 @@ describe("architecture catalog wire contract", () => {
         };
         retiredModelAlias.models[0].entryModes = ["text-to-video"];
         expect(parseVideoArchitectureCatalog(retiredModelAlias)).toBeNull();
+
+        const retiredCapabilityAlias = structuredClone(dto) as unknown as {
+            architectures: Array<{
+                capabilities: Record<string, unknown>;
+            }>;
+        };
+        retiredCapabilityAlias.architectures[0].capabilities.output = [
+            "decoded-video",
+        ];
+        expect(
+            parseVideoArchitectureCatalog(retiredCapabilityAlias),
+        ).toBeNull();
+
+        const retiredRuleAlias = structuredClone(dto) as unknown as {
+            architectures: Array<{
+                rules: Array<Record<string, unknown>>;
+            }>;
+        };
+        retiredRuleAlias.architectures[0].rules[0].extras = {};
+        expect(parseVideoArchitectureCatalog(retiredRuleAlias)).toBeNull();
     });
 
     it("requires host model identity, capability, and entry facts", () => {
@@ -224,6 +244,14 @@ describe("architecture catalog wire contract", () => {
         extra.architectures[0].boundaryRules.dissolve =
             extra.architectures[0].boundaryRules.cut;
         expect(parseVideoArchitectureCatalog(extra)).toBeNull();
+
+        const extraBoundaryConstraint = structuredClone(dto);
+        const extraConstraints = extraBoundaryConstraint.architectures[0]
+            .boundaryRules.continue.constraints as Record<string, unknown>;
+        extraConstraints.unpublishedBehavior = true;
+        expect(
+            parseVideoArchitectureCatalog(extraBoundaryConstraint),
+        ).toBeNull();
 
         const wrongScope = structuredClone(dto);
         wrongScope.architectures[0].boundaryRules.continue.scope = "clip";

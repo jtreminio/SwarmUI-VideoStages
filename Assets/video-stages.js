@@ -1874,17 +1874,23 @@
   var isReferencePositionArray = (value) => isUniqueStringArray(value) && value.every(
     (entry) => REFERENCE_POSITIONS.includes(entry)
   );
+  var hasExactKeys = (value, expected) => Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
   var isRuleDecision = (value, allowedScopes) => {
-    if (!isRecord2(value) || !["supported", "unsupported", "conditional"].includes(
-      `${value.support}`
-    ) || !isTrimmedNonEmpty(value.code) || !isTrimmedNonEmpty(value.reason) || ![
+    if (!isRecord2(value) || !hasExactKeys(value, [
+      "support",
+      "code",
+      "reason",
+      "scope",
+      "entityId",
+      "constraints"
+    ]) || typeof value.support !== "string" || !["supported", "unsupported", "conditional"].includes(value.support) || !isTrimmedNonEmpty(value.code) || !isTrimmedNonEmpty(value.reason) || typeof value.scope !== "string" || ![
       "architecture",
       "model-profile",
       "clip",
       "stage",
       "boundary",
       "output"
-    ].includes(`${value.scope}`) || value.entityId !== null && !isTrimmedNonEmpty(value.entityId) || value.constraints !== null && !isRecord2(value.constraints)) {
+    ].includes(value.scope) || value.entityId !== null && !isTrimmedNonEmpty(value.entityId) || value.constraints !== null && !isRecord2(value.constraints)) {
       return false;
     }
     const scope = value.scope;
@@ -1899,7 +1905,6 @@
     }
     return true;
   };
-  var hasExactKeys = (value, expected) => Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
   var isKnownExecutableRule = (value) => {
     if (value.support !== "conditional" || value.entityId !== null || !isRecord2(value.constraints)) {
       return false;
@@ -1948,7 +1953,17 @@
       constraints.defaultFrames,
       constraints.continuityExtraFrames
     ];
-    if (constraints.sameArchitecture !== true || typeof constraints.targetRequiresGeneratedEntry !== "boolean" || typeof constraints.targetRequiresStage !== "boolean" || typeof constraints.targetDisallowsInitialReference !== "boolean" || !integers.every(Number.isInteger)) {
+    if (!hasExactKeys(constraints, [
+      "sameArchitecture",
+      "frameStep",
+      "minFrames",
+      "maxFrames",
+      "defaultFrames",
+      "continuityExtraFrames",
+      "targetRequiresGeneratedEntry",
+      "targetRequiresStage",
+      "targetDisallowsInitialReference"
+    ]) || constraints.sameArchitecture !== true || typeof constraints.targetRequiresGeneratedEntry !== "boolean" || typeof constraints.targetRequiresStage !== "boolean" || typeof constraints.targetDisallowsInitialReference !== "boolean" || !integers.every(Number.isInteger)) {
       return false;
     }
     const frameStep = constraints.frameStep;
@@ -1962,7 +1977,14 @@
     (rule) => isRuleDecision(rule, allowedScopes) && isKnownConditionalRuleCode(rule.code) && isKnownExecutableRule(rule)
   ) && new Set(value.map((rule) => rule.code)).size === value.length;
   var isCapabilities = (value) => {
-    if (!isRecord2(value)) {
+    if (!isRecord2(value) || !hasExactKeys(value, [
+      "architecture",
+      "clip",
+      "stage",
+      "upscaleModes",
+      "entryModes",
+      "audioSourceKinds"
+    ])) {
       return false;
     }
     return [
@@ -6110,9 +6132,6 @@
     }
     body.prepend(notice);
   };
-
-  // frontend/architectures/currentPolicy.ts
-  var currentCapabilityViewResolver = () => createCapabilityViewResolver(getRootDefaults().modelCatalog);
 
   // frontend/architectures/diagnostics.ts
   var issue = (code, message, clipIdx, severity = "error") => ({ severity, code, message, clipIdx });
@@ -16139,7 +16158,7 @@ The conversion is one undoable change.`;
     let selectionUnsub = null;
     const timelineBody = () => document.getElementById(TIMELINE_BODY_ID);
     const scrollEl = () => timelineBody()?.querySelector(".vst-scroll") ?? null;
-    const capabilities = currentCapabilityViewResolver;
+    const capabilities = () => captureAuthoringTransactionSnapshot().capabilities;
     const viewport = createTimelineViewport({
       refresh: () => refresh(),
       totalSeconds: () => {

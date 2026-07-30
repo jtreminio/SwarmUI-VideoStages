@@ -2,8 +2,9 @@
 
 The frontend authors one timeline. Each generated clip is locked to one video
 architecture, while different clips may use different architectures.
-Production registers LTX Video 2.3 and the source-only `none` architecture; the
-editor is driven by the backend architecture catalog rather than LTX checks in
+Production registers specialized LTX Video 2.3, WAN, the conservative generic
+host-video fallback, and the source-only `none` architecture. The editor is
+driven by the backend architecture catalog rather than model-name checks in
 generic UI code.
 
 ## User-facing path model
@@ -25,21 +26,22 @@ separate editors or execution engines.
 
 ## Layout
 
-The layout is deliberately flat: roughly seventy single-purpose modules sit
-directly in `frontend/`, with six clustered subdirectories. There is no
-`frontend/core` and no `frontend/ui`.
+The layout is deliberately shallow: small semantic modules sit directly in
+`frontend/`, with clustered subdirectories only where they improve navigation.
+There is no `frontend/core` and no `frontend/ui`, and no file-count target.
 
 ```text
 frontend/
 ├── main.ts                  entry point and host registration
 ├── videoStagesTimeline.ts   composition root
+├── authoringSnapshot.ts     one catalog/default/policy snapshot per transaction
 ├── host/                    the only readers of SwarmUI globals
 ├── persistence/             carriers, codec, durable snapshot
 ├── store.ts                 canonical document, revision, dispatch
 ├── documentCommands.ts      command union and reducer
 ├── documentCommands/        list descriptor table, generic list reducer
 ├── documentDiff.ts          whole-document diff → command batch
-├── architectures/           catalog, capability policy, conversion, ltx2, none
+├── architectures/           catalog, capability policy, conversion, local UI
 ├── timelineView/            track rendering and toolbar
 ├── detailStrip/             docked panel editors
 └── *.ts                     domain, gestures, tracks, widgets, utilities
@@ -88,9 +90,9 @@ documentCommands/                    list descriptor table and generic reducer
 documentDiff.ts                      before/after documents → one batch command
 ```
 
-Schema v5 is decode-only. There is no migration path: a carrier at any other
-version surfaces a one-shot notice and loads nothing rather than loading
-partially.
+Schema v6 is the exact current contract. Decode has one bounded v5 migration
+that renames clip `architecture` to `architectureHint`; every other version
+surfaces a one-shot notice and loads nothing rather than loading partially.
 
 Every canonical commit reaches `store.dispatch`. Two APIs get there:
 
@@ -110,10 +112,10 @@ field cannot be classified in one place and forgotten in the other.
 Exhaustiveness is a compile error: a key that is neither patchable nor
 explicitly reserved fails the type gate by name.
 
-Generic patch commands cannot write clip architecture/profile or stage
-model/profile identity, and a patch carrying a reserved key is rejected rather
-than silently overwriting a child collection. Named retarget and conversion
-commands resolve their targets through the catalog.
+Generic patch commands cannot write the clip architecture/profile hints or
+stage model/profile identity, and a patch carrying a reserved key is rejected
+rather than silently overwriting a child collection. Named retarget and
+conversion commands resolve their targets through the catalog.
 
 Reads are not centralized in the same way. `readStateToken()` has exactly two
 importers — the carrier adapter and its own definition; everything else uses
@@ -131,10 +133,14 @@ cookie-backed params asynchronously and the first value observed can be blank.
 
 ## Catalog and capability views
 
-The backend catalog carries architecture/profile identities, scoped capability
-sets, labels, boundary decisions, conditional rules, and constraints. It is the
-frontend's sole authority for architecture/model identity and authoring policy;
-model names and host model-class metadata are never used to infer identity.
+Backend catalog schema v2 has exactly architecture and resolved-model records.
+Architecture records carry ID, label, complete descriptor capabilities,
+boundary decisions, conditional rules, and constraints. Resolved-model records
+carry architecture/profile identity, core model facts, frame grid, entry
+abilities, complete effective capabilities, and frame-reference positions. It
+is the frontend's sole authority for executable architecture/model identity and
+authoring policy; model names and host model-class metadata are never used to
+infer identity.
 
 `catalogRepository.ts` exposes five explicit states:
 
@@ -150,16 +156,25 @@ nonblocking warning and Retry while the existing capability-backed UI remains
 active. Generation-owned requests prevent superseded responses from
 overwriting newer state.
 
-Catalog decoding is all-or-nothing: duplicate architecture/profile/model IDs,
-dangling references, unknown capability values, or malformed rule constraints
-reject the response instead of creating a partial capability view. Shared
-C#/TypeScript fixtures keep entry modes, boundary constraint keys, conditional
-rules, and model-profile gates aligned.
+Catalog decoding is exact and all-or-nothing: the wrong schema version, unknown
+or missing keys, duplicate architecture/model IDs, dangling architecture
+references, unknown capability values, or malformed rule constraints reject
+the response instead of creating a partial capability view. There is no
+frontend profile table, extras overlay, or output-capability alias. Shared
+C#/TypeScript fixtures keep entry abilities, frame-reference positions,
+boundary constraint keys, conditional rules, and resolved-model gates aligned.
 
 `buildArchitectureModelCatalog` may apply current host dropdown labels to
 backend-known model entries and retains backend-only models. A host model absent
 from the backend DTO has null architecture/profile identity and is not an
 authorable architecture model.
+
+`captureAuthoringTransactionSnapshot` captures the catalog state, root
+defaults/model catalog, capability resolver, and generated entry mode once for
+one synchronous render, save, or command dispatch. The timeline and detail dock
+receive that snapshot rather than rereading live host/catalog state midway
+through the transaction. The next user event captures again; this is not a
+second global cache.
 
 Options resolve through one view:
 
@@ -211,7 +226,7 @@ summary cannot drift from the mutation. The command:
 
 1. resolves the target architecture, profile and model against the catalog;
 2. retargets every authored stage, including skipped stages;
-3. updates architecture and profile identities;
+3. updates the cached architecture and profile hints;
 4. removes only unsupported architecture-owned settings, clearing each field it
    reports;
 5. preserves every supported prompt/media setting plus duration, stable IDs,
@@ -229,7 +244,7 @@ model profiles.
 
 ## Source-only clips
 
-A sourced clip with no active generation stage uses architecture/profile
+A sourced clip with no active generation stage resolves to architecture/profile
 `none`. It remains selectable and editable: its source can be changed or
 removed and a stage can be added, and a clip with a source video may now be
 emptied down to zero stages. Emptying a clip that has no source video is still
@@ -405,16 +420,18 @@ filter reads it, and no name-matching predicate survives on either side.
 Architecture policy separates identity, feature values, clip/stage views, and
 boundary policy. These behavior/panel maps are optional implementation slots,
 not architecture definitions: add an entry only when an architecture has
-concrete custom frontend behavior or DOM. Labels, profiles, capabilities,
-rules, and model recognition always come from the backend DTO.
+concrete custom frontend behavior or DOM. Labels, resolved model identities,
+capabilities, rules, and model recognition always come from the backend DTO.
 
 ## Completion rules
 
-- Schema v5 is decode-only; any other version notices and loads nothing.
+- Schema v6 is exact; only the bounded v5 `architecture` → `architectureHint`
+  migration is accepted.
 - The emitted document is pinned by `Tests/fixtures/authoring-document.json`,
   asserted from both jest and the C# suite.
 - Every clip/stage model choice is catalog-resolved.
 - Every option panel and timeline creation gesture uses capability views.
+- Every render/save/command uses one authoring transaction snapshot.
 - Unsupported persisted values survive with actionable diagnostics.
 - Architecture conversion is atomic and exactly undoable/redoable.
 - Only `frontend/host/**` reads SwarmUI globals.

@@ -116,6 +116,17 @@ The `<lora:my-style:0.8>` under bare `<videoclip>` is loaded for every clip rega
 
 # Development
 
+Architecture maps:
+
+- [`docs/ARCHITECTURE_FLOW.md`](docs/ARCHITECTURE_FLOW.md) — start-to-finish
+  model/catalog/frontend/backend flow;
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — backend ownership and invariants;
+- [`FRONTEND_ARCHITECTURE.md`](FRONTEND_ARCHITECTURE.md) — authoring state,
+  catalog policy, and UI composition; and
+- [`docs/STAGE_RUNTIME.md`](docs/STAGE_RUNTIME.md) — prepared request state,
+  workflow priorities, runtime lifetimes, stage engines, and generated-binding
+  retention.
+
 ## Use ComfyTyped
 
 ### Generate node definitions with ComfyTyped
@@ -140,3 +151,10 @@ dotnet run --project tools/ComfyTyped.CodeGen -- prune \
     --generated-dir ../SwarmUI-VideoStages/src/Generated \
     --source ../SwarmUI-VideoStages/src
 ```
+
+`comfytyped.keep.json` and direct production references are both inputs to that
+prune. After regenerating or pruning, run `./run-tests`; the generated-binding
+retention test verifies every manifest entry still names a unique generated
+node binding. See
+[`docs/STAGE_RUNTIME.md`](docs/STAGE_RUNTIME.md#9-generated-binding-retention-audit)
+for the distinction between code-generation pruning and .NET linker trimming.

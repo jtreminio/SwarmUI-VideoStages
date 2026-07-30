@@ -49,17 +49,32 @@ const isReferencePositionArray = (value: unknown): value is string[] =>
         (REFERENCE_POSITIONS as readonly string[]).includes(entry),
     );
 
+const hasExactKeys = (
+    value: Record<string, unknown>,
+    expected: readonly string[],
+): boolean =>
+    Object.keys(value).length === expected.length &&
+    expected.every((key) => Object.hasOwn(value, key));
+
 const isRuleDecision = (
     value: unknown,
     allowedScopes?: readonly CapabilityRuleScope[],
 ): value is CapabilityRuleDecision => {
     if (
         !isRecord(value) ||
-        !["supported", "unsupported", "conditional"].includes(
-            `${value.support}`,
-        ) ||
+        !hasExactKeys(value, [
+            "support",
+            "code",
+            "reason",
+            "scope",
+            "entityId",
+            "constraints",
+        ]) ||
+        typeof value.support !== "string" ||
+        !["supported", "unsupported", "conditional"].includes(value.support) ||
         !isTrimmedNonEmpty(value.code) ||
         !isTrimmedNonEmpty(value.reason) ||
+        typeof value.scope !== "string" ||
         ![
             "architecture",
             "model-profile",
@@ -67,7 +82,7 @@ const isRuleDecision = (
             "stage",
             "boundary",
             "output",
-        ].includes(`${value.scope}`) ||
+        ].includes(value.scope) ||
         (value.entityId !== null && !isTrimmedNonEmpty(value.entityId)) ||
         (value.constraints !== null && !isRecord(value.constraints))
     ) {
@@ -85,13 +100,6 @@ const isRuleDecision = (
     }
     return true;
 };
-
-const hasExactKeys = (
-    value: Record<string, unknown>,
-    expected: readonly string[],
-): boolean =>
-    Object.keys(value).length === expected.length &&
-    expected.every((key) => Object.hasOwn(value, key));
 
 const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
     if (
@@ -184,6 +192,17 @@ const isBoundaryRule = (value: unknown): value is CapabilityRuleDecision => {
         constraints.continuityExtraFrames,
     ];
     if (
+        !hasExactKeys(constraints, [
+            "sameArchitecture",
+            "frameStep",
+            "minFrames",
+            "maxFrames",
+            "defaultFrames",
+            "continuityExtraFrames",
+            "targetRequiresGeneratedEntry",
+            "targetRequiresStage",
+            "targetDisallowsInitialReference",
+        ]) ||
         constraints.sameArchitecture !== true ||
         typeof constraints.targetRequiresGeneratedEntry !== "boolean" ||
         typeof constraints.targetRequiresStage !== "boolean" ||
@@ -222,7 +241,17 @@ const isRuleArray = (
     new Set(value.map((rule) => rule.code)).size === value.length;
 
 const isCapabilities = (value: unknown): value is ArchitectureCapabilities => {
-    if (!isRecord(value)) {
+    if (
+        !isRecord(value) ||
+        !hasExactKeys(value, [
+            "architecture",
+            "clip",
+            "stage",
+            "upscaleModes",
+            "entryModes",
+            "audioSourceKinds",
+        ])
+    ) {
         return false;
     }
     return (

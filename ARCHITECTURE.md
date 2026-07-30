@@ -8,8 +8,7 @@ use different architectures.
 Production registers source-only `none`, specialized LTX Video 2.3, the WAN
 family, and a cut-only generic fallback for video models with verified SwarmUI
 graph paths. The registry, planning contracts, runtime dispatch, and timeline
-assembly host all four architectures without architecture branches in common
-code.
+assembly host all four architectures through one top-level execution path.
 
 ## The execution model
 
@@ -43,11 +42,13 @@ encoding, or decoding, and is still an ordinary stage in the plan.
 
 ### Host phases
 
-VideoStages registers seven priority-ordered host workflow steps. Six dispatch
-an `ArchitectureHostPhase` — ControlNet preprocessor capture, base and refiner
-reference capture, pre-core media capture, core output drop, and root audio
-mask sizing — and the seventh runs the configured stages. Every step first
-requires a fully resolved plan, so nothing runs against an invalid document.
+VideoStages registers eight priority-ordered host workflow steps. The first
+compiles and prepares the request without VideoStages graph mutation. Six then
+dispatch an `ArchitectureHostPhase` — ControlNet preprocessor capture, base and
+refiner reference capture, pre-core media capture, core output drop, and root
+audio mask sizing — and the last runs the configured stages. Mutation phases
+require prepared state, so nothing runs against an invalid or partially
+preflighted document.
 
 Each phase is scoped either to the single root-owning architecture or to every
 active architecture. `ArchitectureRootOwnerResolver` picks the root owner: the
@@ -56,6 +57,9 @@ Sourced clips consume their own media and never claim the host root. The
 ControlNet preprocessor capture is architecture-neutral and therefore runs for
 every active architecture, including the source-only adapter, guarded so a
 mixed timeline captures once.
+
+See [`docs/STAGE_RUNTIME.md`](docs/STAGE_RUNTIME.md) for exact priorities,
+state transitions, object lifetimes, stage loops, and failure behavior.
 
 ### Document carrier
 
@@ -71,9 +75,11 @@ them.
 ## The authoring document contract
 
 The timeline rides one hidden `Video Stages` param holding a single JSON
-object: a `schemaVersion` (currently 5, rejected outright when it differs), the
-optional root `width`/`height`, `clips`, and `audioTracks`. Keys are camelCase
-end to end — the backend readers name exactly the keys
+object: a `schemaVersion` (currently 6), optional root `width`/`height`,
+`clips`, and `audioTracks`. Version 6 is exact. One bounded version-5 migration
+renames the retired clip `architecture` field to `architectureHint`; no other
+version is accepted. Keys are camelCase end to end — the backend readers name
+exactly the keys
 `frontend/persistence/documentCodec.ts` emits, and nothing relies on lenient key
 matching. `Tests/fixtures/authoring-document.json` is the shared pin: the jest
 half asserts the codec emits exactly that payload, and the xUnit half parses it
@@ -88,14 +94,16 @@ lists are path-qualified and each entry carries its reason.
 `ModelProfileId` identifies a more specific model generation such as
 `ltx-2.3`.
 
-The first authored stage establishes the clip architecture and clip model
-profile. Every later authored stage is validated against that architecture,
-even when a stage is skipped. Later stages may resolve to different profiles
-inside the same architecture; each stage keeps its own resolved profile. A
-sourced clip with no active generation stages executes through the neutral
-`none` runtime; its declared identity is forced to `none`, while its dormant
-authored stage chain is still checked for architecture and per-stage profile
-consistency.
+The backend-resolved first authored stage establishes the executable clip
+architecture and clip model profile. Every later authored stage is validated
+against that architecture, even when a stage is skipped. Later stages may
+resolve to different profiles inside the same architecture; each stage keeps
+its own resolved profile. Persisted `architectureHint` and model-profile hints
+exist only to explain or repair a document whose model can no longer resolve.
+They never enable features or authorize execution. A sourced clip with no
+active generation stages executes through the neutral `none` runtime, while
+its dormant authored stage chain is still checked for architecture and
+per-stage profile consistency.
 
 Unknown models, unknown profiles, mixed stage architectures, unsupported
 options, and invalid joins produce blocking diagnostics before the extension
@@ -183,17 +191,25 @@ outside the WAN contract.
 ## Capability catalog
 
 The backend catalog is authoritative. It publishes stable capabilities by
-scope:
+scope. Catalog schema v2 has exactly an architecture table and a resolved-model
+table:
 
-- architecture: generated entry, sourced entry, entry modes, audio source
-  kinds, multi-stage, native audio, decoded output;
-- model profile: samplers, schedulers, dimensions, frames, and normal LoRA;
+- each architecture publishes its ID, label, complete descriptor capability
+  set, boundary rules, and conditional rules;
+- each resolved model publishes architecture/profile identity, core model and
+  compatibility identities, frame grid, entry abilities, complete effective
+  capabilities, and supported frame-reference positions;
 - clip: source video, prompts, relay, references, retakes, audio sources, and
   projected audio segments;
 - stage: input modes, each upscale mode (also republished as a flat
   `upscaleModes` list), LoRA, IC-LoRA, HDR, frame references;
-- boundary: cut, continue, and crossfade rules; and
-- output: decoded video, attached audio, standalone audio.
+- boundary: cut, continue, and crossfade rules.
+
+The resolved-model capability set is complete rather than an additive
+“extras” overlay, so it may narrow architecture defaults. The wire has no
+profile table, architecture/model extras, duplicate entry-mode alias, or
+separate output-capability alias. `modelProfileId` remains an opaque resolved
+runtime identity, not a frontend authorization table.
 
 A rule decision includes support state, a stable code, a user-facing reason,
 scope, optional entity identity, and typed constraints. The frontend mirrors
@@ -204,7 +220,7 @@ Typed boundary and conditional-rule policies are also the publication source:
 the evaluator that accepts or rejects a plan consumes the same policy object
 serialized into the catalog, and reads its thresholds back out of the published
 rule rather than keeping a second copy. Shared C#/TypeScript contract fixtures
-guard the wire keys, constraints, and profile gates, plus frame alignment,
+guard the exact wire keys, constraints, resolved-model gates, frame alignment,
 crossfade budgeting, IC-LoRA presets, and the IC-LoRA drive contract.
 
 ### Clip and stage options
@@ -364,6 +380,8 @@ Window, Swarm Prompt Relay Encode, Swarm Ramp Mask Batch, Swarm Set Audio Mask
 Windows, and the legacy Swarm Save HDR Animation WS. Typed C# bindings are
 generated into `src/Generated/`. The package root imports the ComfyUI-facing
 module lazily so the pure helpers stay importable and testable without ComfyUI.
+The generation-prune and runtime-registration retention audit is recorded in
+[`docs/STAGE_RUNTIME.md`](docs/STAGE_RUNTIME.md#9-generated-binding-retention-audit).
 
 ## Adding another architecture
 
@@ -371,10 +389,11 @@ Adding another family should require:
 
 1. a manifest registration supplying module, runtime provider, host handlers,
    API routes, and dependency registration together;
-2. a model resolver and profile descriptors, with at least one profile and a
-   declared default that the profile catalog contains;
-3. scoped capabilities and rules, including a rule for every boundary mode —
-   the registry rejects an incomplete catalog at construction;
+2. a model resolver that returns stable architecture/profile identity, core
+   model facts, entry abilities, frame grid, and complete effective
+   capabilities for every claimed model;
+3. descriptor capabilities and rules, including a rule for every boundary
+   mode — the registry rejects an incomplete catalog at construction;
 4. an architecture-owned clip compiler and opaque payload;
 5. a runtime provider that answers request preflight for its dependencies, and a
    runtime-session factory owning preparation and optional exclusive finalization;
@@ -394,9 +413,9 @@ rule constraint must be added to catalog serialization, and a genuinely new
 audio source kind must be added to `AudioSourceKind` and its parser.
 
 The fake architectures used by tests are deliberately not production
-registrations. They prove different capability sets, profiles, boundary
-policies and budgets, runtime sessions, and mixed-timeline cut assembly without
-shipping a second family.
+registrations. They prove different descriptor and resolved-model capability
+sets, model facts, boundary policies and budgets, runtime sessions, and
+mixed-timeline cut assembly without shipping another production family.
 
 ## Deliberate non-goals
 
@@ -420,5 +439,5 @@ rejected on the merits.
 
 `dotnet test SwarmUI-VideoStages.Tests.sln` is the backend gate; `npm run build`
 runs Biome, TypeScript, jest, and the esbuild bundle for the frontend. Both were
-green at the commit this document describes (2026-07-24). Counts are
-deliberately not recorded here — they go stale within days and the gates do not.
+green when this document was last updated. Counts are deliberately not recorded
+here — they go stale within days and the gates do not.

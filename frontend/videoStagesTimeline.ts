@@ -9,7 +9,6 @@ import {
     refreshAuthoritativeArchitectureCatalog,
     setArchitectureCatalogRequestListener,
 } from "./architectures/catalog";
-import { currentCapabilityViewResolver } from "./architectures/currentPolicy";
 import { deriveAuthoringDiagnostics } from "./authoringDiagnostics";
 import { captureAuthoringTransactionSnapshot } from "./authoringSnapshot";
 import {
@@ -67,7 +66,8 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         document.getElementById(TIMELINE_BODY_ID);
     const scrollEl = (): HTMLElement | null =>
         timelineBody()?.querySelector<HTMLElement>(".vst-scroll") ?? null;
-    const capabilities = currentCapabilityViewResolver;
+    const capabilities = () =>
+        captureAuthoringTransactionSnapshot().capabilities;
     const viewport = createTimelineViewport({
         refresh: () => refresh(),
         totalSeconds: () => {
