@@ -1,12 +1,13 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.HostVideo.Runtime;
 
 namespace VideoStages.Architectures.Wan;
 
 internal sealed class WanGenerationSessionFactory(WorkflowGenerator g) :
     IArchitectureGenerationSessionFactory
 {
-    private WanRootSources _rootSources;
+    private HostVideoRootSources _rootSources;
 
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
 
@@ -35,7 +36,7 @@ internal sealed class WanGenerationSessionFactory(WorkflowGenerator g) :
             g,
             context.Plan,
             _rootSources,
-            new WanStageHostScope(g, context.Plan));
+            new HostVideoStageEngine(g, context.Plan, "Wan"));
     }
 
     /// <summary>Wan owns no post-assembly graph work.</summary>

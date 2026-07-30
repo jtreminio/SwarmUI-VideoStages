@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.HostVideo;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan.Planning;
@@ -22,7 +23,9 @@ internal sealed record WanStagePayload(
     string Sampler,
     string Scheduler,
     StageUpscalePlan Upscale,
-    ImmutableArray<NormalLoraPlan> Loras) : IArchitectureStagePayload
+    ImmutableArray<NormalLoraPlan> Loras) :
+    IArchitectureStagePayload,
+    IHostVideoStageSettings
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
 

@@ -5,13 +5,11 @@ using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Execution;
+using VideoStages.HostVideo;
 using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan;
-
-/// <summary>The host media every WAN clip enters from, snapshotted once per timeline.</summary>
-internal sealed record WanRootSources(WGNodeData Media, WGNodeData Vae);
 
 /// <summary>
 /// Runs one WAN clip. Host primitives own graph construction: this session resolves the compiled
@@ -22,13 +20,11 @@ internal sealed record WanRootSources(WGNodeData Media, WGNodeData Vae);
 internal sealed class WanGenerationSession(
     WorkflowGenerator g,
     VideoExecutionPlan plan,
-    WanRootSources rootSources,
-    WanStageHostScope hostScope) : IVideoGenerationSession
+    HostVideoRootSources rootSources,
+    HostVideoStageEngine stageEngine) : IVideoGenerationSession
 {
     private readonly PlannedStagePromptResolver _prompts = new(g);
-    private readonly GlobalVideoFrameTrimmer _trimmer = new(g);
     private readonly SourcedClipInstaller _sourcedClipInstaller = new(g);
-    private readonly StagePixelScaleGraphBuilder _pixelScaler = new(g);
     private readonly WanFrameReferenceResolver _frameReferences = new(g);
 
     /// <summary>
@@ -102,48 +98,22 @@ internal sealed class WanGenerationSession(
             g.CurrentMedia.AttachedAudio = null;
         }
 
-        HostVideoDecodedStageInput stageInput = new(
-            g,
-            plan.FramesPerSecond,
-            _trimmer,
-            "Wan");
-        foreach (StagePlan stage in clip.Stages)
-        {
-            ApplyPixelUpscale(stage);
-            if (stage.IsPassthrough)
-            {
-                stageInput.ConfigurePassthrough(
-                    clip,
-                    stage,
-                    stage.Input == StageInputKind.PreviousStage
-                        ? g.CurrentMedia?.Frames
-                        : ResolveRequestedFrames(clip, stage, sectionId: null));
-                hostScope.PublishIntermediate(stage);
-                continue;
-            }
-            ExecuteGeneratingStage(clip, stage, stageInput);
-            hostScope.PublishIntermediate(stage);
-        }
-        StagePlan finalStage = clip.Stages[^1];
-        if (finalStage.Output.IsTimelineTerminal && _trimmer.IsRequested)
-        {
-            _trimmer.Apply();
-        }
-        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        return DecodedClipArtifact.FromRuntime(
-            RuntimeArtifact.Capture(g, bridge, ArtifactOrigin.StageOutput),
-            clip);
+        return stageEngine.Execute(
+            clip,
+            stage => stage.RequireWanPayload(),
+            ResolvePassthroughFrames,
+            ExecuteGeneratingStage);
     }
 
-    public void Dispose() => hostScope.Dispose();
+    public void Dispose() => stageEngine.Dispose();
 
     private void ExecuteGeneratingStage(
         ClipPlan clip,
         StagePlan stage,
-        HostVideoDecodedStageInput stageInput)
+        HostVideoDecodedStageInput stageInput,
+        int sectionId)
     {
         WanStagePayload payload = stage.RequireWanPayload();
-        int sectionId = hostScope.ApplyStageOverrides(clip, stage);
         using (ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
             g.UserInput,
             clip.ClipId,
@@ -178,7 +148,7 @@ internal sealed class WanGenerationSession(
                 }
                 int startStep = stage.Input == StageInputKind.RootMedia
                     ? 0
-                    : WanStageSchedulePolicy.StartStep(
+                    : HostVideoStageSchedulePolicy.StartStep(
                         payload.Steps,
                         payload.Control);
                 if (!materializedFirstFrame)
@@ -541,42 +511,6 @@ internal sealed class WanGenerationSession(
             : null;
     }
 
-    private void ApplyPixelUpscale(StagePlan stage)
-    {
-        StageUpscalePlan upscale = stage.RequireWanPayload().Upscale;
-        if (upscale.Mode == StageUpscaleMode.None)
-        {
-            return;
-        }
-        if (upscale.Mode != StageUpscaleMode.Pixel)
-        {
-            throw new InvalidOperationException(
-                $"Clip stage {stage.StageId} reached the Wan runtime with unsupported upscale "
-                    + $"method '{upscale.RawMethod}'.");
-        }
-        if (g.CurrentMedia is null)
-        {
-            // Native text entry has no pixels to resize. Its generated dimensions remain the
-            // authored timeline dimensions, matching the existing LTX text-entry behavior.
-            return;
-        }
-
-        int currentWidth = g.CurrentMedia.Width
-            ?? throw new InvalidOperationException(
-                $"Clip stage {stage.StageId} cannot pixel-scale media with no width.");
-        int currentHeight = g.CurrentMedia.Height
-            ?? throw new InvalidOperationException(
-                $"Clip stage {stage.StageId} cannot pixel-scale media with no height.");
-        (int targetWidth, int targetHeight) = DimensionSnap.Snap(
-            currentWidth * upscale.Factor,
-            currentHeight * upscale.Factor);
-        _pixelScaler.Apply(
-            g.CurrentMedia,
-            targetWidth,
-            targetHeight,
-            upscale.MethodName);
-    }
-
     /// <summary>
     /// An authored clip duration wins; otherwise a stage inherits the applicable host video length.
     /// Passthrough stages consume this structural count directly; only generating stages project it
@@ -635,4 +569,9 @@ internal sealed class WanGenerationSession(
         }
         return snapped;
     }
+
+    private int? ResolvePassthroughFrames(ClipPlan clip, StagePlan stage) =>
+        stage.Input == StageInputKind.PreviousStage
+            ? g.CurrentMedia?.Frames
+            : ResolveRequestedFrames(clip, stage, sectionId: null);
 }

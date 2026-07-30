@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.HostVideo;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.HostVideo;
@@ -249,8 +250,9 @@ internal sealed class HostVideoArchitectureModule :
             }
             if (decodedInput
                 && stage.Control > 0
-                && stage.Control < 1
-                && StartStep(stage.Steps, stage.Control) == 0)
+                && HostVideoStageSchedulePolicy.IsQuantizedZeroPartial(
+                    stage.Steps,
+                    stage.Control))
             {
                 diagnostics.Add(Error(
                     clip,
@@ -279,9 +281,6 @@ internal sealed class HostVideoArchitectureModule :
             stages,
             diagnostics.AsReadOnly());
     }
-
-    internal static int StartStep(int steps, double control) =>
-        (int)Math.Floor(steps * (1 - control));
 
     private static ProvenHostPath Path(
         T2IModelCompatClass compatibility,
@@ -351,7 +350,9 @@ internal sealed record HostVideoStagePayload(
     string Sampler,
     string Scheduler,
     StageUpscalePlan Upscale,
-    ImmutableArray<NormalLoraPlan> Loras) : IArchitectureStagePayload
+    ImmutableArray<NormalLoraPlan> Loras) :
+    IArchitectureStagePayload,
+    IHostVideoStageSettings
 {
     public ArchitectureId ArchitectureId =>
         HostVideoArchitectureModule.ArchitectureId;

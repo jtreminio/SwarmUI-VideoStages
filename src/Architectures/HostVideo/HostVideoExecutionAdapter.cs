@@ -144,8 +144,6 @@ internal static class HostVideoCorePassIsolation
     }
 }
 
-internal sealed record HostVideoRootSources(WGNodeData Media, WGNodeData Vae);
-
 internal sealed class HostVideoGenerationSessionFactory(WorkflowGenerator generator) :
     IArchitectureGenerationSessionFactory
 {
@@ -177,83 +175,14 @@ internal sealed class HostVideoGenerationSessionFactory(WorkflowGenerator genera
             generator,
             context.Plan,
             _rootSources,
-            new HostVideoStageScope(generator, context.Plan));
+            new HostVideoStageEngine(
+                generator,
+                context.Plan,
+                "generic host"));
     }
 
     public void FinalizeTimeline(
         ArchitectureTimelineFinalizationContext context)
     {
-    }
-}
-
-/// <summary>Applies one compiled generic stage through the stock host parameter seam.</summary>
-internal sealed class HostVideoStageScope(
-    WorkflowGenerator generator,
-    VideoExecutionPlan plan) : IDisposable
-{
-    private readonly HashSet<int> _sectionIds = [];
-    private readonly bool _publishIntermediateStages =
-        plan.Clips.Sum(clip => clip.Stages.Count) > 1
-        && generator.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false)
-        && !generator.UserInput.Get(T2IParamTypes.DoNotSave, false);
-    private bool _disposed;
-
-    internal int ApplyStageOverrides(ClipPlan clip, StagePlan stage)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        HostVideoStagePayload payload = stage.RequireHostVideoPayload();
-        int sectionId = VideoStagesExtension.SectionIdForStage(stage.StageId);
-        _sectionIds.Add(sectionId);
-        generator.UserInput.SectionParamOverrides.Remove(sectionId);
-        generator.UserInput.Set(T2IParamTypes.VideoModel.Type, payload.Model, sectionId);
-        generator.UserInput.Set(T2IParamTypes.VideoSteps, payload.Steps, sectionId);
-        generator.UserInput.Set(T2IParamTypes.Steps, payload.Steps, sectionId);
-        generator.UserInput.Set(T2IParamTypes.VideoCFG, payload.CfgScale, sectionId);
-        generator.UserInput.Set(T2IParamTypes.CFGScale, payload.CfgScale, sectionId);
-        generator.UserInput.Set(
-            ComfyUIBackendExtension.SamplerParam.Type,
-            payload.Sampler,
-            sectionId);
-        generator.UserInput.Set(
-            ComfyUIBackendExtension.SchedulerParam.Type,
-            payload.Scheduler,
-            sectionId);
-        if (clip.Frames is int frames && frames > 0)
-        {
-            generator.UserInput.Set(T2IParamTypes.VideoFrames, frames, sectionId);
-        }
-        generator.UserInput.Set(T2IParamTypes.VideoFPS, plan.FramesPerSecond, sectionId);
-        return sectionId;
-    }
-
-    internal void PublishIntermediate(StagePlan stage)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!_publishIntermediateStages
-            || stage.Output.IntermediatePolicy
-                != IntermediateOutputPolicy.ControlledByHostSetting)
-        {
-            return;
-        }
-        generator.CurrentMedia.SaveOutput(
-            generator.CurrentVae,
-            generator.CurrentAudioVae,
-            StableNodeIds.Id(
-                generator,
-                StableNodeIds.IntermediateStageSave,
-                stage.StageId));
-    }
-
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-        foreach (int sectionId in _sectionIds)
-        {
-            generator.UserInput.SectionParamOverrides.Remove(sectionId);
-        }
-        _disposed = true;
     }
 }

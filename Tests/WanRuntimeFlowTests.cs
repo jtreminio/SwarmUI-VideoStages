@@ -11,6 +11,7 @@ using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan;
 using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Generated;
+using VideoStages.HostVideo;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -987,7 +988,7 @@ public class WanRuntimeFlowTests
             firstLatent.FindInput("start_image").Connection?.Node,
             source.Id));
         Assert.Equal(
-            WanStageSchedulePolicy.StartStep(12, 0.5),
+            HostVideoStageSchedulePolicy.StartStep(12, 0.5),
             second.FindInput("start_at_step").LiteralAsInt());
         VAEEncodeNode secondInput = Assert.IsType<VAEEncodeNode>(
             second.FindInput("latent_image").Connection?.Node);
@@ -1876,7 +1877,7 @@ public class WanRuntimeFlowTests
         AssertSamplerSettings(secondSampler, 12, 6.5, "dpmpp_2m", "karras");
         Assert.Equal(0, firstSampler.FindInput("start_at_step").LiteralAsInt());
         Assert.Equal(
-            WanStageSchedulePolicy.StartStep(12, 0.35),
+            HostVideoStageSchedulePolicy.StartStep(12, 0.35),
             secondSampler.FindInput("start_at_step").LiteralAsInt());
         AssertSamplerModelSource(bridge, firstSampler, models.VideoModel.Name);
         AssertSamplerModelSource(bridge, secondSampler, secondModel.Name);
@@ -2040,7 +2041,7 @@ public class WanRuntimeFlowTests
             expectedHeight);
         ComfyNode sampler = Assert.Single(SamplerNodes(bridge));
         Assert.Equal(
-            WanStageSchedulePolicy.StartStep(10, 0.5),
+            HostVideoStageSchedulePolicy.StartStep(10, 0.5),
             sampler.FindInput("start_at_step").LiteralAsInt());
         VAEEncodeNode sourceEncode = Assert.IsType<VAEEncodeNode>(
             sampler.FindInput("latent_image").Connection?.Node);
@@ -2486,7 +2487,7 @@ public class WanRuntimeFlowTests
         VideoStagesSpec parsed = VideoStagesContext.GetVideoStagesSpecForPromptParse(input);
         Assert.Equal("Generated", parsed.Clips[0].Stages[0].ImageReference);
         Assert.Equal("PreviousStage", parsed.Clips[0].Stages[1].ImageReference);
-        Assert.Equal(1, WanStageSchedulePolicy.StartStep(
+        Assert.Equal(1, HostVideoStageSchedulePolicy.StartStep(
             parsed.Clips[0].Stages[1].Steps,
             parsed.Clips[0].Stages[1].Control));
 
@@ -2530,10 +2531,10 @@ public class WanRuntimeFlowTests
         ComfyNode third = SamplerBySeed(samplers, 45);
         Assert.Equal(2, bridge.Graph.NodesOfType<VAEEncodeNode>().Count());
         Assert.Equal(
-            WanStageSchedulePolicy.StartStep(10, 0.5),
+            HostVideoStageSchedulePolicy.StartStep(10, 0.5),
             second.FindInput("start_at_step").LiteralAsInt());
         Assert.Equal(
-            WanStageSchedulePolicy.StartStep(12, 0.25),
+            HostVideoStageSchedulePolicy.StartStep(12, 0.25),
             third.FindInput("start_at_step").LiteralAsInt());
         Assert.True(ReachesUpstream(
             bridge,

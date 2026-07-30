@@ -5,6 +5,7 @@ using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan;
 using VideoStages.Architectures.Wan.Planning;
+using VideoStages.HostVideo;
 using VideoStages.Planning;
 using Xunit;
 
@@ -1352,9 +1353,9 @@ public class WanArchitectureTests
     [Fact]
     public void Schedule_policy_preserves_one_step_partial_boundary()
     {
-        Assert.True(WanStageSchedulePolicy.IsQuantizedZeroPartial(8, 0.9));
-        Assert.False(WanStageSchedulePolicy.IsQuantizedZeroPartial(8, 0.87));
-        Assert.Equal(1, WanStageSchedulePolicy.StartStep(8, 0.87));
+        Assert.True(HostVideoStageSchedulePolicy.IsQuantizedZeroPartial(8, 0.9));
+        Assert.False(HostVideoStageSchedulePolicy.IsQuantizedZeroPartial(8, 0.87));
+        Assert.Equal(1, HostVideoStageSchedulePolicy.StartStep(8, 0.87));
     }
 
     private static void AssertRejected(ClipSpec clip, string expectedOption)

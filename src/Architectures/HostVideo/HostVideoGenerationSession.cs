@@ -4,6 +4,7 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
+using VideoStages.HostVideo;
 using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
 
@@ -18,11 +19,9 @@ internal sealed class HostVideoGenerationSession(
     WorkflowGenerator generator,
     VideoExecutionPlan plan,
     HostVideoRootSources rootSources,
-    HostVideoStageScope hostScope) : IVideoGenerationSession
+    HostVideoStageEngine stageEngine) : IVideoGenerationSession
 {
     private readonly PlannedStagePromptResolver _prompts = new(generator);
-    private readonly GlobalVideoFrameTrimmer _trimmer = new(generator);
-    private readonly StagePixelScaleGraphBuilder _pixelScaler = new(generator);
     private readonly SourcedClipInstaller _sourcedClipInstaller = new(generator);
     private readonly (int Width, int Height) _dimensions =
         DimensionSnap.Snap(plan.Width, plan.Height);
@@ -71,48 +70,22 @@ internal sealed class HostVideoGenerationSession(
             generator.CurrentMedia.AttachedAudio = null;
         }
 
-        HostVideoDecodedStageInput stageInput = new(
-            generator,
-            plan.FramesPerSecond,
-            _trimmer,
-            "generic host");
-        foreach (StagePlan stage in clip.Stages)
-        {
-            ApplyPixelUpscale(stage);
-            if (stage.IsPassthrough)
-            {
-                stageInput.ConfigurePassthrough(clip, stage, ResolveFrames(clip, stage));
-            }
-            else
-            {
-                ExecuteGeneratingStage(clip, stage, stageInput);
-            }
-            hostScope.PublishIntermediate(stage);
-        }
-
-        StagePlan finalStage = clip.Stages[^1];
-        if (finalStage.Output.IsTimelineTerminal && _trimmer.IsRequested)
-        {
-            _trimmer.Apply();
-        }
-        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
-        return DecodedClipArtifact.FromRuntime(
-            RuntimeArtifact.Capture(
-                generator,
-                bridge,
-                ArtifactOrigin.StageOutput),
-            clip);
+        return stageEngine.Execute(
+            clip,
+            stage => stage.RequireHostVideoPayload(),
+            ResolveFrames,
+            ExecuteGeneratingStage);
     }
 
-    public void Dispose() => hostScope.Dispose();
+    public void Dispose() => stageEngine.Dispose();
 
     private void ExecuteGeneratingStage(
         ClipPlan clip,
         StagePlan stage,
-        HostVideoDecodedStageInput stageInput)
+        HostVideoDecodedStageInput stageInput,
+        int sectionId)
     {
         HostVideoStagePayload payload = stage.RequireHostVideoPayload();
-        int sectionId = hostScope.ApplyStageOverrides(clip, stage);
         using (ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
             generator.UserInput,
             clip.ClipId,
@@ -147,7 +120,7 @@ internal sealed class HostVideoGenerationSession(
 
                 int startStep = stage.Input == StageInputKind.RootMedia
                     ? 0
-                    : HostVideoArchitectureModule.StartStep(
+                    : HostVideoStageSchedulePolicy.StartStep(
                         payload.Steps,
                         payload.Control);
                 stageInput.Configure(clip, stage, genInfo, startStep);
@@ -354,36 +327,4 @@ internal sealed class HostVideoGenerationSession(
         return 73;
     }
 
-    private void ApplyPixelUpscale(StagePlan stage)
-    {
-        StageUpscalePlan upscale = stage.RequireHostVideoPayload().Upscale;
-        if (upscale.Mode == StageUpscaleMode.None)
-        {
-            return;
-        }
-        if (upscale.Mode != StageUpscaleMode.Pixel)
-        {
-            throw new InvalidOperationException(
-                $"Stage {stage.StageId} reached the generic host-video runtime with unsupported "
-                    + $"upscale method '{upscale.RawMethod}'.");
-        }
-        if (generator.CurrentMedia is null)
-        {
-            return;
-        }
-        int width = generator.CurrentMedia.Width
-            ?? throw new InvalidOperationException(
-                $"Stage {stage.StageId} cannot pixel-scale media with no width.");
-        int height = generator.CurrentMedia.Height
-            ?? throw new InvalidOperationException(
-                $"Stage {stage.StageId} cannot pixel-scale media with no height.");
-        (int targetWidth, int targetHeight) = DimensionSnap.Snap(
-            width * upscale.Factor,
-            height * upscale.Factor);
-        _pixelScaler.Apply(
-            generator.CurrentMedia,
-            targetWidth,
-            targetHeight,
-            upscale.MethodName);
-    }
 }

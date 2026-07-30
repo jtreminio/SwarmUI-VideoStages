@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.HostVideo;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan.Planning;
@@ -97,7 +98,7 @@ internal static class WanClipPlanCompiler
                 decodedStageInput
                     && double.IsFinite(stage.Control)
                     && stage.Control > 0
-                    && WanStageSchedulePolicy.IsQuantizedZeroPartial(
+                    && HostVideoStageSchedulePolicy.IsQuantizedZeroPartial(
                         stage.Steps,
                         stage.Control),
                 "decoded-input partial control that quantizes to sampler start step 0",
