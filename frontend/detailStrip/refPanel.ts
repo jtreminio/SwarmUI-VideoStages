@@ -20,7 +20,6 @@ import { getReferenceFrameMax } from "../normalization";
 import { getState } from "../persistence";
 import { setSelection } from "../selection";
 import { type Clip, REF_SOURCE_UPLOAD, type TimelineSelection } from "../types";
-import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
 /**
@@ -244,9 +243,6 @@ export const buildRefSection = (
                     },
                 ),
             );
-        }
-        if (!decision.supported) {
-            applyPersistedCapabilityRepair(fields, decision);
         }
         return fields;
     };

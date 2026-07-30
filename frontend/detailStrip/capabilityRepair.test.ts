@@ -102,8 +102,8 @@ describe("persisted-but-unsupported repair contract", () => {
         expect(section).not.toBeNull();
         // Visible and read-only, with the reason.
         expect(
-            section?.querySelector("[data-vst-capability-unsupported]"),
-        ).not.toBeNull();
+            section?.querySelectorAll("[data-vst-capability-unsupported]"),
+        ).toHaveLength(1);
         expect(
             section?.querySelector<HTMLButtonElement>(".vst-detail-add-ref")
                 ?.disabled,
