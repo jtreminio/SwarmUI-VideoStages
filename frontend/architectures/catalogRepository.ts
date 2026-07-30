@@ -155,8 +155,9 @@ export const resetArchitectureCatalogForTests = (): void => {
 export const buildArchitectureModelCatalog = (
     values: readonly string[],
     labels: readonly string[],
+    catalog: VideoArchitectureCatalogDto | null = authoritativeCatalog,
 ): ArchitectureModelCatalog => {
-    const backend = authoritativeCatalog;
+    const backend = catalog;
     const hostLabels = new Map<string, string>();
     const modelNames: string[] = [];
     const seen = new Set<string>();

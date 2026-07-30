@@ -25,7 +25,6 @@ import { snapDimensions } from "../dimensionSnap";
 import { activeDocumentDimensionMultiple } from "../documentDimensionSnap";
 import { getVideoStagesHostBridge } from "../host";
 import { getState } from "../persistence";
-import { getRootDefaults } from "../rootDefaults";
 import type { TimelineSelection } from "../types";
 import type { DetailStripContext } from "./context";
 
@@ -91,7 +90,7 @@ export const buildSettingsBody = (
     },
 ): HTMLElement => {
     const state = getState();
-    const defaults = getRootDefaults();
+    const defaults = ctx.rootDefaults();
     const core = {
         width: defaults.width,
         height: defaults.height,

@@ -1,3 +1,7 @@
+import {
+    type AuthoringTransactionSnapshot,
+    captureAuthoringTransactionSnapshot,
+} from "./authoringSnapshot";
 import type { DetailStripContext } from "./detailStrip/context";
 import {
     createDetailDraftQueue,
@@ -12,7 +16,6 @@ import { renderDetailShell } from "./detailStrip/renderShell";
 import { createDetailSelectionOperations } from "./detailStrip/selectionOperations";
 import { closeTimelineAuthoringSettingsModal } from "./detailStrip/settingsModal";
 import { getClips } from "./persistence";
-import { getRootDefaults } from "./rootDefaults";
 import {
     getSelection,
     isSameSelection,
@@ -20,7 +23,6 @@ import {
     subscribeSelection,
 } from "./selection";
 import type { UpdateMeta } from "./store";
-import { getRootGeneratedEntryMode } from "./swarmInputs";
 import type { TimelineSelection } from "./types";
 
 const DETAIL_CLASS = "vst-detail";
@@ -35,7 +37,7 @@ export interface TimelineDetailStrip {
         dock: HTMLElement,
         renderImmediately?: boolean,
     ): void;
-    render(meta?: UpdateMeta): void;
+    render(meta?: UpdateMeta, snapshot?: AuthoringTransactionSnapshot): void;
     flushPending(): void;
     dispose(): void;
 }
@@ -49,11 +51,18 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
     let settingsMode: string | null = null;
     let revealSelectionOnNextRender = false;
     let renderEnabled = true;
+    let activeSnapshot: AuthoringTransactionSnapshot | null = null;
     let draftQueue: DetailDraftQueue;
-    let renderImplementation: (meta?: UpdateMeta) => void = () => {};
-    const render = (meta?: UpdateMeta): void => {
+    let renderImplementation: (
+        meta: UpdateMeta | undefined,
+        snapshot: AuthoringTransactionSnapshot,
+    ) => void = () => {};
+    const render = (
+        meta?: UpdateMeta,
+        snapshot = captureAuthoringTransactionSnapshot(),
+    ): void => {
         renderEnabled = true;
-        renderImplementation(meta);
+        renderImplementation(meta, snapshot);
     };
 
     let renderedSelection: TimelineSelection | null = null;
@@ -78,10 +87,8 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
             const stage = clip?.stages[selection.stageIdx];
             const currentSupported =
                 clip && stage
-                    ? createCapabilityViewResolver(
-                          getRootDefaults().modelCatalog,
-                      )
-                          .forStage(clip, stage)
+                    ? captureAuthoringTransactionSnapshot()
+                          .capabilities.forStage(clip, stage)
                           .decision("stageLoras").supported
                     : null;
             if (
@@ -114,8 +121,8 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
     });
     const selectionOperations = createDetailSelectionOperations(
         draftQueue.structuralCommit,
-        () => createCapabilityViewResolver(getRootDefaults().modelCatalog),
-        getRootGeneratedEntryMode,
+        () => captureAuthoringTransactionSnapshot().capabilities,
+        () => captureAuthoringTransactionSnapshot().generatedEntryMode,
     );
 
     const context: DetailStripContext = {
@@ -127,8 +134,14 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         structuralCommit: draftQueue.structuralCommit,
         render,
         capabilities: () =>
-            createCapabilityViewResolver(getRootDefaults().modelCatalog),
-        generatedEntryMode: getRootGeneratedEntryMode,
+            activeSnapshot?.capabilities ??
+            captureAuthoringTransactionSnapshot().capabilities,
+        rootDefaults: () =>
+            activeSnapshot?.defaults ??
+            captureAuthoringTransactionSnapshot().defaults,
+        generatedEntryMode: () =>
+            activeSnapshot?.generatedEntryMode ??
+            captureAuthoringTransactionSnapshot().generatedEntryMode,
         addRefEntry: selectionOperations.addRefEntry,
         deleteRefEntry: selectionOperations.deleteRefEntry,
         addPromptWindow: selectionOperations.addPromptWindow,
@@ -156,26 +169,30 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         return dockEl;
     };
 
-    renderImplementation = (meta?: UpdateMeta): void => {
+    renderImplementation = (
+        meta: UpdateMeta | undefined,
+        snapshot: AuthoringTransactionSnapshot,
+    ): void => {
         if (!dockEl) {
             return;
         }
-        if (
-            meta?.origin === "detail-strip" &&
-            meta.hint === "value-only" &&
-            renderedSelection &&
-            isSameSelection(getSelection(), renderedSelection)
-        ) {
-            draftQueue.markCurrentSource();
-            syncValueDerivedUi(renderedSelection);
-            return;
-        }
-
-        // Load-bearing: pending field edits flush before widget teardown or
-        // synthetic slider setup can observe stale carrier state.
-        draftQueue.flush();
-        rendering = true;
+        activeSnapshot = snapshot;
         try {
+            if (
+                meta?.origin === "detail-strip" &&
+                meta.hint === "value-only" &&
+                renderedSelection &&
+                isSameSelection(getSelection(), renderedSelection)
+            ) {
+                draftQueue.markCurrentSource();
+                syncValueDerivedUi(renderedSelection);
+                return;
+            }
+
+            // Load-bearing: pending field edits flush before widget teardown or
+            // synthetic slider setup can observe stale carrier state.
+            draftQueue.flush();
+            rendering = true;
             draftQueue.markCurrentSource();
             const detail = ensureDetail();
             const clips = getClips();
@@ -199,6 +216,7 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
             renderedSelection = selection;
         } finally {
             rendering = false;
+            activeSnapshot = null;
         }
     };
 
@@ -329,5 +347,3 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         dispose,
     };
 };
-
-import { createCapabilityViewResolver } from "./architectures/policy";

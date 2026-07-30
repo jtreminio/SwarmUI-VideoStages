@@ -3,6 +3,7 @@ import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectu
 import {
     testArchitectureCatalog,
     testArchitectureCatalogDto,
+    testRootDefaults,
 } from "../__test_helpers__/architectureFixtures";
 import {
     mountPromptBox,
@@ -43,10 +44,11 @@ describe("buildRefBody", () => {
             ],
         });
 
+        const catalog = testArchitectureCatalog();
         const body = buildRefBody(
             {
-                capabilities: () =>
-                    createCapabilityViewResolver(testArchitectureCatalog()),
+                capabilities: () => createCapabilityViewResolver(catalog),
+                rootDefaults: () => testRootDefaults(catalog),
                 buildClampedNumber: () => document.createElement("input"),
             } as unknown as DetailStripContext,
             { kind: "ref", clipIdx: 0, refIdx: 0 },
@@ -97,6 +99,7 @@ describe("buildRefBody", () => {
         const body = buildRefBody(
             {
                 capabilities: () => createCapabilityViewResolver(catalog),
+                rootDefaults: () => testRootDefaults(catalog),
                 buildClampedNumber: () => document.createElement("input"),
             } as unknown as DetailStripContext,
             { kind: "ref", clipIdx: 0, refIdx: 0 },
@@ -149,6 +152,7 @@ describe("buildRefBody", () => {
         const body = buildRefBody(
             {
                 capabilities: () => createCapabilityViewResolver(catalog),
+                rootDefaults: () => testRootDefaults(catalog),
                 buildClampedNumber: () => document.createElement("input"),
             } as unknown as DetailStripContext,
             { kind: "ref", clipIdx: 0, refIdx: 0 },

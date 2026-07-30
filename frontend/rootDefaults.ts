@@ -3,7 +3,10 @@ import {
     buildArchitectureModelCatalog,
     supportedArchitectureCatalog,
 } from "./architectures/catalog";
-import type { VideoArchitectureId } from "./architectures/types";
+import type {
+    VideoArchitectureCatalogDto,
+    VideoArchitectureId,
+} from "./architectures/types";
 import { ROOT_DIMENSION_MIN } from "./constants";
 import { dimensionsFor } from "./dimensionPresets";
 import { getVideoStagesHostBridge } from "./host";
@@ -40,16 +43,16 @@ const firstPresentInput = (...ids: string[]): HTMLInputElement | null => {
 export const getDefaultStageModel = (
     modelValues: string[],
     architectureId?: VideoArchitectureId,
+    modelCatalog = buildArchitectureModelCatalog(modelValues, modelValues),
 ): string => {
-    const catalog = buildArchitectureModelCatalog(modelValues, modelValues);
     const supports = (modelName: string): boolean => {
-        const resolved = architectureForModel(catalog, modelName);
+        const resolved = architectureForModel(modelCatalog, modelName);
         return (
             resolved !== null &&
             (architectureId === undefined || resolved === architectureId)
         );
     };
-    if (isRootTextToVideoModel()) {
+    if (isRootTextToVideoModel(modelCatalog)) {
         const modelName = trimDomValue(getRootModelInput());
         if (modelName && supports(modelName)) {
             return modelName;
@@ -84,10 +87,30 @@ export const readInheritedDimsSignature = (): string => {
     return `${width}|${height}|${aspectRatio}|${sideLength}|${sideLengthToggle?.checked ?? ""}|${fps}`;
 };
 
-export const getRootDefaults = (): RootDefaults => {
+export const getRootDefaults = (
+    architectureCatalog?: VideoArchitectureCatalogDto | null,
+): RootDefaults => {
     let model = getVideoStagesHostBridge().getSelect("input_videomodel");
-    if ((!model || model.options.length === 0) && isRootTextToVideoModel()) {
+    let modelOptions = getVideoStagesHostBridge().getSelectOptions(model);
+    const buildModelCatalog = () =>
+        architectureCatalog === undefined
+            ? buildArchitectureModelCatalog(
+                  modelOptions.values,
+                  modelOptions.labels,
+              )
+            : buildArchitectureModelCatalog(
+                  modelOptions.values,
+                  modelOptions.labels,
+                  architectureCatalog,
+              );
+    let modelCatalog = buildModelCatalog();
+    if (
+        (!model || model.options.length === 0) &&
+        isRootTextToVideoModel(modelCatalog)
+    ) {
         model = getVideoStagesHostBridge().getSelect("input_model");
+        modelOptions = getVideoStagesHostBridge().getSelectOptions(model);
+        modelCatalog = buildModelCatalog();
     }
     // The host's lora list can lead with a "(None)" sentinel; it's meaningless
     // in our add-a-lora lists and a freshly-added entry seeded with it would be
@@ -109,12 +132,7 @@ export const getRootDefaults = (): RootDefaults => {
         getVideoStagesHostBridge().getSelectOptions(upscaleMethod).values;
     const upscaleMethodLabels =
         getVideoStagesHostBridge().getSelectOptions(upscaleMethod).labels;
-    const modelCatalog = supportedArchitectureCatalog(
-        buildArchitectureModelCatalog(
-            getVideoStagesHostBridge().getSelectOptions(model).values,
-            getVideoStagesHostBridge().getSelectOptions(model).labels,
-        ),
-    );
+    modelCatalog = supportedArchitectureCatalog(modelCatalog);
     const models = {
         values: modelCatalog.entries.map((entry) => entry.value),
         labels: modelCatalog.entries.map((entry) => entry.label),

@@ -4,6 +4,7 @@ import { videoStagesDebugLog } from "./debugLog";
 import {
     type CommandFailure,
     type DocumentCommand,
+    type DocumentCommandContext,
     reduceDocumentCommand,
 } from "./documentCommands";
 import { ensureAuthoringDocumentIdentity } from "./identity";
@@ -105,6 +106,7 @@ export interface TimelineStore {
         notifyDomChange: boolean,
         expectedRevision?: number,
         hint?: UpdateMeta["hint"],
+        context?: DocumentCommandContext,
     ): TimelineDispatchResult;
     /**
      * Absorb a carrier change made by someone else (host undo, paste, prompt
@@ -235,6 +237,7 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         notifyDomChange: boolean,
         expectedRevision?: number,
         hint?: UpdateMeta["hint"],
+        context?: DocumentCommandContext,
     ): TimelineDispatchResult => {
         // This is the dispatch's only pre-reduction carrier revalidation.
         const source = structuredClone(revalidate());
@@ -251,8 +254,13 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
 
         ensureAuthoringDocumentIdentity(source);
         const reduced = reduceDocumentCommand(source, command, {
-            architectureCatalog: deps.architectureCatalog?.() ?? null,
-            generatedEntryMode: deps.generatedEntryMode?.() ?? "text-to-video",
+            architectureCatalog: context
+                ? context.architectureCatalog
+                : (deps.architectureCatalog?.() ?? null),
+            generatedEntryMode:
+                context?.generatedEntryMode ??
+                deps.generatedEntryMode?.() ??
+                "text-to-video",
         });
         if (!reduced.applied) {
             return {

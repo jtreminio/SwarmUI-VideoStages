@@ -6,7 +6,6 @@ import {
     buildOptionSelect,
     type SectionHeaderAction,
 } from "../detailWidgets";
-import { getRootDefaults } from "../rootDefaults";
 import { skipGlyph, skipTitle } from "../skipVocabulary";
 import { applyClipDurationResize } from "../timelineEdit";
 import type { Clip, ReferenceFraming } from "../types";
@@ -39,7 +38,8 @@ export const buildClipColumn = (
             context.debouncedCommit("duration", (clips) => {
                 const target = clips[clipIdx];
                 if (target && !lengthDerived) {
-                    applyClipDurationResize(target, value, getRootDefaults);
+                    const defaults = context.rootDefaults();
+                    applyClipDurationResize(target, value, () => defaults);
                 }
             });
         },

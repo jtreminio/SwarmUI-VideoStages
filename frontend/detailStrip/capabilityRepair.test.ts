@@ -70,6 +70,7 @@ const context = (
         getSettingsMode: () => null,
         setSettingsMode: jest.fn(),
         capabilities: () => createCapabilityViewResolver(models),
+        rootDefaults: () => testRootDefaults(models),
         generatedEntryMode: () => "text-to-video",
     }) as unknown as DetailStripContext;
 

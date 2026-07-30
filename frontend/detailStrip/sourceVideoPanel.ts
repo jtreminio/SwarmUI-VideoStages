@@ -9,7 +9,6 @@ import {
     clampStartLength,
 } from "../detailWidgets";
 import { getTimelineStore, saveClips } from "../persistence";
-import { getRootDefaults } from "../rootDefaults";
 import { probeSourceVideo } from "../sourceVideoProbe";
 import {
     beginSourceVideoProbeOperation,
@@ -43,10 +42,10 @@ const applyPickedSourceVideo = (
         const state = store.getState();
         const clips = state.clips;
         const target = findClipByStableId(clips, operation.clipId);
+        const capabilities = context.capabilities();
         if (
             !target ||
-            !context.capabilities().forClip(target).decision("sourceVideo")
-                .supported
+            !capabilities.forClip(target).decision("sourceVideo").supported
         ) {
             return;
         }
@@ -61,14 +60,12 @@ const applyPickedSourceVideo = (
             startSeconds: 0,
             lengthSeconds,
         };
-        reconcileClipArchitectureIdentity(
-            target,
-            context.capabilities().catalog,
-        );
+        reconcileClipArchitectureIdentity(target, capabilities.catalog);
+        const defaults = context.rootDefaults();
         applyClipDurationResize(
             target,
             Math.max(CLIP_DURATION_MIN, lengthSeconds),
-            getRootDefaults,
+            () => defaults,
             state.fps,
         );
         saveClips(clips, { origin: "detail-strip" });
@@ -161,13 +158,14 @@ export const buildSourceVideoSection = (
             ? source.durationSeconds
             : source.startSeconds + source.lengthSeconds;
     const syncClipDuration = (target: Clip): void => {
+        const defaults = context.rootDefaults();
         applyClipDurationResize(
             target,
             Math.max(
                 CLIP_DURATION_MIN,
                 target.sourceVideo?.lengthSeconds ?? target.duration,
             ),
-            getRootDefaults,
+            () => defaults,
             getTimelineStore().getState().fps,
         );
     };

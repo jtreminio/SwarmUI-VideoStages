@@ -338,6 +338,30 @@ describe("createTimelineStore", () => {
             expect(h.writeQuietCalls).toHaveLength(1);
             expect(h.notifyHostCalls).toHaveLength(1);
         });
+
+        it("uses one supplied command context without rereading ambient defaults", () => {
+            const architectureCatalog = jest.fn(() => null);
+            const generatedEntryMode = jest.fn(() => "image-to-video" as const);
+            h.deps.architectureCatalog = architectureCatalog;
+            h.deps.generatedEntryMode = generatedEntryMode;
+            const snapshot = h.store.getSnapshot();
+
+            const result = h.store.dispatch(
+                { type: "root.patch", patch: { fps: 30 } },
+                "timeline",
+                false,
+                snapshot.revision,
+                undefined,
+                {
+                    architectureCatalog: null,
+                    generatedEntryMode: "text-to-video",
+                },
+            );
+
+            expect(result.applied).toBe(true);
+            expect(architectureCatalog).not.toHaveBeenCalled();
+            expect(generatedEntryMode).not.toHaveBeenCalled();
+        });
     });
 
     describe("syncFromCarrier", () => {

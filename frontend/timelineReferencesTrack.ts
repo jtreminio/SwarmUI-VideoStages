@@ -69,8 +69,8 @@ export const createTimelineReferencesTrack = (
             .supported ?? true;
     const referencePositions = (
         clip: ReturnType<typeof getClips>[number],
-    ): string[] =>
-        referenceEndpointPolicy(clip, getRootDefaults().modelCatalog).positions;
+        modelCatalog = getRootDefaults().modelCatalog,
+    ): string[] => referenceEndpointPolicy(clip, modelCatalog).positions;
 
     const findArrow = (clipIdx: number, refIdx: number): HTMLElement | null =>
         boundBody?.querySelector<HTMLElement>(
@@ -101,6 +101,7 @@ export const createTimelineReferencesTrack = (
         clipIdx: number,
         frame: number,
         sourceRevision: number,
+        defaults = getRootDefaults(),
     ): void => {
         const fps = documentFps(getState());
         let newRefIdx = -1;
@@ -113,11 +114,11 @@ export const createTimelineReferencesTrack = (
                     return null;
                 }
                 const frameMax = getReferenceFrameMax(
-                    getRootDefaults,
+                    () => defaults,
                     clip,
                     fps,
                 );
-                const allowed = referencePositions(clip);
+                const allowed = referencePositions(clip, defaults.modelCatalog);
                 const ref = buildDefaultRef();
                 if (allowed.length === 0 || allowed.includes("any")) {
                     ref.frame = clamp(
@@ -305,7 +306,8 @@ export const createTimelineReferencesTrack = (
         }
         const arrow = findArrow(clipIdx, refIdx);
         const fps = documentFps(getState());
-        const frameMax = getReferenceFrameMax(getRootDefaults, clip, fps);
+        const defaults = getRootDefaults();
+        const frameMax = getReferenceFrameMax(() => defaults, clip, fps);
         me.preventDefault();
         return dragSession(body, {
             clipIdx,
@@ -321,12 +323,9 @@ export const createTimelineReferencesTrack = (
             durationSeconds: clip.duration,
             generatedDurationSeconds: frameMax / fps,
             fps,
-            frameGrid: resolvedClipFrameGrid(
-                clip,
-                getRootDefaults().modelCatalog,
-            ),
+            frameGrid: resolvedClipFrameGrid(clip, defaults.modelCatalog),
             frameMax,
-            allowedPositions: referencePositions(clip),
+            allowedPositions: referencePositions(clip, defaults.modelCatalog),
             fromEnd: ref.fromEnd === true,
             sourceRevision: currentRevision(),
         });
@@ -369,15 +368,16 @@ export const createTimelineReferencesTrack = (
             return;
         }
         const rect = lane.getBoundingClientRect();
+        const defaults = getRootDefaults();
         const frame = pxToFrame(
             (event as MouseEvent).clientX - rect.left,
             rect.width,
             clip.duration,
             documentFps(getState()),
             false,
-            resolvedClipFrameGrid(clip, getRootDefaults().modelCatalog),
+            resolvedClipFrameGrid(clip, defaults.modelCatalog),
         );
-        addRefAtFrame(clipIdx, frame, currentRevision());
+        addRefAtFrame(clipIdx, frame, currentRevision(), defaults);
     };
 
     const onBodyKeyDown = (event: Event): void => {

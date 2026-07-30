@@ -2,6 +2,7 @@ import {
     buildArchitectureModelCatalog,
     buildArchitectureRetargetPlan,
 } from "./architectures/catalog";
+import type { ArchitectureModelCatalog } from "./architectures/types";
 import { parseBase2EditStageIndex } from "./constants";
 import { getVideoStagesHostBridge } from "./host";
 import {
@@ -104,12 +105,15 @@ export const getBase2EditStageRefs = (): string[] => {
     );
 };
 
-export const isRootTextToVideoModel = (): boolean => {
+export const isRootTextToVideoModel = (
+    modelCatalog?: ArchitectureModelCatalog,
+): boolean => {
     const modelName = `${getRootModelInput()?.value ?? ""}`.trim();
     if (!modelName) {
         return false;
     }
-    const catalog = buildArchitectureModelCatalog([modelName], [modelName]);
+    const catalog =
+        modelCatalog ?? buildArchitectureModelCatalog([modelName], [modelName]);
     const target = buildArchitectureRetargetPlan(catalog, modelName);
     if (!target) {
         return false;
@@ -119,10 +123,11 @@ export const isRootTextToVideoModel = (): boolean => {
         : target.entryAbilities.includes("text");
 };
 
-export const getRootGeneratedEntryMode = ():
-    | "text-to-video"
-    | "image-to-video" =>
-    !`${getRootModelInput()?.value ?? ""}`.trim() || isRootTextToVideoModel()
+export const getRootGeneratedEntryMode = (
+    modelCatalog?: ArchitectureModelCatalog,
+): "text-to-video" | "image-to-video" =>
+    !`${getRootModelInput()?.value ?? ""}`.trim() ||
+    isRootTextToVideoModel(modelCatalog)
         ? "text-to-video"
         : "image-to-video";
 

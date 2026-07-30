@@ -1,5 +1,10 @@
 import type { CapabilityViewResolver } from "../architectures/policy";
-import type { Clip, TimelineSelection, VideoStagesConfig } from "../types";
+import type {
+    Clip,
+    RootDefaults,
+    TimelineSelection,
+    VideoStagesConfig,
+} from "../types";
 
 export interface ClampedNumberOpts {
     key: string;
@@ -33,6 +38,7 @@ export interface DetailStripContext {
     ): void;
     render(): void;
     capabilities(): CapabilityViewResolver;
+    rootDefaults(): RootDefaults;
     generatedEntryMode(): "text-to-video" | "image-to-video";
 
     addRefEntry(clipIdx: number): void;

@@ -215,6 +215,7 @@ export const createDetailSelectionDomainOperations = (
     const addRefEntry = (clipIdx: number): void => {
         structuralCommit((clips) => {
             const clip = clips[clipIdx];
+            const defaults = getRootDefaults();
             if (
                 !clip?.id ||
                 !getCapabilities().forClip(clip).decision("frameReferences")
@@ -224,9 +225,8 @@ export const createDetailSelectionDomainOperations = (
             }
             const position = nextAllowedReferencePosition(
                 clip.refs,
-                getReferenceFrameMax(getRootDefaults, clip),
-                referenceEndpointPolicy(clip, getRootDefaults().modelCatalog)
-                    .positions,
+                getReferenceFrameMax(() => defaults, clip),
+                referenceEndpointPolicy(clip, defaults.modelCatalog).positions,
             );
             if (position === null) {
                 return null;
@@ -477,7 +477,7 @@ export const createDetailSelectionDomainOperations = (
                         ? undefined
                         : clipArchitectureId;
                 const stage = buildDefaultStage(
-                    getRootDefaults,
+                    () => defaults,
                     (values) =>
                         getDefaultStageModel(values, lockedArchitecture),
                     last,

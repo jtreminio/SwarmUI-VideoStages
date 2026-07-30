@@ -11,6 +11,7 @@ import {
 } from "./architectures/catalog";
 import { currentCapabilityViewResolver } from "./architectures/currentPolicy";
 import { deriveAuthoringDiagnostics } from "./authoringDiagnostics";
+import { captureAuthoringTransactionSnapshot } from "./authoringSnapshot";
 import {
     injectTimelineTab,
     TIMELINE_BODY_ID,
@@ -26,7 +27,7 @@ import {
     saveClips,
     saveState,
 } from "./persistence";
-import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
+import { getDefaultStageModel } from "./rootDefaults";
 import { setSelection, subscribeSelection } from "./selection";
 import type { UpdateMeta } from "./store";
 import {
@@ -194,8 +195,12 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             // immediate empty-state click must wait for it before choosing the
             // first clip's model and architecture identity.
             await loadAuthoritativeArchitectureCatalog();
-            const defaults = getRootDefaults();
-            const defaultModel = getDefaultStageModel(defaults.modelValues);
+            const { defaults } = captureAuthoringTransactionSnapshot();
+            const defaultModel = getDefaultStageModel(
+                defaults.modelValues,
+                undefined,
+                defaults.modelCatalog,
+            );
             if (
                 !defaultModel ||
                 architectureForModel(defaults.modelCatalog, defaultModel) ===
@@ -220,7 +225,12 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             clips.push(
                 buildDefaultClip(
                     () => defaults,
-                    getDefaultStageModel,
+                    (values) =>
+                        getDefaultStageModel(
+                            values,
+                            undefined,
+                            defaults.modelCatalog,
+                        ),
                     false,
                     prev,
                 ),
@@ -262,7 +272,8 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         if (!body) {
             return;
         }
-        const catalogSnapshot = getArchitectureCatalogSnapshot();
+        const transaction = captureAuthoringTransactionSnapshot();
+        const catalogSnapshot = transaction.catalogStatus;
         if (
             renderBlockingArchitectureCatalogStatus(
                 body,
@@ -289,7 +300,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             const state = getState();
             const clips = state.clips;
             const globalPrompt = readGlobalPrompt();
-            const architectureCatalog = getRootDefaults().modelCatalog;
+            const architectureCatalog = transaction.defaults.modelCatalog;
             renderTimeline(body, clips, {
                 fps: safeFps(state.fps),
                 width: state.width,
@@ -315,7 +326,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 diagnostics: deriveAuthoringDiagnostics(clips, {
                     catalog: architectureCatalog,
                 }),
-                capabilities: capabilities(),
+                capabilities: transaction.capabilities,
             });
             renderRetainedArchitectureCatalogStatus(
                 body,
@@ -324,7 +335,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             );
             viewport.restoreScroll(previousScroll);
             linking.reapplySelection(body, clips.length);
-            detailStrip.render(meta);
+            detailStrip.render(meta, transaction);
             applySelectionHighlight(body);
         } catch (error) {
             console.warn("VideoStages: timeline render failed", error);

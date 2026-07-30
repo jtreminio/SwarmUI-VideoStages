@@ -1,6 +1,5 @@
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
 import { buildStaticSection } from "../detailWidgets";
-import { getRootDefaults } from "../rootDefaults";
 import type { Clip, TimelineSelection } from "../types";
 import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import { buildClipColumn, buildClipSkipAction } from "./clipBasics";
@@ -30,7 +29,7 @@ export const buildClipBody = (
     const stageIdx = selection.kind === "clip" ? selection.stageIdx : 0;
     const clip = clips[clipIdx];
     body.classList.toggle("vst-detail-clip-skipped", clip.skipped === true);
-    const defaults = getRootDefaults();
+    const defaults = context.rootDefaults();
     const capabilityView = context.capabilities().forClip(clip);
     const referenceFramingState = capabilityView.authoringState(
         "referenceFraming",

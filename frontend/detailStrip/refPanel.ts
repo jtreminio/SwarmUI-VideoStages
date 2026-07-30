@@ -18,7 +18,6 @@ import {
 } from "../imageSource";
 import { getReferenceFrameMax } from "../normalization";
 import { getState } from "../persistence";
-import { getRootDefaults } from "../rootDefaults";
 import { setSelection } from "../selection";
 import { type Clip, REF_SOURCE_UPLOAD, type TimelineSelection } from "../types";
 import { applyPersistedCapabilityRepair } from "./capabilityUi";
@@ -136,14 +135,15 @@ export const buildRefSection = (
             fields.appendChild(preview);
         }
 
+        const defaults = ctx.rootDefaults();
         const frameMax = getReferenceFrameMax(
-            getRootDefaults,
+            () => defaults,
             clip,
             getState().fps,
         );
         const endpointPolicy = referenceEndpointPolicy(
             clip,
-            getRootDefaults().modelCatalog,
+            defaults.modelCatalog,
         );
         const boundedPositions = endpointPolicy.bounded;
         const supportsFirst = endpointPolicy.supportsFirst;

@@ -1,3 +1,4 @@
+import { captureAuthoringTransactionSnapshot } from "../authoringSnapshot";
 import { assignMissingHues } from "../clipColor";
 import { ROOT_DIMENSION_STEP } from "../constants";
 import { videoStagesDebugLog } from "../debugLog";
@@ -73,12 +74,13 @@ const saveRequestedState = (
     options: SaveStateOptions | undefined,
     snapshot = store.getSnapshot(),
 ): void => {
+    const transaction = captureAuthoringTransactionSnapshot();
     const requested = structuredClone(requestedInput);
     ensureAuthoringDocumentIdentity(requested);
     assignMissingHues(requested.clips);
     const dimensionSnap = snapExplicitDocumentDimensions(
         requested,
-        getRootDefaults().modelCatalog,
+        transaction.defaults.modelCatalog,
     );
 
     const before = structuredClone(snapshot.state);
@@ -88,8 +90,8 @@ const saveRequestedState = (
     const diffCommand = (() => {
         try {
             return diffDocuments(before, requested, {
-                architectureCatalog: getRootDefaults().modelCatalog,
-                generatedEntryMode: getRootGeneratedEntryMode(),
+                architectureCatalog: transaction.defaults.modelCatalog,
+                generatedEntryMode: transaction.generatedEntryMode,
             });
         } catch (error) {
             return throwSaveFailure("diff", error);
@@ -115,6 +117,10 @@ const saveRequestedState = (
         willNotifyDom,
         options?.expectedRevision ?? snapshot.revision,
         options?.valueOnly ? "value-only" : undefined,
+        {
+            architectureCatalog: transaction.defaults.modelCatalog,
+            generatedEntryMode: transaction.generatedEntryMode,
+        },
     );
     if (!result.applied) {
         throwSaveFailure("dispatch", result.failure ?? "unknown failure");
@@ -145,6 +151,7 @@ export const dispatchDocumentCommand = (
     command: DocumentCommand,
     options?: DispatchDocumentCommandOptions,
 ): TimelineDispatchResult => {
+    const transaction = captureAuthoringTransactionSnapshot();
     const willNotifyDom = options?.notifyDomChange !== false;
     const result = store.dispatch(
         command,
@@ -152,6 +159,10 @@ export const dispatchDocumentCommand = (
         willNotifyDom,
         options?.expectedRevision,
         options?.valueOnly ? "value-only" : undefined,
+        {
+            architectureCatalog: transaction.defaults.modelCatalog,
+            generatedEntryMode: transaction.generatedEntryMode,
+        },
     );
     videoStagesDebugLog("persistence", "dispatchDocumentCommand", {
         command: command.type,
