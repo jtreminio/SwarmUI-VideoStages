@@ -52,7 +52,8 @@ internal sealed record AuthoringFeatureVocabularyEntry(
     string DisplayLabel,
     IReadOnlyList<CapabilityVocabularyEntry> Capabilities,
     ConditionalRuleFeature? ConditionalRuleFeature = null,
-    bool CanIgnoreWhenUnsupported = true);
+    bool CanIgnoreWhenUnsupported = true,
+    bool RequiresEveryCapability = true);
 
 /// <summary>
 /// The single cross-language vocabulary for architecture capabilities and authored features.
@@ -188,7 +189,8 @@ internal static class ArchitectureFeatureVocabulary
                 Capability(StageCapability.ModelUpscale),
                 Capability(StageCapability.LatentUpscale),
                 Capability(StageCapability.LatentModelUpscale),
-            ]),
+            ],
+            RequiresEveryCapability: false),
     ];
 
     internal static IReadOnlyList<ConditionalRuleCodeVocabularyEntry>
@@ -238,11 +240,12 @@ internal static class ArchitectureFeatureVocabulary
 
     internal static bool Supports(
         ArchitectureCapabilityDescriptor capabilities,
-        UnsupportedAuthoringFeature feature) =>
-        AuthoringFeatures
-            .Single(entry => entry.Feature == feature)
-            .Capabilities
-            .All(capability => capability.Scope switch
+        UnsupportedAuthoringFeature feature)
+    {
+        AuthoringFeatureVocabularyEntry entry =
+            AuthoringFeatures.Single(candidate => candidate.Feature == feature);
+        bool SupportsCapability(CapabilityVocabularyEntry capability) =>
+            capability.Scope switch
             {
                 CapabilityVocabularyScope.Architecture =>
                     capability.Supports(capabilities.Architecture),
@@ -251,7 +254,11 @@ internal static class ArchitectureFeatureVocabulary
                 CapabilityVocabularyScope.Stage =>
                     capability.Supports(capabilities.Stage),
                 _ => throw new ArgumentOutOfRangeException(),
-            });
+            };
+        return entry.RequiresEveryCapability
+            ? entry.Capabilities.All(SupportsCapability)
+            : entry.Capabilities.Any(SupportsCapability);
+    }
 
     internal static IReadOnlySet<UnsupportedAuthoringFeature>
         IgnoredWhenUnsupported(
@@ -316,8 +323,9 @@ internal static class ArchitectureFeatureVocabulary
         Line();
         Line("export const AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY = [");
         foreach (AuthoringFeatureVocabularyEntry feature in
-            AuthoringFeatures.Where(entry => entry.Capabilities.Count > 1
-                && entry.Feature != UnsupportedAuthoringFeature.Upscale))
+            AuthoringFeatures.Where(entry =>
+                entry.Capabilities.Count > 1
+                && entry.RequiresEveryCapability))
         {
             Line($"    {Quote(feature.AuthoringKey)},");
         }

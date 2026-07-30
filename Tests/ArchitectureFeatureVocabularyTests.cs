@@ -137,6 +137,47 @@ public class ArchitectureFeatureVocabularyTests
     }
 
     [Fact]
+    public void Upscale_support_requires_any_published_upscale_mode()
+    {
+        ArchitectureCapabilityDescriptor pixelOnly = new(
+            ArchitectureCapability.None,
+            ClipCapability.None,
+            StageCapability.PixelUpscale);
+        ArchitectureCapabilityDescriptor latentOnly = new(
+            ArchitectureCapability.None,
+            ClipCapability.None,
+            StageCapability.LatentUpscale);
+        ArchitectureCapabilityDescriptor none = new(
+            ArchitectureCapability.None,
+            ClipCapability.None,
+            StageCapability.None);
+
+        Assert.True(ArchitectureFeatureVocabulary.Supports(
+            pixelOnly,
+            UnsupportedAuthoringFeature.Upscale));
+        Assert.True(ArchitectureFeatureVocabulary.Supports(
+            latentOnly,
+            UnsupportedAuthoringFeature.Upscale));
+        Assert.False(ArchitectureFeatureVocabulary.Supports(
+            none,
+            UnsupportedAuthoringFeature.Upscale));
+    }
+
+    [Fact]
+    public void Capability_binding_mode_is_the_generated_frontend_authority()
+    {
+        Assert.True(
+            ArchitectureFeatureVocabulary.AuthoringFeatures
+                .Single(entry =>
+                    entry.Feature == UnsupportedAuthoringFeature.FrameReferences)
+                .RequiresEveryCapability);
+        Assert.False(
+            ArchitectureFeatureVocabulary.AuthoringFeatures
+                .Single(entry => entry.Feature == UnsupportedAuthoringFeature.Upscale)
+                .RequiresEveryCapability);
+    }
+
+    [Fact]
     public void Structural_features_are_never_silently_ignored()
     {
         UnsupportedAuthoringFeature[] structural =

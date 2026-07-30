@@ -807,7 +807,6 @@ public sealed class EffectiveVideoRequestTests
                 UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
                 UnsupportedAuthoringFeature.IcLora,
                 UnsupportedAuthoringFeature.Hdr,
-                UnsupportedAuthoringFeature.Upscale,
             }.SetEquals(
                 ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(
                     HostVideoArchitectureModule.Instance.Descriptor.Capabilities)));
@@ -863,7 +862,6 @@ public sealed class EffectiveVideoRequestTests
                 UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
                 UnsupportedAuthoringFeature.IcLora,
                 UnsupportedAuthoringFeature.Hdr,
-                UnsupportedAuthoringFeature.Upscale,
             }.SetEquals(
                 ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(
                     WanArchitectureModule.Instance.Descriptor.Capabilities)));
