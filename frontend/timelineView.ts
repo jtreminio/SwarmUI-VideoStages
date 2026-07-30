@@ -143,7 +143,7 @@ export const renderTimeline = (
             `${header}${diagnostics}<div class="vst-empty">` +
             `<div class="vst-empty-icon" aria-hidden="true">🎬</div>` +
             `<div class="vst-empty-title">No clips yet.</div>` +
-            `<div class="vst-empty-hint">Add one here — or in the VideoStages panel on the left — to start building your sequence.</div>` +
+            `<div class="vst-empty-hint">Use the button below to start building your sequence.</div>` +
             `<button type="button" class="basic-button btn-primary vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button>` +
             `</div>`;
         wireTimelineToolbar(body, options);

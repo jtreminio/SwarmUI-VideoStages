@@ -278,6 +278,9 @@ describe("renderTimeline (DOM)", () => {
         expect(body.querySelector(".vst-empty")?.textContent).toContain(
             "No clips yet",
         );
+        expect(body.querySelector(".vst-empty-hint")?.textContent).toBe(
+            "Use the button below to start building your sequence.",
+        );
         expect(body.querySelectorAll(".vst-region")).toHaveLength(0);
     });
 
