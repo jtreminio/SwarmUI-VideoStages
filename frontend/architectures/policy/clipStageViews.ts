@@ -1,6 +1,7 @@
 import { isAllowedAudioSource } from "../../audioSource";
+import { activeStageCount } from "../../clipSemantics";
 import type { Clip, Stage } from "../../types";
-import { clipHasActiveHdr } from "../behaviorRegistry";
+import { clipHasActiveHdrForArchitecture } from "../behaviorRegistry";
 import {
     CONDITIONAL_RULE_CODES,
     type ConditionalRuleCode,
@@ -11,6 +12,7 @@ import { NONE_ARCHITECTURE_ID } from "../none/identity";
 import type {
     ArchitectureCapabilities,
     ArchitectureCatalogEntryDto,
+    ArchitectureModelEntry,
     CapabilityRuleDecision,
 } from "../types";
 import {
@@ -27,6 +29,13 @@ import type {
 } from "./types";
 
 type ArchitectureLookup = ReadonlyMap<string, ArchitectureCatalogEntryDto>;
+type ModelLookup = ReadonlyMap<string, ArchitectureModelEntry>;
+
+interface EffectiveCatalogIdentity {
+    architectureId: string;
+    profileId: string;
+    descriptor: ArchitectureCatalogEntryDto | undefined;
+}
 
 /**
  * Conditional rules that gate an authoring feature. Every consumer reaches
@@ -50,6 +59,7 @@ const conditionalRuleFor = (
     feature: AuthoringFeature,
     descriptor: ArchitectureCatalogEntryDto,
     scope: CapabilityRuleScopeContext,
+    effectiveArchitectureId: (target: Clip) => string,
 ): CapabilityRuleDecision | undefined => {
     const codes = FEATURE_RULE_CODES[feature];
     if (!codes) return undefined;
@@ -61,7 +71,11 @@ const conditionalRuleFor = (
                 clip,
                 globalRefineMode: scope.globalRefineMode,
                 timelineClips: scope.timelineClips,
-                hasActiveHdr: clipHasActiveHdr,
+                hasActiveHdr: (target) =>
+                    clipHasActiveHdrForArchitecture(
+                        target,
+                        effectiveArchitectureId(target),
+                    ),
             })
         ) {
             return rule;
@@ -160,18 +174,39 @@ const scopedFeatureSupport = (
 
 export const createClipStageCapabilityViews = (
     architectureById: ArchitectureLookup,
+    modelByName: ModelLookup,
     scope: CapabilityRuleScopeContext = {},
 ): {
     forClip(clip: Clip): ClipCapabilityView;
     forStage(clip: Clip, stage: Stage): StageCapabilityView;
 } => {
+    const effectiveClipIdentity = (clip: Clip): EffectiveCatalogIdentity => {
+        const sourceOnly =
+            activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+        const resolvedModel = sourceOnly
+            ? undefined
+            : modelByName.get(clip.stages[0]?.model ?? "");
+        const architectureId = sourceOnly
+            ? NONE_ARCHITECTURE_ID
+            : (resolvedModel?.architectureId ?? clip.architecture);
+        const profileId = sourceOnly
+            ? NONE_ARCHITECTURE_ID
+            : (resolvedModel?.modelProfileId ?? clip.modelProfileId);
+        return {
+            architectureId,
+            profileId,
+            descriptor: architectureById.get(architectureId),
+        };
+    };
+
     const forClip = (clip: Clip): ClipCapabilityView => {
-        const descriptor = architectureById.get(clip.architecture);
+        const identity = effectiveClipIdentity(clip);
+        const { architectureId, profileId, descriptor } = identity;
         const label =
             descriptor?.label ??
-            (clip.architecture === NONE_ARCHITECTURE_ID
+            (architectureId === NONE_ARCHITECTURE_ID
                 ? "source-only clips"
-                : `unknown architecture '${clip.architecture}'`);
+                : `unknown architecture '${architectureId}'`);
         const decision = (feature: AuthoringFeature): CapabilityDecision => {
             if (!descriptor) {
                 return {
@@ -185,13 +220,11 @@ export const createClipStageCapabilityViews = (
                 feature,
                 descriptor,
                 scope,
+                (target) => effectiveClipIdentity(target).architectureId,
             );
             const supported =
-                scopedFeatureSupport(
-                    feature,
-                    descriptor,
-                    clip.modelProfileId,
-                ) && !conditionalRule;
+                scopedFeatureSupport(feature, descriptor, profileId) &&
+                !conditionalRule;
             return {
                 supported,
                 reason: supported
@@ -202,7 +235,7 @@ export const createClipStageCapabilityViews = (
             };
         };
         return {
-            architectureId: clip.architecture,
+            architectureId,
             architectureLabel: label,
             known: descriptor !== undefined,
             audioSourceKinds: descriptor?.capabilities.audioSourceKinds ?? [],
@@ -220,9 +253,21 @@ export const createClipStageCapabilityViews = (
 
     const forStage = (clip: Clip, stage: Stage): StageCapabilityView => {
         const view = forClip(clip);
-        const descriptor = architectureById.get(clip.architecture);
+        const sourceOnly =
+            view.architectureId === NONE_ARCHITECTURE_ID &&
+            activeStageCount(clip) === 0 &&
+            clip.sourceVideo !== null;
+        const resolvedModel = sourceOnly
+            ? undefined
+            : modelByName.get(stage.model);
+        const architectureId =
+            resolvedModel?.architectureId ?? view.architectureId;
+        const descriptor = architectureById.get(architectureId);
+        const profileId = sourceOnly
+            ? NONE_ARCHITECTURE_ID
+            : (resolvedModel?.modelProfileId ?? stage.modelProfileId);
         const profile = descriptor?.profiles.find(
-            (entry) => entry.id === stage.modelProfileId,
+            (entry) => entry.id === profileId,
         );
         const decision = (
             feature: "stageLoras" | "upscale" | "sampler" | "scheduler",
@@ -267,7 +312,20 @@ export const createClipStageCapabilityViews = (
                     rule: null,
                 };
             }
-            return view.decision(feature);
+            const supported =
+                descriptor !== undefined &&
+                architectureFeatureSupport("upscale", {
+                    capabilities: descriptor.capabilities,
+                });
+            return {
+                supported,
+                reason: supported
+                    ? ""
+                    : descriptor
+                      ? architectureReason(descriptor.label, "upscale")
+                      : noArchitectureReason("upscale"),
+                rule: null,
+            };
         };
         return {
             upscaleModes: descriptor?.capabilities.upscaleModes ?? [],

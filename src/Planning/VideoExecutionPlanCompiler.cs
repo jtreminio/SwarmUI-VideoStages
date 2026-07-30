@@ -25,7 +25,15 @@ internal static class VideoExecutionPlanCompiler
         ArgumentNullException.ThrowIfNull(rootEnvironment);
         ArgumentNullException.ThrowIfNull(architecturePlanning);
 
-        List<PlanDiagnostic> diagnostics = [.. architecturePlanning.Diagnostics];
+        EffectiveVideoRequest request =
+            EffectiveVideoRequestProjector.Project(spec, architecturePlanning);
+        spec = request.Spec;
+        architecturePlanning = request.ArchitecturePlanning;
+        List<PlanDiagnostic> diagnostics =
+        [
+            .. architecturePlanning.Diagnostics,
+            .. request.Diagnostics,
+        ];
         IReadOnlyList<ClipSpec> executableClips = (spec.Clips ?? []).Where(IsExecutableClip).ToArray();
         if (executableClips.Count != (spec.Clips?.Count ?? 0))
         {
@@ -56,11 +64,13 @@ internal static class VideoExecutionPlanCompiler
         int firstStageOrdinal = 0;
         for (int i = 0; i < activeClips.Count; i++)
         {
+            bool effectiveRequestBlocked =
+                request.BlockedClipIds.Contains(activeClips[i].Id);
             ClipArchitectureAssignment assignment =
                 architecturePlanning.Clips.GetValueOrDefault(activeClips[i].Id);
             ArchitectureEntryMode entryMode = ResolveEntryMode(spec, rootEnvironment, activeClips[i]);
             ArchitectureClipCompilation acceptedArchitectureCompilation = null;
-            if (assignment is not null)
+            if (assignment is not null && !effectiveRequestBlocked)
             {
                 IReadOnlyList<PlanDiagnostic> capabilityDiagnostics =
                     ArchitectureCapabilityValidator.Validate(
@@ -107,7 +117,11 @@ internal static class VideoExecutionPlanCompiler
             firstStageOrdinal += activeClips[i].Stages?.Count ?? 0;
         }
         diagnostics.AddRange(ClipGeometryProjection.Validate(clips, spec.Width, spec.Height));
-        BoundaryPlanningResult boundaryResult = BoundaryPlanCompiler.Compile(activeClips, clips);
+        BoundaryPlanningResult boundaryResult = BoundaryPlanCompiler.Compile(
+            activeClips,
+            clips,
+            request.AuthoredBoundaryModes,
+            request.ProjectedBoundaryFallbacks);
         diagnostics.AddRange(boundaryResult.Diagnostics);
         BoundaryBudgetResolution boundaryBudget = BoundaryOverlapPlanner.ResolvePlanBudgets(
             [.. activeClips.Select(clip => clip.Frames)],

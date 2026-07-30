@@ -1,11 +1,14 @@
-import { clipHasActiveHdr } from "./architectures/behaviorRegistry";
+import { clipHasActiveHdrForArchitecture } from "./architectures/behaviorRegistry";
 import { architectureDescriptor } from "./architectures/catalog";
 import {
     CONDITIONAL_RULE_CODES,
     conditionalRule,
     evaluateConditionalRule,
 } from "./architectures/conditionalRules";
-import { deriveArchitectureDiagnostics } from "./architectures/diagnostics";
+import {
+    deriveArchitectureDiagnostics,
+    effectiveArchitectureIdForClip,
+} from "./architectures/diagnostics";
 import type { ArchitectureModelCatalog } from "./architectures/types";
 import { executableClipIndexes } from "./clipSemantics";
 import type { Clip } from "./types";
@@ -61,11 +64,15 @@ export const deriveAuthoringDiagnostics = (
         clip: clips[clipIdx],
         clipIdx,
     }));
+    const effectiveArchitectureId = (clip: Clip): string =>
+        context.catalog
+            ? effectiveArchitectureIdForClip(clip, context.catalog)
+            : clip.architecture;
 
     for (const { clip, clipIdx } of executable) {
         const descriptor = architectureDescriptor(
             context.catalog,
-            clip.architecture,
+            effectiveArchitectureId(clip),
         );
         const rule = (code: Parameters<typeof conditionalRule>[1]) =>
             descriptor ? conditionalRule(descriptor.rules, code) : null;
@@ -143,7 +150,7 @@ export const deriveAuthoringDiagnostics = (
     const hdrRule = executable
         .map(({ clip }) =>
             context.catalog?.architectures
-                .find((entry) => entry.id === clip.architecture)
+                .find((entry) => entry.id === effectiveArchitectureId(clip))
                 ?.rules.find(
                     (rule) =>
                         rule.code === CONDITIONAL_RULE_CODES.uniformTimelineHdr,
@@ -154,7 +161,11 @@ export const deriveAuthoringDiagnostics = (
         hdrRule &&
         evaluateConditionalRule(hdrRule, {
             timelineClips: executable.map(({ clip }) => clip),
-            hasActiveHdr: clipHasActiveHdr,
+            hasActiveHdr: (clip) =>
+                clipHasActiveHdrForArchitecture(
+                    clip,
+                    effectiveArchitectureId(clip),
+                ),
         })
     ) {
         diagnostics.push(diagnostic("error", hdrRule.code, hdrRule.reason));

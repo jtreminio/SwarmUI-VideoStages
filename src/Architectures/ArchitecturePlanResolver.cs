@@ -76,7 +76,6 @@ internal static class ArchitecturePlanResolver
                         authoredStages[0].RawIndex,
                         out ResolvedVideoModel inactiveFirstModel))
                 {
-                    ValidateClipIdentity(clip, authoredStages[0], inactiveFirstModel, diagnostics);
                     ValidateSameArchitecture(
                         clip,
                         authoredStages,
@@ -97,7 +96,6 @@ internal static class ArchitecturePlanResolver
             {
                 continue;
             }
-            ValidateClipIdentity(clip, firstStage, firstModel, diagnostics);
             ValidateSameArchitecture(
                 clip,
                 authoredStages,
@@ -149,21 +147,6 @@ internal static class ArchitecturePlanResolver
                     stageId: null,
                     rawStageIndex: authored.RawIndex));
             }
-            if (!string.IsNullOrWhiteSpace(authored.ModelProfileId)
-                && !string.Equals(
-                    authored.ModelProfileId,
-                    stageModel.ModelProfileId.Value,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                diagnostics.Add(Error(
-                    "architecture-authored-stage-profile-mismatch",
-                    $"Clip {clip.Id} authored stage {authored.RawIndex} declares model profile "
-                        + $"'{authored.ModelProfileId}', but model '{authored.Model}' resolves to "
-                        + $"'{stageModel.ModelProfileId}'.",
-                    clip.Id,
-                    stageId: null,
-                    rawStageIndex: authored.RawIndex));
-            }
         }
         return stageModels;
     }
@@ -199,44 +182,6 @@ internal static class ArchitecturePlanResolver
                     + $"'{clip.AuthoredModelProfileId}'.",
                 clip.Id,
                 stageId: null));
-        }
-    }
-
-    private static void ValidateClipIdentity(
-        ClipSpec clip,
-        AuthoredStageModelSpec firstStage,
-        ResolvedVideoModel firstModel,
-        ICollection<PlanDiagnostic> diagnostics)
-    {
-        if (!string.IsNullOrWhiteSpace(clip.AuthoredArchitectureId)
-            && !string.Equals(
-                clip.AuthoredArchitectureId,
-                firstModel.ArchitectureId.Value,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            diagnostics.Add(Error(
-                "architecture-authored-identity-mismatch",
-                $"Clip {clip.Id} declares architecture '{clip.AuthoredArchitectureId}', "
-                    + $"but authored stage {firstStage.RawIndex} model '{firstStage.Model}' "
-                    + $"resolves to '{firstModel.ArchitectureId}'.",
-                clip.Id,
-                stageId: null,
-                rawStageIndex: firstStage.RawIndex));
-        }
-        if (!string.IsNullOrWhiteSpace(clip.AuthoredModelProfileId)
-            && !string.Equals(
-                clip.AuthoredModelProfileId,
-                firstModel.ModelProfileId.Value,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            diagnostics.Add(Error(
-                "architecture-authored-profile-mismatch",
-                $"Clip {clip.Id} declares model profile '{clip.AuthoredModelProfileId}', "
-                    + $"but authored stage {firstStage.RawIndex} model '{firstStage.Model}' "
-                    + $"resolves to '{firstModel.ModelProfileId}'.",
-                clip.Id,
-                stageId: null,
-                rawStageIndex: firstStage.RawIndex));
         }
     }
 

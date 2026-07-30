@@ -14,6 +14,31 @@ import {
 } from "./authoringDiagnostics";
 import type { Clip } from "./types";
 
+const catalogWithWan = () => {
+    const catalog = testArchitectureCatalog();
+    const ltx = catalog.architectures[0];
+    const wan = structuredClone(ltx);
+    wan.id = "wan22";
+    wan.label = "WAN";
+    wan.defaultProfileId = "wan-profile";
+    wan.rules = [];
+    wan.profiles = [
+        {
+            ...wan.profiles[0],
+            id: "wan-profile",
+            label: "WAN",
+        },
+    ];
+    catalog.architectures.push(wan);
+    catalog.entries.push({
+        value: "wan.safetensors",
+        label: "WAN",
+        architectureId: "wan22",
+        modelProfileId: "wan-profile",
+    });
+    return catalog;
+};
+
 const codes = (clips: Clip[]): string[] =>
     deriveAuthoringDiagnostics(clips, {
         catalog: testArchitectureCatalog(),
@@ -153,6 +178,40 @@ describe("backend-aligned authoring diagnostics", () => {
         expect(codes([hdr, structuredClone(hdr)])).not.toContain(
             "mixed-hdr-timeline-unsupported",
         );
+    });
+
+    it("does not apply stale LTX HDR ownership to a model that resolves as WAN", () => {
+        const staleWan = minimalClip({
+            architecture: "ltx2",
+            modelProfileId: "ltx-2.3",
+            icLoras: [
+                {
+                    lora: "persisted-hdr.safetensors",
+                    preset: "hdr",
+                    driveSource: "Upload",
+                    driveData: "visual",
+                    driveMediaKinds: ["image", "video"],
+                    stage: -1,
+                    strength: 1,
+                    attentionStrength: 1,
+                    controlType: "none",
+                    hdr: true,
+                    driveMedia: null,
+                },
+            ],
+            stages: [
+                minimalStage({
+                    model: "wan.safetensors",
+                    modelProfileId: "wan-profile",
+                }),
+            ],
+        });
+
+        expect(
+            deriveAuthoringDiagnostics([staleWan, minimalClip()], {
+                catalog: catalogWithWan(),
+            }).map(({ code }) => code),
+        ).not.toContain("mixed-hdr-timeline-unsupported");
     });
 
     it("ignores skipped clips and HDR entries targeting skipped stages", () => {

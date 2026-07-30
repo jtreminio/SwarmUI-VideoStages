@@ -161,7 +161,7 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Capability_validation_accepts_pixel_upscale_but_rejects_advanced_upscalers()
+    public void Effective_request_accepts_pixel_upscale_and_ignores_advanced_upscalers_and_ic_lora()
     {
         StageSpec stage = Stage(10, "wan-model");
 
@@ -170,7 +170,7 @@ public class WanArchitectureTests
         Assert.DoesNotContain(
             pixelPlan.Diagnostics,
             diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
-        AssertRejected(
+        AssertIgnored(
             GeneratedClip(
                 0,
                 stage with
@@ -178,7 +178,7 @@ public class WanArchitectureTests
                     Upscale = 2,
                     UpscaleMethod = "model-fake-upscaler.safetensors",
                 }),
-            "upscale");
+            "effective-request.wan-advanced-upscale-ignored");
         AssertRejected(
             GeneratedClip(0, stage with { RetakeWindow = new(0, 8, 1) }),
             "retake");
@@ -200,12 +200,12 @@ public class WanArchitectureTests
         AssertRejected(
             GeneratedClip(0, stage with { ImageReference = "Base" }),
             "stage image reference 'Base'");
-        AssertRejected(
+        AssertIgnored(
             GeneratedClip(0, stage) with
             {
                 IcLoras = [new("wan-ic.safetensors", "Upload", 1, 1, "canny", null)],
             },
-            "IC-LoRA");
+            "effective-request.wan-ic-lora-ignored");
     }
 
     [Fact]
@@ -1061,6 +1061,19 @@ public class WanArchitectureTests
             plan.Diagnostics,
             item => item.Code == "wan22.option.unsupported"
                 && item.Message.Contains(expectedOption));
+    }
+
+    private static void AssertIgnored(ClipSpec clip, string code)
+    {
+        VideoExecutionPlan plan = Compile(clip);
+        Assert.Contains(
+            plan.Diagnostics,
+            item => item.Code == code
+                && item.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            item => item.Severity == PlanDiagnosticSeverity.Error);
+        Assert.NotNull(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
     private static void AssertRefused(ClipSpec clip, string expectedOption) =>

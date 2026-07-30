@@ -28,7 +28,7 @@ import type {
 } from "./types";
 
 export interface ArchitectureDiagnostic {
-    severity: "error";
+    severity: "warning" | "error";
     code: string;
     message: string;
     clipIdx?: number;
@@ -38,11 +38,13 @@ const issue = (
     code: string,
     message: string,
     clipIdx?: number,
-): ArchitectureDiagnostic => ({ severity: "error", code, message, clipIdx });
+    severity: ArchitectureDiagnostic["severity"] = "error",
+): ArchitectureDiagnostic => ({ severity, code, message, clipIdx });
 
 const persistedCapabilityIssues = (
     clip: Clip,
     clipIdx: number,
+    architectureId: string,
     capabilities: ArchitectureCapabilities,
 ): ArchitectureDiagnostic[] => {
     const diagnostics: ArchitectureDiagnostic[] = [];
@@ -51,13 +53,21 @@ const persistedCapabilityIssues = (
         value?: { audioSource?: string; upscaleMethod?: string },
     ): boolean =>
         architectureFeatureSupport(feature, { capabilities, ...value });
-    const unsupported = (active: boolean, key: string, label: string): void => {
+    const unsupported = (
+        active: boolean,
+        key: string,
+        label: string,
+        severity: ArchitectureDiagnostic["severity"] = "error",
+    ): void => {
         if (active) {
             diagnostics.push(
                 issue(
                     `architecture.unsupported.${key}`,
-                    `${label} is persisted on Clip ${clipIdx}, but its architecture does not support it. Remove it or explicitly convert the clip.`,
+                    severity === "warning"
+                        ? `${label} is saved on Clip ${clipIdx}, but its architecture cannot use it. Generation will ignore it and keep the authored setting.`
+                        : `${label} is persisted on Clip ${clipIdx}, but its architecture does not support it. Remove it or explicitly convert the clip.`,
                     clipIdx,
+                    severity,
                 ),
             );
         }
@@ -81,11 +91,12 @@ const persistedCapabilityIssues = (
         !supports("icLora") && clip.icLoras.length > 0,
         "ic-lora",
         "IC-LoRA",
+        architectureId === "wan22" ? "warning" : "error",
     );
     unsupported(
         !supports("hdr") &&
             clip.icLoras.some((entry) =>
-                isArchitectureHdrFeature(clip.architecture, entry),
+                isArchitectureHdrFeature(architectureId, entry),
             ),
         "hdr",
         "HDR",
@@ -120,14 +131,29 @@ const persistedCapabilityIssues = (
         "stage-loras",
         "LoRAs",
     );
+    const unsupportedUpscales = clip.stages.filter(
+        (stage) =>
+            stage.upscale !== 1 &&
+            !supports("upscale", { upscaleMethod: stage.upscaleMethod }),
+    );
+    const isKnownAdvancedUpscale = (method: string): boolean => {
+        const normalized = method.trim().toLowerCase();
+        return (
+            normalized.startsWith("model-") ||
+            normalized.startsWith("latent-") ||
+            normalized.startsWith("latentmodel-")
+        );
+    };
     unsupported(
-        clip.stages.some(
-            (stage) =>
-                stage.upscale !== 1 &&
-                !supports("upscale", { upscaleMethod: stage.upscaleMethod }),
-        ),
+        unsupportedUpscales.length > 0,
         "upscale",
         "Stage upscaling",
+        architectureId === "wan22" &&
+            unsupportedUpscales.every((stage) =>
+                isKnownAdvancedUpscale(stage.upscaleMethod),
+            )
+            ? "warning"
+            : "error",
     );
     const sourceKind = audioSourceKind(clip.audioSource);
     const selectedAudioSourceSupported = supports("clipAudio", {
@@ -178,7 +204,7 @@ const persistedCapabilityIssues = (
     if (
         clip.clipLengthFromControlNet &&
         supportsControlSignalDerivedDuration &&
-        !hasArchitectureSlotSourcedIcLora(clip.architecture, clip.icLoras)
+        !hasArchitectureSlotSourcedIcLora(architectureId, clip.icLoras)
     ) {
         diagnostics.push(
             issue(
@@ -189,6 +215,23 @@ const persistedCapabilityIssues = (
         );
     }
     return diagnostics;
+};
+
+/** Resolves the architecture frontend diagnostics may execute, without rewriting authored hints. */
+export const effectiveArchitectureIdForClip = (
+    clip: Clip,
+    catalog: ArchitectureModelCatalog,
+): string => {
+    const sourceOnly =
+        activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+    if (sourceOnly) return NONE_ARCHITECTURE_ID;
+    const firstAuthoredModel =
+        clip.stages.length > 0
+            ? catalog.entries.find(
+                  (entry) => entry.value === clip.stages[0].model,
+              )
+            : undefined;
+    return firstAuthoredModel?.architectureId ?? clip.architecture;
 };
 
 /**
@@ -204,18 +247,54 @@ export const deriveArchitectureDiagnostics = (
     const architectureById = new Map(
         catalog.architectures.map((entry) => [entry.id, entry]),
     );
-    const boundaries = createBoundaryCapabilityViews(
-        architectureById,
-        createClipStageCapabilityViews(architectureById).forClip,
-    );
     const modelByName = new Map(
         catalog.entries.map((entry) => [entry.value, entry]),
+    );
+    const boundaries = createBoundaryCapabilityViews(
+        architectureById,
+        createClipStageCapabilityViews(architectureById, modelByName).forClip,
     );
     const executableClipIndexSet = new Set(executableClipIndexes(clips));
 
     clips.forEach((clip, clipIdx) => {
         const sourceOnly =
             activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+        const resolvedFirstModel =
+            !sourceOnly && clip.stages.length > 0
+                ? modelByName.get(clip.stages[0].model)
+                : undefined;
+        const effectiveArchitectureId = effectiveArchitectureIdForClip(
+            clip,
+            catalog,
+        );
+        const effectiveModelProfileId =
+            resolvedFirstModel?.modelProfileId ?? clip.modelProfileId;
+        if (
+            resolvedFirstModel?.architectureId &&
+            resolvedFirstModel.architectureId !== clip.architecture
+        ) {
+            diagnostics.push(
+                issue(
+                    "architecture.stale-identity-hint",
+                    `Clip ${clipIdx} caches architecture '${clip.architecture}', but model '${clip.stages[0].model}' resolves to '${resolvedFirstModel.architectureId}'. Generation uses the resolved architecture and preserves the authored hint.`,
+                    clipIdx,
+                    "warning",
+                ),
+            );
+        }
+        if (
+            resolvedFirstModel?.modelProfileId &&
+            resolvedFirstModel.modelProfileId !== clip.modelProfileId
+        ) {
+            diagnostics.push(
+                issue(
+                    "architecture.stale-profile-hint",
+                    `Clip ${clipIdx} caches model profile '${clip.modelProfileId}', but model '${clip.stages[0].model}' resolves to '${resolvedFirstModel.modelProfileId}'. Generation uses the resolved profile and preserves the authored hint.`,
+                    clipIdx,
+                    "warning",
+                ),
+            );
+        }
         if (sourceOnly) {
             if (
                 clip.architecture !== NONE_ARCHITECTURE_ID ||
@@ -233,7 +312,7 @@ export const deriveArchitectureDiagnostics = (
 
         const architecture = sourceOnly
             ? architectureById.get("none")
-            : architectureById.get(clip.architecture);
+            : architectureById.get(effectiveArchitectureId);
         if (!architecture && !sourceOnly) {
             diagnostics.push(
                 issue(
@@ -247,6 +326,7 @@ export const deriveArchitectureDiagnostics = (
                 ...persistedCapabilityIssues(
                     clip,
                     clipIdx,
+                    effectiveArchitectureId,
                     architecture.capabilities,
                 ),
             );
@@ -309,14 +389,15 @@ export const deriveArchitectureDiagnostics = (
                 resolved.architectureId !== dormantArchitecture;
             if (
                 mixedDormant ||
-                (!sourceOnly && resolved.architectureId !== clip.architecture)
+                (!sourceOnly &&
+                    resolved.architectureId !== effectiveArchitectureId)
             ) {
                 diagnostics.push(
                     issue(
                         "architecture.mixed-stage",
                         sourceOnly
                             ? `Source-only Clip ${clipIdx} has dormant stages from multiple architectures; Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`
-                            : `Clip ${clipIdx} is locked to '${clip.architecture}', but Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`,
+                            : `Clip ${clipIdx} is locked to '${effectiveArchitectureId}', but Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`,
                         clipIdx,
                     ),
                 );
@@ -325,13 +406,14 @@ export const deriveArchitectureDiagnostics = (
                 stage.modelProfileId !== resolved.modelProfileId ||
                 (!sourceOnly &&
                     stageIdx === 0 &&
-                    clip.modelProfileId !== resolved.modelProfileId)
+                    effectiveModelProfileId !== resolved.modelProfileId)
             ) {
                 diagnostics.push(
                     issue(
                         "architecture.profile-mismatch",
-                        `Clip ${clipIdx} Stage ${stageIdx} profile identity does not match model '${stage.model}'.`,
+                        `Clip ${clipIdx} Stage ${stageIdx} caches a profile identity that does not match model '${stage.model}'. Generation uses the resolved profile and preserves the authored hint.`,
                         clipIdx,
+                        "warning",
                     ),
                 );
             }
@@ -384,14 +466,16 @@ export const deriveArchitectureDiagnostics = (
         const left = { clip: clips[seam.leftIdx], clipIdx: seam.leftIdx };
         const right = { clip: clips[seam.rightIdx], clipIdx: seam.rightIdx };
         if (
-            left.clip.architecture !== right.clip.architecture &&
+            effectiveArchitectureIdForClip(left.clip, catalog) !==
+                effectiveArchitectureIdForClip(right.clip, catalog) &&
             left.clip.boundaryOut !== "cut"
         ) {
             diagnostics.push(
                 issue(
                     "architecture.cross-boundary-cut-only",
-                    `Clip ${left.clipIdx} → ${right.clipIdx} crosses architectures; '${left.clip.boundaryOut}' is preserved for repair, but only cut can execute.`,
+                    `Clip ${left.clipIdx} → ${right.clipIdx} crosses architectures; '${left.clip.boundaryOut}' remains authored, but generation safely uses a cut.`,
                     left.clipIdx,
+                    "warning",
                 ),
             );
             continue;
@@ -411,8 +495,9 @@ export const deriveArchitectureDiagnostics = (
             diagnostics.push(
                 issue(
                     "architecture.boundary-unsupported",
-                    `Clip ${left.clipIdx} cannot execute a '${left.clip.boundaryOut}' boundary into Clip ${right.clipIdx}.${reason}`,
+                    `Clip ${left.clipIdx} cannot execute a '${left.clip.boundaryOut}' boundary into Clip ${right.clipIdx}.${reason} Generation safely uses a cut while preserving the authored boundary.`,
                     left.clipIdx,
+                    "warning",
                 ),
             );
         }

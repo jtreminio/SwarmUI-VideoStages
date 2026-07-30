@@ -16,6 +16,7 @@ import {
     detailBreadcrumb,
 } from "../detailStrip/panelRouter";
 import { renderTimeline } from "../timelineView";
+import type { Clip } from "../types";
 import { reconcileClipArchitectureIdentity } from "./clipIdentity";
 import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
 import { createCapabilityViewResolver } from "./policy";
@@ -33,6 +34,40 @@ const catalog = (): ArchitectureModelCatalog => {
         ],
         entries: [...ltx.entries, ...fake.entries],
     };
+};
+
+const catalogWithWan = (): ArchitectureModelCatalog => {
+    const models = catalog();
+    const ltx = models.architectures.find((entry) => entry.id === "ltx2");
+    if (!ltx) throw new Error("missing LTX architecture");
+    ltx.capabilities.upscaleModes = ["model"];
+    const wan = structuredClone(ltx);
+    wan.id = "wan22";
+    wan.label = "WAN 2.2";
+    wan.defaultProfileId = "wan22-i2v-14b";
+    wan.capabilities.stage = wan.capabilities.stage.filter(
+        (capability) =>
+            capability !== "lora" &&
+            capability !== "ic-lora" &&
+            capability !== "hdr",
+    );
+    wan.capabilities.upscaleModes = ["pixel"];
+    wan.profiles = [
+        {
+            ...wan.profiles[0],
+            id: "wan22-i2v-14b",
+            label: "WAN 2.2 I2V 14B",
+            capabilities: [],
+        },
+    ];
+    models.architectures.push(wan);
+    models.entries.push({
+        value: "wan-14b.safetensors",
+        label: "WAN 14B",
+        architectureId: "wan22",
+        modelProfileId: "wan22-i2v-14b",
+    });
+    return models;
 };
 
 const fakeClip = () =>
@@ -106,6 +141,12 @@ describe("catalog-backed authoring policy", () => {
             visible: true,
             enabled: false,
         });
+        const sourceStage = createCapabilityViewResolver(models).forStage(
+            clip,
+            clip.stages[0],
+        );
+        expect(sourceStage.upscaleModes).toEqual([]);
+        expect(sourceStage.decision("sampler").supported).toBe(false);
         expect(
             createCapabilityViewResolver(models)
                 .forClip(minimalClip())
@@ -337,6 +378,72 @@ describe("catalog-backed authoring policy", () => {
 
         expect(decision.supported).toBe(false);
         expect(decision.reason).toContain("normal-LoRA");
+    });
+
+    it("uses the actual WAN stage model instead of stale LTX identity and profile hints", () => {
+        const models = catalogWithWan();
+        const clip = minimalClip({
+            architecture: "ltx2",
+            modelProfileId: "ltx-2.3",
+            stages: [
+                minimalStage({
+                    model: "wan-14b.safetensors",
+                    modelProfileId: "ltx-2.3",
+                }),
+            ],
+        });
+        const before = structuredClone(clip);
+        const resolver = createCapabilityViewResolver(models);
+        const clipView = resolver.forClip(clip);
+        const stageView = resolver.forStage(clip, clip.stages[0]);
+
+        expect(clipView).toMatchObject({
+            architectureId: "wan22",
+            architectureLabel: "WAN 2.2",
+            known: true,
+        });
+        expect(clipView.decision("icLora").supported).toBe(false);
+        expect(clipView.decision("stageLoras").supported).toBe(false);
+        expect(stageView.upscaleModes).toEqual(["pixel"]);
+        expect(stageView.decision("upscale").supported).toBe(true);
+        expect(stageView.decision("sampler").supported).toBe(false);
+        expect(stageView.decision("scheduler").supported).toBe(false);
+        expect(stageView.decision("stageLoras").supported).toBe(false);
+        expect(clip).toEqual(before);
+    });
+
+    it("evaluates conditional HDR state with the resolved architecture ID", () => {
+        const models = catalogWithWan();
+        const wan = models.architectures.find((entry) => entry.id === "wan22");
+        if (!wan) throw new Error("missing WAN architecture");
+        // Keep HDR authoring available so this isolates the conditional
+        // behavior lookup from the basic capability check.
+        wan.capabilities.stage.push("hdr");
+        const wanClip = (icLoras: Clip["icLoras"] = []) =>
+            minimalClip({
+                architecture: "ltx2",
+                modelProfileId: "ltx-2.3",
+                icLoras,
+                stages: [
+                    minimalStage({
+                        model: "wan-14b.safetensors",
+                        modelProfileId: "ltx-2.3",
+                    }),
+                ],
+            });
+        const hdr = wanClip([hdrIcLoraFixture()]);
+        const plain = wanClip();
+
+        expect(
+            createCapabilityViewResolver(models, {
+                timelineClips: [hdr, plain],
+            })
+                .forClip(hdr)
+                .decision("hdr"),
+        ).toMatchObject({
+            supported: true,
+            rule: null,
+        });
     });
 
     it("applies a profile stage-control rule only to stage LoRA authoring", () => {

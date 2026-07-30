@@ -118,10 +118,13 @@ export const architectureIcLoraDisplayName = (
     entry.lora;
 
 /** True when the clip has an HDR IC-LoRA bound to at least one active stage. */
-export const clipHasActiveHdr = (clip: Clip): boolean =>
+export const clipHasActiveHdrForArchitecture = (
+    clip: Clip,
+    architectureId: string,
+): boolean =>
     clip.icLoras.some(
         (entry) =>
-            isArchitectureHdrFeature(clip.architecture, entry) &&
+            isArchitectureHdrFeature(architectureId, entry) &&
             clip.stages
                 .slice(0, activeStageCount(clip))
                 .some(
@@ -129,3 +132,6 @@ export const clipHasActiveHdr = (clip: Clip): boolean =>
                         entry.stage < 0 || entry.stage === rawStageIdx,
                 ),
     );
+
+export const clipHasActiveHdr = (clip: Clip): boolean =>
+    clipHasActiveHdrForArchitecture(clip, clip.architecture);

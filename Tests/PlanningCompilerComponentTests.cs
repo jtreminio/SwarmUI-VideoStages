@@ -678,7 +678,15 @@ public class PlanningCompilerComponentTests
     private static VideoExecutionPlan CompileFromComponents(VideoStagesSpec spec, RootEnvironment environment)
     {
         ArchitecturePlanningResult architecture = TestPlanCompiler.ResolveLtx(spec);
-        List<PlanDiagnostic> diagnostics = [];
+        EffectiveVideoRequest request =
+            EffectiveVideoRequestProjector.Project(spec, architecture);
+        spec = request.Spec;
+        architecture = request.ArchitecturePlanning;
+        List<PlanDiagnostic> diagnostics =
+        [
+            .. architecture.Diagnostics,
+            .. request.Diagnostics,
+        ];
         List<ClipSpec> clips = [];
         HashSet<int> seenClipIds = [];
         foreach (ClipSpec clip in (spec.Clips ?? []).Where(clip =>
@@ -747,7 +755,11 @@ public class PlanningCompilerComponentTests
             firstStageOrdinal += clips[i].Stages?.Count ?? 0;
         }
 
-        BoundaryPlanningResult boundaries = BoundaryPlanCompiler.Compile(clips, plans);
+        BoundaryPlanningResult boundaries = BoundaryPlanCompiler.Compile(
+            clips,
+            plans,
+            request.AuthoredBoundaryModes,
+            request.ProjectedBoundaryFallbacks);
         diagnostics.AddRange(boundaries.Diagnostics);
         BoundaryBudgetResolution boundaryBudget = BoundaryOverlapPlanner.ResolvePlanBudgets(
             [.. clips.Select(clip => clip.Frames)],

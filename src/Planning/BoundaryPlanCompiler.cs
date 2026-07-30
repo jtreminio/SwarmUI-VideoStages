@@ -8,7 +8,9 @@ internal static class BoundaryPlanCompiler
 {
     internal static BoundaryPlanningResult Compile(
         IReadOnlyList<ClipSpec> clips,
-        IReadOnlyList<ClipPlan> plannedClips = null)
+        IReadOnlyList<ClipPlan> plannedClips = null,
+        IReadOnlyDictionary<int, BoundaryExecutionMode> authoredBoundaryModes = null,
+        IReadOnlyDictionary<int, BoundaryFallback> projectedBoundaryFallbacks = null)
     {
         ImmutableArray<BoundaryPlan>.Builder boundaries = ImmutableArray.CreateBuilder<BoundaryPlan>();
         ImmutableArray<PlanDiagnostic>.Builder diagnostics =
@@ -16,10 +18,24 @@ internal static class BoundaryPlanCompiler
         for (int i = 0; i < clips.Count - 1; i++)
         {
             ClipSpec from = clips[i];
-            BoundaryExecutionMode requested = BoundaryPolicy.ParsePlanMode(from.BoundaryOut, out bool isKnown);
+            BoundaryExecutionMode effectiveRequested =
+                BoundaryPolicy.ParsePlanMode(from.BoundaryOut, out bool isKnown);
+            BoundaryExecutionMode requested =
+                authoredBoundaryModes?.GetValueOrDefault(from.Id)
+                ?? effectiveRequested;
             ClipSpec to = clips[i + 1];
-            BoundaryFallback fallback = isKnown ? BoundaryFallback.None : BoundaryFallback.UnknownBoundaryKind;
-            BoundaryExecutionMode effective = requested;
+            BoundaryFallback projectedFallback = BoundaryFallback.None;
+            bool hasProjectedFallback =
+                projectedBoundaryFallbacks is not null
+                && projectedBoundaryFallbacks.TryGetValue(
+                    from.Id,
+                    out projectedFallback);
+            BoundaryFallback fallback = hasProjectedFallback
+                ? projectedFallback
+                : isKnown
+                    ? BoundaryFallback.None
+                    : BoundaryFallback.UnknownBoundaryKind;
+            BoundaryExecutionMode effective = effectiveRequested;
             ClipPlan plannedFrom = plannedClips is not null && i < plannedClips.Count
                 ? plannedClips[i]
                 : null;
@@ -29,12 +45,12 @@ internal static class BoundaryPlanCompiler
             // One owner: the architecture's typed boundary policy. The catalog publishes the
             // same modes, so the advertised rule is the rule compiled here.
             ArchitectureBoundaryModePolicy modePolicy = plannedFrom?.Architecture?.BoundaryPolicy
-                ?.Modes.GetValueOrDefault(requested);
+                ?.Modes.GetValueOrDefault(effectiveRequested);
             if (!isKnown)
             {
                 effective = BoundaryExecutionMode.Cut;
             }
-            else if (requested != BoundaryExecutionMode.Cut
+            else if (effectiveRequested != BoundaryExecutionMode.Cut
                 && plannedFrom?.Architecture is not null
                 && plannedTo?.Architecture is not null
                 && plannedFrom.Architecture.Id != plannedTo.Architecture.Id)
@@ -49,7 +65,7 @@ internal static class BoundaryPlanCompiler
                         + $"'{plannedTo.Architecture.Id}'. Cross-architecture boundaries must be cuts.",
                     from.Id));
             }
-            else if (requested != BoundaryExecutionMode.Cut
+            else if (effectiveRequested != BoundaryExecutionMode.Cut
                 && modePolicy is { Support: RuleSupport.Unsupported })
             {
                 effective = BoundaryExecutionMode.Cut;
@@ -60,7 +76,7 @@ internal static class BoundaryPlanCompiler
                     modePolicy.Reason,
                     from.Id));
             }
-            else if (requested != BoundaryExecutionMode.Cut
+            else if (effectiveRequested != BoundaryExecutionMode.Cut
                 && EvaluateTarget(modePolicy, to) is { } targetFallback)
             {
                 effective = BoundaryExecutionMode.Cut;
@@ -76,7 +92,7 @@ internal static class BoundaryPlanCompiler
                 : 0;
             bool targetHasGenerationStage = plannedTo?.Stages is { Count: > 0 }
                 || (plannedTo is null && to.Stages is { Count: > 0 });
-            if (fallback != BoundaryFallback.None)
+            if (fallback != BoundaryFallback.None && !hasProjectedFallback)
             {
                 diagnostics.Add(new PlanDiagnostic(
                     PlanDiagnosticSeverity.Warning,

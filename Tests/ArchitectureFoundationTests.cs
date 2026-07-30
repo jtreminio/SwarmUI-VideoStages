@@ -51,7 +51,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Resolver_rejects_persisted_clip_identity_mismatch()
+    public void Effective_request_ignores_a_stale_persisted_clip_identity_hint()
     {
         ClipSpec clip = GeneratedClip(0, Stage(10, "ltx-model")) with
         {
@@ -59,12 +59,21 @@ public class ArchitectureFoundationTests
             AuthoredStages = [new(0, "ltx-model", "ltx-profile", Skipped: false)],
         };
 
+        VideoStagesSpec spec = Spec(clip);
         ArchitecturePlanningResult result =
-            ArchitecturePlanResolver.Resolve(Spec(clip), new FakeRegistry());
+            ArchitecturePlanResolver.Resolve(spec, new FakeRegistry());
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            result);
 
-        Assert.Contains(
+        Assert.DoesNotContain(
             result.Diagnostics,
             item => item.Code == "architecture-authored-identity-mismatch");
+        Assert.Contains(
+            plan.Diagnostics,
+            item => item.Code == "effective-request.stale-architecture-hint"
+                && item.Severity == PlanDiagnosticSeverity.Warning);
     }
 
     [Fact]
@@ -141,7 +150,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Resolver_validates_profile_ids_for_skipped_raw_stage_positions()
+    public void Effective_request_refreshes_profile_hints_for_skipped_raw_stage_positions()
     {
         ClipSpec inactive = GeneratedClip(0) with
         {
@@ -157,11 +166,19 @@ public class ArchitectureFoundationTests
         ArchitecturePlanningResult result =
             ArchitecturePlanResolver.Resolve(Spec(inactive), new FakeRegistry());
 
+        EffectiveVideoRequest request =
+            EffectiveVideoRequestProjector.Project(Spec(inactive), result);
         PlanDiagnostic diagnostic = Assert.Single(
-            result.Diagnostics,
-            item => item.Code == "architecture-authored-stage-profile-mismatch");
+            request.Diagnostics,
+            item => item.Code == "effective-request.stale-stage-profile-hint");
         Assert.Contains("stage 3", diagnostic.Message);
         Assert.Equal(3, diagnostic.RawStageIndex);
+        Assert.Equal(
+            "ltx-profile",
+            request.Spec.Clips[0].AuthoredStages[1].ModelProfileId);
+        Assert.Equal(
+            "wrong-profile",
+            inactive.AuthoredStages[1].ModelProfileId);
         Assert.Equal(new ArchitectureId("ltx2"), result.Clips[0].Architecture.Id);
     }
 
@@ -305,7 +322,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Cross_architecture_non_cut_boundary_is_a_blocking_plan_error()
+    public void Cross_architecture_non_cut_boundary_warns_and_uses_an_effective_cut()
     {
         ClipSpec left = GeneratedClip(0, Stage(10, "ltx-model")) with
         {
@@ -330,10 +347,17 @@ public class ArchitectureFoundationTests
         BoundaryPlan boundary = Assert.Single(plan.Boundaries);
         Assert.Equal(BoundaryExecutionMode.Crossfade, boundary.Requested);
         Assert.Equal(BoundaryExecutionMode.Cut, boundary.Effective);
-        Assert.Contains(
+        Assert.Equal(
+            BoundaryFallback.ArchitectureRuleUnsupported,
+            boundary.Fallback);
+        Assert.Single(
             plan.Diagnostics,
-            item => item.Code == "boundary-cross-architecture-non-cut"
-                && item.Severity == PlanDiagnosticSeverity.Error);
+            item => item.Code == "effective-request.boundary-degraded-to-cut"
+                && item.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            item => item.Severity == PlanDiagnosticSeverity.Error);
+        Assert.Equal(Constants.BoundaryOutCrossfade, left.BoundaryOut);
     }
 
     [Fact]

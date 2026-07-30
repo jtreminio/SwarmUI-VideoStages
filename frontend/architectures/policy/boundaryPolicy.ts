@@ -48,9 +48,11 @@ export const createBoundaryCapabilityViews = (
         rightClipIdx: number | null = null,
     ): BoundaryCapabilityView => {
         const leftView = forClip(left);
-        const leftDescriptor = architectureById.get(left.architecture);
+        const rightView = right === null ? null : forClip(right);
+        const leftDescriptor = architectureById.get(leftView.architectureId);
         const crossArchitecture =
-            right !== null && left.architecture !== right.architecture;
+            rightView !== null &&
+            leftView.architectureId !== rightView.architectureId;
         const hasInitialReference =
             right?.refs.some(
                 (reference) =>

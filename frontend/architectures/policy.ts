@@ -32,7 +32,14 @@ export const createCapabilityViewResolver = (
     const architectureById = new Map(
         catalog.architectures.map((entry) => [entry.id, entry]),
     );
-    const clipStage = createClipStageCapabilityViews(architectureById, scope);
+    const modelByName = new Map(
+        catalog.entries.map((entry) => [entry.value, entry]),
+    );
+    const clipStage = createClipStageCapabilityViews(
+        architectureById,
+        modelByName,
+        scope,
+    );
     const boundaries = createBoundaryCapabilityViews(
         architectureById,
         clipStage.forClip,

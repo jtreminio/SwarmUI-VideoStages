@@ -30,7 +30,182 @@ const combinedCatalog = (): ArchitectureModelCatalog => {
     };
 };
 
+const wanCatalog = (): ArchitectureModelCatalog => {
+    const models = combinedCatalog();
+    const template = models.architectures.find((entry) => entry.id === "ltx2");
+    if (!template) throw new Error("missing architecture template");
+    const wan = structuredClone(template);
+    wan.id = "wan22";
+    wan.label = "WAN 2.2";
+    wan.defaultProfileId = "wan22-i2v-14b";
+    wan.capabilities.stage = wan.capabilities.stage.filter(
+        (capability) => capability !== "ic-lora" && capability !== "hdr",
+    );
+    wan.capabilities.upscaleModes = ["pixel"];
+    wan.profiles = [
+        {
+            ...wan.profiles[0],
+            id: "wan22-i2v-14b",
+            label: "WAN 2.2 I2V 14B",
+            entryModes: ["image-to-video", "source-video"],
+        },
+    ];
+    models.architectures.push(wan);
+    models.entries.push({
+        value: "wan-14b.safetensors",
+        label: "WAN 14B",
+        architectureId: "wan22",
+        modelProfileId: "wan22-i2v-14b",
+    });
+    return models;
+};
+
 describe("architecture diagnostics", () => {
+    it("warns for stale resolved identity hints without changing the authored clip", () => {
+        const clip = minimalClip({
+            architecture: "removed-cache",
+            modelProfileId: "old-profile",
+            stages: [
+                minimalStage({
+                    model: "ltx",
+                    modelProfileId: "old-stage-profile",
+                }),
+            ],
+        });
+        const before = structuredClone(clip);
+
+        const matching = deriveArchitectureDiagnostics(
+            [clip],
+            combinedCatalog(),
+        ).filter(({ code }) =>
+            [
+                "architecture.stale-identity-hint",
+                "architecture.stale-profile-hint",
+                "architecture.profile-mismatch",
+            ].includes(code),
+        );
+
+        expect(matching).toHaveLength(3);
+        expect(matching.every(({ severity }) => severity === "warning")).toBe(
+            true,
+        );
+        expect(clip).toEqual(before);
+    });
+
+    it("resolves stale hints from the first authored model even when every stage is skipped", () => {
+        const clip = minimalClip({
+            architecture: "removed-cache",
+            modelProfileId: "old-profile",
+            stages: [
+                minimalStage({
+                    skipped: true,
+                    model: "ltx",
+                    modelProfileId: "old-stage-profile",
+                }),
+            ],
+        });
+
+        const diagnostics = deriveArchitectureDiagnostics(
+            [clip],
+            combinedCatalog(),
+        );
+        expect(
+            diagnostics.find(
+                ({ code }) => code === "architecture.stale-identity-hint",
+            )?.severity,
+        ).toBe("warning");
+        expect(
+            diagnostics.find(
+                ({ code }) => code === "architecture.stale-profile-hint",
+            )?.severity,
+        ).toBe("warning");
+        expect(diagnostics.map(({ code }) => code)).not.toContain(
+            "architecture.unknown",
+        );
+    });
+
+    it("uses the resolved WAN identity for existing HDR and IC-LoRA source checks", () => {
+        const clip = minimalClip({
+            architecture: "ltx2",
+            modelProfileId: "ltx-2.3",
+            clipLengthFromControlNet: true,
+            icLoras: [
+                hdrIcLoraFixture({
+                    hdr: true,
+                    driveSource: "ControlNet 1",
+                }),
+            ],
+            stages: [
+                minimalStage({
+                    model: "wan-14b.safetensors",
+                    modelProfileId: "wan22-i2v-14b",
+                }),
+            ],
+        });
+
+        const diagnostics = deriveArchitectureDiagnostics([clip], wanCatalog());
+        const codes = diagnostics.map(({ code }) => code);
+        expect(codes).toContain("architecture.unsupported.ic-lora");
+        expect(codes).toContain(
+            "architecture.unusable.clip-length-from-control-net",
+        );
+        expect(codes).not.toContain("architecture.unsupported.hdr");
+    });
+
+    it("warns for safely ignored WAN IC-LoRA and advanced upscale values", () => {
+        const clip = minimalClip({
+            architecture: "wan22",
+            modelProfileId: "wan22-i2v-14b",
+            icLoras: [hdrIcLoraFixture({ hdr: false })],
+            stages: [
+                minimalStage({
+                    model: "wan-14b.safetensors",
+                    modelProfileId: "wan22-i2v-14b",
+                    upscale: 2,
+                    upscaleMethod: "latentmodel-detail.safetensors",
+                }),
+            ],
+        });
+        const before = structuredClone(clip);
+
+        const matching = deriveArchitectureDiagnostics(
+            [clip],
+            wanCatalog(),
+        ).filter(({ code }) =>
+            [
+                "architecture.unsupported.ic-lora",
+                "architecture.unsupported.upscale",
+            ].includes(code),
+        );
+
+        expect(matching).toHaveLength(2);
+        expect(matching.every(({ severity }) => severity === "warning")).toBe(
+            true,
+        );
+        expect(clip).toEqual(before);
+    });
+
+    it("keeps an unclassifiable WAN upscale blocking", () => {
+        const clip = minimalClip({
+            architecture: "wan22",
+            modelProfileId: "wan22-i2v-14b",
+            stages: [
+                minimalStage({
+                    model: "wan-14b.safetensors",
+                    modelProfileId: "wan22-i2v-14b",
+                    upscale: 2,
+                    upscaleMethod: "future-upscale",
+                }),
+            ],
+        });
+
+        expect(
+            deriveArchitectureDiagnostics([clip], wanCatalog()).find(
+                ({ code }) => code === "architecture.unsupported.upscale",
+            )?.severity,
+        ).toBe("error");
+    });
+
     it("checks skipped authored stages and preserves the invalid document", () => {
         const clip = minimalClip({
             stages: [
@@ -260,7 +435,7 @@ describe("architecture diagnostics", () => {
         expect(clip).toEqual(before);
     });
 
-    it("blocks cross-architecture non-cut joins between executable neighbors", () => {
+    it("warns when cross-architecture non-cut joins will execute as cuts", () => {
         const left = minimalClip({ boundaryOut: "continue" });
         const right = minimalClip({
             architecture: "test-video",
@@ -273,11 +448,56 @@ describe("architecture diagnostics", () => {
             ],
         });
 
+        const diagnostic = deriveArchitectureDiagnostics(
+            [left, right],
+            combinedCatalog(),
+        ).find(({ code }) => code === "architecture.cross-boundary-cut-only");
+        expect(diagnostic?.severity).toBe("warning");
+    });
+
+    it("uses actual WAN models for a same-architecture unsupported continue despite stale LTX hints", () => {
+        const models = wanCatalog();
+        const wan = models.architectures.find((entry) => entry.id === "wan22");
+        if (!wan) throw new Error("missing WAN architecture");
+        wan.boundaryRules.continue = {
+            support: "unsupported",
+            code: "wan22.boundary.continue.unsupported",
+            reason: "WAN 2.2 only supports cut boundaries.",
+            scope: "boundary",
+            entityId: null,
+            constraints: null,
+        };
+        const staleWanClip = (boundaryOut: Clip["boundaryOut"]) =>
+            minimalClip({
+                architecture: "ltx2",
+                modelProfileId: "ltx-2.3",
+                boundaryOut,
+                stages: [
+                    minimalStage({
+                        model: "wan-14b.safetensors",
+                        modelProfileId: "ltx-2.3",
+                    }),
+                ],
+            });
+        const clips = [staleWanClip("continue"), staleWanClip("cut")];
+        const before = structuredClone(clips);
+
+        const diagnostics = deriveArchitectureDiagnostics(clips, models);
+
         expect(
-            deriveArchitectureDiagnostics([left, right], combinedCatalog()).map(
-                ({ code }) => code,
+            diagnostics.filter(
+                ({ code }) => code === "architecture.boundary-unsupported",
             ),
-        ).toContain("architecture.cross-boundary-cut-only");
+        ).toEqual([
+            expect.objectContaining({
+                severity: "warning",
+                clipIdx: 0,
+            }),
+        ]);
+        expect(diagnostics.map(({ code }) => code)).not.toContain(
+            "architecture.cross-boundary-cut-only",
+        );
+        expect(clips).toEqual(before);
     });
 
     describe("persisted joins that only the boundary constraints reject", () => {
@@ -293,7 +513,7 @@ describe("architecture diagnostics", () => {
             );
         });
 
-        it("blocks a continue into a clip with no active stage", () => {
+        it("warns that a continue into a source-only skipped-stage clip becomes a cut", () => {
             expect(
                 codesFor(
                     minimalClip({
@@ -301,10 +521,10 @@ describe("architecture diagnostics", () => {
                         sourceVideo: sourceVideoFixture(),
                     }),
                 ),
-            ).toContain("architecture.boundary-unsupported");
+            ).toContain("architecture.cross-boundary-cut-only");
         });
 
-        it("blocks a continue into a sourced clip", () => {
+        it("warns when a continue target is sourced", () => {
             expect(
                 codesFor(minimalClip({ sourceVideo: sourceVideoFixture() })),
             ).toContain("architecture.boundary-unsupported");

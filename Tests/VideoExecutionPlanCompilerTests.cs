@@ -503,7 +503,7 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_ContinueIntoSourcedClip_PreservesInvalidAuthoredBoundaryAndBlocksGeneration()
+    public void Compile_ContinueIntoSourcedClip_PreservesAuthoredBoundaryAndWarnsWhileUsingCut()
     {
         ClipSpec first = GeneratedClip(0, Stage(10)) with
         {
@@ -518,11 +518,17 @@ public class VideoExecutionPlanCompilerTests
         BoundaryPlan boundary = plan.Boundaries[0];
         Assert.Equal(BoundaryExecutionMode.Continue, boundary.Requested);
         Assert.Equal(BoundaryExecutionMode.Cut, boundary.Effective);
-        Assert.Equal(BoundaryFallback.ArchitectureRuleUnsupported, boundary.Fallback);
+        Assert.Equal(
+            BoundaryFallback.ArchitectureRuleUnsupported,
+            boundary.Fallback);
         Assert.Equal(0, boundary.ContinuityWindowFrames);
         Assert.Contains(plan.Diagnostics, d =>
-            d.Code == "boundary-cross-architecture-non-cut"
-            && d.Severity == PlanDiagnosticSeverity.Error);
+            d.Code == "effective-request.boundary-degraded-to-cut"
+            && d.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        Assert.Equal(Constants.BoundaryOutContinue, first.BoundaryOut);
     }
 
     [Fact]

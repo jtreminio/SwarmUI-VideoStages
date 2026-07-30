@@ -1191,8 +1191,8 @@
   var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => architectureBehavior(architectureId)?.hasSlotSourcedIcLora(entries) ?? false;
   var isArchitectureHdrFeature = (architectureId, entry) => architectureBehavior(architectureId)?.isHdrFeature(entry) ?? false;
   var architectureIcLoraDisplayName = (architectureId, entry) => architectureBehavior(architectureId)?.icLoraDisplayName(entry) ?? entry.lora;
-  var clipHasActiveHdr = (clip) => clip.icLoras.some(
-    (entry) => isArchitectureHdrFeature(clip.architecture, entry) && clip.stages.slice(0, activeStageCount(clip)).some(
+  var clipHasActiveHdrForArchitecture = (clip, architectureId) => clip.icLoras.some(
+    (entry) => isArchitectureHdrFeature(architectureId, entry) && clip.stages.slice(0, activeStageCount(clip)).some(
       (_stage, rawStageIdx) => entry.stage < 0 || entry.stage === rawStageIdx
     )
   );
@@ -3629,7 +3629,7 @@
     ],
     hdr: [CONDITIONAL_RULE_CODES.uniformTimelineHdr]
   };
-  var conditionalRuleFor = (clip, feature, descriptor, scope) => {
+  var conditionalRuleFor = (clip, feature, descriptor, scope, effectiveArchitectureId) => {
     const codes = FEATURE_RULE_CODES[feature];
     if (!codes) return void 0;
     for (const code of codes) {
@@ -3638,7 +3638,10 @@
         clip,
         globalRefineMode: scope.globalRefineMode,
         timelineClips: scope.timelineClips,
-        hasActiveHdr: clipHasActiveHdr
+        hasActiveHdr: (target) => clipHasActiveHdrForArchitecture(
+          target,
+          effectiveArchitectureId(target)
+        )
       })) {
         return rule;
       }
@@ -3691,10 +3694,22 @@
       (entry) => entry.id === profileId
     )?.capabilities
   });
-  var createClipStageCapabilityViews = (architectureById, scope = {}) => {
+  var createClipStageCapabilityViews = (architectureById, modelByName, scope = {}) => {
+    const effectiveClipIdentity = (clip) => {
+      const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+      const resolvedModel = sourceOnly ? void 0 : modelByName.get(clip.stages[0]?.model ?? "");
+      const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? clip.architecture;
+      const profileId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.modelProfileId ?? clip.modelProfileId;
+      return {
+        architectureId,
+        profileId,
+        descriptor: architectureById.get(architectureId)
+      };
+    };
     const forClip = (clip) => {
-      const descriptor = architectureById.get(clip.architecture);
-      const label = descriptor?.label ?? (clip.architecture === NONE_ARCHITECTURE_ID ? "source-only clips" : `unknown architecture '${clip.architecture}'`);
+      const identity = effectiveClipIdentity(clip);
+      const { architectureId, profileId, descriptor } = identity;
+      const label = descriptor?.label ?? (architectureId === NONE_ARCHITECTURE_ID ? "source-only clips" : `unknown architecture '${architectureId}'`);
       const decision = (feature) => {
         if (!descriptor) {
           return {
@@ -3707,13 +3722,10 @@
           clip,
           feature,
           descriptor,
-          scope
+          scope,
+          (target) => effectiveClipIdentity(target).architectureId
         );
-        const supported = scopedFeatureSupport(
-          feature,
-          descriptor,
-          clip.modelProfileId
-        ) && !conditionalRule2;
+        const supported = scopedFeatureSupport(feature, descriptor, profileId) && !conditionalRule2;
         return {
           supported,
           reason: supported ? "" : conditionalRule2?.reason ?? architectureReason(label, feature),
@@ -3721,7 +3733,7 @@
         };
       };
       return {
-        architectureId: clip.architecture,
+        architectureId,
         architectureLabel: label,
         known: descriptor !== void 0,
         audioSourceKinds: descriptor?.capabilities.audioSourceKinds ?? [],
@@ -3738,34 +3750,45 @@
     };
     const forStage = (clip, stage) => {
       const view = forClip(clip);
-      const descriptor = architectureById.get(clip.architecture);
+      const sourceOnly = view.architectureId === NONE_ARCHITECTURE_ID && activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+      const resolvedModel = sourceOnly ? void 0 : modelByName.get(stage.model);
+      const architectureId = resolvedModel?.architectureId ?? view.architectureId;
+      const descriptor = architectureById.get(architectureId);
+      const profileId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.modelProfileId ?? stage.modelProfileId;
       const profile = descriptor?.profiles.find(
-        (entry) => entry.id === stage.modelProfileId
+        (entry) => entry.id === profileId
       );
       const decision = (feature) => {
         if (feature === "stageLoras" && descriptor) {
-          const supported = descriptor.capabilities.stage.includes("lora") && profile?.capabilities.includes("normal-lora") === true;
-          const profileRule = supported ? conditionalRule(
+          const supported2 = descriptor.capabilities.stage.includes("lora") && profile?.capabilities.includes("normal-lora") === true;
+          const profileRule = supported2 ? conditionalRule(
             profile.rules,
             CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
           ) : null;
           const violatedRule = profileRule && evaluateConditionalRule(profileRule, { clip, stage }) ? profileRule : null;
           return {
-            supported: supported && !violatedRule,
-            reason: supported && !violatedRule ? "" : violatedRule?.reason ?? `LoRAs require normal-LoRA support in ${descriptor.label}.`,
+            supported: supported2 && !violatedRule,
+            reason: supported2 && !violatedRule ? "" : violatedRule?.reason ?? `LoRAs require normal-LoRA support in ${descriptor.label}.`,
             rule: violatedRule
           };
         }
         if (feature === "sampler" || feature === "scheduler") {
           const required = feature === "sampler" ? "sampler-selection" : "scheduler-selection";
-          const supported = profile?.capabilities.includes(required) === true;
+          const supported2 = profile?.capabilities.includes(required) === true;
           return {
-            supported,
-            reason: supported ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection is not supported by this model profile.`,
+            supported: supported2,
+            reason: supported2 ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection is not supported by this model profile.`,
             rule: null
           };
         }
-        return view.decision(feature);
+        const supported = descriptor !== void 0 && architectureFeatureSupport("upscale", {
+          capabilities: descriptor.capabilities
+        });
+        return {
+          supported,
+          reason: supported ? "" : descriptor ? architectureReason(descriptor.label, "upscale") : noArchitectureReason("upscale"),
+          rule: null
+        };
       };
       return {
         upscaleModes: descriptor?.capabilities.upscaleModes ?? [],
@@ -3999,8 +4022,9 @@
   var createBoundaryCapabilityViews = (architectureById, forClip) => {
     const forBoundary = (left, right, leftClipIdx = -1, rightClipIdx = null) => {
       const leftView = forClip(left);
-      const leftDescriptor = architectureById.get(left.architecture);
-      const crossArchitecture = right !== null && left.architecture !== right.architecture;
+      const rightView = right === null ? null : forClip(right);
+      const leftDescriptor = architectureById.get(leftView.architectureId);
+      const crossArchitecture = rightView !== null && leftView.architectureId !== rightView.architectureId;
       const hasInitialReference = right?.refs.some(
         (reference) => reference.fromEnd !== true && Math.max(1, Math.round(reference.frame)) === 1
       ) ?? false;
@@ -5673,7 +5697,14 @@
     const architectureById = new Map(
       catalog.architectures.map((entry) => [entry.id, entry])
     );
-    const clipStage = createClipStageCapabilityViews(architectureById, scope);
+    const modelByName = new Map(
+      catalog.entries.map((entry) => [entry.value, entry])
+    );
+    const clipStage = createClipStageCapabilityViews(
+      architectureById,
+      modelByName,
+      scope
+    );
     const boundaries = createBoundaryCapabilityViews(
       architectureById,
       clipStage.forClip
@@ -5699,17 +5730,18 @@
   };
 
   // frontend/architectures/diagnostics.ts
-  var issue = (code, message, clipIdx) => ({ severity: "error", code, message, clipIdx });
-  var persistedCapabilityIssues = (clip, clipIdx, capabilities) => {
+  var issue = (code, message, clipIdx, severity = "error") => ({ severity, code, message, clipIdx });
+  var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities) => {
     const diagnostics = [];
     const supports = (feature, value) => architectureFeatureSupport(feature, { capabilities, ...value });
-    const unsupported = (active, key, label) => {
+    const unsupported = (active, key, label, severity = "error") => {
       if (active) {
         diagnostics.push(
           issue(
             `architecture.unsupported.${key}`,
-            `${label} is persisted on Clip ${clipIdx}, but its architecture does not support it. Remove it or explicitly convert the clip.`,
-            clipIdx
+            severity === "warning" ? `${label} is saved on Clip ${clipIdx}, but its architecture cannot use it. Generation will ignore it and keep the authored setting.` : `${label} is persisted on Clip ${clipIdx}, but its architecture does not support it. Remove it or explicitly convert the clip.`,
+            clipIdx,
+            severity
           )
         );
       }
@@ -5732,11 +5764,12 @@
     unsupported(
       !supports("icLora") && clip.icLoras.length > 0,
       "ic-lora",
-      "IC-LoRA"
+      "IC-LoRA",
+      architectureId === "wan22" ? "warning" : "error"
     );
     unsupported(
       !supports("hdr") && clip.icLoras.some(
-        (entry) => isArchitectureHdrFeature(clip.architecture, entry)
+        (entry) => isArchitectureHdrFeature(architectureId, entry)
       ),
       "hdr",
       "HDR"
@@ -5770,12 +5803,20 @@
       "stage-loras",
       "LoRAs"
     );
+    const unsupportedUpscales = clip.stages.filter(
+      (stage) => stage.upscale !== 1 && !supports("upscale", { upscaleMethod: stage.upscaleMethod })
+    );
+    const isKnownAdvancedUpscale = (method) => {
+      const normalized = method.trim().toLowerCase();
+      return normalized.startsWith("model-") || normalized.startsWith("latent-") || normalized.startsWith("latentmodel-");
+    };
     unsupported(
-      clip.stages.some(
-        (stage) => stage.upscale !== 1 && !supports("upscale", { upscaleMethod: stage.upscaleMethod })
-      ),
+      unsupportedUpscales.length > 0,
       "upscale",
-      "Stage upscaling"
+      "Stage upscaling",
+      architectureId === "wan22" && unsupportedUpscales.every(
+        (stage) => isKnownAdvancedUpscale(stage.upscaleMethod)
+      ) ? "warning" : "error"
     );
     const sourceKind = audioSourceKind(clip.audioSource);
     const selectedAudioSourceSupported = supports("clipAudio", {
@@ -5813,7 +5854,7 @@
         )
       );
     }
-    if (clip.clipLengthFromControlNet && supportsControlSignalDerivedDuration && !hasArchitectureSlotSourcedIcLora(clip.architecture, clip.icLoras)) {
+    if (clip.clipLengthFromControlNet && supportsControlSignalDerivedDuration && !hasArchitectureSlotSourcedIcLora(architectureId, clip.icLoras)) {
       diagnostics.push(
         issue(
           "architecture.unusable.clip-length-from-control-net",
@@ -5824,21 +5865,55 @@
     }
     return diagnostics;
   };
+  var effectiveArchitectureIdForClip = (clip, catalog) => {
+    const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+    if (sourceOnly) return NONE_ARCHITECTURE_ID;
+    const firstAuthoredModel = clip.stages.length > 0 ? catalog.entries.find(
+      (entry) => entry.value === clip.stages[0].model
+    ) : void 0;
+    return firstAuthoredModel?.architectureId ?? clip.architecture;
+  };
   var deriveArchitectureDiagnostics = (clips, catalog, generatedEntryMode = "text-to-video") => {
     const diagnostics = [];
     const architectureById = new Map(
       catalog.architectures.map((entry) => [entry.id, entry])
     );
-    const boundaries = createBoundaryCapabilityViews(
-      architectureById,
-      createClipStageCapabilityViews(architectureById).forClip
-    );
     const modelByName = new Map(
       catalog.entries.map((entry) => [entry.value, entry])
+    );
+    const boundaries = createBoundaryCapabilityViews(
+      architectureById,
+      createClipStageCapabilityViews(architectureById, modelByName).forClip
     );
     const executableClipIndexSet = new Set(executableClipIndexes(clips));
     clips.forEach((clip, clipIdx) => {
       const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+      const resolvedFirstModel = !sourceOnly && clip.stages.length > 0 ? modelByName.get(clip.stages[0].model) : void 0;
+      const effectiveArchitectureId = effectiveArchitectureIdForClip(
+        clip,
+        catalog
+      );
+      const effectiveModelProfileId = resolvedFirstModel?.modelProfileId ?? clip.modelProfileId;
+      if (resolvedFirstModel?.architectureId && resolvedFirstModel.architectureId !== clip.architecture) {
+        diagnostics.push(
+          issue(
+            "architecture.stale-identity-hint",
+            `Clip ${clipIdx} caches architecture '${clip.architecture}', but model '${clip.stages[0].model}' resolves to '${resolvedFirstModel.architectureId}'. Generation uses the resolved architecture and preserves the authored hint.`,
+            clipIdx,
+            "warning"
+          )
+        );
+      }
+      if (resolvedFirstModel?.modelProfileId && resolvedFirstModel.modelProfileId !== clip.modelProfileId) {
+        diagnostics.push(
+          issue(
+            "architecture.stale-profile-hint",
+            `Clip ${clipIdx} caches model profile '${clip.modelProfileId}', but model '${clip.stages[0].model}' resolves to '${resolvedFirstModel.modelProfileId}'. Generation uses the resolved profile and preserves the authored hint.`,
+            clipIdx,
+            "warning"
+          )
+        );
+      }
       if (sourceOnly) {
         if (clip.architecture !== NONE_ARCHITECTURE_ID || clip.modelProfileId !== NONE_ARCHITECTURE_ID) {
           diagnostics.push(
@@ -5850,7 +5925,7 @@
           );
         }
       }
-      const architecture = sourceOnly ? architectureById.get("none") : architectureById.get(clip.architecture);
+      const architecture = sourceOnly ? architectureById.get("none") : architectureById.get(effectiveArchitectureId);
       if (!architecture && !sourceOnly) {
         diagnostics.push(
           issue(
@@ -5864,6 +5939,7 @@
           ...persistedCapabilityIssues(
             clip,
             clipIdx,
+            effectiveArchitectureId,
             architecture.capabilities
           )
         );
@@ -5904,21 +5980,22 @@
           dormantArchitecture = resolved.architectureId;
         }
         const mixedDormant = sourceOnly && dormantArchitecture !== null && resolved.architectureId !== dormantArchitecture;
-        if (mixedDormant || !sourceOnly && resolved.architectureId !== clip.architecture) {
+        if (mixedDormant || !sourceOnly && resolved.architectureId !== effectiveArchitectureId) {
           diagnostics.push(
             issue(
               "architecture.mixed-stage",
-              sourceOnly ? `Source-only Clip ${clipIdx} has dormant stages from multiple architectures; Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.` : `Clip ${clipIdx} is locked to '${clip.architecture}', but Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`,
+              sourceOnly ? `Source-only Clip ${clipIdx} has dormant stages from multiple architectures; Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.` : `Clip ${clipIdx} is locked to '${effectiveArchitectureId}', but Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`,
               clipIdx
             )
           );
         }
-        if (stage.modelProfileId !== resolved.modelProfileId || !sourceOnly && stageIdx === 0 && clip.modelProfileId !== resolved.modelProfileId) {
+        if (stage.modelProfileId !== resolved.modelProfileId || !sourceOnly && stageIdx === 0 && effectiveModelProfileId !== resolved.modelProfileId) {
           diagnostics.push(
             issue(
               "architecture.profile-mismatch",
-              `Clip ${clipIdx} Stage ${stageIdx} profile identity does not match model '${stage.model}'.`,
-              clipIdx
+              `Clip ${clipIdx} Stage ${stageIdx} caches a profile identity that does not match model '${stage.model}'. Generation uses the resolved profile and preserves the authored hint.`,
+              clipIdx,
+              "warning"
             )
           );
         }
@@ -5955,12 +6032,13 @@
     for (const seam of executableBoundaries(clips)) {
       const left = { clip: clips[seam.leftIdx], clipIdx: seam.leftIdx };
       const right = { clip: clips[seam.rightIdx], clipIdx: seam.rightIdx };
-      if (left.clip.architecture !== right.clip.architecture && left.clip.boundaryOut !== "cut") {
+      if (effectiveArchitectureIdForClip(left.clip, catalog) !== effectiveArchitectureIdForClip(right.clip, catalog) && left.clip.boundaryOut !== "cut") {
         diagnostics.push(
           issue(
             "architecture.cross-boundary-cut-only",
-            `Clip ${left.clipIdx} → ${right.clipIdx} crosses architectures; '${left.clip.boundaryOut}' is preserved for repair, but only cut can execute.`,
-            left.clipIdx
+            `Clip ${left.clipIdx} → ${right.clipIdx} crosses architectures; '${left.clip.boundaryOut}' remains authored, but generation safely uses a cut.`,
+            left.clipIdx,
+            "warning"
           )
         );
         continue;
@@ -5976,8 +6054,9 @@
         diagnostics.push(
           issue(
             "architecture.boundary-unsupported",
-            `Clip ${left.clipIdx} cannot execute a '${left.clip.boundaryOut}' boundary into Clip ${right.clipIdx}.${reason}`,
-            left.clipIdx
+            `Clip ${left.clipIdx} cannot execute a '${left.clip.boundaryOut}' boundary into Clip ${right.clipIdx}.${reason} Generation safely uses a cut while preserving the authored boundary.`,
+            left.clipIdx,
+            "warning"
           )
         );
       }
@@ -6004,10 +6083,11 @@
       clip: clips[clipIdx],
       clipIdx
     }));
+    const effectiveArchitectureId = (clip) => context.catalog ? effectiveArchitectureIdForClip(clip, context.catalog) : clip.architecture;
     for (const { clip, clipIdx } of executable) {
       const descriptor = architectureDescriptor(
         context.catalog,
-        clip.architecture
+        effectiveArchitectureId(clip)
       );
       const rule = (code) => descriptor ? conditionalRule(descriptor.rules, code) : null;
       const reuseRule = rule(CONDITIONAL_RULE_CODES.audioReuseRequiresStages);
@@ -6063,13 +6143,16 @@
       }
     }
     const hdrRule = executable.map(
-      ({ clip }) => context.catalog?.architectures.find((entry) => entry.id === clip.architecture)?.rules.find(
+      ({ clip }) => context.catalog?.architectures.find((entry) => entry.id === effectiveArchitectureId(clip))?.rules.find(
         (rule) => rule.code === CONDITIONAL_RULE_CODES.uniformTimelineHdr
       )
     ).find((rule) => rule !== void 0);
     if (hdrRule && evaluateConditionalRule(hdrRule, {
       timelineClips: executable.map(({ clip }) => clip),
-      hasActiveHdr: clipHasActiveHdr
+      hasActiveHdr: (clip) => clipHasActiveHdrForArchitecture(
+        clip,
+        effectiveArchitectureId(clip)
+      )
     })) {
       diagnostics.push(diagnostic("error", hdrRule.code, hdrRule.reason));
     }
