@@ -56,6 +56,9 @@ const wanCatalog = (): ArchitectureModelCatalog => {
         label: "WAN 14B",
         architectureId: "wan22",
         modelProfileId: "wan22-i2v-14b",
+        modelClassId: "wan-i2v-14b",
+        compatibilityClassId: "wan-video",
+        entryModes: ["image-to-video", "source-video", "refine-video"],
     });
     return models;
 };
@@ -232,6 +235,46 @@ describe("architecture diagnostics", () => {
                 ?.message,
         ).toContain("(skipped)");
         expect(clip).toEqual(before);
+    });
+
+    it("blocks incompatible model classes inside one architecture", () => {
+        const models = combinedCatalog();
+        const incompatible = models.entries.find(
+            (entry) => entry.value === "ltx",
+        );
+        if (!incompatible) throw new Error("missing LTX alias");
+        incompatible.compatibilityClassId = "other-ltx-family";
+        const clip = minimalClip({
+            stages: [
+                minimalStage({ model: "ltx-2.3.safetensors" }),
+                minimalStage({ model: "ltx" }),
+            ],
+        });
+
+        expect(
+            deriveArchitectureDiagnostics([clip], models).map(
+                ({ code }) => code,
+            ),
+        ).toContain("architecture.mixed-stage");
+    });
+
+    it("requires image entry for a later active stage", () => {
+        const models = combinedCatalog();
+        const textOnly = models.entries.find((entry) => entry.value === "ltx");
+        if (!textOnly) throw new Error("missing LTX alias");
+        textOnly.entryModes = ["text-to-video"];
+        const clip = minimalClip({
+            stages: [
+                minimalStage({ model: "ltx-2.3.safetensors" }),
+                minimalStage({ model: "ltx" }),
+            ],
+        });
+
+        expect(
+            deriveArchitectureDiagnostics([clip], models).map(
+                ({ code }) => code,
+            ),
+        ).toContain("architecture.entry-mode-unsupported");
     });
 
     it("reports preserved length flags the clip's own state cannot honor", () => {
@@ -771,6 +814,11 @@ describe("architecture diagnostics", () => {
         );
         if (!fake) throw new Error("missing fake architecture");
         fake.profiles[0].entryModes = ["text-to-video"];
+        const fakeModel = models.entries.find(
+            (entry) => entry.value === "test-video.safetensors",
+        );
+        if (!fakeModel) throw new Error("missing fake model");
+        fakeModel.entryModes = ["text-to-video"];
         const clip = minimalClip({
             architecture: "test-video",
             modelProfileId: "test-profile",
@@ -830,12 +878,18 @@ describe("architecture diagnostics", () => {
                 label: "WAN 14B",
                 architectureId: "wan22",
                 modelProfileId: "wan22-i2v-14b",
+                modelClassId: "wan-i2v-14b",
+                compatibilityClassId: "wan-video",
+                entryModes: ["image-to-video", "source-video", "refine-video"],
             },
             {
                 value: "wan-5b.safetensors",
                 label: "WAN 5B",
                 architectureId: "wan22",
                 modelProfileId: "wan22-ti2v-5b",
+                modelClassId: "wan-ti2v-5b",
+                compatibilityClassId: "wan-video",
+                entryModes: ["text-to-video", "image-to-video"],
             },
         );
         const guidedClip = (model: string, modelProfileId: string) =>

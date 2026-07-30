@@ -646,7 +646,14 @@ public class ArchitectureFoundationTests
                 stage.Model,
                 descriptor.Id,
                 descriptor.DefaultProfileId,
-                descriptor),
+                descriptor)
+            {
+                ModelClassId = "ltx-test",
+                CompatibilityClassId = T2IModelClassSorter.CompatLtxv2.ID,
+                EntryAbilities =
+                    VideoModelEntryAbility.TextToVideo
+                    | VideoModelEntryAbility.ImageToVideo,
+            },
         };
 
         IReadOnlyList<PlanDiagnostic> diagnostics =
@@ -900,7 +907,8 @@ public class ArchitectureFoundationTests
 
         Assert.Contains(
             plan.Diagnostics,
-            item => item.Message.Contains("entry mode 'ImageToVideo'"));
+            item => item.Code == "architecture-model-entry-unsupported"
+                && item.Message.Contains("entry ability 'ImageToVideo'"));
         Assert.Equal(0, registry.CompileCounts[new("fake")]);
     }
 
@@ -929,12 +937,12 @@ public class ArchitectureFoundationTests
         PlanDiagnostic diagnostic = Assert.Single(
             diagnostics,
             item => item.Message.Contains(
-                "entry mode 'ImageToVideo' for every executing model profile"));
-        Assert.Equal("architecture-capability-unsupported", diagnostic.Code);
+                "entry ability 'ImageToVideo'"));
+        Assert.Equal("architecture-model-entry-unsupported", diagnostic.Code);
     }
 
     [Fact]
-    public void Capability_validation_fails_closed_for_an_undeclared_stage_profile()
+    public void Capability_validation_uses_model_entry_facts_instead_of_profile_aliases()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor();
         StageSpec stage = Stage(10, "fake-model");
@@ -945,7 +953,12 @@ public class ArchitectureFoundationTests
                 stage.Model,
                 descriptor.Id,
                 new("ghost-profile"),
-                descriptor),
+                descriptor)
+            {
+                ModelClassId = "fake-model",
+                CompatibilityClassId = "fake-compat",
+                EntryAbilities = VideoModelEntryAbility.ImageToVideo,
+            },
         };
 
         IReadOnlyList<PlanDiagnostic> diagnostics =
@@ -955,10 +968,9 @@ public class ArchitectureFoundationTests
                 ArchitectureEntryMode.ImageToVideo,
                 stageModels);
 
-        Assert.Single(
+        Assert.DoesNotContain(
             diagnostics,
-            item => item.Message.Contains(
-                "entry mode 'ImageToVideo' for every executing model profile"));
+            item => item.Code == "architecture-model-entry-unsupported");
     }
 
     [Fact]
@@ -1001,8 +1013,18 @@ public class ArchitectureFoundationTests
         ClipSpec clip = GeneratedClip(0, first, second);
         Dictionary<int, ResolvedVideoModel> stageModels = new()
         {
-            [0] = new(first.Model, descriptor.Id, new("allows-image"), descriptor),
-            [1] = new(second.Model, descriptor.Id, new("text-only"), descriptor),
+            [0] = new(first.Model, descriptor.Id, new("allows-image"), descriptor)
+            {
+                ModelClassId = "fake-image",
+                CompatibilityClassId = "fake-compat",
+                EntryAbilities = VideoModelEntryAbility.ImageToVideo,
+            },
+            [1] = new(second.Model, descriptor.Id, new("text-only"), descriptor)
+            {
+                ModelClassId = "fake-text",
+                CompatibilityClassId = "fake-compat",
+                EntryAbilities = VideoModelEntryAbility.TextToVideo,
+            },
         };
 
         IReadOnlyList<PlanDiagnostic> diagnostics =
@@ -1015,7 +1037,7 @@ public class ArchitectureFoundationTests
         Assert.Single(
             diagnostics,
             item => item.Message.Contains(
-                "entry mode 'ImageToVideo' for every executing model profile"));
+                "entry ability 'ImageToVideo'"));
     }
 
     [Fact]
@@ -1043,7 +1065,7 @@ public class ArchitectureFoundationTests
         Assert.Single(
             textDiagnostics,
             item => item.Message.Contains(
-                "entry mode 'TextToVideo' for every executing model profile"));
+                "entry mode 'TextToVideo' for the default model profile"));
     }
 
     [Theory]
@@ -1693,6 +1715,7 @@ public class ArchitectureFoundationTests
             [
                 WanArchitectureModule.ImageToVideoProfileId.Value,
                 WanArchitectureModule.Ti2v5bProfileId.Value,
+                WanArchitectureModule.OrdinaryImageToVideoProfileId.Value,
             ],
             wanProfiles.Select(profile => profile.Value<string>("id")));
         Assert.All(
@@ -1953,8 +1976,28 @@ public class ArchitectureFoundationTests
         private static ResolvedVideoModel Resolved(
             string name,
             VideoArchitectureDescriptor architecture,
-            string profile) =>
-            new(name, architecture.Id, new(profile), architecture);
+            string profile)
+        {
+            ModelProfileId profileId = new(profile);
+            IReadOnlyList<ArchitectureEntryMode> entryModes = architecture.Profiles
+                .SingleOrDefault(candidate => candidate.Id == profileId)
+                ?.EntryModes ?? [];
+            return new(name, architecture.Id, profileId, architecture)
+            {
+                ModelClassId = $"{architecture.Id}-test-model",
+                CompatibilityClassId = $"{architecture.Id}-test-compat",
+                EntryAbilities =
+                    (entryModes.Contains(ArchitectureEntryMode.TextToVideo)
+                        ? VideoModelEntryAbility.TextToVideo
+                        : VideoModelEntryAbility.None)
+                    | (entryModes.Any(mode => mode is
+                            ArchitectureEntryMode.ImageToVideo
+                            or ArchitectureEntryMode.SourceVideo
+                            or ArchitectureEntryMode.RefineVideo)
+                        ? VideoModelEntryAbility.ImageToVideo
+                        : VideoModelEntryAbility.None),
+            };
+        }
 
         private sealed class FakeModule(
             VideoArchitectureDescriptor descriptor,
@@ -2056,7 +2099,15 @@ public class ArchitectureFoundationTests
                 model.Name,
                 descriptor.Id,
                 descriptor.Profiles[0].Id,
-                resolvedDescriptor ?? descriptor);
+                resolvedDescriptor ?? descriptor)
+            {
+                ModelClassId = model.ModelClass.ID,
+                CompatibilityClassId = model.ModelClass.CompatClass.ID,
+                EntryAbilities =
+                    VideoModelEntryAbility.TextToVideo
+                    | VideoModelEntryAbility.ImageToVideo,
+                HostFactsAuthoritative = true,
+            };
             return true;
         }
 

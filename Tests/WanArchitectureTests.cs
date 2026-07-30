@@ -1,4 +1,5 @@
 using Newtonsoft.Json.Linq;
+using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
@@ -29,7 +30,7 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Resolves_only_the_two_exact_Wan_class_and_compatibility_pairs()
+    public void Resolves_host_supported_Wan_image_models_and_rejects_non_model_shapes()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle fourteen =
@@ -64,11 +65,88 @@ public class WanArchitectureTests
             ID = "wan-2_1-image2video-14b",
             CompatClass = T2IModelClassSorter.CompatWan21_14b,
         };
-        Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
+        Assert.True(WanArchitectureModule.Instance.TryResolveModel(
+            five.VideoModel,
+            out ResolvedVideoModel ordinary));
+        Assert.Equal(
+            WanArchitectureModule.OrdinaryImageToVideoProfileId,
+            ordinary.ModelProfileId);
         five.VideoModel.ModelClass = exactFive with
         {
             ID = "wan-2_1-vace-14b",
             CompatClass = T2IModelClassSorter.CompatWan21_14b,
+        };
+        Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
+
+        foreach ((string modelClassId, T2IModelCompatClass compatibility) in new[]
+        {
+            ("wan-2_1-image2video-1_3b", T2IModelClassSorter.CompatWan21_1_3b),
+            ("wan-2_1-flf2v-14b", T2IModelClassSorter.CompatWan21_14b),
+        })
+        {
+            five.VideoModel.ModelClass = exactFive with
+            {
+                ID = modelClassId,
+                CompatClass = compatibility,
+            };
+            Assert.True(WanArchitectureModule.Instance.TryResolveModel(
+                five.VideoModel,
+                out ResolvedVideoModel accepted));
+            Assert.Equal(
+                WanArchitectureModule.OrdinaryImageToVideoProfileId,
+                accepted.ModelProfileId);
+            Assert.Equal(compatibility.ID, accepted.CompatibilityClassId);
+            Assert.Equal(
+                VideoModelEntryAbility.ImageToVideo,
+                accepted.EntryAbilities);
+        }
+        foreach (string rejectedClassId in new[]
+        {
+            "wan-2_1-text2video-1_3b",
+            "wan-2_1-text2video-14b",
+            "wan-2_1-text2video/vae",
+            "wan-2_1-image2video-14b/lora",
+            "wan-2_1-image2video-lora",
+            "wan-2_1-image2video_vae",
+            "wan-2_1-image2video(lora)",
+            "wan-2_1-image2video+vae",
+            "wan-2_1-image2video:lora",
+            "wan-2_1-image2video@vae",
+            "wan-2_1-vace-1_3b",
+            "wan-2_1-vace-14b",
+            "not-wan-image2video",
+        })
+        {
+            five.VideoModel.ModelClass = exactFive with
+            {
+                ID = rejectedClassId,
+                CompatClass = T2IModelClassSorter.CompatWan21_14b,
+            };
+            Assert.False(WanArchitectureModule.Instance.TryResolveModel(
+                five.VideoModel,
+                out _));
+        }
+        five.VideoModel.ModelClass = exactFive with
+        {
+            ID = "wan-2_1-image2video-valor",
+            CompatClass = T2IModelClassSorter.CompatWan21_14b,
+        };
+        Assert.True(WanArchitectureModule.Instance.TryResolveModel(
+            five.VideoModel,
+            out _));
+        five.VideoModel.ModelClass = exactFive with
+        {
+            ID = "wan-2_1-image2video-14b",
+            CompatClass = T2IModelClassSorter.CompatLtxv2,
+        };
+        Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
+        five.VideoModel.ModelClass = exactFive with
+        {
+            ID = "wan-2_1-image2video-14b",
+            CompatClass = T2IModelClassSorter.CompatWan21_14b with
+            {
+                IsImage2Video = false,
+            },
         };
         Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
 
@@ -319,11 +397,12 @@ public class WanArchitectureTests
         JObject[] profiles = [.. wan["profiles"].Values<JObject>()];
 
         Assert.Contains("lora", wan["capabilities"]["stage"].Values<string>());
-        Assert.Equal(2, profiles.Length);
+        Assert.Equal(3, profiles.Length);
         Assert.Equal(
             [
                 WanArchitectureModule.ImageToVideoProfileId.Value,
                 WanArchitectureModule.Ti2v5bProfileId.Value,
+                WanArchitectureModule.OrdinaryImageToVideoProfileId.Value,
             ],
             profiles.Select(profile => profile.Value<string>("id")));
         Assert.All(profiles, profile =>
@@ -411,7 +490,7 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Compilation_locks_each_clip_to_one_supported_profile_but_allows_cut_clips_to_differ()
+    public void Compilation_locks_each_clip_to_one_compatibility_class_but_allows_cut_clips_to_differ()
     {
         StageSpec firstFive = Stage(10, "wan-five");
         StageSpec secondFive = Stage(11, "wan-five") with
@@ -463,9 +542,9 @@ public class WanArchitectureTests
                 }));
         Assert.Contains(
             mixedPlan.Diagnostics,
-            diagnostic => diagnostic.Code == "wan22.clip-profile.mixed"
+            diagnostic => diagnostic.Code == "wan.clip-compatibility-class.mixed"
                 && diagnostic.Severity == PlanDiagnosticSeverity.Error
-                && diagnostic.StageId == 11);
+                && diagnostic.RawStageIndex == 1);
         Assert.Null(Assert.Single(mixedPlan.Clips).ArchitecturePayload);
 
         VideoStagesSpec cutSpec = new(
@@ -496,6 +575,122 @@ public class WanArchitectureTests
                 WanArchitectureModule.Ti2v5bProfileId,
             ],
             cutPlan.Clips.Select(clip => clip.RequireWanPayload().ProfileId));
+    }
+
+    [Fact]
+    public void Same_compatibility_class_can_chain_exact_and_ordinary_Wan_aliases()
+    {
+        StageSpec exact = Stage(10, "wan-2.2-exact");
+        StageSpec ordinary = Stage(11, "wan-2.1-ordinary") with
+        {
+            Control = 0.5,
+            ImageReference = "PreviousStage",
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+        };
+
+        WanClipPlanCompilation compiled = CompileDirect(
+            GeneratedClip(0, exact, ordinary),
+            profilesByModel: new Dictionary<string, ModelProfileId>
+            {
+                [exact.Model] = WanArchitectureModule.ImageToVideoProfileId,
+                [ordinary.Model] = WanArchitectureModule.OrdinaryImageToVideoProfileId,
+            });
+
+        Assert.DoesNotContain(
+            compiled.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        Assert.Equal(
+            [
+                WanArchitectureModule.ImageToVideoProfileId,
+                WanArchitectureModule.OrdinaryImageToVideoProfileId,
+            ],
+            compiled.Stages.OrderBy(pair => pair.Key).Select(pair => pair.Value.ProfileId));
+        Assert.All(
+            compiled.Stages.Values,
+            payload => Assert.False(payload.OwnsVideoEndFrame));
+        ResolvedVideoModel ordinaryModel = ResolvedWan(
+            ordinary.Model,
+            WanArchitectureModule.OrdinaryImageToVideoProfileId,
+            WanArchitectureModule.Instance.Descriptor);
+        Assert.False(WanExecutionAdapter.IsSwapCompatible(ordinaryModel, ordinaryModel));
+    }
+
+    [Fact]
+    public void Production_planning_accepts_a_real_Wan_2_1_image_model()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle installed = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        T2IModel model = AddWanModel(
+            installed.VideoModel,
+            "UnitTest_Wan21_I2V.safetensors",
+            "wan-2_1-image2video-14b",
+            T2IModelClassSorter.CompatWan21_14b);
+        ClipSpec clip = GeneratedClip(0, Stage(10, model.Name)) with
+        {
+            AuthoredStages = [new(0, model.Name, null, false)],
+        };
+        VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
+        VideoArchitectureRegistry registry = new(
+        [
+            NoneArchitectureModule.Instance,
+            Ltx2ArchitectureModule.Instance,
+            WanArchitectureModule.Instance,
+        ]);
+        ArchitecturePlanningResult resolution =
+            ArchitecturePlanResolver.Resolve(spec, registry);
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            resolution);
+
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        ClipPlan compiled = Assert.Single(plan.Clips);
+        Assert.Equal(
+            WanArchitectureModule.OrdinaryImageToVideoProfileId,
+            compiled.Stages[0].ResolvedModel.ModelProfileId);
+        Assert.Equal(
+            T2IModelClassSorter.CompatWan21_14b.ID,
+            compiled.RequireWanPayload().CompatibilityClassId);
+    }
+
+    [Fact]
+    public void Resolution_rejects_a_skipped_Wan_stage_from_another_compatibility_class()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle installed = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        T2IModel other = AddWanModel(
+            installed.VideoModel,
+            "UnitTest_Wan21_I2V_1_3B.safetensors",
+            "wan-2_1-image2video-1_3b",
+            T2IModelClassSorter.CompatWan21_1_3b);
+        ClipSpec clip = GeneratedClip(0, Stage(10, installed.VideoModel.Name)) with
+        {
+            AuthoredStages =
+            [
+                new(0, installed.VideoModel.Name, null, false),
+                new(1, other.Name, null, true),
+            ],
+        };
+        VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
+        VideoArchitectureRegistry registry = new(
+        [
+            NoneArchitectureModule.Instance,
+            Ltx2ArchitectureModule.Instance,
+            WanArchitectureModule.Instance,
+        ]);
+
+        ArchitecturePlanningResult result =
+            ArchitecturePlanResolver.Resolve(spec, registry);
+
+        PlanDiagnostic diagnostic = Assert.Single(
+            result.Diagnostics,
+            candidate => candidate.Code
+                == "architecture-mixed-authored-stage-compatibility");
+        Assert.Equal(1, diagnostic.RawStageIndex);
+        Assert.Contains("(skipped)", diagnostic.Message);
     }
 
     [Fact]
@@ -583,9 +778,9 @@ public class WanArchitectureTests
         Assert.Contains(
             plan.Diagnostics,
             diagnostic =>
-                diagnostic.Code == "architecture-capability-unsupported"
+                diagnostic.Code == "architecture-model-entry-unsupported"
                 && diagnostic.Severity == PlanDiagnosticSeverity.Error
-                && diagnostic.Message.Contains("entry mode 'TextToVideo'"));
+                && diagnostic.Message.Contains("entry ability 'TextToVideo'"));
         Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
@@ -598,7 +793,12 @@ public class WanArchitectureTests
             "canonical-wan-model.safetensors",
             descriptor.Id,
             WanArchitectureModule.ImageToVideoProfileId,
-            descriptor);
+            descriptor)
+        {
+            ModelClassId = WanArchitectureModule.ImageToVideoModelClassId,
+            CompatibilityClassId = T2IModelClassSorter.CompatWan21_14b.ID,
+            EntryAbilities = VideoModelEntryAbility.ImageToVideo,
+        };
 
         WanClipPlanCompilation compilation = WanClipPlanCompiler.Compile(
             GeneratedClip(0, stage),
@@ -751,7 +951,7 @@ public class WanArchitectureTests
         Assert.All(sourced.Stages.Values, stage => Assert.False(stage.OwnsVideoEndFrame));
         Assert.Contains(
             mixed.Diagnostics,
-            diagnostic => diagnostic.Code == "wan22.clip-profile.mixed");
+            diagnostic => diagnostic.Code == "wan.clip-compatibility-class.mixed");
     }
 
     [Fact]
@@ -1112,9 +1312,8 @@ public class WanArchitectureTests
         {
             stageModels.Add(
                 stage.ClipStageRawIndex,
-                new(
+                ResolvedWan(
                     stage.Model,
-                    descriptor.Id,
                     profilesByModel is not null
                         && profilesByModel.TryGetValue(
                             stage.Model,
@@ -1141,9 +1340,8 @@ public class WanArchitectureTests
             Dictionary<int, ResolvedVideoModel> stageModels = [];
             foreach (StageSpec stage in clip.Stages ?? [])
             {
-                stageModels[stage.ClipStageRawIndex] = new(
+                stageModels[stage.ClipStageRawIndex] = ResolvedWan(
                     stage.Model,
-                    descriptor.Id,
                     profilesByModel is not null
                         && profilesByModel.TryGetValue(stage.Model, out ModelProfileId profileId)
                             ? profileId
@@ -1157,6 +1355,50 @@ public class WanArchitectureTests
                 stageModels));
         }
         return new(clips, []);
+    }
+
+    private static ResolvedVideoModel ResolvedWan(
+        string model,
+        ModelProfileId profile,
+        VideoArchitectureDescriptor descriptor)
+    {
+        bool five = profile == WanArchitectureModule.Ti2v5bProfileId;
+        bool ordinary = profile == WanArchitectureModule.OrdinaryImageToVideoProfileId;
+        return new(model, descriptor.Id, profile, descriptor)
+        {
+            ModelClassId = five
+                ? WanArchitectureModule.Ti2v5bModelClassId
+                : ordinary
+                    ? "wan-2_1-image2video-14b"
+                    : WanArchitectureModule.ImageToVideoModelClassId,
+            CompatibilityClassId = five
+                ? T2IModelClassSorter.CompatWan22_5b.ID
+                : T2IModelClassSorter.CompatWan21_14b.ID,
+            EntryAbilities = five
+                ? VideoModelEntryAbility.TextToVideo
+                    | VideoModelEntryAbility.ImageToVideo
+                : VideoModelEntryAbility.ImageToVideo,
+        };
+    }
+
+    private static T2IModel AddWanModel(
+        T2IModel template,
+        string name,
+        string modelClassId,
+        T2IModelCompatClass compatibility)
+    {
+        T2IModelHandler handler = Program.T2IModelSets["Stable-Diffusion"];
+        T2IModel model = new(handler, "/tmp", $"/tmp/{name}", name)
+        {
+            ModelClass = template.ModelClass with
+            {
+                ID = modelClassId,
+                Name = modelClassId,
+                CompatClass = compatibility,
+            },
+        };
+        handler.Models[model.Name] = model;
+        return model;
     }
 
     private static ClipSpec GeneratedClip(int id, params StageSpec[] stages) =>

@@ -41,11 +41,22 @@ const dto = {
             modelName: "ltx-two.safetensors",
             architectureId: "ltx2",
             modelProfileId: "ltx-2.3",
+            modelClassId: "ltx-video",
+            compatibilityClassId: "ltx-video",
+            entryModes: [
+                "text-to-video",
+                "image-to-video",
+                "source-video",
+                "refine-video",
+            ],
         },
         {
             modelName: "ltx-two-three.safetensors",
             architectureId: "ltx2",
             modelProfileId: "synthetic-profile",
+            modelClassId: "ltx-image-video",
+            compatibilityClassId: "ltx-video",
+            entryModes: ["image-to-video"],
         },
     ],
 };
@@ -82,6 +93,19 @@ describe("architecture catalog wire contract", () => {
                 models: [],
             }),
         ).toBeNull();
+    });
+
+    it("requires host model identity and entry facts", () => {
+        for (const key of [
+            "modelClassId",
+            "compatibilityClassId",
+            "entryModes",
+        ] as const) {
+            const missing = structuredClone(dto) as Record<string, unknown>;
+            const models = missing.models as Record<string, unknown>[];
+            delete models[0][key];
+            expect(parseVideoArchitectureCatalog(missing)).toBeNull();
+        }
     });
 
     it("rejects duplicate and dangling identities", () => {
@@ -268,6 +292,9 @@ describe("architecture catalog wire contract", () => {
                 label: model.modelName,
                 architectureId: model.architectureId,
                 modelProfileId: model.modelProfileId,
+                modelClassId: model.modelClassId,
+                compatibilityClassId: model.compatibilityClassId,
+                entryModes: [...model.entryModes],
             })),
         };
         const left = minimalClip({ boundaryOut: "continue" });

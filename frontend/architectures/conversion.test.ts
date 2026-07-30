@@ -10,7 +10,7 @@ import {
 } from "../__test_helpers__/clipFixtures";
 import { createTimelineHistory } from "../timelineHistory";
 import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
-import { architectureSupportsClipStart } from "./conversion/entryModePolicy";
+import { modelSupportsStageEntry } from "./conversion/entryModePolicy";
 import { planArchitectureConversion } from "./conversion/plan";
 import {
     architectureConversionMessage,
@@ -157,12 +157,7 @@ describe("architecture conversion policy", () => {
         expect(apply).toHaveBeenCalledTimes(1);
     });
 
-    it("requires the exact clip source or host-generated entry mode", () => {
-        const ltx =
-            testArchitectureCatalog().architectures[0].profiles[0].entryModes;
-        const textOnly = ["text-to-video"];
-        const sourceOnly = ["source-video"];
-        const refineOnly = ["refine-video"];
+    it("requires the host-generated root mode and accepts decoded source entry", () => {
         const source = minimalClip({
             sourceVideo: {
                 data: "data:video/mp4;base64,AA==",
@@ -175,32 +170,188 @@ describe("architecture conversion policy", () => {
         });
 
         expect(
-            architectureSupportsClipStart(ltx, source, "text-to-video"),
+            modelSupportsStageEntry(
+                { entryModes: ["image-to-video"] },
+                source,
+                0,
+                "text-to-video",
+            ),
         ).toBe(true);
         expect(
-            architectureSupportsClipStart(textOnly, source, "text-to-video"),
+            modelSupportsStageEntry(
+                { entryModes: ["text-to-video"] },
+                source,
+                0,
+                "text-to-video",
+            ),
         ).toBe(false);
         expect(
-            architectureSupportsClipStart(sourceOnly, source, "text-to-video"),
+            modelSupportsStageEntry(
+                { entryModes: ["source-video"] },
+                source,
+                0,
+                "text-to-video",
+            ),
         ).toBe(true);
         expect(
-            architectureSupportsClipStart(refineOnly, source, "text-to-video"),
-        ).toBe(false);
+            modelSupportsStageEntry(
+                { entryModes: ["refine-video"] },
+                source,
+                0,
+                "text-to-video",
+            ),
+        ).toBe(true);
         const guidedText = minimalClip({ refs: [minimalRef({ frame: 1 })] });
         expect(
-            architectureSupportsClipStart(
-                textOnly,
+            modelSupportsStageEntry(
+                { entryModes: ["text-to-video"] },
                 guidedText,
+                0,
                 "text-to-video",
             ),
         ).toBe(true);
         expect(
-            architectureSupportsClipStart(
-                ["image-to-video"],
+            modelSupportsStageEntry(
+                { entryModes: ["image-to-video"] },
                 guidedText,
+                0,
                 "text-to-video",
             ),
         ).toBe(false);
+    });
+
+    it("uses the host root mode only for the first active stage", () => {
+        const textOnly = { entryModes: ["text-to-video"] };
+        const imageOnly = { entryModes: ["image-to-video"] };
+        const clip = minimalClip({
+            stages: [minimalStage(), minimalStage()],
+        });
+
+        expect(
+            modelSupportsStageEntry(textOnly, clip, 0, "text-to-video"),
+        ).toBe(true);
+        expect(
+            modelSupportsStageEntry(imageOnly, clip, 0, "text-to-video"),
+        ).toBe(false);
+        expect(
+            modelSupportsStageEntry(textOnly, clip, 1, "text-to-video"),
+        ).toBe(false);
+        expect(
+            modelSupportsStageEntry(imageOnly, clip, 1, "text-to-video"),
+        ).toBe(true);
+    });
+
+    it("rejects an image-only whole-clip target when the first active stage needs text entry", () => {
+        const catalog = fakeArchitectureCatalog();
+        catalog.entries[0].entryModes = ["image-to-video"];
+        catalog.architectures[0].profiles[0].entryModes = ["image-to-video"];
+        const clip = minimalClip({
+            stages: [
+                minimalStage({ skipped: true }),
+                minimalStage({ model: "ltx" }),
+            ],
+        });
+
+        expect(
+            planArchitectureConversion(
+                clip,
+                {
+                    architectureId: "test-video",
+                    modelProfileId: "test-profile",
+                    model: "test-video.safetensors",
+                    capabilities: catalog.architectures[0].capabilities,
+                    entryModes: ["image-to-video"],
+                },
+                catalog,
+                "text-to-video",
+            ),
+        ).toBeNull();
+    });
+
+    it("checks entry roles after a single-stage target removes an incompatible later stage", () => {
+        const catalog = fakeArchitectureCatalog();
+        catalog.architectures[0].capabilities.architecture =
+            catalog.architectures[0].capabilities.architecture.filter(
+                (capability) => capability !== "multi-stage",
+            );
+        catalog.entries[0].entryModes = ["text-to-video"];
+        catalog.architectures[0].profiles[0].entryModes = ["text-to-video"];
+        const source = minimalClip({
+            stages: [minimalStage(), minimalStage()],
+        });
+        const before = structuredClone(source);
+
+        const conversion = planArchitectureConversion(
+            source,
+            {
+                architectureId: "test-video",
+                modelProfileId: "test-profile",
+                model: "test-video.safetensors",
+                capabilities: catalog.architectures[0].capabilities,
+                entryModes: ["text-to-video"],
+            },
+            catalog,
+            "text-to-video",
+        );
+
+        expect(conversion?.clip.stages).toHaveLength(1);
+        expect(conversion?.removals).toContain("1 later authored stage");
+        expect(source).toEqual(before);
+    });
+
+    it("checks the generated root after target cleanup removes source video", () => {
+        const catalog = fakeArchitectureCatalog();
+        catalog.entries[0].entryModes = ["image-to-video"];
+        catalog.architectures[0].profiles[0].entryModes = ["image-to-video"];
+        const source = minimalClip({
+            sourceVideo: {
+                data: "data:video/mp4;base64,AA==",
+                fileName: "source.mp4",
+                fps: 24,
+                durationSeconds: 2,
+                startSeconds: 0,
+                lengthSeconds: 2,
+            },
+        });
+        const before = structuredClone(source);
+
+        expect(
+            planArchitectureConversion(
+                source,
+                {
+                    architectureId: "test-video",
+                    modelProfileId: "test-profile",
+                    model: "test-video.safetensors",
+                    capabilities: catalog.architectures[0].capabilities,
+                    entryModes: ["image-to-video"],
+                },
+                catalog,
+                "text-to-video",
+            ),
+        ).toBeNull();
+        expect(source).toEqual(before);
+    });
+
+    it("accepts image-capable models for decoded source refinement", () => {
+        const sourced = minimalClip({
+            sourceVideo: {
+                data: "data:video/mp4;base64,AA==",
+                fileName: "source.mp4",
+                fps: 24,
+                durationSeconds: 2,
+                startSeconds: 0,
+                lengthSeconds: 2,
+            },
+        });
+
+        expect(
+            modelSupportsStageEntry(
+                { entryModes: ["image-to-video"] },
+                sourced,
+                0,
+                "text-to-video",
+            ),
+        ).toBe(true);
     });
 
     it("retains clip LoRAs and selectively disables target-rule violations", () => {

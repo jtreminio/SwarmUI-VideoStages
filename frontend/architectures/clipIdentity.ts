@@ -7,6 +7,7 @@ import type { ArchitectureModelCatalog } from "./types";
 export interface StageModelIdentity {
     architectureId: string;
     modelProfileId: string;
+    compatibilityClassId: string;
 }
 
 export interface ClipArchitectureIdentity {
@@ -25,6 +26,7 @@ export const modelIdentityFromCatalog = (
     if (
         !entry?.architectureId ||
         !entry.modelProfileId ||
+        !entry.compatibilityClassId ||
         !architectureDescriptor(catalog, entry.architectureId)?.profiles.some(
             (profile) => profile.id === entry.modelProfileId,
         )
@@ -34,6 +36,7 @@ export const modelIdentityFromCatalog = (
     return {
         architectureId: entry.architectureId,
         modelProfileId: entry.modelProfileId,
+        compatibilityClassId: entry.compatibilityClassId,
     };
 };
 
@@ -63,7 +66,8 @@ export const deriveClipArchitectureIdentity = (
         authored &&
         identities.some(
             ({ identity }) =>
-                identity?.architectureId !== authored.architectureId,
+                identity?.architectureId !== authored.architectureId ||
+                identity.compatibilityClassId !== authored.compatibilityClassId,
         )
     ) {
         return null;

@@ -94,7 +94,19 @@ internal sealed class Ltx2ArchitectureModule :
             model.Name,
             ArchitectureId,
             new("ltx-2.3"),
-            Descriptor);
+            Descriptor)
+        {
+            ModelClassId = model.ModelClass.ID,
+            CompatibilityClassId = model.ModelClass.CompatClass.ID,
+            EntryAbilities =
+                (model.ModelClass.CompatClass.IsText2Video
+                    ? VideoModelEntryAbility.TextToVideo
+                    : VideoModelEntryAbility.None)
+                | (model.ModelClass.CompatClass.IsImage2Video
+                    ? VideoModelEntryAbility.ImageToVideo
+                    : VideoModelEntryAbility.None),
+            HostFactsAuthoritative = true,
+        };
         return true;
     }
 

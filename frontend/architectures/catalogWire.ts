@@ -260,7 +260,11 @@ export const parseVideoArchitectureCatalog = (
             !isTrimmedNonEmpty(raw.modelName) ||
             !isTrimmedNonEmpty(raw.architectureId) ||
             !architectureIds.has(raw.architectureId) ||
-            !isTrimmedNonEmpty(raw.modelProfileId)
+            !isTrimmedNonEmpty(raw.modelProfileId) ||
+            !isTrimmedNonEmpty(raw.modelClassId) ||
+            !isTrimmedNonEmpty(raw.compatibilityClassId) ||
+            !isEntryModeArray(raw.entryModes) ||
+            raw.entryModes.length === 0
         ) {
             return null;
         }
@@ -280,6 +284,9 @@ export const parseVideoArchitectureCatalog = (
             modelName: raw.modelName,
             architectureId: raw.architectureId,
             modelProfileId: raw.modelProfileId,
+            modelClassId: raw.modelClassId,
+            compatibilityClassId: raw.compatibilityClassId,
+            entryModes: [...raw.entryModes],
         });
     }
     return { architectures, models };

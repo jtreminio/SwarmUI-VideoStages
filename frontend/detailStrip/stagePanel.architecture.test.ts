@@ -43,6 +43,43 @@ const catalog = (): ArchitectureModelCatalog => {
     };
 };
 
+const catalogWithWan = (): ArchitectureModelCatalog => {
+    const models = catalog();
+    const wan = structuredClone(models.architectures[0]);
+    wan.id = "wan22";
+    wan.label = "WAN";
+    wan.defaultProfileId = "wan-i2v";
+    wan.profiles = [
+        {
+            ...wan.profiles[0],
+            id: "wan-i2v",
+            label: "WAN Image2Video",
+        },
+    ];
+    models.architectures.push(wan);
+    models.entries.push(
+        {
+            value: "wan-current.safetensors",
+            label: "WAN Current",
+            architectureId: "wan22",
+            modelProfileId: "wan-i2v",
+            modelClassId: "wan-current",
+            compatibilityClassId: "wan-video",
+            entryModes: ["text-to-video", "image-to-video", "source-video"],
+        },
+        {
+            value: "wan-alternate.safetensors",
+            label: "WAN Alternate",
+            architectureId: "wan22",
+            modelProfileId: "wan-i2v",
+            modelClassId: "wan-alternate",
+            compatibilityClassId: "wan-video",
+            entryModes: ["text-to-video", "image-to-video", "source-video"],
+        },
+    );
+    return models;
+};
+
 const context = (
     models = catalog(),
     generatedEntryMode: "text-to-video" | "image-to-video" = "text-to-video",
@@ -91,7 +128,7 @@ afterEach(() => {
 });
 
 describe("stage architecture model filtering", () => {
-    it("exact-filters WAN profiles at every stage for text, image, and source entry", () => {
+    it("filters WAN models by the input each stage actually receives", () => {
         const models = catalog();
         const wan = structuredClone(models.architectures[0]);
         wan.id = "wan22";
@@ -118,12 +155,18 @@ describe("stage architecture model filtering", () => {
                 label: "WAN 14B",
                 architectureId: "wan22",
                 modelProfileId: "wan22-i2v-14b",
+                modelClassId: "wan-i2v-14b",
+                compatibilityClassId: "wan-video",
+                entryModes: ["image-to-video", "source-video", "refine-video"],
             },
             {
                 value: "wan-5b.safetensors",
                 label: "WAN 5B",
                 architectureId: "wan22",
                 modelProfileId: "wan22-ti2v-5b",
+                modelClassId: "wan-ti2v-5b",
+                compatibilityClassId: "wan-video",
+                entryModes: ["text-to-video", "image-to-video"],
             },
         );
         const stage = minimalStage({ model: "ltx" });
@@ -220,7 +263,7 @@ describe("stage architecture model filtering", () => {
 
         expect(
             laterOptionsFor("text-to-video").map(({ value }) => value),
-        ).toEqual(["wan-5b.safetensors"]);
+        ).toEqual(["wan-14b.safetensors", "wan-5b.safetensors"]);
         expect(
             laterOptionsFor("image-to-video").map(({ value }) => value),
         ).toEqual(["wan-14b.safetensors", "wan-5b.safetensors"]);
@@ -236,7 +279,7 @@ describe("stage architecture model filtering", () => {
             "wan-14b.safetensors",
             "wan-5b.safetensors",
         ]);
-        expect(persisted14b[0]).toMatchObject({ disabled: true });
+        expect(persisted14b[0]).toMatchObject({ disabled: false });
     });
 
     it("keeps unsupported persisted sampling and normal-LoRA values visible for repair", () => {
@@ -406,7 +449,7 @@ describe("stage architecture model filtering", () => {
         ]);
     });
 
-    it("locks later stages to the clip architecture", () => {
+    it("locks later stages to the clip architecture and compatibility class", () => {
         const models = catalog();
         const clip = minimalClip({
             stages: [
@@ -428,6 +471,225 @@ describe("stage architecture model filtering", () => {
             "ltx-2.3.safetensors",
             "ltx",
         ]);
+    });
+
+    it.each([
+        ["active", false],
+        ["skipped", true],
+    ])("hides a same-architecture root retarget that would conflict with another %s authored stage", (_label, skipped) => {
+        const models = catalog();
+        models.architectures[0].profiles.push({
+            ...models.architectures[0].profiles[0],
+            id: "ltx-other-family",
+            label: "LTX Other Family",
+        });
+        models.entries.push({
+            ...models.entries[0],
+            value: "ltx-other-family.safetensors",
+            label: "LTX Other Family",
+            modelProfileId: "ltx-other-family",
+            modelClassId: "ltx-other-family",
+            compatibilityClassId: "other-ltx-family",
+        });
+        const clip = minimalClip({
+            stages: [
+                minimalStage(),
+                minimalStage({
+                    model: "ltx",
+                    skipped,
+                }),
+            ],
+        });
+
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            0,
+            clip.stages[0],
+            testRootDefaults(models),
+        );
+
+        expect(modelOptions(column).map(({ value }) => value)).not.toContain(
+            "ltx-other-family.safetensors",
+        );
+    });
+
+    it("hides an image-only whole-clip target when a skipped Stage 0 leaves a text-entry root at Stage 1", () => {
+        const models = catalog();
+        const imageOnly = models.entries.find(
+            (entry) => entry.value === "test-video.safetensors",
+        );
+        const imageOnlyProfile = models.architectures
+            .find((entry) => entry.id === "test-video")
+            ?.profiles.find((entry) => entry.id === "test-profile");
+        if (!imageOnly || !imageOnlyProfile) {
+            throw new Error("missing test video model");
+        }
+        imageOnly.entryModes = ["image-to-video"];
+        imageOnlyProfile.entryModes = ["image-to-video"];
+        const clip = minimalClip({
+            stages: [
+                minimalStage({ skipped: true }),
+                minimalStage({ model: "ltx" }),
+            ],
+        });
+
+        const column = buildStageParamsColumn(
+            context(models, "text-to-video"),
+            clip,
+            0,
+            0,
+            clip.stages[0],
+            testRootDefaults(models),
+        );
+
+        expect(modelOptions(column).map(({ value }) => value)).not.toContain(
+            "test-video.safetensors",
+        );
+    });
+
+    it("shows a text-only single-stage target when conversion removes an incompatible later stage", () => {
+        const models = catalog();
+        const target = models.entries.find(
+            (entry) => entry.value === "test-video.safetensors",
+        );
+        const architecture = models.architectures.find(
+            (entry) => entry.id === "test-video",
+        );
+        const profile = architecture?.profiles.find(
+            (entry) => entry.id === "test-profile",
+        );
+        if (!target || !architecture || !profile) {
+            throw new Error("missing test video model");
+        }
+        architecture.capabilities.architecture =
+            architecture.capabilities.architecture.filter(
+                (capability) => capability !== "multi-stage",
+            );
+        target.entryModes = ["text-to-video"];
+        profile.entryModes = ["text-to-video"];
+        const clip = minimalClip({
+            stages: [minimalStage(), minimalStage()],
+        });
+        const before = structuredClone(clip);
+
+        const column = buildStageParamsColumn(
+            context(models, "text-to-video"),
+            clip,
+            0,
+            0,
+            clip.stages[0],
+            testRootDefaults(models),
+        );
+
+        expect(modelOptions(column).map(({ value }) => value)).toContain(
+            "test-video.safetensors",
+        );
+        expect(clip).toEqual(before);
+    });
+
+    it("hides an image-only target when conversion removes the source video that made image entry valid", () => {
+        const models = catalog();
+        const target = models.entries.find(
+            (entry) => entry.value === "test-video.safetensors",
+        );
+        const profile = models.architectures
+            .find((entry) => entry.id === "test-video")
+            ?.profiles.find((entry) => entry.id === "test-profile");
+        if (!target || !profile) {
+            throw new Error("missing test video model");
+        }
+        target.entryModes = ["image-to-video"];
+        profile.entryModes = ["image-to-video"];
+        const clip = minimalClip({
+            sourceVideo: {
+                data: "data:video/mp4;base64,AA==",
+                fileName: "source.mp4",
+                fps: 24,
+                durationSeconds: 2,
+                startSeconds: 0,
+                lengthSeconds: 2,
+            },
+        });
+        const before = structuredClone(clip);
+
+        const column = buildStageParamsColumn(
+            context(models, "text-to-video"),
+            clip,
+            0,
+            0,
+            clip.stages[0],
+            testRootDefaults(models),
+        );
+
+        expect(modelOptions(column).map(({ value }) => value)).not.toContain(
+            "test-video.safetensors",
+        );
+        expect(clip).toEqual(before);
+    });
+
+    it("locks the first active stage to a skipped Stage 0 compatibility class", () => {
+        const models = catalog();
+        models.architectures[0].profiles.push({
+            ...models.architectures[0].profiles[0],
+            id: "ltx-other-family",
+            label: "LTX Other Family",
+        });
+        models.entries.push({
+            ...models.entries[0],
+            value: "ltx-other-family.safetensors",
+            label: "LTX Other Family",
+            modelProfileId: "ltx-other-family",
+            modelClassId: "ltx-other-family",
+            compatibilityClassId: "other-ltx-family",
+        });
+        const active = minimalStage({ model: "ltx" });
+        const clip = minimalClip({
+            stages: [minimalStage({ skipped: true }), active],
+        });
+
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            1,
+            active,
+            testRootDefaults(models),
+        );
+
+        expect(modelOptions(column).map(({ value }) => value)).not.toContain(
+            "ltx-other-family.safetensors",
+        );
+    });
+
+    it("keeps a persisted later-stage model from another compatibility class visible but disabled", () => {
+        const models = catalog();
+        const incompatible = models.entries.find(
+            (entry) => entry.value === "ltx",
+        );
+        if (!incompatible) throw new Error("missing LTX alias");
+        incompatible.compatibilityClassId = "other-ltx-family";
+        const stage = minimalStage({ model: "ltx" });
+        const clip = minimalClip({
+            stages: [minimalStage({ model: "ltx-2.3.safetensors" }), stage],
+        });
+
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            1,
+            stage,
+            testRootDefaults(models),
+        );
+        const options = modelOptions(column);
+
+        expect(options.map(({ value }) => value)).toEqual([
+            "ltx",
+            "ltx-2.3.safetensors",
+        ]);
+        expect(options[0]).toMatchObject({ disabled: true });
     });
 
     it("keeps an invalid persisted later-stage model visible for repair", () => {
@@ -464,7 +726,13 @@ describe("stage architecture model filtering", () => {
             (entry) => entry.id === "test-video",
         );
         if (!fake) throw new Error("missing fake architecture");
+        fake.capabilities.clip.push("source-video");
         fake.profiles[0].entryModes = ["text-to-video"];
+        const fakeModel = models.entries.find(
+            (entry) => entry.value === "test-video.safetensors",
+        );
+        if (!fakeModel) throw new Error("missing fake model");
+        fakeModel.entryModes = ["text-to-video"];
         const clip = minimalClip({
             sourceVideo: {
                 data: "data:video/mp4;base64,AA==",
@@ -499,6 +767,11 @@ describe("stage architecture model filtering", () => {
         );
         if (!fake) throw new Error("missing fake architecture");
         fake.profiles[0].entryModes = ["text-to-video"];
+        const fakeModel = models.entries.find(
+            (entry) => entry.value === "test-video.safetensors",
+        );
+        if (!fakeModel) throw new Error("missing fake model");
+        fakeModel.entryModes = ["text-to-video"];
         const persisted = minimalStage({
             model: "test-video.safetensors",
             modelProfileId: "test-profile",
@@ -562,6 +835,78 @@ describe("stage architecture model filtering", () => {
         expect(select.value).toBe("ltx");
     });
 
+    it("uses authored WAN ownership instead of a stale cached LTX hint for an ordinary WAN retarget", () => {
+        const models = catalogWithWan();
+        const clip = minimalClip({
+            architecture: "ltx2",
+            modelProfileId: "ltx-2.3",
+            stages: [
+                minimalStage({
+                    model: "wan-current.safetensors",
+                    modelProfileId: "wan-i2v",
+                }),
+            ],
+        });
+        const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            0,
+            clip.stages[0],
+            testRootDefaults(models),
+        );
+        const select = modelOptions(column)[0].parentElement;
+        if (!(select instanceof HTMLSelectElement)) {
+            throw new Error("missing model select");
+        }
+
+        select.value = "wan-alternate.safetensors";
+        select.dispatchEvent(new Event("change"));
+
+        expect(confirm).not.toHaveBeenCalled();
+    });
+
+    it("uses authored WAN ownership instead of a stale cached LTX hint for whole-clip LTX conversion", () => {
+        const models = catalogWithWan();
+        const clip = minimalClip({
+            architecture: "ltx2",
+            modelProfileId: "ltx-2.3",
+            architecturePayload: { wan22: { tuning: "private" } },
+            stages: [
+                minimalStage({
+                    model: "wan-current.safetensors",
+                    modelProfileId: "wan-i2v",
+                }),
+            ],
+        });
+        const before = structuredClone(clip);
+        const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            0,
+            clip.stages[0],
+            testRootDefaults(models),
+        );
+        const select = modelOptions(column)[0].parentElement;
+        if (!(select instanceof HTMLSelectElement)) {
+            throw new Error("missing model select");
+        }
+
+        select.value = "ltx";
+        select.dispatchEvent(new Event("change"));
+
+        expect(confirm).toHaveBeenCalledWith(
+            expect.stringContaining("Convert this clip from WAN to LTX"),
+        );
+        expect(confirm).toHaveBeenCalledWith(
+            expect.stringContaining("one undoable change"),
+        );
+        expect(clip).toEqual(before);
+    });
+
     it("commits a confirmed conversion through the UI as one exact undoable store change", async () => {
         const models = catalog();
         const dto = {
@@ -570,6 +915,9 @@ describe("stage architecture model filtering", () => {
                 modelName: entry.value,
                 architectureId: entry.architectureId as string,
                 modelProfileId: entry.modelProfileId as string,
+                modelClassId: entry.modelClassId as string,
+                compatibilityClassId: entry.compatibilityClassId as string,
+                entryModes: [...entry.entryModes],
             })),
         };
         setVideoStagesHostBridgeForTests({
@@ -694,6 +1042,12 @@ describe("stage architecture model filtering", () => {
         if (!ltx || !fake) throw new Error("missing test architectures");
         ltx.profiles[0].entryModes = ["image-to-video"];
         fake.profiles[0].entryModes = ["text-to-video"];
+        for (const model of models.entries) {
+            model.entryModes =
+                model.architectureId === "ltx2"
+                    ? ["image-to-video"]
+                    : ["text-to-video"];
+        }
         const textStage = minimalStage({
             model: "test-video.safetensors",
             modelProfileId: "test-profile",

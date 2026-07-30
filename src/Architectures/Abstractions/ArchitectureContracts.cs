@@ -40,6 +40,14 @@ internal enum ArchitectureEntryMode
 }
 
 [Flags]
+internal enum VideoModelEntryAbility
+{
+    None = 0,
+    TextToVideo = 1 << 0,
+    ImageToVideo = 1 << 1,
+}
+
+[Flags]
 internal enum ArchitectureCapability
 {
     None = 0,
@@ -355,7 +363,59 @@ internal sealed record ResolvedVideoModel(
     string ModelName,
     ArchitectureId ArchitectureId,
     ModelProfileId ModelProfileId,
-    VideoArchitectureDescriptor Architecture);
+    VideoArchitectureDescriptor Architecture)
+{
+    /// <summary>
+    /// Test and compatibility adapters receive a deterministic synthetic identity. Production
+    /// registry resolutions must replace it and set <see cref="HostFactsAuthoritative"/>.
+    /// </summary>
+    public string ModelClassId { get; init; } = ModelName;
+
+    public string CompatibilityClassId { get; init; } = ArchitectureId.Value;
+
+    public VideoModelEntryAbility EntryAbilities { get; init; } =
+        VideoModelEntryPolicy.FromProfileAlias(Architecture, ModelProfileId);
+
+    public bool HostFactsAuthoritative { get; init; }
+}
+
+internal static class VideoModelEntryPolicy
+{
+    internal static VideoModelEntryAbility FromProfileAlias(
+        VideoArchitectureDescriptor architecture,
+        ModelProfileId profileId)
+    {
+        IReadOnlyList<ArchitectureEntryMode> entryModes = architecture?.Profiles
+            ?.SingleOrDefault(profile => profile.Id == profileId)
+            ?.EntryModes ?? [];
+        return (entryModes.Contains(ArchitectureEntryMode.TextToVideo)
+                ? VideoModelEntryAbility.TextToVideo
+                : VideoModelEntryAbility.None)
+            | (entryModes.Any(mode => mode is
+                    ArchitectureEntryMode.ImageToVideo
+                    or ArchitectureEntryMode.SourceVideo
+                    or ArchitectureEntryMode.RefineVideo)
+                ? VideoModelEntryAbility.ImageToVideo
+                : VideoModelEntryAbility.None);
+    }
+
+    internal static bool SupportsStageRole(
+        ResolvedVideoModel model,
+        int activeStageIndex,
+        ArchitectureEntryMode rootEntryMode)
+    {
+        if (model is null)
+        {
+            return false;
+        }
+        VideoModelEntryAbility required = activeStageIndex == 0
+            ? rootEntryMode == ArchitectureEntryMode.TextToVideo
+                ? VideoModelEntryAbility.TextToVideo
+                : VideoModelEntryAbility.ImageToVideo
+            : VideoModelEntryAbility.ImageToVideo;
+        return (model.EntryAbilities & required) == required;
+    }
+}
 
 internal interface IVideoArchitectureModule
 {

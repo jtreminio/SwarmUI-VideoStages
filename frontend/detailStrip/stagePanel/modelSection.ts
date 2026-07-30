@@ -1,8 +1,9 @@
 import {
     architectureDescriptor,
     buildArchitectureRetargetPlan,
+    modelCatalogEntry,
 } from "../../architectures/catalog";
-import { architectureSupportsClipStart } from "../../architectures/conversion/entryModePolicy";
+import { modelSupportsStageEntry } from "../../architectures/conversion/entryModePolicy";
 import { planArchitectureConversion } from "../../architectures/conversion/plan";
 import {
     architectureConversionMessage,
@@ -25,20 +26,60 @@ export const appendStageModelSection = ({
     defaults,
     fields,
 }: StagePanelBindings): void => {
+    const rootModel = modelCatalogEntry(
+        defaults.modelCatalog,
+        clip.stages[0]?.model,
+    );
+    // Stage 0 owns authored architecture. The cached clip field is only a
+    // repair fallback when a persisted Stage 0 model no longer resolves.
+    const ownerArchitectureId = rootModel?.architectureId ?? clip.architecture;
     const modelOptions: OptionSpec[] = defaults.modelCatalog.entries.flatMap(
         (entry): OptionSpec[] => {
+            const model = modelCatalogEntry(defaults.modelCatalog, entry.value);
             const target = buildArchitectureRetargetPlan(
                 defaults.modelCatalog,
                 entry.value,
             );
-            return target &&
-                (stageIdx === 0 ||
-                    target.architectureId === clip.architecture) &&
-                architectureSupportsClipStart(
-                    target.entryModes,
-                    clip,
-                    context.generatedEntryMode(),
-                )
+            if (!target || !model) return [];
+            const leavesAuthoredStagesCompatible = clip.stages.every(
+                (candidate, candidateIndex) => {
+                    if (candidateIndex === stageIdx) return true;
+                    const candidateModel = modelCatalogEntry(
+                        defaults.modelCatalog,
+                        candidate.model,
+                    );
+                    return (
+                        candidateModel?.architectureId ===
+                            model.architectureId &&
+                        candidateModel.compatibilityClassId !== null &&
+                        candidateModel.compatibilityClassId ===
+                            model.compatibilityClassId
+                    );
+                },
+            );
+            const preservesClipLock =
+                stageIdx === 0
+                    ? target.architectureId !== ownerArchitectureId ||
+                      leavesAuthoredStagesCompatible
+                    : model.architectureId === rootModel?.architectureId &&
+                      model.compatibilityClassId !== null &&
+                      model.compatibilityClassId ===
+                          rootModel?.compatibilityClassId;
+            const supportsRetargetedRoles =
+                stageIdx === 0 && target.architectureId !== ownerArchitectureId
+                    ? planArchitectureConversion(
+                          clip,
+                          target,
+                          defaults.modelCatalog,
+                          context.generatedEntryMode(),
+                      ) !== null
+                    : modelSupportsStageEntry(
+                          model,
+                          clip,
+                          stageIdx,
+                          context.generatedEntryMode(),
+                      );
+            return preservesClipLock && supportsRetargetedRoles
                 ? [{ value: entry.value, label: entry.label }]
                 : [];
         },
@@ -57,19 +98,24 @@ export const appendStageModelSection = ({
         modelOptions,
         `${stage.model ?? ""}`,
         (value) => {
+            const selectedModel = modelCatalogEntry(
+                defaults.modelCatalog,
+                value,
+            );
             const plan = buildArchitectureRetargetPlan(
                 defaults.modelCatalog,
                 value,
             );
-            if (!plan) {
+            if (!plan || !selectedModel) {
                 modelSelect.value = stage.model;
                 return;
             }
-            if (stageIdx === 0 && plan.architectureId !== clip.architecture) {
+            if (stageIdx === 0 && plan.architectureId !== ownerArchitectureId) {
                 const conversion = planArchitectureConversion(
                     clip,
                     plan,
                     defaults.modelCatalog,
+                    context.generatedEntryMode(),
                 );
                 if (!conversion) {
                     modelSelect.value = stage.model;
@@ -78,8 +124,8 @@ export const appendStageModelSection = ({
                 const fromLabel =
                     architectureDescriptor(
                         defaults.modelCatalog,
-                        clip.architecture,
-                    )?.label ?? clip.architecture;
+                        ownerArchitectureId,
+                    )?.label ?? ownerArchitectureId;
                 const toLabel =
                     architectureDescriptor(
                         defaults.modelCatalog,

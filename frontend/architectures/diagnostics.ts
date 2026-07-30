@@ -14,7 +14,7 @@ import {
     conditionalRule,
     evaluateConditionalRule,
 } from "./conditionalRules";
-import { architectureSupportsClipStart } from "./conversion/entryModePolicy";
+import { modelSupportsStageEntry } from "./conversion/entryModePolicy";
 import { NONE_ARCHITECTURE_ID } from "./none/identity";
 import { createBoundaryCapabilityViews } from "./policy/boundaryPolicy";
 import {
@@ -269,6 +269,8 @@ export const deriveArchitectureDiagnostics = (
         );
         const effectiveModelProfileId =
             resolvedFirstModel?.modelProfileId ?? clip.modelProfileId;
+        const effectiveCompatibilityClassId =
+            resolvedFirstModel?.compatibilityClassId ?? null;
         if (
             resolvedFirstModel?.architectureId &&
             resolvedFirstModel.architectureId !== clip.architecture
@@ -333,34 +335,24 @@ export const deriveArchitectureDiagnostics = (
             if (
                 !sourceOnly &&
                 activeStageCount(clip) > 0 &&
-                !clip.stages
-                    .filter((stage) => !stage.skipped)
-                    .every((stage) => {
-                        const resolved = modelByName.get(stage.model);
-                        const profile = resolved?.architectureId
-                            ? architectureById
-                                  .get(resolved.architectureId)
-                                  ?.profiles.find(
-                                      (candidate) =>
-                                          candidate.id ===
-                                          resolved.modelProfileId,
-                                  )
-                            : null;
-                        return (
-                            profile !== null &&
-                            profile !== undefined &&
-                            architectureSupportsClipStart(
-                                profile.entryModes,
-                                clip,
-                                generatedEntryMode,
-                            )
-                        );
-                    })
+                !clip.stages.every((stage, stageIdx) => {
+                    if (stage.skipped) return true;
+                    const resolved = modelByName.get(stage.model);
+                    return (
+                        resolved !== undefined &&
+                        modelSupportsStageEntry(
+                            resolved,
+                            clip,
+                            stageIdx,
+                            generatedEntryMode,
+                        )
+                    );
+                })
             ) {
                 diagnostics.push(
                     issue(
                         "architecture.entry-mode-unsupported",
-                        `Clip ${clipIdx} cannot start from the current ${generatedEntryMode} host entry with architecture '${architecture.id}'.`,
+                        `Clip ${clipIdx} has an active stage whose model cannot accept the input required at that stage.`,
                         clipIdx,
                     ),
                 );
@@ -368,6 +360,7 @@ export const deriveArchitectureDiagnostics = (
         }
 
         let dormantArchitecture: string | null = null;
+        let dormantCompatibilityClass: string | null = null;
         clip.stages.forEach((stage, stageIdx) => {
             const resolved = modelByName.get(stage.model);
             if (!resolved?.architectureId || !resolved.modelProfileId) {
@@ -382,22 +375,28 @@ export const deriveArchitectureDiagnostics = (
             }
             if (sourceOnly && dormantArchitecture === null) {
                 dormantArchitecture = resolved.architectureId;
+                dormantCompatibilityClass = resolved.compatibilityClassId;
             }
             const mixedDormant =
                 sourceOnly &&
                 dormantArchitecture !== null &&
-                resolved.architectureId !== dormantArchitecture;
+                (resolved.architectureId !== dormantArchitecture ||
+                    resolved.compatibilityClassId !==
+                        dormantCompatibilityClass);
             if (
                 mixedDormant ||
                 (!sourceOnly &&
-                    resolved.architectureId !== effectiveArchitectureId)
+                    (resolved.architectureId !== effectiveArchitectureId ||
+                        (effectiveCompatibilityClassId !== null &&
+                            resolved.compatibilityClassId !==
+                                effectiveCompatibilityClassId)))
             ) {
                 diagnostics.push(
                     issue(
                         "architecture.mixed-stage",
                         sourceOnly
-                            ? `Source-only Clip ${clipIdx} has dormant stages from multiple architectures; Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`
-                            : `Clip ${clipIdx} is locked to '${effectiveArchitectureId}', but Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`,
+                            ? `Source-only Clip ${clipIdx} has dormant stages from incompatible model families; Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to architecture '${resolved.architectureId}' and compatibility class '${resolved.compatibilityClassId}'.`
+                            : `Clip ${clipIdx} uses architecture '${effectiveArchitectureId}' and compatibility class '${effectiveCompatibilityClassId}', but Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}' and '${resolved.compatibilityClassId}'.`,
                         clipIdx,
                     ),
                 );

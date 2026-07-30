@@ -71,13 +71,13 @@ export const buildArchitectureRetargetPlan = (
         (candidate) => candidate.id === profileId,
     );
     const capabilities = descriptor?.capabilities;
-    return architectureId && profileId && profile && capabilities
+    return entry && architectureId && profileId && profile && capabilities
         ? {
               architectureId,
               modelProfileId: profileId,
               model,
               capabilities: structuredClone(capabilities),
-              entryModes: [...profile.entryModes],
+              entryModes: [...entry.entryModes],
           }
         : null;
 };

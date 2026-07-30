@@ -66,6 +66,9 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
         label: "WAN 14B",
         architectureId: "wan22",
         modelProfileId: "wan22-i2v-14b",
+        modelClassId: "wan-i2v",
+        compatibilityClassId: "wan-video",
+        entryModes: ["image-to-video", "source-video", "refine-video"],
     });
     return models;
 };
@@ -538,6 +541,9 @@ describe("catalog-backed authoring policy", () => {
             label: "Synthetic alternate model",
             architectureId: "ltx2",
             modelProfileId: "ltx-alt-profile",
+            modelClassId: "ltx-video-alt",
+            compatibilityClassId: "ltx-video",
+            entryModes: ["text-to-video", "image-to-video"],
         });
         const clip = minimalClip({
             architecture: "none",

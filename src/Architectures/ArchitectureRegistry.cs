@@ -128,6 +128,10 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                 if (match is null
                     || match.ArchitectureId != module.Descriptor.Id
                     || match.Architecture?.Id != module.Descriptor.Id
+                    || string.IsNullOrWhiteSpace(match.ModelClassId)
+                    || string.IsNullOrWhiteSpace(match.CompatibilityClassId)
+                    || match.EntryAbilities == VideoModelEntryAbility.None
+                    || !match.HostFactsAuthoritative
                     || !module.Descriptor.Profiles.Any(
                         profile => profile.Id == match.ModelProfileId))
                 {

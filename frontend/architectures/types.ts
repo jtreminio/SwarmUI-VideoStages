@@ -38,6 +38,9 @@ export interface ArchitectureModelEntry {
     label: string;
     architectureId: VideoArchitectureId | null;
     modelProfileId: ModelProfileId | null;
+    modelClassId: string | null;
+    compatibilityClassId: string | null;
+    entryModes: string[];
 }
 
 export interface ArchitectureModelCatalog {
@@ -65,6 +68,9 @@ export interface ArchitectureCatalogModelDto {
     modelName: string;
     architectureId: VideoArchitectureId;
     modelProfileId: ModelProfileId;
+    modelClassId: string;
+    compatibilityClassId: string;
+    entryModes: string[];
 }
 
 export interface ArchitectureCatalogEntryDto {

@@ -1280,12 +1280,12 @@
       (candidate) => candidate.id === profileId
     );
     const capabilities = descriptor?.capabilities;
-    return architectureId && profileId && profile && capabilities ? {
+    return entry && architectureId && profileId && profile && capabilities ? {
       architectureId,
       modelProfileId: profileId,
       model,
       capabilities: structuredClone(capabilities),
-      entryModes: [...profile.entryModes]
+      entryModes: [...entry.entryModes]
     } : null;
   };
 
@@ -1480,7 +1480,7 @@
     const modelNames = /* @__PURE__ */ new Set();
     const models = [];
     for (const raw of value.models) {
-      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId)) {
+      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !isEntryModeArray(raw.entryModes) || raw.entryModes.length === 0) {
         return null;
       }
       const descriptor = architectures.find(
@@ -1495,7 +1495,10 @@
       models.push({
         modelName: raw.modelName,
         architectureId: raw.architectureId,
-        modelProfileId: raw.modelProfileId
+        modelProfileId: raw.modelProfileId,
+        modelClassId: raw.modelClassId,
+        compatibilityClassId: raw.compatibilityClassId,
+        entryModes: [...raw.entryModes]
       });
     }
     return { architectures, models };
@@ -1620,7 +1623,10 @@
           value,
           label: hostLabels.get(value) ?? value,
           architectureId: backendModel?.architectureId ?? null,
-          modelProfileId: backendModel?.modelProfileId ?? null
+          modelProfileId: backendModel?.modelProfileId ?? null,
+          modelClassId: backendModel?.modelClassId ?? null,
+          compatibilityClassId: backendModel?.compatibilityClassId ?? null,
+          entryModes: [...backendModel?.entryModes ?? []]
         };
       })
     };
@@ -3520,14 +3526,15 @@
   var modelIdentityFromCatalog = (catalog, model) => {
     if (!catalog) return null;
     const entry = modelCatalogEntry(catalog, model);
-    if (!entry?.architectureId || !entry.modelProfileId || !architectureDescriptor(catalog, entry.architectureId)?.profiles.some(
+    if (!entry?.architectureId || !entry.modelProfileId || !entry.compatibilityClassId || !architectureDescriptor(catalog, entry.architectureId)?.profiles.some(
       (profile) => profile.id === entry.modelProfileId
     )) {
       return null;
     }
     return {
       architectureId: entry.architectureId,
-      modelProfileId: entry.modelProfileId
+      modelProfileId: entry.modelProfileId,
+      compatibilityClassId: entry.compatibilityClassId
     };
   };
   var deriveClipArchitectureIdentity = (clip, catalog) => {
@@ -3543,7 +3550,7 @@
     }
     const authored = identities[0]?.identity ?? null;
     if (authored && identities.some(
-      ({ identity }) => identity?.architectureId !== authored.architectureId
+      ({ identity }) => identity?.architectureId !== authored.architectureId || identity.compatibilityClassId !== authored.compatibilityClassId
     )) {
       return null;
     }
@@ -3806,6 +3813,26 @@
     return { forClip, forStage };
   };
 
+  // frontend/architectures/conversion/entryModePolicy.ts
+  var firstActiveStageIndex = (clip) => {
+    const index = clip.stages.findIndex((stage) => !stage.skipped);
+    return index >= 0 ? index : null;
+  };
+  var modelSupportsStageEntry = (model, clip, stageIdx, generatedEntryMode) => {
+    const firstActive = firstActiveStageIndex(clip);
+    const isClipRoot = firstActive === null ? !clip.stages.slice(0, stageIdx).some((candidate) => !candidate.skipped) : stageIdx === firstActive;
+    if (!isClipRoot) {
+      return model.entryModes.includes("image-to-video");
+    }
+    if (clip.sourceVideo === null) {
+      return model.entryModes.includes(generatedEntryMode);
+    }
+    return model.entryModes.includes("source-video") || model.entryModes.includes("refine-video") || model.entryModes.includes("image-to-video");
+  };
+  var modelSupportsAllActiveStageEntries = (model, clip, generatedEntryMode) => clip.stages.every(
+    (stage, stageIdx) => stage.skipped || modelSupportsStageEntry(model, clip, stageIdx, generatedEntryMode)
+  );
+
   // frontend/architectures/conversion/plan.ts
   var countLabel = (count, singular) => `${count} ${singular}${count === 1 ? "" : "s"}`;
   var ownId = (value) => typeof value === "object" && value !== null && "id" in value && typeof value.id === "string" ? value.id : null;
@@ -3830,12 +3857,12 @@
       modelProfileId: profile.id,
       model: model.value,
       capabilities: structuredClone(descriptor.capabilities),
-      entryModes: [...profile.entryModes],
+      entryModes: [...model.entryModes],
       profileCapabilities: [...profile.capabilities],
       profileRules: structuredClone(profile.rules)
     };
   };
-  var planArchitectureConversion = (source, requested, catalog) => {
+  var planArchitectureConversion = (source, requested, catalog, generatedEntryMode = "text-to-video") => {
     const target = resolveArchitectureRetarget(requested, catalog);
     if (!target) {
       return null;
@@ -4001,6 +4028,9 @@
     if (clip.clipLengthFromAudio && (!supports("audioDerivedDuration") || !canUseClipLengthFromAudio(clip.audioSource))) {
       removals.push("audio-derived clip duration");
       clip.clipLengthFromAudio = false;
+    }
+    if (!modelSupportsAllActiveStageEntries(target, clip, generatedEntryMode)) {
+      return null;
     }
     return {
       clip,
@@ -4475,9 +4505,15 @@
     const requestedPlan = planArchitectureConversion(
       requestedForCleanup,
       target,
-      catalog
+      catalog,
+      context.generatedEntryMode ?? "text-to-video"
     );
-    const baselinePlan = planArchitectureConversion(previous, target, catalog);
+    const baselinePlan = planArchitectureConversion(
+      previous,
+      target,
+      catalog,
+      context.generatedEntryMode ?? "text-to-video"
+    );
     if (!requestedPlan || !baselinePlan) {
       throw new DocumentDiffError("architecture-invariant");
     }
@@ -4819,7 +4855,8 @@
         const conversion = planArchitectureConversion(
           clip,
           target,
-          context.architectureCatalog
+          context.architectureCatalog,
+          context.generatedEntryMode ?? "text-to-video"
         );
         if (!conversion) {
           return failure(document2, "invalid-architecture-conversion");
@@ -4850,6 +4887,13 @@
           context.architectureCatalog
         );
         if (!target) {
+          return failure(document2, "architecture-invariant");
+        }
+        const ownerArchitectureId = modelIdentityFromCatalog(
+          context.architectureCatalog,
+          clip.stages[0]?.model ?? ""
+        )?.architectureId ?? clip.architecture;
+        if (target.architectureId !== ownerArchitectureId) {
           return failure(document2, "architecture-invariant");
         }
         const candidate = clone2(clip);
@@ -5036,7 +5080,8 @@
       }
       ensureAuthoringDocumentIdentity(source);
       const reduced = reduceDocumentCommand(source, command, {
-        architectureCatalog: deps.architectureCatalog?.() ?? null
+        architectureCatalog: deps.architectureCatalog?.() ?? null,
+        generatedEntryMode: deps.generatedEntryMode?.() ?? "text-to-video"
       });
       if (!reduced.applied) {
         return {
@@ -5448,6 +5493,7 @@
   // frontend/persistence/repository.ts
   var store = createTimelineStore({
     architectureCatalog: () => getRootDefaults().modelCatalog,
+    generatedEntryMode: getRootGeneratedEntryMode,
     ...timelineCarrierAdapter
   });
   var getTimelineStore = () => store;
@@ -5473,7 +5519,8 @@
     const diffCommand = (() => {
       try {
         return diffDocuments(before, requested, {
-          architectureCatalog: getRootDefaults().modelCatalog
+          architectureCatalog: getRootDefaults().modelCatalog,
+          generatedEntryMode: getRootGeneratedEntryMode()
         });
       } catch (error) {
         return throwSaveFailure("diff", error);
@@ -5720,15 +5767,6 @@
   // frontend/architectures/currentPolicy.ts
   var currentCapabilityViewResolver = () => createCapabilityViewResolver(getRootDefaults().modelCatalog);
 
-  // frontend/architectures/conversion/entryModePolicy.ts
-  var architectureSupportsClipStart = (entryModes, clip, generatedEntryMode) => {
-    const modes = entryModes;
-    if (clip.sourceVideo !== null) {
-      return modes.includes("source-video");
-    }
-    return modes.includes(generatedEntryMode);
-  };
-
   // frontend/architectures/diagnostics.ts
   var issue = (code, message, clipIdx, severity = "error") => ({ severity, code, message, clipIdx });
   var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities) => {
@@ -5894,6 +5932,7 @@
         catalog
       );
       const effectiveModelProfileId = resolvedFirstModel?.modelProfileId ?? clip.modelProfileId;
+      const effectiveCompatibilityClassId = resolvedFirstModel?.compatibilityClassId ?? null;
       if (resolvedFirstModel?.architectureId && resolvedFirstModel.architectureId !== clip.architecture) {
         diagnostics.push(
           issue(
@@ -5943,27 +5982,27 @@
             architecture.capabilities
           )
         );
-        if (!sourceOnly && activeStageCount(clip) > 0 && !clip.stages.filter((stage) => !stage.skipped).every((stage) => {
+        if (!sourceOnly && activeStageCount(clip) > 0 && !clip.stages.every((stage, stageIdx) => {
+          if (stage.skipped) return true;
           const resolved = modelByName.get(stage.model);
-          const profile = resolved?.architectureId ? architectureById.get(resolved.architectureId)?.profiles.find(
-            (candidate) => candidate.id === resolved.modelProfileId
-          ) : null;
-          return profile !== null && profile !== void 0 && architectureSupportsClipStart(
-            profile.entryModes,
+          return resolved !== void 0 && modelSupportsStageEntry(
+            resolved,
             clip,
+            stageIdx,
             generatedEntryMode
           );
         })) {
           diagnostics.push(
             issue(
               "architecture.entry-mode-unsupported",
-              `Clip ${clipIdx} cannot start from the current ${generatedEntryMode} host entry with architecture '${architecture.id}'.`,
+              `Clip ${clipIdx} has an active stage whose model cannot accept the input required at that stage.`,
               clipIdx
             )
           );
         }
       }
       let dormantArchitecture = null;
+      let dormantCompatibilityClass = null;
       clip.stages.forEach((stage, stageIdx) => {
         const resolved = modelByName.get(stage.model);
         if (!resolved?.architectureId || !resolved.modelProfileId) {
@@ -5978,13 +6017,14 @@
         }
         if (sourceOnly && dormantArchitecture === null) {
           dormantArchitecture = resolved.architectureId;
+          dormantCompatibilityClass = resolved.compatibilityClassId;
         }
-        const mixedDormant = sourceOnly && dormantArchitecture !== null && resolved.architectureId !== dormantArchitecture;
-        if (mixedDormant || !sourceOnly && resolved.architectureId !== effectiveArchitectureId) {
+        const mixedDormant = sourceOnly && dormantArchitecture !== null && (resolved.architectureId !== dormantArchitecture || resolved.compatibilityClassId !== dormantCompatibilityClass);
+        if (mixedDormant || !sourceOnly && (resolved.architectureId !== effectiveArchitectureId || effectiveCompatibilityClassId !== null && resolved.compatibilityClassId !== effectiveCompatibilityClassId)) {
           diagnostics.push(
             issue(
               "architecture.mixed-stage",
-              sourceOnly ? `Source-only Clip ${clipIdx} has dormant stages from multiple architectures; Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.` : `Clip ${clipIdx} is locked to '${effectiveArchitectureId}', but Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}'.`,
+              sourceOnly ? `Source-only Clip ${clipIdx} has dormant stages from incompatible model families; Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to architecture '${resolved.architectureId}' and compatibility class '${resolved.compatibilityClassId}'.` : `Clip ${clipIdx} uses architecture '${effectiveArchitectureId}' and compatibility class '${effectiveCompatibilityClassId}', but Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}' and '${resolved.compatibilityClassId}'.`,
               clipIdx
             )
           );
@@ -12059,17 +12099,42 @@ The conversion is one undoable change.`;
     defaults,
     fields
   }) => {
+    const rootModel = modelCatalogEntry(
+      defaults.modelCatalog,
+      clip.stages[0]?.model
+    );
+    const ownerArchitectureId = rootModel?.architectureId ?? clip.architecture;
     const modelOptions = defaults.modelCatalog.entries.flatMap(
       (entry) => {
+        const model = modelCatalogEntry(defaults.modelCatalog, entry.value);
         const target = buildArchitectureRetargetPlan(
           defaults.modelCatalog,
           entry.value
         );
-        return target && (stageIdx === 0 || target.architectureId === clip.architecture) && architectureSupportsClipStart(
-          target.entryModes,
+        if (!target || !model) return [];
+        const leavesAuthoredStagesCompatible = clip.stages.every(
+          (candidate, candidateIndex) => {
+            if (candidateIndex === stageIdx) return true;
+            const candidateModel = modelCatalogEntry(
+              defaults.modelCatalog,
+              candidate.model
+            );
+            return candidateModel?.architectureId === model.architectureId && candidateModel.compatibilityClassId !== null && candidateModel.compatibilityClassId === model.compatibilityClassId;
+          }
+        );
+        const preservesClipLock = stageIdx === 0 ? target.architectureId !== ownerArchitectureId || leavesAuthoredStagesCompatible : model.architectureId === rootModel?.architectureId && model.compatibilityClassId !== null && model.compatibilityClassId === rootModel?.compatibilityClassId;
+        const supportsRetargetedRoles = stageIdx === 0 && target.architectureId !== ownerArchitectureId ? planArchitectureConversion(
           clip,
+          target,
+          defaults.modelCatalog,
           context.generatedEntryMode()
-        ) ? [{ value: entry.value, label: entry.label }] : [];
+        ) !== null : modelSupportsStageEntry(
+          model,
+          clip,
+          stageIdx,
+          context.generatedEntryMode()
+        );
+        return preservesClipLock && supportsRetargetedRoles ? [{ value: entry.value, label: entry.label }] : [];
       }
     );
     if (stage.model && !modelOptions.some((option) => option.value === stage.model)) {
@@ -12083,19 +12148,24 @@ The conversion is one undoable change.`;
       modelOptions,
       `${stage.model ?? ""}`,
       (value) => {
+        const selectedModel = modelCatalogEntry(
+          defaults.modelCatalog,
+          value
+        );
         const plan = buildArchitectureRetargetPlan(
           defaults.modelCatalog,
           value
         );
-        if (!plan) {
+        if (!plan || !selectedModel) {
           modelSelect.value = stage.model;
           return;
         }
-        if (stageIdx === 0 && plan.architectureId !== clip.architecture) {
+        if (stageIdx === 0 && plan.architectureId !== ownerArchitectureId) {
           const conversion = planArchitectureConversion(
             clip,
             plan,
-            defaults.modelCatalog
+            defaults.modelCatalog,
+            context.generatedEntryMode()
           );
           if (!conversion) {
             modelSelect.value = stage.model;
@@ -12103,8 +12173,8 @@ The conversion is one undoable change.`;
           }
           const fromLabel = architectureDescriptor(
             defaults.modelCatalog,
-            clip.architecture
-          )?.label ?? clip.architecture;
+            ownerArchitectureId
+          )?.label ?? ownerArchitectureId;
           const toLabel = architectureDescriptor(
             defaults.modelCatalog,
             plan.architectureId

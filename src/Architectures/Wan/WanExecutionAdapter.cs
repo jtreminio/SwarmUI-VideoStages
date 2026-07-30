@@ -234,7 +234,8 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
         swap is not null
         && stage is not null
         && swap.ArchitectureId == stage.ArchitectureId
-        && swap.ModelProfileId == stage.ModelProfileId;
+        && swap.ModelProfileId == stage.ModelProfileId
+        && WanArchitectureModule.IsLegacySpecialProfile(swap.ModelProfileId);
 
     internal static string DescribeSwapIncompatibility(
         ResolvedVideoModel swap,

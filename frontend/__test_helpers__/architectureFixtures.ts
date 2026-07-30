@@ -187,12 +187,28 @@ export const testArchitectureCatalog = (
             label: "LTX 2.3",
             architectureId: "ltx2",
             modelProfileId: "ltx-2.3",
+            modelClassId: "ltx-video",
+            compatibilityClassId: "ltx-video",
+            entryModes: [
+                "text-to-video",
+                "image-to-video",
+                "source-video",
+                "refine-video",
+            ],
         },
         {
             value: "ltx",
             label: "Synthetic LTX 2.3 alias",
             architectureId: "ltx2",
             modelProfileId: "ltx-2.3",
+            modelClassId: "ltx-video",
+            compatibilityClassId: "ltx-video",
+            entryModes: [
+                "text-to-video",
+                "image-to-video",
+                "source-video",
+                "refine-video",
+            ],
         },
     ],
     ...overrides,
@@ -209,6 +225,11 @@ export const testArchitectureCatalogDto = (
                       modelName: entry.value,
                       architectureId: entry.architectureId,
                       modelProfileId: entry.modelProfileId,
+                      modelClassId: entry.modelClassId ?? "test-model-class",
+                      compatibilityClassId:
+                          entry.compatibilityClassId ??
+                          "test-compatibility-class",
+                      entryModes: [...entry.entryModes],
                   },
               ]
             : [],
@@ -330,6 +351,14 @@ export const fakeArchitectureCatalog = (
             label: "Test Video",
             architectureId,
             modelProfileId: "test-profile",
+            modelClassId: "test-video",
+            compatibilityClassId: "test-video",
+            entryModes: [
+                "text-to-video",
+                "image-to-video",
+                "source-video",
+                "refine-video",
+            ],
         },
     ],
 });

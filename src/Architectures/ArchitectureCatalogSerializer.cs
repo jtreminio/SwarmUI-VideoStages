@@ -123,7 +123,24 @@ internal static class ArchitectureCatalogSerializer
         ["modelName"] = model.ModelName,
         ["architectureId"] = model.ArchitectureId.Value,
         ["modelProfileId"] = model.ModelProfileId.Value,
+        ["modelClassId"] = model.ModelClassId,
+        ["compatibilityClassId"] = model.CompatibilityClassId,
+        ["entryModes"] = new JArray(ModelEntryModes(model.EntryAbilities)),
     };
+
+    private static IEnumerable<string> ModelEntryModes(VideoModelEntryAbility abilities)
+    {
+        if ((abilities & VideoModelEntryAbility.TextToVideo)
+            == VideoModelEntryAbility.TextToVideo)
+        {
+            yield return SerializeEntryMode(ArchitectureEntryMode.TextToVideo);
+        }
+        if ((abilities & VideoModelEntryAbility.ImageToVideo)
+            == VideoModelEntryAbility.ImageToVideo)
+        {
+            yield return SerializeEntryMode(ArchitectureEntryMode.ImageToVideo);
+        }
+    }
 
     private static IEnumerable<string> ArchitectureCapabilities(ArchitectureCapability value)
     {

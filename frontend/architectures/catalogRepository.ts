@@ -187,6 +187,10 @@ export const buildArchitectureModelCatalog = (
                 label: hostLabels.get(value) ?? value,
                 architectureId: backendModel?.architectureId ?? null,
                 modelProfileId: backendModel?.modelProfileId ?? null,
+                modelClassId: backendModel?.modelClassId ?? null,
+                compatibilityClassId:
+                    backendModel?.compatibilityClassId ?? null,
+                entryModes: [...(backendModel?.entryModes ?? [])],
             };
         }),
     };

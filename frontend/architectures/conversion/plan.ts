@@ -24,6 +24,10 @@ import type {
     ArchitectureRetargetPlan,
     CapabilityRuleDecision,
 } from "../types";
+import {
+    type GeneratedEntryMode,
+    modelSupportsAllActiveStageEntries,
+} from "./entryModePolicy";
 
 const countLabel = (count: number, singular: string): string =>
     `${count} ${singular}${count === 1 ? "" : "s"}`;
@@ -89,7 +93,7 @@ export const resolveArchitectureRetarget = (
         modelProfileId: profile.id,
         model: model.value,
         capabilities: structuredClone(descriptor.capabilities),
-        entryModes: [...profile.entryModes],
+        entryModes: [...model.entryModes],
         profileCapabilities: [...profile.capabilities],
         profileRules: structuredClone(profile.rules),
     };
@@ -105,6 +109,7 @@ export const planArchitectureConversion = (
     source: Clip,
     requested: ArchitectureRetargetPlan,
     catalog: ArchitectureModelCatalog | null,
+    generatedEntryMode: GeneratedEntryMode = "text-to-video",
 ): ArchitectureConversionPlan | null => {
     const target = resolveArchitectureRetarget(requested, catalog);
     if (!target) {
@@ -325,6 +330,10 @@ export const planArchitectureConversion = (
     ) {
         removals.push("audio-derived clip duration");
         clip.clipLengthFromAudio = false;
+    }
+
+    if (!modelSupportsAllActiveStageEntries(target, clip, generatedEntryMode)) {
+        return null;
     }
 
     return {

@@ -27,32 +27,28 @@ internal static class ArchitectureCapabilityValidator
             }
         }
 
-        bool everyExecutingProfileSupportsEntry;
         if (!hasActiveStages)
         {
             VideoModelProfileDescriptor defaultProfile = descriptor.Profiles.SingleOrDefault(
                 profile => profile.Id == descriptor.DefaultProfileId);
-            everyExecutingProfileSupportsEntry =
-                defaultProfile?.EntryModes?.Contains(entryMode) == true;
+            Require(
+                configured: true,
+                defaultProfile?.EntryModes?.Contains(entryMode) == true,
+                $"entry mode '{entryMode}' for the default model profile");
         }
         else
         {
-            everyExecutingProfileSupportsEntry = clip.Stages.All(stage =>
-                stageModels.TryGetValue(
-                    stage.ClipStageRawIndex,
-                    out ResolvedVideoModel resolved)
-                && resolved is not null
-                && resolved.ArchitectureId == descriptor.Id
-                && ReferenceEquals(resolved.Architecture, descriptor)
-                && descriptor.Profiles.SingleOrDefault(
-                    profile => profile.Id == resolved.ModelProfileId)
-                    ?.EntryModes
-                    ?.Contains(entryMode) == true);
+            Require(
+                configured: true,
+                descriptor.EntryModes.Contains(entryMode),
+                $"entry mode '{entryMode}'");
+            ValidateModelEntryRoles(
+                clip,
+                descriptor,
+                entryMode,
+                stageModels,
+                diagnostics);
         }
-        Require(
-            configured: true,
-            everyExecutingProfileSupportsEntry,
-            $"entry mode '{entryMode}' for every executing model profile");
         Require(
             clip.SourceVideo is null,
             Has(
@@ -151,6 +147,47 @@ internal static class ArchitectureCapabilityValidator
         ValidateAudioSourceKind(clip, descriptor, diagnostics);
         ValidateStages(clip, descriptor, stageModels, diagnostics);
         return diagnostics.AsReadOnly();
+    }
+
+    private static void ValidateModelEntryRoles(
+        ClipSpec clip,
+        VideoArchitectureDescriptor descriptor,
+        ArchitectureEntryMode entryMode,
+        IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
+        ICollection<PlanDiagnostic> diagnostics)
+    {
+        for (int activeStageIndex = 0; activeStageIndex < clip.Stages.Count; activeStageIndex++)
+        {
+            StageSpec stage = clip.Stages[activeStageIndex];
+            bool resolvedForArchitecture =
+                stageModels.TryGetValue(
+                    stage.ClipStageRawIndex,
+                    out ResolvedVideoModel resolved)
+                && resolved is not null
+                && resolved.ArchitectureId == descriptor.Id
+                && ReferenceEquals(resolved.Architecture, descriptor);
+            if (resolvedForArchitecture
+                && VideoModelEntryPolicy.SupportsStageRole(
+                    resolved,
+                    activeStageIndex,
+                    entryMode))
+            {
+                continue;
+            }
+            string required = activeStageIndex == 0
+                ? entryMode.ToString()
+                : ArchitectureEntryMode.ImageToVideo.ToString();
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Error,
+                "architecture-model-entry-unsupported",
+                $"Clip {clip.Id} stage {stage.Id} model "
+                    + $"'{resolved?.ModelName ?? stage.Model}' cannot perform its "
+                    + (activeStageIndex == 0 ? "clip-root" : "decoded later-stage")
+                    + $" role, which requires entry ability '{required}'.",
+                clip.Id,
+                stage.Id,
+                stage.ClipStageRawIndex));
+        }
     }
 
     private static void ValidateAudioDerivedDurationSource(

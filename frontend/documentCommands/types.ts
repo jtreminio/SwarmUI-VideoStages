@@ -1,3 +1,4 @@
+import type { GeneratedEntryMode } from "../architectures/conversion/entryModePolicy";
 import type {
     ArchitectureModelCatalog,
     ArchitectureRetargetPlan,
@@ -169,4 +170,6 @@ export type DocumentCommand =
 export interface DocumentCommandContext {
     /** The current catalog snapshot that authoritatively owns model identity. */
     architectureCatalog: ArchitectureModelCatalog | null;
+    /** The current host input mode used by a generated clip root. */
+    generatedEntryMode?: GeneratedEntryMode;
 }

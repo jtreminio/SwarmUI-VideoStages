@@ -35,6 +35,9 @@ const catalogWithWan = () => {
         label: "WAN",
         architectureId: "wan22",
         modelProfileId: "wan-profile",
+        modelClassId: "wan-video",
+        compatibilityClassId: "wan-video",
+        entryModes: ["text-to-video", "image-to-video"],
     });
     return catalog;
 };

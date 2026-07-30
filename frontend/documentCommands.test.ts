@@ -874,6 +874,113 @@ describe("reduceDocumentCommand", () => {
         expect(retarget.document).toEqual(source);
     });
 
+    it("rejects a cross-architecture stage retarget even when the clip has only one stage", () => {
+        const source = document();
+        source.clips[0].stages = [source.clips[0].stages[0]];
+
+        const result = reduceDocumentCommand(
+            source,
+            {
+                type: "stage.retarget-model",
+                clipId: "clip-a",
+                stageId: "stage-a",
+                target: {
+                    architectureId: "test-video",
+                    modelProfileId: "test-profile",
+                    model: "test-video.safetensors",
+                },
+            },
+            { architectureCatalog: catalogWithFake() },
+        );
+
+        expect(result).toMatchObject({
+            applied: false,
+            failure: "architecture-invariant",
+        });
+        expect(result.document).toEqual(source);
+    });
+
+    it("uses resolved Stage 0 ownership instead of a stale cached architecture during retarget", () => {
+        const source = document();
+        const catalog = catalogWithFake();
+        const current = catalog.entries.find(
+            (entry) => entry.value === "test-video.safetensors",
+        );
+        if (!current) throw new Error("missing test video model");
+        catalog.entries.push({
+            ...current,
+            value: "test-video-alt.safetensors",
+            label: "Test Video Alternate",
+        });
+        source.clips[0].stages = [
+            {
+                ...source.clips[0].stages[0],
+                model: "test-video.safetensors",
+                modelProfileId: "test-profile",
+            },
+        ];
+
+        const result = reduceDocumentCommand(
+            source,
+            {
+                type: "stage.retarget-model",
+                clipId: "clip-a",
+                stageId: "stage-a",
+                target: {
+                    architectureId: "test-video",
+                    modelProfileId: "test-profile",
+                    model: "test-video-alt.safetensors",
+                },
+            },
+            { architectureCatalog: catalog },
+        );
+
+        expect(result.applied).toBe(true);
+        expect(result.document.clips[0]).toMatchObject({
+            architecture: "test-video",
+            modelProfileId: "test-profile",
+            stages: [
+                {
+                    model: "test-video-alt.safetensors",
+                    modelProfileId: "test-profile",
+                },
+            ],
+        });
+    });
+
+    it("falls back to the cached owner so an unresolved Stage 0 model can be repaired", () => {
+        const source = document();
+        source.clips[0].stages = [
+            {
+                ...source.clips[0].stages[0],
+                model: "removed-model.safetensors",
+                modelProfileId: "removed-profile",
+            },
+        ];
+        const catalog = testArchitectureCatalog();
+
+        const result = reduceDocumentCommand(
+            source,
+            {
+                type: "stage.retarget-model",
+                clipId: "clip-a",
+                stageId: "stage-a",
+                target: {
+                    architectureId: "ltx2",
+                    modelProfileId: "ltx-2.3",
+                    model: "ltx",
+                },
+            },
+            { architectureCatalog: catalog },
+        );
+
+        expect(result.applied).toBe(true);
+        expect(result.document.clips[0].stages[0]).toMatchObject({
+            model: "ltx",
+            modelProfileId: "ltx-2.3",
+        });
+    });
+
     it("allows different catalog profiles across same-architecture active and skipped stages", () => {
         const source = document();
         const catalog = catalogWithSecondLtxProfile();
@@ -983,6 +1090,38 @@ describe("reduceDocumentCommand", () => {
         expect(result.document.clips[0].stages[1].modelProfileId).toBe(
             "ltx-2.3",
         );
+    });
+
+    it("rejects a root retarget that would leave a skipped stage in another compatibility class", () => {
+        const source = document();
+        source.clips[0].stages[1].skipped = true;
+        const catalog = catalogWithSecondLtxProfile();
+        const alternate = catalog.entries.find(
+            (entry) => entry.value === "ltx-alt",
+        );
+        if (!alternate) throw new Error("missing alternate LTX model");
+        alternate.compatibilityClassId = "other-ltx-family";
+
+        const result = reduceDocumentCommand(
+            source,
+            {
+                type: "stage.retarget-model",
+                clipId: "clip-a",
+                stageId: "stage-a",
+                target: {
+                    architectureId: "ltx2",
+                    modelProfileId: "ltx-alt",
+                    model: "ltx-alt",
+                },
+            },
+            { architectureCatalog: catalog },
+        );
+
+        expect(result).toMatchObject({
+            applied: false,
+            failure: "architecture-invariant",
+        });
+        expect(result.document).toEqual(source);
     });
 
     it("validates dormant source-only stages by architecture while retaining per-stage profiles", () => {
@@ -1193,6 +1332,39 @@ describe("reduceDocumentCommand", () => {
         expect(forgedConversion.failure).toBe(
             "invalid-architecture-conversion",
         );
+    });
+
+    it("rejects a whole-clip conversion whose model cannot perform the first active root role", () => {
+        const source = document();
+        source.clips[0].stages[0].skipped = true;
+        const fake = fakeArchitectureCatalog();
+        fake.entries[0].entryModes = ["image-to-video"];
+        fake.architectures[0].profiles[0].entryModes = ["image-to-video"];
+
+        const result = reduceDocumentCommand(
+            source,
+            {
+                type: "clip.convert-architecture",
+                clipId: "clip-a",
+                target: {
+                    architectureId: "test-video",
+                    modelProfileId: "test-profile",
+                    model: "test-video.safetensors",
+                    capabilities: fake.architectures[0].capabilities,
+                    entryModes: ["text-to-video"],
+                },
+            },
+            {
+                architectureCatalog: catalogWithFake(fake),
+                generatedEntryMode: "text-to-video",
+            },
+        );
+
+        expect(result).toMatchObject({
+            applied: false,
+            failure: "invalid-architecture-conversion",
+        });
+        expect(result.document).toEqual(source);
     });
 
     it("uses exact target profile LoRA and upscale-mode support during conversion", () => {

@@ -72,11 +72,22 @@ public class WanRuntimeFlowTests
         }
     }
 
-    [Fact]
-    public void Wan_clip_generates_from_the_host_image_and_replaces_the_core_video()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Wan_clip_generates_from_the_host_image_and_replaces_the_core_video(
+        bool useWan21ImageModel)
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        if (useWan21ImageModel)
+        {
+            models.VideoModel.ModelClass = models.VideoModel.ModelClass with
+            {
+                ID = "wan-2_1-image2video-14b",
+                Name = "Wan 2.1 Image2Video 14B",
+            };
+        }
         string loaderKey = $"modelloader_{models.VideoModel.Name}_image2video";
         string hostLoaderTuple = null;
         bool hostLoaderTupleWasInvalidated = false;
@@ -3582,7 +3593,7 @@ public class WanRuntimeFlowTests
                 MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 10)));
         input.Set(T2IParamTypes.VideoEndFrame, new Image([0x04], MediaType.ImagePng));
 
-        AssertPreflightRefusalBeforeMutation(input, "entry mode 'TextToVideo'");
+        AssertPreflightRefusalBeforeMutation(input, "entry ability 'TextToVideo'");
     }
 
     [Fact]
@@ -3820,10 +3831,10 @@ public class WanRuntimeFlowTests
 
     [Theory]
     [InlineData("entry", "entry mode, clip input, or source-video plan")]
-    [InlineData("profile", "canonical Wan profile")]
-    [InlineData("model", "canonical Wan profile")]
-    [InlineData("payload-profile", "canonical Wan profile")]
-    [InlineData("clip-profile", "canonical Wan profile")]
+    [InlineData("profile", "canonical Wan model facts")]
+    [InlineData("model", "canonical Wan model facts")]
+    [InlineData("payload-profile", "canonical Wan model facts")]
+    [InlineData("clip-compatibility", "canonical Wan model facts")]
     [InlineData("loras-default", "invalid immutable normal-LoRA payload")]
     [InlineData("loras-no-op", "invalid immutable normal-LoRA payload")]
     [InlineData("passthrough-loras", "samplerless passthrough with a normal-LoRA plan")]
@@ -3887,11 +3898,11 @@ public class WanRuntimeFlowTests
                 Stages = [validStage with { ArchitecturePayload = stalePayload }],
             };
         }
-        else if (corruption == "clip-profile")
+        else if (corruption == "clip-compatibility")
         {
             WanClipPayload stalePayload = validClip.RequireWanPayload() with
             {
-                ProfileId = WanArchitectureModule.Ti2v5bProfileId,
+                CompatibilityClassId = "stale-wan-compatibility",
             };
             invalidClip = validClip with { ArchitecturePayload = stalePayload };
         }

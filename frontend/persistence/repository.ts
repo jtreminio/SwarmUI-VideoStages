@@ -13,7 +13,10 @@ import {
     type TimelineStore,
     type UpdateOrigin,
 } from "../store";
-import { isVideoStagesEnabled } from "../swarmInputs";
+import {
+    getRootGeneratedEntryMode,
+    isVideoStagesEnabled,
+} from "../swarmInputs";
 import type { Clip, VideoStagesConfig } from "../types";
 import {
     dataCarrierNeedsCanonicalIdRepair,
@@ -35,6 +38,7 @@ export type DispatchDocumentCommandOptions = SaveStateOptions;
 
 const store = createTimelineStore({
     architectureCatalog: () => getRootDefaults().modelCatalog,
+    generatedEntryMode: getRootGeneratedEntryMode,
     ...timelineCarrierAdapter,
 });
 
@@ -82,6 +86,7 @@ const saveRequestedState = (
         try {
             return diffDocuments(before, requested, {
                 architectureCatalog: getRootDefaults().modelCatalog,
+                generatedEntryMode: getRootGeneratedEntryMode(),
             });
         } catch (error) {
             return throwSaveFailure("diff", error);

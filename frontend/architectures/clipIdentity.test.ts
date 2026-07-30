@@ -53,4 +53,26 @@ describe("clip architecture identity", () => {
             modelProfileId: "none",
         });
     });
+
+    it.each([
+        ["active", false],
+        ["skipped", true],
+    ])("rejects different compatibility classes inside one authored clip when the other stage is %s", (_label, skipped) => {
+        const catalog = testArchitectureCatalog();
+        const alias = catalog.entries.find((entry) => entry.value === "ltx");
+        if (!alias) throw new Error("missing LTX alias");
+        alias.compatibilityClassId = "other-ltx-family";
+        const clip = minimalClip({
+            stages: [
+                minimalStage(),
+                minimalStage({
+                    model: "ltx",
+                    skipped,
+                }),
+            ],
+        });
+
+        expect(deriveClipArchitectureIdentity(clip, catalog)).toBeNull();
+        expect(reconcileClipArchitectureIdentity(clip, catalog)).toBe(false);
+    });
 });

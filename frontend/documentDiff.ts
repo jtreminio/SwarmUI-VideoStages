@@ -6,6 +6,7 @@ import {
     deriveClipArchitectureIdentity,
     reconcileClipArchitectureIdentity,
 } from "./architectures/clipIdentity";
+import type { GeneratedEntryMode } from "./architectures/conversion/entryModePolicy";
 import { planArchitectureConversion } from "./architectures/conversion/plan";
 import { NONE_ARCHITECTURE_ID } from "./architectures/none/identity";
 import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
@@ -46,6 +47,7 @@ interface CommandPhases {
 
 export interface DocumentDiffContext {
     architectureCatalog: ArchitectureModelCatalog | null;
+    generatedEntryMode?: GeneratedEntryMode;
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -431,8 +433,14 @@ const clipDiffBase = (
         requestedForCleanup,
         target,
         catalog,
+        context.generatedEntryMode ?? "text-to-video",
     );
-    const baselinePlan = planArchitectureConversion(previous, target, catalog);
+    const baselinePlan = planArchitectureConversion(
+        previous,
+        target,
+        catalog,
+        context.generatedEntryMode ?? "text-to-video",
+    );
     if (!requestedPlan || !baselinePlan) {
         throw new DocumentDiffError("architecture-invariant");
     }

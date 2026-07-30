@@ -23,6 +23,7 @@ internal static class WanRuntimeClipContract
             || clipPayload.ArchitectureId != WanArchitectureModule.ArchitectureId
             || clipPayload.ClipId != clip.ClipId
             || !WanArchitectureModule.IsSupportedProfile(clipPayload.ProfileId)
+            || string.IsNullOrWhiteSpace(clipPayload.CompatibilityClassId)
             || !clip.Architecture.Profiles.Any(
                 profile => profile.Id == clipPayload.ProfileId))
         {
@@ -83,6 +84,15 @@ internal static class WanRuntimeClipContract
             .Select(item => item.index)
             .DefaultIfEmpty(-1)
             .Last();
+        bool exactLegacyEndFrameClip =
+            generatedEntry
+            && clip.Stages.All(stage =>
+                stage.ResolvedModel?.ModelProfileId
+                    == WanArchitectureModule.ImageToVideoProfileId
+                && string.Equals(
+                        stage.ResolvedModel.ModelClassId,
+                        WanArchitectureModule.ImageToVideoModelClassId,
+                        StringComparison.OrdinalIgnoreCase));
         for (int index = 0; index < clip.Stages.Count; index++)
         {
             StagePlan stage = clip.Stages[index];
@@ -107,9 +117,7 @@ internal static class WanRuntimeClipContract
             ValidateUpscale(clip, stage, payload.Upscale, decodedInput);
             bool passthrough = decodedInput && payload.Control == 0;
             bool expectedEndFrameOwner =
-                generatedEntry
-                && clipPayload.ProfileId
-                    == WanArchitectureModule.ImageToVideoProfileId
+                exactLegacyEndFrameClip
                 && index == terminalGeneratingIndex;
             if (payload.OwnsVideoEndFrame != expectedEndFrameOwner)
             {
@@ -154,11 +162,23 @@ internal static class WanRuntimeClipContract
             }
             ResolvedVideoModel resolved = stage.ResolvedModel;
             if (payload.ArchitectureId != WanArchitectureModule.ArchitectureId
-                || payload.ProfileId != clipPayload.ProfileId
                 || resolved?.ArchitectureId != WanArchitectureModule.ArchitectureId
-                || resolved.ModelProfileId != clipPayload.ProfileId
                 || resolved.ModelProfileId != payload.ProfileId
                 || !WanArchitectureModule.IsSupportedProfile(resolved.ModelProfileId)
+                || string.IsNullOrWhiteSpace(resolved.ModelClassId)
+                || string.IsNullOrWhiteSpace(resolved.CompatibilityClassId)
+                || !string.Equals(
+                    resolved.ModelClassId,
+                    payload.ModelClassId,
+                    StringComparison.Ordinal)
+                || !string.Equals(
+                    resolved.CompatibilityClassId,
+                    payload.CompatibilityClassId,
+                    StringComparison.Ordinal)
+                || !string.Equals(
+                    resolved.CompatibilityClassId,
+                    clipPayload.CompatibilityClassId,
+                    StringComparison.Ordinal)
                 || !string.Equals(
                     resolved.ModelName,
                     payload.Model,
@@ -172,7 +192,7 @@ internal static class WanRuntimeClipContract
             {
                 throw Invalid(
                     clip,
-                    $"stage {stage.StageId} does not preserve the clip's canonical Wan profile");
+                    $"stage {stage.StageId} does not preserve the clip's canonical Wan model facts");
             }
         }
     }

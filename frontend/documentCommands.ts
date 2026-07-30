@@ -1,4 +1,7 @@
-import { reconcileClipArchitectureIdentity } from "./architectures/clipIdentity";
+import {
+    modelIdentityFromCatalog,
+    reconcileClipArchitectureIdentity,
+} from "./architectures/clipIdentity";
 import {
     planArchitectureConversion,
     resolveArchitectureRetarget,
@@ -144,6 +147,7 @@ export const reduceDocumentCommand = (
                 clip,
                 target,
                 context.architectureCatalog,
+                context.generatedEntryMode ?? "text-to-video",
             );
             if (!conversion) {
                 return failure(document, "invalid-architecture-conversion");
@@ -176,6 +180,16 @@ export const reduceDocumentCommand = (
                 context.architectureCatalog,
             );
             if (!target) {
+                return failure(document, "architecture-invariant");
+            }
+            // Authored Stage 0 is authoritative. The cached clip field is only
+            // a repair fallback when its persisted model cannot be resolved.
+            const ownerArchitectureId =
+                modelIdentityFromCatalog(
+                    context.architectureCatalog,
+                    clip.stages[0]?.model ?? "",
+                )?.architectureId ?? clip.architecture;
+            if (target.architectureId !== ownerArchitectureId) {
                 return failure(document, "architecture-invariant");
             }
             const candidate = clone(clip);

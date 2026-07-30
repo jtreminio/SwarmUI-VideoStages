@@ -6,11 +6,9 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Wan;
 
 /// <summary>
-/// Exact Wan 2.2 profiles proven through the host image-to-video builder. Clips enter from either
-/// the generated host image or bounded clip-local source footage, then may chain one profile over
-/// the preceding decoded stage output. Every other authoring feature is declared unsupported so
-/// common capability validation rejects it before graph mutation rather than an executor
-/// discovering it late.
+/// Wan image-to-video models recognized from the host's compatibility and entry facts. Exact
+/// legacy profiles remain runtime aliases for the two paths which already had special handling;
+/// they are not the authority for ordinary Wan image-entry support.
 /// </summary>
 internal sealed class WanArchitectureModule : IVideoArchitectureModule
 {
@@ -39,7 +37,10 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
 
     internal static ModelProfileId Ti2v5bProfileId { get; } = new("wan-2.2-ti2v-5b");
 
-    private static IReadOnlyList<RecognizedProfile> RecognizedProfiles { get; } =
+    internal static ModelProfileId OrdinaryImageToVideoProfileId { get; } =
+        new("wan-i2v");
+
+    private static IReadOnlyList<RecognizedProfile> LegacyRecognizedProfiles { get; } =
     [
         new(
             ImageToVideoModelClassId,
@@ -84,6 +85,10 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
                     ArchitectureEntryMode.ImageToVideo,
                     ArchitectureEntryMode.SourceVideo,
                 ]),
+            Profile(
+                OrdinaryImageToVideoProfileId,
+                "Wan Image2Video",
+                [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo]),
         ],
         new(
             ArchitectureCapability.GeneratedEntry
@@ -106,7 +111,12 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
     {
         string modelClassId = model?.ModelClass?.ID;
         string compatClassId = model?.ModelClass?.CompatClass?.ID;
-        RecognizedProfile match = RecognizedProfiles.SingleOrDefault(candidate =>
+        if (!IsOrdinaryWanImageModel(model))
+        {
+            resolved = null;
+            return false;
+        }
+        RecognizedProfile legacyMatch = LegacyRecognizedProfiles.SingleOrDefault(candidate =>
             string.Equals(
                 modelClassId,
                 candidate.ModelClassId,
@@ -115,21 +125,106 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
                 compatClassId,
                 candidate.CompatClassId,
                 StringComparison.Ordinal));
-        if (match is null)
-        {
-            resolved = null;
-            return false;
-        }
+        ModelProfileId profileId =
+            legacyMatch?.ProfileId ?? OrdinaryImageToVideoProfileId;
+        VideoModelEntryAbility entryAbilities =
+            profileId == Ti2v5bProfileId
+                ? VideoModelEntryAbility.TextToVideo
+                    | VideoModelEntryAbility.ImageToVideo
+                : VideoModelEntryAbility.ImageToVideo;
         resolved = new(
             model.Name,
             ArchitectureId,
-            match.ProfileId,
-            Descriptor);
+            profileId,
+            Descriptor)
+        {
+            ModelClassId = modelClassId,
+            CompatibilityClassId = compatClassId,
+            EntryAbilities = entryAbilities,
+            HostFactsAuthoritative = true,
+        };
         return true;
     }
 
     internal static bool IsSupportedProfile(ModelProfileId profileId) =>
-        RecognizedProfiles.Any(candidate => candidate.ProfileId == profileId);
+        profileId == OrdinaryImageToVideoProfileId
+        || LegacyRecognizedProfiles.Any(candidate => candidate.ProfileId == profileId);
+
+    internal static bool IsLegacySpecialProfile(ModelProfileId profileId) =>
+        LegacyRecognizedProfiles.Any(candidate => candidate.ProfileId == profileId);
+
+    private static bool IsOrdinaryWanImageModel(T2IModel model)
+    {
+        T2IModelClass modelClass = model?.ModelClass;
+        T2IModelCompatClass compatibility = modelClass?.CompatClass;
+        string modelClassId = modelClass?.ID ?? "";
+        string compatibilityClassId = compatibility?.ID ?? "";
+        if (model is null
+            || modelClass is null
+            || compatibility is null
+            || !compatibility.IsImage2Video
+            || !compatibilityClassId.StartsWith("wan-", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(modelClassId)
+            || !(modelClassId.StartsWith("wan-2_1-", StringComparison.OrdinalIgnoreCase)
+                || modelClassId.StartsWith("wan-2_2-", StringComparison.OrdinalIgnoreCase))
+            || modelClass.IsLora
+            || HasClassToken(modelClassId, "lora")
+            || HasClassToken(modelClassId, "vae")
+            || modelClassId.Contains("vace", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (string.Equals(
+                modelClassId,
+                Ti2v5bModelClassId,
+                StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(
+                compatibilityClassId,
+                T2IModelClassSorter.CompatWan22_5b.ID,
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+        if (string.Equals(
+                modelClassId,
+                ImageToVideoModelClassId,
+                StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(
+                compatibilityClassId,
+                T2IModelClassSorter.CompatWan21_14b.ID,
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+        // The compatibility family advertises both entry abilities broadly. A concrete T2V class
+        // is still not an image-entry model.
+        return !modelClassId.Contains("text2video", StringComparison.OrdinalIgnoreCase)
+            || modelClassId.Contains("image2video", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasClassToken(string modelClassId, string token)
+    {
+        for (int index = 0; index <= modelClassId.Length - token.Length; index++)
+        {
+            bool hasLeadingBoundary =
+                index == 0 || !char.IsLetterOrDigit(modelClassId[index - 1]);
+            int followingIndex = index + token.Length;
+            bool hasTrailingBoundary =
+                followingIndex == modelClassId.Length
+                || !char.IsLetterOrDigit(modelClassId[followingIndex]);
+            if (
+                hasLeadingBoundary
+                && hasTrailingBoundary
+                && modelClassId
+                    .AsSpan(index, token.Length)
+                    .Equals(token.AsSpan(), StringComparison.OrdinalIgnoreCase)
+            )
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     public ArchitectureClipCompilation ValidateAndCompileClip(
         ClipSpec clip,

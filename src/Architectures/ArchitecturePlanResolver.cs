@@ -197,6 +197,26 @@ internal static class ArchitecturePlanResolver
             if (!stageModels.TryGetValue(authored.RawIndex, out ResolvedVideoModel stageModel)
                 || stageModel.ArchitectureId == firstModel.ArchitectureId)
             {
+                if (stageModel is not null
+                    && !string.IsNullOrWhiteSpace(firstModel.CompatibilityClassId)
+                    && !string.IsNullOrWhiteSpace(stageModel.CompatibilityClassId)
+                    && !string.Equals(
+                        stageModel.CompatibilityClassId,
+                        firstModel.CompatibilityClassId,
+                        StringComparison.Ordinal))
+                {
+                    diagnostics.Add(Error(
+                        "architecture-mixed-authored-stage-compatibility",
+                        $"Clip {clip.Id} authored stage {authoredStages[0].RawIndex} establishes "
+                            + $"host compatibility class '{firstModel.CompatibilityClassId}', "
+                            + $"but authored stage {authored.RawIndex}"
+                            + (authored.Skipped ? " (skipped)" : "")
+                            + $" resolves to '{stageModel.CompatibilityClassId}'. All authored "
+                            + "stages in one clip must use one host compatibility class.",
+                        clip.Id,
+                        stageId: null,
+                        rawStageIndex: authored.RawIndex));
+                }
                 continue;
             }
             diagnostics.Add(Error(

@@ -1,3 +1,4 @@
+import type { GeneratedEntryMode } from "./architectures/conversion/entryModePolicy";
 import type { ArchitectureModelCatalog } from "./architectures/types";
 import { videoStagesDebugLog } from "./debugLog";
 import {
@@ -62,6 +63,8 @@ export interface StoreDeps {
      * commands fail closed when it is unavailable.
      */
     architectureCatalog?(): ArchitectureModelCatalog | null;
+    /** Current host input mode used by generated clip roots. */
+    generatedEntryMode?(): GeneratedEntryMode;
     /**
      * Change token covering everything a cached parse depends on: both
      * carrier values plus the inherited-dims signature (inherited width/
@@ -249,6 +252,7 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         ensureAuthoringDocumentIdentity(source);
         const reduced = reduceDocumentCommand(source, command, {
             architectureCatalog: deps.architectureCatalog?.() ?? null,
+            generatedEntryMode: deps.generatedEntryMode?.() ?? "text-to-video",
         });
         if (!reduced.applied) {
             return {

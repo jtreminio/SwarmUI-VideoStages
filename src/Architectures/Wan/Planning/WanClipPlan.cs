@@ -22,6 +22,11 @@ internal sealed record WanStagePayload(
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
 
+    public string ModelClassId { get; init; } = Model;
+
+    public string CompatibilityClassId { get; init; } =
+        WanArchitectureModule.ArchitectureId.Value;
+
     /// <summary>
     /// True only for the last generating stage of a pure generated 14B clip. The request-global
     /// end image, when configured, belongs exclusively to this stage.
@@ -36,6 +41,9 @@ internal sealed record WanClipPayload(
     IArchitectureClipGeometryProjection
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
+
+    public string CompatibilityClassId { get; init; } =
+        WanArchitectureModule.ArchitectureId.Value;
 
     public (int Width, int Height) ProjectFinalDimensions(
         IReadOnlyList<StagePlan> stages,

@@ -93,10 +93,22 @@ public class RealArchitectureContractTests
         {
             ID = fixture.CloseImpostorClassId,
         };
-        Assert.False(registry.TryResolveModel(
-            fixture.Model,
-            out ResolvedVideoModel impostorResolution));
-        Assert.Null(impostorResolution);
+        bool closeVariantSupported = family == "wan22";
+        Assert.Equal(
+            closeVariantSupported,
+            registry.TryResolveModel(
+                fixture.Model,
+                out ResolvedVideoModel impostorResolution));
+        if (closeVariantSupported)
+        {
+            Assert.Equal(
+                WanArchitectureModule.OrdinaryImageToVideoProfileId,
+                impostorResolution.ModelProfileId);
+        }
+        else
+        {
+            Assert.Null(impostorResolution);
+        }
     }
 
     [Theory]

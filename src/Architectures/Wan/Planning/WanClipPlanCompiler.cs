@@ -57,8 +57,56 @@ internal static class WanClipPlanCompiler
                 && resolved is not null
                 && resolved.ArchitectureId == WanArchitectureModule.ArchitectureId
                 && resolved.ModelProfileId
-                    == WanArchitectureModule.ImageToVideoProfileId);
+                    == WanArchitectureModule.ImageToVideoProfileId
+                && string.Equals(
+                    resolved.ModelClassId,
+                    WanArchitectureModule.ImageToVideoModelClassId,
+                    StringComparison.OrdinalIgnoreCase));
         ModelProfileId? clipProfile = null;
+        string clipCompatibilityClassId = null;
+        foreach ((int rawStageIndex, ResolvedVideoModel resolved) in stageModels
+            .OrderBy(pair => pair.Key))
+        {
+            if (resolved is null
+                || resolved.ArchitectureId != WanArchitectureModule.ArchitectureId)
+            {
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(resolved.ModelClassId)
+                || string.IsNullOrWhiteSpace(resolved.CompatibilityClassId)
+                || resolved.EntryAbilities == VideoModelEntryAbility.None)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "wan.model-facts.missing",
+                    $"Clip {clip.Id} authored stage {rawStageIndex} is missing the host model "
+                        + "class, compatibility class, or entry abilities required to plan WAN.",
+                    clip.Id,
+                    RawStageIndex: rawStageIndex));
+                continue;
+            }
+            if (clipCompatibilityClassId is null)
+            {
+                clipCompatibilityClassId = resolved.CompatibilityClassId;
+            }
+            else if (!string.Equals(
+                resolved.CompatibilityClassId,
+                clipCompatibilityClassId,
+                StringComparison.Ordinal))
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "wan.clip-compatibility-class.mixed",
+                    $"Clip {clip.Id} must use one host model compatibility class throughout, "
+                        + $"but authored stage {rawStageIndex} resolves to "
+                        + $"'{resolved.CompatibilityClassId}' after "
+                        + $"'{clipCompatibilityClassId}'. Use a separate clip to change model "
+                        + "compatibility families.",
+                    clip.Id,
+                    StageId: null,
+                    RawStageIndex: rawStageIndex));
+            }
+        }
         for (int stageIndex = 0; stageIndex < authoredStages.Count; stageIndex++)
         {
             StageSpec stage = authoredStages[stageIndex];
@@ -90,17 +138,6 @@ internal static class WanClipPlanCompiler
             else if (clipProfile is null)
             {
                 clipProfile = resolved.ModelProfileId;
-            }
-            else if (resolved.ModelProfileId != clipProfile.Value)
-            {
-                diagnostics.Add(new(
-                    PlanDiagnosticSeverity.Error,
-                    "wan22.clip-profile.mixed",
-                    $"Clip {clip.Id} must use one Wan profile throughout, but stage {stage.Id} "
-                        + $"resolves to '{resolved.ModelProfileId}' after "
-                        + $"'{clipProfile.Value}'. Use a hard-cut clip to change profiles.",
-                    clip.Id,
-                    stage.Id));
             }
             bool firstStage = stageIndex == 0;
             bool decodedStageInput = sourcedEntry || !firstStage;
@@ -175,6 +212,8 @@ internal static class WanClipPlanCompiler
                     StageUpscalePlanCompiler.Compile(stage),
                     loras)
             {
+                ModelClassId = resolved?.ModelClassId ?? "",
+                CompatibilityClassId = resolved?.CompatibilityClassId ?? "",
                 OwnsVideoEndFrame =
                     eligibleForVideoEndFrameOwnership
                     && stage.ClipStageRawIndex == terminalGeneratingRawIndex.Value,
@@ -184,7 +223,10 @@ internal static class WanClipPlanCompiler
         return new(
             new WanClipPayload(
                 clip.Id,
-                clipProfile ?? WanArchitectureModule.ImageToVideoProfileId),
+                clipProfile ?? WanArchitectureModule.ImageToVideoProfileId)
+            {
+                CompatibilityClassId = clipCompatibilityClassId ?? "",
+            },
             stages,
             diagnostics.AsReadOnly());
     }

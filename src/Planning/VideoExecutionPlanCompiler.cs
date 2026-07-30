@@ -66,11 +66,17 @@ internal static class VideoExecutionPlanCompiler
         {
             bool effectiveRequestBlocked =
                 request.BlockedClipIds.Contains(activeClips[i].Id);
+            bool architectureResolutionBlocked =
+                architecturePlanning.Diagnostics.Any(diagnostic =>
+                    diagnostic.Severity == PlanDiagnosticSeverity.Error
+                    && diagnostic.ClipId == activeClips[i].Id);
             ClipArchitectureAssignment assignment =
                 architecturePlanning.Clips.GetValueOrDefault(activeClips[i].Id);
             ArchitectureEntryMode entryMode = ResolveEntryMode(spec, rootEnvironment, activeClips[i]);
             ArchitectureClipCompilation acceptedArchitectureCompilation = null;
-            if (assignment is not null && !effectiveRequestBlocked)
+            if (assignment is not null
+                && !effectiveRequestBlocked
+                && !architectureResolutionBlocked)
             {
                 IReadOnlyList<PlanDiagnostic> capabilityDiagnostics =
                     ArchitectureCapabilityValidator.Validate(
