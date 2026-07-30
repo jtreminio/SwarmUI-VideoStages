@@ -120,15 +120,25 @@ export const buildArchitectureIcLorasSection = (
     defaults: RootDefaults,
     selectedEntryIdx: number | null = null,
     open = selectedEntryIdx !== null,
-): HTMLElement =>
-    panels
-        .get(clip.architecture)
-        ?.buildIcLorasSection(
+): HTMLElement => {
+    const architectureId = context.capabilities().forClip(clip).architectureId;
+    return (
+        panels
+            .get(architectureId)
+            ?.buildIcLorasSection(
+                context,
+                clip,
+                clipIdx,
+                defaults,
+                selectedEntryIdx,
+                open,
+            ) ??
+        persistedIcLoraRemovalPanel(
             context,
             clip,
             clipIdx,
-            defaults,
             selectedEntryIdx,
             open,
-        ) ??
-    persistedIcLoraRemovalPanel(context, clip, clipIdx, selectedEntryIdx, open);
+        )
+    );
+};

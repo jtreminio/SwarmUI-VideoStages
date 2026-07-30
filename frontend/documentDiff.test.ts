@@ -311,7 +311,9 @@ describe("diffDocuments", () => {
             label: "LTX Alt",
         });
 
-        const command = diffDocuments(before, after);
+        const command = diffDocuments(before, after, {
+            architectureCatalog: catalog,
+        });
         expect(command.commands).toContainEqual({
             type: "stage.retarget-model",
             clipId: "clip-a",
@@ -329,6 +331,49 @@ describe("diffDocuments", () => {
                     ("model" in entry.patch || "modelProfileId" in entry.patch),
             ),
         ).toBe(false);
+        const result = reduceDocumentCommand(before, command, {
+            architectureCatalog: catalog,
+        });
+        expect(result.applied).toBe(true);
+        expect(result.document).toEqual(after);
+    });
+
+    it("round-trips a same-architecture retarget in dormant source-only stages", () => {
+        const before = document();
+        before.clips[0].sourceVideo = {
+            data: "data:video/mp4;base64,AAAA",
+            fileName: "source.mp4",
+            fps: 24,
+            durationSeconds: 4,
+            startSeconds: 0,
+            lengthSeconds: 4,
+        };
+        before.clips[0].stages = [
+            { ...before.clips[0].stages[0], skipped: true },
+        ];
+        before.clips[0].architecture = "none";
+        before.clips[0].modelProfileId = "none";
+        const catalog = testArchitectureCatalog();
+        catalog.entries.push({
+            ...catalog.entries[0],
+            value: "ltx-dormant-alt",
+            label: "LTX Dormant Alternate",
+        });
+        const after = structuredClone(before);
+        after.clips[0].stages[0].model = "ltx-dormant-alt";
+
+        const command = diffDocuments(before, after, {
+            architectureCatalog: catalog,
+        });
+        expect(command.commands).toContainEqual(
+            expect.objectContaining({
+                type: "stage.retarget-model",
+                target: expect.objectContaining({
+                    architectureId: "ltx2",
+                    model: "ltx-dormant-alt",
+                }),
+            }),
+        );
         const result = reduceDocumentCommand(before, command, {
             architectureCatalog: catalog,
         });
@@ -417,6 +462,262 @@ describe("diffDocuments", () => {
                 architectureCatalog: catalog,
             }),
         ).toThrow(DocumentDiffError);
+    });
+
+    it("repairs an unresolved Stage-0 owner through a conversion even when its cached hint already matches", () => {
+        const before = document();
+        before.clips[0].stages = [stage("stage-a")];
+        before.clips[0].stages[0].model = "removed-ltx-model";
+        before.clips[0].architecturePayload = {
+            ltx2: { unowned: "must-drop" },
+        };
+        const after = structuredClone(before);
+        after.clips[0].stages[0].model = "ltx";
+        after.clips[0].architecturePayload = null;
+        const catalog = testArchitectureCatalog();
+
+        const command = diffDocuments(before, after, {
+            architectureCatalog: catalog,
+        });
+        expect(command.commands).toContainEqual(
+            expect.objectContaining({
+                type: "clip.convert-architecture",
+                clipId: "clip-a",
+            }),
+        );
+
+        const result = reduceDocumentCommand(before, command, {
+            architectureCatalog: catalog,
+        });
+        expect(result.applied).toBe(true);
+        expect(result.document).toEqual(after);
+        expect(result.document.clips[0].architecturePayload).toBeNull();
+    });
+
+    it("rejects an atomic sourced-to-generated conversion whose target cannot enter the final root role", () => {
+        const before = document();
+        before.clips[0].sourceVideo = {
+            data: "data:video/mp4;base64,AAAA",
+            fileName: "source.mp4",
+            fps: 24,
+            durationSeconds: 4,
+            startSeconds: 0,
+            lengthSeconds: 4,
+        };
+        const { catalog, target } = crossArchitectureCatalog();
+        const targetEntry = catalog.entries.find(
+            (entry) => entry.value === target.model,
+        );
+        if (!targetEntry) throw new Error("missing target model");
+        targetEntry.entryAbilities = ["image"];
+        targetEntry.entryModes = ["image-to-video", "source-video"];
+        const after = structuredClone(before);
+        after.clips[0].sourceVideo = null;
+        after.clips[0].architecture = target.architectureId;
+        after.clips[0].modelProfileId = target.modelProfileId;
+        after.clips[0].stages.forEach((entry) => {
+            entry.model = target.model;
+            entry.modelProfileId = target.modelProfileId;
+        });
+
+        expect(() =>
+            diffDocuments(before, after, {
+                architectureCatalog: catalog,
+                generatedEntryMode: "text-to-video",
+            }),
+        ).toThrow(new DocumentDiffError("architecture-invariant"));
+    });
+
+    it("applies the final source role before an atomic generated-to-sourced conversion", () => {
+        const before = document();
+        const { catalog, target } = crossArchitectureCatalog();
+        const targetEntry = catalog.entries.find(
+            (entry) => entry.value === target.model,
+        );
+        if (!targetEntry) throw new Error("missing target model");
+        targetEntry.entryAbilities = ["image"];
+        targetEntry.entryModes = ["image-to-video", "source-video"];
+        const after = structuredClone(before);
+        after.clips[0].sourceVideo = {
+            data: "data:video/mp4;base64,AAAA",
+            fileName: "source.mp4",
+            fps: 24,
+            durationSeconds: 4,
+            startSeconds: 0,
+            lengthSeconds: 4,
+        };
+        after.clips[0].architecture = target.architectureId;
+        after.clips[0].modelProfileId = target.modelProfileId;
+        after.clips[0].stages.forEach((entry) => {
+            entry.model = target.model;
+            entry.modelProfileId = target.modelProfileId;
+        });
+
+        const context = {
+            architectureCatalog: catalog,
+            generatedEntryMode: "text-to-video" as const,
+        };
+        const command = diffDocuments(before, after, context);
+        expect(command.commands.slice(0, 2).map(({ type }) => type)).toEqual([
+            "clip.patch",
+            "clip.convert-architecture",
+        ]);
+        const result = reduceDocumentCommand(before, command, context);
+        expect(result.applied).toBe(true);
+        expect(result.document).toEqual(after);
+    });
+
+    it("removes obsolete active stages before validating an atomic text-only conversion", () => {
+        const before = document();
+        const { catalog, target } = crossArchitectureCatalog();
+        const targetEntry = catalog.entries.find(
+            (entry) => entry.value === target.model,
+        );
+        if (!targetEntry) throw new Error("missing target model");
+        targetEntry.entryAbilities = ["text"];
+        targetEntry.entryModes = ["text-to-video"];
+        const after = structuredClone(before);
+        after.clips[0].stages = [after.clips[0].stages[0]];
+        after.clips[0].architecture = target.architectureId;
+        after.clips[0].modelProfileId = target.modelProfileId;
+        after.clips[0].stages[0].model = target.model;
+        after.clips[0].stages[0].modelProfileId = target.modelProfileId;
+
+        const context = {
+            architectureCatalog: catalog,
+            generatedEntryMode: "text-to-video" as const,
+        };
+        const command = diffDocuments(before, after, context);
+        const conversionIndex = command.commands.findIndex(
+            ({ type }) => type === "clip.convert-architecture",
+        );
+        const removalIndexes = command.commands.flatMap((entry, index) =>
+            entry.type === "stage.remove" ? [index] : [],
+        );
+        expect(removalIndexes).toHaveLength(2);
+        expect(removalIndexes.every((index) => index < conversionIndex)).toBe(
+            true,
+        );
+
+        const result = reduceDocumentCommand(before, command, context);
+        expect(result.applied).toBe(true);
+        expect(result.document).toEqual(after);
+    });
+
+    it("drops an unowned payload before removing an unresolved Stage 0", () => {
+        const before = document();
+        before.clips[0].stages = [
+            {
+                ...stage("stage-unknown"),
+                model: "removed-model.safetensors",
+                modelProfileId: "removed-profile",
+            },
+            stage("stage-promoted"),
+        ];
+        before.clips[0].architecturePayload = {
+            unowned: { mustDrop: true },
+        };
+        const after = structuredClone(before);
+        after.clips[0].stages = [after.clips[0].stages[1]];
+        after.clips[0].architecturePayload = null;
+        const catalog = testArchitectureCatalog();
+
+        const command = diffDocuments(before, after, {
+            architectureCatalog: catalog,
+        });
+        expect(command.commands.slice(0, 3)).toEqual([
+            {
+                type: "clip.patch",
+                clipId: "clip-a",
+                patch: { architecturePayload: null },
+            },
+            {
+                type: "stage.remove",
+                clipId: "clip-a",
+                stageId: "stage-unknown",
+            },
+            expect.objectContaining({
+                type: "clip.convert-architecture",
+                clipId: "clip-a",
+            }),
+        ]);
+        const result = reduceDocumentCommand(before, command, {
+            architectureCatalog: catalog,
+        });
+        expect(result.applied).toBe(true);
+        expect(result.document).toEqual(after);
+
+        const retained = structuredClone(after);
+        retained.clips[0].architecturePayload =
+            before.clips[0].architecturePayload;
+        expect(() =>
+            diffDocuments(before, retained, {
+                architectureCatalog: catalog,
+            }),
+        ).toThrow(new DocumentDiffError("architecture-invariant"));
+    });
+
+    it("reasserts validated Incoming media after conversion-time graph reconciliation", () => {
+        const before = document();
+        const { catalog } = crossArchitectureCatalog();
+        const targetClip = before.clips[0];
+        targetClip.stages = [
+            {
+                ...targetClip.stages[0],
+                model: "test-video.safetensors",
+                modelProfileId: "test-profile",
+            },
+        ];
+        targetClip.architecture = "test-video";
+        targetClip.modelProfileId = "test-profile";
+        targetClip.skipped = true;
+        targetClip.sourceVideo = {
+            data: "data:video/mp4;base64,AAAA",
+            fileName: "source.mp4",
+            fps: 24,
+            durationSeconds: 4,
+            startSeconds: 0,
+            lengthSeconds: 4,
+        };
+        targetClip.icLoras = [
+            {
+                lora: "guide.safetensors",
+                preset: "custom",
+                driveSource: "Incoming",
+                driveData: "visual",
+                driveMediaKinds: ["video"],
+                stage: 0,
+                strength: 1,
+                attentionStrength: 1,
+                controlType: "none",
+                hdr: false,
+                driveMedia: null,
+            },
+        ];
+        const after = structuredClone(before);
+        after.clips[0].architecture = "ltx2";
+        after.clips[0].modelProfileId = "ltx-2.3";
+        after.clips[0].skipped = false;
+        after.clips[0].stages[0].model = "ltx";
+        after.clips[0].stages[0].modelProfileId = "ltx-2.3";
+
+        const context = {
+            architectureCatalog: catalog,
+            generatedEntryMode: "text-to-video" as const,
+        };
+        const command = diffDocuments(before, after, context);
+        expect(command.commands).toContainEqual({
+            type: "clip.patch",
+            clipId: "clip-a",
+            patch: { icLoras: after.clips[0].icLoras },
+        });
+
+        const result = reduceDocumentCommand(before, command, context);
+        expect(result.applied).toBe(true);
+        expect(result.document).toEqual(after);
+        expect(result.document.clips[0].icLoras[0].driveSource).toBe(
+            "Incoming",
+        );
     });
 
     it("requires a catalog but accepts newly authored dormant extras", () => {

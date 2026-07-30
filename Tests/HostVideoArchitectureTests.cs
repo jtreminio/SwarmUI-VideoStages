@@ -47,6 +47,80 @@ public class HostVideoArchitectureTests
         Assert.Equal(
             ArchitectureResolutionTier.Fallback,
             HostVideoArchitectureModule.Instance.ResolutionTier);
+        Assert.Equal(
+            model.ModelClass.CompatClass.LorasTargetTextEnc,
+            resolved.LorasTargetTextEncoder);
+    }
+
+    [Fact]
+    public void Resolved_LoRA_target_fact_follows_core_instead_of_a_compatibility_allowlist()
+    {
+        using SwarmUiTestContext context = new();
+        T2IModelCompatClass compatibility = Compatibility("nvidia-cosmos-1")
+            with { LorasTargetTextEnc = false };
+
+        Assert.True(HostVideoArchitectureModule.Instance.TryResolveModel(
+            Model("nvidia-cosmos-1-7b-text2world", compatibility),
+            out ResolvedVideoModel resolved));
+
+        Assert.False(resolved.LorasTargetTextEncoder);
+    }
+
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 1)]
+    public void Compilation_uses_the_resolved_core_LoRA_target_fact(
+        bool targetsTextEncoder,
+        int expectedLoras)
+    {
+        using SwarmUiTestContext context = new();
+        T2IModelCompatClass compatibility = Compatibility("nvidia-cosmos-1")
+            with { LorasTargetTextEnc = targetsTextEncoder };
+        T2IModel model = Model(
+            "nvidia-cosmos-1-7b-text2world",
+            compatibility);
+        Assert.True(HostVideoArchitectureModule.Instance.TryResolveModel(
+            model,
+            out ResolvedVideoModel resolved));
+        StageSpec stage = new(
+            10,
+            1,
+            1,
+            "pixel-lanczos",
+            model.Name,
+            12,
+            4.5,
+            "euler",
+            "normal",
+            "Generated",
+            Loras: [new("text-only.safetensors", 0, 0.8)]);
+        ClipSpec clip = new(
+            0,
+            25,
+            Constants.AudioSourceNative,
+            [],
+            false,
+            false,
+            false,
+            false,
+            null,
+            [],
+            [stage]);
+
+        ArchitectureClipCompilation compilation =
+            HostVideoArchitectureModule.Instance.ValidateAndCompileClip(
+                clip,
+                new Dictionary<int, ResolvedVideoModel> { [0] = resolved },
+                new(512, 512, 24));
+
+        HostVideoStagePayload payload = Assert.IsType<HostVideoStagePayload>(
+            compilation.StagePayloads[0]);
+        Assert.Equal(
+            targetsTextEncoder
+                ? NormalLoraTargetPolicy.ModelAndTextEncoder
+                : NormalLoraTargetPolicy.ModelOnly,
+            payload.LoraTargetPolicy);
+        Assert.Equal(expectedLoras, payload.Loras.Length);
     }
 
     [Theory]
@@ -89,6 +163,7 @@ public class HostVideoArchitectureTests
             wan.VideoModel,
             out ResolvedVideoModel resolvedWan));
         Assert.Equal(WanArchitectureModule.ArchitectureId, resolvedWan.ArchitectureId);
+        Assert.False(resolvedWan.LorasTargetTextEncoder);
     }
 
     [Fact]

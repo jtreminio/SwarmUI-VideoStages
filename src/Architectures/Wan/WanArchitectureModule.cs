@@ -116,6 +116,19 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
         Rules = [NormalLoraRequiresSamplingStageRule],
+        IgnoredUnsupportedFeatures = new HashSet<UnsupportedAuthoringFeature>
+        {
+            UnsupportedAuthoringFeature.ReferenceFraming,
+            UnsupportedAuthoringFeature.Retake,
+            UnsupportedAuthoringFeature.PromptRelay,
+            UnsupportedAuthoringFeature.ClipAudio,
+            UnsupportedAuthoringFeature.AudioReuse,
+            UnsupportedAuthoringFeature.AudioDerivedDuration,
+            UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
+            UnsupportedAuthoringFeature.IcLora,
+            UnsupportedAuthoringFeature.Hdr,
+            UnsupportedAuthoringFeature.Upscale,
+        },
     };
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
@@ -152,6 +165,8 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
             ReferencePositions = SupportsHostEndFrame(compatClassId)
                 ? ["first", "last"]
                 : ["first"],
+            LorasTargetTextEncoder =
+                model.ModelClass.CompatClass.LorasTargetTextEnc,
             HostFactsAuthoritative = true,
         };
         return true;

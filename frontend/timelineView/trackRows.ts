@@ -103,8 +103,11 @@ export const renderPromptTrackRow = (
                 ? " — inherited from the global prompt; click to set a clip prompt"
                 : " — click to edit");
         if (majorSupported || ownPrompt !== "") {
+            const renderedMajorTitle = majorSupported
+                ? majorTitle
+                : "Persisted major prompt is unsupported by this architecture; click to inspect or remove it";
             parts.push(
-                `<div class="vst-major-seg${majorClass}${majorSupported ? "" : " vst-capability-disabled"}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(majorSupported ? majorTitle : `${majorTitle} — unsupported by this architecture`)}">` +
+                `<div class="vst-major-seg${majorClass}${majorSupported ? "" : " vst-capability-disabled"}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(renderedMajorTitle)}">` +
                     overlays +
                     `<span class="vst-major-text">${escapeHtml(majorText)}</span>` +
                     `</div>`,
@@ -116,8 +119,11 @@ export const renderPromptTrackRow = (
                 const geometry = promptWindowGeom(layout, window, pxPerSecond);
                 const text = `${window.prompt ?? ""}`.trim();
                 const label = text === "" ? "(empty)" : truncate(text, 60);
+                const title = relaySupported
+                    ? `${text || "(empty minor prompt)"} · Shift+click to delete`
+                    : "Persisted relay prompt is unsupported by this architecture; click to inspect or Shift+click to delete";
                 return (
-                    `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeHtml(`${text || "(empty minor prompt)"} · Shift+click to delete`)}">` +
+                    `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeHtml(title)}">` +
                     `<span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span>` +
                     `<span class="vst-minor-text">${escapeHtml(label)}</span>` +
                     `<span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span>` +
@@ -127,7 +133,7 @@ export const renderPromptTrackRow = (
             .join("");
         if (relaySupported || windows.length > 0) {
             parts.push(
-                `<div class="vst-minor-lane${relaySupported ? "" : " vst-capability-disabled"}"${relaySupported ? " data-vst-prompt-add" : ""} data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${relaySupported ? "Click empty space to add a minor prompt" : "Relay prompts are unsupported; existing windows can be removed"}">${minorSegments}</div>`,
+                `<div class="vst-minor-lane${relaySupported ? "" : " vst-capability-disabled"}"${relaySupported ? " data-vst-prompt-add" : ""} data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${relaySupported ? "Click empty space to add a minor prompt" : "Relay prompts are unsupported; existing windows can be inspected or removed"}">${minorSegments}</div>`,
             );
         }
     }
@@ -257,6 +263,7 @@ export const renderAudioTrackRow = (
                 clip.reuseAudio ||
                 clip.clipLengthFromAudio ||
                 clip.saveAudioTrack;
+            const audioOperable = clipAudioSupported || persistedAudio;
             const native = badge.label === "Native";
             const width = clipInnerWidth(layout.widthPx);
             const kindClass = native
@@ -285,8 +292,18 @@ export const renderAudioTrackRow = (
                 ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>`
                 : "";
             const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
+            const renderedTitle = clipAudioSupported
+                ? title
+                : persistedAudio
+                  ? "Clip audio is unsupported; click persisted audio to inspect or remove it"
+                  : "Clip audio is unsupported by this architecture";
+            const ariaLabel = clipAudioSupported
+                ? `Edit audio for clip ${layout.index}`
+                : persistedAudio
+                  ? `Inspect unsupported persisted audio for clip ${layout.index}`
+                  : `Audio unavailable for clip ${layout.index}`;
             return (
-                `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${clipAudioSupported || persistedAudio ? ' data-vst-audio="clip"' : ""} data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(clipAudioSupported ? title : "Clip audio is unsupported; click persisted audio to remove it")}" aria-label="Edit audio for clip ${layout.index}">` +
+                `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${audioOperable ? ' data-vst-audio="clip" role="button" tabindex="0"' : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(renderedTitle)}" aria-label="${ariaLabel}">` +
                 `<span class="vst-audio-label">${escapeHtml(labelText)}</span>` +
                 audioFlagChips(clip) +
                 body +
@@ -386,11 +403,14 @@ export const renderReferencesTrackRow = (
                         (isPrimary ? " vst-refs-primary" : "") +
                         (isEnd ? " vst-refs-fromend" : "") +
                         alignClass;
-                    const title =
-                        `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""}` +
-                        ` · frame ${frame} · ${formatTimeLabel(time, unit, fps)}` +
-                        ` · click to edit, drag to move · Shift+click to delete`;
-                    const label = `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})`;
+                    const title = refsSupported
+                        ? `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""}` +
+                          ` · frame ${frame} · ${formatTimeLabel(time, unit, fps)}` +
+                          ` · click to edit, drag to move · Shift+click to delete`
+                        : `Persisted reference ${refIdx} is unsupported by this architecture · click to inspect or Shift+click to delete`;
+                    const label = refsSupported
+                        ? `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})`
+                        : `Inspect unsupported persisted reference ${refIdx} for removal`;
                     return (
                         `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}">` +
                         `<span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeHtml(frameLabel)}</span></span>` +
@@ -398,7 +418,7 @@ export const renderReferencesTrackRow = (
                     );
                 })
                 .join("");
-            return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a reference image at this frame" : "Frame references are unsupported; existing references can be removed"}">${marks}</div>`;
+            return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.refs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a reference image at this frame" : "Frame references are unsupported; existing references can be inspected or removed"}">${marks}</div>`;
         })
         .join("");
     return (

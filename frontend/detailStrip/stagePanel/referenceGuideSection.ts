@@ -159,11 +159,12 @@ export const appendStageReferenceGuideSection = ({
     if (applicableIcLoras.length === 0) return;
 
     appendSectionHeader(fields, "IC-LoRA Guide Strengths");
-    const icDecision = context.capabilities().forClip(clip).decision("icLora");
+    const capabilityView = context.capabilities().forClip(clip);
+    const icDecision = capabilityView.decision("icLora");
     const icGroup = document.createDocumentFragment();
     applicableIcLoras.forEach(({ entry, entryIdx }) => {
         const displayName = architectureIcLoraDisplayName(
-            clip.architecture,
+            capabilityView.architectureId,
             entry,
         );
         const guideStrength = tagFocus(

@@ -293,6 +293,29 @@ internal sealed record VideoModelProfileDescriptor(
     IReadOnlyList<ArchitectureEntryMode> EntryModes,
     IReadOnlyList<RuleDecision> Rules);
 
+/// <summary>
+/// Optional authored product features that an effective-request projector can
+/// safely omit while preserving their authored values. Absence means block.
+/// </summary>
+internal enum UnsupportedAuthoringFeature
+{
+    MultiStage,
+    SourceVideo,
+    FrameReferences,
+    ReferenceFraming,
+    Retake,
+    MajorPrompt,
+    PromptRelay,
+    ClipAudio,
+    AudioReuse,
+    AudioDerivedDuration,
+    ControlSignalDerivedDuration,
+    StageLoras,
+    IcLora,
+    Hdr,
+    Upscale,
+}
+
 internal sealed record VideoArchitectureDescriptor(
     ArchitectureId Id,
     string DisplayName,
@@ -330,6 +353,17 @@ internal sealed record VideoArchitectureDescriptor(
             .ToArray());
 
     public IReadOnlyList<RuleDecision> Rules { get; init; } = [];
+
+    /// <summary>
+    /// Fail-closed per-feature disposition contract consumed by authoring
+    /// diagnostics. Each listed feature must have a matching backend
+    /// projection that prevents unsupported values from reaching execution.
+    /// Value-sensitive features such as Upscale may still execute supported
+    /// variants and must block malformed or unknown variants.
+    /// </summary>
+    public IReadOnlySet<UnsupportedAuthoringFeature>
+        IgnoredUnsupportedFeatures { get; init; } =
+            new HashSet<UnsupportedAuthoringFeature>();
 }
 
 internal sealed record ResolvedVideoModel(
@@ -360,6 +394,13 @@ internal sealed record ResolvedVideoModel(
     /// stable wire names such as <c>first</c>, <c>last</c>, and <c>any</c>.
     /// </summary>
     public IReadOnlyList<string> ReferencePositions { get; init; } = [];
+
+    /// <summary>
+    /// Core-owned LoRA targeting fact from the resolved model compatibility.
+    /// False means normal LoRAs must not become effective solely through their
+    /// text-encoder weight.
+    /// </summary>
+    public bool LorasTargetTextEncoder { get; init; } = true;
 
     public bool HostFactsAuthoritative { get; init; }
 }

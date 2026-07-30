@@ -3,6 +3,7 @@ import {
     buildArchitectureRetargetPlan,
     modelCatalogEntry,
 } from "../../architectures/catalog";
+import { resolvedClipArchitectureId } from "../../architectures/clipIdentity";
 import { modelSupportsStageEntry } from "../../architectures/conversion/entryModePolicy";
 import { planArchitectureConversion } from "../../architectures/conversion/plan";
 import {
@@ -30,9 +31,10 @@ export const appendStageModelSection = ({
         defaults.modelCatalog,
         clip.stages[0]?.model,
     );
-    // Stage 0 owns authored architecture. The cached clip field is only a
-    // repair fallback when a persisted Stage 0 model no longer resolves.
-    const ownerArchitectureId = rootModel?.architectureId ?? clip.architecture;
+    const ownerArchitectureId = resolvedClipArchitectureId(
+        clip,
+        defaults.modelCatalog,
+    );
     const modelOptions: OptionSpec[] = defaults.modelCatalog.entries.flatMap(
         (entry): OptionSpec[] => {
             const model = modelCatalogEntry(defaults.modelCatalog, entry.value);
@@ -57,28 +59,31 @@ export const appendStageModelSection = ({
                     );
                 },
             );
+            const requiresWholeClipConversion =
+                stageIdx === 0 &&
+                (ownerArchitectureId === null ||
+                    target.architectureId !== ownerArchitectureId);
             const preservesClipLock =
                 stageIdx === 0
-                    ? target.architectureId !== ownerArchitectureId ||
+                    ? requiresWholeClipConversion ||
                       leavesAuthoredStagesCompatible
                     : model.architectureId === rootModel?.architectureId &&
                       model.compatibilityClassId !== null &&
                       model.compatibilityClassId ===
                           rootModel?.compatibilityClassId;
-            const supportsRetargetedRoles =
-                stageIdx === 0 && target.architectureId !== ownerArchitectureId
-                    ? planArchitectureConversion(
-                          clip,
-                          target,
-                          defaults.modelCatalog,
-                          context.generatedEntryMode(),
-                      ) !== null
-                    : modelSupportsStageEntry(
-                          model,
-                          clip,
-                          stageIdx,
-                          context.generatedEntryMode(),
-                      );
+            const supportsRetargetedRoles = requiresWholeClipConversion
+                ? planArchitectureConversion(
+                      clip,
+                      target,
+                      defaults.modelCatalog,
+                      context.generatedEntryMode(),
+                  ) !== null
+                : modelSupportsStageEntry(
+                      model,
+                      clip,
+                      stageIdx,
+                      context.generatedEntryMode(),
+                  );
             return preservesClipLock && supportsRetargetedRoles
                 ? [{ value: entry.value, label: entry.label }]
                 : [];
@@ -110,7 +115,11 @@ export const appendStageModelSection = ({
                 modelSelect.value = stage.model;
                 return;
             }
-            if (stageIdx === 0 && plan.architectureId !== ownerArchitectureId) {
+            if (
+                stageIdx === 0 &&
+                (ownerArchitectureId === null ||
+                    plan.architectureId !== ownerArchitectureId)
+            ) {
                 const conversion = planArchitectureConversion(
                     clip,
                     plan,
@@ -122,10 +131,15 @@ export const appendStageModelSection = ({
                     return;
                 }
                 const fromLabel =
-                    architectureDescriptor(
-                        defaults.modelCatalog,
-                        ownerArchitectureId,
-                    )?.label ?? ownerArchitectureId;
+                    (ownerArchitectureId
+                        ? architectureDescriptor(
+                              defaults.modelCatalog,
+                              ownerArchitectureId,
+                          )?.label
+                        : null) ??
+                    (clip.architecture
+                        ? `${clip.architecture} (unresolved hint)`
+                        : "Unresolved model");
                 const toLabel =
                     architectureDescriptor(
                         defaults.modelCatalog,
@@ -152,7 +166,6 @@ export const appendStageModelSection = ({
                                 origin: "detail-strip",
                             },
                         );
-                        if (result.applied) context.render();
                         return result.applied;
                     },
                 );
@@ -182,7 +195,6 @@ export const appendStageModelSection = ({
                 modelSelect.value = stage.model;
                 return;
             }
-            context.render();
         },
     );
     const modelField = buildField("Model", modelSelect);

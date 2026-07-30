@@ -32,10 +32,21 @@ export const isAudioSourceSupported = (
     source: string,
 ): boolean => isAllowedAudioSource(view.audioSourceKinds, source);
 
-export const upscaleModeForMethod = (method: string): string => {
+export type UpscaleMethodMode =
+    | "pixel"
+    | "model"
+    | "latent"
+    | "latent-model"
+    | "unsupported";
+
+export const upscaleModeForMethod = (method: string): UpscaleMethodMode => {
     const normalized = method.trim().toLowerCase();
-    if (normalized.startsWith("latentmodel-")) return "latent-model";
-    if (normalized.startsWith("latent-")) return "latent";
-    if (normalized.startsWith("pixel-")) return "pixel";
-    return "model";
+    const hasMethodName = (prefix: string): boolean =>
+        normalized.startsWith(prefix) &&
+        normalized.slice(prefix.length).trim().length > 0;
+    if (hasMethodName("latentmodel-")) return "latent-model";
+    if (hasMethodName("latent-")) return "latent";
+    if (hasMethodName("pixel-")) return "pixel";
+    if (hasMethodName("model-")) return "model";
+    return "unsupported";
 };

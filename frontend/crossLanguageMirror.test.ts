@@ -16,6 +16,7 @@ import {
     icLoraDriveMediaContractForData,
     icLoraLegacyAutoModelName,
 } from "./architectures/ltx2/icLoraPresets";
+import { upscaleModeForMethod } from "./architectures/policy";
 import type { ArchitectureCatalogEntryDto } from "./architectures/types";
 import { crossfadePlanForClips } from "./boundaryPlan";
 import { dimensionsFor } from "./dimensionPresets";
@@ -37,6 +38,18 @@ const ltxBoundaryConstraints = (
     boundaryOverlapConstraints(
         testArchitectureCatalog().architectures[0].boundaryRules[mode],
     );
+
+describe("cross-language mirror: upscale method classification", () => {
+    interface UpscaleMethodCase {
+        method: string;
+        expectedMode: string;
+    }
+    const cases = loadFixture<UpscaleMethodCase[]>("upscale-method-cases.json");
+
+    it.each(cases)("$method -> $expectedMode", ({ method, expectedMode }) => {
+        expect(upscaleModeForMethod(method)).toBe(expectedMode);
+    });
+});
 
 describe("cross-language mirror: dimension snapping", () => {
     interface DimensionCase {

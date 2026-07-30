@@ -175,6 +175,141 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Fact]
+    public void Published_host_ignore_dispositions_match_values_projection_removes()
+    {
+        StageSpec first = Stage(
+            0,
+            rawIndex: 0,
+            upscale: 2,
+            upscaleMethod: "latentmodel-detail.safetensors",
+            model: "host-model") with
+        {
+            IcLoraStrengths = [0.8],
+            ImageRefStrengths = [0.7],
+            Loras = [new("stage-lora.safetensors", 0.5)],
+            RetakeWindow = new(0, 8, 0.6),
+        };
+        StageSpec second = Stage(
+            1,
+            rawIndex: 1,
+            model: "host-model");
+        ClipSpec clip = Clip(first, second) with
+        {
+            AuthoredArchitectureId =
+                HostVideoArchitectureModule.ArchitectureId.Value,
+            AuthoredModelProfileId =
+                HostVideoArchitectureModule.ProfileId.Value,
+            AuthoredStages =
+            [
+                new(0, first.Model, HostVideoArchitectureModule.ProfileId.Value, false),
+                new(1, second.Model, HostVideoArchitectureModule.ProfileId.Value, false),
+            ],
+            AudioSource = Constants.AudioSourceUpload,
+            SaveAudioTrack = true,
+            ClipLengthFromAudio = true,
+            ClipLengthFromControlNet = true,
+            ReuseAudio = true,
+            UploadedAudio = new("data:audio/wav;base64,QUJD", "audio.wav"),
+            ImageRefs =
+            [
+                new(
+                    Constants.IcLoraSourceUpload,
+                    1,
+                    false,
+                    "reference.png",
+                    "data:image/png;base64,QUJD"),
+            ],
+            PromptWindows = [new("later", 1, 1)],
+            ReferenceFraming = ReferenceFramingMode.Fit,
+            SourceVideo = new(
+                "data:video/mp4;base64,QUJD",
+                "source.mp4",
+                0),
+            Loras = [new("clip-lora.safetensors", 0.5)],
+            IcLoras =
+            [
+                new(
+                    "host-ic.safetensors",
+                    Constants.IcLoraSourceUpload,
+                    1,
+                    1,
+                    Constants.IcLoraControlNone,
+                    null,
+                    Hdr: true),
+            ],
+        };
+        VideoStagesSpec authored = Spec(clip);
+        ArchitecturePlanningResult architectures = Resolve(
+            authored,
+            _ => HostVideoArchitectureModule.Instance,
+            _ => HostVideoArchitectureModule.Instance.Descriptor);
+
+        EffectiveVideoRequest request =
+            EffectiveVideoRequestProjector.Project(authored, architectures);
+        ClipSpec effective = Assert.Single(request.Spec.Clips);
+
+        Assert.True(
+            new HashSet<UnsupportedAuthoringFeature>
+            {
+                UnsupportedAuthoringFeature.FrameReferences,
+                UnsupportedAuthoringFeature.ReferenceFraming,
+                UnsupportedAuthoringFeature.Retake,
+                UnsupportedAuthoringFeature.PromptRelay,
+                UnsupportedAuthoringFeature.ClipAudio,
+                UnsupportedAuthoringFeature.AudioReuse,
+                UnsupportedAuthoringFeature.AudioDerivedDuration,
+                UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
+                UnsupportedAuthoringFeature.IcLora,
+                UnsupportedAuthoringFeature.Hdr,
+                UnsupportedAuthoringFeature.Upscale,
+            }.SetEquals(
+                HostVideoArchitectureModule.Instance.Descriptor
+                    .IgnoredUnsupportedFeatures));
+        Assert.Empty(effective.ImageRefs);
+        Assert.All(effective.Stages, stage => Assert.Empty(stage.ImageRefStrengths));
+        Assert.Equal(ReferenceFramingMode.Crop, effective.ReferenceFraming);
+        Assert.All(effective.Stages, stage => Assert.Null(stage.RetakeWindow));
+        Assert.Empty(effective.PromptWindows);
+        Assert.Equal(Constants.AudioSourceNative, effective.AudioSource);
+        Assert.False(effective.SaveAudioTrack);
+        Assert.False(effective.ClipLengthFromAudio);
+        Assert.False(effective.ClipLengthFromControlNet);
+        Assert.False(effective.ReuseAudio);
+        Assert.Null(effective.UploadedAudio);
+        Assert.Empty(effective.IcLoras);
+        Assert.All(effective.Stages, stage => Assert.Empty(stage.IcLoraStrengths));
+        Assert.Equal(1, effective.Stages[0].Upscale);
+
+        // Supported authoring remains intact while the unsupported fields are
+        // projected away.
+        Assert.Equal(2, effective.Stages.Count);
+        Assert.Equal(clip.SourceVideo, effective.SourceVideo);
+        Assert.Equal(clip.Loras, effective.Loras);
+        Assert.Equal(first.Loras, effective.Stages[0].Loras);
+    }
+
+    [Fact]
+    public void Published_Wan_ignore_dispositions_do_not_claim_frame_reference_removal()
+    {
+        Assert.True(
+            new HashSet<UnsupportedAuthoringFeature>
+            {
+                UnsupportedAuthoringFeature.ReferenceFraming,
+                UnsupportedAuthoringFeature.Retake,
+                UnsupportedAuthoringFeature.PromptRelay,
+                UnsupportedAuthoringFeature.ClipAudio,
+                UnsupportedAuthoringFeature.AudioReuse,
+                UnsupportedAuthoringFeature.AudioDerivedDuration,
+                UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
+                UnsupportedAuthoringFeature.IcLora,
+                UnsupportedAuthoringFeature.Hdr,
+                UnsupportedAuthoringFeature.Upscale,
+            }.SetEquals(
+                WanArchitectureModule.Instance.Descriptor
+                    .IgnoredUnsupportedFeatures));
+    }
+
+    [Fact]
     public void Unsupported_non_cut_boundary_uses_an_effective_cut_without_editing_authored_data()
     {
         ClipSpec ltxClip = LtxClip() with
@@ -253,6 +388,63 @@ public sealed class EffectiveVideoRequestTests
             plan.Diagnostics,
             diagnostic => diagnostic.Code == "architecture-capability-unsupported");
         Assert.Null(plan.Clips[0].ArchitecturePayload);
+    }
+
+    [Fact]
+    public void Prefix_only_Wan_upscale_is_malformed_and_blocks()
+    {
+        StageSpec first = Stage(0, rawIndex: 0);
+        StageSpec malformed = Stage(
+            1,
+            rawIndex: 1,
+            upscale: 2,
+            upscaleMethod: "pixel-   ");
+        VideoStagesSpec spec = Spec(Clip(first, malformed));
+        RecordingWanModule module = new();
+        ArchitecturePlanningResult architectures = ResolveWan(spec, module);
+
+        EffectiveVideoRequest request =
+            EffectiveVideoRequestProjector.Project(spec, architectures);
+
+        Assert.Contains(
+            request.Decisions,
+            decision => decision.Code == "effective-request.unknown-upscale"
+                && decision.Disposition == EffectiveRequestDisposition.Block);
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            architectures);
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code == "effective-request.unknown-upscale"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        Assert.Equal(0, module.CompileCount);
+    }
+
+    [Fact]
+    public void Baseline_control_strength_does_not_warn_without_IcLora_configuration()
+    {
+        StageSpec stage = Stage(
+            0,
+            rawIndex: 0,
+            model: "host-model") with
+        {
+            ControlNetStrength = Constants.DefaultStageControlNetStrength,
+        };
+        VideoStagesSpec spec = Spec(Clip(stage));
+        ArchitecturePlanningResult architectures = Resolve(
+            spec,
+            _ => HostVideoArchitectureModule.Instance,
+            _ => HostVideoArchitectureModule.Instance.Descriptor);
+
+        EffectiveVideoRequest request =
+            EffectiveVideoRequestProjector.Project(spec, architectures);
+
+        Assert.DoesNotContain(
+            request.Decisions,
+            decision => decision.Code
+                == "effective-request.host-video-controlnet-ignored");
+        Assert.Null(request.Spec.Clips[0].Stages[0].ControlNetStrength);
     }
 
     [Fact]

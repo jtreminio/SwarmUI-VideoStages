@@ -3,24 +3,10 @@ import type { BoundaryOverlapConstraints } from "../boundaryConstraints";
 import type {
     ArchitectureModelCatalog,
     CapabilityRuleDecision,
+    CatalogAuthoringFeature,
 } from "../types";
 
-export type AuthoringFeature =
-    | "multiStage"
-    | "sourceVideo"
-    | "frameReferences"
-    | "referenceFraming"
-    | "retake"
-    | "majorPrompt"
-    | "promptRelay"
-    | "clipAudio"
-    | "audioReuse"
-    | "audioDerivedDuration"
-    | "controlSignalDerivedDuration"
-    | "stageLoras"
-    | "icLora"
-    | "hdr"
-    | "upscale";
+export type AuthoringFeature = CatalogAuthoringFeature;
 
 /**
  * Context a conditional capability rule needs beyond the clip itself. Omitted

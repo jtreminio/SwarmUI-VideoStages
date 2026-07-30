@@ -1,3 +1,4 @@
+import { reconcileClipArchitectureIncomingIcLoraDrives } from "./architectures/behaviorRegistry";
 import {
     modelIdentityFromCatalog,
     reconcileClipArchitectureIdentity,
@@ -162,7 +163,16 @@ export const reduceDocumentCommand = (
                 return failure(document, "invalid-architecture-conversion");
             }
             document.clips[clipIndex] = converted;
-            forceCrossArchitectureCutsForConversion(document.clips);
+            forceCrossArchitectureCutsForConversion(
+                document.clips,
+                context.architectureCatalog,
+            );
+            reconcileClipArchitectureIncomingIcLoraDrives(
+                document.clips,
+                clipIndex,
+                context.generatedEntryMode ?? "text-to-video",
+                context.architectureCatalog,
+            );
             return success(document);
         }
         case "stage.add":
@@ -182,13 +192,10 @@ export const reduceDocumentCommand = (
             if (!target) {
                 return failure(document, "architecture-invariant");
             }
-            // Authored Stage 0 is authoritative. The cached clip field is only
-            // a repair fallback when its persisted model cannot be resolved.
-            const ownerArchitectureId =
-                modelIdentityFromCatalog(
-                    context.architectureCatalog,
-                    clip.stages[0]?.model ?? "",
-                )?.architectureId ?? clip.architecture;
+            const ownerArchitectureId = modelIdentityFromCatalog(
+                context.architectureCatalog,
+                clip.stages[0]?.model ?? "",
+            )?.architectureId;
             if (target.architectureId !== ownerArchitectureId) {
                 return failure(document, "architecture-invariant");
             }

@@ -175,7 +175,14 @@ export const createTimelineLinking = (): TimelineLinking => {
 
     const applySkip = (idx: number): void => {
         const clips = getClips();
-        if (applyClipSkip(clips, idx, getRootGeneratedEntryMode())) {
+        if (
+            applyClipSkip(
+                clips,
+                idx,
+                getRootGeneratedEntryMode(),
+                getRootDefaults().modelCatalog,
+            )
+        ) {
             saveClips(clips, { origin: "linking" });
         }
     };
@@ -189,6 +196,7 @@ export const createTimelineLinking = (): TimelineLinking => {
         reconcileArchitectureIncomingIcLoraDrives(
             clips,
             getRootGeneratedEntryMode(),
+            getRootDefaults().modelCatalog,
         );
         // No selection remap here: selection is anchored to entity ids, so a
         // surviving selection follows its clip and a deleted one degrades to
@@ -333,6 +341,7 @@ export const createTimelineLinking = (): TimelineLinking => {
                         reconcileArchitectureIncomingIcLoraDrives(
                             reordered,
                             getRootGeneratedEntryMode(),
+                            getRootDefaults().modelCatalog,
                         );
                         return reordered;
                     },

@@ -265,6 +265,12 @@ export const normalizeClip = (
               stageZero?.model ?? null,
               defaults.modelCatalog,
           );
+    const resolvedArchitecture = isSourceOnly
+        ? NONE_ARCHITECTURE_ID
+        : (architectureForModel(
+              defaults.modelCatalog,
+              stageZero?.model ?? "",
+          ) ?? "unsupported");
     const modelProfileId = isSourceOnly
         ? persistedProfile ||
           (architecture === NONE_ARCHITECTURE_ID
@@ -272,12 +278,11 @@ export const normalizeClip = (
               : "unsupported")
         : persistedProfile || stageZero?.modelProfileId || "unsupported";
     const icLoras = normalizeArchitectureIcLoras(
-        architecture,
+        resolvedArchitecture,
         rawClip,
         stagesRaw.length,
         sourceVideo !== null,
-        architectureDescriptor(defaults.modelCatalog, architecture) === null ||
-            architecture === NONE_ARCHITECTURE_ID,
+        { preserveDormantLtx: true },
     );
     const icLoraDefaultStrengths = icLoras.map((entry) =>
         defaultLoraWeight(defaults, entry.lora),
@@ -312,7 +317,7 @@ export const normalizeClip = (
     const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
     const boundaryRule = architectureDescriptor(
         defaults.modelCatalog,
-        architecture,
+        resolvedArchitecture,
     )?.boundaryRules[boundaryOut];
     return {
         id: normalizeOptionalEntityId(rawClip.id),

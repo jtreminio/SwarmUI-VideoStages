@@ -1,12 +1,17 @@
+import { reconcileClipArchitectureIncomingIcLoraDrives } from "./architectures/behaviorRegistry";
 import {
     architectureDescriptor,
     modelCatalogEntry,
 } from "./architectures/catalogQueries";
 import {
     deriveClipArchitectureIdentity,
+    modelIdentityFromCatalog,
     reconcileClipArchitectureIdentity,
 } from "./architectures/clipIdentity";
-import type { GeneratedEntryMode } from "./architectures/conversion/entryModePolicy";
+import {
+    type GeneratedEntryMode,
+    modelSupportsAllActiveStageEntries,
+} from "./architectures/conversion/entryModePolicy";
 import { planArchitectureConversion } from "./architectures/conversion/plan";
 import { NONE_ARCHITECTURE_ID } from "./architectures/none/identity";
 import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
@@ -38,6 +43,7 @@ export class DocumentDiffError extends Error {
 }
 
 interface CommandPhases {
+    preConversions: DocumentCommand[];
     conversions: DocumentCommand[];
     removes: DocumentCommand[];
     adds: DocumentCommand[];
@@ -256,6 +262,7 @@ const diffStages = (
     before: CanonicalClip,
     after: CanonicalClip,
     phases: CommandPhases,
+    context: DocumentDiffContext,
 ): void =>
     diffList(
         LIST_ENTITIES.stage,
@@ -268,14 +275,24 @@ const diffStages = (
                 previous.model !== next.model ||
                 previous.modelProfileId !== next.modelProfileId
             ) {
+                const targetEntry = modelCatalogEntry(
+                    context.architectureCatalog,
+                    next.model,
+                );
+                if (
+                    !targetEntry?.architectureId ||
+                    !targetEntry.modelProfileId
+                ) {
+                    throw new DocumentDiffError("architecture-invariant");
+                }
                 phases.patches.push({
                     type: "stage.retarget-model",
                     clipId: after.id,
                     stageId: next.id,
                     target: {
-                        architectureId: after.architecture,
-                        modelProfileId: next.modelProfileId,
-                        model: next.model,
+                        architectureId: targetEntry.architectureId,
+                        modelProfileId: targetEntry.modelProfileId,
+                        model: targetEntry.value,
                     },
                 });
             }
@@ -323,8 +340,9 @@ const diffClipChildren = (
     before: CanonicalClip,
     after: CanonicalClip,
     phases: CommandPhases,
+    context: DocumentDiffContext,
 ): void => {
-    diffStages(before, after, phases);
+    diffStages(before, after, phases, context);
     diffList(LIST_ENTITIES.ref, after.id, before, after, phases);
     diffList(LIST_ENTITIES.promptWindow, after.id, before, after, phases);
     diffRetake(before, after, phases);
@@ -352,6 +370,18 @@ const clipDiffBase = (
         next,
         context.architectureCatalog,
     );
+    const previousStageZeroIdentity = modelIdentityFromCatalog(
+        context.architectureCatalog,
+        previous.stages[0]?.model ?? "",
+    );
+    const nextStageZeroIdentity = modelIdentityFromCatalog(
+        context.architectureCatalog,
+        next.stages[0]?.model ?? "",
+    );
+    const repairsUnresolvedStageZero =
+        previous.stages[0]?.model !== next.stages[0]?.model &&
+        previousStageZeroIdentity === null &&
+        nextStageZeroIdentity !== null;
     if (changesEffectiveIdentity) {
         if (
             !nextIdentity ||
@@ -362,12 +392,13 @@ const clipDiffBase = (
         }
     }
     const changesAuthoredArchitecture =
-        previousIdentity?.authoredArchitectureId !== null &&
-        previousIdentity?.authoredArchitectureId !== undefined &&
-        nextIdentity?.authoredArchitectureId !== null &&
-        nextIdentity?.authoredArchitectureId !== undefined &&
-        previousIdentity.authoredArchitectureId !==
-            nextIdentity.authoredArchitectureId;
+        repairsUnresolvedStageZero ||
+        (previousIdentity?.authoredArchitectureId !== null &&
+            previousIdentity?.authoredArchitectureId !== undefined &&
+            nextIdentity?.authoredArchitectureId !== null &&
+            nextIdentity?.authoredArchitectureId !== undefined &&
+            previousIdentity.authoredArchitectureId !==
+                nextIdentity.authoredArchitectureId);
     // Deleting the last stage of a sourced clip leaves a valid source-only clip: the documented
     // `none` architecture case. It legitimately has no authored Stage 0 and therefore no next
     // authored architecture to convert to, so the stage removals plus the clip's own architecture
@@ -397,7 +428,6 @@ const clipDiffBase = (
     }
 
     const catalog = context.architectureCatalog;
-    const sourceArchitectureId = previousIdentity?.authoredArchitectureId;
     const targetStage = next.stages[0];
     const targetEntry = modelCatalogEntry(catalog, targetStage?.model);
     const targetDescriptor = architectureDescriptor(
@@ -406,7 +436,6 @@ const clipDiffBase = (
     );
     if (
         !catalog ||
-        !sourceArchitectureId ||
         !targetStage ||
         !targetEntry?.architectureId ||
         !targetEntry.modelProfileId ||
@@ -422,35 +451,84 @@ const clipDiffBase = (
         capabilities: clone(targetDescriptor.capabilities),
         entryModes: clone(targetEntry.entryModes),
     };
-    const requestedForCleanup = clone(next);
-    requestedForCleanup.architecture = sourceArchitectureId;
-    const requestedPlan = planArchitectureConversion(
-        requestedForCleanup,
-        target,
-        catalog,
-        context.generatedEntryMode ?? "text-to-video",
+    // Root input and active-stage topology determine whether the target model
+    // can enter the clip. Apply those non-identity edits before conversion so
+    // the reducer validates the same role that the final atomic document uses.
+    const conversionSource = clone(previous);
+    const dropsUnownedPayload =
+        previous.architecturePayload !== null &&
+        previousStageZeroIdentity?.architectureId !== target.architectureId;
+    if (dropsUnownedPayload) {
+        // Decide opaque payload ownership before a Stage-0 removal can promote
+        // another model and accidentally claim the old envelope.
+        phases.preConversions.push({
+            type: "clip.patch",
+            clipId: next.id,
+            patch: { architecturePayload: null },
+        });
+        conversionSource.architecturePayload = null;
+    }
+    if (!deepEqual(previous.sourceVideo, next.sourceVideo)) {
+        phases.preConversions.push({
+            type: "clip.patch",
+            clipId: next.id,
+            patch: { sourceVideo: clone(next.sourceVideo) },
+        });
+        conversionSource.sourceVideo = clone(next.sourceVideo);
+    }
+    const nextStagesById = new Map(
+        next.stages.map((stage) => [stage.id, stage]),
     );
+    const nextStageIds = new Set(nextStagesById.keys());
+    for (const stage of conversionSource.stages) {
+        if (!nextStageIds.has(stage.id)) {
+            phases.preConversions.push({
+                type: "stage.remove",
+                clipId: next.id,
+                stageId: stage.id,
+            });
+        }
+    }
+    conversionSource.stages = conversionSource.stages.filter((stage) =>
+        nextStageIds.has(stage.id),
+    );
+    for (const stage of conversionSource.stages) {
+        const nextStage = nextStagesById.get(stage.id);
+        if (nextStage && stage.skipped !== nextStage.skipped) {
+            phases.preConversions.push({
+                type: "stage.patch",
+                clipId: next.id,
+                stageId: stage.id,
+                patch: { skipped: nextStage.skipped },
+            });
+            stage.skipped = nextStage.skipped;
+        }
+    }
+    if (
+        !modelSupportsAllActiveStageEntries(
+            targetEntry,
+            next,
+            context.generatedEntryMode ?? "text-to-video",
+        )
+    ) {
+        throw new DocumentDiffError("architecture-invariant");
+    }
     const baselinePlan = planArchitectureConversion(
-        previous,
+        conversionSource,
         target,
         catalog,
         context.generatedEntryMode ?? "text-to-video",
     );
-    if (!requestedPlan || !baselinePlan) {
+    if (!baselinePlan) {
         throw new DocumentDiffError("architecture-invariant");
     }
 
     // The requested whole-document state must already reflect all destructive
-    // cleanup. Restore only valid per-stage models, which conversion
-    // intentionally seeds from Stage 0.
-    const cleanedRequested = requestedPlan.clip as CanonicalClip;
-    if (cleanedRequested.stages.length === next.stages.length) {
-        for (let index = 0; index < next.stages.length; index++) {
-            cleanedRequested.stages[index].model = next.stages[index].model;
-            cleanedRequested.stages[index].modelProfileId =
-                next.stages[index].modelProfileId;
-        }
-    }
+    // cleanup derived from the previous payload owner. The requested state
+    // already carries its final models and other dormant authored values.
+    const cleanedRequested = clone(next);
+    cleanedRequested.architecturePayload =
+        baselinePlan.clip.architecturePayload;
     if (
         !reconcileClipArchitectureIdentity(cleanedRequested, catalog) ||
         !deepEqual(cleanedRequested, next)
@@ -485,7 +563,7 @@ const diffClips = (
         (previous, next) => {
             const diffBase = clipDiffBase(previous, next, phases, context);
             emitPatch(LIST_ENTITIES.clip, null, diffBase, next, phases);
-            diffClipChildren(diffBase, next, phases);
+            diffClipChildren(diffBase, next, phases, context);
         },
     );
 
@@ -519,6 +597,7 @@ export const diffDocuments = (
     validateDocumentIds(after);
 
     const phases: CommandPhases = {
+        preConversions: [],
         conversions: [],
         removes: [],
         adds: [],
@@ -528,8 +607,27 @@ export const diffDocuments = (
     const rootPatch = changedPatch(before, after, ROOT_PATCH_KEYS);
     diffClips(before, after, phases, context);
     if (phases.conversions.length > 0) {
+        const reconciledAfter = clone(after);
+        for (const conversion of phases.conversions) {
+            if (conversion.type !== "clip.convert-architecture") continue;
+            const clipIdx = reconciledAfter.clips.findIndex(
+                (clip) => clip.id === conversion.clipId,
+            );
+            reconcileClipArchitectureIncomingIcLoraDrives(
+                reconciledAfter.clips,
+                clipIdx,
+                context.generatedEntryMode ?? "text-to-video",
+                context.architectureCatalog,
+            );
+        }
+        if (!deepEqual(reconciledAfter, after)) {
+            throw new DocumentDiffError("architecture-invariant");
+        }
         const forcedFinalClips = clone(after.clips);
-        forceCrossArchitectureCutsForConversion(forcedFinalClips);
+        forceCrossArchitectureCutsForConversion(
+            forcedFinalClips,
+            context.architectureCatalog,
+        );
         if (
             forcedFinalClips.some(
                 (clip, index) =>
@@ -550,6 +648,25 @@ export const diffDocuments = (
                 patch: { boundaryOut: clip.boundaryOut },
             });
         }
+        // Conversion repairs graph-relative Incoming media immediately, while
+        // an atomic batch may still have clip/stage topology edits to apply.
+        // Reassert the final IC-LoRA state only after it passed the final-graph
+        // reconciliation above, so replay cannot depend on intermediate order.
+        const convertedClipIds = new Set(
+            phases.conversions.flatMap((conversion) =>
+                conversion.type === "clip.convert-architecture"
+                    ? [conversion.clipId]
+                    : [],
+            ),
+        );
+        for (const clip of after.clips) {
+            if (!convertedClipIds.has(clip.id)) continue;
+            phases.patches.push({
+                type: "clip.patch",
+                clipId: clip.id,
+                patch: { icLoras: clone(clip.icLoras) },
+            });
+        }
     }
     diffAudioTracks(before, after, phases);
 
@@ -559,6 +676,7 @@ export const diffDocuments = (
             ...(hasPatch(rootPatch)
                 ? [{ type: "root.patch", patch: rootPatch } as const]
                 : []),
+            ...phases.preConversions,
             ...phases.conversions,
             ...phases.removes,
             ...phases.adds,

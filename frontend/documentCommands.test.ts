@@ -713,6 +713,39 @@ describe("reduceDocumentCommand", () => {
         expect(source).toEqual(before);
     });
 
+    it("uses resolved models rather than stale hints when conversion repairs boundaries", () => {
+        const source = document();
+        source.clips.push(clip("clip-c"));
+        source.clips[1].stages = [stage("stage-b-root")];
+        source.clips[2].stages = [stage("stage-c-root")];
+        source.clips[0].boundaryOut = "continue";
+        source.clips[1].boundaryOut = "continue";
+        // Both first joins are authored LTX by model, despite this stale hint.
+        source.clips[1].architecture = "test-video";
+        source.clips[1].modelProfileId = "test-profile";
+        const fake = fakeArchitectureCatalog();
+
+        const result = reduceDocumentCommand(
+            source,
+            {
+                type: "clip.convert-architecture",
+                clipId: "clip-c",
+                target: {
+                    architectureId: "test-video",
+                    modelProfileId: "test-profile",
+                    model: "test-video.safetensors",
+                    capabilities: fake.architectures[0].capabilities,
+                    entryModes: fake.architectures[0].profiles[0].entryModes,
+                },
+            },
+            { architectureCatalog: catalogWithFake(fake) },
+        );
+
+        expect(result.applied).toBe(true);
+        expect(result.document.clips[0].boundaryOut).toBe("continue");
+        expect(result.document.clips[1].boundaryOut).toBe("cut");
+    });
+
     it("preserves requested cross-architecture joins on ordinary clip edits", () => {
         const source = document();
         source.clips[0].boundaryOut = "continue";
@@ -942,7 +975,57 @@ describe("reduceDocumentCommand", () => {
         });
     });
 
-    it("falls back to the cached owner so an unresolved Stage 0 model can be repaired", () => {
+    it("uses authored Stage-0 model ownership for a dormant source-only retarget", () => {
+        const source = document();
+        const targetClip = source.clips[0];
+        targetClip.sourceVideo = {
+            data: "data:video/mp4;base64,AAAA",
+            fileName: "source.mp4",
+            fps: 24,
+            durationSeconds: 4,
+            startSeconds: 0,
+            lengthSeconds: 4,
+        };
+        targetClip.stages = [{ ...targetClip.stages[0], skipped: true }];
+        targetClip.architecture = "none";
+        targetClip.modelProfileId = "none";
+        const catalog = testArchitectureCatalog();
+        catalog.entries.push({
+            ...catalog.entries[0],
+            value: "ltx-dormant-alt",
+            label: "LTX Dormant Alternate",
+        });
+
+        const result = reduceDocumentCommand(
+            source,
+            {
+                type: "stage.retarget-model",
+                clipId: "clip-a",
+                stageId: "stage-a",
+                target: {
+                    architectureId: "ltx2",
+                    modelProfileId: "ltx-2.3",
+                    model: "ltx-dormant-alt",
+                },
+            },
+            { architectureCatalog: catalog },
+        );
+
+        expect(result.applied).toBe(true);
+        expect(result.document.clips[0]).toMatchObject({
+            architecture: "none",
+            modelProfileId: "none",
+            stages: [
+                {
+                    model: "ltx-dormant-alt",
+                    modelProfileId: "ltx-2.3",
+                    skipped: true,
+                },
+            ],
+        });
+    });
+
+    it("requires whole-clip conversion to repair an unresolved Stage 0 model", () => {
         const source = document();
         source.clips[0].stages = [
             {
@@ -968,8 +1051,27 @@ describe("reduceDocumentCommand", () => {
             { architectureCatalog: catalog },
         );
 
-        expect(result.applied).toBe(true);
-        expect(result.document.clips[0].stages[0]).toMatchObject({
+        expect(result.applied).toBe(false);
+        expect(result.failure).toBe("architecture-invariant");
+
+        const conversion = reduceDocumentCommand(
+            source,
+            {
+                type: "clip.convert-architecture",
+                clipId: "clip-a",
+                target: {
+                    architectureId: "ltx2",
+                    modelProfileId: "ltx-2.3",
+                    model: "ltx",
+                    capabilities: catalog.architectures[0].capabilities,
+                    entryModes: catalog.architectures[0].profiles[0].entryModes,
+                },
+            },
+            { architectureCatalog: catalog },
+        );
+
+        expect(conversion.applied).toBe(true);
+        expect(conversion.document.clips[0].stages[0]).toMatchObject({
             model: "ltx",
             modelProfileId: "ltx-2.3",
         });
@@ -1412,6 +1514,57 @@ describe("reduceDocumentCommand", () => {
             { upscale: 2, loraWeights: [1] },
             { upscale: 2, loraWeights: [1] },
         ]);
+    });
+
+    it("repairs dormant Incoming IC-LoRA media when conversion reactivates LTX behavior", () => {
+        const source = document();
+        const fake = fakeArchitectureCatalog();
+        const catalog = catalogWithFake(fake);
+        const targetClip = source.clips[0];
+        targetClip.architecture = "test-video";
+        targetClip.modelProfileId = "test-profile";
+        targetClip.stages.forEach((entry) => {
+            entry.model = "test-video.safetensors";
+            entry.modelProfileId = "test-profile";
+        });
+        targetClip.icLoras = [
+            {
+                lora: "guide.safetensors",
+                preset: "custom",
+                driveSource: "Incoming",
+                driveData: "visual",
+                driveMediaKinds: ["image", "video"],
+                stage: 0,
+                strength: 1,
+                attentionStrength: 1,
+                controlType: "none",
+                hdr: false,
+                driveMedia: null,
+            },
+        ];
+        const ltx = testArchitectureCatalog();
+
+        const result = reduceDocumentCommand(
+            source,
+            {
+                type: "clip.convert-architecture",
+                clipId: "clip-a",
+                target: {
+                    architectureId: "ltx2",
+                    modelProfileId: "ltx-2.3",
+                    model: "ltx",
+                    capabilities: ltx.architectures[0].capabilities,
+                    entryModes: ltx.entries[0].entryModes,
+                },
+            },
+            {
+                architectureCatalog: catalog,
+                generatedEntryMode: "text-to-video",
+            },
+        );
+
+        expect(result.applied).toBe(true);
+        expect(result.document.clips[0].icLoras[0].driveSource).toBe("Upload");
     });
 
     it("fails architecture-sensitive commands closed without a catalog", () => {

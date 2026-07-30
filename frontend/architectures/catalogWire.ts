@@ -1,4 +1,7 @@
-import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
+import {
+    CONDITIONAL_RULE_CODES,
+    isKnownConditionalRuleCode,
+} from "./conditionalRules";
 import type {
     ArchitectureCapabilities,
     ArchitectureCatalogEntryDto,
@@ -7,6 +10,7 @@ import type {
     MinimumStageControlRuleConstraints,
     VideoArchitectureCatalogDto,
 } from "./types";
+import { AUTHORING_FEATURES } from "./types";
 
 const BOUNDARY_MODES = ["cut", "continue", "crossfade"] as const;
 const ENTRY_MODES = [
@@ -43,6 +47,14 @@ const isReferencePositionArray = (value: unknown): value is string[] =>
     isUniqueStringArray(value) &&
     value.every((entry) =>
         (REFERENCE_POSITIONS as readonly string[]).includes(entry),
+    );
+
+const isAuthoringFeatureArray = (
+    value: unknown,
+): value is (typeof AUTHORING_FEATURES)[number][] =>
+    isUniqueStringArray(value) &&
+    value.every((entry) =>
+        (AUTHORING_FEATURES as readonly string[]).includes(entry),
     );
 
 const isRuleDecision = (
@@ -82,25 +94,83 @@ const isRuleDecision = (
     return true;
 };
 
-const isMinimumStageControlRule = (value: CapabilityRuleDecision): boolean => {
-    if (value.code !== CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage) {
-        return true;
-    }
+const hasExactKeys = (
+    value: Record<string, unknown>,
+    expected: readonly string[],
+): boolean =>
+    Object.keys(value).length === expected.length &&
+    expected.every((key) => Object.hasOwn(value, key));
+
+const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
     if (
         value.support !== "conditional" ||
-        value.scope !== "stage" ||
         value.entityId !== null ||
         !isRecord(value.constraints)
     ) {
         return false;
     }
-    const constraints =
-        value.constraints as Partial<MinimumStageControlRuleConstraints>;
-    return (
-        Object.keys(value.constraints).length === 1 &&
-        typeof constraints.exclusiveMinimumControl === "number" &&
-        Number.isFinite(constraints.exclusiveMinimumControl)
-    );
+    const constraints = value.constraints;
+    switch (value.code) {
+        case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
+            return (
+                value.scope === "clip" &&
+                hasExactKeys(constraints, [
+                    "minimumActiveStages",
+                    "failureSeverity",
+                    "failureEffect",
+                ]) &&
+                Number.isInteger(constraints.minimumActiveStages) &&
+                Number(constraints.minimumActiveStages) > 0 &&
+                constraints.failureSeverity === "warning" &&
+                constraints.failureEffect === "disable-feature"
+            );
+        case CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage: {
+            const typed =
+                constraints as Partial<MinimumStageControlRuleConstraints>;
+            return (
+                value.scope === "stage" &&
+                hasExactKeys(constraints, ["exclusiveMinimumControl"]) &&
+                typeof typed.exclusiveMinimumControl === "number" &&
+                Number.isFinite(typed.exclusiveMinimumControl)
+            );
+        }
+        case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
+            return (
+                value.scope === "clip" &&
+                hasExactKeys(constraints, ["requiresFixedFrameCount"]) &&
+                constraints.requiresFixedFrameCount === true
+            );
+        case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
+            return (
+                value.scope === "stage" &&
+                hasExactKeys(constraints, ["mutuallyExclusive"]) &&
+                isUniqueStringArray(constraints.mutuallyExclusive) &&
+                constraints.mutuallyExclusive.length === 2 &&
+                constraints.mutuallyExclusive.includes("retake") &&
+                constraints.mutuallyExclusive.includes("frameReferences")
+            );
+        case CONDITIONAL_RULE_CODES.retakeRequiresSource:
+            return (
+                value.scope === "clip" &&
+                hasExactKeys(constraints, ["requiresAnyEntryMode"]) &&
+                isEntryModeArray(constraints.requiresAnyEntryMode) &&
+                constraints.requiresAnyEntryMode.length === 2 &&
+                constraints.requiresAnyEntryMode.includes("source-video") &&
+                constraints.requiresAnyEntryMode.includes("refine-video")
+            );
+        case CONDITIONAL_RULE_CODES.uniformTimelineHdr:
+            return (
+                value.scope === "architecture" &&
+                hasExactKeys(constraints, [
+                    "uniformTimelineFeature",
+                    "minimumTimelineClips",
+                ]) &&
+                constraints.uniformTimelineFeature === "hdr" &&
+                Number.isInteger(constraints.minimumTimelineClips) &&
+                Number(constraints.minimumTimelineClips) >= 2
+            );
+    }
+    return false;
 };
 
 const isBoundaryRule = (value: unknown): value is CapabilityRuleDecision => {
@@ -154,7 +224,8 @@ const isRuleArray = (
     value.every(
         (rule) =>
             isRuleDecision(rule, allowedScopes) &&
-            isMinimumStageControlRule(rule),
+            isKnownConditionalRuleCode(rule.code) &&
+            isKnownExecutableRule(rule),
     ) &&
     new Set(value.map((rule) => rule.code)).size === value.length;
 
@@ -222,6 +293,8 @@ export const parseVideoArchitectureCatalog = (
             !isTrimmedNonEmpty(raw.defaultProfileId) ||
             !isCapabilities(raw.capabilities) ||
             (raw.extras !== undefined && !isUniqueStringArray(raw.extras)) ||
+            (raw.ignoredUnsupportedFeatures !== undefined &&
+                !isAuthoringFeatureArray(raw.ignoredUnsupportedFeatures)) ||
             !Array.isArray(raw.profiles) ||
             !raw.profiles.every(isProfile) ||
             !hasCompleteBoundaryRules(raw.boundaryRules) ||
@@ -247,6 +320,13 @@ export const parseVideoArchitectureCatalog = (
             label: raw.label,
             defaultProfileId: raw.defaultProfileId,
             ...(raw.extras === undefined ? {} : { extras: [...raw.extras] }),
+            ...(raw.ignoredUnsupportedFeatures === undefined
+                ? {}
+                : {
+                      ignoredUnsupportedFeatures: [
+                          ...raw.ignoredUnsupportedFeatures,
+                      ],
+                  }),
             capabilities: structuredClone(raw.capabilities),
             profiles: structuredClone(raw.profiles),
             boundaryRules: structuredClone(raw.boundaryRules),

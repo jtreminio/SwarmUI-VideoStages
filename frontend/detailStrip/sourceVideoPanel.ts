@@ -116,6 +116,7 @@ export const buildSourceVideoSection = (
             reconcileArchitectureIncomingIcLoraDrives(
                 clips,
                 context.generatedEntryMode(),
+                context.capabilities().catalog,
             );
             return "render";
         });

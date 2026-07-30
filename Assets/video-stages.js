@@ -644,6 +644,119 @@
     return tracks;
   };
 
+  // frontend/architectures/catalogQueries.ts
+  var architectureDescriptor = (catalog, architectureId) => (architectureId ? catalog?.architectures.find((entry) => entry.id === architectureId) : null) ?? null;
+  var modelCatalogEntry = (catalog, model) => (model ? catalog?.entries.find((entry) => entry.value === model) : null) ?? null;
+  var supportedArchitectureCatalog = (catalog) => ({
+    architectures: structuredClone(catalog.architectures),
+    source: catalog.source,
+    entries: catalog.entries.filter((entry) => entry.architectureId !== null)
+  });
+  var architectureForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.architectureId ?? null;
+  var modelProfileForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.modelProfileId ?? null;
+  var buildArchitectureRetargetPlan = (catalog, model) => {
+    const entry = modelCatalogEntry(catalog, model);
+    const architectureId = entry?.architectureId ?? null;
+    const descriptor = architectureDescriptor(catalog, architectureId);
+    const profileId = entry?.modelProfileId ?? null;
+    const capabilities = descriptor?.capabilities;
+    return entry && architectureId && profileId && descriptor && capabilities ? {
+      architectureId,
+      modelProfileId: profileId,
+      model,
+      extras: [
+        ...entry.enhancements?.extras ?? descriptor.extras ?? []
+      ],
+      capabilities: structuredClone(capabilities),
+      ...entry.entryAbilities === void 0 ? {} : { entryAbilities: [...entry.entryAbilities] },
+      entryModes: [...entry.entryModes]
+    } : null;
+  };
+
+  // frontend/architectures/none/identity.ts
+  var NONE_ARCHITECTURE_ID = "none";
+
+  // frontend/architectures/clipIdentity.ts
+  var modelIdentityFromCatalog = (catalog, model) => {
+    if (!catalog) return null;
+    const entry = modelCatalogEntry(catalog, model);
+    if (!entry?.architectureId || !entry.modelProfileId || !entry.compatibilityClassId) {
+      return null;
+    }
+    return {
+      architectureId: entry.architectureId,
+      modelProfileId: entry.modelProfileId,
+      compatibilityClassId: entry.compatibilityClassId
+    };
+  };
+  var resolvedClipArchitectureId = (clip, catalog) => {
+    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
+      return NONE_ARCHITECTURE_ID;
+    }
+    const stageZeroModel = clip.stages[0]?.model;
+    return stageZeroModel ? modelIdentityFromCatalog(catalog, stageZeroModel)?.architectureId ?? null : null;
+  };
+  var deriveClipArchitectureIdentity = (clip, catalog) => {
+    if (!catalog) return null;
+    const identities = clip.stages.map((stage) => ({
+      stage,
+      identity: modelIdentityFromCatalog(catalog, stage.model)
+    }));
+    if (identities.some(({ identity }) => !identity)) {
+      return null;
+    }
+    const authored = identities[0]?.identity ?? null;
+    if (authored && identities.some(
+      ({ identity }) => identity?.architectureId !== authored.architectureId || identity.compatibilityClassId !== authored.compatibilityClassId
+    )) {
+      return null;
+    }
+    const descriptor = authored ? architectureDescriptor(catalog, authored.architectureId) : null;
+    if (clip.stages.length > 1 && !(descriptor?.extras?.includes("multi-stage") ?? descriptor?.capabilities.architecture.includes("multi-stage"))) {
+      return null;
+    }
+    const authoredIdentity = {
+      authoredArchitectureId: authored?.architectureId ?? null,
+      authoredModelProfileId: authored?.modelProfileId ?? null
+    };
+    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
+      return {
+        architectureId: NONE_ARCHITECTURE_ID,
+        modelProfileId: NONE_ARCHITECTURE_ID,
+        ...authoredIdentity
+      };
+    }
+    if (authored) {
+      return {
+        architectureId: authored.architectureId,
+        modelProfileId: authored.modelProfileId,
+        ...authoredIdentity
+      };
+    }
+    if (clip.architecture === NONE_ARCHITECTURE_ID && clip.modelProfileId === NONE_ARCHITECTURE_ID) {
+      return {
+        architectureId: NONE_ARCHITECTURE_ID,
+        modelProfileId: NONE_ARCHITECTURE_ID,
+        ...authoredIdentity
+      };
+    }
+    const validEmptyIdentity = catalog.architectures.some(
+      (architecture) => architecture.id === clip.architecture
+    );
+    return validEmptyIdentity ? {
+      architectureId: clip.architecture,
+      modelProfileId: clip.modelProfileId,
+      ...authoredIdentity
+    } : null;
+  };
+  var reconcileClipArchitectureIdentity = (clip, catalog) => {
+    const identity = deriveClipArchitectureIdentity(clip, catalog);
+    if (!identity) return false;
+    clip.architecture = identity.architectureId;
+    clip.modelProfileId = identity.modelProfileId;
+    return true;
+  };
+
   // frontend/architectures/ltx2/icLoraPresets.ts
   var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
   var IC_LORA_AUTO = "[AUTO]";
@@ -1155,8 +1268,8 @@
     [LTX2_ARCHITECTURE_ID, ltx2Behavior]
   ]);
   var architectureBehavior = (architectureId) => behaviors.get(architectureId) ?? null;
-  var architectureDimensionMultiple = (clip) => {
-    const requested = architectureBehavior(clip.architecture)?.dimensionMultiple(clip) ?? ROOT_DIMENSION_STEP;
+  var architectureDimensionMultiple = (clip, architectureId) => {
+    const requested = architectureBehavior(architectureId)?.dimensionMultiple(clip) ?? ROOT_DIMENSION_STEP;
     if (!Number.isFinite(requested)) {
       return ROOT_DIMENSION_STEP;
     }
@@ -1165,28 +1278,37 @@
       Math.ceil(requested / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP
     );
   };
-  var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, sourcedClip, allowPersistedLtxFallback = false) => {
+  var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, sourcedClip, options = {}) => {
     const behavior = architectureBehavior(architectureId);
     if (behavior) {
       return behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip);
     }
-    return allowPersistedLtxFallback && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? ltx2Behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip) : [];
+    return options.preserveDormantLtx === true && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? ltx2Behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip) : [];
   };
   var canonicalizeArchitectureIcLoraFields = (architectureId, entry) => {
     architectureBehavior(architectureId)?.canonicalizeIcLoraFields(entry);
   };
-  var reconcileArchitectureIncomingIcLoraDrives = (clips, generatedEntryMode) => {
+  var reconcileArchitectureIncomingIcLoraDrives = (clips, generatedEntryMode, catalog) => {
     let changed = false;
     clips.forEach((clip, clipIdx) => {
-      changed = architectureBehavior(
-        clip.architecture
-      )?.reconcileIncomingIcLoraDrives(
+      const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
+      changed = architectureBehavior(architectureId)?.reconcileIncomingIcLoraDrives(
         clips,
         clipIdx,
         generatedEntryMode
       ) || changed;
     });
     return changed;
+  };
+  var reconcileClipArchitectureIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode, catalog) => {
+    const clip = clips[clipIdx];
+    if (!clip) return false;
+    const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
+    return architectureBehavior(architectureId)?.reconcileIncomingIcLoraDrives(
+      clips,
+      clipIdx,
+      generatedEntryMode
+    ) ?? false;
   };
   var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => architectureBehavior(architectureId)?.hasSlotSourcedIcLora(entries) ?? false;
   var isArchitectureHdrFeature = (architectureId, entry) => architectureBehavior(architectureId)?.isHdrFeature(entry) ?? false;
@@ -1261,35 +1383,6 @@
     return choices;
   };
 
-  // frontend/architectures/catalogQueries.ts
-  var architectureDescriptor = (catalog, architectureId) => (architectureId ? catalog?.architectures.find((entry) => entry.id === architectureId) : null) ?? null;
-  var modelCatalogEntry = (catalog, model) => (model ? catalog?.entries.find((entry) => entry.value === model) : null) ?? null;
-  var supportedArchitectureCatalog = (catalog) => ({
-    architectures: structuredClone(catalog.architectures),
-    source: catalog.source,
-    entries: catalog.entries.filter((entry) => entry.architectureId !== null)
-  });
-  var architectureForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.architectureId ?? null;
-  var modelProfileForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.modelProfileId ?? null;
-  var buildArchitectureRetargetPlan = (catalog, model) => {
-    const entry = modelCatalogEntry(catalog, model);
-    const architectureId = entry?.architectureId ?? null;
-    const descriptor = architectureDescriptor(catalog, architectureId);
-    const profileId = entry?.modelProfileId ?? null;
-    const capabilities = descriptor?.capabilities;
-    return entry && architectureId && profileId && descriptor && capabilities ? {
-      architectureId,
-      modelProfileId: profileId,
-      model,
-      extras: [
-        ...entry.enhancements?.extras ?? descriptor.extras ?? []
-      ],
-      capabilities: structuredClone(capabilities),
-      ...entry.entryAbilities === void 0 ? {} : { entryAbilities: [...entry.entryAbilities] },
-      entryModes: [...entry.entryModes]
-    } : null;
-  };
-
   // frontend/architectures/conditionalRules.ts
   var CONDITIONAL_RULE_CODES = {
     audioReuseRequiresStages: "audio.reuse.requires_three_stages",
@@ -1299,6 +1392,10 @@
     retakeRequiresSource: "retake-source-required",
     uniformTimelineHdr: "mixed-hdr-timeline-unsupported"
   };
+  var KNOWN_CONDITIONAL_RULE_CODES = new Set(
+    Object.values(CONDITIONAL_RULE_CODES)
+  );
+  var isKnownConditionalRuleCode = (value) => KNOWN_CONDITIONAL_RULE_CODES.has(value);
   var conditionalRule = (rules, code) => rules.find((rule) => rule.code === code) ?? null;
   var finiteConstraint = (rule, key, fallback) => {
     const value = Number(rule.constraints?.[key]);
@@ -1334,9 +1431,28 @@
         return hdr.some(Boolean) && hdr.some((value) => !value);
       }
       default:
-        return false;
+        return true;
     }
   };
+
+  // frontend/architectures/types.ts
+  var AUTHORING_FEATURES = [
+    "multiStage",
+    "sourceVideo",
+    "frameReferences",
+    "referenceFraming",
+    "retake",
+    "majorPrompt",
+    "promptRelay",
+    "clipAudio",
+    "audioReuse",
+    "audioDerivedDuration",
+    "controlSignalDerivedDuration",
+    "stageLoras",
+    "icLora",
+    "hdr",
+    "upscale"
+  ];
 
   // frontend/architectures/catalogWire.ts
   var BOUNDARY_MODES = ["cut", "continue", "crossfade"];
@@ -1357,6 +1473,9 @@
   );
   var isReferencePositionArray = (value) => isUniqueStringArray(value) && value.every(
     (entry) => REFERENCE_POSITIONS.includes(entry)
+  );
+  var isAuthoringFeatureArray = (value) => isUniqueStringArray(value) && value.every(
+    (entry) => AUTHORING_FEATURES.includes(entry)
   );
   var isRuleDecision = (value, allowedScopes) => {
     if (!isRecord2(value) || !["supported", "unsupported", "conditional"].includes(
@@ -1383,15 +1502,36 @@
     }
     return true;
   };
-  var isMinimumStageControlRule = (value) => {
-    if (value.code !== CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage) {
-      return true;
-    }
-    if (value.support !== "conditional" || value.scope !== "stage" || value.entityId !== null || !isRecord2(value.constraints)) {
+  var hasExactKeys = (value, expected) => Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
+  var isKnownExecutableRule = (value) => {
+    if (value.support !== "conditional" || value.entityId !== null || !isRecord2(value.constraints)) {
       return false;
     }
     const constraints = value.constraints;
-    return Object.keys(value.constraints).length === 1 && typeof constraints.exclusiveMinimumControl === "number" && Number.isFinite(constraints.exclusiveMinimumControl);
+    switch (value.code) {
+      case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
+        return value.scope === "clip" && hasExactKeys(constraints, [
+          "minimumActiveStages",
+          "failureSeverity",
+          "failureEffect"
+        ]) && Number.isInteger(constraints.minimumActiveStages) && Number(constraints.minimumActiveStages) > 0 && constraints.failureSeverity === "warning" && constraints.failureEffect === "disable-feature";
+      case CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage: {
+        const typed = constraints;
+        return value.scope === "stage" && hasExactKeys(constraints, ["exclusiveMinimumControl"]) && typeof typed.exclusiveMinimumControl === "number" && Number.isFinite(typed.exclusiveMinimumControl);
+      }
+      case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
+        return value.scope === "clip" && hasExactKeys(constraints, ["requiresFixedFrameCount"]) && constraints.requiresFixedFrameCount === true;
+      case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
+        return value.scope === "stage" && hasExactKeys(constraints, ["mutuallyExclusive"]) && isUniqueStringArray(constraints.mutuallyExclusive) && constraints.mutuallyExclusive.length === 2 && constraints.mutuallyExclusive.includes("retake") && constraints.mutuallyExclusive.includes("frameReferences");
+      case CONDITIONAL_RULE_CODES.retakeRequiresSource:
+        return value.scope === "clip" && hasExactKeys(constraints, ["requiresAnyEntryMode"]) && isEntryModeArray(constraints.requiresAnyEntryMode) && constraints.requiresAnyEntryMode.length === 2 && constraints.requiresAnyEntryMode.includes("source-video") && constraints.requiresAnyEntryMode.includes("refine-video");
+      case CONDITIONAL_RULE_CODES.uniformTimelineHdr:
+        return value.scope === "architecture" && hasExactKeys(constraints, [
+          "uniformTimelineFeature",
+          "minimumTimelineClips"
+        ]) && constraints.uniformTimelineFeature === "hdr" && Number.isInteger(constraints.minimumTimelineClips) && Number(constraints.minimumTimelineClips) >= 2;
+    }
+    return false;
   };
   var isBoundaryRule = (value) => {
     if (!isRuleDecision(value, ["boundary"]) || value.entityId !== null) {
@@ -1422,7 +1562,7 @@
     return frameStep > 0 && minFrames >= 0 && maxFrames >= minFrames && defaultFrames >= minFrames && defaultFrames <= maxFrames && continuityExtraFrames >= 0 && (defaultFrames - minFrames) % frameStep === 0;
   };
   var isRuleArray = (value, allowedScopes) => Array.isArray(value) && value.every(
-    (rule) => isRuleDecision(rule, allowedScopes) && isMinimumStageControlRule(rule)
+    (rule) => isRuleDecision(rule, allowedScopes) && isKnownConditionalRuleCode(rule.code) && isKnownExecutableRule(rule)
   ) && new Set(value.map((rule) => rule.code)).size === value.length;
   var isProfile = (value) => isRecord2(value) && isTrimmedNonEmpty(value.id) && isTrimmedNonEmpty(value.label) && isEntryModeArray(value.entryModes) && value.entryModes.length > 0 && isUniqueStringArray(value.capabilities) && isRuleArray(value.rules, ["model-profile", "stage"]);
   var isCapabilities = (value) => {
@@ -1452,7 +1592,7 @@
     const architectures = [];
     const architectureIds = /* @__PURE__ */ new Set();
     for (const raw of value.architectures) {
-      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isTrimmedNonEmpty(raw.defaultProfileId) || !isCapabilities(raw.capabilities) || raw.extras !== void 0 && !isUniqueStringArray(raw.extras) || !Array.isArray(raw.profiles) || !raw.profiles.every(isProfile) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["architecture", "clip", "stage", "output"])) {
+      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isTrimmedNonEmpty(raw.defaultProfileId) || !isCapabilities(raw.capabilities) || raw.extras !== void 0 && !isUniqueStringArray(raw.extras) || raw.ignoredUnsupportedFeatures !== void 0 && !isAuthoringFeatureArray(raw.ignoredUnsupportedFeatures) || !Array.isArray(raw.profiles) || !raw.profiles.every(isProfile) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["architecture", "clip", "stage", "output"])) {
         return null;
       }
       const profileIds = raw.profiles.map((profile) => profile.id);
@@ -1469,6 +1609,11 @@
         label: raw.label,
         defaultProfileId: raw.defaultProfileId,
         ...raw.extras === void 0 ? {} : { extras: [...raw.extras] },
+        ...raw.ignoredUnsupportedFeatures === void 0 ? {} : {
+          ignoredUnsupportedFeatures: [
+            ...raw.ignoredUnsupportedFeatures
+          ]
+        },
         capabilities: structuredClone(raw.capabilities),
         profiles: structuredClone(raw.profiles),
         boundaryRules: structuredClone(raw.boundaryRules),
@@ -1660,9 +1805,6 @@
     }
     return "unsupported";
   };
-
-  // frontend/architectures/none/identity.ts
-  var NONE_ARCHITECTURE_ID = "none";
 
   // frontend/selectOption.ts
   var preserveSelectedOption = (options, selectedValue, position, build) => {
@@ -2322,13 +2464,17 @@
       stageZero?.model ?? null,
       defaults.modelCatalog
     );
+    const resolvedArchitecture = isSourceOnly ? NONE_ARCHITECTURE_ID : architectureForModel(
+      defaults.modelCatalog,
+      stageZero?.model ?? ""
+    ) ?? "unsupported";
     const modelProfileId = isSourceOnly ? persistedProfile || (architecture === NONE_ARCHITECTURE_ID ? NONE_ARCHITECTURE_ID : "unsupported") : persistedProfile || stageZero?.modelProfileId || "unsupported";
     const icLoras = normalizeArchitectureIcLoras(
-      architecture,
+      resolvedArchitecture,
       rawClip,
       stagesRaw.length,
       sourceVideo !== null,
-      architectureDescriptor(defaults.modelCatalog, architecture) === null || architecture === NONE_ARCHITECTURE_ID
+      { preserveDormantLtx: true }
     );
     const icLoraDefaultStrengths = icLoras.map(
       (entry) => defaultLoraWeight(defaults, entry.lora)
@@ -2353,7 +2499,7 @@
     const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
     const boundaryRule = architectureDescriptor(
       defaults.modelCatalog,
-      architecture
+      resolvedArchitecture
     )?.boundaryRules[boundaryOut];
     return {
       id: normalizeOptionalEntityId(rawClip.id),
@@ -3119,14 +3265,11 @@
       upscaleStep: 0.25,
       steps: 8,
       stepsMin: Math.max(1, Math.round(toNumber(steps?.min, 1))),
-      stepsMax: Math.min(
-        50,
-        Math.max(1, Math.round(toNumber(steps?.max, 200)))
-      ),
+      stepsMax: Math.max(1, Math.round(toNumber(steps?.max, 200))),
       stepsStep: Math.max(1, Math.round(toNumber(steps?.step, 1))),
       cfgScale: 1,
       cfgScaleMin: toNumber(cfgScale?.min, 0),
-      cfgScaleMax: Math.min(10, toNumber(cfgScale?.max, 10)),
+      cfgScaleMax: toNumber(cfgScale?.max, 10),
       cfgScaleStep: toNumber(cfgScale?.step, 0.5)
     };
   };
@@ -3541,80 +3684,6 @@
     console.debug(`[VideoStages debug ${area}]`, message, ...details);
   };
 
-  // frontend/architectures/clipIdentity.ts
-  var modelIdentityFromCatalog = (catalog, model) => {
-    if (!catalog) return null;
-    const entry = modelCatalogEntry(catalog, model);
-    if (!entry?.architectureId || !entry.modelProfileId || !entry.compatibilityClassId) {
-      return null;
-    }
-    return {
-      architectureId: entry.architectureId,
-      modelProfileId: entry.modelProfileId,
-      compatibilityClassId: entry.compatibilityClassId
-    };
-  };
-  var deriveClipArchitectureIdentity = (clip, catalog) => {
-    if (!catalog) return null;
-    const identities = clip.stages.map((stage) => ({
-      stage,
-      identity: modelIdentityFromCatalog(catalog, stage.model)
-    }));
-    if (identities.some(({ identity }) => !identity)) {
-      return null;
-    }
-    const authored = identities[0]?.identity ?? null;
-    if (authored && identities.some(
-      ({ identity }) => identity?.architectureId !== authored.architectureId || identity.compatibilityClassId !== authored.compatibilityClassId
-    )) {
-      return null;
-    }
-    const descriptor = authored ? architectureDescriptor(catalog, authored.architectureId) : null;
-    if (clip.stages.length > 1 && !(descriptor?.extras?.includes("multi-stage") ?? descriptor?.capabilities.architecture.includes("multi-stage"))) {
-      return null;
-    }
-    const authoredIdentity = {
-      authoredArchitectureId: authored?.architectureId ?? null,
-      authoredModelProfileId: authored?.modelProfileId ?? null
-    };
-    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
-      return {
-        architectureId: NONE_ARCHITECTURE_ID,
-        modelProfileId: NONE_ARCHITECTURE_ID,
-        ...authoredIdentity
-      };
-    }
-    if (authored) {
-      return {
-        architectureId: authored.architectureId,
-        modelProfileId: authored.modelProfileId,
-        ...authoredIdentity
-      };
-    }
-    if (clip.architecture === NONE_ARCHITECTURE_ID && clip.modelProfileId === NONE_ARCHITECTURE_ID) {
-      return {
-        architectureId: NONE_ARCHITECTURE_ID,
-        modelProfileId: NONE_ARCHITECTURE_ID,
-        ...authoredIdentity
-      };
-    }
-    const validEmptyIdentity = catalog.architectures.some(
-      (architecture) => architecture.id === clip.architecture
-    );
-    return validEmptyIdentity ? {
-      architectureId: clip.architecture,
-      modelProfileId: clip.modelProfileId,
-      ...authoredIdentity
-    } : null;
-  };
-  var reconcileClipArchitectureIdentity = (clip, catalog) => {
-    const identity = deriveClipArchitectureIdentity(clip, catalog);
-    if (!identity) return false;
-    clip.architecture = identity.architectureId;
-    clip.modelProfileId = identity.modelProfileId;
-    return true;
-  };
-
   // frontend/architectures/conversion/entryModePolicy.ts
   var firstActiveStageIndex = (clip) => {
     const index = clip.stages.findIndex((stage) => !stage.skipped);
@@ -3675,8 +3744,11 @@
       stage.model = target.model;
       stage.modelProfileId = target.modelProfileId;
     }
-    const payloadOwner = source.architecture === NONE_ARCHITECTURE_ID ? modelIdentityFromCatalog(catalog, source.stages[0]?.model ?? "")?.architectureId ?? source.architecture : source.architecture;
-    const dropsForeignPayload = payloadOwner !== target.architectureId && clip.architecturePayload !== null;
+    const payloadOwner = modelIdentityFromCatalog(
+      catalog,
+      source.stages[0]?.model ?? ""
+    )?.architectureId;
+    const dropsForeignPayload = (payloadOwner === void 0 || payloadOwner !== target.architectureId) && clip.architecturePayload !== null;
     if (dropsForeignPayload) {
       clip.architecturePayload = null;
     }
@@ -3689,10 +3761,13 @@
   };
 
   // frontend/architectures/policy/boundaryPolicy.ts
-  var forceCrossArchitectureCutsForConversion = (clips) => {
+  var forceCrossArchitectureCutsForConversion = (clips, catalog) => {
     for (const boundary of executableBoundaries(clips)) {
       const left = clips[boundary.leftIdx];
-      if (left.architecture !== clips[boundary.rightIdx].architecture) {
+      const right = clips[boundary.rightIdx];
+      const leftArchitectureId = resolvedClipArchitectureId(left, catalog);
+      const rightArchitectureId = resolvedClipArchitectureId(right, catalog);
+      if (leftArchitectureId !== null && rightArchitectureId !== null && leftArchitectureId !== rightArchitectureId) {
         left.boundaryOut = "cut";
       }
     }
@@ -4045,7 +4120,7 @@
       }
     }
   };
-  var diffStages = (before, after, phases) => diffList(
+  var diffStages = (before, after, phases, context) => diffList(
     LIST_ENTITIES.stage,
     after.id,
     before,
@@ -4053,14 +4128,21 @@
     phases,
     (previous, next) => {
       if (previous.model !== next.model || previous.modelProfileId !== next.modelProfileId) {
+        const targetEntry = modelCatalogEntry(
+          context.architectureCatalog,
+          next.model
+        );
+        if (!targetEntry?.architectureId || !targetEntry.modelProfileId) {
+          throw new DocumentDiffError("architecture-invariant");
+        }
         phases.patches.push({
           type: "stage.retarget-model",
           clipId: after.id,
           stageId: next.id,
           target: {
-            architectureId: after.architecture,
-            modelProfileId: next.modelProfileId,
-            model: next.model
+            architectureId: targetEntry.architectureId,
+            modelProfileId: targetEntry.modelProfileId,
+            model: targetEntry.value
           }
         });
       }
@@ -4098,8 +4180,8 @@
       });
     }
   };
-  var diffClipChildren = (before, after, phases) => {
-    diffStages(before, after, phases);
+  var diffClipChildren = (before, after, phases, context) => {
+    diffStages(before, after, phases, context);
     diffList(LIST_ENTITIES.ref, after.id, before, after, phases);
     diffList(LIST_ENTITIES.promptWindow, after.id, before, after, phases);
     diffRetake(before, after, phases);
@@ -4114,12 +4196,21 @@
       next,
       context.architectureCatalog
     );
+    const previousStageZeroIdentity = modelIdentityFromCatalog(
+      context.architectureCatalog,
+      previous.stages[0]?.model ?? ""
+    );
+    const nextStageZeroIdentity = modelIdentityFromCatalog(
+      context.architectureCatalog,
+      next.stages[0]?.model ?? ""
+    );
+    const repairsUnresolvedStageZero = previous.stages[0]?.model !== next.stages[0]?.model && previousStageZeroIdentity === null && nextStageZeroIdentity !== null;
     if (changesEffectiveIdentity) {
       if (!nextIdentity || nextIdentity.architectureId !== next.architecture || nextIdentity.modelProfileId !== next.modelProfileId) {
         throw new DocumentDiffError("architecture-invariant");
       }
     }
-    const changesAuthoredArchitecture = previousIdentity?.authoredArchitectureId !== null && previousIdentity?.authoredArchitectureId !== void 0 && nextIdentity?.authoredArchitectureId !== null && nextIdentity?.authoredArchitectureId !== void 0 && previousIdentity.authoredArchitectureId !== nextIdentity.authoredArchitectureId;
+    const changesAuthoredArchitecture = repairsUnresolvedStageZero || previousIdentity?.authoredArchitectureId !== null && previousIdentity?.authoredArchitectureId !== void 0 && nextIdentity?.authoredArchitectureId !== null && nextIdentity?.authoredArchitectureId !== void 0 && previousIdentity.authoredArchitectureId !== nextIdentity.authoredArchitectureId;
     const nextIsSourceOnlyClip = next.stages.length === 0 && next.sourceVideo !== null && nextIdentity?.authoredArchitectureId == null && nextIdentity?.architectureId === NONE_ARCHITECTURE_ID;
     if (changesEffectiveIdentity && !changesAuthoredArchitecture && !nextIsSourceOnlyClip && (previousIdentity?.authoredArchitectureId == null || nextIdentity?.authoredArchitectureId == null || previousIdentity.authoredArchitectureId !== nextIdentity.authoredArchitectureId)) {
       throw new DocumentDiffError("architecture-invariant");
@@ -4128,14 +4219,13 @@
       return previous;
     }
     const catalog = context.architectureCatalog;
-    const sourceArchitectureId = previousIdentity?.authoredArchitectureId;
     const targetStage = next.stages[0];
     const targetEntry = modelCatalogEntry(catalog, targetStage?.model);
     const targetDescriptor = architectureDescriptor(
       catalog,
       targetEntry?.architectureId
     );
-    if (!catalog || !sourceArchitectureId || !targetStage || !targetEntry?.architectureId || !targetEntry.modelProfileId || !targetDescriptor || targetEntry.architectureId !== nextIdentity?.authoredArchitectureId) {
+    if (!catalog || !targetStage || !targetEntry?.architectureId || !targetEntry.modelProfileId || !targetDescriptor || targetEntry.architectureId !== nextIdentity?.authoredArchitectureId) {
       throw new DocumentDiffError("architecture-invariant");
     }
     const target = {
@@ -4145,30 +4235,70 @@
       capabilities: clone(targetDescriptor.capabilities),
       entryModes: clone(targetEntry.entryModes)
     };
-    const requestedForCleanup = clone(next);
-    requestedForCleanup.architecture = sourceArchitectureId;
-    const requestedPlan = planArchitectureConversion(
-      requestedForCleanup,
-      target,
-      catalog,
-      context.generatedEntryMode ?? "text-to-video"
-    );
-    const baselinePlan = planArchitectureConversion(
-      previous,
-      target,
-      catalog,
-      context.generatedEntryMode ?? "text-to-video"
-    );
-    if (!requestedPlan || !baselinePlan) {
-      throw new DocumentDiffError("architecture-invariant");
+    const conversionSource = clone(previous);
+    const dropsUnownedPayload = previous.architecturePayload !== null && previousStageZeroIdentity?.architectureId !== target.architectureId;
+    if (dropsUnownedPayload) {
+      phases.preConversions.push({
+        type: "clip.patch",
+        clipId: next.id,
+        patch: { architecturePayload: null }
+      });
+      conversionSource.architecturePayload = null;
     }
-    const cleanedRequested = requestedPlan.clip;
-    if (cleanedRequested.stages.length === next.stages.length) {
-      for (let index = 0; index < next.stages.length; index++) {
-        cleanedRequested.stages[index].model = next.stages[index].model;
-        cleanedRequested.stages[index].modelProfileId = next.stages[index].modelProfileId;
+    if (!deepEqual(previous.sourceVideo, next.sourceVideo)) {
+      phases.preConversions.push({
+        type: "clip.patch",
+        clipId: next.id,
+        patch: { sourceVideo: clone(next.sourceVideo) }
+      });
+      conversionSource.sourceVideo = clone(next.sourceVideo);
+    }
+    const nextStagesById = new Map(
+      next.stages.map((stage) => [stage.id, stage])
+    );
+    const nextStageIds = new Set(nextStagesById.keys());
+    for (const stage of conversionSource.stages) {
+      if (!nextStageIds.has(stage.id)) {
+        phases.preConversions.push({
+          type: "stage.remove",
+          clipId: next.id,
+          stageId: stage.id
+        });
       }
     }
+    conversionSource.stages = conversionSource.stages.filter(
+      (stage) => nextStageIds.has(stage.id)
+    );
+    for (const stage of conversionSource.stages) {
+      const nextStage = nextStagesById.get(stage.id);
+      if (nextStage && stage.skipped !== nextStage.skipped) {
+        phases.preConversions.push({
+          type: "stage.patch",
+          clipId: next.id,
+          stageId: stage.id,
+          patch: { skipped: nextStage.skipped }
+        });
+        stage.skipped = nextStage.skipped;
+      }
+    }
+    if (!modelSupportsAllActiveStageEntries(
+      targetEntry,
+      next,
+      context.generatedEntryMode ?? "text-to-video"
+    )) {
+      throw new DocumentDiffError("architecture-invariant");
+    }
+    const baselinePlan = planArchitectureConversion(
+      conversionSource,
+      target,
+      catalog,
+      context.generatedEntryMode ?? "text-to-video"
+    );
+    if (!baselinePlan) {
+      throw new DocumentDiffError("architecture-invariant");
+    }
+    const cleanedRequested = clone(next);
+    cleanedRequested.architecturePayload = baselinePlan.clip.architecturePayload;
     if (!reconcileClipArchitectureIdentity(cleanedRequested, catalog) || !deepEqual(cleanedRequested, next)) {
       throw new DocumentDiffError("architecture-invariant");
     }
@@ -4192,7 +4322,7 @@
     (previous, next) => {
       const diffBase = clipDiffBase(previous, next, phases, context);
       emitPatch(LIST_ENTITIES.clip, null, diffBase, next, phases);
-      diffClipChildren(diffBase, next, phases);
+      diffClipChildren(diffBase, next, phases, context);
     }
   );
   var diffAudioTracks = (before, after, phases) => diffList(
@@ -4210,6 +4340,7 @@
     validateDocumentIds(before);
     validateDocumentIds(after);
     const phases = {
+      preConversions: [],
       conversions: [],
       removes: [],
       adds: [],
@@ -4219,8 +4350,27 @@
     const rootPatch = changedPatch(before, after, ROOT_PATCH_KEYS);
     diffClips(before, after, phases, context);
     if (phases.conversions.length > 0) {
+      const reconciledAfter = clone(after);
+      for (const conversion of phases.conversions) {
+        if (conversion.type !== "clip.convert-architecture") continue;
+        const clipIdx = reconciledAfter.clips.findIndex(
+          (clip) => clip.id === conversion.clipId
+        );
+        reconcileClipArchitectureIncomingIcLoraDrives(
+          reconciledAfter.clips,
+          clipIdx,
+          context.generatedEntryMode ?? "text-to-video",
+          context.architectureCatalog
+        );
+      }
+      if (!deepEqual(reconciledAfter, after)) {
+        throw new DocumentDiffError("architecture-invariant");
+      }
       const forcedFinalClips = clone(after.clips);
-      forceCrossArchitectureCutsForConversion(forcedFinalClips);
+      forceCrossArchitectureCutsForConversion(
+        forcedFinalClips,
+        context.architectureCatalog
+      );
       if (forcedFinalClips.some(
         (clip, index) => clip.boundaryOut !== after.clips[index]?.boundaryOut
       )) {
@@ -4233,12 +4383,26 @@
           patch: { boundaryOut: clip.boundaryOut }
         });
       }
+      const convertedClipIds = new Set(
+        phases.conversions.flatMap(
+          (conversion) => conversion.type === "clip.convert-architecture" ? [conversion.clipId] : []
+        )
+      );
+      for (const clip of after.clips) {
+        if (!convertedClipIds.has(clip.id)) continue;
+        phases.patches.push({
+          type: "clip.patch",
+          clipId: clip.id,
+          patch: { icLoras: clone(clip.icLoras) }
+        });
+      }
     }
     diffAudioTracks(before, after, phases);
     return {
       type: "batch",
       commands: [
         ...hasPatch(rootPatch) ? [{ type: "root.patch", patch: rootPatch }] : [],
+        ...phases.preConversions,
         ...phases.conversions,
         ...phases.removes,
         ...phases.adds,
@@ -4258,16 +4422,22 @@
     return a || 1;
   };
   var leastCommonMultiple = (left, right) => Math.abs(left * right) / greatestCommonDivisor(left, right);
-  var activeDocumentDimensionMultiple = (clips) => clips.reduce(
-    (multiple, clip) => leastCommonMultiple(multiple, architectureDimensionMultiple(clip)),
+  var activeDocumentDimensionMultiple = (clips, catalog) => clips.reduce(
+    (multiple, clip) => leastCommonMultiple(
+      multiple,
+      architectureDimensionMultiple(
+        clip,
+        resolvedClipArchitectureId(clip, catalog) ?? ""
+      )
+    ),
     ROOT_DIMENSION_STEP
   );
-  var snapExplicitDocumentDimensions = (state) => {
+  var snapExplicitDocumentDimensions = (state, catalog) => {
     const before = {
       width: Math.round(state.width),
       height: Math.round(state.height)
     };
-    const multiple = activeDocumentDimensionMultiple(state.clips);
+    const multiple = activeDocumentDimensionMultiple(state.clips, catalog);
     const after = state.dimsExplicit ? snapDimensions(before.width, before.height, multiple) : before;
     const changed = after.width !== before.width || after.height !== before.height;
     if (changed) {
@@ -4514,7 +4684,16 @@
           return failure(document2, "invalid-architecture-conversion");
         }
         document2.clips[clipIndex] = converted;
-        forceCrossArchitectureCutsForConversion(document2.clips);
+        forceCrossArchitectureCutsForConversion(
+          document2.clips,
+          context.architectureCatalog
+        );
+        reconcileClipArchitectureIncomingIcLoraDrives(
+          document2.clips,
+          clipIndex,
+          context.generatedEntryMode ?? "text-to-video",
+          context.architectureCatalog
+        );
         return success(document2);
       }
       case "stage.add":
@@ -4537,7 +4716,7 @@
         const ownerArchitectureId = modelIdentityFromCatalog(
           context.architectureCatalog,
           clip.stages[0]?.model ?? ""
-        )?.architectureId ?? clip.architecture;
+        )?.architectureId;
         if (target.architectureId !== ownerArchitectureId) {
           return failure(document2, "architecture-invariant");
         }
@@ -5157,7 +5336,10 @@
     const requested = structuredClone(requestedInput);
     ensureAuthoringDocumentIdentity(requested);
     assignMissingHues(requested.clips);
-    const dimensionSnap = snapExplicitDocumentDimensions(requested);
+    const dimensionSnap = snapExplicitDocumentDimensions(
+      requested,
+      getRootDefaults().modelCatalog
+    );
     const before = structuredClone(snapshot.state);
     ensureAuthoringDocumentIdentity(before);
     assignMissingHues(before.clips);
@@ -5406,13 +5588,16 @@
   var noArchitectureReason = (feature) => `${FEATURE_LABEL[feature]} requires a generated clip with a known architecture.`;
   var upscaleModeForMethod = (method) => {
     const normalized = method.trim().toLowerCase();
-    if (normalized.startsWith("latentmodel-")) return "latent-model";
-    if (normalized.startsWith("latent-")) return "latent";
-    if (normalized.startsWith("pixel-")) return "pixel";
-    return "model";
+    const hasMethodName = (prefix) => normalized.startsWith(prefix) && normalized.slice(prefix.length).trim().length > 0;
+    if (hasMethodName("latentmodel-")) return "latent-model";
+    if (hasMethodName("latent-")) return "latent";
+    if (hasMethodName("pixel-")) return "pixel";
+    if (hasMethodName("model-")) return "model";
+    return "unsupported";
   };
 
   // frontend/architectures/policy/clipStageViews.ts
+  var UNRESOLVED_ARCHITECTURE_ID = "unsupported";
   var FEATURE_RULE_CODES = {
     promptRelay: [CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength],
     audioReuse: [CONDITIONAL_RULE_CODES.audioReuseRequiresStages],
@@ -5491,7 +5676,7 @@
     const effectiveClipIdentity = (clip) => {
       const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
       const resolvedModel = sourceOnly ? void 0 : modelByName.get(clip.stages[0]?.model ?? "");
-      const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? clip.architecture;
+      const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID;
       return {
         architectureId,
         descriptor: architectureById.get(architectureId)
@@ -5547,7 +5732,7 @@
       const view = forClip(clip);
       const sourceOnly = view.architectureId === NONE_ARCHITECTURE_ID && activeStageCount(clip) === 0 && clip.sourceVideo !== null;
       const resolvedModel = sourceOnly ? void 0 : modelByName.get(stage.model);
-      const architectureId = resolvedModel?.architectureId ?? view.architectureId;
+      const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID;
       const descriptor = architectureById.get(architectureId);
       const decision = (feature) => {
         if (feature === "stageLoras" && descriptor) {
@@ -5628,13 +5813,12 @@
 
   // frontend/architectures/diagnostics.ts
   var issue = (code, message, clipIdx, severity = "error") => ({ severity, code, message, clipIdx });
-  var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities, extras) => {
+  var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities, extras, ignoredUnsupportedFeatures = []) => {
     const diagnostics = [];
-    const backendProjectsUnsupported = architectureId === "wan22" || architectureId === "host-video";
     const supports = (feature, value) => architectureFeatureSupport(feature, { capabilities, extras, ...value });
-    const unsupported = (active, key, label, severity) => {
+    const unsupported = (active, feature, key, label, severity) => {
       if (active) {
-        const effectiveSeverity = severity ?? (backendProjectsUnsupported ? "warning" : "error");
+        const effectiveSeverity = severity ?? (ignoredUnsupportedFeatures.includes(feature) ? "warning" : "error");
         diagnostics.push(
           issue(
             `architecture.unsupported.${key}`,
@@ -5647,21 +5831,25 @@
     };
     unsupported(
       !supports("multiStage") && activeStageCount(clip) > 1,
+      "multiStage",
       "multi-stage",
       "Multiple active stages"
     );
     unsupported(
       !supports("frameReferences") && clip.refs.length > 0,
+      "frameReferences",
       "frame-references",
       "Frame references"
     );
     unsupported(
       !supports("referenceFraming") && clip.refFraming !== "crop",
+      "referenceFraming",
       "reference-framing",
       "Reference framing"
     );
     unsupported(
       !supports("icLora") && clip.icLoras.length > 0,
+      "icLora",
       "ic-lora",
       "IC-LoRA"
     );
@@ -5670,25 +5858,30 @@
         (entry) => isArchitectureHdrFeature(architectureId, entry)
       ),
       "hdr",
+      "hdr",
       "HDR"
     );
     unsupported(
       !supports("retake") && clip.retake !== null,
       "retake",
+      "retake",
       "Retake"
     );
     unsupported(
       !supports("majorPrompt") && clip.prompt.trim().length > 0,
+      "majorPrompt",
       "major-prompt",
       "Major prompt"
     );
     unsupported(
       !supports("sourceVideo") && clip.sourceVideo !== null,
+      "sourceVideo",
       "source-video",
       "Source video"
     );
     unsupported(
       !supports("promptRelay") && clip.promptWindows.length > 0,
+      "promptRelay",
       "prompt-relay",
       "Prompt relay"
     );
@@ -5698,6 +5891,7 @@
           (_, index) => (stage.loraWeights[index] ?? 1) !== 0
         )
       ),
+      "stageLoras",
       "stage-loras",
       "LoRAs"
     );
@@ -5705,14 +5899,15 @@
       (stage) => stage.upscale !== 1 && !supports("upscale", { upscaleMethod: stage.upscaleMethod })
     );
     const isKnownAdvancedUpscale = (method) => {
-      const normalized = method.trim().toLowerCase();
-      return normalized.startsWith("model-") || normalized.startsWith("latent-") || normalized.startsWith("latentmodel-");
+      const mode = upscaleModeForMethod(method);
+      return mode !== "pixel" && mode !== "unsupported";
     };
     unsupported(
       unsupportedUpscales.length > 0,
       "upscale",
+      "upscale",
       "Stage upscaling",
-      backendProjectsUnsupported && unsupportedUpscales.every(
+      ignoredUnsupportedFeatures.includes("upscale") && unsupportedUpscales.every(
         (stage) => isKnownAdvancedUpscale(stage.upscaleMethod)
       ) ? "warning" : "error"
     );
@@ -5722,11 +5917,13 @@
     });
     unsupported(
       !supports("audioReuse") && clip.reuseAudio,
+      "audioReuse",
       "audio-reuse",
       "Captured stage audio reuse"
     );
     unsupported(
       !supports("audioDerivedDuration") && clip.clipLengthFromAudio,
+      "audioDerivedDuration",
       "audio-derived-duration",
       "Audio-derived clip duration"
     );
@@ -5735,11 +5932,13 @@
     );
     unsupported(
       !supportsControlSignalDerivedDuration && clip.clipLengthFromControlNet,
+      "controlSignalDerivedDuration",
       "control-signal-derived-duration",
       "Control-signal-derived clip duration"
     );
     unsupported(
       !selectedAudioSourceSupported && (sourceKind !== "Native" || clip.uploadedAudio !== null || clip.saveAudioTrack),
+      "clipAudio",
       "audio-source",
       `Audio source '${sourceKind}'`
     );
@@ -5763,14 +5962,7 @@
     }
     return diagnostics;
   };
-  var effectiveArchitectureIdForClip = (clip, catalog) => {
-    const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
-    if (sourceOnly) return NONE_ARCHITECTURE_ID;
-    const firstAuthoredModel = clip.stages.length > 0 ? catalog.entries.find(
-      (entry) => entry.value === clip.stages[0].model
-    ) : void 0;
-    return firstAuthoredModel?.architectureId ?? clip.architecture;
-  };
+  var effectiveArchitectureIdForClip = (clip, catalog) => resolvedClipArchitectureId(clip, catalog) ?? "unsupported";
   var deriveArchitectureDiagnostics = (clips, catalog, _generatedEntryMode = "text-to-video") => {
     const diagnostics = [];
     const architectureById = new Map(
@@ -5825,7 +6017,7 @@
         }
       }
       const architecture = sourceOnly ? architectureById.get("none") : architectureById.get(effectiveArchitectureId);
-      if (!architecture && !sourceOnly) {
+      if (!architecture && !sourceOnly && effectiveArchitectureId !== "unsupported") {
         diagnostics.push(
           issue(
             "architecture.unknown",
@@ -5840,7 +6032,8 @@
             clipIdx,
             effectiveArchitectureId,
             architecture.capabilities,
-            resolvedFirstModel?.enhancements?.extras ?? architecture.extras
+            resolvedFirstModel?.enhancements?.extras ?? architecture.extras,
+            architecture.ignoredUnsupportedFeatures
           )
         );
       }
@@ -5954,7 +6147,7 @@
       clip: clips[clipIdx],
       clipIdx
     }));
-    const effectiveArchitectureId = (clip) => context.catalog ? effectiveArchitectureIdForClip(clip, context.catalog) : clip.architecture;
+    const effectiveArchitectureId = (clip) => context.catalog ? effectiveArchitectureIdForClip(clip, context.catalog) : "unsupported";
     for (const { clip, clipIdx } of executable) {
       const descriptor = architectureDescriptor(
         context.catalog,
@@ -5992,7 +6185,7 @@
       })) {
         diagnostics.push(
           diagnostic(
-            "warning",
+            "error",
             retakeSourceRule.code,
             retakeSourceRule.reason,
             clipIdx
@@ -9156,7 +9349,7 @@
       "controlSignalDerivedDuration"
     );
     const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
-      clip.architecture,
+      capabilityView.architectureId,
       clip.icLoras
     );
     const controlDurationIssueDecision = clip.clipLengthFromControlNet && !controlDurationDecision.supported ? controlDurationDecision : clip.clipLengthFromControlNet && !controlNetEnabled ? {
@@ -9485,7 +9678,7 @@
     }
     return `<div class="vst-region-off" style="left:${left}%;width:${width}%" aria-hidden="true"></div>`;
   };
-  var renderRetakeOverlay = (clip, clipIdx, durationSeconds) => {
+  var renderRetakeOverlay = (clip, clipIdx, durationSeconds, editable) => {
     const retake = clip.retake;
     if (!retake || durationSeconds <= 0) {
       return "";
@@ -9502,8 +9695,8 @@
       edgeAttr: "data-vst-retake-edge",
       labelClass: "vst-retake-label",
       label,
-      title: `${label} · drag to move/resize · Shift+click to delete`,
-      ariaLabel: label,
+      title: editable ? `${label} · drag to move/resize · Shift+click to delete` : `${label} · unsupported by this architecture · click to inspect or Shift+click to delete`,
+      ariaLabel: editable ? label : `${label}. Unsupported persisted retake; available for inspection or removal.`,
       startSeconds: retake.startSeconds,
       lengthSeconds: retake.lengthSeconds,
       durationSeconds
@@ -9632,10 +9825,11 @@
       layout.durationSeconds,
       fps,
       unit
-    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` + renderRetakeOverlay(
+    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs}${retakeSupported || clip.retake ? "" : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` + renderRetakeOverlay(
       clip,
       layout.index,
-      layout.durationSeconds
+      layout.durationSeconds,
+      retakeSupported
     ) + `</div>`;
   }).join("");
   var renderVideoTrackRow = (clips, layouts, fps, unit, capabilities, timing, pxPerSecond = 1) => {
@@ -9804,19 +9998,21 @@
       const majorClass = (major === "" ? " vst-major-empty" : "") + (inherited && major !== "" ? " vst-major-inherited" : "");
       const majorTitle = (major === "" ? PROMPT_PLACEHOLDER : major) + (inherited && major !== "" ? " — inherited from the global prompt; click to set a clip prompt" : " — click to edit");
       if (majorSupported || ownPrompt !== "") {
+        const renderedMajorTitle = majorSupported ? majorTitle : "Persisted major prompt is unsupported by this architecture; click to inspect or remove it";
         parts.push(
-          `<div class="vst-major-seg${majorClass}${majorSupported ? "" : " vst-capability-disabled"}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(majorSupported ? majorTitle : `${majorTitle} — unsupported by this architecture`)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
+          `<div class="vst-major-seg${majorClass}${majorSupported ? "" : " vst-capability-disabled"}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(renderedMajorTitle)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
         );
       }
       const minorSegments = windows.map((window2, windowIdx) => {
         const geometry = promptWindowGeom(layout, window2, pxPerSecond);
         const text2 = `${window2.prompt ?? ""}`.trim();
         const label = text2 === "" ? "(empty)" : truncate(text2, 60);
-        return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeAttr(`${text2 || "(empty minor prompt)"} · Shift+click to delete`)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
+        const title = relaySupported ? `${text2 || "(empty minor prompt)"} · Shift+click to delete` : "Persisted relay prompt is unsupported by this architecture; click to inspect or Shift+click to delete";
+        return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeAttr(title)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
       }).join("");
       if (relaySupported || windows.length > 0) {
         parts.push(
-          `<div class="vst-minor-lane${relaySupported ? "" : " vst-capability-disabled"}"${relaySupported ? " data-vst-prompt-add" : ""} data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${relaySupported ? "Click empty space to add a minor prompt" : "Relay prompts are unsupported; existing windows can be removed"}">${minorSegments}</div>`
+          `<div class="vst-minor-lane${relaySupported ? "" : " vst-capability-disabled"}"${relaySupported ? " data-vst-prompt-add" : ""} data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${relaySupported ? "Click empty space to add a minor prompt" : "Relay prompts are unsupported; existing windows can be inspected or removed"}">${minorSegments}</div>`
         );
       }
     }
@@ -9898,6 +10094,7 @@
       const clipCapabilities = capabilities?.forClip(clip);
       const clipAudioSupported = clipCapabilities?.decision("clipAudio").supported ?? true;
       const persistedAudio = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.reuseAudio || clip.clipLengthFromAudio || clip.saveAudioTrack;
+      const audioOperable = clipAudioSupported || persistedAudio;
       const native = badge.label === "Native";
       const width = clipInnerWidth(layout.widthPx);
       const kindClass = native ? " vst-audio-native vst-audio-kind-native" : isAceStepFunAudioSource(clip.audioSource ?? "") ? " vst-audio-kind-ace" : " vst-audio-kind-upload";
@@ -9911,7 +10108,9 @@
       const bars = waveBarHeights(layout.index, barCount).map((height) => `<span style="height:${height}%"></span>`).join("");
       const hint = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : "";
       const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
-      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${clipAudioSupported || persistedAudio ? ' data-vst-audio="clip"' : ""} data-clip-idx="${layout.index}" role="button" tabindex="0" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(clipAudioSupported ? title : "Clip audio is unsupported; click persisted audio to remove it")}" aria-label="Edit audio for clip ${layout.index}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>`;
+      const renderedTitle = clipAudioSupported ? title : persistedAudio ? "Clip audio is unsupported; click persisted audio to inspect or remove it" : "Clip audio is unsupported by this architecture";
+      const ariaLabel = clipAudioSupported ? `Edit audio for clip ${layout.index}` : persistedAudio ? `Inspect unsupported persisted audio for clip ${layout.index}` : `Audio unavailable for clip ${layout.index}`;
+      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${audioOperable ? ' data-vst-audio="clip" role="button" tabindex="0"' : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(renderedTitle)}" aria-label="${ariaLabel}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>`;
     }).join("");
     const totalSeconds = timelineTotalSeconds ?? layouts.reduce(
       (max, layout) => Math.max(
@@ -9975,11 +10174,11 @@
         const thumbnailClass = `vst-refs-thumb${image ? " vst-refs-has-image" : ""}`;
         const alignClass = frame > REF_EDGE_ALIGN_FRAMES ? "" : isEnd ? " vst-refs-align-end" : " vst-refs-align-start";
         const kindClass = (isPrimary ? " vst-refs-primary" : "") + (isEnd ? " vst-refs-fromend" : "") + alignClass;
-        const title = `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move · Shift+click to delete`;
-        const label = `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})`;
+        const title = refsSupported ? `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move · Shift+click to delete` : `Persisted reference ${refIdx} is unsupported by this architecture · click to inspect or Shift+click to delete`;
+        const label = refsSupported ? `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})` : `Inspect unsupported persisted reference ${refIdx} for removal`;
         return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}"><span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeAttr(frameLabel)}</span></span></div>`;
       }).join("");
-      return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a reference image at this frame" : "Frame references are unsupported; existing references can be removed"}">${marks}</div>`;
+      return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.refs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a reference image at this frame" : "Frame references are unsupported; existing references can be inspected or removed"}">${marks}</div>`;
     }).join("");
     return `<div class="vst-track-row vst-track-refs">` + renderTrackHead("vst-track-icon-refs", "⧉", "References", "") + `<div class="vst-track-cell">${lanes}</div></div>`;
   };
@@ -11053,14 +11252,23 @@
       editorForItem: buildEditor
     }).section;
   };
-  var buildArchitectureIcLorasSection = (context, clip, clipIdx, defaults, selectedEntryIdx = null, open = selectedEntryIdx !== null) => panels.get(clip.architecture)?.buildIcLorasSection(
-    context,
-    clip,
-    clipIdx,
-    defaults,
-    selectedEntryIdx,
-    open
-  ) ?? persistedIcLoraRemovalPanel(context, clip, clipIdx, selectedEntryIdx, open);
+  var buildArchitectureIcLorasSection = (context, clip, clipIdx, defaults, selectedEntryIdx = null, open = selectedEntryIdx !== null) => {
+    const architectureId = context.capabilities().forClip(clip).architectureId;
+    return panels.get(architectureId)?.buildIcLorasSection(
+      context,
+      clip,
+      clipIdx,
+      defaults,
+      selectedEntryIdx,
+      open
+    ) ?? persistedIcLoraRemovalPanel(
+      context,
+      clip,
+      clipIdx,
+      selectedEntryIdx,
+      open
+    );
+  };
 
   // frontend/timelineEdit.ts
   var pxToDuration = (px, pxPerSecond, fps) => {
@@ -11861,7 +12069,8 @@
         );
         reconcileArchitectureIncomingIcLoraDrives(
           clips,
-          context.generatedEntryMode()
+          context.generatedEntryMode(),
+          context.capabilities().catalog
         );
         return "render";
       });
@@ -11997,7 +12206,10 @@ The conversion is one undoable change.`;
       defaults.modelCatalog,
       clip.stages[0]?.model
     );
-    const ownerArchitectureId = rootModel?.architectureId ?? clip.architecture;
+    const ownerArchitectureId = resolvedClipArchitectureId(
+      clip,
+      defaults.modelCatalog
+    );
     const modelOptions = defaults.modelCatalog.entries.flatMap(
       (entry) => {
         const model = modelCatalogEntry(defaults.modelCatalog, entry.value);
@@ -12016,8 +12228,9 @@ The conversion is one undoable change.`;
             return candidateModel?.architectureId === model.architectureId && candidateModel.compatibilityClassId !== null && candidateModel.compatibilityClassId === model.compatibilityClassId;
           }
         );
-        const preservesClipLock = stageIdx === 0 ? target.architectureId !== ownerArchitectureId || leavesAuthoredStagesCompatible : model.architectureId === rootModel?.architectureId && model.compatibilityClassId !== null && model.compatibilityClassId === rootModel?.compatibilityClassId;
-        const supportsRetargetedRoles = stageIdx === 0 && target.architectureId !== ownerArchitectureId ? planArchitectureConversion(
+        const requiresWholeClipConversion = stageIdx === 0 && (ownerArchitectureId === null || target.architectureId !== ownerArchitectureId);
+        const preservesClipLock = stageIdx === 0 ? requiresWholeClipConversion || leavesAuthoredStagesCompatible : model.architectureId === rootModel?.architectureId && model.compatibilityClassId !== null && model.compatibilityClassId === rootModel?.compatibilityClassId;
+        const supportsRetargetedRoles = requiresWholeClipConversion ? planArchitectureConversion(
           clip,
           target,
           defaults.modelCatalog,
@@ -12054,7 +12267,7 @@ The conversion is one undoable change.`;
           modelSelect.value = stage.model;
           return;
         }
-        if (stageIdx === 0 && plan.architectureId !== ownerArchitectureId) {
+        if (stageIdx === 0 && (ownerArchitectureId === null || plan.architectureId !== ownerArchitectureId)) {
           const conversion = planArchitectureConversion(
             clip,
             plan,
@@ -12065,10 +12278,10 @@ The conversion is one undoable change.`;
             modelSelect.value = stage.model;
             return;
           }
-          const fromLabel = architectureDescriptor(
+          const fromLabel = (ownerArchitectureId ? architectureDescriptor(
             defaults.modelCatalog,
             ownerArchitectureId
-          )?.label ?? ownerArchitectureId;
+          )?.label : null) ?? (clip.architecture ? `${clip.architecture} (unresolved hint)` : "Unresolved model");
           const toLabel = architectureDescriptor(
             defaults.modelCatalog,
             plan.architectureId
@@ -12094,7 +12307,6 @@ The conversion is one undoable change.`;
                   origin: "detail-strip"
                 }
               );
-              if (result2.applied) context.render();
               return result2.applied;
             }
           );
@@ -12124,7 +12336,6 @@ The conversion is one undoable change.`;
           modelSelect.value = stage.model;
           return;
         }
-        context.render();
       }
     );
     const modelField = buildField("Model", modelSelect);
@@ -12250,11 +12461,12 @@ The conversion is one undoable change.`;
     const applicableIcLoras = clip.icLoras.map((entry, entryIdx) => ({ entry, entryIdx })).filter(({ entry }) => entry.stage < 0 || entry.stage === stageIdx);
     if (applicableIcLoras.length === 0) return;
     appendSectionHeader(fields, "IC-LoRA Guide Strengths");
-    const icDecision = context.capabilities().forClip(clip).decision("icLora");
+    const capabilityView = context.capabilities().forClip(clip);
+    const icDecision = capabilityView.decision("icLora");
     const icGroup = document.createDocumentFragment();
     applicableIcLoras.forEach(({ entry, entryIdx }) => {
       const displayName = architectureIcLoraDisplayName(
-        clip.architecture,
+        capabilityView.architectureId,
         entry
       );
       const guideStrength = tagFocus(
@@ -13122,7 +13334,10 @@ The conversion is one undoable change.`;
       height: defaults.height,
       fps: defaults.fps
     };
-    const multiple = activeDocumentDimensionMultiple(state.clips);
+    const multiple = activeDocumentDimensionMultiple(
+      state.clips,
+      defaults.modelCatalog
+    );
     const defaultMode = !state.dimsExplicit ? SETTINGS_INHERIT : matchAspectRatio(state.width, state.height, multiple) ?? SETTINGS_CUSTOM;
     const mode = ctx.getSettingsMode() ?? defaultMode;
     const isCustom = mode === SETTINGS_CUSTOM;
@@ -13537,7 +13752,7 @@ The conversion is one undoable change.`;
       }
     ] : []
   );
-  var applyClipSkip = (clips, clipIdx, generatedEntryMode) => {
+  var applyClipSkip = (clips, clipIdx, generatedEntryMode, catalog = null) => {
     const clip = clips[clipIdx];
     if (!clip || clipIdx === 0 && clip.skipped !== true) {
       return false;
@@ -13550,7 +13765,11 @@ The conversion is one undoable change.`;
     for (let index = start; index < clips.length; index++) {
       clips[index].skipped = skipped;
     }
-    reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
+    reconcileArchitectureIncomingIcLoraDrives(
+      clips,
+      generatedEntryMode,
+      catalog
+    );
     return true;
   };
   var applyStageSkip = (clips, clipIdx, stageIdx, catalog, generatedEntryMode) => {
@@ -13568,7 +13787,11 @@ The conversion is one undoable change.`;
       clip.stages[index].skipped = skipped;
     }
     reconcileClipArchitectureIdentity(clip, catalog);
-    reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
+    reconcileArchitectureIncomingIcLoraDrives(
+      clips,
+      generatedEntryMode,
+      catalog
+    );
     return true;
   };
   var createDetailSelectionDomainOperations = (structuralCommit, getCapabilities, getGeneratedEntryMode = () => "text-to-video") => {
@@ -13819,7 +14042,8 @@ The conversion is one undoable change.`;
           clips.splice(clipIdx, 1);
           reconcileArchitectureIncomingIcLoraDrives(
             clips,
-            getGeneratedEntryMode()
+            getGeneratedEntryMode(),
+            getCapabilities().catalog
           );
           return selectionAfterRemoval(
             clipIdx,
@@ -13847,7 +14071,8 @@ The conversion is one undoable change.`;
           }
           const last = clip.stages[clip.stages.length - 1] ?? null;
           const defaults = getRootDefaults();
-          const lockedArchitecture = clip.architecture === NONE_ARCHITECTURE_ID ? void 0 : clip.architecture;
+          const clipArchitectureId = getCapabilities().forClip(clip).architectureId;
+          const lockedArchitecture = clipArchitectureId === NONE_ARCHITECTURE_ID || clipArchitectureId === "unsupported" ? void 0 : clipArchitectureId;
           const stage = buildDefaultStage(
             getRootDefaults,
             (values) => getDefaultStageModel(values, lockedArchitecture),
@@ -13861,7 +14086,7 @@ The conversion is one undoable change.`;
             )
           );
           stage.skipped = last?.skipped === true;
-          if (clip.architecture === NONE_ARCHITECTURE_ID && clip.stages.length === 0) {
+          if (clipArchitectureId === NONE_ARCHITECTURE_ID && clip.stages.length === 0) {
             const target = buildArchitectureRetargetPlan(
               defaults.modelCatalog,
               stage.model
@@ -13923,7 +14148,7 @@ The conversion is one undoable change.`;
               entry.stage -= 1;
             }
             canonicalizeArchitectureIcLoraFields(
-              clip.architecture,
+              getCapabilities().forClip(clip).architectureId,
               entry
             );
           }
@@ -13933,7 +14158,8 @@ The conversion is one undoable change.`;
           );
           reconcileArchitectureIncomingIcLoraDrives(
             clips,
-            getGeneratedEntryMode()
+            getGeneratedEntryMode(),
+            getCapabilities().catalog
           );
           return {
             kind: "clip",
@@ -14005,7 +14231,12 @@ The conversion is one undoable change.`;
       structuralCommit(
         (clips) => commitSkip(
           clips,
-          (working) => applyClipSkip(working, clipIdx, getGeneratedEntryMode())
+          (working) => applyClipSkip(
+            working,
+            clipIdx,
+            getGeneratedEntryMode(),
+            getCapabilities().catalog
+          )
         )
       );
     };
@@ -14676,7 +14907,12 @@ The conversion is one undoable change.`;
     };
     const applySkip = (idx) => {
       const clips = getClips();
-      if (applyClipSkip(clips, idx, getRootGeneratedEntryMode())) {
+      if (applyClipSkip(
+        clips,
+        idx,
+        getRootGeneratedEntryMode(),
+        getRootDefaults().modelCatalog
+      )) {
         saveClips(clips, { origin: "linking" });
       }
     };
@@ -14688,7 +14924,8 @@ The conversion is one undoable change.`;
       clips.splice(idx, 1);
       reconcileArchitectureIncomingIcLoraDrives(
         clips,
-        getRootGeneratedEntryMode()
+        getRootGeneratedEntryMode(),
+        getRootDefaults().modelCatalog
       );
       saveClips(clips, { origin: "linking" });
     };
@@ -14797,7 +15034,8 @@ The conversion is one undoable change.`;
               const reordered = moveItem(clips, from, gap);
               reconcileArchitectureIncomingIcLoraDrives(
                 reordered,
-                getRootGeneratedEntryMode()
+                getRootGeneratedEntryMode(),
+                getRootDefaults().modelCatalog
               );
               return reordered;
             }

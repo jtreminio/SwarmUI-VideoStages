@@ -1,6 +1,26 @@
 export type VideoArchitectureId = string;
 export type ModelProfileId = string;
 
+export const AUTHORING_FEATURES = [
+    "multiStage",
+    "sourceVideo",
+    "frameReferences",
+    "referenceFraming",
+    "retake",
+    "majorPrompt",
+    "promptRelay",
+    "clipAudio",
+    "audioReuse",
+    "audioDerivedDuration",
+    "controlSignalDerivedDuration",
+    "stageLoras",
+    "icLora",
+    "hdr",
+    "upscale",
+] as const;
+
+export type CatalogAuthoringFeature = (typeof AUTHORING_FEATURES)[number];
+
 export type CapabilitySupport = "supported" | "unsupported" | "conditional";
 export type CapabilityRuleScope =
     | "architecture"
@@ -91,6 +111,11 @@ export interface ArchitectureCatalogEntryDto {
     label: string;
     defaultProfileId: ModelProfileId;
     extras?: string[];
+    /**
+     * Unsupported optional features the backend guarantees it will omit from
+     * execution while preserving authored data. Missing entries fail closed.
+     */
+    ignoredUnsupportedFeatures?: CatalogAuthoringFeature[];
     /** Scoped legacy transport; new feature reads use `extras`. */
     capabilities: ArchitectureCapabilities;
     profiles: VideoModelProfileDescriptor[];

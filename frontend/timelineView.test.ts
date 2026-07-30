@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
-import { minimalClip } from "./__test_helpers__/clipFixtures";
+import { minimalClip, minimalRef } from "./__test_helpers__/clipFixtures";
 import { createCapabilityViewResolver } from "./architectures/policy";
 import { renderTimeline } from "./timelineView";
 import {
@@ -924,7 +924,9 @@ describe("renderTimeline (DOM)", () => {
         );
         expect(chip?.dataset.effectiveBoundary).toBe("cut");
         expect(chip?.classList.contains("vst-boundary-cut")).toBe(true);
+        expect(chip?.classList.contains("vst-boundary-fallback")).toBe(true);
         expect(chip?.title).toContain("effective Cut");
+        expect(chip?.getAttribute("aria-label")).toContain("effective Cut");
         expect(body.querySelector(".vst-boundary-overlap")).toBeNull();
     });
 
@@ -1276,5 +1278,80 @@ describe("authoring diagnostics", () => {
             "Retake and references cannot run together.",
         );
         expect(item?.className).toContain("vst-diagnostic-error");
+    });
+});
+
+describe("unsupported persisted timeline controls", () => {
+    it("keeps repair targets operable while disabling empty creation lanes", () => {
+        const catalog = testArchitectureCatalog();
+        catalog.architectures[0].capabilities.clip = [];
+        catalog.architectures[0].capabilities.stage = [];
+        const persisted = minimalClip({
+            prompt: "persisted major",
+            promptWindows: [
+                {
+                    prompt: "persisted relay",
+                    start: 0,
+                    duration: 1,
+                },
+            ],
+            audioSource: "Upload",
+            uploadedAudio: {
+                data: "data:audio/wav;base64,AAAA",
+                fileName: "persisted.wav",
+            },
+            refs: [minimalRef({ frame: 1 })],
+            retake: {
+                startSeconds: 0,
+                lengthSeconds: 1,
+                strength: 0.5,
+            },
+        });
+        const empty = minimalClip();
+
+        renderTimeline(document.body, [persisted, empty], {
+            capabilities: createCapabilityViewResolver(catalog),
+        });
+
+        for (const selector of [
+            '[data-vst-prompt="major"]',
+            '[data-vst-prompt="minor"]',
+            '[data-vst-audio="clip"]',
+            '[data-vst-ref="thumb"]',
+            "[data-vst-retake]",
+        ]) {
+            expect(
+                document.querySelector(selector)?.hasAttribute("aria-disabled"),
+            ).toBe(false);
+        }
+        expect(
+            document
+                .querySelector('.vst-refs-lane[data-clip-idx="0"]')
+                ?.hasAttribute("aria-disabled"),
+        ).toBe(false);
+        expect(
+            document
+                .querySelector('.vst-retake-lane[data-clip-idx="0"]')
+                ?.hasAttribute("aria-disabled"),
+        ).toBe(false);
+        expect(
+            document
+                .querySelector('.vst-refs-lane[data-clip-idx="1"]')
+                ?.getAttribute("aria-disabled"),
+        ).toBe("true");
+        expect(
+            document
+                .querySelector('.vst-retake-lane[data-clip-idx="1"]')
+                ?.getAttribute("aria-disabled"),
+        ).toBe("true");
+        const emptyAudio = document.querySelector(
+            '.vst-audio-clip[data-clip-idx="1"]',
+        );
+        expect(emptyAudio?.getAttribute("aria-disabled")).toBe("true");
+        expect(emptyAudio?.hasAttribute("role")).toBe(false);
+        expect(emptyAudio?.hasAttribute("tabindex")).toBe(false);
+        expect(emptyAudio?.getAttribute("aria-label")).toBe(
+            "Audio unavailable for clip 1",
+        );
     });
 });

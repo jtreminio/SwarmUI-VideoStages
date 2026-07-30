@@ -95,8 +95,8 @@ describe("backend-aligned authoring diagnostics", () => {
     });
 
     it("evaluates the advertised retake source rule", () => {
-        expect(
-            codes([
+        const diagnostic = deriveAuthoringDiagnostics(
+            [
                 minimalClip({
                     retake: {
                         startSeconds: 0,
@@ -104,8 +104,10 @@ describe("backend-aligned authoring diagnostics", () => {
                         strength: 1,
                     },
                 }),
-            ]),
-        ).toContain("retake-source-required");
+            ],
+            { catalog: testArchitectureCatalog() },
+        ).find(({ code }) => code === "retake-source-required");
+        expect(diagnostic?.severity).toBe("error");
     });
 
     it("allows retake source preconditions in sourced or global-refine flows", () => {

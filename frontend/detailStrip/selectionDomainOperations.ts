@@ -71,6 +71,7 @@ export const applyClipSkip = (
     clips: Clip[],
     clipIdx: number,
     generatedEntryMode: "text-to-video" | "image-to-video",
+    catalog: ArchitectureModelCatalog | null = null,
 ): boolean => {
     const clip = clips[clipIdx];
     if (!clip || (clipIdx === 0 && clip.skipped !== true)) {
@@ -86,7 +87,11 @@ export const applyClipSkip = (
     for (let index = start; index < clips.length; index++) {
         clips[index].skipped = skipped;
     }
-    reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
+    reconcileArchitectureIncomingIcLoraDrives(
+        clips,
+        generatedEntryMode,
+        catalog,
+    );
     return true;
 };
 
@@ -114,7 +119,11 @@ export const applyStageSkip = (
         clip.stages[index].skipped = skipped;
     }
     reconcileClipArchitectureIdentity(clip, catalog);
-    reconcileArchitectureIncomingIcLoraDrives(clips, generatedEntryMode);
+    reconcileArchitectureIncomingIcLoraDrives(
+        clips,
+        generatedEntryMode,
+        catalog,
+    );
     return true;
 };
 
@@ -427,6 +436,7 @@ export const createDetailSelectionDomainOperations = (
                 reconcileArchitectureIncomingIcLoraDrives(
                     clips,
                     getGeneratedEntryMode(),
+                    getCapabilities().catalog,
                 );
                 return selectionAfterRemoval(
                     clipIdx,
@@ -459,10 +469,13 @@ export const createDetailSelectionDomainOperations = (
                 }
                 const last = clip.stages[clip.stages.length - 1] ?? null;
                 const defaults = getRootDefaults();
+                const clipArchitectureId =
+                    getCapabilities().forClip(clip).architectureId;
                 const lockedArchitecture =
-                    clip.architecture === NONE_ARCHITECTURE_ID
+                    clipArchitectureId === NONE_ARCHITECTURE_ID ||
+                    clipArchitectureId === "unsupported"
                         ? undefined
-                        : clip.architecture;
+                        : clipArchitectureId;
                 const stage = buildDefaultStage(
                     getRootDefaults,
                     (values) =>
@@ -478,7 +491,7 @@ export const createDetailSelectionDomainOperations = (
                 );
                 stage.skipped = last?.skipped === true;
                 if (
-                    clip.architecture === NONE_ARCHITECTURE_ID &&
+                    clipArchitectureId === NONE_ARCHITECTURE_ID &&
                     clip.stages.length === 0
                 ) {
                     const target = buildArchitectureRetargetPlan(
@@ -550,7 +563,7 @@ export const createDetailSelectionDomainOperations = (
                         entry.stage -= 1;
                     }
                     canonicalizeArchitectureIcLoraFields(
-                        clip.architecture,
+                        getCapabilities().forClip(clip).architectureId,
                         entry,
                     );
                 }
@@ -561,6 +574,7 @@ export const createDetailSelectionDomainOperations = (
                 reconcileArchitectureIncomingIcLoraDrives(
                     clips,
                     getGeneratedEntryMode(),
+                    getCapabilities().catalog,
                 );
                 return {
                     kind: "clip",
@@ -658,7 +672,12 @@ export const createDetailSelectionDomainOperations = (
     const toggleClipSkip = (clipIdx: number): void => {
         structuralCommit((clips) =>
             commitSkip(clips, (working) =>
-                applyClipSkip(working, clipIdx, getGeneratedEntryMode()),
+                applyClipSkip(
+                    working,
+                    clipIdx,
+                    getGeneratedEntryMode(),
+                    getCapabilities().catalog,
+                ),
             ),
         );
     };

@@ -53,10 +53,14 @@ public sealed record StageSpec(
     RetakeWindowSpec RetakeWindow = null
 )
 {
-    public bool IsLatentModelUpscale => HasUpscaleMethodPrefix("latentmodel-");
-    public bool IsLatentUpscale => HasUpscaleMethodPrefix("latent-");
-    public bool IsPixelUpscale => HasUpscaleMethodPrefix("pixel-");
-    public bool IsModelUpscale => HasUpscaleMethodPrefix("model-");
+    public bool IsLatentModelUpscale =>
+        Planning.StageUpscalePlanCompiler.Classify(UpscaleMethod) == Planning.StageUpscaleMode.LatentModel;
+    public bool IsLatentUpscale =>
+        Planning.StageUpscalePlanCompiler.Classify(UpscaleMethod) == Planning.StageUpscaleMode.Latent;
+    public bool IsPixelUpscale =>
+        Planning.StageUpscalePlanCompiler.Classify(UpscaleMethod) == Planning.StageUpscaleMode.Pixel;
+    public bool IsModelUpscale =>
+        Planning.StageUpscalePlanCompiler.Classify(UpscaleMethod) == Planning.StageUpscaleMode.Model;
 
     /// <summary>
     /// True when the authored stage requests no generation or architecture-owned latent transform.
@@ -65,9 +69,6 @@ public sealed record StageSpec(
     public bool IsPassthrough => Control <= 0
         && RetakeWindow is null
         && !(Upscale != 1 && (IsLatentUpscale || IsLatentModelUpscale));
-
-    private bool HasUpscaleMethodPrefix(string prefix) =>
-        UpscaleMethod?.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ?? false;
 }
 
 public sealed record ImageRefSpec(

@@ -39,8 +39,14 @@ public class VideoStagesExtension : Extension
         VideoStagesApi.Register();
         AttachPromptMetadataRestorer("prompt");
         AttachPromptMetadataRestorer("negativeprompt");
-        CoreImageToVideoStep = WorkflowGenerator.Steps.FirstOrDefault(
-            step => step.Priority == Constants.WorkflowStepPriority.CoreImageToVideo);
+        CoreImageToVideoStep =
+            RootHostWorkflowFacts.ResolveCoreImageToVideoStep(
+                WorkflowGenerator.Steps,
+                out string coreImageToVideoDiagnostic);
+        if (coreImageToVideoDiagnostic is not null)
+        {
+            Logs.Warning(coreImageToVideoDiagnostic);
+        }
         AltImageToVideoScope.RegisterDispatcher();
         VideoArchitectureManifest.RegisterProductionHostHandlers();
 

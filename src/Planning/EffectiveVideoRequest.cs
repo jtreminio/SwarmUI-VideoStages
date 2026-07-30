@@ -415,9 +415,15 @@ internal static class EffectiveVideoRequestProjector
             effective.Stages?.Any(stage => stage.RetakeWindow is not null) == true,
             "a retake window",
             "retake");
+        bool hasIcLoraConfiguration =
+            effective.IcLoras is { Count: > 0 }
+            || effective.Stages?.Any(
+                stage => stage.IcLoraStrengths is { Count: > 0 }) == true;
         IgnoreConfigured(
-            effective.Stages?.Any(stage => stage.ControlNetStrength.HasValue) == true,
-            "stage ControlNet strength",
+            hasIcLoraConfiguration
+                && effective.Stages?.Any(
+                    stage => stage.ControlNetStrength.HasValue) == true,
+            "stage ControlNet strength used by IC-LoRA",
             "controlnet");
         IgnoreConfigured(
             effective.UploadedAudio is not null

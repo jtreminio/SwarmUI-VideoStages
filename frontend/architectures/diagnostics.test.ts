@@ -48,6 +48,18 @@ const wanCatalog = (): ArchitectureModelCatalog => {
             capability !== "audio-reuse",
     );
     wan.capabilities.upscaleModes = ["pixel"];
+    wan.ignoredUnsupportedFeatures = [
+        "referenceFraming",
+        "retake",
+        "promptRelay",
+        "clipAudio",
+        "audioReuse",
+        "audioDerivedDuration",
+        "controlSignalDerivedDuration",
+        "icLora",
+        "hdr",
+        "upscale",
+    ];
     wan.profiles = [
         {
             ...wan.profiles[0],
@@ -88,6 +100,19 @@ const hostVideoCatalog = (): ArchitectureModelCatalog => {
     host.capabilities.output = ["video"];
     host.capabilities.upscaleModes = ["pixel"];
     host.capabilities.audioSourceKinds = ["Disabled"];
+    host.ignoredUnsupportedFeatures = [
+        "frameReferences",
+        "referenceFraming",
+        "retake",
+        "promptRelay",
+        "clipAudio",
+        "audioReuse",
+        "audioDerivedDuration",
+        "controlSignalDerivedDuration",
+        "icLora",
+        "hdr",
+        "upscale",
+    ];
     host.profiles = [
         {
             ...host.profiles[0],
@@ -110,6 +135,22 @@ const hostVideoCatalog = (): ArchitectureModelCatalog => {
 };
 
 describe("architecture diagnostics", () => {
+    it("reports one precise model error when Stage 0 is unresolved", () => {
+        const clip = minimalClip({
+            architecture: "ltx2",
+            modelProfileId: "ltx-2.3",
+            stages: [minimalStage({ model: "removed-model.safetensors" })],
+        });
+
+        const codes = deriveArchitectureDiagnostics(
+            [clip],
+            combinedCatalog(),
+        ).map(({ code }) => code);
+
+        expect(codes).toContain("architecture.model-unknown");
+        expect(codes).not.toContain("architecture.unknown");
+    });
+
     it("warns for stale resolved identity hints without changing the authored clip", () => {
         const clip = minimalClip({
             architecture: "removed-cache",
@@ -270,6 +311,75 @@ describe("architecture diagnostics", () => {
             true,
         );
         expect(clip).toEqual(before);
+    });
+
+    it("uses per-feature backend dispositions without architecture-name switches", () => {
+        const models = hostVideoCatalog();
+        const host = models.architectures.find(
+            (entry) => entry.id === "host-video",
+        );
+        const model = models.entries.find(
+            (entry) => entry.architectureId === "host-video",
+        );
+        if (!host || !model) throw new Error("missing host fixture");
+        host.id = "third-party-video";
+        model.architectureId = host.id;
+
+        const clip = minimalClip({
+            architecture: host.id,
+            refs: [minimalRef()],
+            promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
+            stages: [
+                minimalStage({
+                    model: model.value,
+                    modelProfileId: model.modelProfileId ?? "host-video",
+                }),
+            ],
+        });
+
+        const matching = deriveArchitectureDiagnostics([clip], models).filter(
+            ({ code }) => code.startsWith("architecture.unsupported."),
+        );
+        expect(matching).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    code: "architecture.unsupported.frame-references",
+                    severity: "warning",
+                }),
+                expect.objectContaining({
+                    code: "architecture.unsupported.prompt-relay",
+                    severity: "warning",
+                }),
+            ]),
+        );
+    });
+
+    it("fails closed when a feature has no ignore disposition", () => {
+        const models = hostVideoCatalog();
+        const host = models.architectures.find(
+            (entry) => entry.id === "host-video",
+        );
+        if (!host) throw new Error("missing host fixture");
+        host.ignoredUnsupportedFeatures =
+            host.ignoredUnsupportedFeatures?.filter(
+                (feature) => feature !== "promptRelay",
+            );
+        const clip = minimalClip({
+            architecture: host.id,
+            promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
+            stages: [
+                minimalStage({
+                    model: "host-video.safetensors",
+                    modelProfileId: "host-video",
+                }),
+            ],
+        });
+
+        expect(
+            deriveArchitectureDiagnostics([clip], models).find(
+                ({ code }) => code === "architecture.unsupported.prompt-relay",
+            )?.severity,
+        ).toBe("error");
     });
 
     it("keeps an unclassifiable WAN upscale blocking", () => {

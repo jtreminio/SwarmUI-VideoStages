@@ -9,6 +9,7 @@ import {
     hasArchitectureSlotSourcedIcLora,
     isArchitectureHdrFeature,
 } from "./behaviorRegistry";
+import { resolvedClipArchitectureId } from "./clipIdentity";
 import {
     CONDITIONAL_RULE_CODES,
     conditionalRule,
@@ -20,6 +21,7 @@ import {
     architectureFeatureSupport,
     createClipStageCapabilityViews,
 } from "./policy/clipStageViews";
+import { upscaleModeForMethod } from "./policy/featureValues";
 import type { AuthoringFeature } from "./policy/types";
 import type {
     ArchitectureCapabilities,
@@ -46,10 +48,9 @@ const persistedCapabilityIssues = (
     architectureId: string,
     capabilities: ArchitectureCapabilities,
     extras?: readonly string[],
+    ignoredUnsupportedFeatures: readonly AuthoringFeature[] = [],
 ): ArchitectureDiagnostic[] => {
     const diagnostics: ArchitectureDiagnostic[] = [];
-    const backendProjectsUnsupported =
-        architectureId === "wan22" || architectureId === "host-video";
     const supports = (
         feature: AuthoringFeature,
         value?: { audioSource?: string; upscaleMethod?: string },
@@ -57,13 +58,17 @@ const persistedCapabilityIssues = (
         architectureFeatureSupport(feature, { capabilities, extras, ...value });
     const unsupported = (
         active: boolean,
+        feature: AuthoringFeature,
         key: string,
         label: string,
         severity?: ArchitectureDiagnostic["severity"],
     ): void => {
         if (active) {
             const effectiveSeverity =
-                severity ?? (backendProjectsUnsupported ? "warning" : "error");
+                severity ??
+                (ignoredUnsupportedFeatures.includes(feature)
+                    ? "warning"
+                    : "error");
             diagnostics.push(
                 issue(
                     `architecture.unsupported.${key}`,
@@ -78,21 +83,25 @@ const persistedCapabilityIssues = (
     };
     unsupported(
         !supports("multiStage") && activeStageCount(clip) > 1,
+        "multiStage",
         "multi-stage",
         "Multiple active stages",
     );
     unsupported(
         !supports("frameReferences") && clip.refs.length > 0,
+        "frameReferences",
         "frame-references",
         "Frame references",
     );
     unsupported(
         !supports("referenceFraming") && clip.refFraming !== "crop",
+        "referenceFraming",
         "reference-framing",
         "Reference framing",
     );
     unsupported(
         !supports("icLora") && clip.icLoras.length > 0,
+        "icLora",
         "ic-lora",
         "IC-LoRA",
     );
@@ -102,25 +111,30 @@ const persistedCapabilityIssues = (
                 isArchitectureHdrFeature(architectureId, entry),
             ),
         "hdr",
+        "hdr",
         "HDR",
     );
     unsupported(
         !supports("retake") && clip.retake !== null,
         "retake",
+        "retake",
         "Retake",
     );
     unsupported(
         !supports("majorPrompt") && clip.prompt.trim().length > 0,
+        "majorPrompt",
         "major-prompt",
         "Major prompt",
     );
     unsupported(
         !supports("sourceVideo") && clip.sourceVideo !== null,
+        "sourceVideo",
         "source-video",
         "Source video",
     );
     unsupported(
         !supports("promptRelay") && clip.promptWindows.length > 0,
+        "promptRelay",
         "prompt-relay",
         "Prompt relay",
     );
@@ -131,6 +145,7 @@ const persistedCapabilityIssues = (
                     (_, index) => (stage.loraWeights[index] ?? 1) !== 0,
                 ),
             ),
+        "stageLoras",
         "stage-loras",
         "LoRAs",
     );
@@ -140,18 +155,15 @@ const persistedCapabilityIssues = (
             !supports("upscale", { upscaleMethod: stage.upscaleMethod }),
     );
     const isKnownAdvancedUpscale = (method: string): boolean => {
-        const normalized = method.trim().toLowerCase();
-        return (
-            normalized.startsWith("model-") ||
-            normalized.startsWith("latent-") ||
-            normalized.startsWith("latentmodel-")
-        );
+        const mode = upscaleModeForMethod(method);
+        return mode !== "pixel" && mode !== "unsupported";
     };
     unsupported(
         unsupportedUpscales.length > 0,
         "upscale",
+        "upscale",
         "Stage upscaling",
-        backendProjectsUnsupported &&
+        ignoredUnsupportedFeatures.includes("upscale") &&
             unsupportedUpscales.every((stage) =>
                 isKnownAdvancedUpscale(stage.upscaleMethod),
             )
@@ -164,11 +176,13 @@ const persistedCapabilityIssues = (
     });
     unsupported(
         !supports("audioReuse") && clip.reuseAudio,
+        "audioReuse",
         "audio-reuse",
         "Captured stage audio reuse",
     );
     unsupported(
         !supports("audioDerivedDuration") && clip.clipLengthFromAudio,
+        "audioDerivedDuration",
         "audio-derived-duration",
         "Audio-derived clip duration",
     );
@@ -177,6 +191,7 @@ const persistedCapabilityIssues = (
     );
     unsupported(
         !supportsControlSignalDerivedDuration && clip.clipLengthFromControlNet,
+        "controlSignalDerivedDuration",
         "control-signal-derived-duration",
         "Control-signal-derived clip duration",
     );
@@ -185,6 +200,7 @@ const persistedCapabilityIssues = (
             (sourceKind !== "Native" ||
                 clip.uploadedAudio !== null ||
                 clip.saveAudioTrack),
+        "clipAudio",
         "audio-source",
         `Audio source '${sourceKind}'`,
     );
@@ -224,18 +240,7 @@ const persistedCapabilityIssues = (
 export const effectiveArchitectureIdForClip = (
     clip: Clip,
     catalog: ArchitectureModelCatalog,
-): string => {
-    const sourceOnly =
-        activeStageCount(clip) === 0 && clip.sourceVideo !== null;
-    if (sourceOnly) return NONE_ARCHITECTURE_ID;
-    const firstAuthoredModel =
-        clip.stages.length > 0
-            ? catalog.entries.find(
-                  (entry) => entry.value === clip.stages[0].model,
-              )
-            : undefined;
-    return firstAuthoredModel?.architectureId ?? clip.architecture;
-};
+): string => resolvedClipArchitectureId(clip, catalog) ?? "unsupported";
 
 /**
  * Validates persisted architecture identity without normalizing it away.
@@ -318,7 +323,11 @@ export const deriveArchitectureDiagnostics = (
         const architecture = sourceOnly
             ? architectureById.get("none")
             : architectureById.get(effectiveArchitectureId);
-        if (!architecture && !sourceOnly) {
+        if (
+            !architecture &&
+            !sourceOnly &&
+            effectiveArchitectureId !== "unsupported"
+        ) {
             diagnostics.push(
                 issue(
                     "architecture.unknown",
@@ -335,6 +344,7 @@ export const deriveArchitectureDiagnostics = (
                     architecture.capabilities,
                     resolvedFirstModel?.enhancements?.extras ??
                         architecture.extras,
+                    architecture.ignoredUnsupportedFeatures,
                 ),
             );
         }

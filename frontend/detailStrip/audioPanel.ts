@@ -44,7 +44,7 @@ export const buildAudioBody = (
         "controlSignalDerivedDuration",
     );
     const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
-        clip.architecture,
+        capabilityView.architectureId,
         clip.icLoras,
     );
     const controlDurationIssueDecision =

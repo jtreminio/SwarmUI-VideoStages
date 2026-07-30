@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
+import { testArchitectureCatalog } from "../__test_helpers__/architectureFixtures";
 import type { Clip, IcLora } from "../types";
 import {
     architectureBehavior,
@@ -86,7 +87,9 @@ describe("architecture behavior registry", () => {
             normalizeArchitectureIcLoras("future-video", raw, 1, false),
         ).toEqual([]);
         expect(
-            normalizeArchitectureIcLoras("future-video", raw, 1, false, true),
+            normalizeArchitectureIcLoras("future-video", raw, 1, false, {
+                preserveDormantLtx: true,
+            }),
         ).toHaveLength(1);
     });
 
@@ -101,23 +104,58 @@ describe("architecture behavior registry", () => {
             architecture: "ltx2",
             skipped: false,
             sourceVideo: null,
-            stages: [{}],
+            stages: [{ model: "ltx", skipped: false }],
             icLoras: [incoming],
         } as unknown as Clip;
         const foreign = {
             architecture: "future-video",
             skipped: false,
             sourceVideo: null,
-            stages: [{}],
+            stages: [{ model: "future-model", skipped: false }],
             icLoras: [{ ...incoming }],
         } as unknown as Clip;
 
         reconcileArchitectureIncomingIcLoraDrives(
             [ltx, foreign],
             "text-to-video",
+            testArchitectureCatalog(),
         );
 
         expect(ltx.icLoras[0].driveSource).toBe("Upload");
         expect(foreign.icLoras[0].driveSource).toBe("Incoming");
+    });
+
+    it("resolves the behavior owner from Stage 0 when a catalog is supplied", () => {
+        const incoming = {
+            ...hdrEntry,
+            preset: "custom",
+            driveSource: "Incoming",
+            stage: 0,
+        };
+        const clip = (architecture: string, model: string): Clip =>
+            ({
+                architecture,
+                skipped: false,
+                sourceVideo: null,
+                stages: [{ model, skipped: false }],
+                icLoras: [{ ...incoming }],
+            }) as unknown as Clip;
+        const resolved = clip("stale-foreign-hint", "ltx");
+        const unresolved = clip("ltx2", "removed-model.safetensors");
+        const catalog = testArchitectureCatalog();
+
+        reconcileArchitectureIncomingIcLoraDrives(
+            [resolved],
+            "text-to-video",
+            catalog,
+        );
+        reconcileArchitectureIncomingIcLoraDrives(
+            [unresolved],
+            "text-to-video",
+            catalog,
+        );
+
+        expect(resolved.icLoras[0].driveSource).toBe("Upload");
+        expect(unresolved.icLoras[0].driveSource).toBe("Incoming");
     });
 });

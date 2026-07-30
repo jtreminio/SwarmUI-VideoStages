@@ -67,7 +67,7 @@ export const deriveAuthoringDiagnostics = (
     const effectiveArchitectureId = (clip: Clip): string =>
         context.catalog
             ? effectiveArchitectureIdForClip(clip, context.catalog)
-            : clip.architecture;
+            : "unsupported";
 
     for (const { clip, clipIdx } of executable) {
         const descriptor = architectureDescriptor(
@@ -121,7 +121,7 @@ export const deriveAuthoringDiagnostics = (
         ) {
             diagnostics.push(
                 diagnostic(
-                    "warning",
+                    "error",
                     retakeSourceRule.code,
                     retakeSourceRule.reason,
                     clipIdx,

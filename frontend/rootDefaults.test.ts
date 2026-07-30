@@ -61,4 +61,24 @@ describe("root dimension defaults", () => {
         toggle.checked = false;
         expect(readInheritedDimsSignature()).not.toBe(withSide);
     });
+
+    it("uses host step and CFG limits without applying extension caps", () => {
+        const steps = mountNumber("input_videosteps", 32);
+        steps.min = "2";
+        steps.max = "240";
+        steps.step = "2";
+        const cfg = mountNumber("input_videocfg", 12);
+        cfg.min = "-5";
+        cfg.max = "30";
+        cfg.step = "0.25";
+
+        expect(getRootDefaults()).toMatchObject({
+            stepsMin: 2,
+            stepsMax: 240,
+            stepsStep: 2,
+            cfgScaleMin: -5,
+            cfgScaleMax: 30,
+            cfgScaleStep: 0.25,
+        });
+    });
 });

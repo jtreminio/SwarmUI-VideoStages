@@ -76,7 +76,10 @@ const saveRequestedState = (
     const requested = structuredClone(requestedInput);
     ensureAuthoringDocumentIdentity(requested);
     assignMissingHues(requested.clips);
-    const dimensionSnap = snapExplicitDocumentDimensions(requested);
+    const dimensionSnap = snapExplicitDocumentDimensions(
+        requested,
+        getRootDefaults().modelCatalog,
+    );
 
     const before = structuredClone(snapshot.state);
     ensureAuthoringDocumentIdentity(before);

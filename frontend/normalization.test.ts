@@ -1,5 +1,8 @@
 import { describe, expect, it } from "@jest/globals";
-import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
+import {
+    fakeArchitectureCatalog,
+    testArchitectureCatalog,
+} from "./__test_helpers__/architectureFixtures";
 import {
     canonicalizeIcLoraFields,
     defaultIcLora,
@@ -339,6 +342,72 @@ describe("normalization", () => {
             data: "data:video/mp4;base64,QUJD",
             fileName: "d.mp4",
         });
+    });
+
+    it("preserves dormant LTX IC-LoRAs across a non-LTX save and reload", () => {
+        const ltx = testArchitectureCatalog();
+        const foreign = fakeArchitectureCatalog();
+        const defaults = {
+            ...getRootDefaults(),
+            modelCatalog: {
+                source: "backend" as const,
+                architectures: [...ltx.architectures, ...foreign.architectures],
+                entries: [...ltx.entries, ...foreign.entries],
+            },
+        };
+        const rootDefaults = (): RootDefaults => defaults;
+        const raw = {
+            architecture: "test-video",
+            modelProfileId: "test-profile",
+            icLoras: [
+                {
+                    lora: "guide.safetensors",
+                    preset: "pose",
+                    driveSource: "Upload",
+                    driveData: "visual",
+                    driveMediaKinds: ["image", "video"],
+                    stage: -1,
+                    strength: 0.7,
+                    attentionStrength: 0.8,
+                    controlType: "depth",
+                    hdr: false,
+                },
+            ],
+            stages: [
+                {
+                    model: "test-video.safetensors",
+                    modelProfileId: "test-profile",
+                },
+            ],
+        };
+
+        const converted = normalizeClip(raw, rootDefaults, () => "");
+        const reloaded = normalizeClip(
+            structuredClone(converted) as unknown as Record<string, unknown>,
+            rootDefaults,
+            () => "",
+        );
+        const restoredRaw = structuredClone(reloaded);
+        restoredRaw.architecture = "ltx2";
+        restoredRaw.modelProfileId = "ltx-2.3";
+        restoredRaw.stages[0].model = "ltx";
+        restoredRaw.stages[0].modelProfileId = "ltx-2.3";
+        const restored = normalizeClip(
+            restoredRaw as unknown as Record<string, unknown>,
+            rootDefaults,
+            () => "",
+        );
+
+        expect(converted.architecture).toBe("test-video");
+        expect(converted.icLoras).toHaveLength(1);
+        expect(reloaded.icLoras).toEqual(converted.icLoras);
+        expect(reloaded.stages[0].icLoraStrengths).toEqual(
+            converted.stages[0].icLoraStrengths,
+        );
+        expect(restored.icLoras).toEqual(converted.icLoras);
+        expect(restored.stages[0].icLoraStrengths).toEqual(
+            converted.stages[0].icLoraStrengths,
+        );
     });
 
     it("normalizes audio Drive Media for LipDub", () => {

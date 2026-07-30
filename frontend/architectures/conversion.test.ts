@@ -140,6 +140,44 @@ describe("architecture conversion policy", () => {
         expect(clip.architecturePayload).toEqual(payload);
     });
 
+    it("uses resolved Stage-0 ownership and drops payloads with only an unresolved hint", () => {
+        const payload = { owner: { private: true } };
+        const catalog = testArchitectureCatalog();
+        const target = {
+            architectureId: "ltx2",
+            modelProfileId: "ltx-2.3",
+            model: "ltx",
+            capabilities: catalog.architectures[0].capabilities,
+            entryModes: catalog.architectures[0].profiles[0].entryModes,
+        };
+        const staleHint = planArchitectureConversion(
+            minimalClip({
+                architecture: "test-video",
+                modelProfileId: "test-profile",
+                architecturePayload: payload,
+                stages: [minimalStage({ model: "ltx" })],
+            }),
+            target,
+            catalog,
+        );
+        const unresolvedHint = planArchitectureConversion(
+            minimalClip({
+                architecture: "ltx2",
+                modelProfileId: "ltx-2.3",
+                architecturePayload: payload,
+                stages: [minimalStage({ model: "removed-model.safetensors" })],
+            }),
+            target,
+            catalog,
+        );
+
+        expect(staleHint?.clip.architecturePayload).toEqual(payload);
+        expect(unresolvedHint?.clip.architecturePayload).toBeNull();
+        expect(unresolvedHint?.removals).toContain(
+            "architecture-specific payload",
+        );
+    });
+
     it("does not apply on cancel and applies exactly once on confirm", () => {
         const apply = jest.fn(() => true);
 

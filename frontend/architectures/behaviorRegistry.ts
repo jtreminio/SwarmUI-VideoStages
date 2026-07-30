@@ -1,9 +1,11 @@
 import { activeStageCount } from "../clipSemantics";
 import { ROOT_DIMENSION_STEP } from "../constants";
 import type { Clip, IcLora } from "../types";
+import { resolvedClipArchitectureId } from "./clipIdentity";
 import { ltx2Behavior } from "./ltx2/behavior";
 import type { GeneratedEntryMode } from "./ltx2/icLoraDriveAvailability";
 import { LTX2_ARCHITECTURE_ID } from "./ltx2/identity";
+import type { ArchitectureModelCatalog } from "./types";
 
 /** Pure architecture-owned authoring behavior with no DOM dependencies. */
 export interface ArchitectureBehavior {
@@ -36,9 +38,12 @@ export const architectureBehavior = (
     architectureId: string,
 ): ArchitectureBehavior | null => behaviors.get(architectureId) ?? null;
 
-export const architectureDimensionMultiple = (clip: Clip): number => {
+export const architectureDimensionMultiple = (
+    clip: Clip,
+    architectureId: string,
+): number => {
     const requested =
-        architectureBehavior(clip.architecture)?.dimensionMultiple(clip) ??
+        architectureBehavior(architectureId)?.dimensionMultiple(clip) ??
         ROOT_DIMENSION_STEP;
     if (!Number.isFinite(requested)) {
         return ROOT_DIMENSION_STEP;
@@ -49,22 +54,27 @@ export const architectureDimensionMultiple = (clip: Clip): number => {
     );
 };
 
-/**
- * The LTX fallback exists only to preserve already-authored IC values for
- * removal when a source-only or unknown clip has no active behavior owner.
- */
+export interface IcLoraNormalizationOptions {
+    /**
+     * Decode the persisted LTX-owned carrier even when another architecture
+     * executes the clip. The data remains dormant; this does not grant that
+     * architecture IC-LoRA behavior.
+     */
+    preserveDormantLtx?: boolean;
+}
+
 export const normalizeArchitectureIcLoras = (
     architectureId: string,
     rawClip: Record<string, unknown>,
     stageCount: number,
     sourcedClip: boolean,
-    allowPersistedLtxFallback = false,
+    options: IcLoraNormalizationOptions = {},
 ): IcLora[] => {
     const behavior = architectureBehavior(architectureId);
     if (behavior) {
         return behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip);
     }
-    return allowPersistedLtxFallback &&
+    return options.preserveDormantLtx === true &&
         Array.isArray(rawClip.icLoras) &&
         rawClip.icLoras.length > 0
         ? ltx2Behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip)
@@ -82,19 +92,38 @@ export const canonicalizeArchitectureIcLoraFields = (
 export const reconcileArchitectureIncomingIcLoraDrives = (
     clips: Clip[],
     generatedEntryMode: GeneratedEntryMode,
+    catalog: ArchitectureModelCatalog | null,
 ): boolean => {
     let changed = false;
     clips.forEach((clip, clipIdx) => {
+        const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
         changed =
-            architectureBehavior(
-                clip.architecture,
-            )?.reconcileIncomingIcLoraDrives(
+            architectureBehavior(architectureId)?.reconcileIncomingIcLoraDrives(
                 clips,
                 clipIdx,
                 generatedEntryMode,
             ) || changed;
     });
     return changed;
+};
+
+/** Repairs graph-relative state only for one clip whose behavior was activated. */
+export const reconcileClipArchitectureIncomingIcLoraDrives = (
+    clips: Clip[],
+    clipIdx: number,
+    generatedEntryMode: GeneratedEntryMode,
+    catalog: ArchitectureModelCatalog | null,
+): boolean => {
+    const clip = clips[clipIdx];
+    if (!clip) return false;
+    const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
+    return (
+        architectureBehavior(architectureId)?.reconcileIncomingIcLoraDrives(
+            clips,
+            clipIdx,
+            generatedEntryMode,
+        ) ?? false
+    );
 };
 
 export const hasArchitectureSlotSourcedIcLora = (
@@ -132,6 +161,3 @@ export const clipHasActiveHdrForArchitecture = (
                         entry.stage < 0 || entry.stage === rawStageIdx,
                 ),
     );
-
-export const clipHasActiveHdr = (clip: Clip): boolean =>
-    clipHasActiveHdrForArchitecture(clip, clip.architecture);

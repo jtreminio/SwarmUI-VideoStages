@@ -16,7 +16,10 @@ import {
     parseVideoArchitectureCatalog,
     refreshAuthoritativeArchitectureCatalog,
 } from "./catalog";
-import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
+import {
+    CONDITIONAL_RULE_CODES,
+    evaluateConditionalRule,
+} from "./conditionalRules";
 import { createCapabilityViewResolver } from "./policy";
 import type {
     CapabilityRuleDecision,
@@ -291,6 +294,52 @@ describe("architecture catalog wire contract", () => {
         duplicateCode.architectures[0].rules[0].code =
             duplicateCode.architectures[0].boundaryRules.continue.code;
         expect(parseVideoArchitectureCatalog(duplicateCode)).toBeNull();
+
+        const unknownExecutableRule = structuredClone(dto);
+        unknownExecutableRule.architectures[0].rules[0].code =
+            "future-rule-with-unknown-semantics";
+        expect(parseVideoArchitectureCatalog(unknownExecutableRule)).toBeNull();
+
+        const unknownProfileRule = structuredClone(dto);
+        unknownProfileRule.architectures[0].profiles[0].rules = [
+            {
+                support: "conditional",
+                code: "future-profile-rule",
+                reason: "A newer server requires behavior this client lacks.",
+                scope: "stage",
+                entityId: null,
+                constraints: {},
+            },
+        ];
+        expect(parseVideoArchitectureCatalog(unknownProfileRule)).toBeNull();
+
+        const arbitraryBoundaryCode = structuredClone(dto);
+        arbitraryBoundaryCode.architectures[0].boundaryRules.continue.code =
+            "future-architecture.boundary.continue";
+        expect(parseVideoArchitectureCatalog(arbitraryBoundaryCode)).toEqual(
+            arbitraryBoundaryCode,
+        );
+    });
+
+    it("validates optional per-feature ignore dispositions as a closed set", () => {
+        const valid = structuredClone(dto);
+        valid.architectures[0].ignoredUnsupportedFeatures = [
+            "promptRelay",
+            "upscale",
+        ];
+        expect(parseVideoArchitectureCatalog(valid)).toEqual(valid);
+
+        const unknown = structuredClone(valid);
+        (unknown.architectures[0].ignoredUnsupportedFeatures as string[])[0] =
+            "future-feature";
+        expect(parseVideoArchitectureCatalog(unknown)).toBeNull();
+
+        const duplicate = structuredClone(valid);
+        duplicate.architectures[0].ignoredUnsupportedFeatures = [
+            "upscale",
+            "upscale",
+        ];
+        expect(parseVideoArchitectureCatalog(duplicate)).toBeNull();
     });
 
     it("validates typed stage-control rules on model profiles", () => {
@@ -330,6 +379,34 @@ describe("architecture catalog wire contract", () => {
         expect(parseVideoArchitectureCatalog(wrongScope)).toBeNull();
     });
 
+    it("rejects known executable rules with mismatched semantics", () => {
+        const wrongScope = structuredClone(dto);
+        wrongScope.architectures[0].rules[0].scope = "stage";
+        expect(parseVideoArchitectureCatalog(wrongScope)).toBeNull();
+
+        const extraConstraint = structuredClone(dto);
+        const constraints = extraConstraint.architectures[0].rules[0]
+            .constraints as Record<string, unknown>;
+        constraints.unpublishedBehavior = true;
+        expect(parseVideoArchitectureCatalog(extraConstraint)).toBeNull();
+    });
+
+    it("defensively treats unchecked unknown rules as violated", () => {
+        expect(
+            evaluateConditionalRule(
+                {
+                    support: "conditional",
+                    code: "future-rule",
+                    reason: "Unknown behavior",
+                    scope: "clip",
+                    entityId: null,
+                    constraints: {},
+                },
+                {},
+            ),
+        ).toBe(true);
+    });
+
     it("uses exact authoritative boundary constraints", () => {
         const parsed = parseVideoArchitectureCatalog(dto);
         if (!parsed) throw new Error("catalog did not parse");
@@ -346,7 +423,16 @@ describe("architecture catalog wire contract", () => {
                 entryModes: [...model.entryModes],
             })),
         };
-        const left = minimalClip({ boundaryOut: "continue" });
+        const stageModel = dto.models[0].modelName;
+        const left = minimalClip({
+            boundaryOut: "continue",
+            stages: [
+                {
+                    ...minimalClip().stages[0],
+                    model: stageModel,
+                },
+            ],
+        });
         const right = minimalClip({
             sourceVideo: {
                 data: "data:video/mp4;base64,AA==",
@@ -356,6 +442,12 @@ describe("architecture catalog wire contract", () => {
                 startSeconds: 0,
                 lengthSeconds: 2,
             },
+            stages: [
+                {
+                    ...minimalClip().stages[0],
+                    model: stageModel,
+                },
+            ],
         });
         const boundary = createCapabilityViewResolver(catalog).forBoundary(
             left,

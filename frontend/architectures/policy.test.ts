@@ -110,6 +110,29 @@ describe("catalog-backed authoring policy", () => {
         ).toBe(true);
     });
 
+    it("does not use a persisted architecture hint when Stage 0 is unresolved", () => {
+        const clip = minimalClip({
+            architecture: "ltx2",
+            icLoras: [hdrIcLoraFixture()],
+            stages: [
+                minimalStage({
+                    model: "removed-model.safetensors",
+                    modelProfileId: "removed-profile",
+                }),
+            ],
+        });
+
+        const view = createCapabilityViewResolver(catalog()).forClip(clip);
+
+        expect(view.architectureId).toBe("unsupported");
+        expect(view.known).toBe(false);
+        expect(view.decision("icLora").supported).toBe(false);
+        expect(view.authoringState("icLora", true)).toMatchObject({
+            visible: true,
+            enabled: false,
+        });
+    });
+
     it("normalizes all-skipped sourced clips to the cataloged none identity", () => {
         const models = catalog();
         const clip = minimalClip({
@@ -332,9 +355,39 @@ describe("catalog-backed authoring policy", () => {
         expect(body.querySelector(".vst-minor-seg")).not.toBeNull();
         expect(body.querySelector(".vst-refs-mark")).not.toBeNull();
         expect(body.querySelector(".vst-retake")).not.toBeNull();
-        expect(body.querySelector(".vst-audio-clip")?.className).toContain(
-            "vst-capability-disabled",
+        for (const selector of [
+            ".vst-minor-lane",
+            ".vst-refs-lane",
+            ".vst-retake-lane",
+            ".vst-audio-clip",
+        ]) {
+            const element = body.querySelector(selector);
+            expect(element?.className).toContain("vst-capability-disabled");
+            expect(element?.hasAttribute("aria-disabled")).toBe(false);
+        }
+        for (const selector of [
+            ".vst-major-seg",
+            ".vst-minor-seg",
+            ".vst-refs-mark",
+            ".vst-retake",
+            ".vst-audio-clip",
+        ]) {
+            expect(
+                body.querySelector(selector)?.hasAttribute("aria-disabled"),
+            ).toBe(false);
+        }
+        expect(
+            body.querySelector<HTMLElement>(".vst-minor-seg")?.title,
+        ).toContain("click to inspect");
+        expect(body.querySelector<HTMLElement>(".vst-retake")?.title).toContain(
+            "click to inspect",
         );
+        expect(
+            body.querySelector(".vst-refs-mark")?.getAttribute("aria-label"),
+        ).toContain("Inspect unsupported persisted reference");
+        expect(
+            body.querySelector(".vst-audio-clip")?.getAttribute("aria-label"),
+        ).toContain("Inspect unsupported persisted audio");
         expect(body.querySelector("[data-vst-prompt-add]")).toBeNull();
         expect(body.querySelector("[data-vst-ref-add]")).toBeNull();
         expect(body.querySelector("[data-vst-retake-add]")).toBeNull();

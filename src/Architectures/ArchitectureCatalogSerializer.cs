@@ -23,6 +23,10 @@ internal static class ArchitectureCatalogSerializer
         ["label"] = descriptor.DisplayName,
         ["defaultProfileId"] = descriptor.DefaultProfileId.Value,
         ["extras"] = new JArray(ArchitectureExtras(descriptor)),
+        ["ignoredUnsupportedFeatures"] = new JArray(
+            descriptor.IgnoredUnsupportedFeatures
+                .Select(SerializeUnsupportedAuthoringFeature)
+                .Order(StringComparer.Ordinal)),
         ["capabilities"] = SerializeCapabilities(descriptor),
         ["profiles"] = new JArray(descriptor.Profiles.Select(profile =>
             Serialize(profile, descriptor))),
@@ -396,6 +400,29 @@ internal static class ArchitectureCatalogSerializer
         AudioSourceKind.AceStepFun => "AceStepFun",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
+
+    private static string SerializeUnsupportedAuthoringFeature(
+        UnsupportedAuthoringFeature feature) => feature switch
+        {
+            UnsupportedAuthoringFeature.MultiStage => "multiStage",
+            UnsupportedAuthoringFeature.SourceVideo => "sourceVideo",
+            UnsupportedAuthoringFeature.FrameReferences => "frameReferences",
+            UnsupportedAuthoringFeature.ReferenceFraming => "referenceFraming",
+            UnsupportedAuthoringFeature.Retake => "retake",
+            UnsupportedAuthoringFeature.MajorPrompt => "majorPrompt",
+            UnsupportedAuthoringFeature.PromptRelay => "promptRelay",
+            UnsupportedAuthoringFeature.ClipAudio => "clipAudio",
+            UnsupportedAuthoringFeature.AudioReuse => "audioReuse",
+            UnsupportedAuthoringFeature.AudioDerivedDuration =>
+                "audioDerivedDuration",
+            UnsupportedAuthoringFeature.ControlSignalDerivedDuration =>
+                "controlSignalDerivedDuration",
+            UnsupportedAuthoringFeature.StageLoras => "stageLoras",
+            UnsupportedAuthoringFeature.IcLora => "icLora",
+            UnsupportedAuthoringFeature.Hdr => "hdr",
+            UnsupportedAuthoringFeature.Upscale => "upscale",
+            _ => throw new ArgumentOutOfRangeException(nameof(feature)),
+        };
 
     private static string SerializeBoundaryMode(BoundaryExecutionMode mode) => mode switch
     {

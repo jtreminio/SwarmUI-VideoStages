@@ -23,39 +23,42 @@ internal sealed record StageUpscalePlan(
 /// </summary>
 internal static class StageUpscalePlanCompiler
 {
+    private static bool HasMethodName(string method, string prefix) =>
+        method.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+        && !string.IsNullOrWhiteSpace(method[prefix.Length..]);
+
+    internal static StageUpscaleMode Classify(string method)
+    {
+        string normalized = method?.Trim() ?? "";
+        if (HasMethodName(normalized, "latentmodel-"))
+        {
+            return StageUpscaleMode.LatentModel;
+        }
+        if (HasMethodName(normalized, "latent-"))
+        {
+            return StageUpscaleMode.Latent;
+        }
+        if (HasMethodName(normalized, "pixel-"))
+        {
+            return StageUpscaleMode.Pixel;
+        }
+        if (HasMethodName(normalized, "model-"))
+        {
+            return StageUpscaleMode.Model;
+        }
+        return StageUpscaleMode.Unsupported;
+    }
+
     internal static StageUpscalePlan Compile(StageSpec stage)
     {
         ArgumentNullException.ThrowIfNull(stage);
-        StageUpscaleMode mode;
-        if (stage.Upscale == 1)
-        {
-            mode = StageUpscaleMode.None;
-        }
-        else if (stage.IsPixelUpscale)
-        {
-            mode = StageUpscaleMode.Pixel;
-        }
-        else if (stage.IsModelUpscale)
-        {
-            mode = StageUpscaleMode.Model;
-        }
-        else if (stage.IsLatentUpscale)
-        {
-            mode = StageUpscaleMode.Latent;
-        }
-        else if (stage.IsLatentModelUpscale)
-        {
-            mode = StageUpscaleMode.LatentModel;
-        }
-        else
-        {
-            mode = StageUpscaleMode.Unsupported;
-        }
-
         string raw = stage.UpscaleMethod?.Trim() ?? "";
+        StageUpscaleMode mode = stage.Upscale == 1
+            ? StageUpscaleMode.None
+            : Classify(raw);
         int separator = raw.IndexOf('-');
         string methodName = separator >= 0 && separator < raw.Length - 1
-            ? raw[(separator + 1)..]
+            ? raw[(separator + 1)..].Trim()
             : raw;
         return new(mode, stage.Upscale, raw, methodName);
     }

@@ -23,6 +23,8 @@ namespace VideoStages.Tests;
 /// frontend <c>renderUtils.framesForClip</c>.</item>
 /// <item>M4 — IC-LoRA auto-model naming: <see cref="IcLoraWeights"/> vs frontend
 /// <c>icLoraPresets</c>.</item>
+/// <item>Upscale mode classification: <see cref="StageUpscalePlanCompiler"/> vs frontend
+/// <c>upscaleModeForMethod</c>.</item>
 /// </list>
 /// </summary>
 [Collection("VideoStagesTests")]
@@ -48,6 +50,27 @@ public class CrossLanguageMirrorTests
         Features = [],
         Workflow = new JObject(),
     };
+
+    [Fact]
+    public void UpscaleMethodClassification_MatchesSharedFixture()
+    {
+        static string WireName(StageUpscaleMode mode) => mode switch
+        {
+            StageUpscaleMode.Pixel => "pixel",
+            StageUpscaleMode.Model => "model",
+            StageUpscaleMode.Latent => "latent",
+            StageUpscaleMode.LatentModel => "latent-model",
+            StageUpscaleMode.Unsupported => "unsupported",
+            _ => throw new InvalidOperationException($"Unexpected fixture mode {mode}.")
+        };
+
+        foreach (JObject c in LoadFixture("upscale-method-cases.json").OfType<JObject>())
+        {
+            Assert.Equal(
+                c.Value<string>("expectedMode"),
+                WireName(StageUpscalePlanCompiler.Classify(c.Value<string>("method"))));
+        }
+    }
 
     [Fact]
     public void FrameAlignment_MatchesSharedFixture()

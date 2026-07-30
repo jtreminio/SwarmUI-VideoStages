@@ -433,6 +433,51 @@ describe("stage architecture model filtering", () => {
         expect(persisted?.textContent).toContain("unsupported persisted value");
     });
 
+    it("uses the removal-only IC-LoRA panel when Stage 0 is unresolved", () => {
+        const models = catalog();
+        const clip = minimalClip({
+            architecture: "ltx2",
+            icLoras: [
+                {
+                    lora: "persisted-ic-lora.safetensors",
+                    preset: "custom",
+                    driveSource: "Upload",
+                    driveData: "visual",
+                    driveMediaKinds: ["image", "video"],
+                    stage: -1,
+                    strength: 1,
+                    attentionStrength: 1,
+                    controlType: "none",
+                    hdr: false,
+                    driveMedia: null,
+                },
+            ],
+            stages: [
+                minimalStage({
+                    model: "removed-model.safetensors",
+                    modelProfileId: "removed-profile",
+                }),
+            ],
+        });
+
+        const panel = buildArchitectureIcLorasSection(
+            context(models),
+            clip,
+            0,
+            testRootDefaults(models),
+        );
+        const add = panel.querySelector<HTMLButtonElement>(
+            ".vst-detail-add-iclora",
+        );
+
+        expect(panel.textContent).toContain("Persisted IC-LoRAs");
+        expect(panel.textContent).toContain(
+            "Existing entries remain available for removal.",
+        );
+        expect(add?.disabled).toBe(true);
+        expect(panel.querySelector("select")).toBeNull();
+    });
+
     it("offers every supported architecture model on stage 0", () => {
         const models = catalog();
         const clip = minimalClip({
@@ -726,6 +771,41 @@ describe("stage architecture model filtering", () => {
         expect(options[0].textContent).toContain("unsupported persisted value");
     });
 
+    it("offers whole-clip repair when Stage 0 and sibling models are unresolved", () => {
+        const models = catalog();
+        const clip = minimalClip({
+            architecture: "ltx2",
+            modelProfileId: "ltx-2.3",
+            stages: [
+                minimalStage({ model: "removed-root.safetensors" }),
+                minimalStage({ model: "removed-sibling.safetensors" }),
+            ],
+        });
+        const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            0,
+            clip.stages[0],
+            testRootDefaults(models),
+        );
+        const options = modelOptions(column);
+        const select = options[0].parentElement;
+        if (!(select instanceof HTMLSelectElement)) {
+            throw new Error("missing model select");
+        }
+
+        expect(options.map(({ value }) => value)).toEqual(
+            expect.arrayContaining(["ltx", "test-video.safetensors"]),
+        );
+        select.value = "ltx";
+        select.dispatchEvent(new Event("change"));
+        expect(confirm).toHaveBeenCalledWith(
+            expect.stringContaining("Convert this clip"),
+        );
+    });
+
     it("excludes a text-only architecture from a source-video start", () => {
         const models = catalog();
         const fake = models.architectures.find(
@@ -985,7 +1065,9 @@ describe("stage architecture model filtering", () => {
         expect(confirm).toHaveBeenCalledTimes(1);
         expect(getTimelineStore().revision()).toBe(revisionBefore + 1);
         expect(notifications).toEqual(["detail-strip"]);
-        expect(panelContext.render).toHaveBeenCalledTimes(1);
+        // The timeline's store subscriber owns the render for this dispatch;
+        // the model picker must not trigger a second paint itself.
+        expect(panelContext.render).not.toHaveBeenCalled();
         expect(getState().clips[0]).toMatchObject({
             architecture: "test-video",
             modelProfileId: "test-profile",

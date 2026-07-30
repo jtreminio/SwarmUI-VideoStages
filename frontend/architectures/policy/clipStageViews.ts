@@ -36,6 +36,8 @@ interface EffectiveCatalogIdentity {
     descriptor: ArchitectureCatalogEntryDto | undefined;
 }
 
+const UNRESOLVED_ARCHITECTURE_ID = "unsupported";
+
 /**
  * Conditional rules that gate an authoring feature. Every consumer reaches
  * these through `decision()`, so a control is disabled where it is authored
@@ -178,7 +180,7 @@ export const createClipStageCapabilityViews = (
             : modelByName.get(clip.stages[0]?.model ?? "");
         const architectureId = sourceOnly
             ? NONE_ARCHITECTURE_ID
-            : (resolvedModel?.architectureId ?? clip.architecture);
+            : (resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID);
         return {
             architectureId,
             descriptor: architectureById.get(architectureId),
@@ -251,8 +253,9 @@ export const createClipStageCapabilityViews = (
         const resolvedModel = sourceOnly
             ? undefined
             : modelByName.get(stage.model);
-        const architectureId =
-            resolvedModel?.architectureId ?? view.architectureId;
+        const architectureId = sourceOnly
+            ? NONE_ARCHITECTURE_ID
+            : (resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID);
         const descriptor = architectureById.get(architectureId);
         const decision = (
             feature: "stageLoras" | "upscale" | "sampler" | "scheduler",

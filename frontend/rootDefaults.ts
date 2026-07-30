@@ -194,14 +194,11 @@ export const getRootDefaults = (): RootDefaults => {
         upscaleStep: 0.25,
         steps: 8,
         stepsMin: Math.max(1, Math.round(toNumber(steps?.min, 1))),
-        stepsMax: Math.min(
-            50,
-            Math.max(1, Math.round(toNumber(steps?.max, 200))),
-        ),
+        stepsMax: Math.max(1, Math.round(toNumber(steps?.max, 200))),
         stepsStep: Math.max(1, Math.round(toNumber(steps?.step, 1))),
         cfgScale: 1,
         cfgScaleMin: toNumber(cfgScale?.min, 0),
-        cfgScaleMax: Math.min(10, toNumber(cfgScale?.max, 10)),
+        cfgScaleMax: toNumber(cfgScale?.max, 10),
         cfgScaleStep: toNumber(cfgScale?.step, 0.5),
     };
 };

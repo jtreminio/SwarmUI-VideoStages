@@ -105,6 +105,8 @@ internal sealed class Ltx2ArchitectureModule :
                     : VideoModelEntryAbility.None),
             Enhancements = ["arbitrary-frame-references"],
             ReferencePositions = ["any"],
+            LorasTargetTextEncoder =
+                model.ModelClass.CompatClass.LorasTargetTextEnc,
             HostFactsAuthoritative = true,
         };
         return true;

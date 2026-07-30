@@ -1505,6 +1505,7 @@ public class ArchitectureFoundationTests
         JObject ltx = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "ltx2");
+        Assert.Empty(ltx["ignoredUnsupportedFeatures"].Values<string>());
         Assert.Equal("ltx2", ltx["id"]);
         Assert.Equal("LTX Video 2.3", ltx["label"]);
         Assert.Equal("ltx-2.3", ltx["defaultProfileId"]);
@@ -1579,6 +1580,15 @@ public class ArchitectureFoundationTests
         JObject wan = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "wan22");
+        Assert.Contains(
+            "upscale",
+            wan["ignoredUnsupportedFeatures"].Values<string>());
+        Assert.Contains(
+            "icLora",
+            wan["ignoredUnsupportedFeatures"].Values<string>());
+        Assert.DoesNotContain(
+            "frameReferences",
+            wan["ignoredUnsupportedFeatures"].Values<string>());
         Assert.Equal(
             WanArchitectureModule.ImageToVideoProfileId.Value,
             wan["defaultProfileId"]);

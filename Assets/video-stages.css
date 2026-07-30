@@ -1384,6 +1384,37 @@
     cursor: not-allowed;
 }
 
+/* Persisted feature data remains selectable/removable when the resolved model
+   cannot execute it. Disabled lanes must not retain their normal add/drag
+   affordance, while their existing items still read as repair targets. */
+.vst-capability-disabled {
+    opacity: 0.56;
+    filter: saturate(0.35);
+}
+.vst-minor-lane.vst-capability-disabled,
+.vst-retake-lane.vst-capability-disabled,
+.vst-refs-lane.vst-capability-disabled {
+    cursor: not-allowed;
+    background-image: repeating-linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--text-soft) 10%, transparent) 0 5px,
+        transparent 5px 10px
+    );
+}
+.vst-capability-disabled .vst-minor-seg,
+.vst-capability-disabled .vst-retake,
+.vst-capability-disabled .vst-refs-mark,
+.vst-major-seg.vst-capability-disabled,
+.vst-audio-clip.vst-capability-disabled {
+    cursor: pointer;
+}
+.vst-capability-disabled :is(
+        .vst-minor-resize,
+        .vst-retake-resize
+    ) {
+    display: none;
+}
+
 /* ── References track (image refs, below the video clip) ── */
 .vst-track-icon-refs {
     color: color-mix(in srgb, var(--emphasis) 60%, var(--text));
@@ -1924,6 +1955,19 @@
 }
 .vst-boundary-chip:hover {
     opacity: 1;
+}
+.vst-boundary-chip.vst-boundary-fallback {
+    opacity: 1;
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--yellow) 72%, var(--light-border));
+    border-style: dashed;
+    background: color-mix(in srgb, var(--yellow) 18%, var(--background));
+    box-shadow: 0 0 0 1px
+        color-mix(in srgb, var(--yellow) 24%, transparent);
+}
+.vst-boundary-chip.vst-boundary-fallback:hover,
+.vst-boundary-chip.vst-boundary-fallback:focus-visible {
+    background: color-mix(in srgb, var(--yellow) 27%, var(--background));
 }
 .vst-boundary-continue,
 .vst-boundary-crossfade {

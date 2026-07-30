@@ -6,6 +6,30 @@ namespace VideoStages;
 /// <summary>Host workflow facts used before an architecture runtime is selected.</summary>
 internal static class RootHostWorkflowFacts
 {
+    internal static WorkflowGenerator.WorkflowGenStep
+        ResolveCoreImageToVideoStep(
+            IEnumerable<WorkflowGenerator.WorkflowGenStep> steps,
+            out string diagnostic)
+    {
+        WorkflowGenerator.WorkflowGenStep[] matches =
+        [
+            .. (steps ?? []).Where(
+                step => step.Priority
+                    == Constants.WorkflowStepPriority.CoreImageToVideo)
+        ];
+        if (matches.Length == 1)
+        {
+            diagnostic = null;
+            return matches[0];
+        }
+        diagnostic =
+            "VideoStages expected exactly one SwarmUI core image-to-video "
+            + $"workflow step at priority {Constants.WorkflowStepPriority.CoreImageToVideo}, "
+            + $"but found {matches.Length}. Core video handoff is disabled; this "
+            + "SwarmUI version's workflow-step contract may have changed.";
+        return null;
+    }
+
     internal static bool IsTextToVideoRootWorkflow(WorkflowGenerator generator)
     {
         if (generator.UserInput.TryGet(

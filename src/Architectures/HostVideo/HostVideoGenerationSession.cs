@@ -113,14 +113,11 @@ internal sealed class HostVideoGenerationSession(
     {
         HostVideoStagePayload payload = stage.RequireHostVideoPayload();
         int sectionId = hostScope.ApplyStageOverrides(clip, stage);
-        NormalLoraTargetPolicy loraTarget =
-            HostVideoArchitectureModule.ResolveLoraTargetPolicy(
-                payload.CompatibilityClassId);
         using (ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
             generator.UserInput,
             clip.ClipId,
             sectionId,
-            loraTarget))
+            payload.LoraTargetPolicy))
         using (ParamSnapshot loraScope =
             LoraParams.ApplyNormalLoras(generator.UserInput, payload.Loras))
         using (ParamSnapshot ignoredAudioReference = ParamSnapshot.Of(

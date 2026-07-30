@@ -97,7 +97,10 @@ export const buildSettingsBody = (
         height: defaults.height,
         fps: defaults.fps,
     };
-    const multiple = activeDocumentDimensionMultiple(state.clips);
+    const multiple = activeDocumentDimensionMultiple(
+        state.clips,
+        defaults.modelCatalog,
+    );
     const defaultMode = !state.dimsExplicit
         ? SETTINGS_INHERIT
         : (matchAspectRatio(state.width, state.height, multiple) ??

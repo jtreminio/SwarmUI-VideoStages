@@ -14,6 +14,14 @@ export const CONDITIONAL_RULE_CODES = {
 export type ConditionalRuleCode =
     (typeof CONDITIONAL_RULE_CODES)[keyof typeof CONDITIONAL_RULE_CODES];
 
+const KNOWN_CONDITIONAL_RULE_CODES = new Set<string>(
+    Object.values(CONDITIONAL_RULE_CODES),
+);
+
+export const isKnownConditionalRuleCode = (
+    value: string,
+): value is ConditionalRuleCode => KNOWN_CONDITIONAL_RULE_CODES.has(value);
+
 export interface ConditionalRuleContext {
     clip?: Clip;
     stage?: Stage;
@@ -102,6 +110,9 @@ export const evaluateConditionalRule = (
             return hdr.some(Boolean) && hdr.some((value) => !value);
         }
         default:
-            return false;
+            // Catalog parsing rejects unknown executable rules atomically.
+            // Fail closed as a defense if an unchecked runtime value reaches
+            // this evaluator through a test adapter or future integration.
+            return true;
     }
 };

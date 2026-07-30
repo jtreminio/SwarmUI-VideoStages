@@ -81,6 +81,7 @@ const renderRetakeOverlay = (
     clip: Clip,
     clipIdx: number,
     durationSeconds: number,
+    editable: boolean,
 ): string => {
     const retake = clip.retake;
     if (!retake || durationSeconds <= 0) {
@@ -98,8 +99,12 @@ const renderRetakeOverlay = (
         edgeAttr: "data-vst-retake-edge",
         labelClass: "vst-retake-label",
         label,
-        title: `${label} · drag to move/resize · Shift+click to delete`,
-        ariaLabel: label,
+        title: editable
+            ? `${label} · drag to move/resize · Shift+click to delete`
+            : `${label} · unsupported by this architecture · click to inspect or Shift+click to delete`,
+        ariaLabel: editable
+            ? label
+            : `${label}. Unsupported persisted retake; available for inspection or removal.`,
         startSeconds: retake.startSeconds,
         lengthSeconds: retake.lengthSeconds,
         durationSeconds,
@@ -360,11 +365,12 @@ const renderRegions = (
                 controls +
                 resizeGrip +
                 `</div>` +
-                `<div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` +
+                `<div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs}${retakeSupported || clip.retake ? "" : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` +
                 renderRetakeOverlay(
                     clip,
                     layout.index,
                     layout.durationSeconds,
+                    retakeSupported,
                 ) +
                 `</div>`
             );

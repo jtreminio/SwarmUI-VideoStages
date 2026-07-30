@@ -4,6 +4,7 @@ import * as path from "node:path";
 
 import { describe, expect, it } from "@jest/globals";
 
+import { testArchitectureCatalog } from "../../__test_helpers__/architectureFixtures";
 import {
     activeDocumentDimensionMultiple,
     snapExplicitDocumentDimensions,
@@ -44,7 +45,12 @@ const icLora = (overrides: Partial<IcLora>): IcLora =>
     }) as IcLora;
 
 const clip = (...entries: IcLora[]): Clip =>
-    ({ architecture: "ltx2", icLoras: entries }) as unknown as Clip;
+    ({
+        architecture: "ltx2",
+        sourceVideo: null,
+        stages: [{ model: "ltx", skipped: false }],
+        icLoras: entries,
+    }) as unknown as Clip;
 
 describe("LTX dimension policy", () => {
     it("resolves preset and exact curated-model factors", () => {
@@ -98,13 +104,37 @@ describe("LTX dimension policy", () => {
             clips: [clip(icLora({ preset: "union-control", lora: "[AUTO]" }))],
         } as VideoStagesConfig;
 
-        expect(activeDocumentDimensionMultiple(state.clips)).toBe(64);
-        expect(snapExplicitDocumentDimensions(state)).toMatchObject({
+        const catalog = testArchitectureCatalog();
+        expect(activeDocumentDimensionMultiple(state.clips, catalog)).toBe(64);
+        expect(snapExplicitDocumentDimensions(state, catalog)).toMatchObject({
             changed: true,
             multiple: 64,
             before: { width: 1232, height: 688 },
             after: { width: 1280, height: 704 },
         });
         expect(state).toMatchObject({ width: 1280, height: 704 });
+    });
+
+    it("uses resolved Stage-0 identity for architecture dimension behavior", () => {
+        const resolvedLtx = clip(
+            icLora({ preset: "union-control", lora: "[AUTO]" }),
+        );
+        resolvedLtx.architecture = "stale-foreign-hint";
+        const unresolved = structuredClone(resolvedLtx);
+        unresolved.architecture = "ltx2";
+        unresolved.stages[0].model = "removed-model.safetensors";
+
+        expect(
+            activeDocumentDimensionMultiple(
+                [resolvedLtx],
+                testArchitectureCatalog(),
+            ),
+        ).toBe(64);
+        expect(
+            activeDocumentDimensionMultiple(
+                [unresolved],
+                testArchitectureCatalog(),
+            ),
+        ).toBe(32);
     });
 });

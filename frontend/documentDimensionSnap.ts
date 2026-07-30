@@ -1,4 +1,6 @@
 import { architectureDimensionMultiple } from "./architectures/behaviorRegistry";
+import { resolvedClipArchitectureId } from "./architectures/clipIdentity";
+import type { ArchitectureModelCatalog } from "./architectures/types";
 import { ROOT_DIMENSION_STEP } from "./constants";
 import { snapDimensions } from "./dimensionSnap";
 import type { Clip, VideoStagesConfig } from "./types";
@@ -28,10 +30,17 @@ const leastCommonMultiple = (left: number, right: number): number =>
  */
 export const activeDocumentDimensionMultiple = (
     clips: readonly Clip[],
+    catalog: ArchitectureModelCatalog | null,
 ): number =>
     clips.reduce(
         (multiple, clip) =>
-            leastCommonMultiple(multiple, architectureDimensionMultiple(clip)),
+            leastCommonMultiple(
+                multiple,
+                architectureDimensionMultiple(
+                    clip,
+                    resolvedClipArchitectureId(clip, catalog) ?? "",
+                ),
+            ),
         ROOT_DIMENSION_STEP,
     );
 
@@ -41,12 +50,13 @@ export const activeDocumentDimensionMultiple = (
  */
 export const snapExplicitDocumentDimensions = (
     state: VideoStagesConfig,
+    catalog: ArchitectureModelCatalog | null,
 ): DocumentDimensionSnap => {
     const before = {
         width: Math.round(state.width),
         height: Math.round(state.height),
     };
-    const multiple = activeDocumentDimensionMultiple(state.clips);
+    const multiple = activeDocumentDimensionMultiple(state.clips, catalog);
     const after = state.dimsExplicit
         ? snapDimensions(before.width, before.height, multiple)
         : before;

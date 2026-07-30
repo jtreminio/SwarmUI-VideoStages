@@ -121,6 +121,20 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
         FrameGrid = 1,
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
+        IgnoredUnsupportedFeatures = new HashSet<UnsupportedAuthoringFeature>
+        {
+            UnsupportedAuthoringFeature.FrameReferences,
+            UnsupportedAuthoringFeature.ReferenceFraming,
+            UnsupportedAuthoringFeature.Retake,
+            UnsupportedAuthoringFeature.PromptRelay,
+            UnsupportedAuthoringFeature.ClipAudio,
+            UnsupportedAuthoringFeature.AudioReuse,
+            UnsupportedAuthoringFeature.AudioDerivedDuration,
+            UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
+            UnsupportedAuthoringFeature.IcLora,
+            UnsupportedAuthoringFeature.Hdr,
+            UnsupportedAuthoringFeature.Upscale,
+        },
     };
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
@@ -151,6 +165,7 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
             ModelClassId = modelClass.ID,
             CompatibilityClassId = compatibility.ID,
             EntryAbilities = path.EntryAbilities,
+            LorasTargetTextEncoder = compatibility.LorasTargetTextEnc,
             HostFactsAuthoritative = true,
         };
         return true;
@@ -226,10 +241,14 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
 
             bool decodedInput = clip.SourceVideo is not null
                 || stage.ClipStageIndex > 0;
+            NormalLoraTargetPolicy loraTargetPolicy =
+                resolved?.LorasTargetTextEncoder == false
+                    ? NormalLoraTargetPolicy.ModelOnly
+                    : NormalLoraTargetPolicy.ModelAndTextEncoder;
             ImmutableArray<NormalLoraPlan> loras = NormalLoraPlanCompiler.Compile(
                 clip,
                 stage,
-                ResolveLoraTargetPolicy(resolved?.CompatibilityClassId));
+                loraTargetPolicy);
             if (!double.IsFinite(stage.Control)
                 || decodedInput && (stage.Control < 0 || stage.Control > 1)
                 || !decodedInput && stage.Control != 1)
@@ -270,6 +289,7 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
                 resolved?.ModelName ?? stage.Model,
                 resolved?.ModelClassId ?? "",
                 resolved?.CompatibilityClassId ?? "",
+                loraTargetPolicy,
                 stage.Control,
                 stage.Steps,
                 stage.CfgScale,
@@ -287,27 +307,6 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
 
     internal static int StartStep(int steps, double control) =>
         (int)Math.Floor(steps * (1 - control));
-
-    internal static NormalLoraTargetPolicy ResolveLoraTargetPolicy(
-        string compatibilityClassId) =>
-        string.Equals(
-            compatibilityClassId,
-            T2IModelClassSorter.CompatHunyuanVideo1_5.ID,
-            StringComparison.Ordinal)
-        || string.Equals(
-            compatibilityClassId,
-            T2IModelClassSorter.CompatHunyuanVideo.ID,
-            StringComparison.Ordinal)
-        || string.Equals(
-            compatibilityClassId,
-            T2IModelClassSorter.CompatKandinsky5VidLite.ID,
-            StringComparison.Ordinal)
-        || string.Equals(
-            compatibilityClassId,
-            T2IModelClassSorter.CompatKandinsky5VidPro.ID,
-            StringComparison.Ordinal)
-            ? NormalLoraTargetPolicy.ModelOnly
-            : NormalLoraTargetPolicy.ModelAndTextEncoder;
 
     private static ProvenHostPath Path(
         T2IModelCompatClass compatibility,
@@ -370,6 +369,7 @@ internal sealed record HostVideoStagePayload(
     string Model,
     string ModelClassId,
     string CompatibilityClassId,
+    NormalLoraTargetPolicy LoraTargetPolicy,
     double Control,
     int Steps,
     double CfgScale,

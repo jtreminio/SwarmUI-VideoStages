@@ -1,0 +1,50 @@
+[
+  {
+    "method": "pixel-lanczos",
+    "expectedMode": "pixel"
+  },
+  {
+    "method": " MODEL-upscaler.safetensors ",
+    "expectedMode": "model"
+  },
+  {
+    "method": "latent-bilinear",
+    "expectedMode": "latent"
+  },
+  {
+    "method": "LatentModel-spatial.safetensors",
+    "expectedMode": "latent-model"
+  },
+  {
+    "method": "upscaler-without-a-mode.safetensors",
+    "expectedMode": "unsupported"
+  },
+  {
+    "method": "modeless-upscaler.safetensors",
+    "expectedMode": "unsupported"
+  },
+  {
+    "method": "",
+    "expectedMode": "unsupported"
+  },
+  {
+    "method": "pixel-",
+    "expectedMode": "unsupported"
+  },
+  {
+    "method": " pixel-   ",
+    "expectedMode": "unsupported"
+  },
+  {
+    "method": "model-",
+    "expectedMode": "unsupported"
+  },
+  {
+    "method": "latent-",
+    "expectedMode": "unsupported"
+  },
+  {
+    "method": "latentmodel-",
+    "expectedMode": "unsupported"
+  }
+]

@@ -38,6 +38,25 @@ export const modelIdentityFromCatalog = (
 };
 
 /**
+ * Resolves the architecture that may execute frontend behavior for a clip.
+ * Persisted architecture/profile fields are repair hints only and never make
+ * an unresolved Stage-0 model executable.
+ */
+export const resolvedClipArchitectureId = (
+    clip: Clip,
+    catalog: ArchitectureModelCatalog | null,
+): string | null => {
+    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
+        return NONE_ARCHITECTURE_ID;
+    }
+    const stageZeroModel = clip.stages[0]?.model;
+    return stageZeroModel
+        ? (modelIdentityFromCatalog(catalog, stageZeroModel)?.architectureId ??
+              null)
+        : null;
+};
+
+/**
  * Pure Stage-0 identity derivation shared by commands, whole-document diffs,
  * and UI preview mutations.
  */

@@ -5,7 +5,11 @@ import {
 } from "../../clipSemantics";
 import type { BoundaryOut, Clip } from "../../types";
 import { boundaryOverlapConstraints } from "../boundaryConstraints";
-import type { ArchitectureCatalogEntryDto } from "../types";
+import { resolvedClipArchitectureId } from "../clipIdentity";
+import type {
+    ArchitectureCatalogEntryDto,
+    ArchitectureModelCatalog,
+} from "../types";
 import type { BoundaryCapabilityView, ClipCapabilityView } from "./types";
 
 type ArchitectureLookup = ReadonlyMap<string, ArchitectureCatalogEntryDto>;
@@ -17,10 +21,18 @@ type ArchitectureLookup = ReadonlyMap<string, ArchitectureCatalogEntryDto>;
  */
 export const forceCrossArchitectureCutsForConversion = (
     clips: Clip[],
+    catalog: ArchitectureModelCatalog | null,
 ): void => {
     for (const boundary of executableBoundaries(clips)) {
         const left = clips[boundary.leftIdx];
-        if (left.architecture !== clips[boundary.rightIdx].architecture) {
+        const right = clips[boundary.rightIdx];
+        const leftArchitectureId = resolvedClipArchitectureId(left, catalog);
+        const rightArchitectureId = resolvedClipArchitectureId(right, catalog);
+        if (
+            leftArchitectureId !== null &&
+            rightArchitectureId !== null &&
+            leftArchitectureId !== rightArchitectureId
+        ) {
             left.boundaryOut = "cut";
         }
     }
