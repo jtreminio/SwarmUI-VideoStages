@@ -9,8 +9,6 @@ namespace VideoStages.Architectures.Ltx2;
 /// <summary>The existing LTX-owned decoded overlap/crossfade graph.</summary>
 internal sealed class Ltx2BoundaryAssembler : IArchitectureBoundaryAssembler
 {
-    public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
-
     public INodeOutput MergeOverlaps(
         WorkflowBridge bridge,
         IReadOnlyList<DecodedClipArtifact> clips,

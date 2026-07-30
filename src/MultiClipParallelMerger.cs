@@ -203,13 +203,6 @@ internal sealed class MultiClipParallelMerger(
                 throw new InvalidOperationException(
                     $"No boundary assembler is registered for architecture '{architectureId}'.");
             }
-            if (assembler.ArchitectureId != architectureId)
-            {
-                throw new InvalidOperationException(
-                    $"Boundary assembler '{assembler.ArchitectureId}' cannot assemble "
-                    + $"architecture '{architectureId}'.");
-            }
-
             BoundaryOverlapPlan runPlan = BoundaryOverlapPlanner.ToOverlapPlan(
                 [.. boundaries.Skip(runStart).Take(runLength - 1)])
                 ?? throw new InvalidOperationException(

@@ -94,8 +94,6 @@ internal sealed record ArchitectureClipRuntimeContext(
 /// <summary>Architecture-owned graph construction for non-cut boundaries.</summary>
 internal interface IArchitectureBoundaryAssembler
 {
-    ArchitectureId ArchitectureId { get; }
-
     INodeOutput MergeOverlaps(
         WorkflowBridge bridge,
         IReadOnlyList<DecodedClipArtifact> clips,

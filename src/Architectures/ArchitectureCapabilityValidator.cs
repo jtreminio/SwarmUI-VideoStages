@@ -72,16 +72,6 @@ internal static class ArchitectureCapabilityValidator
                 ArchitectureCapability.MultiStage),
             "multiple active stages");
         Require(
-            configured: true,
-            Has(
-                descriptor.Capabilities.Architecture,
-                ArchitectureCapability.DecodedOutput),
-            "decoded output");
-        Require(
-            configured: true,
-            Has(descriptor.Capabilities.Output, OutputCapability.Video),
-            "video output");
-        Require(
             clip.SaveAudioTrack,
             Has(descriptor.Capabilities.Output, OutputCapability.StandaloneAudio),
             "standalone audio output");
@@ -294,46 +284,6 @@ internal static class ArchitectureCapabilityValidator
             }
             VideoModelProfileDescriptor profile = descriptor.Profiles.SingleOrDefault(
                 candidate => candidate.Id == resolved.ModelProfileId);
-            RequireProfileCapability(
-                !string.IsNullOrWhiteSpace(stage.Sampler),
-                ModelProfileCapability.SamplerSelection,
-                "sampler selection",
-                clip,
-                descriptor,
-                stage,
-                resolved,
-                profile,
-                diagnostics);
-            RequireProfileCapability(
-                !string.IsNullOrWhiteSpace(stage.Scheduler),
-                ModelProfileCapability.SchedulerSelection,
-                "scheduler selection",
-                clip,
-                descriptor,
-                stage,
-                resolved,
-                profile,
-                diagnostics);
-            RequireProfileCapability(
-                configured: true,
-                ModelProfileCapability.DimensionRules,
-                "dimension rules",
-                clip,
-                descriptor,
-                stage,
-                resolved,
-                profile,
-                diagnostics);
-            RequireProfileCapability(
-                clip.Frames.HasValue,
-                ModelProfileCapability.FrameRules,
-                "frame rules",
-                clip,
-                descriptor,
-                stage,
-                resolved,
-                profile,
-                diagnostics);
             RequireProfileCapability(
                 HasNormalLora(clip, stage),
                 ModelProfileCapability.NormalLora,

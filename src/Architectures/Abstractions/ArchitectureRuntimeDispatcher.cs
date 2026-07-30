@@ -51,14 +51,11 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
         DecodedClipArtifact output = session.Execute(context)
             ?? throw new InvalidOperationException(
                 $"Architecture '{session.ArchitectureId}' returned no decoded clip artifact.");
-        ArchitectureId plannedArchitecture = context.Clip.Architecture.Id;
-        if (output.ArchitectureId != plannedArchitecture
-            || output.ClipId != context.Clip.ClipId)
+        if (output.ClipId != context.Clip.ClipId)
         {
             throw new InvalidOperationException(
-                $"Architecture '{session.ArchitectureId}' returned artifact identity "
-                + $"'{output.ArchitectureId}/{output.ClipId}' for planned clip "
-                + $"'{plannedArchitecture}/{context.Clip.ClipId}'.");
+                $"Architecture '{session.ArchitectureId}' returned artifact for clip "
+                + $"'{output.ClipId}' instead of planned clip '{context.Clip.ClipId}'.");
         }
         output.ValidateDecoded();
         return output;

@@ -782,48 +782,6 @@ public class ArchitectureFoundationTests
         Assert.Equal(0, registry.CompileCounts[new("fake")]);
     }
 
-    [Theory]
-    [InlineData(
-        (int)(ModelProfileCapability.SchedulerSelection
-            | ModelProfileCapability.DimensionRules
-            | ModelProfileCapability.FrameRules),
-        "sampler selection")]
-    [InlineData(
-        (int)(ModelProfileCapability.SamplerSelection
-            | ModelProfileCapability.DimensionRules
-            | ModelProfileCapability.FrameRules),
-        "scheduler selection")]
-    [InlineData(
-        (int)(ModelProfileCapability.SamplerSelection
-            | ModelProfileCapability.SchedulerSelection
-            | ModelProfileCapability.FrameRules),
-        "dimension rules")]
-    [InlineData(
-        (int)(ModelProfileCapability.SamplerSelection
-            | ModelProfileCapability.SchedulerSelection
-            | ModelProfileCapability.DimensionRules),
-        "frame rules")]
-    public void Capability_validation_requires_exact_profile_execution_features(
-        int supportedValue,
-        string missingFeature)
-    {
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
-            profile: (ModelProfileCapability)supportedValue);
-        FakeRegistry registry = new(fakeDescriptor: descriptor);
-        ClipSpec clip = GeneratedClip(0, Stage(10, "fake-model")) with
-        {
-            AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
-        };
-
-        VideoExecutionPlan plan = Compile(clip, registry);
-
-        Assert.Contains(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
-                && diagnostic.Message.Contains(missingFeature));
-        Assert.Equal(0, registry.CompileCounts[new("fake")]);
-    }
-
     [Fact]
     public void Capability_validation_rejects_lora_when_resolved_profile_lacks_lora()
     {
@@ -1124,7 +1082,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Runtime_dispatcher_rejects_mismatched_session_result_identity()
+    public void Runtime_dispatcher_rejects_mismatched_session_result_clip()
     {
         VideoExecutionPlan plan = Plan(GeneratedClip(7, Stage(10, "ltx-model")));
         ClipPlan clip = Assert.Single(plan.Clips);
@@ -1132,11 +1090,7 @@ public class ArchitectureFoundationTests
         [
             new ProjectingSession(
                 new("ltx2"),
-                context => ValidArtifact(context.Clip) with
-                {
-                    ArchitectureId = new("fake"),
-                    ClipId = 88,
-                }),
+                context => ValidArtifact(context.Clip) with { ClipId = 88 }),
         ]);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
@@ -1147,8 +1101,8 @@ public class ArchitectureFoundationTests
                 PreviousClipOutput: null,
                 PreviousTimelineClipOutput: null)));
 
-        Assert.Contains("artifact identity 'fake/88'", error.Message);
-        Assert.Contains("planned clip 'ltx2/7'", error.Message);
+        Assert.Contains("artifact for clip '88'", error.Message);
+        Assert.Contains("planned clip '7'", error.Message);
     }
 
     [Theory]
