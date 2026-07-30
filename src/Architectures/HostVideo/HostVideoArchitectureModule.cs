@@ -86,23 +86,6 @@ internal sealed class HostVideoArchitectureModule :
             VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo),
     ];
 
-    private static IReadOnlySet<UnsupportedAuthoringFeature>
-        UnsupportedProjectionFeatures { get; } =
-            new HashSet<UnsupportedAuthoringFeature>
-            {
-                UnsupportedAuthoringFeature.FrameReferences,
-                UnsupportedAuthoringFeature.ReferenceFraming,
-                UnsupportedAuthoringFeature.Retake,
-                UnsupportedAuthoringFeature.PromptRelay,
-                UnsupportedAuthoringFeature.ClipAudio,
-                UnsupportedAuthoringFeature.AudioReuse,
-                UnsupportedAuthoringFeature.AudioDerivedDuration,
-                UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
-                UnsupportedAuthoringFeature.IcLora,
-                UnsupportedAuthoringFeature.Hdr,
-                UnsupportedAuthoringFeature.Upscale,
-            };
-
     internal static HostVideoArchitectureModule Instance { get; } = new();
 
     public ArchitectureResolutionTier ResolutionTier =>
@@ -140,11 +123,7 @@ internal sealed class HostVideoArchitectureModule :
         FrameGrid = 1,
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
-        IgnoredUnsupportedFeatures = UnsupportedProjectionFeatures,
     };
-
-    public IReadOnlySet<UnsupportedAuthoringFeature> ProjectedUnsupportedFeatures =>
-        UnsupportedProjectionFeatures;
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
     {
@@ -185,32 +164,6 @@ internal sealed class HostVideoArchitectureModule :
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        ArchitectureProjectedEffectiveClip[] clips = context.OwnedClips
-            .Select(owned =>
-            {
-                EffectiveClipProjection baseline =
-                    BaselineVideoEffectiveRequestProjector.ProjectBaseline(
-                        owned.Clip,
-                        preserveFrameReferences: false,
-                        Descriptor,
-                        "generic host-video",
-                        "host-video");
-                EffectiveClipProjection enhancements =
-                    BaselineVideoEffectiveRequestProjector
-                        .ProjectUnsupportedEnhancements(
-                            baseline.Clip,
-                            "generic host video",
-                            "host-video");
-                return new ArchitectureProjectedEffectiveClip(
-                    owned.TimelineIndex,
-                    enhancements.Clip,
-                    Array.AsReadOnly<EffectiveRequestDecision>(
-                    [
-                        .. baseline.Decisions,
-                        .. enhancements.Decisions,
-                    ]));
-            })
-            .ToArray();
         EffectiveRequestDecision[] requestDecisions =
             context.LegacyVideoSwap?.IsConfigured == true
                 && context.AuthoredRootTimelineIndex.HasValue
@@ -229,7 +182,7 @@ internal sealed class HostVideoArchitectureModule :
             ]
             : [];
         return new(
-            Array.AsReadOnly(clips),
+            Array.Empty<ArchitectureProjectedEffectiveClip>(),
             Array.AsReadOnly(requestDecisions));
     }
 

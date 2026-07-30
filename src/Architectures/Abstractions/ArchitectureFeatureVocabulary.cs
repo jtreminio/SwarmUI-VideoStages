@@ -47,7 +47,8 @@ internal sealed record AuthoringFeatureVocabularyEntry(
     string AuthoringKey,
     string DisplayLabel,
     IReadOnlyList<CapabilityVocabularyEntry> Capabilities,
-    ConditionalRuleFeature? ConditionalRuleFeature = null);
+    ConditionalRuleFeature? ConditionalRuleFeature = null,
+    bool CanIgnoreWhenUnsupported = true);
 
 /// <summary>
 /// The single cross-language vocabulary for architecture capabilities and authored features.
@@ -92,23 +93,29 @@ internal static class ArchitectureFeatureVocabulary
     ];
 
     internal static IReadOnlyList<AuthoringFeatureVocabularyEntry>
-        AuthoringFeatures { get; } =
+        AuthoringFeatures
+    { get; } =
     [
         new(
             UnsupportedAuthoringFeature.MultiStage,
             "multiStage",
             "Multiple stages",
-            [Capability(ArchitectureCapability.MultiStage)]),
+            [Capability(ArchitectureCapability.MultiStage)],
+            CanIgnoreWhenUnsupported: false),
         new(
             UnsupportedAuthoringFeature.SourceVideo,
             "sourceVideo",
             "Source video",
-            [Capability(ClipCapability.SourceVideo)]),
+            [Capability(ClipCapability.SourceVideo)],
+            CanIgnoreWhenUnsupported: false),
         new(
             UnsupportedAuthoringFeature.FrameReferences,
             "frameReferences",
             "Frame references",
-            [Capability(StageCapability.FrameReferences)],
+            [
+                Capability(ClipCapability.References),
+                Capability(StageCapability.FrameReferences),
+            ],
             ConditionalRuleFeature.FrameReferences),
         new(
             UnsupportedAuthoringFeature.ReferenceFraming,
@@ -125,7 +132,8 @@ internal static class ArchitectureFeatureVocabulary
             UnsupportedAuthoringFeature.MajorPrompt,
             "majorPrompt",
             "Major prompts",
-            [Capability(ClipCapability.Prompts)]),
+            [Capability(ClipCapability.Prompts)],
+            CanIgnoreWhenUnsupported: false),
         new(
             UnsupportedAuthoringFeature.PromptRelay,
             "promptRelay",
@@ -201,6 +209,33 @@ internal static class ArchitectureFeatureVocabulary
             .Single(entry => entry.ConditionalRuleFeature == feature)
             .AuthoringKey;
 
+    internal static bool Supports(
+        ArchitectureCapabilityDescriptor capabilities,
+        UnsupportedAuthoringFeature feature) =>
+        AuthoringFeatures
+            .Single(entry => entry.Feature == feature)
+            .Capabilities
+            .All(capability => capability.Scope switch
+            {
+                CapabilityVocabularyScope.Architecture =>
+                    capability.Supports(capabilities.Architecture),
+                CapabilityVocabularyScope.Clip =>
+                    capability.Supports(capabilities.Clip),
+                CapabilityVocabularyScope.Stage =>
+                    capability.Supports(capabilities.Stage),
+                _ => throw new ArgumentOutOfRangeException(),
+            });
+
+    internal static IReadOnlySet<UnsupportedAuthoringFeature>
+        IgnoredWhenUnsupported(
+            ArchitectureCapabilityDescriptor capabilities) =>
+        AuthoringFeatures
+            .Where(entry =>
+                entry.CanIgnoreWhenUnsupported
+                && !Supports(capabilities, entry.Feature))
+            .Select(entry => entry.Feature)
+            .ToHashSet();
+
     /// <summary>
     /// Renders the checked-in TypeScript projection. A backend test compares this output byte for
     /// byte with <c>frontend/architectures/generatedFeatures.ts</c>.
@@ -243,6 +278,35 @@ internal static class ArchitectureFeatureVocabulary
         Line("] as const;");
         Line();
         Line("export type GeneratedAuthoringFeature = (typeof AUTHORING_FEATURES)[number];");
+        Line();
+        Line("export const IGNORED_WHEN_UNSUPPORTED_FEATURES = [");
+        foreach (AuthoringFeatureVocabularyEntry feature in
+            AuthoringFeatures.Where(entry => entry.CanIgnoreWhenUnsupported))
+        {
+            Line($"    {Quote(feature.AuthoringKey)},");
+        }
+        Line("] as const satisfies readonly GeneratedAuthoringFeature[];");
+        Line();
+        Line("export const AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY = [");
+        foreach (AuthoringFeatureVocabularyEntry feature in
+            AuthoringFeatures.Where(entry => entry.Capabilities.Count > 1
+                && entry.Feature != UnsupportedAuthoringFeature.Upscale))
+        {
+            Line($"    {Quote(feature.AuthoringKey)},");
+        }
+        Line("] as const satisfies readonly GeneratedAuthoringFeature[];");
+        Line();
+        Line("export const doesAuthoringFeatureRequireEveryCapability = (");
+        Line("    feature: GeneratedAuthoringFeature,");
+        Line("): boolean =>");
+        Line("    (");
+        Line("        AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY as readonly string[]");
+        Line("    ).includes(feature);");
+        Line();
+        Line("export const isIgnoredWhenUnsupportedFeature = (");
+        Line("    feature: GeneratedAuthoringFeature,");
+        Line("): boolean =>");
+        Line("    (IGNORED_WHEN_UNSUPPORTED_FEATURES as readonly string[]).includes(feature);");
         Line();
         Line("export const AUTHORING_FEATURE_LABELS: Record<");
         Line("    GeneratedAuthoringFeature,");

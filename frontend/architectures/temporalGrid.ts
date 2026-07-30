@@ -212,12 +212,18 @@ export const resolveClipFrameGridForLookup = (
     ) {
         return { status: "unknown" };
     }
-    const ignored = descriptor.ignoredUnsupportedFeatures ?? [];
+    const supportScope = {
+        capabilities: descriptor.capabilities,
+        extras: descriptor.extras,
+    };
     if (
         (clip.clipLengthFromAudio === true &&
-            !ignored.includes("audioDerivedDuration")) ||
+            architectureFeatureSupport("audioDerivedDuration", supportScope)) ||
         (clip.clipLengthFromControlNet === true &&
-            !ignored.includes("controlSignalDerivedDuration"))
+            architectureFeatureSupport(
+                "controlSignalDerivedDuration",
+                supportScope,
+            ))
     ) {
         return { status: "not-applicable" };
     }

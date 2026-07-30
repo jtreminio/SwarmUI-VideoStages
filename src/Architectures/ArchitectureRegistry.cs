@@ -32,23 +32,6 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                     $"Video architecture '{descriptor.Id}' has invalid frame grid "
                         + $"{descriptor.FrameGrid}; grids must be positive.");
             }
-            if (module is not IArchitectureEffectiveRequestProjector projector)
-            {
-                if (descriptor.IgnoredUnsupportedFeatures.Count > 0)
-                {
-                    throw new InvalidOperationException(
-                        $"Video architecture '{descriptor.Id}' publishes ignored unsupported "
-                            + "features but does not own an effective-request projector.");
-                }
-            }
-            else if (projector.ProjectedUnsupportedFeatures is null
-                || !descriptor.IgnoredUnsupportedFeatures.SetEquals(
-                    projector.ProjectedUnsupportedFeatures))
-            {
-                throw new InvalidOperationException(
-                    $"Video architecture '{descriptor.Id}' publishes ignored unsupported "
-                        + "features that do not match its effective-request projector.");
-            }
             ModelProfileId[] duplicateProfiles = [
                 .. descriptor.Profiles
                     .GroupBy(profile => profile.Id)

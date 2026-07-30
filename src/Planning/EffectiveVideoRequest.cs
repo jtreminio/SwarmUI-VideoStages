@@ -85,7 +85,8 @@ internal sealed record ArchitectureOwnedEffectiveClip(
 /// <summary>
 /// Graph-free request facts supplied once to each active architecture module.
 /// The module sees only the request-global legacy setting it may translate and
-/// its owned clips. It must return exactly one result for every owned clip.
+/// its owned clips. It returns replacements only for clips whose architecture-private
+/// semantics change; common capability projection handles the rest.
 /// </summary>
 internal sealed record ArchitectureEffectiveRequestProjectionContext(
     LegacyVideoSwapRequestSnapshot LegacyVideoSwap,
@@ -131,8 +132,9 @@ internal sealed record EffectiveVideoRequest(
 }
 
 /// <summary>
-/// Projects the first safely ignorable policy slice after actual model resolution and before any
-/// common planning or workflow mutation.
+/// Produces one normalized effective request after actual model resolution: canonical identity,
+/// architecture-specific policy hooks, capability-driven optional-value omission, and temporal
+/// normalization all complete before validation or workflow compilation consumes the request.
 /// </summary>
 internal static class EffectiveVideoRequestProjector
 {
@@ -188,7 +190,7 @@ internal static class EffectiveVideoRequestProjector
             && root.Use == RootUse.Discard
             && !rootEnvironment.HasGlobalRefineSource;
         foreach (ModuleProjectionBatch batch in BuildProjectionBatches(
-            canonicalClips,
+            effectiveClips,
             architecturePlanning))
         {
             ArchitectureEffectiveRequestProjection projection =
@@ -203,6 +205,27 @@ internal static class EffectiveVideoRequestProjector
                 effectiveClips,
                 architectureDecisions,
                 requestDecisions);
+        }
+        for (int timelineIndex = 0; timelineIndex < effectiveClips.Length; timelineIndex++)
+        {
+            ClipSpec clip = effectiveClips[timelineIndex];
+            ClipArchitectureAssignment assignment =
+                architecturePlanning.Clips.GetValueOrDefault(clip.Id);
+            if (assignment is null)
+            {
+                continue;
+            }
+            // Architecture hooks see the canonical authored semantics first. This matters for
+            // model-sensitive policy such as WAN's terminal-reference check, where an
+            // unsupported latent upscale is still active work until common projection removes
+            // it. Capability-driven omission then gives every module the same optional-feature
+            // behavior before temporal resolution and compilation.
+            EffectiveClipProjection common =
+                CapabilityDrivenEffectiveRequestProjector.ProjectUnsupportedFeatures(
+                    clip,
+                    assignment.Architecture);
+            effectiveClips[timelineIndex] = common.Clip;
+            architectureDecisions[timelineIndex].AddRange(common.Decisions);
         }
 
         List<EffectiveRequestDecision>[] temporalDecisions =
@@ -339,12 +362,6 @@ internal static class EffectiveVideoRequestProjector
                 architectureDecisions[projected.TimelineIndex].Add(decision);
             }
             effectiveClips[projected.TimelineIndex] = projected.Clip;
-        }
-        if (!projectedIndexes.SetEquals(ownedIndexes))
-        {
-            throw ProjectionContractError(
-                batch.Module,
-                "did not return exactly one projection for every owned clip");
         }
         foreach (EffectiveRequestDecision decision in projection.RequestDecisions)
         {

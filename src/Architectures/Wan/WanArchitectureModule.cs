@@ -66,22 +66,6 @@ internal sealed class WanArchitectureModule :
             RuleScope.Stage,
             new MinimumStageControlRuleConstraints(0));
 
-    private static IReadOnlySet<UnsupportedAuthoringFeature>
-        UnsupportedProjectionFeatures { get; } =
-            new HashSet<UnsupportedAuthoringFeature>
-            {
-                UnsupportedAuthoringFeature.ReferenceFraming,
-                UnsupportedAuthoringFeature.Retake,
-                UnsupportedAuthoringFeature.PromptRelay,
-                UnsupportedAuthoringFeature.ClipAudio,
-                UnsupportedAuthoringFeature.AudioReuse,
-                UnsupportedAuthoringFeature.AudioDerivedDuration,
-                UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
-                UnsupportedAuthoringFeature.IcLora,
-                UnsupportedAuthoringFeature.Hdr,
-                UnsupportedAuthoringFeature.Upscale,
-            };
-
     internal static WanArchitectureModule Instance { get; } = new();
 
     public VideoArchitectureDescriptor Descriptor { get; } = new(
@@ -134,11 +118,7 @@ internal sealed class WanArchitectureModule :
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
         Rules = [NormalLoraRequiresSamplingStageRule],
-        IgnoredUnsupportedFeatures = UnsupportedProjectionFeatures,
     };
-
-    public IReadOnlySet<UnsupportedAuthoringFeature> ProjectedUnsupportedFeatures =>
-        UnsupportedProjectionFeatures;
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
     {
@@ -263,7 +243,7 @@ internal sealed class WanArchitectureModule :
 
     public ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
         ArchitectureEffectiveRequestProjectionContext context) =>
-        WanEffectiveRequestProjector.Project(context, Descriptor);
+        WanEffectiveRequestProjector.Project(context);
 
     public ArchitectureClipCompilation ValidateAndCompileClip(
         ClipSpec clip,

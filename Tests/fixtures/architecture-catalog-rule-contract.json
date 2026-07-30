@@ -34,7 +34,6 @@
       "attached-audio",
       "standalone-audio"
     ],
-    "ignoredUnsupportedFeatures": [],
     "capabilities": {
       "architecture": [
         "generated-entry",

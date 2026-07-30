@@ -2,6 +2,7 @@ import { isAllowedAudioSource } from "../../audioSource";
 import {
     AUTHORING_FEATURE_CAPABILITIES,
     AUTHORING_FEATURE_LABELS,
+    doesAuthoringFeatureRequireEveryCapability,
     type GeneratedAuthoringFeatureCapability,
 } from "../generatedFeatures";
 import type { ArchitectureCapabilities } from "../types";
@@ -42,7 +43,7 @@ export const upscaleModeForMethod = (method: string): UpscaleMethodMode => {
 
 export interface FeatureSupportScope {
     capabilities: ArchitectureCapabilities;
-    /** Canonical flat feature set. Scoped capability arrays remain migration aliases. */
+    /** Additive flat capability aliases/enhancements from the architecture or resolved model. */
     extras?: readonly string[];
     /** Persisted audio source, when the caller needs the value checked too. */
     audioSource?: string;
@@ -63,12 +64,11 @@ export const architectureFeatureSupport = (
         binding: GeneratedAuthoringFeatureCapability,
     ): boolean => {
         const [capabilityScope, wireName, upscaleMode] = binding;
-        if (scope.extras !== undefined) {
-            return scope.extras.includes(wireName);
-        }
-        return upscaleMode === null
-            ? capability[capabilityScope].includes(wireName)
-            : capability.upscaleModes.includes(upscaleMode);
+        const typedCapability =
+            upscaleMode === null
+                ? capability[capabilityScope].includes(wireName)
+                : capability.upscaleModes.includes(upscaleMode);
+        return typedCapability || scope.extras?.includes(wireName) === true;
     };
 
     let bindings = AUTHORING_FEATURE_CAPABILITIES[feature];
@@ -78,7 +78,10 @@ export const architectureFeatureSupport = (
             ([, , upscaleMode]) => upscaleMode === requestedMode,
         );
     }
-    if (!bindings.some(supports)) {
+    const supported = doesAuthoringFeatureRequireEveryCapability(feature)
+        ? bindings.every(supports)
+        : bindings.some(supports);
+    if (!supported) {
         return false;
     }
     if (feature === "clipAudio" && scope.audioSource !== undefined) {

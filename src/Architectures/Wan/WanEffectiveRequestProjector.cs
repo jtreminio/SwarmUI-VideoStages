@@ -10,14 +10,12 @@ namespace VideoStages.Architectures.Wan;
 internal static class WanEffectiveRequestProjector
 {
     internal static ArchitectureEffectiveRequestProjection Project(
-        ArchitectureEffectiveRequestProjectionContext context,
-        VideoArchitectureDescriptor descriptor)
+        ArchitectureEffectiveRequestProjectionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(descriptor);
 
         ArchitectureProjectedEffectiveClip[] clips = context.OwnedClips
-            .Select(owned => ProjectClip(owned, descriptor))
+            .Select(ProjectClip)
             .ToArray();
         EffectiveRequestDecision[] requestDecisions =
             context.LegacyVideoSwap?.IsConfigured == true
@@ -38,31 +36,47 @@ internal static class WanEffectiveRequestProjector
     }
 
     private static ArchitectureProjectedEffectiveClip ProjectClip(
-        ArchitectureOwnedEffectiveClip owned,
-        VideoArchitectureDescriptor descriptor)
+        ArchitectureOwnedEffectiveClip owned)
     {
-        EffectiveClipProjection baseline =
-            BaselineVideoEffectiveRequestProjector.ProjectBaseline(
-                owned.Clip,
-                preserveFrameReferences: true,
-                descriptor,
-                "WAN",
-                "wan");
-        List<EffectiveRequestDecision> decisions = [.. baseline.Decisions];
-        ClipSpec effective = ProjectFrameReferences(
-            baseline.Clip,
+        List<EffectiveRequestDecision> decisions = [];
+        ClipSpec effective = ProjectReferenceStrengths(
+            owned.Clip,
+            decisions);
+        effective = ProjectFrameReferences(
+            effective,
             owned.Assignment,
             decisions);
-        EffectiveClipProjection enhancements =
-            BaselineVideoEffectiveRequestProjector.ProjectUnsupportedEnhancements(
-                effective,
-                "WAN",
-                "wan");
-        decisions.AddRange(enhancements.Decisions);
         return new(
             owned.TimelineIndex,
-            enhancements.Clip,
+            effective,
             decisions.AsReadOnly());
+    }
+
+    private static ClipSpec ProjectReferenceStrengths(
+        ClipSpec effective,
+        ICollection<EffectiveRequestDecision> decisions)
+    {
+        StageSpec[] stages = (effective.Stages ?? []).ToArray();
+        bool hasCustomStrength = stages.Any(stage =>
+            stage.ImageRefStrengths?.Any(
+                strength => Math.Abs(
+                    strength - Constants.DefaultStageRefStrength)
+                    > 0.000001) == true);
+        if (hasCustomStrength)
+        {
+            decisions.Add(EffectiveRequestDecision.Ignore(
+                "effective-request.wan-reference-strengths-ignored",
+                $"Clip {effective.Id} configures per-stage frame-reference strengths, which "
+                    + "WAN native conditioning does not use. The authored strengths remain "
+                    + "saved and are ignored for this generation.",
+                effective.Id));
+        }
+        return effective with
+        {
+            Stages = stages
+                .Select(stage => stage with { ImageRefStrengths = [] })
+                .ToArray(),
+        };
     }
 
     private static ClipSpec ProjectFrameReferences(

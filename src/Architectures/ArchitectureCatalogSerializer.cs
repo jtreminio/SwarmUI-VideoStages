@@ -23,10 +23,6 @@ internal static class ArchitectureCatalogSerializer
         ["label"] = descriptor.DisplayName,
         ["defaultProfileId"] = descriptor.DefaultProfileId.Value,
         ["extras"] = new JArray(ArchitectureExtras(descriptor)),
-        ["ignoredUnsupportedFeatures"] = new JArray(
-            descriptor.IgnoredUnsupportedFeatures
-                .Select(SerializeUnsupportedAuthoringFeature)
-                .Order(StringComparer.Ordinal)),
         ["capabilities"] = SerializeCapabilities(descriptor),
         ["profiles"] = new JArray(descriptor.Profiles.Select(profile =>
             Serialize(profile, descriptor))),
@@ -119,14 +115,14 @@ internal static class ArchitectureCatalogSerializer
     private static JObject Serialize(
         VideoModelProfileDescriptor profile,
         VideoArchitectureDescriptor descriptor) => new()
-    {
-        ["id"] = profile.Id.Value,
-        ["label"] = profile.DisplayName,
-        ["entryModes"] = new JArray(profile.EntryModes.Select(SerializeEntryMode)),
-        // Legacy transport field. Profiles are migration aliases, not capability owners.
-        ["capabilities"] = new JArray(LegacyProfileCapabilities(descriptor)),
-        ["rules"] = new JArray(profile.Rules.Select(SerializeRule)),
-    };
+        {
+            ["id"] = profile.Id.Value,
+            ["label"] = profile.DisplayName,
+            ["entryModes"] = new JArray(profile.EntryModes.Select(SerializeEntryMode)),
+            // Legacy transport field. Profiles are migration aliases, not capability owners.
+            ["capabilities"] = new JArray(LegacyProfileCapabilities(descriptor)),
+            ["rules"] = new JArray(profile.Rules.Select(SerializeRule)),
+        };
 
     private static JObject Serialize(ResolvedVideoModel model) => new()
     {
@@ -271,10 +267,6 @@ internal static class ArchitectureCatalogSerializer
         AudioSourceKind.AceStepFun => "AceStepFun",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
-
-    private static string SerializeUnsupportedAuthoringFeature(
-        UnsupportedAuthoringFeature feature) =>
-        ArchitectureFeatureVocabulary.AuthoringKey(feature);
 
     private static string SerializeBoundaryMode(BoundaryExecutionMode mode) => mode switch
     {

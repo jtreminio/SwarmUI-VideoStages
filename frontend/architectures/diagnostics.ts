@@ -15,6 +15,10 @@ import {
     conditionalRule,
     evaluateConditionalRule,
 } from "./conditionalRules";
+import {
+    CAPABILITY_WIRE_NAMES,
+    isIgnoredWhenUnsupportedFeature,
+} from "./generatedFeatures";
 import { NONE_ARCHITECTURE_ID } from "./none/identity";
 import { createBoundaryCapabilityViews } from "./policy/boundaryPolicy";
 import { createClipStageCapabilityViews } from "./policy/clipStageViews";
@@ -48,7 +52,6 @@ const persistedCapabilityIssues = (
     architectureId: string,
     capabilities: ArchitectureCapabilities,
     extras?: readonly string[],
-    ignoredUnsupportedFeatures: readonly AuthoringFeature[] = [],
 ): ArchitectureDiagnostic[] => {
     const diagnostics: ArchitectureDiagnostic[] = [];
     const supports = (
@@ -66,7 +69,7 @@ const persistedCapabilityIssues = (
         if (active) {
             const effectiveSeverity =
                 severity ??
-                (ignoredUnsupportedFeatures.includes(feature)
+                (isIgnoredWhenUnsupportedFeature(feature)
                     ? "warning"
                     : "error");
             diagnostics.push(
@@ -154,23 +157,26 @@ const persistedCapabilityIssues = (
             stage.upscale !== 1 &&
             !supports("upscale", { upscaleMethod: stage.upscaleMethod }),
     );
-    const isKnownAdvancedUpscale = (method: string): boolean => {
-        const mode = upscaleModeForMethod(method);
-        return mode !== "pixel" && mode !== "unsupported";
-    };
+    const isKnownUpscale = (method: string): boolean =>
+        upscaleModeForMethod(method) !== "unsupported";
     unsupported(
         unsupportedUpscales.length > 0,
         "upscale",
         "upscale",
         "Stage upscaling",
-        ignoredUnsupportedFeatures.includes("upscale") &&
+        isIgnoredWhenUnsupportedFeature("upscale") &&
             unsupportedUpscales.every((stage) =>
-                isKnownAdvancedUpscale(stage.upscaleMethod),
+                isKnownUpscale(stage.upscaleMethod),
             )
             ? "warning"
             : "error",
     );
     const sourceKind = audioSourceKind(clip.audioSource);
+    const clipAudioCapabilitySupported = supports("clipAudio");
+    const standaloneAudioSupported =
+        capabilities.architecture.includes(
+            CAPABILITY_WIRE_NAMES.architecture.nativeAudio,
+        ) && capabilities.audioSourceKinds.includes("Native");
     const selectedAudioSourceSupported = supports("clipAudio", {
         audioSource: clip.audioSource,
     });
@@ -197,12 +203,17 @@ const persistedCapabilityIssues = (
     );
     unsupported(
         !selectedAudioSourceSupported &&
-            (sourceKind !== "Native" ||
-                clip.uploadedAudio !== null ||
-                clip.saveAudioTrack),
+            (sourceKind !== "Native" || clip.uploadedAudio !== null),
         "clipAudio",
         "audio-source",
         `Audio source '${sourceKind}'`,
+        clipAudioCapabilitySupported ? "error" : undefined,
+    );
+    unsupported(
+        clip.saveAudioTrack && !standaloneAudioSupported,
+        "clipAudio",
+        "audio-output",
+        "Standalone audio output",
     );
     // Normalization preserves both length flags as authored, so the clip's own
     // state is what makes an authored flag unusable here.
@@ -348,7 +359,6 @@ export const deriveArchitectureDiagnostics = (
                     architecture.capabilities,
                     resolvedFirstModel?.enhancements?.extras ??
                         architecture.extras,
-                    architecture.ignoredUnsupportedFeatures,
                 ),
             );
         }

@@ -354,16 +354,6 @@ internal sealed record VideoArchitectureDescriptor(
 
     public IReadOnlyList<RuleDecision> Rules { get; init; } = [];
 
-    /// <summary>
-    /// Fail-closed per-feature disposition contract consumed by authoring
-    /// diagnostics. Each listed feature must have a matching backend
-    /// projection that prevents unsupported values from reaching execution.
-    /// Value-sensitive features such as Upscale may still execute supported
-    /// variants and must block malformed or unknown variants.
-    /// </summary>
-    public IReadOnlySet<UnsupportedAuthoringFeature>
-        IgnoredUnsupportedFeatures { get; init; } =
-            new HashSet<UnsupportedAuthoringFeature>();
 }
 
 internal sealed record ResolvedVideoModel(
@@ -499,13 +489,6 @@ internal interface IVideoArchitectureModule
 /// </summary>
 internal interface IArchitectureEffectiveRequestProjector
 {
-    /// <summary>
-    /// Unsupported authoring features this projector safely removes from the
-    /// effective copy. The registry requires exact agreement with the
-    /// descriptor contract published to the frontend.
-    /// </summary>
-    IReadOnlySet<UnsupportedAuthoringFeature> ProjectedUnsupportedFeatures { get; }
-
     ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
         ArchitectureEffectiveRequestProjectionContext context);
 }

@@ -83,6 +83,58 @@ public class ArchitectureFeatureVocabularyTests
     }
 
     [Fact]
+    public void Frame_references_require_both_clip_and_stage_capabilities()
+    {
+        ArchitectureCapabilityDescriptor clipOnly = new(
+            ArchitectureCapability.None,
+            ClipCapability.References,
+            StageCapability.None);
+        ArchitectureCapabilityDescriptor stageOnly = new(
+            ArchitectureCapability.None,
+            ClipCapability.None,
+            StageCapability.FrameReferences);
+        ArchitectureCapabilityDescriptor complete = new(
+            ArchitectureCapability.None,
+            ClipCapability.References,
+            StageCapability.FrameReferences);
+
+        Assert.False(ArchitectureFeatureVocabulary.Supports(
+            clipOnly,
+            UnsupportedAuthoringFeature.FrameReferences));
+        Assert.False(ArchitectureFeatureVocabulary.Supports(
+            stageOnly,
+            UnsupportedAuthoringFeature.FrameReferences));
+        Assert.True(ArchitectureFeatureVocabulary.Supports(
+            complete,
+            UnsupportedAuthoringFeature.FrameReferences));
+    }
+
+    [Fact]
+    public void Structural_features_are_never_silently_ignored()
+    {
+        UnsupportedAuthoringFeature[] structural =
+        [
+            UnsupportedAuthoringFeature.MultiStage,
+            UnsupportedAuthoringFeature.SourceVideo,
+            UnsupportedAuthoringFeature.MajorPrompt,
+        ];
+
+        Assert.All(
+            structural,
+            feature => Assert.False(
+                ArchitectureFeatureVocabulary.AuthoringFeatures
+                    .Single(entry => entry.Feature == feature)
+                    .CanIgnoreWhenUnsupported));
+        Assert.DoesNotContain(
+            ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(
+                new(
+                    ArchitectureCapability.None,
+                    ClipCapability.None,
+                    StageCapability.None)),
+            structural.Contains);
+    }
+
+    [Fact]
     public void Generated_typescript_feature_vocabulary_is_current()
     {
         string committedPath = Path.GetFullPath(

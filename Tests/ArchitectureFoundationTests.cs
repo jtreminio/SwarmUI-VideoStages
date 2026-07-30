@@ -434,7 +434,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Capability_validation_blocks_fake_module_before_it_receives_ltx_options()
+    public void Common_projection_ignores_stage_loras_before_fake_module_compilation()
     {
         FakeRegistry registry = new();
         StageSpec stage = Stage(10, "fake-model") with
@@ -454,13 +454,14 @@ public class ArchitectureFoundationTests
 
         Assert.Contains(
             plan.Diagnostics,
-            item => item.Code == "architecture-capability-unsupported");
-        Assert.Equal(0, registry.CompileCounts[new ArchitectureId("fake")]);
-        Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
+            item => item.Code == "effective-request.unsupported-stage-loras-ignored"
+                && item.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.Equal(1, registry.CompileCounts[new ArchitectureId("fake")]);
+        Assert.NotNull(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
     [Fact]
-    public void Capability_validation_rejects_nondefault_reference_framing()
+    public void Common_projection_ignores_nondefault_reference_framing()
     {
         FakeRegistry registry = new();
         ClipSpec clip = GeneratedClip(0, Stage(10, "fake-model")) with
@@ -473,9 +474,10 @@ public class ArchitectureFoundationTests
 
         Assert.Contains(
             plan.Diagnostics,
-            item => item.Code == "architecture-capability-unsupported"
+            item => item.Code
+                    == "effective-request.unsupported-reference-framing-ignored"
                 && item.Message.Contains("reference framing"));
-        Assert.Equal(0, registry.CompileCounts[new("fake")]);
+        Assert.Equal(1, registry.CompileCounts[new("fake")]);
     }
 
     [Fact]
@@ -563,7 +565,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Source_only_none_rejects_captured_stage_audio_reuse()
+    public void Source_only_none_ignores_captured_stage_audio_reuse()
     {
         ClipSpec clip = SourcedClip(0) with
         {
@@ -576,18 +578,20 @@ public class ArchitectureFoundationTests
 
         Assert.Contains(
             plan.Diagnostics,
-            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
+            diagnostic => diagnostic.Code
+                    == "effective-request.unsupported-audio-reuse-ignored"
                 && diagnostic.Message.Contains("captured stage audio reuse"));
-        Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
+        Assert.NotNull(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
     [Fact]
-    public void Source_only_none_rejects_audio_derived_duration_but_accepts_uploaded_audio()
+    public void Source_only_none_ignores_audio_derived_duration_but_accepts_uploaded_audio()
     {
         ClipSpec clip = SourcedClip(0) with
         {
             AudioSource = Constants.AudioSourceUpload,
             UploadedAudio = new("data:audio/wav;base64,AA==", "voice.wav"),
+            SaveAudioTrack = true,
             ClipLengthFromAudio = true,
             AuthoredArchitectureId = "none",
             AuthoredModelProfileId = "none",
@@ -597,17 +601,22 @@ public class ArchitectureFoundationTests
 
         Assert.Contains(
             plan.Diagnostics,
-            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
+            diagnostic => diagnostic.Code
+                    == "effective-request.unsupported-audio-derived-duration-ignored"
                 && diagnostic.Message.Contains("audio-derived clip duration"));
         Assert.DoesNotContain(
             plan.Diagnostics,
             diagnostic => diagnostic.Code == "architecture-capability-unsupported"
                 && diagnostic.Message.Contains("clip audio source"));
-        Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.unsupported-audio-output-ignored");
+        Assert.NotNull(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
     [Fact]
-    public void Source_only_none_rejects_control_signal_derived_duration()
+    public void Source_only_none_ignores_control_signal_derived_duration()
     {
         ClipSpec clip = SourcedClip(0) with
         {
@@ -620,9 +629,10 @@ public class ArchitectureFoundationTests
 
         Assert.Contains(
             plan.Diagnostics,
-            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
+            diagnostic => diagnostic.Code
+                    == "effective-request.unsupported-control-signal-derived-duration-ignored"
                 && diagnostic.Message.Contains("control-signal-derived clip duration"));
-        Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
+        Assert.NotNull(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
     [Theory]
@@ -790,7 +800,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Capability_validation_requires_stage_frame_reference_support()
+    public void Common_projection_requires_both_frame_reference_capabilities()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
             stage: StageCapability.ImageInput | StageCapability.VideoInput) with
@@ -811,13 +821,14 @@ public class ArchitectureFoundationTests
 
         Assert.Contains(
             plan.Diagnostics,
-            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
+            diagnostic => diagnostic.Code
+                    == "effective-request.unsupported-frame-references-ignored"
                 && diagnostic.Message.Contains("frame references"));
-        Assert.Equal(0, registry.CompileCounts[new("fake")]);
+        Assert.Equal(1, registry.CompileCounts[new("fake")]);
     }
 
     [Fact]
-    public void Capability_validation_rejects_the_actual_unsupported_upscale_mode()
+    public void Common_projection_ignores_the_actual_unsupported_upscale_mode()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
             stage: StageCapability.ImageInput
@@ -838,8 +849,9 @@ public class ArchitectureFoundationTests
 
         Assert.Contains(
             plan.Diagnostics,
-            item => item.Message.Contains("upscale mode 'ModelUpscale'"));
-        Assert.Equal(0, registry.CompileCounts[new("fake")]);
+            item => item.Code == "effective-request.unsupported-upscale-ignored"
+                && item.Message.Contains("model-fake"));
+        Assert.Equal(1, registry.CompileCounts[new("fake")]);
     }
 
     [Fact]
@@ -1450,45 +1462,6 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Registry_rejects_an_ignore_contract_without_an_owned_projector()
-    {
-        VideoArchitectureDescriptor descriptor = Descriptor("fake", "profile") with
-        {
-            IgnoredUnsupportedFeatures =
-                new HashSet<UnsupportedAuthoringFeature>
-                {
-                    UnsupportedAuthoringFeature.PromptRelay,
-                },
-        };
-
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => new VideoArchitectureRegistry([new MatchingModule(descriptor)]));
-
-        Assert.Contains("effective-request projector", error.Message);
-        Assert.Contains("'fake'", error.Message);
-    }
-
-    [Fact]
-    public void Registry_rejects_a_projector_disposition_set_that_differs_from_its_descriptor()
-    {
-        VideoArchitectureDescriptor descriptor = Descriptor("fake", "profile") with
-        {
-            IgnoredUnsupportedFeatures =
-                new HashSet<UnsupportedAuthoringFeature>
-                {
-                    UnsupportedAuthoringFeature.PromptRelay,
-                },
-        };
-
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => new VideoArchitectureRegistry(
-                [new MismatchedProjectionModule(descriptor)]));
-
-        Assert.Contains("do not match", error.Message);
-        Assert.Contains("'fake'", error.Message);
-    }
-
-    [Fact]
     public void Registry_accepts_a_stale_default_profile_alias()
     {
         VideoArchitectureDescriptor descriptor = Descriptor("fake", "declared") with
@@ -1642,7 +1615,7 @@ public class ArchitectureFoundationTests
         JObject ltx = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "ltx2");
-        Assert.Empty(ltx["ignoredUnsupportedFeatures"].Values<string>());
+        Assert.Null(ltx["ignoredUnsupportedFeatures"]);
         Assert.Equal("ltx2", ltx["id"]);
         Assert.Equal("LTX Video 2.3", ltx["label"]);
         Assert.Equal("ltx-2.3", ltx["defaultProfileId"]);
@@ -1717,15 +1690,7 @@ public class ArchitectureFoundationTests
         JObject wan = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "wan22");
-        Assert.Contains(
-            "upscale",
-            wan["ignoredUnsupportedFeatures"].Values<string>());
-        Assert.Contains(
-            "icLora",
-            wan["ignoredUnsupportedFeatures"].Values<string>());
-        Assert.DoesNotContain(
-            "frameReferences",
-            wan["ignoredUnsupportedFeatures"].Values<string>());
+        Assert.Null(wan["ignoredUnsupportedFeatures"]);
         Assert.Equal(
             WanArchitectureModule.ImageToVideoProfileId.Value,
             wan["defaultProfileId"]);
@@ -2133,41 +2098,6 @@ public class ArchitectureFoundationTests
                     stage => stage.ClipStageRawIndex,
                     _ => (IArchitectureStagePayload)new FakeStagePayload(descriptor.Id)),
                 []);
-    }
-
-    private sealed class MismatchedProjectionModule(
-        VideoArchitectureDescriptor descriptor) :
-        IVideoArchitectureModule,
-        IArchitectureEffectiveRequestProjector
-    {
-        public VideoArchitectureDescriptor Descriptor => descriptor;
-
-        public IReadOnlySet<UnsupportedAuthoringFeature>
-            ProjectedUnsupportedFeatures { get; } =
-                new HashSet<UnsupportedAuthoringFeature>();
-
-        public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
-        {
-            resolved = null;
-            return false;
-        }
-
-        public ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
-            ArchitectureEffectiveRequestProjectionContext context) =>
-            new(
-                context.OwnedClips
-                    .Select(owned => new ArchitectureProjectedEffectiveClip(
-                        owned.TimelineIndex,
-                        owned.Clip,
-                        []))
-                    .ToArray(),
-                []);
-
-        public ArchitectureClipCompilation ValidateAndCompileClip(
-            ClipSpec clip,
-            IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
-            ArchitectureClipCompileContext context) =>
-            throw new NotSupportedException();
     }
 
     private sealed record FakePayload(

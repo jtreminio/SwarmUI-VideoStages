@@ -11,7 +11,6 @@ import type {
     MinimumStageControlRuleConstraints,
     VideoArchitectureCatalogDto,
 } from "./types";
-import { AUTHORING_FEATURES } from "./types";
 
 const BOUNDARY_MODES = ["cut", "continue", "crossfade"] as const;
 const ENTRY_MODES = [
@@ -48,14 +47,6 @@ const isReferencePositionArray = (value: unknown): value is string[] =>
     isUniqueStringArray(value) &&
     value.every((entry) =>
         (REFERENCE_POSITIONS as readonly string[]).includes(entry),
-    );
-
-const isAuthoringFeatureArray = (
-    value: unknown,
-): value is (typeof AUTHORING_FEATURES)[number][] =>
-    isUniqueStringArray(value) &&
-    value.every((entry) =>
-        (AUTHORING_FEATURES as readonly string[]).includes(entry),
     );
 
 const isRuleDecision = (
@@ -294,8 +285,6 @@ export const parseVideoArchitectureCatalog = (
             !isTrimmedNonEmpty(raw.defaultProfileId) ||
             !isCapabilities(raw.capabilities) ||
             (raw.extras !== undefined && !isUniqueStringArray(raw.extras)) ||
-            (raw.ignoredUnsupportedFeatures !== undefined &&
-                !isAuthoringFeatureArray(raw.ignoredUnsupportedFeatures)) ||
             !Array.isArray(raw.profiles) ||
             !raw.profiles.every(isProfile) ||
             !hasCompleteBoundaryRules(raw.boundaryRules) ||
@@ -321,13 +310,6 @@ export const parseVideoArchitectureCatalog = (
             label: raw.label,
             defaultProfileId: raw.defaultProfileId,
             ...(raw.extras === undefined ? {} : { extras: [...raw.extras] }),
-            ...(raw.ignoredUnsupportedFeatures === undefined
-                ? {}
-                : {
-                      ignoredUnsupportedFeatures: [
-                          ...raw.ignoredUnsupportedFeatures,
-                      ],
-                  }),
             capabilities: structuredClone(raw.capabilities),
             profiles: structuredClone(raw.profiles),
             boundaryRules: structuredClone(raw.boundaryRules),

@@ -313,34 +313,34 @@ public class WanArchitectureTests
                     Upscale = 2,
                     UpscaleMethod = "model-fake-upscaler.safetensors",
                 }),
-            "effective-request.wan-advanced-upscale-ignored");
+            "effective-request.unsupported-upscale-ignored");
         AssertIgnored(
             GeneratedClip(0, stage with { RetakeWindow = new(0, 8, 1) }),
-            "effective-request.wan-retake-ignored");
+            "effective-request.unsupported-retake-ignored");
         AssertIgnored(
             GeneratedClip(0, stage) with { ImageRefs = [new("Generated", 1, false, null)] },
             "effective-request.wan-frame-reference-source-ignored");
         AssertIgnored(
             GeneratedClip(0, stage) with { PromptWindows = [new("late", 1, 1)] },
-            "effective-request.wan-prompt-relay-ignored");
+            "effective-request.unsupported-prompt-relay-ignored");
         AssertIgnored(
             GeneratedClip(0, stage) with { ReuseAudio = true },
-            "effective-request.wan-audio-reuse-ignored");
+            "effective-request.unsupported-audio-reuse-ignored");
         AssertIgnored(
             GeneratedClip(0, stage) with { ClipLengthFromAudio = true },
-            "effective-request.wan-audio-duration-ignored");
+            "effective-request.unsupported-audio-derived-duration-ignored");
         AssertIgnored(
             GeneratedClip(0, stage) with { ClipLengthFromControlNet = true },
-            "effective-request.wan-control-duration-ignored");
+            "effective-request.unsupported-control-signal-derived-duration-ignored");
         AssertIgnored(
             GeneratedClip(0, stage with { ImageReference = "Base" }),
-            "effective-request.wan-stage-reference-ignored");
+            "effective-request.unsupported-stage-reference-ignored");
         AssertIgnored(
             GeneratedClip(0, stage) with
             {
                 IcLoras = [new("wan-ic.safetensors", "Upload", 1, 1, "canny", null)],
             },
-            "effective-request.wan-ic-lora-ignored");
+            "effective-request.unsupported-ic-lora-ignored");
     }
 
     [Fact]
@@ -567,7 +567,7 @@ public class WanArchitectureTests
         Assert.Contains(
             plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.wan-advanced-upscale-ignored");
+                == "effective-request.unsupported-upscale-ignored");
     }
 
     [Fact]

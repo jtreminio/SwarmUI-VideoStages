@@ -424,7 +424,7 @@ public sealed class EffectiveVideoRequestTests
         Assert.Null(request.Spec.Clips[0].Stages[0].RetakeWindow);
         Assert.Contains(
             request.Decisions,
-            decision => decision.Code == "effective-request.wan-retake-ignored");
+            decision => decision.Code == "effective-request.unsupported-retake-ignored");
         Assert.DoesNotContain(
             request.Decisions,
             decision => decision.Code == "effective-request.temporal-grid");
@@ -667,11 +667,11 @@ public sealed class EffectiveVideoRequestTests
             diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
         Assert.Contains(
             plan.Diagnostics,
-            diagnostic => diagnostic.Code == "effective-request.wan-ic-lora-ignored");
+            diagnostic => diagnostic.Code == "effective-request.unsupported-ic-lora-ignored");
         Assert.Contains(
             plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.wan-advanced-upscale-ignored");
+                == "effective-request.unsupported-upscale-ignored");
         WanStagePayload payload = plan.Clips[0].Stages[1].RequireWanPayload();
         Assert.Equal(StageUpscaleMode.None, payload.Upscale.Mode);
         Assert.Equal(1, payload.Upscale.Factor);
@@ -716,7 +716,7 @@ public sealed class EffectiveVideoRequestTests
         Assert.Contains(
             request.Decisions,
             decision => decision.Code
-                    == "effective-request.host-video-references-ignored"
+                    == "effective-request.unsupported-frame-references-ignored"
                 && decision.Disposition
                     == EffectiveRequestDisposition.IgnoreWithWarning);
     }
@@ -810,8 +810,8 @@ public sealed class EffectiveVideoRequestTests
                 UnsupportedAuthoringFeature.Hdr,
                 UnsupportedAuthoringFeature.Upscale,
             }.SetEquals(
-                HostVideoArchitectureModule.Instance.Descriptor
-                    .IgnoredUnsupportedFeatures));
+                ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(
+                    HostVideoArchitectureModule.Instance.Descriptor.Capabilities)));
         Assert.Empty(effective.ImageRefs);
         Assert.All(effective.Stages, stage => Assert.Empty(stage.ImageRefStrengths));
         Assert.Equal(ReferenceFramingMode.Crop, effective.ReferenceFraming);
@@ -829,16 +829,16 @@ public sealed class EffectiveVideoRequestTests
         Assert.Contains(
             request.Decisions,
             decision => decision.Code
-                    == "effective-request.host-video-ic-lora-ignored"
+                    == "effective-request.unsupported-ic-lora-ignored"
                 && decision.Message.Contains(
-                    "generic host video does not support",
+                    "Host Video does not support",
                     StringComparison.Ordinal));
         Assert.Contains(
             request.Decisions,
             decision => decision.Code
-                    == "effective-request.host-video-advanced-upscale-ignored"
+                    == "effective-request.unsupported-upscale-ignored"
                 && decision.Message.Contains(
-                    "unsupported generic host video upscale",
+                    "unsupported upscale",
                     StringComparison.Ordinal));
 
         // Supported authoring remains intact while the unsupported fields are
@@ -850,7 +850,7 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Fact]
-    public void Published_Wan_ignore_dispositions_do_not_claim_frame_reference_removal()
+    public void Wan_absent_capabilities_derive_ignore_dispositions_without_frame_references()
     {
         Assert.True(
             new HashSet<UnsupportedAuthoringFeature>
@@ -866,8 +866,8 @@ public sealed class EffectiveVideoRequestTests
                 UnsupportedAuthoringFeature.Hdr,
                 UnsupportedAuthoringFeature.Upscale,
             }.SetEquals(
-                WanArchitectureModule.Instance.Descriptor
-                    .IgnoredUnsupportedFeatures));
+                ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(
+                    WanArchitectureModule.Instance.Descriptor.Capabilities)));
     }
 
     [Fact]
@@ -943,6 +943,7 @@ public sealed class EffectiveVideoRequestTests
                     WanArchitectureModule.ImageToVideoProfileId.Value,
                     context.OwnedClips[0].Clip.AuthoredModelProfileId);
                 Assert.Equal(0, context.AuthoredRootTimelineIndex);
+                Assert.Single(context.OwnedClips[0].Clip.PromptWindows);
                 return new(
                     context.OwnedClips
                         .Select(owned => new ArchitectureProjectedEffectiveClip(
@@ -965,15 +966,14 @@ public sealed class EffectiveVideoRequestTests
             EffectiveVideoRequestProjector.Project(authored, architectures);
 
         Assert.Equal(1, module.ProjectionCount);
-        Assert.Single(request.Spec.Clips[0].PromptWindows);
+        Assert.Empty(request.Spec.Clips[0].PromptWindows);
         Assert.Contains(
             request.Decisions,
             decision => decision.Code == "effective-request.test-module-routed");
-        Assert.DoesNotContain(
+        Assert.Contains(
             request.Decisions,
-            decision => decision.Code.StartsWith(
-                "effective-request.wan-",
-                StringComparison.Ordinal));
+            decision => decision.Code
+                == "effective-request.unsupported-prompt-relay-ignored");
     }
 
     [Fact]
@@ -999,18 +999,18 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Fact]
-    public void Projection_rejects_missing_owned_clip_results()
+    public void Projection_allows_a_module_to_replace_only_the_owned_clips_it_changes()
     {
         ClipSpec first = Clip(Stage(0, rawIndex: 0));
         ClipSpec second = Clip(Stage(0, rawIndex: 0)) with { Id = 1 };
         VideoStagesSpec authored = Spec(first, second);
         RecordingProjectionModule module = new(
-            WanArchitectureModule.Instance.Descriptor,
+            Ltx2ArchitectureModule.Instance.Descriptor,
             context => new(
                 [
                     new(
                         context.OwnedClips[0].TimelineIndex,
-                        context.OwnedClips[0].Clip,
+                        context.OwnedClips[0].Clip with { SaveAudioTrack = true },
                         []),
                 ],
                 []));
@@ -1019,10 +1019,11 @@ public sealed class EffectiveVideoRequestTests
             _ => module,
             _ => module.Descriptor);
 
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => EffectiveVideoRequestProjector.Project(authored, architectures));
+        EffectiveVideoRequest request =
+            EffectiveVideoRequestProjector.Project(authored, architectures);
 
-        Assert.Contains("every owned clip", error.Message);
+        Assert.True(request.Spec.Clips[0].SaveAudioTrack);
+        Assert.False(request.Spec.Clips[1].SaveAudioTrack);
     }
 
     [Fact]
@@ -1215,7 +1216,7 @@ public sealed class EffectiveVideoRequestTests
         Assert.DoesNotContain(
             request.Decisions,
             decision => decision.Code
-                == "effective-request.host-video-controlnet-ignored");
+                == "effective-request.unsupported-ic-lora-ignored");
         Assert.Null(request.Spec.Clips[0].Stages[0].ControlNetStrength);
     }
 
@@ -1269,8 +1270,8 @@ public sealed class EffectiveVideoRequestTests
             input.ExtraMeta["parser_warnings"]);
         Assert.Contains(warnings, warning => warning.Contains("cached architecture"));
         Assert.Contains(warnings, warning => warning.Contains("cached model profile"));
-        Assert.Contains(warnings, warning => warning.Contains("WAN does not support IC-LoRA"));
-        Assert.Contains(warnings, warning => warning.Contains("runs the stage at 1×"));
+        Assert.Contains(warnings, warning => warning.Contains("IC-LoRA data"));
+        Assert.Contains(warnings, warning => warning.Contains("unsupported upscale method"));
         ClipSpec authored = Assert.Single(generator.GetVideoStagesSpec().Clips);
         Assert.Equal("old-wan-cache", authored.AuthoredArchitectureId);
         Assert.Equal("old-wan-profile", authored.AuthoredModelProfileId);
@@ -1431,10 +1432,6 @@ public sealed class EffectiveVideoRequestTests
         public VideoArchitectureDescriptor Descriptor =>
             WanArchitectureModule.Instance.Descriptor;
 
-        public IReadOnlySet<UnsupportedAuthoringFeature>
-            ProjectedUnsupportedFeatures =>
-                WanArchitectureModule.Instance.ProjectedUnsupportedFeatures;
-
         public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
         {
             resolved = null;
@@ -1467,10 +1464,6 @@ public sealed class EffectiveVideoRequestTests
         internal int ProjectionCount { get; private set; }
 
         public VideoArchitectureDescriptor Descriptor => descriptor;
-
-        public IReadOnlySet<UnsupportedAuthoringFeature>
-            ProjectedUnsupportedFeatures =>
-                descriptor.IgnoredUnsupportedFeatures;
 
         public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
         {

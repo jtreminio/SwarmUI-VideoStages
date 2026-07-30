@@ -1580,13 +1580,10 @@
       frameReferences: "frame-references"
     }
   };
-  var AUTHORING_FEATURES = [
-    "multiStage",
-    "sourceVideo",
+  var IGNORED_WHEN_UNSUPPORTED_FEATURES = [
     "frameReferences",
     "referenceFraming",
     "retake",
-    "majorPrompt",
     "promptRelay",
     "clipAudio",
     "audioReuse",
@@ -1597,6 +1594,11 @@
     "hdr",
     "upscale"
   ];
+  var AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY = [
+    "frameReferences"
+  ];
+  var doesAuthoringFeatureRequireEveryCapability = (feature) => AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY.includes(feature);
+  var isIgnoredWhenUnsupportedFeature = (feature) => IGNORED_WHEN_UNSUPPORTED_FEATURES.includes(feature);
   var AUTHORING_FEATURE_LABELS = {
     multiStage: "Multiple stages",
     sourceVideo: "Source video",
@@ -1620,6 +1622,7 @@
     ],
     sourceVideo: [["clip", CAPABILITY_WIRE_NAMES.clip.sourceVideo, null]],
     frameReferences: [
+      ["clip", CAPABILITY_WIRE_NAMES.clip.references, null],
       ["stage", CAPABILITY_WIRE_NAMES.stage.frameReferences, null]
     ],
     referenceFraming: [
@@ -1667,10 +1670,8 @@
     const capability = scope.capabilities;
     const supports = (binding) => {
       const [capabilityScope, wireName, upscaleMode] = binding;
-      if (scope.extras !== void 0) {
-        return scope.extras.includes(wireName);
-      }
-      return upscaleMode === null ? capability[capabilityScope].includes(wireName) : capability.upscaleModes.includes(upscaleMode);
+      const typedCapability = upscaleMode === null ? capability[capabilityScope].includes(wireName) : capability.upscaleModes.includes(upscaleMode);
+      return typedCapability || scope.extras?.includes(wireName) === true;
     };
     let bindings = AUTHORING_FEATURE_CAPABILITIES[feature];
     if (feature === "upscale" && scope.upscaleMethod !== void 0) {
@@ -1679,7 +1680,8 @@
         ([, , upscaleMode]) => upscaleMode === requestedMode
       );
     }
-    if (!bindings.some(supports)) {
+    const supported = doesAuthoringFeatureRequireEveryCapability(feature) ? bindings.every(supports) : bindings.some(supports);
+    if (!supported) {
       return false;
     }
     if (feature === "clipAudio" && scope.audioSource !== void 0) {
@@ -1774,8 +1776,14 @@
     )) {
       return { status: "unknown" };
     }
-    const ignored = descriptor.ignoredUnsupportedFeatures ?? [];
-    if (clip.clipLengthFromAudio === true && !ignored.includes("audioDerivedDuration") || clip.clipLengthFromControlNet === true && !ignored.includes("controlSignalDerivedDuration")) {
+    const supportScope = {
+      capabilities: descriptor.capabilities,
+      extras: descriptor.extras
+    };
+    if (clip.clipLengthFromAudio === true && architectureFeatureSupport("audioDerivedDuration", supportScope) || clip.clipLengthFromControlNet === true && architectureFeatureSupport(
+      "controlSignalDerivedDuration",
+      supportScope
+    )) {
       return { status: "not-applicable" };
     }
     const models = effectiveGridModels(
@@ -1825,9 +1833,6 @@
   );
   var isReferencePositionArray = (value) => isUniqueStringArray(value) && value.every(
     (entry) => REFERENCE_POSITIONS.includes(entry)
-  );
-  var isAuthoringFeatureArray = (value) => isUniqueStringArray(value) && value.every(
-    (entry) => AUTHORING_FEATURES.includes(entry)
   );
   var isRuleDecision = (value, allowedScopes) => {
     if (!isRecord2(value) || !["supported", "unsupported", "conditional"].includes(
@@ -1944,7 +1949,7 @@
     const architectures = [];
     const architectureIds = /* @__PURE__ */ new Set();
     for (const raw of value.architectures) {
-      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isTrimmedNonEmpty(raw.defaultProfileId) || !isCapabilities(raw.capabilities) || raw.extras !== void 0 && !isUniqueStringArray(raw.extras) || raw.ignoredUnsupportedFeatures !== void 0 && !isAuthoringFeatureArray(raw.ignoredUnsupportedFeatures) || !Array.isArray(raw.profiles) || !raw.profiles.every(isProfile) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["architecture", "clip", "stage", "output"])) {
+      if (!isRecord2(raw) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isTrimmedNonEmpty(raw.defaultProfileId) || !isCapabilities(raw.capabilities) || raw.extras !== void 0 && !isUniqueStringArray(raw.extras) || !Array.isArray(raw.profiles) || !raw.profiles.every(isProfile) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["architecture", "clip", "stage", "output"])) {
         return null;
       }
       const profileIds = raw.profiles.map((profile) => profile.id);
@@ -1961,11 +1966,6 @@
         label: raw.label,
         defaultProfileId: raw.defaultProfileId,
         ...raw.extras === void 0 ? {} : { extras: [...raw.extras] },
-        ...raw.ignoredUnsupportedFeatures === void 0 ? {} : {
-          ignoredUnsupportedFeatures: [
-            ...raw.ignoredUnsupportedFeatures
-          ]
-        },
         capabilities: structuredClone(raw.capabilities),
         profiles: structuredClone(raw.profiles),
         boundaryRules: structuredClone(raw.boundaryRules),
@@ -6011,12 +6011,12 @@
 
   // frontend/architectures/diagnostics.ts
   var issue = (code, message, clipIdx, severity = "error") => ({ severity, code, message, clipIdx });
-  var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities, extras, ignoredUnsupportedFeatures = []) => {
+  var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities, extras) => {
     const diagnostics = [];
     const supports = (feature, value) => architectureFeatureSupport(feature, { capabilities, extras, ...value });
     const unsupported = (active, feature, key, label, severity) => {
       if (active) {
-        const effectiveSeverity = severity ?? (ignoredUnsupportedFeatures.includes(feature) ? "warning" : "error");
+        const effectiveSeverity = severity ?? (isIgnoredWhenUnsupportedFeature(feature) ? "warning" : "error");
         diagnostics.push(
           issue(
             `architecture.unsupported.${key}`,
@@ -6096,20 +6096,21 @@
     const unsupportedUpscales = clip.stages.filter(
       (stage) => stage.upscale !== 1 && !supports("upscale", { upscaleMethod: stage.upscaleMethod })
     );
-    const isKnownAdvancedUpscale = (method) => {
-      const mode = upscaleModeForMethod(method);
-      return mode !== "pixel" && mode !== "unsupported";
-    };
+    const isKnownUpscale = (method) => upscaleModeForMethod(method) !== "unsupported";
     unsupported(
       unsupportedUpscales.length > 0,
       "upscale",
       "upscale",
       "Stage upscaling",
-      ignoredUnsupportedFeatures.includes("upscale") && unsupportedUpscales.every(
-        (stage) => isKnownAdvancedUpscale(stage.upscaleMethod)
+      isIgnoredWhenUnsupportedFeature("upscale") && unsupportedUpscales.every(
+        (stage) => isKnownUpscale(stage.upscaleMethod)
       ) ? "warning" : "error"
     );
     const sourceKind = audioSourceKind(clip.audioSource);
+    const clipAudioCapabilitySupported = supports("clipAudio");
+    const standaloneAudioSupported = capabilities.architecture.includes(
+      CAPABILITY_WIRE_NAMES.architecture.nativeAudio
+    ) && capabilities.audioSourceKinds.includes("Native");
     const selectedAudioSourceSupported = supports("clipAudio", {
       audioSource: clip.audioSource
     });
@@ -6135,10 +6136,17 @@
       "Control-signal-derived clip duration"
     );
     unsupported(
-      !selectedAudioSourceSupported && (sourceKind !== "Native" || clip.uploadedAudio !== null || clip.saveAudioTrack),
+      !selectedAudioSourceSupported && (sourceKind !== "Native" || clip.uploadedAudio !== null),
       "clipAudio",
       "audio-source",
-      `Audio source '${sourceKind}'`
+      `Audio source '${sourceKind}'`,
+      clipAudioCapabilitySupported ? "error" : void 0
+    );
+    unsupported(
+      clip.saveAudioTrack && !standaloneAudioSupported,
+      "clipAudio",
+      "audio-output",
+      "Standalone audio output"
     );
     if (clip.clipLengthFromAudio && supports("audioDerivedDuration") && selectedAudioSourceSupported && !canUseClipLengthFromAudio(clip.audioSource)) {
       diagnostics.push(
@@ -6236,8 +6244,7 @@
             clipIdx,
             effectiveArchitectureId,
             architecture.capabilities,
-            resolvedFirstModel?.enhancements?.extras ?? architecture.extras,
-            architecture.ignoredUnsupportedFeatures
+            resolvedFirstModel?.enhancements?.extras ?? architecture.extras
           )
         );
       }

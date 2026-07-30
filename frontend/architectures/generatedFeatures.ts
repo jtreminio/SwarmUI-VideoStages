@@ -63,6 +63,37 @@ export const AUTHORING_FEATURES = [
 
 export type GeneratedAuthoringFeature = (typeof AUTHORING_FEATURES)[number];
 
+export const IGNORED_WHEN_UNSUPPORTED_FEATURES = [
+    "frameReferences",
+    "referenceFraming",
+    "retake",
+    "promptRelay",
+    "clipAudio",
+    "audioReuse",
+    "audioDerivedDuration",
+    "controlSignalDerivedDuration",
+    "stageLoras",
+    "icLora",
+    "hdr",
+    "upscale",
+] as const satisfies readonly GeneratedAuthoringFeature[];
+
+export const AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY = [
+    "frameReferences",
+] as const satisfies readonly GeneratedAuthoringFeature[];
+
+export const doesAuthoringFeatureRequireEveryCapability = (
+    feature: GeneratedAuthoringFeature,
+): boolean =>
+    (
+        AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY as readonly string[]
+    ).includes(feature);
+
+export const isIgnoredWhenUnsupportedFeature = (
+    feature: GeneratedAuthoringFeature,
+): boolean =>
+    (IGNORED_WHEN_UNSUPPORTED_FEATURES as readonly string[]).includes(feature);
+
 export const AUTHORING_FEATURE_LABELS: Record<
     GeneratedAuthoringFeature,
     string
@@ -93,6 +124,7 @@ export const AUTHORING_FEATURE_CAPABILITIES: Record<
     ],
     sourceVideo: [["clip", CAPABILITY_WIRE_NAMES.clip.sourceVideo, null]],
     frameReferences: [
+        ["clip", CAPABILITY_WIRE_NAMES.clip.references, null],
         ["stage", CAPABILITY_WIRE_NAMES.stage.frameReferences, null],
     ],
     referenceFraming: [

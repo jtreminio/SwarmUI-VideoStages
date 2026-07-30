@@ -591,27 +591,27 @@ public class HostVideoRuntimeFlowTests
         Assert.Contains(
             generator.RequireVideoExecutionPlanContext().Plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.host-video-advanced-upscale-ignored");
+                == "effective-request.unsupported-upscale-ignored");
         Assert.Contains(
             generator.RequireVideoExecutionPlanContext().Plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.host-video-ic-lora-ignored");
+                == "effective-request.unsupported-ic-lora-ignored");
         Assert.Contains(
             generator.RequireVideoExecutionPlanContext().Plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.host-video-stage-reference-ignored");
+                == "effective-request.unsupported-stage-reference-ignored");
         Assert.Contains(
             generator.RequireVideoExecutionPlanContext().Plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.host-video-audio-output-ignored");
+                == "effective-request.unsupported-audio-output-ignored");
         Assert.Contains(
             generator.RequireVideoExecutionPlanContext().Plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.host-video-audio-reuse-ignored");
+                == "effective-request.unsupported-audio-reuse-ignored");
         Assert.Contains(
             generator.RequireVideoExecutionPlanContext().Plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.host-video-reference-framing-ignored");
+                == "effective-request.unsupported-reference-framing-ignored");
         List<string> warnings = Assert.IsType<List<string>>(
             input.ExtraMeta["parser_warnings"]);
         Assert.Contains(

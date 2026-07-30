@@ -91,13 +91,12 @@ describe("resolved temporal grid", () => {
         });
     });
 
-    it("uses the static grid when an architecture explicitly ignores a dynamic-length flag", () => {
+    it("uses the static grid when a dynamic-length capability is absent", () => {
         const catalog = testArchitectureCatalog();
         const descriptor = catalog.architectures[0];
         descriptor.capabilities.clip = descriptor.capabilities.clip.filter(
             (feature) => feature !== "audio-derived-duration",
         );
-        descriptor.ignoredUnsupportedFeatures = ["audioDerivedDuration"];
         const clip = minimalClip({
             clipLengthFromAudio: true,
             stages: [minimalStage({ model: "ltx" })],

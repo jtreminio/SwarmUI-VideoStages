@@ -19,7 +19,10 @@ import { renderTimeline } from "../timelineView";
 import type { Clip } from "../types";
 import { reconcileClipArchitectureIdentity } from "./clipIdentity";
 import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
-import { createCapabilityViewResolver } from "./policy";
+import {
+    architectureFeatureSupport,
+    createCapabilityViewResolver,
+} from "./policy";
 import type { ArchitectureModelCatalog } from "./types";
 
 const catalog = (): ArchitectureModelCatalog => {
@@ -86,6 +89,30 @@ const fakeClip = () =>
     });
 
 describe("catalog-backed authoring policy", () => {
+    it("requires both halves of the frame-reference contract", () => {
+        const capabilities = structuredClone(
+            catalog().architectures[0].capabilities,
+        );
+        expect(
+            architectureFeatureSupport("frameReferences", { capabilities }),
+        ).toBe(true);
+
+        capabilities.clip = capabilities.clip.filter(
+            (capability) => capability !== "references",
+        );
+        expect(
+            architectureFeatureSupport("frameReferences", { capabilities }),
+        ).toBe(false);
+
+        capabilities.clip.push("references");
+        capabilities.stage = capabilities.stage.filter(
+            (capability) => capability !== "frame-references",
+        );
+        expect(
+            architectureFeatureSupport("frameReferences", { capabilities }),
+        ).toBe(false);
+    });
+
     it("uses scoped capabilities and keeps unsupported persisted values removable", () => {
         const view = createCapabilityViewResolver(catalog()).forClip(
             fakeClip(),

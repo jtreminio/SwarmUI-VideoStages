@@ -340,27 +340,6 @@ describe("architecture catalog wire contract", () => {
         );
     });
 
-    it("validates optional per-feature ignore dispositions as a closed set", () => {
-        const valid = structuredClone(dto);
-        valid.architectures[0].ignoredUnsupportedFeatures = [
-            "promptRelay",
-            "upscale",
-        ];
-        expect(parseVideoArchitectureCatalog(valid)).toEqual(valid);
-
-        const unknown = structuredClone(valid);
-        (unknown.architectures[0].ignoredUnsupportedFeatures as string[])[0] =
-            "future-feature";
-        expect(parseVideoArchitectureCatalog(unknown)).toBeNull();
-
-        const duplicate = structuredClone(valid);
-        duplicate.architectures[0].ignoredUnsupportedFeatures = [
-            "upscale",
-            "upscale",
-        ];
-        expect(parseVideoArchitectureCatalog(duplicate)).toBeNull();
-    });
-
     it("validates typed stage-control rules on model profiles", () => {
         const samplingRule: CapabilityRuleDecision = {
             support: "conditional",

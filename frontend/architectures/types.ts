@@ -98,11 +98,6 @@ export interface ArchitectureCatalogEntryDto {
     label: string;
     defaultProfileId: ModelProfileId;
     extras?: string[];
-    /**
-     * Unsupported optional features the backend guarantees it will omit from
-     * execution while preserving authored data. Missing entries fail closed.
-     */
-    ignoredUnsupportedFeatures?: CatalogAuthoringFeature[];
     /** Scoped legacy transport; new feature reads use `extras`. */
     capabilities: ArchitectureCapabilities;
     profiles: VideoModelProfileDescriptor[];

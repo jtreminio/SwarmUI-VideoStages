@@ -48,18 +48,6 @@ const wanCatalog = (): ArchitectureModelCatalog => {
             capability !== "audio-reuse",
     );
     wan.capabilities.upscaleModes = ["pixel"];
-    wan.ignoredUnsupportedFeatures = [
-        "referenceFraming",
-        "retake",
-        "promptRelay",
-        "clipAudio",
-        "audioReuse",
-        "audioDerivedDuration",
-        "controlSignalDerivedDuration",
-        "icLora",
-        "hdr",
-        "upscale",
-    ];
     wan.profiles = [
         {
             ...wan.profiles[0],
@@ -100,19 +88,6 @@ const hostVideoCatalog = (): ArchitectureModelCatalog => {
     host.capabilities.output = ["video"];
     host.capabilities.upscaleModes = ["pixel"];
     host.capabilities.audioSourceKinds = ["Disabled"];
-    host.ignoredUnsupportedFeatures = [
-        "frameReferences",
-        "referenceFraming",
-        "retake",
-        "promptRelay",
-        "clipAudio",
-        "audioReuse",
-        "audioDerivedDuration",
-        "controlSignalDerivedDuration",
-        "icLora",
-        "hdr",
-        "upscale",
-    ];
     host.profiles = [
         {
             ...host.profiles[0],
@@ -354,20 +329,22 @@ describe("architecture diagnostics", () => {
         );
     });
 
-    it("fails closed when a feature has no ignore disposition", () => {
+    it("keeps absent structural capabilities blocking", () => {
         const models = hostVideoCatalog();
         const host = models.architectures.find(
             (entry) => entry.id === "host-video",
         );
         if (!host) throw new Error("missing host fixture");
-        host.ignoredUnsupportedFeatures =
-            host.ignoredUnsupportedFeatures?.filter(
-                (feature) => feature !== "promptRelay",
-            );
+        host.capabilities.architecture = host.capabilities.architecture.filter(
+            (capability) => capability !== "multi-stage",
+        );
         const clip = minimalClip({
             architecture: host.id,
-            promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
             stages: [
+                minimalStage({
+                    model: "host-video.safetensors",
+                    modelProfileId: "host-video",
+                }),
                 minimalStage({
                     model: "host-video.safetensors",
                     modelProfileId: "host-video",
@@ -377,7 +354,7 @@ describe("architecture diagnostics", () => {
 
         expect(
             deriveArchitectureDiagnostics([clip], models).find(
-                ({ code }) => code === "architecture.unsupported.prompt-relay",
+                ({ code }) => code === "architecture.unsupported.multi-stage",
             )?.severity,
         ).toBe("error");
     });
@@ -530,6 +507,7 @@ describe("architecture diagnostics", () => {
                 data: "data:audio/wav;base64,AA==",
                 fileName: "voice.wav",
             },
+            saveAudioTrack: true,
             clipLengthFromAudio: true,
         });
         const before = structuredClone(clip);
@@ -543,6 +521,7 @@ describe("architecture diagnostics", () => {
             "architecture.unsupported.audio-derived-duration",
         );
         expect(codes).not.toContain("architecture.unsupported.audio-source");
+        expect(codes).toContain("architecture.unsupported.audio-output");
         expect(codes).not.toContain(
             "architecture.unusable.clip-length-from-audio",
         );
