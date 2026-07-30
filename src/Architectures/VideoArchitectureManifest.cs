@@ -57,10 +57,29 @@ internal static class VideoArchitectureManifest
         Array.AsReadOnly(Production.Select(item => item.Module).ToArray());
 
     internal static IReadOnlyList<IArchitectureGenerationSessionFactoryProvider>
-        CreateProductionRuntimeProviders(WorkflowGenerator generator) =>
-        Array.AsReadOnly(Production
-            .Select(item => item.CreateRuntimeProvider(generator))
-            .ToArray());
+        CreateProductionRuntimeProviders(
+            WorkflowGenerator generator,
+            IEnumerable<ArchitectureId> activeArchitectureIds)
+    {
+        ArgumentNullException.ThrowIfNull(generator);
+        ArgumentNullException.ThrowIfNull(activeArchitectureIds);
+        Dictionary<ArchitectureId, VideoArchitectureRegistration> registrations =
+            Production.ToDictionary(item => item.Module.Descriptor.Id);
+        List<IArchitectureGenerationSessionFactoryProvider> providers = [];
+        foreach (ArchitectureId architectureId in activeArchitectureIds.Distinct())
+        {
+            if (!registrations.TryGetValue(
+                architectureId,
+                out VideoArchitectureRegistration registration))
+            {
+                throw new InvalidOperationException(
+                    $"No generation runtime provider is registered for architecture "
+                        + $"'{architectureId}'.");
+            }
+            providers.Add(registration.CreateRuntimeProvider(generator));
+        }
+        return providers.AsReadOnly();
+    }
 
     internal static void RegisterProductionHostHandlers()
     {

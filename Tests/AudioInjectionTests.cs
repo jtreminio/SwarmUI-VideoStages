@@ -499,16 +499,19 @@ public class AudioInjectionTests
     }
 
     [Fact]
-    public void Active_audio_only_configuration_without_timeline_is_rejected()
+    public void Active_empty_configuration_does_not_gate_core_generation()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, "[]");
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps()));
-        Assert.Contains("no executable clips", error.Message);
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
+
+        Assert.NotEmpty(workflow);
+        Assert.Null(generator.GetVideoExecutionPlanContext());
+        Assert.NotNull(generator.CurrentMedia);
     }
 
     [Fact]

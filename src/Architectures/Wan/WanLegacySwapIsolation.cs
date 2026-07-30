@@ -36,10 +36,6 @@ internal static class WanLegacySwapIsolation
         {
             return;
         }
-        // The normal workflow preflight has already validated this plan before core image-to-video
-        // construction. Requiring it here also keeps direct or out-of-order handler invocation
-        // self-contained and independent of another architecture handler's registration order.
-        context = generator.RequireVideoExecutionPlanContext();
         if (context.Plan.Clips.Any(
                 clip => clip.Architecture?.Id == WanArchitectureModule.ArchitectureId)
             != true)
@@ -47,7 +43,10 @@ internal static class WanLegacySwapIsolation
             return;
         }
 
-        genInfo.VideoSwapModel = null;
-        genInfo.VideoSwapPercent = 0.5;
+        context.ExecutePrepared(() =>
+        {
+            genInfo.VideoSwapModel = null;
+            genInfo.VideoSwapPercent = 0.5;
+        });
     }
 }

@@ -13,12 +13,10 @@ internal sealed class VideoStagesCoordinator(
     StageSequenceRunner stageSequenceRunner,
     ArchitectureRuntimeSessionFactoryRegistry runtimeFactories)
 {
-    public void RunConfiguredStages() =>
-        RunConfiguredStages(g.RequireVideoExecutionPlanContext());
-
     internal void RunConfiguredStages(VideoExecutionPlanContext planContext)
     {
         ArgumentNullException.ThrowIfNull(planContext);
+        planContext.RequirePrepared();
         if (planContext.Plan.Clips.Count == 0)
         {
             return;

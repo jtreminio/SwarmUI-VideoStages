@@ -1395,7 +1395,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Clip_shaped_json_without_executable_timeline_is_rejected()
+    public void Clip_shaped_json_without_executable_timeline_does_not_gate_core_generation()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
@@ -1405,11 +1405,14 @@ public partial class StageFlowTests
         ).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => WorkflowTestHarness.GenerateWithStepsAndState(
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
-                BuildCoreVideoWorkflowSteps()));
-        Assert.Contains("no executable clips", error.Message);
+                BuildCoreVideoWorkflowSteps());
+
+        Assert.NotEmpty(workflow);
+        Assert.Null(generator.GetVideoExecutionPlanContext());
+        Assert.NotNull(generator.CurrentMedia);
     }
 
     [Fact]

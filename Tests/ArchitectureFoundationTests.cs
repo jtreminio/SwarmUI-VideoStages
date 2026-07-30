@@ -1247,8 +1247,49 @@ public class ArchitectureFoundationTests
 
         Assert.Equal(
             VideoArchitectureManifest.Production.Select(item => item.Module.Descriptor.Id),
-            VideoArchitectureManifest.CreateProductionRuntimeProviders(generator)
+            VideoArchitectureManifest.CreateProductionRuntimeProviders(
+                generator,
+                VideoArchitectureManifest.Production.Select(
+                    item => item.Module.Descriptor.Id))
                 .Select(provider => provider.ArchitectureId));
+    }
+
+    [Fact]
+    public void Production_manifest_constructs_only_requested_runtime_providers_in_request_order()
+    {
+        WorkflowGenerator generator = new()
+        {
+            UserInput = new T2IParamInput(null),
+            Features = [],
+            Workflow = [],
+        };
+
+        IReadOnlyList<IArchitectureGenerationSessionFactoryProvider> providers =
+            VideoArchitectureManifest.CreateProductionRuntimeProviders(
+                generator,
+                [new("wan22"), new("none"), new("wan22")]);
+
+        Assert.Equal(
+            [new ArchitectureId("wan22"), new ArchitectureId("none")],
+            providers.Select(provider => provider.ArchitectureId));
+    }
+
+    [Fact]
+    public void Production_manifest_rejects_a_missing_runtime_provider_binding()
+    {
+        WorkflowGenerator generator = new()
+        {
+            UserInput = new T2IParamInput(null),
+            Features = [],
+            Workflow = [],
+        };
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            VideoArchitectureManifest.CreateProductionRuntimeProviders(
+                generator,
+                [new("not-registered")]));
+
+        Assert.Contains("not-registered", error.Message);
     }
 
     [Theory]
@@ -1280,6 +1321,10 @@ public class ArchitectureFoundationTests
             spec,
             RootEnvironment.FromSpec(spec),
             ArchitecturePlanResolver.Resolve(spec, new FakeRegistry()));
+        // This is a pure common-orchestrator routing test. Its synthetic alternating clips do not
+        // satisfy production entry-role planning, so keep those planner diagnostics out of the
+        // prepared runtime seam being exercised here.
+        plan = plan with { Diagnostics = [] };
 
         JObject workflow = [];
         using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
@@ -1317,6 +1362,7 @@ public class ArchitectureFoundationTests
         List<ArchitectureClipRuntimeContext> runtimeContexts = [];
         VideoArchitectureExecutionHost host = new(
             generator,
+            plan,
             [
                 new RecordingSessionFactoryProvider(
                     new("ltx2"),
@@ -1327,8 +1373,10 @@ public class ArchitectureFoundationTests
                     calls,
                     runtimeContexts),
             ]);
+        VideoExecutionPlanContext request = new(plan, () => host);
+        request.PrepareRequest();
 
-        host.RunConfiguredStages(new VideoExecutionPlanContext(plan));
+        host.RunConfiguredStages();
 
         Assert.Equal(ids, calls);
         Assert.All(runtimeContexts.Skip(1), context =>
@@ -1338,8 +1386,27 @@ public class ArchitectureFoundationTests
             Assert.Null(context.PreviousClipOutput);
         });
         Assert.Equal(100, generator.CurrentMedia.Frames);
+        Assert.Equal(VideoExecutionState.Completed, request.State);
         using WorkflowBridge result = WorkflowBridge.Create(workflow);
         Assert.Single(result.Graph.NodesOfType<BatchImagesNodeNode>());
+    }
+
+    [Fact]
+    public void Runtime_dispatcher_disposes_partial_sessions_when_construction_fails()
+    {
+        TrackingSession first = new(new("first"));
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            new ArchitectureRuntimeDispatcher(FailingSessions()));
+
+        Assert.Equal("session construction failed", error.Message);
+        Assert.True(first.Disposed);
+
+        IEnumerable<IVideoGenerationSession> FailingSessions()
+        {
+            yield return first;
+            throw new InvalidOperationException("session construction failed");
+        }
     }
 
     [Fact]
@@ -2152,6 +2219,19 @@ public class ArchitectureFoundationTests
         public void Dispose()
         {
         }
+    }
+
+    private sealed class TrackingSession(ArchitectureId architectureId) :
+        IVideoGenerationSession
+    {
+        public ArchitectureId ArchitectureId => architectureId;
+
+        internal bool Disposed { get; private set; }
+
+        public DecodedClipArtifact Execute(ArchitectureClipRuntimeContext context) =>
+            throw new NotSupportedException();
+
+        public void Dispose() => Disposed = true;
     }
 
     private sealed class RecordingSessionFactory(

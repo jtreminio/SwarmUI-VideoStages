@@ -22,15 +22,18 @@ public class ArchitectureRuntimeOwnershipTests
         WorkflowGenerator generator = Generator();
         RecordingProvider sourced = new(new("sourced-arch"));
         RecordingProvider future = new(new("future-arch"));
-        VideoArchitectureExecutionHost host = new(generator, [sourced, future]);
+        VideoArchitectureExecutionHost host = PreparedHost(
+            generator,
+            plan,
+            [sourced, future]);
 
-        host.DispatchHostPhase(ArchitectureHostPhase.DropCoreOutput, plan);
+        host.DispatchHostPhase(ArchitectureHostPhase.DropCoreOutput);
 
         Assert.Empty(sourced.HostPhases);
         ArchitectureHostPhaseContext rootPhase = Assert.Single(future.HostPhases);
         Assert.Equal(ArchitectureHostPhaseScope.RootOwnerOnly, rootPhase.Scope);
         Assert.Equal(new ArchitectureId("future-arch"), rootPhase.RootOwnerArchitectureId);
-        Assert.Same(future.Resizer, host.GetRootMediaResizer(plan));
+        Assert.Same(future.Resizer, host.GetRootMediaResizer());
     }
 
     [Fact]
@@ -40,9 +43,12 @@ public class ArchitectureRuntimeOwnershipTests
         WorkflowGenerator generator = Generator();
         RecordingProvider sourced = new(new("sourced-arch"));
         RecordingProvider future = new(new("future-arch"));
-        VideoArchitectureExecutionHost host = new(generator, [sourced, future]);
+        VideoArchitectureExecutionHost host = PreparedHost(
+            generator,
+            plan,
+            [sourced, future]);
 
-        host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors, plan);
+        host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors);
 
         ArchitectureHostPhaseContext sourcedPhase = Assert.Single(sourced.HostPhases);
         ArchitectureHostPhaseContext futurePhase = Assert.Single(future.HostPhases);
@@ -80,17 +86,120 @@ public class ArchitectureRuntimeOwnershipTests
         WorkflowGenerator generator = Generator(withRefineSource: true);
         JObject before = (JObject)generator.Workflow.DeepClone();
         WGNodeData beforeMedia = generator.CurrentMedia;
-        VideoArchitectureExecutionHost host = new(generator, [sourced, future]);
+        VideoArchitectureExecutionHost host = new(generator, plan, [sourced, future]);
+        VideoExecutionPlanContext request = new(plan, () => host);
 
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(() =>
-            host.PreflightRequest(plan));
+            request.PrepareRequest());
+        SwarmUserErrorException repeated = Assert.Throws<SwarmUserErrorException>(() =>
+            request.PrepareRequest());
 
         Assert.Contains("future runtime unavailable", error.Message);
+        Assert.Same(error, repeated);
+        Assert.Equal(VideoExecutionState.Failed, request.State);
+        Assert.Single(
+            request.PreflightDiagnostics,
+            diagnostic => diagnostic.Code == "test.preflight");
         Assert.Equal(["preflight:sourced-arch", "preflight:future-arch"], calls);
         Assert.Empty(sourced.HostPhases);
         Assert.Empty(future.HostPhases);
         Assert.Same(beforeMedia, generator.CurrentMedia);
         Assert.True(JToken.DeepEquals(before, generator.Workflow));
+    }
+
+    [Fact]
+    public void Prepared_context_binds_active_providers_once_and_reuses_them_for_host_phases()
+    {
+        VideoExecutionPlan plan = MixedSourcedLeadingPlan();
+        List<string> calls = [];
+        RecordingProvider sourced = new(new("sourced-arch"), calls);
+        RecordingProvider future = new(new("future-arch"), calls);
+        WorkflowGenerator generator = Generator();
+        int bindingCount = 0;
+        VideoExecutionPlanContext request = new(
+            plan,
+            () =>
+            {
+                bindingCount++;
+                return new(generator, plan, [sourced, future]);
+            });
+
+        request.PrepareRequest();
+        request.PrepareRequest();
+        VideoArchitectureExecutionHost host = request.RequirePreparedExecutionHost();
+        host.DispatchHostPhase(ArchitectureHostPhase.CaptureBaseReference);
+        host.DispatchHostPhase(ArchitectureHostPhase.CaptureRefinerReference);
+
+        Assert.Equal(1, bindingCount);
+        Assert.Equal(
+            ["preflight:sourced-arch", "preflight:future-arch"],
+            calls);
+        Assert.Equal(2, sourced.HostPhases.Count);
+        Assert.Equal(2, future.HostPhases.Count);
+    }
+
+    [Fact]
+    public void Unprepared_host_rejects_mutation_at_the_host_boundary()
+    {
+        VideoExecutionPlan plan = MixedSourcedLeadingPlan();
+        RecordingProvider sourced = new(new("sourced-arch"));
+        RecordingProvider future = new(new("future-arch"));
+        VideoArchitectureExecutionHost host = new(
+            Generator(),
+            plan,
+            [sourced, future]);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            host.DispatchHostPhase(ArchitectureHostPhase.CaptureBaseReference));
+
+        Assert.Contains("not bound to a prepared", error.Message);
+        Assert.Empty(sourced.HostPhases);
+        Assert.Empty(future.HostPhases);
+    }
+
+    [Fact]
+    public void Execution_host_rejects_duplicate_runtime_provider_bindings()
+    {
+        VideoExecutionPlan plan = MixedSourcedLeadingPlan();
+        RecordingProvider first = new(new("sourced-arch"));
+        RecordingProvider duplicate = new(new("sourced-arch"));
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            new VideoArchitectureExecutionHost(
+                Generator(),
+                plan,
+                [first, duplicate]));
+
+        Assert.Contains("Duplicate generation runtime provider", error.Message);
+    }
+
+    [Fact]
+    public void Host_phase_failure_is_sticky_and_blocks_later_mutation()
+    {
+        VideoExecutionPlan plan = MixedSourcedLeadingPlan();
+        InvalidOperationException phaseFailure = new("provider mutation failed");
+        RecordingProvider sourced = new(new("sourced-arch"));
+        RecordingProvider future = new(
+            new("future-arch"),
+            hostPhaseFailure: phaseFailure);
+        WorkflowGenerator generator = Generator();
+        VideoArchitectureExecutionHost host = new(
+            generator,
+            plan,
+            [sourced, future]);
+        VideoExecutionPlanContext request = new(plan, () => host);
+        request.PrepareRequest();
+
+        InvalidOperationException first = Assert.Throws<InvalidOperationException>(() =>
+            host.DispatchHostPhase(ArchitectureHostPhase.CaptureBaseReference));
+        InvalidOperationException repeated = Assert.Throws<InvalidOperationException>(() =>
+            host.DispatchHostPhase(ArchitectureHostPhase.CaptureRefinerReference));
+
+        Assert.Same(phaseFailure, first);
+        Assert.Same(first, repeated);
+        Assert.Equal(VideoExecutionState.Failed, request.State);
+        Assert.Single(sourced.HostPhases);
+        Assert.Single(future.HostPhases);
     }
 
     private static VideoExecutionPlan MixedSourcedLeadingPlan()
@@ -222,6 +331,17 @@ public class ArchitectureRuntimeOwnershipTests
         new Dictionary<int, WGNodeData>(),
         new Dictionary<int, WGNodeData>());
 
+    private static VideoArchitectureExecutionHost PreparedHost(
+        WorkflowGenerator generator,
+        VideoExecutionPlan plan,
+        IEnumerable<IArchitectureGenerationSessionFactoryProvider> providers)
+    {
+        VideoArchitectureExecutionHost host = new(generator, plan, providers);
+        VideoExecutionPlanContext request = new(plan, () => host);
+        request.PrepareRequest();
+        return request.RequirePreparedExecutionHost();
+    }
+
     private sealed record TestPayload(ArchitectureId ArchitectureId) :
         IArchitectureClipPayload,
         IArchitectureStagePayload;
@@ -229,7 +349,8 @@ public class ArchitectureRuntimeOwnershipTests
     private sealed class RecordingProvider(
         ArchitectureId architectureId,
         ICollection<string> calls = null,
-        string preflightError = null) :
+        string preflightError = null,
+        Exception hostPhaseFailure = null) :
         IArchitectureGenerationSessionFactoryProvider,
         IArchitectureHostPhaseParticipant,
         IArchitectureRootMediaResizerProvider
@@ -249,8 +370,14 @@ public class ArchitectureRuntimeOwnershipTests
                 : [new(PlanDiagnosticSeverity.Error, "test.preflight", preflightError)];
         }
 
-        public void ExecuteHostPhase(ArchitectureHostPhaseContext context) =>
+        public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
+        {
             HostPhases.Add(context);
+            if (hostPhaseFailure is not null)
+            {
+                throw hostPhaseFailure;
+            }
+        }
 
         public IArchitectureGenerationSessionFactory CreateFactory() =>
             new RecordingFactory(architectureId, calls);

@@ -11,14 +11,26 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
     internal ArchitectureRuntimeDispatcher(IEnumerable<IVideoGenerationSession> sessions)
     {
         Dictionary<ArchitectureId, IVideoGenerationSession> byId = [];
-        foreach (IVideoGenerationSession session in sessions ?? [])
+        try
         {
-            ArgumentNullException.ThrowIfNull(session);
-            if (!byId.TryAdd(session.ArchitectureId, session))
+            foreach (IVideoGenerationSession session in sessions ?? [])
             {
-                throw new InvalidOperationException(
-                    $"Duplicate runtime session for architecture '{session.ArchitectureId}'.");
+                ArgumentNullException.ThrowIfNull(session);
+                if (!byId.TryAdd(session.ArchitectureId, session))
+                {
+                    TryDispose(session);
+                    throw new InvalidOperationException(
+                        $"Duplicate runtime session for architecture '{session.ArchitectureId}'.");
+                }
             }
+        }
+        catch
+        {
+            foreach (IVideoGenerationSession session in byId.Values)
+            {
+                TryDispose(session);
+            }
+            throw;
         }
         _sessions = byId;
     }
@@ -66,6 +78,18 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
         foreach (IVideoGenerationSession session in _sessions.Values)
         {
             session.Dispose();
+        }
+    }
+
+    private static void TryDispose(IVideoGenerationSession session)
+    {
+        try
+        {
+            session.Dispose();
+        }
+        catch
+        {
+            // Preserve the construction failure that made rollback necessary.
         }
     }
 }

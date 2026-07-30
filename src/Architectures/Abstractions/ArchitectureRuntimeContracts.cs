@@ -151,7 +151,12 @@ internal interface IArchitectureGenerationSessionFactory
     void FinalizeTimeline(ArchitectureTimelineFinalizationContext context);
 }
 
-/// <summary>Lazy production registration; architecture dependencies are built only when selected.</summary>
+/// <summary>
+/// Request-scoped production registration. One provider instance is created for each active
+/// architecture after the immutable plan passes compilation, then reused sequentially for request
+/// preflight, host phases, and timeline-factory creation. Mutable timeline and clip state belongs
+/// in the factories and sessions returned below, not in the provider.
+/// </summary>
 internal interface IArchitectureGenerationSessionFactoryProvider
 {
     ArchitectureId ArchitectureId { get; }

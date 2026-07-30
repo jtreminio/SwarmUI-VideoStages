@@ -200,11 +200,10 @@ public class DecisionOwnerRegressionTests
             Formatting.None);
         generator.NodeHelpers[ControlNetCaptureKeys.Audio(0)] = new JArray("1", 1).ToString(
             Formatting.None);
-        VideoArchitectureExecutionHost host = new(generator);
+        VideoExecutionPlan plan = SourcedOnlyPlan();
+        VideoArchitectureExecutionHost host = BoundHost(generator, plan);
 
-        host.DispatchHostPhase(
-            ArchitectureHostPhase.CaptureControlNetPreprocessors,
-            SourcedOnlyPlan());
+        host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors);
 
         // Common orchestration owns capture, so source-only execution gets its audio facts without
         // pretending that the None adapter has architecture-specific host work.
@@ -218,9 +217,9 @@ public class DecisionOwnerRegressionTests
         using SwarmUiTestContext _ = new();
         WorkflowGenerator generator = GeneratorWithVideoControlNet();
 
-        new VideoArchitectureExecutionHost(generator).DispatchHostPhase(
-            ArchitectureHostPhase.CaptureControlNetPreprocessors,
-            PlanWithArchitectures(NoneArchitecture.Descriptor));
+        VideoExecutionPlan plan = PlanWithArchitectures(NoneArchitecture.Descriptor);
+        BoundHost(generator, plan).DispatchHostPhase(
+            ArchitectureHostPhase.CaptureControlNetPreprocessors);
 
         using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         ResizeImageMaskNodeNode hostResize =
@@ -263,15 +262,11 @@ public class DecisionOwnerRegressionTests
         VideoArchitectureDescriptor[] architectures = ltxFirst
             ? [Ltx2ArchitectureModule.Instance.Descriptor, NoneArchitecture.Descriptor]
             : [NoneArchitecture.Descriptor, Ltx2ArchitectureModule.Instance.Descriptor];
-        VideoArchitectureExecutionHost host = new(generator);
         VideoExecutionPlan plan = PlanWithArchitectures(architectures);
+        VideoArchitectureExecutionHost host = BoundHost(generator, plan);
 
-        host.DispatchHostPhase(
-            ArchitectureHostPhase.CaptureControlNetPreprocessors,
-            plan);
-        host.DispatchHostPhase(
-            ArchitectureHostPhase.CaptureControlNetPreprocessors,
-            plan);
+        host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors);
+        host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors);
 
         Assert.True(
             ControlNetCoreMediaCapture.TryGetCapturedControlImage(
@@ -328,13 +323,13 @@ public class DecisionOwnerRegressionTests
         ClipPlan[] clips = ltxRunsFirst
             ? [SourcedClip(0, ltx), GeneratedClip(1, foreign)]
             : [GeneratedClip(0, foreign), GeneratedClip(1, ltx)];
-        VideoArchitectureExecutionHost host = new(
+        VideoExecutionPlan plan = Plan(clips);
+        VideoArchitectureExecutionHost host = BoundHost(
             generator,
+            plan,
             [new ForeignRootAdapter(generator, foreign.Id), new Ltx2ExecutionAdapter(generator)]);
 
-        host.DispatchHostPhase(
-            ArchitectureHostPhase.CaptureControlNetPreprocessors,
-            Plan(clips));
+        host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors);
 
         Assert.True(
             ControlNetCoreMediaCapture.TryGetCapturedControlImage(
@@ -497,6 +492,48 @@ public class DecisionOwnerRegressionTests
         clips,
         [],
         []);
+
+    private static VideoArchitectureExecutionHost BoundHost(
+        WorkflowGenerator generator,
+        VideoExecutionPlan plan,
+        IEnumerable<IArchitectureGenerationSessionFactoryProvider> providers = null)
+    {
+        IEnumerable<IArchitectureGenerationSessionFactoryProvider> innerProviders =
+            providers
+            ?? VideoArchitectureManifest.CreateProductionRuntimeProviders(
+                generator,
+                plan.Clips.Select(clip => clip.Architecture.Id));
+        VideoArchitectureExecutionHost host = new(
+            generator,
+            plan,
+            innerProviders.Select(provider => new HostPhaseTestProvider(provider)));
+        VideoExecutionPlanContext request = new(plan, () => host);
+        request.PrepareRequest();
+        return request.RequirePreparedExecutionHost();
+    }
+
+    private sealed class HostPhaseTestProvider(
+        IArchitectureGenerationSessionFactoryProvider inner) :
+        IArchitectureGenerationSessionFactoryProvider,
+        IArchitectureHostPhaseParticipant,
+        IArchitectureRootMediaResizerProvider
+    {
+        public ArchitectureId ArchitectureId => inner.ArchitectureId;
+
+        public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
+        {
+            if (inner is IArchitectureHostPhaseParticipant participant)
+            {
+                participant.ExecuteHostPhase(context);
+            }
+        }
+
+        public IArchitectureGenerationSessionFactory CreateFactory() =>
+            inner.CreateFactory();
+
+        public IArchitectureRootMediaResizer CreateRootMediaResizer() =>
+            (inner as IArchitectureRootMediaResizerProvider)?.CreateRootMediaResizer();
+    }
 
     private static ClipPlan SourcedClip(
         int id,

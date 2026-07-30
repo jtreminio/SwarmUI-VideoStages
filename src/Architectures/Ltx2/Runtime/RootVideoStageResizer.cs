@@ -28,27 +28,63 @@ internal sealed class RootVideoStageResizer(
     internal static void ApplyRootResolutionBeforeImageToVideo(
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        if (!TryGetVideoContextResizerWithRootSize(
-            genInfo, out IArchitectureRootMediaResizer resizer, out int width, out int height))
+        if (!TryGetApplicableContext(genInfo, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        genInfo.Width = width;
-        genInfo.Height = height;
-        resizer.ApplyCurrentMediaResolution(width, height);
+        context.ExecutePrepared(() =>
+        {
+            if (!TryGetVideoContextResizerWithRootSize(
+                genInfo, out IArchitectureRootMediaResizer resizer, out int width, out int height))
+            {
+                return;
+            }
+            genInfo.Width = width;
+            genInfo.Height = height;
+            resizer.ApplyCurrentMediaResolution(width, height);
+        });
     }
 
     internal static void ApplyRootLatentResolutionAfterImageToVideo(
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        if (!TryGetVideoContextResizerWithRootSize(
-            genInfo, out IArchitectureRootMediaResizer resizer, out int width, out int height))
+        if (!TryGetApplicableContext(genInfo, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        resizer.SetCurrentMediaDimensions(width, height);
+        context.ExecutePrepared(() =>
+        {
+            if (TryGetVideoContextResizerWithRootSize(
+                genInfo, out IArchitectureRootMediaResizer resizer, out int width, out int height))
+            {
+                resizer.SetCurrentMediaDimensions(width, height);
+            }
+        });
+    }
+
+    private static bool TryGetApplicableContext(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        out VideoExecutionPlanContext context)
+    {
+        context = null;
+        if (genInfo?.Generator is not WorkflowGenerator generator
+            || genInfo.ContextID != T2IParamInput.SectionID_Video
+            || !VideoStagesPromptSection.IsActive(generator))
+        {
+            return false;
+        }
+
+        context = generator.GetVideoExecutionPlanContext();
+        if (context is null)
+        {
+            return false;
+        }
+        return ArchitectureRootOwnerResolver.TryResolve(
+                context.Plan,
+                out ArchitectureId? rootOwner)
+            && rootOwner == Ltx2ArchitectureModule.ArchitectureId;
     }
 
     private static bool TryGetVideoContextResizerWithRootSize(
@@ -57,27 +93,11 @@ internal sealed class RootVideoStageResizer(
         out int width,
         out int height)
     {
-        resizer = null;
-        width = 0;
-        height = 0;
-
-        if (genInfo.ContextID != T2IParamInput.SectionID_Video)
-        {
-            return false;
-        }
-
-        // These host callbacks run before the normal VideoStages workflow phases. Resolve and
-        // validate the immutable plan first so an invalid architecture/model document cannot
-        // partially rewrite host dimensions or graph state before the eventual execution error.
-        if (genInfo.Generator.GetVideoExecutionPlanContext() is null)
-        {
-            return false;
-        }
-        _ = genInfo.Generator.RequireVideoExecutionPlanContext();
-
         resizer = Runner.GetRootMediaResizer(genInfo.Generator);
         if (resizer is null)
         {
+            width = 0;
+            height = 0;
             return false;
         }
         return resizer.TryGetRootStageResolution(out width, out height);

@@ -424,6 +424,50 @@ public class HostVideoRuntimeFlowTests
         Assert.False(core.HasMatchedModelData);
     }
 
+    [Fact]
+    public void Core_isolation_failure_is_sticky_after_partial_mutation()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = HostModel(
+            T2IModelClassSorter.CompatHunyuanVideo1_5,
+            "hunyuan-video-1_5");
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 8)));
+        WorkflowGenerator generator = new()
+        {
+            UserInput = input,
+            Features = [],
+            ModelFolderFormat = "/",
+            Workflow = [],
+        };
+        VideoExecutionPlanContext request =
+            generator.RequireVideoExecutionPlanContext();
+        request.PrepareRequest();
+        WorkflowGenerator.ImageToVideoGenInfo core = new()
+        {
+            Generator = generator,
+            ContextID = T2IParamInput.SectionID_Video,
+            VideoSwapModel = models.VideoModel,
+            VideoSwapPercent = 0.2,
+            VideoEndFrame = new Image([0x01], MediaType.ImagePng),
+            StartStep = 4,
+        };
+
+        InvalidOperationException first = Assert.Throws<InvalidOperationException>(
+            () => HostVideoCorePassIsolation.Isolate(core));
+        core.VideoSwapModel = models.VideoModel;
+        InvalidOperationException repeated = Assert.Throws<InvalidOperationException>(
+            () => HostVideoCorePassIsolation.Isolate(core));
+
+        Assert.Contains("no live base model", first.Message);
+        Assert.Same(first, repeated);
+        Assert.Equal(VideoExecutionState.Failed, request.State);
+        Assert.Same(models.VideoModel, core.VideoSwapModel);
+    }
+
     [Theory]
     [InlineData("nvidia-cosmos-predict2-t2i-2b", "nvidia-cosmos-predict2-t2i-2b")]
     [InlineData("invented-video-model", "invented-video-compat")]

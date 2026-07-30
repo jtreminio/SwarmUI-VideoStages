@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
@@ -34,18 +35,17 @@ internal static class VideoStagesContext
     public static VideoExecutionPlanContext RequireVideoExecutionPlanContext(
         this WorkflowGenerator g)
     {
-        VideoExecutionPlanContext context = g.GetVideoExecutionPlanContext();
-        if (context is null)
-        {
-            throw new SwarmUserErrorException(
-                "VideoStages has no executable clips in the active timeline.");
-        }
-
+        VideoExecutionPlanContext context = RequireExistingContext(g);
         PlanDiagnosticReporter.ThrowIfBlocking(
             context.Plan.Diagnostics,
             "VideoStages could not create a valid architecture execution plan");
         return context;
     }
+
+    private static VideoExecutionPlanContext RequireExistingContext(WorkflowGenerator g) =>
+        g.GetVideoExecutionPlanContext()
+        ?? throw new SwarmUserErrorException(
+            "VideoStages has no executable clips in the active timeline.");
 
     private static VideoStagesSpec ParseForPromptTag(T2IParamInput input)
     {
@@ -83,7 +83,9 @@ internal static class VideoStagesContext
         // Compilation happens once per workflow generator, so this is the one place a plan's
         // non-blocking diagnostics can reach the user without repeating on every phase lookup.
         PlanDiagnosticReporter.ReportToRequest(plan.Diagnostics, g.UserInput);
-        return new PlanCacheEntry(new VideoExecutionPlanContext(plan));
+        return new PlanCacheEntry(new VideoExecutionPlanContext(
+            plan,
+            () => new VideoArchitectureExecutionHost(g, plan)));
     }
 
     private static bool HasVideoRefineSource(WorkflowGenerator g)
@@ -109,8 +111,184 @@ internal static class VideoStagesContext
     private sealed record PlanCacheEntry(VideoExecutionPlanContext? Context);
 }
 
+internal enum VideoExecutionState
+{
+    Compiled,
+    Preparing,
+    Prepared,
+    Failed,
+    Completed,
+}
+
 /// <summary>
-/// Architecture-resolved execution data available at every workflow phase.
+/// One request-scoped execution contract. The immutable plan remains inspectable before and after
+/// execution; provider binding and graph-free preflight happen once before any mutating phase.
+/// Mutable timeline factories and sessions are deliberately created only by the final run.
 /// </summary>
-internal sealed record VideoExecutionPlanContext(
-    VideoExecutionPlan Plan);
+internal sealed class VideoExecutionPlanContext
+{
+    private readonly object _preparationLock = new();
+    private readonly Func<VideoArchitectureExecutionHost> _createExecutionHost;
+    private VideoArchitectureExecutionHost _executionHost;
+    private ExceptionDispatchInfo _failure;
+
+    internal VideoExecutionPlanContext(VideoExecutionPlan plan) : this(plan, null)
+    {
+    }
+
+    internal VideoExecutionPlanContext(
+        VideoExecutionPlan plan,
+        Func<VideoArchitectureExecutionHost> createExecutionHost)
+    {
+        Plan = plan ?? throw new ArgumentNullException(nameof(plan));
+        _createExecutionHost = createExecutionHost;
+    }
+
+    public VideoExecutionPlan Plan { get; }
+
+    public VideoExecutionState State { get; private set; } =
+        VideoExecutionState.Compiled;
+
+    public IReadOnlyList<PlanDiagnostic> PreflightDiagnostics { get; private set; } = [];
+
+    internal void PrepareRequest()
+    {
+        lock (_preparationLock)
+        {
+            if (State == VideoExecutionState.Prepared)
+            {
+                return;
+            }
+            if (State == VideoExecutionState.Failed)
+            {
+                _failure.Throw();
+            }
+            if (State != VideoExecutionState.Compiled)
+            {
+                throw new InvalidOperationException(
+                    $"VideoStages request preparation cannot start from state '{State}'.");
+            }
+
+            State = VideoExecutionState.Preparing;
+            try
+            {
+                PlanDiagnosticReporter.ThrowIfBlocking(
+                    Plan.Diagnostics,
+                    "VideoStages could not create a valid architecture execution plan");
+                _executionHost = _createExecutionHost?.Invoke()
+                    ?? throw new InvalidOperationException(
+                        "This video execution plan context has no runtime provider binding.");
+                _executionHost.BindExecutionContext(this);
+                PreflightDiagnostics = _executionHost.CollectPreflightDiagnostics();
+                PlanDiagnosticReporter.ReportToRequest(
+                    PreflightDiagnostics,
+                    _executionHost.RequestInput);
+                PlanDiagnosticReporter.ThrowIfBlocking(
+                    PreflightDiagnostics,
+                    "VideoStages cannot run this request");
+                State = VideoExecutionState.Prepared;
+            }
+            catch (Exception error)
+            {
+                _failure = ExceptionDispatchInfo.Capture(error);
+                State = VideoExecutionState.Failed;
+                throw;
+            }
+        }
+    }
+
+    internal VideoArchitectureExecutionHost RequirePreparedExecutionHost()
+    {
+        RequirePrepared();
+        return _executionHost;
+    }
+
+    internal void RequirePrepared()
+    {
+        if (State == VideoExecutionState.Prepared)
+        {
+            return;
+        }
+        if (State == VideoExecutionState.Failed)
+        {
+            _failure.Throw();
+        }
+        PlanDiagnosticReporter.ThrowIfBlocking(
+            Plan.Diagnostics,
+            "VideoStages could not create a valid architecture execution plan");
+        // Do not prepare lazily from a mutation callback: alternate host callbacks run after core
+        // graph construction. The registered graph-free preflight phase is the sole preparation
+        // owner, and skipping it must fail before this extension mutates anything.
+        throw new InvalidOperationException(
+            $"VideoStages cannot mutate the workflow while request state is '{State}'. "
+                + "Graph-free request preflight must complete first.");
+    }
+
+    internal void ExecutePrepared(
+        VideoArchitectureExecutionHost executionHost,
+        Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        RequireBoundPreparedHost(executionHost);
+        try
+        {
+            action();
+        }
+        catch (Exception error)
+        {
+            FailExecution(error);
+            throw;
+        }
+    }
+
+    internal void ExecutePrepared(Action action) =>
+        ExecutePrepared(RequirePreparedExecutionHost(), action);
+
+    internal T ExecutePrepared<T>(
+        VideoArchitectureExecutionHost executionHost,
+        Func<T> action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        RequireBoundPreparedHost(executionHost);
+        try
+        {
+            return action();
+        }
+        catch (Exception error)
+        {
+            FailExecution(error);
+            throw;
+        }
+    }
+
+    internal void ExecuteToCompletion(
+        VideoArchitectureExecutionHost executionHost,
+        Action action)
+    {
+        ExecutePrepared(executionHost, action);
+        State = VideoExecutionState.Completed;
+    }
+
+    private void RequireBoundPreparedHost(
+        VideoArchitectureExecutionHost executionHost)
+    {
+        ArgumentNullException.ThrowIfNull(executionHost);
+        if (!ReferenceEquals(RequirePreparedExecutionHost(), executionHost))
+        {
+            throw new InvalidOperationException(
+                "This execution host is not bound to the prepared VideoStages request.");
+        }
+    }
+
+    private void FailExecution(Exception error)
+    {
+        ArgumentNullException.ThrowIfNull(error);
+        if (State == VideoExecutionState.Completed)
+        {
+            throw new InvalidOperationException(
+                "A completed VideoStages execution cannot transition to failed.", error);
+        }
+        _failure = ExceptionDispatchInfo.Capture(error);
+        State = VideoExecutionState.Failed;
+    }
+}

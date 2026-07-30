@@ -1,5 +1,4 @@
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages;
@@ -31,112 +30,124 @@ public static class Runner
 {
     public static void PreflightRequest(WorkflowGenerator g)
     {
-        if (!RequireSupportedActiveExecution(g))
+        if (!IsExtensionActive(g))
         {
             return;
         }
 
-        new VideoArchitectureExecutionHost(g).PreflightRequest();
+        g.GetVideoExecutionPlanContext()?.PrepareRequest();
     }
 
     public static void CaptureCoreVideoControlNetPreprocessors(WorkflowGenerator g)
     {
-        if (!RequireSupportedActiveExecution(g))
+        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        Dispatch(g, ArchitectureHostPhase.CaptureControlNetPreprocessors);
+        Dispatch(context, ArchitectureHostPhase.CaptureControlNetPreprocessors);
     }
 
     public static void CaptureBase(WorkflowGenerator g)
     {
-        if (!RequireSupportedActiveExecution(g) || !HasConfiguredStages(g))
+        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context)
+            || !HasConfiguredStages(context))
         {
             return;
         }
 
-        Dispatch(g, ArchitectureHostPhase.CaptureBaseReference);
+        Dispatch(context, ArchitectureHostPhase.CaptureBaseReference);
     }
 
     public static void CaptureRefiner(WorkflowGenerator g)
     {
-        if (!RequireSupportedActiveExecution(g) || !HasConfiguredStages(g))
+        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context)
+            || !HasConfiguredStages(context))
         {
             return;
         }
 
-        Dispatch(g, ArchitectureHostPhase.CaptureRefinerReference);
+        Dispatch(context, ArchitectureHostPhase.CaptureRefinerReference);
     }
 
     public static void CapturePreCoreVideoMedia(WorkflowGenerator g)
     {
-        if (!RequireSupportedActiveExecution(g))
+        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        Dispatch(g, ArchitectureHostPhase.CapturePreCoreMedia);
+        Dispatch(context, ArchitectureHostPhase.CapturePreCoreMedia);
     }
 
     public static void DropCoreImageToVideoOutput(WorkflowGenerator g)
     {
-        if (!RequireSupportedActiveExecution(g))
+        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        Dispatch(g, ArchitectureHostPhase.DropCoreOutput);
+        Dispatch(context, ArchitectureHostPhase.DropCoreOutput);
     }
 
     public static void ApplyRootAudioMaskDimensionsAfterNativeVideo(WorkflowGenerator g)
     {
-        if (!RequireSupportedActiveExecution(g))
+        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        Dispatch(g, ArchitectureHostPhase.ApplyRootAudioMaskDimensions);
+        Dispatch(context, ArchitectureHostPhase.ApplyRootAudioMaskDimensions);
     }
 
     public static void RunConfiguredStages(WorkflowGenerator g)
     {
-        if (!RequireSupportedActiveExecution(g))
+        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        new VideoArchitectureExecutionHost(g).RunConfiguredStages();
+        context.RequirePreparedExecutionHost().RunConfiguredStages();
     }
 
     // --- Non-phase entry points (not registered as workflow steps; see header map) ---
 
-    internal static IArchitectureRootMediaResizer GetRootMediaResizer(WorkflowGenerator g) =>
-        new VideoArchitectureExecutionHost(g).GetRootMediaResizer();
+    internal static IArchitectureRootMediaResizer GetRootMediaResizer(WorkflowGenerator g)
+    {
+        if (!IsExtensionActive(g))
+        {
+            return null;
+        }
+        VideoExecutionPlanContext context = g.GetVideoExecutionPlanContext();
+        return context?.RequirePreparedExecutionHost().GetRootMediaResizer();
+    }
 
-    private static void Dispatch(WorkflowGenerator g, ArchitectureHostPhase phase) =>
-        new VideoArchitectureExecutionHost(g).DispatchHostPhase(phase);
+    private static void Dispatch(
+        VideoExecutionPlanContext context,
+        ArchitectureHostPhase phase) =>
+        context.RequirePreparedExecutionHost().DispatchHostPhase(phase);
 
     private static bool IsExtensionActive(WorkflowGenerator g) => VideoStagesPromptSection.IsActive(g);
 
-    private static bool RequireSupportedActiveExecution(WorkflowGenerator g)
+    private static bool TryGetPreparedActiveExecution(
+        WorkflowGenerator g,
+        out VideoExecutionPlanContext context)
     {
         if (!IsExtensionActive(g))
         {
+            context = null;
             return false;
         }
-        _ = g.RequireVideoExecutionPlanContext();
+        context = g.GetVideoExecutionPlanContext();
+        if (context is null)
+        {
+            return false;
+        }
+        context.RequirePrepared();
         return true;
     }
 
-    private static bool HasConfiguredStages(WorkflowGenerator g)
-    {
-        if (!IsExtensionActive(g))
-        {
-            return false;
-        }
-
-        return g.RequireVideoExecutionPlanContext().Plan.Clips.Any(
+    private static bool HasConfiguredStages(VideoExecutionPlanContext context) =>
+        context.Plan.Clips.Any(
             clip => clip.Stages.Count > 0);
-    }
 }

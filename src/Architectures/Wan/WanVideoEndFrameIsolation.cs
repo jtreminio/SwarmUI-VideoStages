@@ -32,13 +32,17 @@ internal static class WanVideoEndFrameIsolation
         }
 
         VideoExecutionPlanContext context = generator.GetVideoExecutionPlanContext();
-        if (context?.Plan.Clips.Any(
+        if (context is null)
+        {
+            return;
+        }
+        if (context.Plan.Clips.Any(
                 clip => clip.Architecture?.Id == WanArchitectureModule.ArchitectureId)
             != true)
         {
             return;
         }
 
-        genInfo.VideoEndFrame = null;
+        context.ExecutePrepared(() => genInfo.VideoEndFrame = null);
     }
 }

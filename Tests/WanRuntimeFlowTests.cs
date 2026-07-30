@@ -238,8 +238,10 @@ public class WanRuntimeFlowTests
             ContextID = T2IParamInput.SectionID_Video,
             VideoEndFrame = endFrame,
         };
-        WanVideoEndFrameIsolation.IgnoreCoreEndFrame(coreInfo);
-        Assert.Null(coreInfo.VideoEndFrame);
+        InvalidOperationException completedError = Assert.Throws<InvalidOperationException>(
+            () => WanVideoEndFrameIsolation.IgnoreCoreEndFrame(coreInfo));
+        Assert.Contains("Completed", completedError.Message);
+        Assert.Same(endFrame, coreInfo.VideoEndFrame);
         Assert.Same(endFrame, input.Get(T2IParamTypes.VideoEndFrame, null));
 
         WorkflowGenerator.ImageToVideoGenInfo authoredEndFrameInfo = new()

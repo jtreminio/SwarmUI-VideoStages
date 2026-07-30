@@ -11,7 +11,7 @@ namespace VideoStages.Tests;
 public class RootVideoStageResizerContractTests
 {
     [Fact]
-    public void Alternate_handlers_reject_invalid_plan_before_mutating_host_state()
+    public void Central_preflight_rejects_invalid_plan_and_ltx_handlers_remain_inert()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
@@ -53,15 +53,17 @@ public class RootVideoStageResizerContractTests
         JObject workflowBefore = (JObject)generator.Workflow.DeepClone();
         JArray mediaPathBefore = (JArray)generator.CurrentMedia.Path.DeepClone();
 
-        SwarmUserErrorException preError = Assert.Throws<SwarmUserErrorException>(() =>
-            RootVideoStageResizer.ApplyRootResolutionBeforeImageToVideo(genInfo));
-        SwarmUserErrorException postError = Assert.Throws<SwarmUserErrorException>(() =>
-            RootVideoStageResizer.ApplyRootLatentResolutionAfterImageToVideo(genInfo));
+        VideoExecutionPlanContext request = Assert.IsType<VideoExecutionPlanContext>(
+            generator.GetVideoExecutionPlanContext());
+        SwarmUserErrorException preflightError = Assert.Throws<SwarmUserErrorException>(() =>
+            Runner.PreflightRequest(generator));
+        RootVideoStageResizer.ApplyRootResolutionBeforeImageToVideo(genInfo);
+        RootVideoStageResizer.ApplyRootLatentResolutionAfterImageToVideo(genInfo);
 
         Assert.Contains(
             "does not resolve to a registered video architecture",
-            preError.Message);
-        Assert.Equal(preError.Message, postError.Message);
+            preflightError.Message);
+        Assert.Equal(VideoExecutionState.Failed, request.State);
         Assert.Equal(640, genInfo.Width);
         Assert.Equal(360, genInfo.Height);
         Assert.Equal(320, generator.CurrentMedia.Width);

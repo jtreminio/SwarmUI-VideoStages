@@ -1,4 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
@@ -11,23 +12,38 @@ namespace VideoStages.Architectures;
 internal sealed class VideoArchitectureExecutionHost
 {
     private readonly WorkflowGenerator _generator;
+    private readonly VideoExecutionPlan _plan;
     private readonly IReadOnlyDictionary<
         ArchitectureId,
         IArchitectureGenerationSessionFactoryProvider> _providers;
+    private readonly IReadOnlyList<IArchitectureGenerationSessionFactoryProvider>
+        _activeProviders;
+    private readonly ArchitectureId? _rootOwner;
+    private VideoExecutionPlanContext _executionContext;
 
-    internal VideoArchitectureExecutionHost(WorkflowGenerator generator) : this(
+    internal T2IParamInput RequestInput => _generator.UserInput;
+
+    internal VideoArchitectureExecutionHost(
+        WorkflowGenerator generator,
+        VideoExecutionPlan plan) : this(
         generator,
-        VideoArchitectureManifest.CreateProductionRuntimeProviders(generator))
+        plan,
+        VideoArchitectureManifest.CreateProductionRuntimeProviders(
+            generator,
+            ActiveArchitectureIds(plan)))
     {
     }
 
     internal VideoArchitectureExecutionHost(
         WorkflowGenerator generator,
+        VideoExecutionPlan plan,
         IEnumerable<IArchitectureGenerationSessionFactoryProvider> providers)
     {
-        _generator = generator;
+        _generator = generator ?? throw new ArgumentNullException(nameof(generator));
+        _plan = plan ?? throw new ArgumentNullException(nameof(plan));
+        ArgumentNullException.ThrowIfNull(providers);
         Dictionary<ArchitectureId, IArchitectureGenerationSessionFactoryProvider> byId = [];
-        foreach (IArchitectureGenerationSessionFactoryProvider provider in providers ?? [])
+        foreach (IArchitectureGenerationSessionFactoryProvider provider in providers)
         {
             ArgumentNullException.ThrowIfNull(provider);
             if (!byId.TryAdd(provider.ArchitectureId, provider))
@@ -38,6 +54,8 @@ internal sealed class VideoArchitectureExecutionHost
             }
         }
         _providers = byId;
+        _activeProviders = ResolveActiveProviders(_plan, byId);
+        _rootOwner = ArchitectureRootOwnerResolver.Resolve(_plan);
     }
 
     /// <summary>
@@ -45,65 +63,72 @@ internal sealed class VideoArchitectureExecutionHost
     /// an unsatisfiable request is rejected while the host graph, media and node helpers are still
     /// exactly as the host left them.
     /// </summary>
-    internal void PreflightRequest() =>
-        PreflightRequest(_generator.RequireVideoExecutionPlanContext().Plan);
-
-    internal void PreflightRequest(VideoExecutionPlan plan)
+    internal IReadOnlyList<PlanDiagnostic> CollectPreflightDiagnostics()
     {
-        ArgumentNullException.ThrowIfNull(plan);
         List<PlanDiagnostic> diagnostics = [
-            .. new TimelineFrameInterpolator(_generator).Preflight(plan)
+            .. new TimelineFrameInterpolator(_generator).Preflight(_plan)
         ];
-        ArchitectureRequestPreflightContext context = new(plan);
-        foreach (IArchitectureGenerationSessionFactoryProvider provider in ActiveProviders(plan))
+        ArchitectureRequestPreflightContext context = new(_plan);
+        foreach (IArchitectureGenerationSessionFactoryProvider provider in _activeProviders)
         {
             diagnostics.AddRange(provider.PreflightRequest(context) ?? []);
         }
-        PlanDiagnosticReporter.ReportToRequest(diagnostics, _generator.UserInput);
-        PlanDiagnosticReporter.ThrowIfBlocking(
-            diagnostics,
-            "VideoStages cannot run this request");
+        return diagnostics.AsReadOnly();
+    }
+
+    internal void BindExecutionContext(VideoExecutionPlanContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (!ReferenceEquals(context.Plan, _plan))
+        {
+            throw new InvalidOperationException(
+                "The execution host cannot bind a different video execution plan.");
+        }
+        if (_executionContext is not null && !ReferenceEquals(_executionContext, context))
+        {
+            throw new InvalidOperationException(
+                "The execution host is already bound to another VideoStages request.");
+        }
+        _executionContext = context;
     }
 
     internal void DispatchHostPhase(ArchitectureHostPhase phase)
     {
-        VideoExecutionPlanContext context = _generator.RequireVideoExecutionPlanContext();
-        DispatchHostPhase(phase, context.Plan);
+        RequireExecutionContext().ExecutePrepared(
+            this,
+            () => DispatchHostPhaseCore(phase));
     }
 
-    internal void DispatchHostPhase(ArchitectureHostPhase phase, VideoExecutionPlan plan)
+    private void DispatchHostPhaseCore(ArchitectureHostPhase phase)
     {
-        ArgumentNullException.ThrowIfNull(plan);
         if (phase == ArchitectureHostPhase.CaptureControlNetPreprocessors)
         {
             new ControlNetCoreMediaCapture(_generator).Capture();
         }
         ArchitectureHostPhaseScope scope = ArchitectureHostPhasePolicy.Scope(phase);
-        ArchitectureId? rootOwner = ArchitectureRootOwnerResolver.Resolve(plan);
         IEnumerable<IArchitectureGenerationSessionFactoryProvider> providers =
             scope == ArchitectureHostPhaseScope.RootOwnerOnly
-                ? RootOwnerProvider(rootOwner)
-                : ActiveProviders(plan);
+                ? RootOwnerProvider()
+                : _activeProviders;
         foreach (IArchitectureHostPhaseParticipant participant in providers
             .OfType<IArchitectureHostPhaseParticipant>())
         {
-            participant.ExecuteHostPhase(new(phase, scope, plan, rootOwner));
+            participant.ExecuteHostPhase(new(phase, scope, _plan, _rootOwner));
         }
     }
 
     internal IArchitectureRootMediaResizer GetRootMediaResizer()
     {
-        VideoExecutionPlan plan = _generator.RequireVideoExecutionPlanContext().Plan;
-        return GetRootMediaResizer(plan);
+        return RequireExecutionContext().ExecutePrepared(
+            this,
+            GetRootMediaResizerCore);
     }
 
-    internal IArchitectureRootMediaResizer GetRootMediaResizer(VideoExecutionPlan plan)
+    private IArchitectureRootMediaResizer GetRootMediaResizerCore()
     {
-        ArgumentNullException.ThrowIfNull(plan);
-        ArchitectureId? rootOwner = ArchitectureRootOwnerResolver.Resolve(plan);
-        if (rootOwner is null
+        if (_rootOwner is null
             || !_providers.TryGetValue(
-                rootOwner.Value,
+                _rootOwner.Value,
                 out IArchitectureGenerationSessionFactoryProvider provider))
         {
             return null;
@@ -111,18 +136,21 @@ internal sealed class VideoArchitectureExecutionHost
         return (provider as IArchitectureRootMediaResizerProvider)?.CreateRootMediaResizer();
     }
 
-    internal void RunConfiguredStages() =>
-        RunConfiguredStages(_generator.RequireVideoExecutionPlanContext());
-
-    internal void RunConfiguredStages(VideoExecutionPlanContext context)
+    internal void RunConfiguredStages()
     {
-        ArgumentNullException.ThrowIfNull(context);
-        if (context.Plan.Clips.Count == 0)
+        VideoExecutionPlanContext context = RequireExecutionContext();
+        context.ExecuteToCompletion(this, () => RunConfiguredStagesCore(context));
+    }
+
+    private void RunConfiguredStagesCore(VideoExecutionPlanContext context)
+    {
+        context.RequirePrepared();
+        if (_plan.Clips.Count == 0)
         {
             return;
         }
         ArchitectureRuntimeSessionFactoryRegistry runtimeFactories = new(
-            ActiveProviders(context.Plan).Select(provider => provider.CreateFactory()));
+            _activeProviders.Select(provider => provider.CreateFactory()));
         MultiClipParallelMerger merger = new(
             _generator,
             runtimeFactories.BoundaryAssemblers);
@@ -135,33 +163,51 @@ internal sealed class VideoArchitectureExecutionHost
             runtimeFactories).RunConfiguredStages(context);
     }
 
-    private IEnumerable<IArchitectureGenerationSessionFactoryProvider> RootOwnerProvider(
-        ArchitectureId? rootOwner)
+    private VideoExecutionPlanContext RequireExecutionContext() =>
+        _executionContext
+        ?? throw new InvalidOperationException(
+            "The execution host is not bound to a prepared VideoStages request.");
+
+    private IEnumerable<IArchitectureGenerationSessionFactoryProvider> RootOwnerProvider()
     {
-        if (rootOwner is null)
+        if (_rootOwner is null)
         {
             return [];
         }
         if (!_providers.TryGetValue(
-            rootOwner.Value,
+            _rootOwner.Value,
             out IArchitectureGenerationSessionFactoryProvider provider))
         {
             throw new InvalidOperationException(
                 $"No generation runtime provider is registered for root architecture "
-                + $"'{rootOwner.Value}'.");
+                    + $"'{_rootOwner.Value}'.");
         }
         return [provider];
     }
 
-    private IReadOnlyList<IArchitectureGenerationSessionFactoryProvider> ActiveProviders(
+    private static IReadOnlyList<ArchitectureId> ActiveArchitectureIds(
         VideoExecutionPlan plan)
     {
+        ArgumentNullException.ThrowIfNull(plan);
+        return Array.AsReadOnly(plan.Clips
+            .Select(clip => clip.Architecture?.Id
+                ?? throw new InvalidOperationException(
+                    $"Clip {clip.ClipId} has no architecture identity."))
+            .Distinct()
+            .ToArray());
+    }
+
+    private static IReadOnlyList<IArchitectureGenerationSessionFactoryProvider>
+        ResolveActiveProviders(
+            VideoExecutionPlan plan,
+            IReadOnlyDictionary<
+                ArchitectureId,
+                IArchitectureGenerationSessionFactoryProvider> providers)
+    {
         List<IArchitectureGenerationSessionFactoryProvider> active = [];
-        foreach (ArchitectureId id in plan.Clips
-            .Select(clip => clip.Architecture.Id)
-            .Distinct())
+        foreach (ArchitectureId id in ActiveArchitectureIds(plan))
         {
-            if (!_providers.TryGetValue(
+            if (!providers.TryGetValue(
                 id,
                 out IArchitectureGenerationSessionFactoryProvider provider))
             {

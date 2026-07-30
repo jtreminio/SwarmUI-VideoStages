@@ -34,6 +34,125 @@ public class VideoExecutionPlanContextTests
     }
 
     [Fact]
+    public void PrepareRequest_is_idempotent_and_reuses_one_runtime_binding()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(MakeStage(models.VideoModel.Name, "Generated")));
+        WorkflowGenerator generator = CreateGenerator(input);
+        VideoExecutionPlanContext context = generator.RequireVideoExecutionPlanContext();
+
+        Assert.Equal(VideoExecutionState.Compiled, context.State);
+        context.PrepareRequest();
+        VideoArchitectureExecutionHost first = context.RequirePreparedExecutionHost();
+        context.PrepareRequest();
+
+        Assert.Equal(VideoExecutionState.Prepared, context.State);
+        Assert.Same(first, context.RequirePreparedExecutionHost());
+    }
+
+    [Fact]
+    public void Every_mutating_runner_entry_requires_completed_preflight()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(MakeStage(models.VideoModel.Name, "Generated")));
+        WorkflowGenerator generator = CreateGenerator(input);
+        VideoExecutionPlanContext context = generator.RequireVideoExecutionPlanContext();
+
+        Action<WorkflowGenerator>[] phases =
+        [
+            Runner.CaptureCoreVideoControlNetPreprocessors,
+            Runner.CaptureBase,
+            Runner.CaptureRefiner,
+            Runner.CapturePreCoreVideoMedia,
+            Runner.DropCoreImageToVideoOutput,
+            Runner.ApplyRootAudioMaskDimensionsAfterNativeVideo,
+            Runner.RunConfiguredStages,
+            current => Runner.GetRootMediaResizer(current),
+        ];
+
+        foreach (Action<WorkflowGenerator> phase in phases)
+        {
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+                () => phase(generator));
+            Assert.Contains("preflight must complete first", error.Message);
+        }
+        Assert.Equal(VideoExecutionState.Compiled, context.State);
+    }
+
+    [Fact]
+    public void Successful_production_execution_completes_and_preserves_plan_access()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(MakeStage(models.VideoModel.Name, "Generated")));
+        (JObject unusedWorkflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WorkflowTestHarness.Template_BaseOnlyImage()
+                    .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
+                    .Concat(WorkflowTestHarness.VideoStagesSteps()));
+        VideoExecutionPlanContext context =
+            generator.RequireVideoExecutionPlanContext();
+
+        Assert.Equal(VideoExecutionState.Completed, context.State);
+        Assert.Single(context.Plan.Clips);
+        Assert.Throws<InvalidOperationException>(() => context.RequirePrepared());
+    }
+
+    [Fact]
+    public void Blocking_plan_failure_is_memoized_as_failed()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(MakeStage(models.VideoModel.Name, "Generated")));
+        VideoExecutionPlanContext context = Assert.IsType<VideoExecutionPlanContext>(
+            CreateGenerator(input).GetVideoExecutionPlanContext());
+
+        SwarmUserErrorException first = Assert.Throws<SwarmUserErrorException>(
+            () => context.PrepareRequest());
+        SwarmUserErrorException repeated = Assert.Throws<SwarmUserErrorException>(
+            () => context.PrepareRequest());
+
+        Assert.Same(first, repeated);
+        Assert.Equal(VideoExecutionState.Failed, context.State);
+    }
+
+    [Fact]
+    public void Empty_active_timeline_is_inert_across_all_registered_phases()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            "[]");
+
+        (JObject unusedWorkflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WorkflowTestHarness.Template_BaseOnlyImage()
+                    .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
+                    .Concat(WorkflowTestHarness.VideoStagesSteps()));
+
+        Assert.Null(generator.GetVideoExecutionPlanContext());
+        Assert.NotNull(generator.CurrentMedia);
+    }
+
+    [Fact]
     public void GetPlanContext_PreservesUnsupportedArchitectureDiagnostics()
     {
         using SwarmUiTestContext _ = new();

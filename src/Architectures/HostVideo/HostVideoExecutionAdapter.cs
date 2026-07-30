@@ -109,30 +109,38 @@ internal static class HostVideoCorePassIsolation
             return;
         }
         VideoExecutionPlanContext context = generator.GetVideoExecutionPlanContext();
-        if (context is null
-            || ArchitectureRootOwnerResolver.Resolve(context.Plan)
-                != HostVideoArchitectureModule.ArchitectureId)
+        if (context is null)
+        {
+            return;
+        }
+        if (!ArchitectureRootOwnerResolver.TryResolve(
+                context.Plan,
+                out ArchitectureId? rootOwner)
+            || rootOwner != HostVideoArchitectureModule.ArchitectureId)
         {
             return;
         }
 
-        genInfo.VideoSwapModel = null;
-        genInfo.VideoSwapPercent = 0.5;
-        genInfo.VideoEndFrame = null;
-        genInfo.StartStep = 0;
+        context.ExecutePrepared(() =>
+        {
+            genInfo.VideoSwapModel = null;
+            genInfo.VideoSwapPercent = 0.5;
+            genInfo.VideoEndFrame = null;
+            genInfo.StartStep = 0;
 
-        // The core pass is only a donor that VideoStages drops immediately afterward. Reuse the
-        // already-live base model state so this throwaway pass never loads the selected video
-        // checkpoint, reads its audio-reference options, or leaves a video audio VAE behind.
-        genInfo.Model = generator.CurrentModel
-            ?? throw new InvalidOperationException(
-                "The generic host-video core pass has no live base model.");
-        genInfo.Vae = generator.CurrentVae
-            ?? throw new InvalidOperationException(
-                "The generic host-video core pass has no live base VAE.");
-        genInfo.PosCond = generator.FinalPrompt;
-        genInfo.NegCond = generator.FinalNegativePrompt;
-        genInfo.HasMatchedModelData = true;
+            // The core pass is only a donor that VideoStages drops immediately afterward. Reuse the
+            // already-live base model state so this throwaway pass never loads the selected video
+            // checkpoint, reads its audio-reference options, or leaves a video audio VAE behind.
+            genInfo.Model = generator.CurrentModel
+                ?? throw new InvalidOperationException(
+                    "The generic host-video core pass has no live base model.");
+            genInfo.Vae = generator.CurrentVae
+                ?? throw new InvalidOperationException(
+                    "The generic host-video core pass has no live base VAE.");
+            genInfo.PosCond = generator.FinalPrompt;
+            genInfo.NegCond = generator.FinalNegativePrompt;
+            genInfo.HasMatchedModelData = true;
+        });
     }
 }
 
