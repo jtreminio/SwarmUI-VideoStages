@@ -69,6 +69,15 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
                 $"Architecture '{session.ArchitectureId}' returned artifact for clip "
                 + $"'{output.ClipId}' instead of planned clip '{context.Clip.ClipId}'.");
         }
+        ArchitectureId plannedArchitectureId = context.Clip.Architecture.Id;
+        if (output.ArchitectureId != session.ArchitectureId
+            || output.ArchitectureId != plannedArchitectureId)
+        {
+            throw new InvalidOperationException(
+                $"Architecture '{session.ArchitectureId}' returned artifact for architecture "
+                + $"'{output.ArchitectureId}' instead of planned architecture "
+                + $"'{plannedArchitectureId}' for clip '{context.Clip.ClipId}'.");
+        }
         output.ValidateDecoded();
         return output;
     }

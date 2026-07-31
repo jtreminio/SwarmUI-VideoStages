@@ -1074,6 +1074,35 @@ public class ArchitectureFoundationTests
         Assert.Contains("planned clip '7'", error.Message);
     }
 
+    [Fact]
+    public void Runtime_dispatcher_rejects_mismatched_session_result_architecture()
+    {
+        VideoExecutionPlan plan = Plan(GeneratedClip(7, Stage(10, "ltx-model")));
+        ClipPlan clip = Assert.Single(plan.Clips);
+        using ArchitectureRuntimeDispatcher dispatcher = new(
+        [
+            new ProjectingSession(
+                new("ltx2"),
+                context => ValidArtifact(context.Clip) with
+                {
+                    ArchitectureId = new("fake"),
+                }),
+        ]);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            dispatcher.Execute(new ArchitectureClipRuntimeContext(
+                clip,
+                0,
+                PreviousClip: null,
+                PreviousClipOutput: null,
+                PreviousTimelineClipOutput: null)));
+
+        Assert.Contains("Architecture 'ltx2'", error.Message);
+        Assert.Contains("artifact for architecture 'fake'", error.Message);
+        Assert.Contains("planned architecture 'ltx2'", error.Message);
+        Assert.Contains("clip '7'", error.Message);
+    }
+
     [Theory]
     [InlineData((int)DecodedMediaKind.Audio, 512, 512, 24, 25)]
     [InlineData((int)DecodedMediaKind.Video, 0, 512, 24, 25)]
