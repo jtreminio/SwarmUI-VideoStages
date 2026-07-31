@@ -208,6 +208,11 @@ internal sealed class LtxPostVideoChainCapture
     public bool CanReuseCurrentOutputAsStageInput(WGNodeData sourceMedia) =>
         artifacts.CanReuseCurrentOutputAsStageInput(sourceMedia);
 
+    public bool ReferencesOutput(WGNodeData media) =>
+        media?.Path is JArray mediaPath
+        && (JToken.DeepEquals(mediaPath, CurrentOutputMedia?.Path)
+            || JToken.DeepEquals(mediaPath, DecodeOutputPath));
+
     public WGNodeData CreateDetachedGuideMedia(WGNodeData vae) =>
         artifacts.CreateDetachedGuideMedia(vae);
 

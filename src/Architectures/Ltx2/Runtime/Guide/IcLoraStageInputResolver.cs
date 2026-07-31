@@ -1,4 +1,3 @@
-using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Ltx2.Planning;
 
@@ -21,7 +20,7 @@ internal sealed class IcLoraStageInputResolver(WorkflowGenerator g)
             : stageFrame.SourceMedia;
         LtxPostVideoChainCapture postVideoChain = stageFrame.PostVideoChain;
         if (postVideoChain is null
-            || !StagePostVideoChainMedia.ReferencesOutput(source, postVideoChain))
+            || !postVideoChain.ReferencesOutput(source))
         {
             return source;
         }
@@ -32,17 +31,5 @@ internal sealed class IcLoraStageInputResolver(WorkflowGenerator g)
         }
         detached.AttachedAudio = source?.AttachedAudio;
         return detached;
-    }
-}
-
-internal static class StagePostVideoChainMedia
-{
-    public static bool ReferencesOutput(
-        WGNodeData media,
-        LtxPostVideoChainCapture postVideoChain)
-    {
-        return media?.Path is JArray mediaPath
-            && (JToken.DeepEquals(mediaPath, postVideoChain.CurrentOutputMedia?.Path)
-                || JToken.DeepEquals(mediaPath, postVideoChain.DecodeOutputPath));
     }
 }

@@ -122,7 +122,7 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
         int height)
     {
         if (postVideoChain is null
-            || !StagePostVideoChainMedia.ReferencesOutput(source, postVideoChain))
+            || !postVideoChain.ReferencesOutput(source))
         {
             return source;
         }

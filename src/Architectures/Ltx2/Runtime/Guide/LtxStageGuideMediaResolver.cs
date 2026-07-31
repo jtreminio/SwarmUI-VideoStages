@@ -61,8 +61,7 @@ internal sealed class LtxStageGuideMediaResolver(WorkflowGenerator g)
             return false;
         }
 
-        return JToken.DeepEquals(guidePath, postVideoChain.CurrentOutputMedia?.Path)
-            || JToken.DeepEquals(guidePath, postVideoChain.DecodeOutputPath)
+        return postVideoChain.ReferencesOutput(guideMedia)
             || JToken.DeepEquals(guidePath, postVideoChain.AvLatentPath);
     }
 }

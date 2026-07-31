@@ -112,7 +112,7 @@ internal sealed class LtxStageLatentBuilder
         }
 
         WGNodeData sourceSnapshot = sourceMedia;
-        if (postVideoChain is not null && ReferencesCurrentOutputPath(sourceMedia, postVideoChain))
+        if (postVideoChain?.ReferencesOutput(sourceMedia) == true)
         {
             sourceSnapshot = postVideoChain.CreateDetachedGuideMedia(genInfo.Vae);
         }
@@ -180,17 +180,4 @@ internal sealed class LtxStageLatentBuilder
         framesConnection is null
             ? new JValue(fallbackFrames)
             : PathUtils.Clone(framesConnection);
-
-    private static bool ReferencesCurrentOutputPath(
-        WGNodeData media,
-        LtxPostVideoChainCapture postVideoChain)
-    {
-        if (media?.Path is not JArray mediaPath || postVideoChain is null)
-        {
-            return false;
-        }
-
-        return JToken.DeepEquals(mediaPath, postVideoChain.CurrentOutputMedia?.Path)
-            || JToken.DeepEquals(mediaPath, postVideoChain.DecodeOutputPath);
-    }
 }
