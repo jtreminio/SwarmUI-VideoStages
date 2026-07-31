@@ -15,13 +15,17 @@ internal static class Ltx2ClipPlanCompiler
         ClipSpec clip,
         ArchitectureClipCompileContext context)
     {
-        Ltx2AudioPlan audio = Ltx2AudioPlanCompiler.Compile(clip);
+        IcLoraClipPlanCompilation icLoras =
+            IcLoraPlanCompiler.CompileClip(clip, context);
+        Ltx2AudioPlan audio = Ltx2AudioPlanCompiler.Compile(
+            clip,
+            icLoras.PrimaryControlNetSourceIndex);
         PromptRelayPlan relay = PromptRelayPlanCompiler.Compile(
             clip,
             context.FramesPerSecond);
         List<PlanDiagnostic> diagnostics = [
             .. audio.Diagnostics.Select(diagnostic => diagnostic with { ClipId = clip.Id }),
-            .. IcLoraPlanCompiler.ValidateClip(clip, context),
+            .. icLoras.Diagnostics,
         ];
         Dictionary<int, Ltx2StagePayload> stages = [];
         foreach (StageSpec stage in clip.Stages ?? [])
@@ -37,7 +41,7 @@ internal static class Ltx2ClipPlanCompiler
                     NormalLoraPlanCompiler.Compile(clip, stage)),
                 CompileGuideReference(stage.ImageReference),
                 stage.ImageRefWasExplicit,
-                IcLoraPlanCompiler.Compile(clip, stage, context),
+                icLoras.Stages[stage.ClipStageRawIndex],
                 CompileRetake(stage.RetakeWindow),
                 relay,
                 ImageReferencePlanCompiler.Compile(clip, stage),
@@ -59,7 +63,7 @@ internal static class Ltx2ClipPlanCompiler
                 clip.Id,
                 audio.Reuse,
                 audio.Injection,
-                audio.ControlNetSourceIndex,
+                icLoras.PrimaryControlNetSourceIndex,
                 clip.ReferenceFraming,
                 stages.Values.Any(stage =>
                     stage.IcLoras.Any(entry => entry.IsHdr))),

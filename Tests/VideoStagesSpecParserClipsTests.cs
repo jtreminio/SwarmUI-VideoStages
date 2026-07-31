@@ -5,6 +5,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -482,7 +483,16 @@ public class VideoStagesSpecParserClipsTests
             VideoStagesSpecParser.Parse(BuildParser(json)).Clips);
 
         Assert.Contains(
-            IcLoraPlanCompiler.ValidateClip(clip),
+            IcLoraPlanCompiler.CompileClip(
+                clip,
+                new(
+                    0,
+                    0,
+                    0,
+                    clip.SourceVideo is null
+                        ? ArchitectureEntryMode.ImageToVideo
+                        : ArchitectureEntryMode.SourceVideo))
+                .Diagnostics,
             diagnostic => diagnostic.Code
                 == "ltx2.ic-lora.drive-media-kinds-malformed");
     }

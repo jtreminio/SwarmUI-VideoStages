@@ -5,6 +5,17 @@ namespace VideoStages.Tests;
 
 public class AudioPlanCompilerTests
 {
+    private static IcLoraClipPlanCompilation CompileIcLoras(ClipSpec clip) =>
+        IcLoraPlanCompiler.CompileClip(clip, new(0, 0, 0));
+
+    private static Ltx2AudioPlan CompileLtxAudio(ClipSpec clip)
+    {
+        IcLoraClipPlanCompilation icLoras = CompileIcLoras(clip);
+        return Ltx2AudioPlanCompiler.Compile(
+            clip,
+            icLoras.PrimaryControlNetSourceIndex);
+    }
+
     private static StageSpec Stage(int index) => new(
         Id: index,
         Control: 1.0,
@@ -16,7 +27,8 @@ public class AudioPlanCompilerTests
         Sampler: "euler",
         Scheduler: "normal",
         ImageReference: "Generated",
-        ClipStageIndex: index);
+        ClipStageIndex: index,
+        ClipStageRawIndex: index);
 
     private static UploadedMediaSpec Upload(string data = "data:audio/wav;base64,QUJD") =>
         new(data, "clip.wav");
@@ -105,10 +117,9 @@ public class AudioPlanCompilerTests
             uploadedAudio: Upload(),
             icLoras: [controlNetDrive]);
         AudioPlan plan = AudioPlanCompiler.Compile(clip);
-        Ltx2AudioPlan ltx = Ltx2AudioPlanCompiler.Compile(clip);
 
         Assert.Equal(AudioLengthOwner.ControlNet, plan.Length.Owner);
-        Assert.Equal(1, ltx.ControlNetSourceIndex);
+        Assert.Equal(1, CompileIcLoras(clip).PrimaryControlNetSourceIndex);
         Assert.Contains(plan.Diagnostics, d => d.Code == "audio.length.controlnet_overrides_audio");
     }
 
@@ -125,10 +136,10 @@ public class AudioPlanCompilerTests
     {
         ClipSpec clip = Clip(controlNetLength: true);
         AudioPlan plan = AudioPlanCompiler.Compile(clip);
-        Ltx2AudioPlan ltx = Ltx2AudioPlanCompiler.Compile(clip);
+        Ltx2AudioPlan ltx = CompileLtxAudio(clip);
 
         Assert.Equal(AudioLengthOwner.ControlNet, plan.Length.Owner);
-        Assert.Null(ltx.ControlNetSourceIndex);
+        Assert.Null(CompileIcLoras(clip).PrimaryControlNetSourceIndex);
         Assert.DoesNotContain(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.length.controlnet_owner_has_no_source");
         Assert.Contains(ltx.Diagnostics, diagnostic =>
@@ -149,8 +160,8 @@ public class AudioPlanCompilerTests
             AudioPlanCompiler.Compile(nativeClip).Length.Owner);
         // The route-dependent injection matching is LTX runtime behaviour, so it lives on the LTX
         // plan rather than on the architecture-neutral audio plan.
-        Ltx2AudioInjectionPlan native = Ltx2AudioPlanCompiler.Compile(nativeClip).Injection;
-        Ltx2AudioInjectionPlan upload = Ltx2AudioPlanCompiler.Compile(uploadClip).Injection;
+        Ltx2AudioInjectionPlan native = CompileLtxAudio(nativeClip).Injection;
+        Ltx2AudioInjectionPlan upload = CompileLtxAudio(uploadClip).Injection;
         Assert.True(native.NonHandoffMatchesAudioLength);
         Assert.False(native.RootHandoffMatchesAudioLength);
         Assert.False(upload.NonHandoffMatchesAudioLength);
@@ -203,9 +214,9 @@ public class AudioPlanCompilerTests
     [Fact]
     public void Compile_audio_reuse_requires_generate_capture_and_reuse_stages()
     {
-        Ltx2AudioPlan ineligible = Ltx2AudioPlanCompiler.Compile(
+        Ltx2AudioPlan ineligible = CompileLtxAudio(
             Clip(reuse: true, stages: [Stage(0), Stage(1)]));
-        Ltx2AudioPlan eligible = Ltx2AudioPlanCompiler.Compile(
+        Ltx2AudioPlan eligible = CompileLtxAudio(
             Clip(reuse: true, stages: [Stage(0), Stage(1), Stage(2)]));
 
         Assert.True(ineligible.Reuse.IsRequested);

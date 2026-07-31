@@ -18,14 +18,14 @@ public class IcLoraDriveMediaContractTests
             AudioDrive(new UploadedMediaSpec(data, "speaker.media"), preset: "custom-audio"),
         ]);
 
-        IcLoraPlan plan = Assert.Single(IcLoraPlanCompiler.Compile(clip, clip.Stages[0]));
+        IcLoraPlan plan = Assert.Single(PlansFor(clip, clip.Stages[0]));
 
         Assert.Equal(IcLoraDriveData.Audio, plan.MediaContract.DriveData);
         Assert.Equal((IcLoraDriveMediaKind)expectedKind, plan.DriveMedia.Kind);
         Assert.Equal(IcLoraMediaSourceKind.Upload, plan.MediaInput.Source);
         Assert.False(plan.HasVisualGuide);
         Assert.True(plan.HasAudioReference);
-        Assert.Empty(IcLoraPlanCompiler.ValidateClip(clip));
+        Assert.Empty(CompileIcLoras(clip).Diagnostics);
     }
 
     [Theory]
@@ -40,7 +40,7 @@ public class IcLoraDriveMediaContractTests
         ]);
 
         Assert.Contains(
-            IcLoraPlanCompiler.ValidateClip(clip),
+            CompileIcLoras(clip).Diagnostics,
             diagnostic => diagnostic.Code == code);
     }
 
@@ -52,8 +52,8 @@ public class IcLoraDriveMediaContractTests
             AudioDrive(Audio("two.wav"), preset: "totally-custom", stage: 1),
         ], [Stage(0), Stage(1)]);
 
-        IcLoraPlan lipDub = Assert.Single(IcLoraPlanCompiler.Compile(clip, clip.Stages[0]));
-        IcLoraPlan custom = Assert.Single(IcLoraPlanCompiler.Compile(clip, clip.Stages[1]));
+        IcLoraPlan lipDub = Assert.Single(PlansFor(clip, clip.Stages[0]));
+        IcLoraPlan custom = Assert.Single(PlansFor(clip, clip.Stages[1]));
 
         Assert.Equal(lipDub.MediaContract, custom.MediaContract);
         Assert.Equal(IcLoraDriveData.Audio, custom.MediaContract.DriveData);
@@ -77,7 +77,7 @@ public class IcLoraDriveMediaContractTests
         ]);
 
         Assert.Contains(
-            IcLoraPlanCompiler.ValidateClip(clip),
+            CompileIcLoras(clip).Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.drive-media-kind-unsupported");
     }
 
@@ -101,7 +101,7 @@ public class IcLoraDriveMediaContractTests
         ]);
 
         IReadOnlyList<PlanDiagnostic> diagnostics =
-            IcLoraPlanCompiler.ValidateClip(clip);
+            CompileIcLoras(clip).Diagnostics;
 
         Assert.Equal(
             shouldReject,
@@ -134,7 +134,7 @@ public class IcLoraDriveMediaContractTests
             (ArchitectureEntryMode)entryMode);
 
         IReadOnlyList<PlanDiagnostic> diagnostics =
-            IcLoraPlanCompiler.ValidateClip(clip, context);
+            CompileIcLoras(clip, context).Diagnostics;
 
         Assert.Equal(
             shouldReject,
@@ -163,7 +163,7 @@ public class IcLoraDriveMediaContractTests
         ]);
 
         Assert.Contains(
-            IcLoraPlanCompiler.ValidateClip(clip),
+            CompileIcLoras(clip).Diagnostics,
             diagnostic => diagnostic.Code
                 == "ltx2.ic-lora.drive-media-kinds-contradictory");
     }
@@ -186,7 +186,7 @@ public class IcLoraDriveMediaContractTests
         ]);
 
         Assert.Contains(
-            IcLoraPlanCompiler.ValidateClip(clip),
+            CompileIcLoras(clip).Diagnostics,
             diagnostic => diagnostic.Code
                 == "ltx2.ic-lora.drive-media-kinds-malformed");
     }
@@ -211,12 +211,12 @@ public class IcLoraDriveMediaContractTests
                 0),
         };
 
-        IcLoraPlan plan = Assert.Single(IcLoraPlanCompiler.Compile(clip, clip.Stages[0]));
+        IcLoraPlan plan = Assert.Single(PlansFor(clip, clip.Stages[0]));
 
         Assert.Equal(IcLoraMediaSourceKind.Upload, plan.MediaInput.Source);
         Assert.False(plan.MediaInput.HasInput);
         Assert.Contains(
-            IcLoraPlanCompiler.ValidateClip(clip),
+            CompileIcLoras(clip).Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.drive-media-missing");
     }
 
@@ -237,7 +237,7 @@ public class IcLoraDriveMediaContractTests
         ]);
 
         Assert.Contains(
-            IcLoraPlanCompiler.ValidateClip(clip),
+            CompileIcLoras(clip).Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.drive-media-source-mismatch");
     }
 
@@ -260,7 +260,7 @@ public class IcLoraDriveMediaContractTests
         ]);
 
         Assert.Contains(
-            IcLoraPlanCompiler.ValidateClip(clip),
+            CompileIcLoras(clip).Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.drive-source-contradictory");
     }
 
@@ -279,7 +279,7 @@ public class IcLoraDriveMediaContractTests
         ]);
 
         Assert.Contains(
-            IcLoraPlanCompiler.ValidateClip(clip),
+            CompileIcLoras(clip).Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.drive-data-unsupported");
     }
 
@@ -298,7 +298,7 @@ public class IcLoraDriveMediaContractTests
                 Preset: "pixel-spatial-upscaler-x4"),
         ]);
 
-        IcLoraPlan plan = Assert.Single(IcLoraPlanCompiler.Compile(clip, clip.Stages[0]));
+        IcLoraPlan plan = Assert.Single(PlansFor(clip, clip.Stages[0]));
 
         Assert.Equal(4, plan.DimensionDownscaleFactor);
     }
@@ -343,11 +343,11 @@ public class IcLoraDriveMediaContractTests
             ArchitectureEntryMode.ImageToVideo);
 
         IcLoraPlan plan = Assert.Single(
-            IcLoraPlanCompiler.Compile(clip, clip.Stages[0], context));
+            PlansFor(clip, clip.Stages[0], context));
 
         Assert.Equal(IcLoraMediaSourceKind.Incoming, plan.MediaInput.Source);
         Assert.Equal(IcLoraDriveMediaKind.Image, plan.MediaInput.Kind);
-        Assert.Empty(IcLoraPlanCompiler.ValidateClip(clip, context));
+        Assert.Empty(CompileIcLoras(clip, context).Diagnostics);
     }
 
     [Fact]
@@ -363,7 +363,7 @@ public class IcLoraDriveMediaContractTests
             ArchitectureEntryMode.TextToVideo);
 
         Assert.Contains(
-            IcLoraPlanCompiler.ValidateClip(clip, context),
+            CompileIcLoras(clip, context).Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.incoming-unavailable");
     }
 
@@ -381,11 +381,11 @@ public class IcLoraDriveMediaContractTests
             HasPreviousClipOutput: true);
 
         IcLoraPlan plan = Assert.Single(
-            IcLoraPlanCompiler.Compile(clip, clip.Stages[0], context));
+            PlansFor(clip, clip.Stages[0], context));
 
         Assert.Equal(IcLoraDriveMediaKind.Video, plan.MediaInput.Kind);
         Assert.True(plan.HasAudioReference);
-        Assert.Empty(IcLoraPlanCompiler.ValidateClip(clip, context));
+        Assert.Empty(CompileIcLoras(clip, context).Diagnostics);
     }
 
     [Fact]
@@ -405,10 +405,10 @@ public class IcLoraDriveMediaContractTests
             [Stage(0), Stage(1)]);
 
         Assert.DoesNotContain(
-            IcLoraPlanCompiler.ValidateClip(disjoint),
+            CompileIcLoras(disjoint).Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.audio-drive-overlap");
         Assert.Contains(
-            IcLoraPlanCompiler.ValidateClip(overlapping),
+            CompileIcLoras(overlapping).Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.audio-drive-overlap");
     }
 
@@ -440,9 +440,29 @@ public class IcLoraDriveMediaContractTests
             [Stage(0) with { Control = 0 }]);
 
         Assert.Contains(
-            IcLoraPlanCompiler.ValidateClip(clip),
+            CompileIcLoras(clip).Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.passthrough-stage");
     }
+
+    private static IcLoraClipPlanCompilation CompileIcLoras(
+        ClipSpec clip,
+        ArchitectureClipCompileContext context = null) =>
+        IcLoraPlanCompiler.CompileClip(
+            clip,
+            context
+                ?? new(
+                    0,
+                    0,
+                    0,
+                    clip.SourceVideo is null
+                        ? ArchitectureEntryMode.ImageToVideo
+                        : ArchitectureEntryMode.SourceVideo));
+
+    private static IReadOnlyList<IcLoraPlan> PlansFor(
+        ClipSpec clip,
+        StageSpec stage,
+        ArchitectureClipCompileContext context = null) =>
+        CompileIcLoras(clip, context).Stages[stage.ClipStageRawIndex];
 
     private static UploadedMediaSpec Audio(string fileName) =>
         new("data:audio/wav;base64,QUJD", fileName);

@@ -8,20 +8,14 @@ namespace VideoStages.Architectures.Ltx2.Planning;
 /// Compiles stage-applicable IC-LoRAs from explicit source and data-stream intent. Presets select
 /// weights and genuinely custom graph behavior elsewhere; they do not change media interpretation.
 /// </summary>
+internal sealed record IcLoraClipPlanCompilation(
+    ImmutableDictionary<int, ImmutableArray<IcLoraPlan>> Stages,
+    int? PrimaryControlNetSourceIndex,
+    ImmutableArray<PlanDiagnostic> Diagnostics);
+
 internal static class IcLoraPlanCompiler
 {
-    internal static IReadOnlyList<PlanDiagnostic> ValidateClip(ClipSpec clip) =>
-        ValidateClip(
-            clip,
-            new(
-                0,
-                0,
-                0,
-                clip.SourceVideo is null
-                    ? ArchitectureEntryMode.ImageToVideo
-                    : ArchitectureEntryMode.SourceVideo));
-
-    internal static IReadOnlyList<PlanDiagnostic> ValidateClip(
+    internal static IcLoraClipPlanCompilation CompileClip(
         ClipSpec clip,
         ArchitectureClipCompileContext context)
     {
@@ -29,7 +23,12 @@ internal static class IcLoraPlanCompiler
         HashSet<int> authoredStageIndices = clip.AuthoredStages is { Count: > 0 }
             ? [.. clip.AuthoredStages.Select(stage => stage.RawIndex)]
             : [.. (clip.Stages ?? []).Select(stage => stage.ClipStageRawIndex)];
+        Dictionary<int, ImmutableArray<IcLoraPlan>.Builder> stagePlans =
+            (clip.Stages ?? []).ToDictionary(
+                stage => stage.ClipStageRawIndex,
+                _ => ImmutableArray.CreateBuilder<IcLoraPlan>());
         IReadOnlyList<IcLoraSpec> entries = clip.IcLoras ?? [];
+        int? primaryControlNetSourceIndex = null;
 
         for (int index = 0; index < entries.Count; index++)
         {
@@ -55,8 +54,22 @@ internal static class IcLoraPlanCompiler
                 IcLoraDriveMediaContracts.Resolve(entry.DriveData, entry.DriveMediaKinds);
             ValidateDriveMediaKinds(clip, entry, index, diagnostics);
             IcLoraDriveMediaPlan driveMedia = CompileDriveMedia(entry.DriveMedia);
+            string normalizedSource = NormalizeDriveSource(entry.DriveSource);
             IcLoraMediaSourceKind authoredSource =
-                ResolveSourceKind(NormalizeDriveSource(entry.DriveSource));
+                ResolveSourceKind(normalizedSource);
+            IcLoraControlMode controlMode =
+                CompileControlMode(entry.ControlType);
+            int dimensionDownscaleFactor =
+                IcLoraDimensionPolicyResolver.Resolve(
+                    entry.Preset,
+                    entry.Lora);
+            if (primaryControlNetSourceIndex is null
+                && ControlNetSourcePlan.TryParseIndex(
+                    normalizedSource,
+                    out int sourceIndex))
+            {
+                primaryControlNetSourceIndex = sourceIndex;
+            }
             if (contract.DriveData == IcLoraDriveData.None
                 && authoredSource != IcLoraMediaSourceKind.Upload)
             {
@@ -79,14 +92,23 @@ internal static class IcLoraPlanCompiler
                 IcLoraMediaInputPlan input = CompileMediaInput(
                     clip,
                     stage,
-                    entry,
+                    normalizedSource,
+                    authoredSource,
                     contract,
                     driveMedia,
                     context);
                 ValidateInput(clip, index, contract, driveMedia, input, diagnostics);
+                stagePlans[stage.ClipStageRawIndex].Add(CompilePlan(
+                    index,
+                    entry,
+                    stage,
+                    controlMode,
+                    dimensionDownscaleFactor,
+                    contract,
+                    driveMedia,
+                    input));
             }
 
-            IcLoraControlMode controlMode = CompileControlMode(entry.ControlType);
             if (controlMode == IcLoraControlMode.Unknown)
             {
                 diagnostics.Add(Error(
@@ -144,95 +166,12 @@ internal static class IcLoraPlanCompiler
                     clip.Id));
             }
         }
-        return diagnostics.AsReadOnly();
-    }
-
-    internal static ImmutableArray<IcLoraPlan> Compile(ClipSpec clip, StageSpec stage) =>
-        Compile(
-            clip,
-            stage,
-            new(
-                0,
-                0,
-                0,
-                clip.SourceVideo is null
-                    ? ArchitectureEntryMode.ImageToVideo
-                    : ArchitectureEntryMode.SourceVideo));
-
-    internal static ImmutableArray<IcLoraPlan> Compile(
-        ClipSpec clip,
-        StageSpec stage,
-        ArchitectureClipCompileContext context)
-    {
-        ImmutableArray<IcLoraPlan>.Builder plans = ImmutableArray.CreateBuilder<IcLoraPlan>();
-        IReadOnlyList<IcLoraSpec> entries = clip.IcLoras ?? [];
-        for (int index = 0; index < entries.Count; index++)
-        {
-            IcLoraSpec entry = entries[index];
-            if (entry.Stage >= 0 && entry.Stage != stage.ClipStageRawIndex)
-            {
-                continue;
-            }
-
-            IcLoraDriveMediaContract contract =
-                IcLoraDriveMediaContracts.Resolve(entry.DriveData, entry.DriveMediaKinds);
-            IcLoraDriveMediaPlan driveMedia = CompileDriveMedia(entry.DriveMedia);
-            IcLoraMediaInputPlan input = CompileMediaInput(
-                clip,
-                stage,
-                entry,
-                contract,
-                driveMedia,
-                context);
-            double? guideStrength = null;
-            if (contract.ConsumesVisual && input.HasInput)
-            {
-                if (
-                    stage.IcLoraStrengths is { } strengths &&
-                    index < strengths.Count)
-                {
-                    guideStrength = strengths[index];
-                }
-                else if (stage.ControlNetStrength is double stageStrength)
-                {
-                    guideStrength = stageStrength;
-                }
-                else if (input.Source != IcLoraMediaSourceKind.ControlNet)
-                {
-                    guideStrength = 1.0;
-                }
-            }
-
-            plans.Add(new(
-                index,
-                entry.Lora,
-                StringUtils.Equals(entry.Lora, IcLoraWeights.AutoModelToken),
-                entry.Preset,
-                entry.Strength,
-                entry.AttentionStrength,
-                CompileControlMode(entry.ControlType),
-                contract,
-                driveMedia,
-                input,
-                IcLoraDimensionPolicyResolver.Resolve(entry.Preset, entry.Lora),
-                guideStrength,
-                entry.Hdr));
-        }
-        return plans.ToImmutable();
-    }
-
-    internal static int? ResolvePrimaryControlNetSourceIndex(ClipSpec clip)
-    {
-        foreach (IcLoraSpec entry in clip.IcLoras ?? [])
-        {
-            if (ControlNetSourcePlan.TryParseIndex(
-                NormalizeDriveSource(entry.DriveSource),
-                out int sourceIndex))
-            {
-                return sourceIndex;
-            }
-        }
-        return null;
+        return new(
+            stagePlans.ToImmutableDictionary(
+                pair => pair.Key,
+                pair => pair.Value.ToImmutable()),
+            primaryControlNetSourceIndex,
+            diagnostics.ToImmutableArray());
     }
 
     private static IEnumerable<StageSpec> ApplicableStages(ClipSpec clip, IcLoraSpec entry) =>
@@ -242,28 +181,27 @@ internal static class IcLoraPlanCompiler
     private static IcLoraMediaInputPlan CompileMediaInput(
         ClipSpec clip,
         StageSpec stage,
-        IcLoraSpec entry,
+        string normalizedSource,
+        IcLoraMediaSourceKind source,
         IcLoraDriveMediaContract contract,
         IcLoraDriveMediaPlan driveMedia,
         ArchitectureClipCompileContext context)
     {
-        string raw = NormalizeDriveSource(entry.DriveSource);
         if (contract.DriveData == IcLoraDriveData.None)
         {
             return new(
                 IcLoraMediaSourceKind.LoaderOnly,
-                raw,
+                normalizedSource,
                 IcLoraDriveMediaKind.None,
                 null,
                 HasInput: false);
         }
 
-        IcLoraMediaSourceKind source = ResolveSourceKind(raw);
         if (source == IcLoraMediaSourceKind.Upload)
         {
             return new(
                 source,
-                raw,
+                normalizedSource,
                 driveMedia.Kind,
                 null,
                 driveMedia.IsConfigured);
@@ -271,24 +209,75 @@ internal static class IcLoraPlanCompiler
         if (source == IcLoraMediaSourceKind.Incoming)
         {
             IcLoraDriveMediaKind kind = ResolveIncomingKind(clip, stage, context);
-            return new(source, raw, kind, null, kind != IcLoraDriveMediaKind.None);
+            return new(
+                source,
+                normalizedSource,
+                kind,
+                null,
+                kind != IcLoraDriveMediaKind.None);
         }
         if (source == IcLoraMediaSourceKind.ControlNet
-            && ControlNetSourcePlan.TryParseIndex(raw, out int controlNetIndex))
+            && ControlNetSourcePlan.TryParseIndex(
+                normalizedSource,
+                out int controlNetIndex))
         {
             return new(
                 source,
-                raw,
+                normalizedSource,
                 IcLoraDriveMediaKind.Video,
                 controlNetIndex,
                 HasInput: true);
         }
         return new(
             IcLoraMediaSourceKind.Unknown,
-            raw,
+            normalizedSource,
             IcLoraDriveMediaKind.Unknown,
             null,
             HasInput: false);
+    }
+
+    private static IcLoraPlan CompilePlan(
+        int entryIndex,
+        IcLoraSpec entry,
+        StageSpec stage,
+        IcLoraControlMode controlMode,
+        int dimensionDownscaleFactor,
+        IcLoraDriveMediaContract contract,
+        IcLoraDriveMediaPlan driveMedia,
+        IcLoraMediaInputPlan input)
+    {
+        double? guideStrength = null;
+        if (contract.ConsumesVisual && input.HasInput)
+        {
+            if (stage.IcLoraStrengths is { } strengths
+                && entryIndex < strengths.Count)
+            {
+                guideStrength = strengths[entryIndex];
+            }
+            else if (stage.ControlNetStrength is double stageStrength)
+            {
+                guideStrength = stageStrength;
+            }
+            else if (input.Source != IcLoraMediaSourceKind.ControlNet)
+            {
+                guideStrength = 1.0;
+            }
+        }
+
+        return new(
+            entryIndex,
+            entry.Lora,
+            StringUtils.Equals(entry.Lora, IcLoraWeights.AutoModelToken),
+            entry.Preset,
+            entry.Strength,
+            entry.AttentionStrength,
+            controlMode,
+            contract,
+            driveMedia,
+            input,
+            dimensionDownscaleFactor,
+            guideStrength,
+            entry.Hdr);
     }
 
     private static IcLoraDriveMediaKind ResolveIncomingKind(

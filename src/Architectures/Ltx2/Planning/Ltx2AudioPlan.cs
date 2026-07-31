@@ -22,12 +22,13 @@ internal sealed record Ltx2AudioInjectionPlan(
 internal sealed record Ltx2AudioPlan(
     AudioReusePlan Reuse,
     Ltx2AudioInjectionPlan Injection,
-    int? ControlNetSourceIndex,
     ImmutableArray<PlanDiagnostic> Diagnostics);
 
 internal static class Ltx2AudioPlanCompiler
 {
-    internal static Ltx2AudioPlan Compile(ClipSpec clip)
+    internal static Ltx2AudioPlan Compile(
+        ClipSpec clip,
+        int? controlNetSourceIndex)
     {
         bool external = AudioSourceParser.Parse(clip.AudioSource).Kind
             is AudioSourceKind.Upload or AudioSourceKind.AceStepFun or AudioSourceKind.ControlNet;
@@ -35,8 +36,6 @@ internal static class Ltx2AudioPlanCompiler
             external ? clip.ClipLengthFromAudio : true,
             external && clip.ClipLengthFromAudio);
         AudioReusePlan reuse = CompileReuse(clip);
-        int? controlNetSourceIndex =
-            IcLoraPlanCompiler.ResolvePrimaryControlNetSourceIndex(clip);
         ImmutableArray<PlanDiagnostic>.Builder diagnostics =
             ImmutableArray.CreateBuilder<PlanDiagnostic>();
         if (clip.ClipLengthFromControlNet && controlNetSourceIndex is null)
@@ -49,7 +48,6 @@ internal static class Ltx2AudioPlanCompiler
         return new(
             reuse,
             injection,
-            controlNetSourceIndex,
             diagnostics.ToImmutable());
     }
 

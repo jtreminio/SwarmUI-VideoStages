@@ -142,7 +142,9 @@ public class PlanningCompilerComponentTests
             .Stages[stage.ClipStageRawIndex]
             .Guide;
         var loras = NormalLoraPlanCompiler.Compile(clip, stage);
-        var icLoras = IcLoraPlanCompiler.Compile(clip, stage);
+        var icLoras = IcLoraPlanCompiler
+            .CompileClip(clip, new(640, 360, 24))
+            .Stages[stage.ClipStageRawIndex];
         var references = ImageReferencePlanCompiler.Compile(clip, stage);
 
         Assert.Equal(PromptRelayMode.Relay, prompt.Mode);
@@ -310,7 +312,9 @@ public class PlanningCompilerComponentTests
             ],
         };
 
-        var plans = IcLoraPlanCompiler.Compile(clip, stage);
+        var plans = IcLoraPlanCompiler
+            .CompileClip(clip, new(640, 360, 24))
+            .Stages[stage.ClipStageRawIndex];
 
         Assert.Equal(2, plans.Length);
         Assert.Equal(0.2, plans[0].GuideStrength);

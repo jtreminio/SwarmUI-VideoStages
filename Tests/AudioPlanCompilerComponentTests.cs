@@ -6,6 +6,15 @@ namespace VideoStages.Tests;
 
 public class AudioPlanCompilerComponentTests
 {
+    private static Ltx2AudioPlan CompileLtxAudio(ClipSpec clip)
+    {
+        IcLoraClipPlanCompilation icLoras =
+            IcLoraPlanCompiler.CompileClip(clip, new(0, 0, 0));
+        return Ltx2AudioPlanCompiler.Compile(
+            clip,
+            icLoras.PrimaryControlNetSourceIndex);
+    }
+
     [Theory]
     [MemberData(nameof(BaseSourceClips))]
     public void Facade_matches_focused_component_outputs_for_each_base_source(ClipSpec clip)
@@ -54,7 +63,7 @@ public class AudioPlanCompilerComponentTests
     {
         ClipSpec clip = Clip(reuse: true, stages: [Stage(0), Stage(1)]);
 
-        AudioReusePlan reuse = Ltx2AudioPlanCompiler.Compile(clip).Reuse;
+        AudioReusePlan reuse = CompileLtxAudio(clip).Reuse;
 
         Assert.True(reuse.IsRequested);
         Assert.False(reuse.IsEligible);
@@ -72,7 +81,7 @@ public class AudioPlanCompilerComponentTests
             reuse: true);
 
         AudioPlan plan = AudioPlanCompiler.Compile(clip);
-        Ltx2AudioPlan ltx = Ltx2AudioPlanCompiler.Compile(clip);
+        Ltx2AudioPlan ltx = CompileLtxAudio(clip);
 
         Assert.Equal(
         [
@@ -136,5 +145,6 @@ public class AudioPlanCompilerComponentTests
         Sampler: "euler",
         Scheduler: "normal",
         ImageReference: "Generated",
-        ClipStageIndex: index);
+        ClipStageIndex: index,
+        ClipStageRawIndex: index);
 }
