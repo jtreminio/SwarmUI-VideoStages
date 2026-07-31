@@ -6,8 +6,6 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Planning;
 
-using VideoStages.Architectures.Ltx2.Planning;
-
 namespace VideoStages.Architectures.Ltx2;
 
 /// <summary>Builds the optional pixel/model upscale graph that feeds a stage.</summary>
@@ -21,7 +19,7 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
     {
         ArgumentNullException.ThrowIfNull(clipContext);
         ArgumentNullException.ThrowIfNull(stage);
-        StageUpscalePlan upscale = stage.RequireLtx2Payload().Upscale;
+        StageUpscalePlan upscale = stage.Core.Upscale;
 
         ClipDimensionState dimensions = clipContext.Dimensions;
         WGNodeData source = VaeDecodePreference.AsRawImage(g, g.CurrentMedia, g.CurrentVae);

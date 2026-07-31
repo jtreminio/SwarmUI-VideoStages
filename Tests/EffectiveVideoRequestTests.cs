@@ -673,8 +673,8 @@ public sealed class EffectiveVideoRequestTests
             diagnostic => diagnostic.Code
                 == "effective-request.unsupported-upscale-ignored");
         StockHostVideoStagePayload payload = plan.Clips[0].Stages[1].RequireWanPayload();
-        Assert.Equal(StageUpscaleMode.None, payload.Upscale.Mode);
-        Assert.Equal(1, payload.Upscale.Factor);
+        Assert.Equal(StageUpscaleMode.None, payload.Core.Upscale.Mode);
+        Assert.Equal(1, payload.Core.Upscale.Factor);
     }
 
     [Fact]
@@ -1278,7 +1278,7 @@ public sealed class EffectiveVideoRequestTests
         Assert.Equal([0.8], authored.Stages[1].IcLoraStrengths);
         Assert.Equal(
             StageUpscaleMode.None,
-            plan.Clips[0].Stages[1].RequireWanPayload().Upscale.Mode);
+            plan.Clips[0].Stages[1].Core.Upscale.Mode);
     }
 
     private static StageSpec Stage(

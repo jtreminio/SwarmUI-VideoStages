@@ -10,13 +10,14 @@ namespace VideoStages.Architectures.Ltx2.Planning;
 internal sealed record Ltx2StagePayload(
     StageCorePlan Core,
     GuideReferencePlan Guide,
-    StageUpscalePlan Upscale,
-    ImmutableArray<NormalLoraPlan> Loras,
+    bool ImageReferenceWasExplicit,
     ImmutableArray<IcLoraPlan> IcLoras,
     RetakePlan Retake,
     PromptRelayPlan PromptRelay,
     ImmutableArray<ImageReferencePlan> FrameReferences,
-    StageAudioAction AudioAction) : IArchitectureStagePayload
+    StageAudioAction AudioAction) :
+    IArchitectureStagePayload,
+    IStageCorePlanPayload
 {
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
 }
@@ -42,7 +43,8 @@ internal static class Ltx2StagePlanExtensions
     {
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
         return payload.Retake is not null
-            && Ltx2ModelCompatibility.IsLtxV2VideoModel(payload.Core.Model);
+            && Ltx2ModelCompatibility.IsLtxV2VideoModel(
+                stage.ResolvedModel?.ModelName);
     }
 
     /// <summary>The stage authors its own opening frame, which outranks any implicit frame-1 guide.</summary>
@@ -61,16 +63,6 @@ internal static class Ltx2StagePlanExtensions
         return payload;
     }
 }
-
-internal sealed record StageCorePlan(
-    string Model,
-    double Control,
-    int Steps,
-    double CfgScale,
-    string Sampler,
-    string Scheduler,
-    double? ControlNetStrength,
-    bool ImageReferenceWasExplicit);
 
 internal sealed record GuideReferencePlan(
     StageGuideReferenceKind Kind,

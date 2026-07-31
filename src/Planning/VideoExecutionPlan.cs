@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages.Planning;
@@ -136,7 +137,22 @@ internal sealed record StagePlan(
 {
     /// <summary>Resolved independently for every authored active stage.</summary>
     public ResolvedVideoModel ResolvedModel { get; init; }
+
+    public StageCorePlan Core =>
+        (ArchitecturePayload as IStageCorePlanPayload)?.Core
+        ?? throw new InvalidOperationException(
+            $"Stage {StageId} has no common execution settings.");
 }
+
+/// <summary>Architecture-neutral settings shared by every generated stage.</summary>
+internal sealed record StageCorePlan(
+    double Control,
+    int Steps,
+    double CfgScale,
+    string Sampler,
+    string Scheduler,
+    StageUpscalePlan Upscale,
+    ImmutableArray<NormalLoraPlan> Loras);
 
 internal enum StageInputKind
 {

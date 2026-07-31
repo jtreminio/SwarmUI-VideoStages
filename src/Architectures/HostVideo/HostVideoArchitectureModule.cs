@@ -272,17 +272,17 @@ internal sealed class HostVideoArchitectureModule :
 
             stages[stage.ClipStageRawIndex] = new StockHostVideoStagePayload(
                 ArchitectureId,
-                resolved.ModelName,
                 resolved.ModelClassId,
                 resolved.CompatibilityClassId,
                 loraTargetPolicy,
-                stage.Control,
-                stage.Steps,
-                stage.CfgScale,
-                stage.Sampler,
-                stage.Scheduler,
-                StageUpscalePlanCompiler.Compile(stage),
-                loras);
+                new StageCorePlan(
+                    stage.Control,
+                    stage.Steps,
+                    stage.CfgScale,
+                    stage.Sampler,
+                    stage.Scheduler,
+                    StageUpscalePlanCompiler.Compile(stage),
+                    loras));
         }
 
         return new(

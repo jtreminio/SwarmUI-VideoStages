@@ -3,8 +3,6 @@ using SwarmUI.Text2Image;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
-using VideoStages.Architectures.Ltx2.Planning;
-
 namespace VideoStages.Architectures.Ltx2;
 
 /// <summary>
@@ -47,23 +45,26 @@ internal sealed class StageHostExecutionScope : IDisposable
         ArgumentNullException.ThrowIfNull(clipContext);
         ArgumentNullException.ThrowIfNull(plannedClip);
         ArgumentNullException.ThrowIfNull(plannedStage);
-        Ltx2StagePayload payload = plannedStage.RequireLtx2Payload();
+        StageCorePlan core = plannedStage.Core;
 
         int sectionId = VideoStagesExtension.SectionIdForStage(plannedStage.StageId);
         _sectionIds.Add(sectionId);
         _generator.UserInput.SectionParamOverrides.Remove(sectionId);
-        _generator.UserInput.Set(T2IParamTypes.VideoModel.Type, payload.Core.Model, sectionId);
-        _generator.UserInput.Set(T2IParamTypes.VideoSteps, payload.Core.Steps, sectionId);
-        _generator.UserInput.Set(T2IParamTypes.Steps, payload.Core.Steps, sectionId);
-        _generator.UserInput.Set(T2IParamTypes.VideoCFG, payload.Core.CfgScale, sectionId);
-        _generator.UserInput.Set(T2IParamTypes.CFGScale, payload.Core.CfgScale, sectionId);
+        _generator.UserInput.Set(
+            T2IParamTypes.VideoModel.Type,
+            plannedStage.ResolvedModel.ModelName,
+            sectionId);
+        _generator.UserInput.Set(T2IParamTypes.VideoSteps, core.Steps, sectionId);
+        _generator.UserInput.Set(T2IParamTypes.Steps, core.Steps, sectionId);
+        _generator.UserInput.Set(T2IParamTypes.VideoCFG, core.CfgScale, sectionId);
+        _generator.UserInput.Set(T2IParamTypes.CFGScale, core.CfgScale, sectionId);
         _generator.UserInput.Set(
             ComfyUIBackendExtension.SamplerParam.Type,
-            payload.Core.Sampler,
+            core.Sampler,
             sectionId);
         _generator.UserInput.Set(
             ComfyUIBackendExtension.SchedulerParam.Type,
-            payload.Core.Scheduler,
+            core.Scheduler,
             sectionId);
         if (plannedClip.Frames is int frames && frames > 0)
         {

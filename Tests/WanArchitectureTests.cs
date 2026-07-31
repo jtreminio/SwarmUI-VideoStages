@@ -582,18 +582,18 @@ public class WanArchitectureTests
         Assert.Equal(StageInputKind.PreviousStage, compiled.Stages[1].Input);
         StockHostVideoStagePayload firstPayload = compiled.Stages[0].RequireWanPayload();
         StockHostVideoStagePayload secondPayload = compiled.Stages[1].RequireWanPayload();
-        Assert.Equal("wan-model", firstPayload.Model);
-        Assert.Equal(1, firstPayload.Control);
-        Assert.Equal(12, firstPayload.Steps);
-        Assert.Equal(4.5, firstPayload.CfgScale);
-        Assert.Equal("euler", firstPayload.Sampler);
-        Assert.Equal("normal", firstPayload.Scheduler);
-        Assert.Equal(StageUpscaleMode.None, firstPayload.Upscale.Mode);
-        Assert.Equal(1, firstPayload.Upscale.Factor);
-        Assert.Equal(0.35, secondPayload.Control);
-        Assert.Equal(17, secondPayload.Steps);
-        Assert.Empty(firstPayload.Loras);
-        Assert.Empty(secondPayload.Loras);
+        Assert.Equal("wan-model", compiled.Stages[0].ResolvedModel.ModelName);
+        Assert.Equal(1, firstPayload.Core.Control);
+        Assert.Equal(12, firstPayload.Core.Steps);
+        Assert.Equal(4.5, firstPayload.Core.CfgScale);
+        Assert.Equal("euler", firstPayload.Core.Sampler);
+        Assert.Equal("normal", firstPayload.Core.Scheduler);
+        Assert.Equal(StageUpscaleMode.None, firstPayload.Core.Upscale.Mode);
+        Assert.Equal(1, firstPayload.Core.Upscale.Factor);
+        Assert.Equal(0.35, secondPayload.Core.Control);
+        Assert.Equal(17, secondPayload.Core.Steps);
+        Assert.Empty(firstPayload.Core.Loras);
+        Assert.Empty(secondPayload.Core.Loras);
     }
 
     [Fact]
@@ -609,10 +609,10 @@ public class WanArchitectureTests
             Assert.Single(Compile(GeneratedClip(0, stage)).Clips).Stages)
             .RequireWanPayload();
 
-        Assert.Equal(StageUpscaleMode.Pixel, payload.Upscale.Mode);
-        Assert.Equal(1.5, payload.Upscale.Factor);
-        Assert.Equal("pixel-bicubic", payload.Upscale.RawMethod);
-        Assert.Equal("bicubic", payload.Upscale.MethodName);
+        Assert.Equal(StageUpscaleMode.Pixel, payload.Core.Upscale.Mode);
+        Assert.Equal(1.5, payload.Core.Upscale.Factor);
+        Assert.Equal("pixel-bicubic", payload.Core.Upscale.RawMethod);
+        Assert.Equal("bicubic", payload.Core.Upscale.MethodName);
     }
 
     [Fact]
@@ -703,7 +703,7 @@ public class WanArchitectureTests
             Assert.Single(Compile(clip).Clips).Stages).RequireWanPayload();
 
         Assert.Collection(
-            payload.Loras,
+            payload.Core.Loras,
             lora =>
             {
                 Assert.Equal("clip-active", lora.Name);
@@ -736,8 +736,8 @@ public class WanArchitectureTests
         Assert.Equal(ClipInputKind.SourceVideo, compiled.Input);
         Assert.Equal(StageInputKind.SourceVideo, compiled.Stages[0].Input);
         Assert.Equal(StageInputKind.PreviousStage, compiled.Stages[1].Input);
-        Assert.Equal(0.5, compiled.Stages[0].RequireWanPayload().Control);
-        Assert.Equal(1, compiled.Stages[1].RequireWanPayload().Control);
+        Assert.Equal(0.5, compiled.Stages[0].Core.Control);
+        Assert.Equal(1, compiled.Stages[1].Core.Control);
     }
 
     [Fact]
@@ -821,8 +821,13 @@ public class WanArchitectureTests
             compiled.Diagnostics,
             diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
         Assert.Equal(
-            [exact.Model, ordinary.Model],
-            compiled.Stages.OrderBy(pair => pair.Key).Select(pair => pair.Value.Model));
+            [
+                WanArchitectureModule.ImageToVideoModelClassId,
+                "wan-2_1-image2video-14b",
+            ],
+            compiled.Stages
+                .OrderBy(pair => pair.Key)
+                .Select(pair => pair.Value.ModelClassId));
     }
 
     [Fact]
@@ -1036,8 +1041,8 @@ public class WanArchitectureTests
             compilation.Diagnostics,
             diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
         Assert.Equal(
-            resolved.ModelName,
-            Assert.Single(compilation.Stages).Value.Model);
+            resolved.ModelClassId,
+            Assert.Single(compilation.Stages).Value.ModelClassId);
     }
 
     [Fact]
@@ -1086,7 +1091,7 @@ public class WanArchitectureTests
         Assert.Equal(StageInputKind.PreviousStage, compiled.Stages[1].Input);
         Assert.All(
             compiled.Stages,
-            stage => Assert.Equal(0, stage.RequireWanPayload().Control));
+            stage => Assert.Equal(0, stage.Core.Control));
     }
 
     [Fact]
@@ -1115,7 +1120,7 @@ public class WanArchitectureTests
                 diagnostic.Code
                     == HostVideoStageRules.NormalLoraRequiresSamplingStageCode);
         Assert.Empty(
-            Assert.Single(textOnly.Clips).Stages[0].RequireWanPayload().Loras);
+            Assert.Single(textOnly.Clips).Stages[0].Core.Loras);
         AssertBlocked(
             Compile(
                 SourcedClip(
@@ -1136,7 +1141,7 @@ public class WanArchitectureTests
         };
         ClipPlan compiled = Assert.Single(Compile(disabled).Clips);
         Assert.True(Assert.Single(compiled.Stages).IsPassthrough);
-        Assert.Empty(compiled.Stages[0].RequireWanPayload().Loras);
+        Assert.Empty(compiled.Stages[0].Core.Loras);
 
         VideoExecutionPlan stageNoOp = Compile(
             SourcedClip(
@@ -1151,7 +1156,7 @@ public class WanArchitectureTests
                 diagnostic.Code
                     == HostVideoStageRules.NormalLoraRequiresSamplingStageCode);
         Assert.Empty(
-            Assert.Single(stageNoOp.Clips).Stages[0].RequireWanPayload().Loras);
+            Assert.Single(stageNoOp.Clips).Stages[0].Core.Loras);
 
         VideoExecutionPlan sampled = Compile(
             SourcedClip(0, passthrough with { Control = 0.5 }) with
@@ -1164,7 +1169,7 @@ public class WanArchitectureTests
                 diagnostic.Code
                     == HostVideoStageRules.NormalLoraRequiresSamplingStageCode);
         Assert.Single(
-            Assert.Single(sampled.Clips).Stages[0].RequireWanPayload().Loras);
+            Assert.Single(sampled.Clips).Stages[0].Core.Loras);
     }
 
     [Fact]

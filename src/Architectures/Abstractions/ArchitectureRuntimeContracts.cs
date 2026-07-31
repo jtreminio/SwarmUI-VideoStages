@@ -31,6 +31,12 @@ internal interface IArchitectureStagePayload
     ArchitectureId ArchitectureId { get; }
 }
 
+/// <summary>Exposes common generated-stage settings without revealing private payload data.</summary>
+internal interface IStageCorePlanPayload
+{
+    StageCorePlan Core { get; }
+}
+
 internal sealed record ArchitectureClipCompilation
 {
     internal ArchitectureClipCompilation(

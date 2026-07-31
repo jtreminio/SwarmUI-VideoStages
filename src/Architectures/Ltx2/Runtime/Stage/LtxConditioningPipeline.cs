@@ -43,7 +43,7 @@ internal sealed class LtxConditioningPipeline(
     public LtxConditioningPipeline WithUpscaleIfNeeded(WGNodeData sourceMedia)
     {
         StagePlan stage = stageFrame.Stage;
-        StageUpscalePlan upscale = stage.RequireLtx2Payload().Upscale;
+        StageUpscalePlan upscale = stage.Core.Upscale;
         if (upscale.Mode is not (StageUpscaleMode.LatentModel or StageUpscaleMode.Latent))
         {
             return this;

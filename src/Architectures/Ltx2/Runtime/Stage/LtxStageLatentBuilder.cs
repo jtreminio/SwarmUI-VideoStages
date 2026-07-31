@@ -173,7 +173,7 @@ internal sealed class LtxStageLatentBuilder
     }
 
     private static bool IsPixelOrModelScaleStage(StagePlan stage) =>
-        stage.RequireLtx2Payload().Upscale.Mode
+        stage.Core.Upscale.Mode
             is StageUpscaleMode.Pixel or StageUpscaleMode.Model;
 
     private static JToken FrameCountToken(JArray framesConnection, int fallbackFrames) =>

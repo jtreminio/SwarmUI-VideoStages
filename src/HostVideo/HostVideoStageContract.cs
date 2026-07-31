@@ -1,45 +1,19 @@
-using System.Collections.Immutable;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
 namespace VideoStages.HostVideo;
 
 /// <summary>
-/// The proven common settings consumed by SwarmUI's stock video parameter seam. Architecture
-/// payloads can carry additional facts, but WAN and generic-host stages both expose this subset.
+/// Stock-host-only model facts paired with the common generated-stage settings.
 /// </summary>
-internal interface IHostVideoStageSettings
-{
-    string Model { get; }
-
-    double Control { get; }
-
-    int Steps { get; }
-
-    double CfgScale { get; }
-
-    string Sampler { get; }
-
-    string Scheduler { get; }
-
-    StageUpscalePlan Upscale { get; }
-}
-
 internal sealed record StockHostVideoStagePayload(
     ArchitectureId ArchitectureId,
-    string Model,
     string ModelClassId,
     string CompatibilityClassId,
     NormalLoraTargetPolicy LoraTargetPolicy,
-    double Control,
-    int Steps,
-    double CfgScale,
-    string Sampler,
-    string Scheduler,
-    StageUpscalePlan Upscale,
-    ImmutableArray<NormalLoraPlan> Loras) :
+    StageCorePlan Core) :
     IArchitectureStagePayload,
-    IHostVideoStageSettings;
+    IStageCorePlanPayload;
 
 internal static class StockHostVideoStagePayloadExtensions
 {
@@ -80,11 +54,7 @@ internal static class HostVideoStageGeometry
     {
         foreach (StagePlan stage in stages ?? [])
         {
-            IHostVideoStageSettings settings = stage.ArchitecturePayload
-                as IHostVideoStageSettings
-                ?? throw new InvalidOperationException(
-                    $"Stage {stage.StageId} has no stock host-video settings.");
-            StageUpscalePlan upscale = settings.Upscale;
+            StageUpscalePlan upscale = stage.Core.Upscale;
             if (upscale?.Mode != StageUpscaleMode.Pixel
                 || stage.Input is not (
                     StageInputKind.SourceVideo

@@ -169,7 +169,7 @@ internal sealed record Ltx2ClipPayload(
         bool hasLatentUpscale = false;
         foreach (StagePlan stage in stages ?? [])
         {
-            StageUpscalePlan upscale = stage.RequireLtx2Payload().Upscale;
+            StageUpscalePlan upscale = stage.Core.Upscale;
             bool isLatent = upscale.Mode is StageUpscaleMode.Latent or StageUpscaleMode.LatentModel;
             if (!isLatent
                 && (upscale.Mode is not (StageUpscaleMode.Pixel or StageUpscaleMode.Model)

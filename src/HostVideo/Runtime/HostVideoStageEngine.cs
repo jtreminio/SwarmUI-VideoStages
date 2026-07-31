@@ -44,7 +44,7 @@ internal sealed class HostVideoStageEngine : IDisposable
 
     internal DecodedClipArtifact Execute(
         ClipPlan clip,
-        Func<StagePlan, IHostVideoStageSettings> resolveSettings,
+        Func<StagePlan, StageCorePlan> resolveSettings,
         Func<ClipPlan, StagePlan, int?> resolvePassthroughFrames,
         Action<ClipPlan, StagePlan, HostVideoDecodedStageInput, int> executeGeneratingStage)
     {
@@ -55,7 +55,7 @@ internal sealed class HostVideoStageEngine : IDisposable
 
         foreach (StagePlan stage in clip.Stages)
         {
-            IHostVideoStageSettings settings = resolveSettings(stage)
+            StageCorePlan settings = resolveSettings(stage)
                 ?? throw new InvalidOperationException(
                     $"Stage {stage.StageId} has no {_architectureDisplayLabel} host settings.");
             ApplyPixelUpscale(stage, settings.Upscale);
@@ -142,7 +142,7 @@ internal sealed class HostVideoStageScope(
     internal int ApplyStageOverrides(
         ClipPlan clip,
         StagePlan stage,
-        IHostVideoStageSettings settings)
+        StageCorePlan settings)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(clip);
@@ -152,7 +152,10 @@ internal sealed class HostVideoStageScope(
         int sectionId = VideoStagesExtension.SectionIdForStage(stage.StageId);
         _sectionIds.Add(sectionId);
         generator.UserInput.SectionParamOverrides.Remove(sectionId);
-        generator.UserInput.Set(T2IParamTypes.VideoModel.Type, settings.Model, sectionId);
+        generator.UserInput.Set(
+            T2IParamTypes.VideoModel.Type,
+            stage.ResolvedModel.ModelName,
+            sectionId);
         generator.UserInput.Set(T2IParamTypes.VideoSteps, settings.Steps, sectionId);
         generator.UserInput.Set(T2IParamTypes.Steps, settings.Steps, sectionId);
         generator.UserInput.Set(T2IParamTypes.VideoCFG, settings.CfgScale, sectionId);

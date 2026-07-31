@@ -33,7 +33,7 @@ internal sealed class ContinuityGuideBuilder(WorkflowGenerator g)
         StagePlan firstStage = nextClip.Stages.FirstOrDefault();
         if (firstStage is null
             || !Ltx2ModelCompatibility.IsLtxV2VideoModel(
-                firstStage.RequireLtx2Payload().Core.Model))
+                firstStage.ResolvedModel?.ModelName))
         {
             PlanDiagnosticReporter.TrackRequestWarning(
                 g.UserInput,

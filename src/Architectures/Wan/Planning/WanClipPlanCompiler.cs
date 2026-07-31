@@ -105,17 +105,17 @@ internal static class WanClipPlanCompiler
                 stage.Id);
             StockHostVideoStagePayload payload = new(
                     WanArchitectureModule.ArchitectureId,
-                    resolved.ModelName,
                     resolved.ModelClassId,
                     resolved.CompatibilityClassId,
                     NormalLoraTargetPolicy.ModelOnly,
-                    stage.Control,
-                    stage.Steps,
-                    stage.CfgScale,
-                    stage.Sampler,
-                    stage.Scheduler,
-                    StageUpscalePlanCompiler.Compile(stage),
-                    loras);
+                    new StageCorePlan(
+                        stage.Control,
+                        stage.Steps,
+                        stage.CfgScale,
+                        stage.Sampler,
+                        stage.Scheduler,
+                        StageUpscalePlanCompiler.Compile(stage),
+                        loras));
             stages.Add(stage.ClipStageRawIndex, payload);
         }
         WanFrameReferencePlan firstReference = CompileReference(

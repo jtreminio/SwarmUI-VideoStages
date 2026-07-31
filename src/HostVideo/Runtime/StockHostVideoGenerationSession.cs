@@ -98,7 +98,7 @@ internal sealed class StockHostVideoGenerationSession(
 
         return stageEngine.Execute(
             clip,
-            ResolvePayload,
+            stage => stage.Core,
             IsWan ? ResolveWanPassthroughFrames : ResolveGenericFrames,
             ExecuteGeneratingStage);
     }
@@ -112,13 +112,14 @@ internal sealed class StockHostVideoGenerationSession(
         int sectionId)
     {
         StockHostVideoStagePayload payload = ResolvePayload(stage);
+        StageCorePlan core = stage.Core;
         using (ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
             g.UserInput,
             clip.ClipId,
             sectionId,
             payload.LoraTargetPolicy))
         using (ParamSnapshot loraScope =
-            LoraParams.ApplyNormalLoras(g.UserInput, payload.Loras))
+            LoraParams.ApplyNormalLoras(g.UserInput, core.Loras))
         using (ParamSnapshot ignoredAudioReference = IsWan
             ? null
             : ParamSnapshot.Of(
@@ -132,10 +133,11 @@ internal sealed class StockHostVideoGenerationSession(
                 g.UserInput.InternalSet.ValuesInput.Remove(
                     T2IParamTypes.VideoAudioReference.Type.ID);
             }
-            string stageLoaderKey = $"modelloader_{payload.Model}_image2video";
+            string stageLoaderKey =
+                $"modelloader_{stage.ResolvedModel.ModelName}_image2video";
             bool transientStageLoader =
                 promptLoraScope is not null
-                || !payload.Loras.IsDefaultOrEmpty;
+                || !core.Loras.IsDefaultOrEmpty;
             // The host cache key does not encode the active LoRA parameter scope. Always make
             // the ordinary stage reload under its effective plan, including an
             // empty plan after a prior scoped stage. Existing graph nodes stay live.
@@ -160,8 +162,8 @@ internal sealed class StockHostVideoGenerationSession(
                 int startStep = stage.Input == StageInputKind.RootMedia
                     ? 0
                     : HostVideoStageSchedulePolicy.StartStep(
-                        payload.Steps,
-                        payload.Control);
+                        core.Steps,
+                        core.Control);
                 if (!materializedFirstFrame)
                 {
                     stageInput.Configure(clip, stage, genInfo, startStep);
@@ -221,7 +223,7 @@ internal sealed class StockHostVideoGenerationSession(
         StagePlan stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        StockHostVideoStagePayload payload = ResolvePayload(stage);
+        StageCorePlan core = stage.Core;
         if (clip.EntryMode != ArchitectureEntryMode.TextToVideo
             || clip.Input != ClipInputKind.EmptyLatent
             || stage.ClipStageIndex != 0)
@@ -286,8 +288,8 @@ internal sealed class StockHostVideoGenerationSession(
                 genInfo.PosCond,
                 genInfo.NegCond,
                 g.CurrentMedia.Path,
-                payload.CfgScale,
-                payload.Steps,
+                core.CfgScale,
+                core.Steps,
                 startStep: 0,
                 endStep: 10000,
                 seed: genInfo.Seed,
@@ -297,8 +299,8 @@ internal sealed class StockHostVideoGenerationSession(
                 sigmax: 1000,
                 defsampler: "euler",
                 defscheduler: "simple",
-                explicitSampler: payload.Sampler,
-                explicitScheduler: payload.Scheduler,
+                explicitSampler: core.Sampler,
+                explicitScheduler: core.Scheduler,
                 sectionId: genInfo.ContextID);
             g.CurrentMedia = g.CurrentMedia
                 .WithPath([sampled, 0])
@@ -500,11 +502,12 @@ internal sealed class StockHostVideoGenerationSession(
         int sectionId)
     {
         StockHostVideoStagePayload payload = ResolvePayload(stage);
+        StageCorePlan core = stage.Core;
         T2IModel videoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId)
             ?? throw new SwarmUserErrorException(
                 $"VideoStages: clip {clip.ClipId} could not resolve {architectureLabel} "
                     + "video model "
-                + $"'{payload.Model}'.");
+                + $"'{stage.ResolvedModel.ModelName}'.");
         (string positive, string negative) = _prompts.Resolve(clip, stage);
         int width = g.CurrentMedia?.Width ?? _dimensions.Width;
         int height = g.CurrentMedia?.Height ?? _dimensions.Height;
@@ -519,13 +522,13 @@ internal sealed class StockHostVideoGenerationSession(
             Frames = IsWan
                 ? ResolveWanFrames(clip, stage, sectionId)
                 : ResolveGenericFrames(clip, stage),
-            VideoCFG = payload.CfgScale,
+            VideoCFG = core.CfgScale,
             VideoFPS = plan.FramesPerSecond,
             Width = width,
             Height = height,
             Prompt = positive,
             NegativePrompt = negative,
-            Steps = payload.Steps,
+            Steps = core.Steps,
             Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.StageId,
             ContextID = sectionId,
             VideoEndFrame = IsWan ? ResolveWanEndFrame(clip, stage) : null,

@@ -28,17 +28,15 @@ internal static class Ltx2ClipPlanCompiler
         {
             Ltx2StagePayload payload = new(
                 new StageCorePlan(
-                    stage.Model,
                     stage.Control,
                     stage.Steps,
                     stage.CfgScale,
                     stage.Sampler,
                     stage.Scheduler,
-                    stage.ControlNetStrength,
-                    stage.ImageRefWasExplicit),
+                    StageUpscalePlanCompiler.Compile(stage),
+                    NormalLoraPlanCompiler.Compile(clip, stage)),
                 CompileGuideReference(stage.ImageReference),
-                StageUpscalePlanCompiler.Compile(stage),
-                NormalLoraPlanCompiler.Compile(clip, stage),
+                stage.ImageRefWasExplicit,
                 IcLoraPlanCompiler.Compile(clip, stage, context),
                 CompileRetake(stage.RetakeWindow),
                 relay,

@@ -15,9 +15,9 @@ internal static class StageDimensionRules
         ArgumentNullException.ThrowIfNull(stage);
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
         int targetWidth = AlignTo16((int)Math.Round(
-            Math.Max(width, 16) * payload.Upscale.Factor));
+            Math.Max(width, 16) * payload.Core.Upscale.Factor));
         int targetHeight = AlignTo16((int)Math.Round(
-            Math.Max(height, 16) * payload.Upscale.Factor));
+            Math.Max(height, 16) * payload.Core.Upscale.Factor));
         return SnapForIcLora(stage, targetWidth, targetHeight);
     }
 

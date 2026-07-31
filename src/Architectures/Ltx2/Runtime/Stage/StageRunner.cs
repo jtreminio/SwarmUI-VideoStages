@@ -78,7 +78,7 @@ internal class StageRunner
             sectionId);
         using ParamSnapshot loraScope = LoraParams.ApplyNormalLoras(
             _generator.UserInput,
-            stage.RequireLtx2Payload().Loras);
+            stage.Core.Loras);
 
         StageFrame stageFrame = _framePreparer.Prepare(
             stage,
@@ -194,12 +194,12 @@ internal class StageRunner
             SourcedFootageIsStageInput: clipContext.PlannedClip.IsSourced
                 && clipContext.IsFirstStage(stage)
                 && payload.Guide.Kind == StageGuideReferenceKind.Generated
-                && !payload.Core.ImageReferenceWasExplicit,
+                && !payload.ImageReferenceWasExplicit,
             // The host's incoming image is the implicit frame-1 guide for clip 0/stage 0 only.
             // Later defaulted stages refine their incoming latent directly. Authored ImageReference
             // selectors and authored frame refs remain eligible for guide construction.
             RefinesIncomingLatent: clipContext.Plan.Root.HostKind == HostRootKind.ImageToVideo
-                && !payload.Core.ImageReferenceWasExplicit
+                && !payload.ImageReferenceWasExplicit
                 && (clipContext.PlannedClip.ClipId != 0 || stage.ClipStageIndex != 0),
             PriorStageLatentIsReusable: PriorStageLatentIsReusable(
                 stage,
@@ -278,7 +278,7 @@ internal class StageRunner
             guideReference,
             stageFrame.PriorOutputPath,
             payload.Guide.Kind,
-            payload.Core.ImageReferenceWasExplicit,
+            payload.ImageReferenceWasExplicit,
             stageFrame.PostVideoChain);
         bool guideIsLiveOutput = _guideMediaResolver.IsLiveCurrentOutputReference(
             guideReference?.Media,

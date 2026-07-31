@@ -184,11 +184,14 @@ public class StageRunnerCollaboratorTests
             ArchitecturePayload = MakePlan().Stage.RequireLtx2Payload() with
             {
                 IcLoras = ImmutableArray<IcLoraPlan>.Empty,
-                Upscale = new(
-                    StageUpscaleMode.Latent,
-                    Factor: 2,
-                    RawMethod: "latent-bilinear",
-                    MethodName: "bilinear"),
+                Core = MakePlan().Stage.Core with
+                {
+                    Upscale = new(
+                        StageUpscaleMode.Latent,
+                        Factor: 2,
+                        RawMethod: "latent-bilinear",
+                        MethodName: "bilinear"),
+                },
             }
         };
 

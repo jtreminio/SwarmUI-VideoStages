@@ -88,7 +88,7 @@ public class VideoExecutionPlanCompilerTests
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false,
             GeneratedClip(0, Stage(10, control: 0.5, upscale: 2, upscaleMethod: method))));
 
-        StageUpscalePlan upscale = plan.Clips[0].Stages[0].RequireLtx2Payload().Upscale;
+        StageUpscalePlan upscale = plan.Clips[0].Stages[0].Core.Upscale;
         Assert.Equal((StageUpscaleMode)expectedValue, upscale.Mode);
         Assert.Equal(2, upscale.Factor);
         Assert.Equal(method, upscale.RawMethod);
@@ -119,7 +119,7 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(
             PromptRelayMode.Relay,
             compiled.Stages[0].RequireLtx2Payload().PromptRelay.Mode);
-        Assert.Equal(2, compiled.Stages[0].RequireLtx2Payload().Loras.Length);
+        Assert.Equal(2, compiled.Stages[0].Core.Loras.Length);
         Assert.Single(compiled.Stages[0].RequireLtx2Payload().IcLoras);
         Assert.Single(compiled.Stages[0].RequireLtx2Payload().FrameReferences);
         Assert.Empty(compiled.Stages[1].RequireLtx2Payload().IcLoras);
@@ -145,7 +145,7 @@ public class VideoExecutionPlanCompilerTests
                 TestPlanCompiler.Compile(
                     Spec(false, GeneratedClip(0, stage))).Clips).Stages)
             .RequireLtx2Payload();
-        NormalLoraPlan lora = Assert.Single(payload.Loras);
+        NormalLoraPlan lora = Assert.Single(payload.Core.Loras);
 
         Assert.Equal("stage-text-only", lora.Name);
         Assert.Equal(0, lora.ModelWeight);
@@ -274,23 +274,22 @@ public class VideoExecutionPlanCompilerTests
 
         Assert.Equal(StageGuideReferenceKind.Base2Edit, ltx.Guide.Kind);
         Assert.Equal(4, ltx.Guide.ReferencedStageIndex);
-        Assert.Equal(StageUpscaleMode.Latent, ltx.Upscale.Mode);
-        Assert.Equal(1.5, ltx.Upscale.Factor);
-        Assert.Equal("bilinear", ltx.Upscale.MethodName);
+        Assert.Equal(StageUpscaleMode.Latent, compiled.Core.Upscale.Mode);
+        Assert.Equal(1.5, compiled.Core.Upscale.Factor);
+        Assert.Equal("bilinear", compiled.Core.Upscale.MethodName);
         Assert.Equal(11, compiled.StageId);
         Assert.Equal(1, compiled.ClipStageIndex);
         Assert.Equal(1, compiled.ClipStageRawIndex);
-        Assert.Equal("ltx-2", ltx.Core.Model);
+        Assert.Equal("ltx-2", compiled.ResolvedModel.ModelName);
         Assert.Equal(0.5, ltx.Core.Control);
         Assert.Equal(12, ltx.Core.Steps);
         Assert.Equal(4.5, ltx.Core.CfgScale);
         Assert.Equal("euler", ltx.Core.Sampler);
         Assert.Equal("normal", ltx.Core.Scheduler);
-        Assert.Equal(0.55, ltx.Core.ControlNetStrength);
-        Assert.True(ltx.Core.ImageReferenceWasExplicit);
+        Assert.True(ltx.ImageReferenceWasExplicit);
 
         Assert.Collection(
-            ltx.Loras,
+            compiled.Core.Loras,
             lora =>
             {
                 Assert.Equal("clip.safetensors", lora.Name);
@@ -340,7 +339,7 @@ public class VideoExecutionPlanCompilerTests
             compiled.Output.IntermediatePolicy);
         Assert.True(compiled.Output.PreserveConfiguredAudioTrackSave);
 
-        NormalLoraPlan plannedLora = ltx.Loras[1];
+        NormalLoraPlan plannedLora = compiled.Core.Loras[1];
         Assert.Equal("stage.safetensors", plannedLora.Name);
         Assert.Equal(plannedLora.ModelWeight, plannedLora.TextEncoderWeight);
     }

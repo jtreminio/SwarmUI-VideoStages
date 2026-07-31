@@ -82,7 +82,7 @@ internal sealed class StageFramePreparer(
         {
             throw new SwarmUserErrorException(
                 $"VideoStages: stage {stage.StageId} could not resolve LTX video model "
-                + $"'{payload.Core.Model}'.");
+                + $"'{stage.ResolvedModel.ModelName}'.");
         }
         // The host loader key does not include the stage section or its scoped LoRA state, so LTX
         // must rebuild even when shared graph cleanup has already removed every stale tuple.
