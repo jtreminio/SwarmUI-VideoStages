@@ -15,18 +15,14 @@ internal static class Ltx2ConditionalRulePolicySource
                 ConditionalRuleCodeId.AudioReuseRequiresStages),
             "Audio reuse needs at least three active stages: generate, capture, then reuse.",
             RuleScope.Clip,
-            new MinimumActiveStagesRuleConstraints(
-                3,
-                RuleFailureSeverity.Warning,
-                RuleFailureEffect.DisableFeature));
+            new MinimumActiveStagesRuleConstraints(3));
 
     internal static RuleDecision PromptRelayRequiresFixedLength { get; } =
         RuleDecision.Conditional(
             ArchitectureFeatureVocabulary.RuleCode(
                 ConditionalRuleCodeId.PromptRelayRequiresFixedLength),
             "Prompt relay requires a fixed frame count and cannot be combined with audio-owned or ControlNet-owned clip length.",
-            RuleScope.Clip,
-            new FixedFrameCountRuleConstraints(true));
+            RuleScope.Clip);
 
     internal static RuleDecision RetakeAndReferencesAreExclusive { get; } =
         RuleDecision.Conditional(

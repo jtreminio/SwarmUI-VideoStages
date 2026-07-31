@@ -83,9 +83,6 @@ const isRuleDecision = (
     if (allowedScopes && !allowedScopes.includes(scope)) {
         return false;
     }
-    if (value.support === "conditional" && !isRecord(value.constraints)) {
-        return false;
-    }
     if (value.support === "unsupported" && value.constraints !== null) {
         return false;
     }
@@ -93,7 +90,14 @@ const isRuleDecision = (
 };
 
 const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
-    if (value.support !== "conditional" || !isRecord(value.constraints)) {
+    if (value.support !== "conditional") {
+        return false;
+    }
+    // A conditional rule whose whole meaning is its code publishes no thresholds.
+    if (value.code === CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength) {
+        return value.scope === "clip" && value.constraints === null;
+    }
+    if (!isRecord(value.constraints)) {
         return false;
     }
     const constraints = value.constraints;
@@ -101,15 +105,9 @@ const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
         case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
             return (
                 value.scope === "clip" &&
-                hasExactKeys(constraints, [
-                    "minimumActiveStages",
-                    "failureSeverity",
-                    "failureEffect",
-                ]) &&
+                hasExactKeys(constraints, ["minimumActiveStages"]) &&
                 Number.isInteger(constraints.minimumActiveStages) &&
-                Number(constraints.minimumActiveStages) > 0 &&
-                constraints.failureSeverity === "warning" &&
-                constraints.failureEffect === "disable-feature"
+                Number(constraints.minimumActiveStages) > 0
             );
         case CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage: {
             const typed =
@@ -121,12 +119,6 @@ const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
                 Number.isFinite(typed.exclusiveMinimumControl)
             );
         }
-        case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
-            return (
-                value.scope === "clip" &&
-                hasExactKeys(constraints, ["requiresFixedFrameCount"]) &&
-                constraints.requiresFixedFrameCount === true
-            );
         case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
             return (
                 value.scope === "stage" &&

@@ -981,32 +981,29 @@
     if (allowedScopes && !allowedScopes.includes(scope)) {
       return false;
     }
-    if (value.support === "conditional" && !isRecord2(value.constraints)) {
-      return false;
-    }
     if (value.support === "unsupported" && value.constraints !== null) {
       return false;
     }
     return true;
   };
   var isKnownExecutableRule = (value) => {
-    if (value.support !== "conditional" || !isRecord2(value.constraints)) {
+    if (value.support !== "conditional") {
+      return false;
+    }
+    if (value.code === CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength) {
+      return value.scope === "clip" && value.constraints === null;
+    }
+    if (!isRecord2(value.constraints)) {
       return false;
     }
     const constraints = value.constraints;
     switch (value.code) {
       case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
-        return value.scope === "clip" && hasExactKeys(constraints, [
-          "minimumActiveStages",
-          "failureSeverity",
-          "failureEffect"
-        ]) && Number.isInteger(constraints.minimumActiveStages) && Number(constraints.minimumActiveStages) > 0 && constraints.failureSeverity === "warning" && constraints.failureEffect === "disable-feature";
+        return value.scope === "clip" && hasExactKeys(constraints, ["minimumActiveStages"]) && Number.isInteger(constraints.minimumActiveStages) && Number(constraints.minimumActiveStages) > 0;
       case CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage: {
         const typed = constraints;
         return value.scope === "stage" && hasExactKeys(constraints, ["exclusiveMinimumControl"]) && typeof typed.exclusiveMinimumControl === "number" && Number.isFinite(typed.exclusiveMinimumControl);
       }
-      case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
-        return value.scope === "clip" && hasExactKeys(constraints, ["requiresFixedFrameCount"]) && constraints.requiresFixedFrameCount === true;
       case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
         return value.scope === "stage" && hasExactKeys(constraints, ["mutuallyExclusive"]) && isUniqueStringArray(constraints.mutuallyExclusive) && constraints.mutuallyExclusive.length === 2 && constraints.mutuallyExclusive.includes("retake") && constraints.mutuallyExclusive.includes("frameReferences");
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:

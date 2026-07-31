@@ -73,16 +73,10 @@ internal static class ArchitectureCatalogSerializer
             MinimumActiveStagesRuleConstraints value => new()
             {
                 ["minimumActiveStages"] = value.MinimumActiveStages,
-                ["failureSeverity"] = SerializeFailureSeverity(value.FailureSeverity),
-                ["failureEffect"] = SerializeFailureEffect(value.FailureEffect),
             },
             MinimumStageControlRuleConstraints value => new()
             {
                 ["exclusiveMinimumControl"] = value.ExclusiveMinimumControl,
-            },
-            FixedFrameCountRuleConstraints value => new()
-            {
-                ["requiresFixedFrameCount"] = value.RequiresFixedFrameCount,
             },
             MutuallyExclusiveRuleConstraints value => new()
             {
@@ -181,19 +175,6 @@ internal static class ArchitectureCatalogSerializer
 
     private static string SerializeConditionalFeature(ConditionalRuleFeature feature) =>
         ArchitectureFeatureVocabulary.AuthoringKey(feature);
-
-    private static string SerializeFailureSeverity(RuleFailureSeverity severity) =>
-        severity switch
-        {
-            RuleFailureSeverity.Warning => "warning",
-            _ => throw new ArgumentOutOfRangeException(nameof(severity)),
-        };
-
-    private static string SerializeFailureEffect(RuleFailureEffect effect) => effect switch
-    {
-        RuleFailureEffect.DisableFeature => "disable-feature",
-        _ => throw new ArgumentOutOfRangeException(nameof(effect)),
-    };
 
     private static string SerializeAudioSourceKind(AudioSourceKind kind) => kind switch
     {

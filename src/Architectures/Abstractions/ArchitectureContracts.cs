@@ -115,26 +115,11 @@ internal sealed record BoundaryRuleConstraints(
     bool TargetRequiresStage,
     bool TargetDisallowsInitialReference) : RuleConstraints;
 
-internal enum RuleFailureSeverity
-{
-    Warning,
-}
-
-internal enum RuleFailureEffect
-{
-    DisableFeature,
-}
-
 internal sealed record MinimumActiveStagesRuleConstraints(
-    int MinimumActiveStages,
-    RuleFailureSeverity FailureSeverity,
-    RuleFailureEffect FailureEffect) : RuleConstraints;
+    int MinimumActiveStages) : RuleConstraints;
 
 internal sealed record MinimumStageControlRuleConstraints(
     double ExclusiveMinimumControl) : RuleConstraints;
-
-internal sealed record FixedFrameCountRuleConstraints(
-    bool RequiresFixedFrameCount) : RuleConstraints;
 
 internal enum ConditionalRuleFeature
 {

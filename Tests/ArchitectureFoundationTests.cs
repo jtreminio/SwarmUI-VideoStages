@@ -1667,9 +1667,7 @@ public class ArchitectureFoundationTests
         Assert.Contains(
             rules.Values<JObject>(),
             rule => rule["code"]?.ToString() == "audio.reuse.requires_three_stages"
-                && rule["constraints"]?["minimumActiveStages"]?.Value<int>() == 3
-                && rule["constraints"]?["failureSeverity"]?.ToString() == "warning"
-                && rule["constraints"]?["failureEffect"]?.ToString() == "disable-feature");
+                && rule["constraints"]?["minimumActiveStages"]?.Value<int>() == 3);
         JObject wan = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "wan22");

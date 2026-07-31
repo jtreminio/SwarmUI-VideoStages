@@ -105,8 +105,6 @@ export const testArchitectureCatalog = (
                     scope: "clip",
                     constraints: {
                         minimumActiveStages: 3,
-                        failureSeverity: "warning",
-                        failureEffect: "disable-feature",
                     },
                 },
                 {
@@ -114,7 +112,7 @@ export const testArchitectureCatalog = (
                     code: "prompt-relay-dynamic-length-unsupported",
                     reason: "Prompt relay requires a fixed frame count.",
                     scope: "clip",
-                    constraints: { requiresFixedFrameCount: true },
+                    constraints: null,
                 },
                 {
                     support: "conditional",

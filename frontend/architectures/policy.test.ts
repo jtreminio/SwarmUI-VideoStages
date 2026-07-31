@@ -271,7 +271,7 @@ describe("catalog-backed authoring policy", () => {
                 code: "prompt-relay-dynamic-length-unsupported",
                 reason: "A fixed frame count is required.",
                 scope: "clip",
-                constraints: { requiresFixedFrameCount: true },
+                constraints: null,
             },
         ];
         const clip = minimalClip({
