@@ -46,6 +46,7 @@ internal static class BoundaryPlanCompiler
             // same modes, so the advertised rule is the rule compiled here.
             ArchitectureBoundaryModePolicy modePolicy = plannedFrom?.Architecture?.BoundaryPolicy
                 ?.Modes.GetValueOrDefault(effectiveRequested);
+            BoundaryRuleConstraints constraints = modePolicy?.Constraints;
             if (!isKnown)
             {
                 effective = BoundaryExecutionMode.Cut;
@@ -77,7 +78,7 @@ internal static class BoundaryPlanCompiler
                     from.Id));
             }
             else if (effectiveRequested != BoundaryExecutionMode.Cut
-                && EvaluateTarget(modePolicy, to) is { } targetFallback)
+                && EvaluateTarget(constraints, to) is { } targetFallback)
             {
                 effective = BoundaryExecutionMode.Cut;
                 fallback = targetFallback;
@@ -88,7 +89,7 @@ internal static class BoundaryPlanCompiler
                 : modePolicy?.NormalizeOverlap(from.BoundaryOutOverlap)
                     ?? Math.Max(1, from.BoundaryOutOverlap);
             int continuityWindow = effective == BoundaryExecutionMode.Continue
-                ? overlap + (modePolicy?.ContinuityExtraFrames ?? 0)
+                ? overlap + (constraints?.ContinuityExtraFrames ?? 0)
                 : 0;
             bool targetHasGenerationStage = plannedTo?.Stages is { Count: > 0 }
                 || (plannedTo is null && to.Stages is { Count: > 0 });
@@ -120,10 +121,10 @@ internal static class BoundaryPlanCompiler
                 RequiresRuntimeMergeValidation: effective != BoundaryExecutionMode.Cut,
                 fallback)
             {
-                FrameStep = modePolicy?.FrameStep ?? 1,
+                FrameStep = constraints?.FrameStep ?? 1,
                 MinFrames = effective == BoundaryExecutionMode.Cut
                     ? 0
-                    : modePolicy?.MinFrames ?? 1,
+                    : constraints?.MinFrames ?? 1,
                 CarryAudio = effective != BoundaryExecutionMode.Cut
                     && from.BoundaryOutCarryAudio
                     && targetHasGenerationStage,
@@ -133,22 +134,22 @@ internal static class BoundaryPlanCompiler
     }
 
     private static BoundaryFallback? EvaluateTarget(
-        ArchitectureBoundaryModePolicy policy,
+        BoundaryRuleConstraints constraints,
         ClipSpec target)
     {
-        if (policy is null)
+        if (constraints is null)
         {
             return null;
         }
-        if (policy.TargetRequiresGeneratedEntry && target.SourceVideo is not null)
+        if (constraints.TargetRequiresGeneratedEntry && target.SourceVideo is not null)
         {
             return BoundaryFallback.TargetIsSourcedVideo;
         }
-        if (policy.TargetRequiresStage && target.Stages is not { Count: > 0 })
+        if (constraints.TargetRequiresStage && target.Stages is not { Count: > 0 })
         {
             return BoundaryFallback.TargetHasNoStage;
         }
-        if (policy.TargetDisallowsInitialReference && HasExplicitFirstFrameReference(target))
+        if (constraints.TargetDisallowsInitialReference && HasExplicitFirstFrameReference(target))
         {
             return BoundaryFallback.TargetHasFirstFrameReference;
         }

@@ -883,21 +883,21 @@ public class PlanningCompilerComponentTests
         public StageCorePlan Core => TestPlanCompiler.DefaultStageCore;
     }
 
-    private static readonly IArchitectureBoundaryPolicy FakeBoundaryPolicy =
+    private static readonly ArchitectureBoundaryPolicy FakeBoundaryPolicy =
         new ArchitectureBoundaryPolicy(
             new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
             {
-                [BoundaryExecutionMode.Continue] = new(
-                    RuleSupport.Conditional,
+                [BoundaryExecutionMode.Continue] = ArchitectureBoundaryModePolicy.Conditional(
                     "fake.continue",
                     "Fake policy with a different grid and permissive target.",
-                    FrameStep: 5,
-                    MinFrames: 10,
-                    MaxFrames: 30,
-                    DefaultFrames: 15,
-                    ContinuityExtraFrames: 3,
-                    TargetRequiresGeneratedEntry: false,
-                    TargetRequiresStage: false,
-                    TargetDisallowsInitialReference: false),
+                    new BoundaryRuleConstraints(
+                        FrameStep: 5,
+                        MinFrames: 10,
+                        MaxFrames: 30,
+                        DefaultFrames: 15,
+                        ContinuityExtraFrames: 3,
+                        TargetRequiresGeneratedEntry: false,
+                        TargetRequiresStage: false,
+                        TargetDisallowsInitialReference: false)),
             });
 }

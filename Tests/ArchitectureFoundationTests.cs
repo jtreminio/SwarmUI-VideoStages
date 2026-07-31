@@ -1529,8 +1529,7 @@ public class ArchitectureFoundationTests
             BoundaryPolicy = new ArchitectureBoundaryPolicy(
                 new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
                 {
-                    [BoundaryExecutionMode.Cut] = BoundaryMode(
-                        RuleSupport.Supported,
+                    [BoundaryExecutionMode.Cut] = ArchitectureBoundaryModePolicy.Supported(
                         "fake.cut",
                         "cut"),
                 }),
@@ -1965,36 +1964,32 @@ public class ArchitectureFoundationTests
             new ArchitectureBoundaryPolicy(
                 new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
                 {
-                    [BoundaryExecutionMode.Cut] = BoundaryMode(
-                        RuleSupport.Supported,
+                    [BoundaryExecutionMode.Cut] = ArchitectureBoundaryModePolicy.Supported(
                         $"{id}.cut",
                         "cut"),
                     [BoundaryExecutionMode.Continue] = BoundaryMode(
-                        RuleSupport.Conditional,
                         $"{id}.continue",
                         "same architecture"),
                     [BoundaryExecutionMode.Crossfade] = BoundaryMode(
-                        RuleSupport.Conditional,
                         $"{id}.crossfade",
                         "same architecture"),
                 }));
 
     private static ArchitectureBoundaryModePolicy BoundaryMode(
-        RuleSupport support,
         string code,
         string reason) =>
-        new(
-            support,
+        ArchitectureBoundaryModePolicy.Conditional(
             code,
             reason,
-            FrameStep: 1,
-            MinFrames: 1,
-            MaxFrames: 8,
-            DefaultFrames: 1,
-            ContinuityExtraFrames: 0,
-            TargetRequiresGeneratedEntry: false,
-            TargetRequiresStage: false,
-            TargetDisallowsInitialReference: false);
+            new BoundaryRuleConstraints(
+                FrameStep: 1,
+                MinFrames: 1,
+                MaxFrames: 8,
+                DefaultFrames: 1,
+                ContinuityExtraFrames: 0,
+                TargetRequiresGeneratedEntry: false,
+                TargetRequiresStage: false,
+                TargetDisallowsInitialReference: false));
 
     private sealed class MatchingModule(
         VideoArchitectureDescriptor descriptor,

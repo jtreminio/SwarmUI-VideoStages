@@ -313,18 +313,9 @@ public class HostVideoArchitectureTests
     private static VideoArchitectureDescriptor DescriptorFor(string id)
     {
         ArchitectureId architectureId = new(id);
-        ArchitectureBoundaryModePolicy boundary = new(
-            RuleSupport.Supported,
+        ArchitectureBoundaryModePolicy boundary = ArchitectureBoundaryModePolicy.Supported(
             $"{id}.cut",
-            "cut",
-            1,
-            0,
-            0,
-            0,
-            0,
-            false,
-            false,
-            false);
+            "cut");
         return new(
             architectureId,
             id,

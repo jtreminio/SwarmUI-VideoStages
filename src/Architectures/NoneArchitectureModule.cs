@@ -10,7 +10,7 @@ internal static class NoneArchitecture
     internal static ModelProfileId ProfileId { get; } = new("none");
 
     /// <summary>Cut-only, owned here and published from the same modes the compiler reads.</summary>
-    internal static IArchitectureBoundaryPolicy BoundaryPolicy { get; } =
+    internal static ArchitectureBoundaryPolicy BoundaryPolicy { get; } =
         ArchitectureBoundaryPolicy.CutOnly(
             "none",
             "Decoded sourced clips can be joined with a hard cut.",

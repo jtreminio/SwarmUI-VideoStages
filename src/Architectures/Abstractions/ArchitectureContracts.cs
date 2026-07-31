@@ -215,51 +215,73 @@ internal sealed record ArchitectureCapabilityDescriptor(
 /// <summary>
 /// One typed boundary rule used for both catalog publication and backend planning.
 /// </summary>
-internal sealed record ArchitectureBoundaryModePolicy(
-    RuleSupport Support,
-    string Code,
-    string Reason,
-    int FrameStep,
-    int MinFrames,
-    int MaxFrames,
-    int DefaultFrames,
-    int ContinuityExtraFrames,
-    bool TargetRequiresGeneratedEntry,
-    bool TargetRequiresStage,
-    bool TargetDisallowsInitialReference)
+internal sealed record ArchitectureBoundaryModePolicy
 {
+    private ArchitectureBoundaryModePolicy(
+        RuleSupport support,
+        string code,
+        string reason,
+        BoundaryRuleConstraints constraints)
+    {
+        Support = support;
+        Code = RequireText(code, nameof(code));
+        Reason = RequireText(reason, nameof(reason));
+        Constraints = constraints;
+    }
+
+    internal RuleSupport Support { get; }
+
+    internal string Code { get; }
+
+    internal string Reason { get; }
+
+    /// <summary>
+    /// The thresholds a conditional mode publishes and compiles against; null for the
+    /// unconditional modes, which have no numbers to agree on.
+    /// </summary>
+    internal BoundaryRuleConstraints Constraints { get; }
+
+    internal static ArchitectureBoundaryModePolicy Supported(string code, string reason) =>
+        new(RuleSupport.Supported, code, reason, null);
+
+    internal static ArchitectureBoundaryModePolicy Unsupported(string code, string reason) =>
+        new(RuleSupport.Unsupported, code, reason, null);
+
+    internal static ArchitectureBoundaryModePolicy Conditional(
+        string code,
+        string reason,
+        BoundaryRuleConstraints constraints) =>
+        new(
+            RuleSupport.Conditional,
+            code,
+            reason,
+            constraints ?? throw new ArgumentNullException(nameof(constraints)));
+
     internal RuleDecision ToRuleDecision() => Support switch
     {
         RuleSupport.Supported => RuleDecision.Supported(Code, Reason, RuleScope.Boundary),
         RuleSupport.Unsupported => RuleDecision.Unsupported(Code, Reason, RuleScope.Boundary),
-        _ => RuleDecision.Conditional(
-            Code,
-            Reason,
-            RuleScope.Boundary,
-            new BoundaryRuleConstraints(
-                FrameStep,
-                MinFrames,
-                MaxFrames,
-                DefaultFrames,
-                ContinuityExtraFrames,
-                TargetRequiresGeneratedEntry,
-                TargetRequiresStage,
-                TargetDisallowsInitialReference)),
+        _ => RuleDecision.Conditional(Code, Reason, RuleScope.Boundary, Constraints),
     };
 
     internal int NormalizeOverlap(int authoredFrames)
     {
-        if (Support == RuleSupport.Unsupported)
+        if (Support == RuleSupport.Unsupported || Constraints is null)
         {
             return 0;
         }
-        int step = Math.Max(1, FrameStep);
+        int step = Math.Max(1, Constraints.FrameStep);
         int candidate = Math.Clamp(
-            authoredFrames <= 0 ? DefaultFrames : authoredFrames,
-            MinFrames,
-            MaxFrames);
-        return MinFrames + ((candidate - MinFrames) / step * step);
+            authoredFrames <= 0 ? Constraints.DefaultFrames : authoredFrames,
+            Constraints.MinFrames,
+            Constraints.MaxFrames);
+        return Constraints.MinFrames + ((candidate - Constraints.MinFrames) / step * step);
     }
+
+    private static string RequireText(string value, string parameterName) =>
+        string.IsNullOrWhiteSpace(value)
+            ? throw new ArgumentException("Value cannot be empty.", parameterName)
+            : value;
 }
 
 /// <summary>
@@ -267,28 +289,24 @@ internal sealed record ArchitectureBoundaryModePolicy(
 /// compilation both read the same typed modes, so the advertised rule and the compiled rule
 /// cannot drift.
 /// </summary>
-internal interface IArchitectureBoundaryPolicy
-{
-    IReadOnlyDictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy> Modes { get; }
-
-    IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> PublishedRules { get; }
-}
-
-/// <summary>A boundary policy declared as modes; its published rules are derived from them.</summary>
-internal sealed class ArchitectureBoundaryPolicy : IArchitectureBoundaryPolicy
+internal sealed class ArchitectureBoundaryPolicy
 {
     internal ArchitectureBoundaryPolicy(
         IReadOnlyDictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy> modes)
     {
-        Modes = modes;
-        PublishedRules = modes.ToDictionary(
+        Modes = new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>(
+            modes ?? throw new ArgumentNullException(nameof(modes)));
+        PublishedRules = Modes.ToDictionary(
             pair => pair.Key,
             pair => pair.Value.ToRuleDecision());
     }
 
-    public IReadOnlyDictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy> Modes { get; }
+    internal IReadOnlyDictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy> Modes
+    {
+        get;
+    }
 
-    public IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> PublishedRules { get; }
+    internal IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> PublishedRules { get; }
 
     internal static ArchitectureBoundaryPolicy CutOnly(
         string codePrefix,
@@ -297,36 +315,16 @@ internal sealed class ArchitectureBoundaryPolicy : IArchitectureBoundaryPolicy
         string crossfadeReason) =>
         new(new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
         {
-            [BoundaryExecutionMode.Cut] = Mode(
-                RuleSupport.Supported,
+            [BoundaryExecutionMode.Cut] = ArchitectureBoundaryModePolicy.Supported(
                 $"{codePrefix}.boundary.cut",
                 cutReason),
-            [BoundaryExecutionMode.Continue] = Mode(
-                RuleSupport.Unsupported,
+            [BoundaryExecutionMode.Continue] = ArchitectureBoundaryModePolicy.Unsupported(
                 $"{codePrefix}.boundary.continue.unsupported",
                 continueReason),
-            [BoundaryExecutionMode.Crossfade] = Mode(
-                RuleSupport.Unsupported,
+            [BoundaryExecutionMode.Crossfade] = ArchitectureBoundaryModePolicy.Unsupported(
                 $"{codePrefix}.boundary.crossfade.unsupported",
                 crossfadeReason),
         });
-
-    private static ArchitectureBoundaryModePolicy Mode(
-        RuleSupport support,
-        string code,
-        string reason) =>
-        new(
-            support,
-            code,
-            reason,
-            FrameStep: 1,
-            MinFrames: 0,
-            MaxFrames: 0,
-            DefaultFrames: 0,
-            ContinuityExtraFrames: 0,
-            TargetRequiresGeneratedEntry: false,
-            TargetRequiresStage: false,
-            TargetDisallowsInitialReference: false);
 }
 
 /// <summary>
@@ -367,7 +365,7 @@ internal sealed record VideoArchitectureDescriptor(
     IReadOnlyList<AudioSourceKind> AudioSourceKinds,
     IReadOnlyList<ArchitectureEntryMode> EntryModes,
     ArchitectureCapabilityDescriptor Capabilities,
-    IArchitectureBoundaryPolicy BoundaryPolicy)
+    ArchitectureBoundaryPolicy BoundaryPolicy)
 {
     /// <summary>
     /// The generated-frame grid shared by this architecture. It is an architecture/runtime fact,

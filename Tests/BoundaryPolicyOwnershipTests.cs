@@ -17,7 +17,7 @@ public class BoundaryPolicyOwnershipTests
         foreach (VideoArchitectureDescriptor descriptor in
             VideoArchitectureRegistry.Production.Catalog)
         {
-            IArchitectureBoundaryPolicy policy = descriptor.BoundaryPolicy;
+            ArchitectureBoundaryPolicy policy = descriptor.BoundaryPolicy;
             Assert.NotNull(policy);
             Assert.Equal(
                 Enum.GetValues<BoundaryExecutionMode>().Order(),
@@ -36,18 +36,18 @@ public class BoundaryPolicyOwnershipTests
     {
         // A module that only declares a descriptor: the advertised continue rule must still be
         // the rule that compiles, grid and continuity window included.
-        ArchitectureBoundaryModePolicy continueMode = new(
-            RuleSupport.Conditional,
+        ArchitectureBoundaryModePolicy continueMode = ArchitectureBoundaryModePolicy.Conditional(
             "fixture.boundary.continue",
             "Fixture grid.",
-            FrameStep: 5,
-            MinFrames: 10,
-            MaxFrames: 30,
-            DefaultFrames: 15,
-            ContinuityExtraFrames: 3,
-            TargetRequiresGeneratedEntry: false,
-            TargetRequiresStage: false,
-            TargetDisallowsInitialReference: false);
+            new BoundaryRuleConstraints(
+                FrameStep: 5,
+                MinFrames: 10,
+                MaxFrames: 30,
+                DefaultFrames: 15,
+                ContinuityExtraFrames: 3,
+                TargetRequiresGeneratedEntry: false,
+                TargetRequiresStage: false,
+                TargetDisallowsInitialReference: false));
         VideoStagesSpec spec = new(640, 360, 24, false,
         [
             new ClipSpec(0, 49, Constants.AudioSourceNative, [], false, false, false, false,
@@ -82,10 +82,10 @@ public class BoundaryPolicyOwnershipTests
         Assert.Equal(BoundaryExecutionMode.Continue, boundary.Effective);
         Assert.Equal(continueMode.NormalizeOverlap(22), boundary.OverlapFrames);
         Assert.Equal(20, boundary.OverlapFrames);
-        Assert.Equal(continueMode.FrameStep, boundary.FrameStep);
-        Assert.Equal(continueMode.MinFrames, boundary.MinFrames);
+        Assert.Equal(continueMode.Constraints.FrameStep, boundary.FrameStep);
+        Assert.Equal(continueMode.Constraints.MinFrames, boundary.MinFrames);
         Assert.Equal(
-            boundary.OverlapFrames + continueMode.ContinuityExtraFrames,
+            boundary.OverlapFrames + continueMode.Constraints.ContinuityExtraFrames,
             boundary.ContinuityWindowFrames);
     }
 
