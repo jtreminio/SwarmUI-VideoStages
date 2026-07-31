@@ -10,6 +10,7 @@ import { resetArchitectureCatalogForTests } from "./__test_helpers__/architectur
 import {
     testArchitectureCatalog,
     testArchitectureCatalogDto,
+    testAuthoringTransactionSnapshot,
 } from "./__test_helpers__/architectureFixtures";
 import {
     mountPromptBox,
@@ -18,7 +19,7 @@ import {
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
 import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
-import { createCapabilityViewResolver } from "./architectures/policy";
+import type { ArchitectureModelCatalog } from "./architectures/types";
 import { createGestureRouter } from "./gestureRouter";
 import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
@@ -92,6 +93,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     let track: TimelineReferencesTrack | null = null;
     let router: ReturnType<typeof createGestureRouter> | null = null;
     let saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
+    let authoringCatalog: ArchitectureModelCatalog;
 
     beforeEach(() => {
         resetSelectionForTests();
@@ -121,12 +123,12 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         mountPrompt(fixtures, fps);
         const body = makeBody();
         renderRefs(body, persistence.getClips());
-        const catalog = testArchitectureCatalog();
-        for (const entry of catalog.entries) {
+        authoringCatalog = testArchitectureCatalog();
+        for (const entry of authoringCatalog.entries) {
             entry.enhancements = { referencePositions };
         }
         track = createTimelineReferencesTrack(() =>
-            createCapabilityViewResolver(catalog),
+            testAuthoringTransactionSnapshot(authoringCatalog),
         );
         router = createGestureRouter();
         track.attach(body, router);
@@ -305,6 +307,86 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         expect(savedClips(saveSpy)[0].refs[0].frame).toBe(61);
     });
 
+    it("cancels a drag when a catalog refresh removes reference support", () => {
+        const body = setup([{ duration: 5, refs: [{ frame: 1 }] }]);
+        stubLaneRect(body, 0, 0, 120);
+        const thumb = markEl(body, 0, 0);
+        const originalLeft = thumb.style.left;
+
+        thumb.dispatchEvent(
+            new MouseEvent("mousedown", {
+                bubbles: true,
+                button: 0,
+                clientX: 0,
+            }),
+        );
+        document.dispatchEvent(
+            new MouseEvent("mousemove", { bubbles: true, clientX: 60 }),
+        );
+        authoringCatalog.architectures[0].capabilities.stage =
+            authoringCatalog.architectures[0].capabilities.stage.filter(
+                (feature) => feature !== "frame-references",
+            );
+        document.dispatchEvent(
+            new MouseEvent("mouseup", { bubbles: true, clientX: 60 }),
+        );
+
+        expect(saveSpy).not.toHaveBeenCalled();
+        expect(thumb.style.left).toBe(originalLeft);
+        expect(thumb.querySelector(".vst-refs-ph")?.textContent).toBe("R 1");
+    });
+
+    it("cancels a drag when a catalog refresh changes reference endpoints", () => {
+        const body = setup([{ duration: 5, refs: [{ frame: 1 }] }]);
+        stubLaneRect(body, 0, 0, 120);
+        const thumb = markEl(body, 0, 0);
+
+        thumb.dispatchEvent(
+            new MouseEvent("mousedown", {
+                bubbles: true,
+                button: 0,
+                clientX: 0,
+            }),
+        );
+        document.dispatchEvent(
+            new MouseEvent("mousemove", { bubbles: true, clientX: 60 }),
+        );
+        for (const entry of authoringCatalog.entries) {
+            entry.enhancements = {
+                referencePositions: ["first", "last"],
+            };
+        }
+        document.dispatchEvent(
+            new MouseEvent("mouseup", { bubbles: true, clientX: 60 }),
+        );
+
+        expect(saveSpy).not.toHaveBeenCalled();
+        expect(thumb.querySelector(".vst-refs-ph")?.textContent).toBe("R 1");
+    });
+
+    it("cancels a drag when a catalog repaint detaches its rendered lane", () => {
+        const body = setup([{ duration: 5, refs: [{ frame: 1 }] }]);
+        stubLaneRect(body, 0, 0, 120);
+        const thumb = markEl(body, 0, 0);
+
+        thumb.dispatchEvent(
+            new MouseEvent("mousedown", {
+                bubbles: true,
+                button: 0,
+                clientX: 0,
+            }),
+        );
+        document.dispatchEvent(
+            new MouseEvent("mousemove", { bubbles: true, clientX: 60 }),
+        );
+        body.innerHTML = "";
+        document.dispatchEvent(
+            new MouseEvent("mouseup", { bubbles: true, clientX: 60 }),
+        );
+
+        expect(saveSpy).not.toHaveBeenCalled();
+    });
+
     it("snaps a dragged reference to the nearest clip edge", () => {
         const body = setup([{ duration: 5, refs: [{ frame: 1 }] }]);
         stubLaneRect(body, 0, 0, 120);
@@ -442,7 +524,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
             entry.enhancements = { referencePositions: ["any"] };
         }
         track = createTimelineReferencesTrack(() =>
-            createCapabilityViewResolver(catalog),
+            testAuthoringTransactionSnapshot(catalog),
         );
         router = createGestureRouter();
         track.attach(body, router);

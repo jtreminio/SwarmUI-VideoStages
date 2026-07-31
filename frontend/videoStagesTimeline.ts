@@ -89,7 +89,9 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const promptTrack = createTimelinePromptTrack(capabilities);
     const audioSegmentTrack = createTimelineAudioSegmentTrack(capabilities);
     const selectionTracks = createTimelineSelectionTracks();
-    const referencesTrack = createTimelineReferencesTrack(capabilities);
+    const referencesTrack = createTimelineReferencesTrack(
+        captureAuthoringTransactionSnapshot,
+    );
     let addClipInFlight = false;
     let historyNeedsRebase = true;
     const hasAuthoritativeCatalog = (): boolean =>

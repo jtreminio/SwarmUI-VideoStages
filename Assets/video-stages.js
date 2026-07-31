@@ -15075,14 +15075,20 @@ The conversion is one undoable change.`;
   var LANE_SELECTOR = ".vst-refs-lane[data-vst-ref-add]";
   var DRAGGING_CLASS2 = "vst-refs-dragging";
   var DRAG_THRESHOLD_PX3 = 5;
-  var createTimelineReferencesTrack = (getCapabilities) => {
+  var createTimelineReferencesTrack = (getAuthoring) => {
     let boundBody = null;
     let unregister = null;
-    const canEditReferences = (clip) => getCapabilities?.().forClip(clip).decision("frameReferences").supported ?? true;
-    const referencePositions = (clip, modelCatalog = getRootDefaults().modelCatalog) => referenceEndpointPolicy(
-      clip,
-      getCapabilities?.().catalog ?? modelCatalog
-    ).positions;
+    const canEditReferences = (clip, authoring = getAuthoring()) => authoring.capabilities.forClip(clip).decision("frameReferences").supported;
+    const referencePositions = (clip, authoring = getAuthoring()) => referenceEndpointPolicy(clip, authoring.defaults.modelCatalog).positions;
+    const resolveDragPolicy = (clip, fps, authoring) => ({
+      supported: canEditReferences(clip, authoring),
+      positions: referencePositions(clip, authoring),
+      frameGrid: resolvedClipFrameGrid(clip, authoring.defaults.modelCatalog),
+      frameMax: getReferenceFrameMax(() => authoring.defaults, clip, fps)
+    });
+    const sameDragPolicy = (left, right) => left.supported === right.supported && left.frameGrid === right.frameGrid && left.frameMax === right.frameMax && left.positions.length === right.positions.length && left.positions.every(
+      (position, index) => position === right.positions[index]
+    );
     const findArrow = (clipIdx, refIdx) => boundBody?.querySelector(
       `.vst-region[data-clip-idx="${clipIdx}"] .vst-key[data-ref-idx="${refIdx}"]`
     ) ?? null;
@@ -15098,7 +15104,7 @@ The conversion is one undoable change.`;
         ph.textContent = `R ${fromEnd ? "-" : ""}${frame}`;
       }
     };
-    const addRefAtFrame = (clipIdx, frame, sourceRevision, defaults = getRootDefaults()) => {
+    const addRefAtFrame = (clipIdx, frame, sourceRevision, authoring = getAuthoring()) => {
       const fps = documentFps(getState());
       let newRefIdx = -1;
       const saved = commitClipMutation(
@@ -15106,15 +15112,15 @@ The conversion is one undoable change.`;
         "references-track",
         (clips) => {
           const clip = clips[clipIdx];
-          if (!clip || !canEditReferences(clip)) {
+          if (!clip || !canEditReferences(clip, authoring)) {
             return null;
           }
           const frameMax = getReferenceFrameMax(
-            () => defaults,
+            () => authoring.defaults,
             clip,
             fps
           );
-          const allowed = referencePositions(clip, defaults.modelCatalog);
+          const allowed = referencePositions(clip, authoring);
           const ref = buildDefaultRef();
           if (allowed.includes("any")) {
             ref.frame = clamp(
@@ -15150,12 +15156,12 @@ The conversion is one undoable change.`;
       });
     };
     const dragPositionAt = (state, clientX) => {
-      const bounded = state.allowedPositions.length > 0 && !state.allowedPositions.includes("any");
+      const bounded = state.policy.positions.length > 0 && !state.policy.positions.includes("any");
       if (bounded) {
         const rect2 = state.lane.getBoundingClientRect();
         const prefersLast = clientX - rect2.left >= rect2.width / 2;
-        const supportsFirst = state.allowedPositions.includes("first");
-        const supportsLast = state.allowedPositions.includes("last");
+        const supportsFirst = state.policy.positions.includes("first");
+        const supportsLast = state.policy.positions.includes("last");
         return {
           frame: REF_FRAME_MIN,
           fromEnd: supportsLast && (!supportsFirst || prefersLast)
@@ -15168,21 +15174,21 @@ The conversion is one undoable change.`;
         state.durationSeconds,
         state.fps,
         state.fromEnd,
-        state.frameGrid
+        state.policy.frameGrid
       );
       if (!getTimelineAuthoringSettings().snap || rect.width <= 0) {
         return { frame, fromEnd: state.fromEnd };
       }
       const thresholdFrames = Math.max(
         1,
-        SNAP_THRESHOLD_PX / rect.width * state.frameMax
+        SNAP_THRESHOLD_PX / rect.width * state.policy.frameMax
       );
       return {
         frame: Math.round(
           snapPoint(
             frame,
             [],
-            [REF_FRAME_MIN, state.frameMax],
+            [REF_FRAME_MIN, state.policy.frameMax],
             thresholdFrames
           )
         ),
@@ -15216,13 +15222,22 @@ The conversion is one undoable change.`;
       },
       onCommit: (ctx) => {
         body.classList.remove(DRAGGING_CLASS2);
+        if (!state.mark.isConnected || !state.lane.isConnected) {
+          restoreDragPreview(state);
+          return;
+        }
         const position = dragPositionAt(state, ctx.event.clientX);
         const saved = commitClipMutation(
           state.sourceRevision,
           "references-track",
           (clips) => {
-            const ref = clips[state.clipIdx]?.refs?.[state.refIdx];
-            if (!ref || ref.frame === position.frame && ref.fromEnd === position.fromEnd) {
+            const clip = clips[state.clipIdx];
+            const ref = clip?.refs?.[state.refIdx];
+            const livePolicy = clip ? resolveDragPolicy(clip, state.fps, getAuthoring()) : null;
+            if (!ref || !livePolicy) {
+              return null;
+            }
+            if (!livePolicy.supported || !sameDragPolicy(state.policy, livePolicy) || ref.frame === position.frame && ref.fromEnd === position.fromEnd) {
               return null;
             }
             ref.frame = position.frame;
@@ -15258,24 +15273,20 @@ The conversion is one undoable change.`;
       if (!(lane instanceof HTMLElement) || clipIdx === null || refIdx === null) {
         return null;
       }
-      const clip = getClips()[clipIdx];
+      const documentSnapshot = getTimelineStore().getSnapshot();
+      const clip = documentSnapshot.state.clips[clipIdx];
       const ref = clip?.refs?.[refIdx];
       if (!clip || !ref) {
         return null;
       }
-      if (!canEditReferences(clip)) {
+      const fps = documentFps(documentSnapshot.state);
+      const policy = resolveDragPolicy(clip, fps, getAuthoring());
+      if (!policy.supported) {
         me.preventDefault();
         return claimOnly();
       }
       const arrow = findArrow(clipIdx, refIdx);
-      const fps = documentFps(getState());
-      const defaults = getRootDefaults();
-      const frameMax = getReferenceFrameMax(() => defaults, clip, fps);
-      const allowedPositions = referencePositions(
-        clip,
-        defaults.modelCatalog
-      );
-      if (allowedPositions.length === 0) {
+      if (policy.positions.length === 0) {
         me.preventDefault();
         return claimOnly();
       }
@@ -15290,13 +15301,11 @@ The conversion is one undoable change.`;
         arrowOriginalLeft: arrow?.style.left ?? "",
         originalLabel: mark.querySelector(".vst-refs-ph")?.textContent ?? "",
         durationSeconds: clip.duration,
-        generatedDurationSeconds: frameMax / fps,
+        generatedDurationSeconds: policy.frameMax / fps,
         fps,
-        frameGrid: resolvedClipFrameGrid(clip, defaults.modelCatalog),
-        frameMax,
-        allowedPositions,
+        policy,
         fromEnd: ref.fromEnd === true,
-        sourceRevision: currentRevision()
+        sourceRevision: documentSnapshot.revision
       });
     };
     const selectRef = (clipIdx, refIdx) => {
@@ -15331,20 +15340,20 @@ The conversion is one undoable change.`;
       if (!clip) {
         return;
       }
-      if (!canEditReferences(clip)) {
+      const authoring = getAuthoring();
+      if (!canEditReferences(clip, authoring)) {
         return;
       }
       const rect = lane.getBoundingClientRect();
-      const defaults = getRootDefaults();
       const frame = pxToFrame(
         event.clientX - rect.left,
         rect.width,
         clip.duration,
         documentFps(getState()),
         false,
-        resolvedClipFrameGrid(clip, defaults.modelCatalog)
+        resolvedClipFrameGrid(clip, authoring.defaults.modelCatalog)
       );
-      addRefAtFrame(clipIdx, frame, currentRevision(), defaults);
+      addRefAtFrame(clipIdx, frame, currentRevision(), authoring);
     };
     const onBodyKeyDown = (event) => {
       const ke = event;
@@ -16132,7 +16141,9 @@ The conversion is one undoable change.`;
     const promptTrack = createTimelinePromptTrack(capabilities);
     const audioSegmentTrack = createTimelineAudioSegmentTrack(capabilities);
     const selectionTracks = createTimelineSelectionTracks();
-    const referencesTrack = createTimelineReferencesTrack(capabilities);
+    const referencesTrack = createTimelineReferencesTrack(
+      captureAuthoringTransactionSnapshot
+    );
     let addClipInFlight = false;
     let historyNeedsRebase = true;
     const hasAuthoritativeCatalog = () => getArchitectureCatalogSnapshot().catalog !== null;
