@@ -6,7 +6,6 @@ namespace VideoStages.Planning;
 /// <summary>The graph-free disposition assigned to an authored request value.</summary>
 internal enum EffectiveRequestDisposition
 {
-    Execute,
     IgnoreWithWarning,
     Block,
 }
@@ -23,20 +22,6 @@ internal sealed record EffectiveRequestDecision(
     int? StageId = null,
     int? RawStageIndex = null)
 {
-    internal static EffectiveRequestDecision Execute(
-        string code,
-        string message,
-        int? clipId = null,
-        int? stageId = null,
-        int? rawStageIndex = null) =>
-        new(
-            EffectiveRequestDisposition.Execute,
-            code,
-            message,
-            clipId,
-            stageId,
-            rawStageIndex);
-
     internal static EffectiveRequestDecision Ignore(
         string code,
         string message,
@@ -117,8 +102,6 @@ internal sealed record EffectiveVideoRequest(
 {
     internal IReadOnlyList<PlanDiagnostic> Diagnostics =>
         Decisions
-            .Where(decision =>
-                decision.Disposition != EffectiveRequestDisposition.Execute)
             .Select(decision => decision.ToDiagnostic())
             .ToArray();
 
@@ -586,7 +569,6 @@ internal static class EffectiveVideoRequestProjector
         Dictionary<int, StageSpec> authoredStageByRawIndex =
             (authoredCanonical.Stages ?? [])
                 .ToDictionary(stage => stage.ClipStageRawIndex);
-        bool retakeEndAdjusted = false;
         StageSpec[] effectiveStages = projected.Stages
             .Select(stage =>
             {
@@ -608,7 +590,6 @@ internal static class EffectiveVideoRequestProjector
                 int lengthFrames = Math.Max(
                     retake.LengthFrames,
                     effectiveFrames - retake.StartFrame);
-                retakeEndAdjusted |= lengthFrames != retake.LengthFrames;
                 return stage with
                 {
                     RetakeWindow = retake with
@@ -618,26 +599,6 @@ internal static class EffectiveVideoRequestProjector
                 };
             })
             .ToArray();
-        if (effectiveFrames != projected.Frames.Value)
-        {
-            string provenance = authoredCanonical.Frames == projected.Frames
-                ? $"its authored {projected.Frames.Value}-frame duration"
-                : $"its authored {authoredCanonical.Frames?.ToString() ?? "unknown"}-frame "
-                    + $"duration was architecture-projected to {projected.Frames.Value} frames and";
-            decisions.Add(EffectiveRequestDecision.Execute(
-                "effective-request.temporal-grid",
-                $"Clip {projected.Id} resolves to a {frameGrid}-frame temporal grid; "
-                    + $"{provenance} executes as {effectiveFrames} frames.",
-                projected.Id));
-        }
-        else if (retakeEndAdjusted)
-        {
-            decisions.Add(EffectiveRequestDecision.Execute(
-                "effective-request.temporal-retake-end",
-                $"Clip {projected.Id}'s authored full-length retake follows the "
-                    + $"{effectiveFrames}-frame duration produced by architecture projection.",
-                projected.Id));
-        }
         return projected with
         {
             Frames = effectiveFrames,
@@ -685,10 +646,6 @@ internal static class EffectiveVideoRequestProjector
             if (!crossesArchitectures
                 && policy is not { Support: RuleSupport.Unsupported })
             {
-                decisions.Add(EffectiveRequestDecision.Execute(
-                    "effective-request.boundary",
-                    $"Clip {sourceClip.Id} executes its '{sourceClip.BoundaryOut}' boundary.",
-                    sourceClip.Id));
                 continue;
             }
             string reason = crossesArchitectures

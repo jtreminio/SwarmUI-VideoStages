@@ -38,10 +38,6 @@ public sealed class EffectiveVideoRequestTests
 
         Assert.Equal(27, authored.Clips[0].Frames);
         Assert.Equal(expectedFrames, request.Spec.Clips[0].Frames);
-        Assert.Equal(
-            expectedFrames == 27 ? 0 : 1,
-            request.Decisions.Count(decision =>
-                decision.Code == "effective-request.temporal-grid"));
     }
 
     [Fact]
@@ -83,9 +79,6 @@ public sealed class EffectiveVideoRequestTests
             Resolve(authored, _ => module, _ => descriptor));
 
         Assert.Equal(33, request.Spec.Clips[0].Frames);
-        Assert.Contains(
-            request.Decisions,
-            decision => decision.Code == "effective-request.temporal-grid");
     }
 
     [Fact]
@@ -121,9 +114,6 @@ public sealed class EffectiveVideoRequestTests
         Assert.Equal(
             new int?[] { 27, 33 },
             request.Spec.Clips.Select(clip => clip.Frames));
-        Assert.Contains(
-            request.Decisions,
-            decision => decision.Code == "effective-request.temporal-grid");
     }
 
     [Fact]
@@ -148,9 +138,6 @@ public sealed class EffectiveVideoRequestTests
             Resolve(authored, _ => module, _ => descriptor));
 
         Assert.Equal(27, request.Spec.Clips[0].Frames);
-        Assert.DoesNotContain(
-            request.Decisions,
-            decision => decision.Code == "effective-request.temporal-grid");
     }
 
     [Fact]
@@ -184,11 +171,6 @@ public sealed class EffectiveVideoRequestTests
 
         Assert.Equal(27, framesSeenByArchitecture);
         Assert.Equal(33, request.Spec.Clips[0].Frames);
-        Assert.Contains(
-            request.Decisions,
-            decision => decision.Code == "effective-request.temporal-grid"
-                && decision.Message.Contains("authored 27-frame")
-                && decision.Message.Contains("architecture-projected to 28"));
     }
 
     [Fact]
@@ -271,7 +253,7 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Fact]
-    public void Retake_end_adjustment_is_audited_when_architecture_frames_are_already_aligned()
+    public void Retake_end_tracks_architecture_frames_when_the_grid_is_already_aligned()
     {
         StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
         {
@@ -301,10 +283,6 @@ public sealed class EffectiveVideoRequestTests
             Resolve(authored, _ => module, _ => descriptor));
 
         Assert.Equal(31, request.Spec.Clips[0].Stages[0].RetakeWindow.LengthFrames);
-        Assert.Contains(
-            request.Decisions,
-            decision => decision.Code == "effective-request.temporal-retake-end"
-                && decision.Disposition == EffectiveRequestDisposition.Execute);
     }
 
     [Theory]
@@ -331,9 +309,6 @@ public sealed class EffectiveVideoRequestTests
             Resolve(authored, _ => module, _ => descriptor));
 
         Assert.Equal(27, request.Spec.Clips[0].Frames);
-        Assert.DoesNotContain(
-            request.Decisions,
-            decision => decision.Code == "effective-request.temporal-grid");
     }
 
     [Fact]
@@ -358,9 +333,6 @@ public sealed class EffectiveVideoRequestTests
             Resolve(authored, _ => module, _ => descriptor));
 
         Assert.Equal(27, request.Spec.Clips[0].Frames);
-        Assert.DoesNotContain(
-            request.Decisions,
-            decision => decision.Code == "effective-request.temporal-grid");
     }
 
     [Fact]
@@ -387,13 +359,10 @@ public sealed class EffectiveVideoRequestTests
         Assert.Contains(
             request.Decisions,
             decision => decision.Code == "effective-request.unsupported-retake-ignored");
-        Assert.DoesNotContain(
-            request.Decisions,
-            decision => decision.Code == "effective-request.temporal-grid");
     }
 
     [Fact]
-    public void Admission_blocked_clips_do_not_claim_temporal_execution()
+    public void Admission_blocked_clips_do_not_apply_the_temporal_grid()
     {
         StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
         ClipSpec clip = Clip(stage) with { Frames = 27 };
@@ -420,9 +389,6 @@ public sealed class EffectiveVideoRequestTests
             EffectiveVideoRequestProjector.Project(authored, blocked);
 
         Assert.Equal(27, request.Spec.Clips[0].Frames);
-        Assert.DoesNotContain(
-            request.Decisions,
-            decision => decision.Code == "effective-request.temporal-grid");
     }
 
     [Fact]
@@ -459,9 +425,6 @@ public sealed class EffectiveVideoRequestTests
 
         Assert.Equal(27, request.Spec.Clips[0].Frames);
         Assert.Contains(clip.Id, request.BlockedClipIds);
-        Assert.DoesNotContain(
-            request.Decisions,
-            decision => decision.Code == "effective-request.temporal-grid");
     }
 
     [Fact]

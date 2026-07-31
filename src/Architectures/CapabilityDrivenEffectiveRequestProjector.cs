@@ -299,16 +299,6 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                         UpscaleMethod = "pixel-lanczos",
                     };
                 }
-                else
-                {
-                    decisions.Add(EffectiveRequestDecision.Execute(
-                        "effective-request.supported-upscale",
-                        $"Clip {authored.Id} Stage {stage.Id} executes its "
-                            + $"'{stage.UpscaleMethod}' upscale.",
-                        authored.Id,
-                        stage.Id,
-                        stage.ClipStageRawIndex));
-                }
             }
             stages[index] = stage;
         }
