@@ -5,7 +5,11 @@ import {
 } from "../identity";
 import type { ClipTextInput } from "../promptSegments";
 import { parseClipPrompts } from "../promptSegments";
-import { getRootDefaults, readInheritedDimsSignature } from "../rootDefaults";
+import {
+    getDefaultStageModel,
+    getRootDefaults,
+    readInheritedDimsSignature,
+} from "../rootDefaults";
 import {
     getDataInput,
     getPromptInput,
@@ -15,10 +19,11 @@ import {
     writeClipPrompts,
     writeDataParam,
 } from "../swarmInputs";
-import type { Clip, VideoStagesConfig } from "../types";
+import type { Clip, RootDefaults, VideoStagesConfig } from "../types";
 import { applyUiState, saveUiState } from "../uiState";
 import {
     createRootConfig,
+    type DocumentNormalizationEnvironment,
     decodeStoredDocument,
     type InheritedDims,
     resolveRootDims,
@@ -63,17 +68,30 @@ const overlayPromptAndUiState = (clips: Clip[]): void => {
     assignMissingHues(clips);
 };
 
-const inheritedDims = (): InheritedDims => {
-    const defaults = getRootDefaults();
-    return {
-        width: defaults.width,
-        height: defaults.height,
-        fps: defaults.fps,
-    };
-};
+const inheritedDims = (defaults: RootDefaults): InheritedDims => ({
+    width: defaults.width,
+    height: defaults.height,
+    fps: defaults.fps,
+});
+
+const normalizationEnvironment = (
+    defaults: RootDefaults,
+): DocumentNormalizationEnvironment => ({
+    defaults,
+    defaultStageModel: getDefaultStageModel(
+        defaults.modelValues,
+        undefined,
+        defaults.modelCatalog,
+    ),
+});
 
 const parse = (serialized: string): VideoStagesConfig | null => {
-    const decoded = decodeStoredDocument(serialized, inheritedDims());
+    const defaults = getRootDefaults();
+    const decoded = decodeStoredDocument(
+        serialized,
+        inheritedDims(defaults),
+        normalizationEnvironment(defaults),
+    );
     if (!decoded) return null;
     overlayPromptAndUiState(decoded.clips);
     return createRootConfig(decoded.dims, decoded.clips, decoded.audioTracks);
@@ -82,7 +100,10 @@ const parse = (serialized: string): VideoStagesConfig | null => {
 const parseEmpty = (): VideoStagesConfig => {
     const clips: Clip[] = [];
     overlayPromptAndUiState(clips);
-    return createRootConfig(resolveRootDims(inheritedDims(), {}), clips);
+    return createRootConfig(
+        resolveRootDims(inheritedDims(getRootDefaults()), {}),
+        clips,
+    );
 };
 
 const applyPendingHydratedPrompts = (): void => {
@@ -97,7 +118,12 @@ const applyPendingHydratedPrompts = (): void => {
 const restoreDurableSnapshot = (
     snapshot: DurableAuthoringSnapshot,
 ): boolean => {
-    const decoded = decodeStoredDocument(snapshot.document, inheritedDims());
+    const defaults = getRootDefaults();
+    const decoded = decodeStoredDocument(
+        snapshot.document,
+        inheritedDims(defaults),
+        normalizationEnvironment(defaults),
+    );
     if (!decoded || snapshot.prompts.length !== decoded.clips.length) {
         return false;
     }

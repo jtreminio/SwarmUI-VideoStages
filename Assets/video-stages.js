@@ -5569,7 +5569,7 @@
     }
     return migrated;
   };
-  var decodeStoredDocument = (serialized, inherited) => {
+  var decodeStoredDocument = (serialized, inherited, environment) => {
     try {
       const parsed = JSON.parse(serialized);
       if (!isRecord(parsed)) {
@@ -5590,11 +5590,13 @@
         width: current.width,
         height: current.height
       });
+      const capturedDefaults = () => environment.defaults;
+      const capturedDefaultStageModel = () => environment.defaultStageModel;
       const clips = current.clips.map(
         (entry) => normalizeClip(
           entry,
-          getRootDefaults,
-          getDefaultStageModel,
+          capturedDefaults,
+          capturedDefaultStageModel,
           dims.fps
         )
       );
@@ -5776,16 +5778,26 @@
     ensureClipEntityIdentities(clips);
     assignMissingHues(clips);
   };
-  var inheritedDims = () => {
-    const defaults = getRootDefaults();
-    return {
-      width: defaults.width,
-      height: defaults.height,
-      fps: defaults.fps
-    };
-  };
+  var inheritedDims = (defaults) => ({
+    width: defaults.width,
+    height: defaults.height,
+    fps: defaults.fps
+  });
+  var normalizationEnvironment = (defaults) => ({
+    defaults,
+    defaultStageModel: getDefaultStageModel(
+      defaults.modelValues,
+      void 0,
+      defaults.modelCatalog
+    )
+  });
   var parse = (serialized) => {
-    const decoded = decodeStoredDocument(serialized, inheritedDims());
+    const defaults = getRootDefaults();
+    const decoded = decodeStoredDocument(
+      serialized,
+      inheritedDims(defaults),
+      normalizationEnvironment(defaults)
+    );
     if (!decoded) return null;
     overlayPromptAndUiState(decoded.clips);
     return createRootConfig(decoded.dims, decoded.clips, decoded.audioTracks);
@@ -5793,7 +5805,10 @@
   var parseEmpty = () => {
     const clips = [];
     overlayPromptAndUiState(clips);
-    return createRootConfig(resolveRootDims(inheritedDims(), {}), clips);
+    return createRootConfig(
+      resolveRootDims(inheritedDims(getRootDefaults()), {}),
+      clips
+    );
   };
   var applyPendingHydratedPrompts = () => {
     if (!pendingHydratedPrompts || !getPromptInput()) {
@@ -5804,7 +5819,12 @@
     pendingHydratedPrompts = null;
   };
   var restoreDurableSnapshot = (snapshot) => {
-    const decoded = decodeStoredDocument(snapshot.document, inheritedDims());
+    const defaults = getRootDefaults();
+    const decoded = decodeStoredDocument(
+      snapshot.document,
+      inheritedDims(defaults),
+      normalizationEnvironment(defaults)
+    );
     if (!decoded || snapshot.prompts.length !== decoded.clips.length) {
       return false;
     }

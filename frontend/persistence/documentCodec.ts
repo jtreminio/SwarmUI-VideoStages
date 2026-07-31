@@ -6,13 +6,13 @@ import {
 } from "../identity";
 import { normalizeAudioTracks, normalizeClip } from "../normalization";
 import { optionalNonNegativeNumber } from "../normalizationShared";
-import { getDefaultStageModel, getRootDefaults } from "../rootDefaults";
 import type { StoredClip } from "../storageTypes";
 import {
     type CanonicalClip,
     type CanonicalVideoStagesConfig,
     type Clip,
     CURRENT_AUTHORING_SCHEMA_VERSION,
+    type RootDefaults,
     type VideoStagesConfig,
 } from "../types";
 import { isRecord } from "../utils";
@@ -27,6 +27,11 @@ export interface DecodedStoredDocument {
     dims: RootDims;
     clips: Clip[];
     audioTracks: VideoStagesConfig["audioTracks"];
+}
+
+export interface DocumentNormalizationEnvironment {
+    defaults: RootDefaults;
+    defaultStageModel: string;
 }
 
 const toIntOrNull = (value: unknown): number | null => {
@@ -538,6 +543,7 @@ const migrateStoredDocument = (
 export const decodeStoredDocument = (
     serialized: string,
     inherited: InheritedDims,
+    environment: DocumentNormalizationEnvironment,
 ): DecodedStoredDocument | null => {
     try {
         const parsed: unknown = JSON.parse(serialized);
@@ -559,11 +565,14 @@ export const decodeStoredDocument = (
             width: current.width,
             height: current.height,
         });
+        const capturedDefaults = (): RootDefaults => environment.defaults;
+        const capturedDefaultStageModel = (): string =>
+            environment.defaultStageModel;
         const clips = current.clips.map((entry) =>
             normalizeClip(
                 entry,
-                getRootDefaults,
-                getDefaultStageModel,
+                capturedDefaults,
+                capturedDefaultStageModel,
                 dims.fps,
             ),
         );

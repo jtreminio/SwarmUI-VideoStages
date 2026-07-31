@@ -28,8 +28,12 @@ import {
     setVideoStagesHostBridgeForTests,
 } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
-import { resetTimelineCarrierAdapterForTests } from "./persistence/carrierAdapter";
 import {
+    resetTimelineCarrierAdapterForTests,
+    timelineCarrierAdapter,
+} from "./persistence/carrierAdapter";
+import {
+    type DocumentNormalizationEnvironment,
     decodeStoredDocument,
     serializeClipsForStorage,
     serializeStateForDurableStorage,
@@ -44,6 +48,7 @@ import {
     saveClips,
     saveState,
 } from "./persistence/repository";
+import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import type { StoredClip } from "./storageTypes";
 import { REF_SOURCE_BASE, type VideoStagesConfig } from "./types";
 import { clearUiStateForTests } from "./uiState";
@@ -52,6 +57,18 @@ const dataInput = (): HTMLTextAreaElement =>
     document.getElementById("input_videostages") as HTMLTextAreaElement;
 const promptEl = (): HTMLTextAreaElement =>
     document.getElementById("input_prompt") as HTMLTextAreaElement;
+
+const normalizationEnvironment = (): DocumentNormalizationEnvironment => {
+    const defaults = getRootDefaults();
+    return {
+        defaults,
+        defaultStageModel: getDefaultStageModel(
+            defaults.modelValues,
+            undefined,
+            defaults.modelCatalog,
+        ),
+    };
+};
 
 describe("persistence", () => {
     beforeEach(async () => {
@@ -77,11 +94,15 @@ describe("persistence", () => {
 
     describe("strict collection decoding", () => {
         const decode = (document: unknown) =>
-            decodeStoredDocument(JSON.stringify(document), {
-                width: 1024,
-                height: 1024,
-                fps: 24,
-            });
+            decodeStoredDocument(
+                JSON.stringify(document),
+                {
+                    width: 1024,
+                    height: 1024,
+                    fps: 24,
+                },
+                normalizationEnvironment(),
+            );
 
         it.each([
             ["missing clips", { schemaVersion: 5 }],
@@ -509,6 +530,49 @@ describe("persistence", () => {
                 "a red fox",
                 "a bear",
             ]);
+        });
+
+        it("captures host defaults once per parse and refreshes them on the next parse", () => {
+            mountSelect("input_loras", {
+                value: "style-a.safetensors",
+                options: ["style-a.safetensors", "style-b.safetensors"],
+            });
+            const model = document.getElementById(
+                "input_videomodel",
+            ) as HTMLSelectElement;
+            model.append(
+                new Option(
+                    "ltx-2.3-alt.safetensors",
+                    "ltx-2.3-alt.safetensors",
+                ),
+            );
+            const getLoraDefaultWeight = jest.fn(() => 0.75);
+            const baseBridge = createDefaultVideoStagesHostBridge();
+            setVideoStagesHostBridgeForTests({
+                ...baseBridge,
+                getLoraDefaultWeight,
+            });
+            const serialized = JSON.stringify({
+                schemaVersion: 6,
+                clips: [{ stages: [{}, {}] }, { stages: [{}, {}, {}] }],
+            });
+
+            const first = timelineCarrierAdapter.parse(serialized);
+
+            expect(first?.clips[0].stages[0].model).toBe("ltx-2.3.safetensors");
+            expect(first?.clips[1].stages[0].model).toBe("ltx-2.3.safetensors");
+            expect(getLoraDefaultWeight).toHaveBeenCalledTimes(2);
+
+            model.value = "ltx-2.3-alt.safetensors";
+            const second = timelineCarrierAdapter.parse(serialized);
+
+            expect(second?.clips[0].stages[0].model).toBe(
+                "ltx-2.3-alt.safetensors",
+            );
+            expect(second?.clips[1].stages[0].model).toBe(
+                "ltx-2.3-alt.safetensors",
+            );
+            expect(getLoraDefaultWeight).toHaveBeenCalledTimes(4);
         });
 
         it("restores durable authoring data after a simulated browser reload but leaves uploads detached", () => {

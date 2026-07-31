@@ -7,9 +7,11 @@ import { beforeEach, describe, expect, it } from "@jest/globals";
 import { mountSelect, mountVideoFps } from "./__test_helpers__/dom";
 import {
     createRootConfig,
+    type DocumentNormalizationEnvironment,
     decodeStoredDocument,
     serializeStateForStorage,
 } from "./persistence/documentCodec";
+import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import {
     CURRENT_AUTHORING_SCHEMA_VERSION,
     type VideoStagesConfig,
@@ -28,6 +30,18 @@ const fixturePath = path.resolve(
 );
 const fixture = (): Record<string, unknown> =>
     JSON.parse(fs.readFileSync(fixturePath, "utf8"));
+
+const normalizationEnvironment = (): DocumentNormalizationEnvironment => {
+    const defaults = getRootDefaults();
+    return {
+        defaults,
+        defaultStageModel: getDefaultStageModel(
+            defaults.modelValues,
+            undefined,
+            defaults.modelCatalog,
+        ),
+    };
+};
 
 /**
  * One complete authoring document: every field the codec persists is set to a
@@ -239,11 +253,15 @@ describe("authoring document contract fixture", () => {
     });
 
     it("round-trips the shared fixture through decode and re-encode", () => {
-        const decoded = decodeStoredDocument(JSON.stringify(fixture()), {
-            width: 1024,
-            height: 1024,
-            fps: 24,
-        });
+        const decoded = decodeStoredDocument(
+            JSON.stringify(fixture()),
+            {
+                width: 1024,
+                height: 1024,
+                fps: 24,
+            },
+            normalizationEnvironment(),
+        );
         expect(decoded).not.toBeNull();
         if (!decoded) {
             return;
@@ -287,11 +305,15 @@ describe("authoring document contract fixture", () => {
             stage.modelProfileId = `removed-video-profile-${index}`;
         }
 
-        const decoded = decodeStoredDocument(JSON.stringify(unknown), {
-            width: 1024,
-            height: 1024,
-            fps: 24,
-        });
+        const decoded = decodeStoredDocument(
+            JSON.stringify(unknown),
+            {
+                width: 1024,
+                height: 1024,
+                fps: 24,
+            },
+            normalizationEnvironment(),
+        );
         expect(decoded).not.toBeNull();
         if (!decoded) {
             return;
@@ -300,11 +322,15 @@ describe("authoring document contract fixture", () => {
         const serialized = serializeStateForStorage(
             createRootConfig(decoded.dims, decoded.clips, decoded.audioTracks),
         );
-        const decodedAgain = decodeStoredDocument(serialized, {
-            width: 1024,
-            height: 1024,
-            fps: 24,
-        });
+        const decodedAgain = decodeStoredDocument(
+            serialized,
+            {
+                width: 1024,
+                height: 1024,
+                fps: 24,
+            },
+            normalizationEnvironment(),
+        );
         expect(decodedAgain).not.toBeNull();
         if (!decodedAgain) {
             return;
