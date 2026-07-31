@@ -13,9 +13,9 @@ import { crossfadePlanForClips } from "./boundaryPlan";
 import * as persistence from "./persistence";
 import { getSelection, resetSelectionForTests } from "./selection";
 import {
-    createTimelineBoundaryTrack,
-    type TimelineBoundaryTrack,
-} from "./timelineBoundaryTrack";
+    createTimelineSelectionTracks,
+    type TimelineSelectionTracks,
+} from "./timelineSelectionTracks";
 import { computeRegionLayout } from "./timelineView/layout";
 import { renderBoundarySeams } from "./timelineView/regionRenderer";
 import type { BoundaryOut, Clip } from "./types";
@@ -90,8 +90,8 @@ describe("crossfadePlanForClips", () => {
     });
 });
 
-describe("createTimelineBoundaryTrack (select wiring)", () => {
-    let track: TimelineBoundaryTrack | null = null;
+describe("timeline boundary selection wiring", () => {
+    let track: TimelineSelectionTracks | null = null;
     let saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
 
     beforeEach(() => {
@@ -117,7 +117,7 @@ describe("createTimelineBoundaryTrack (select wiring)", () => {
         const clips = persistence.getClips();
         const layouts = computeRegionLayout(clips, { pxPerSecond: PPS });
         body.innerHTML = renderBoundarySeams(clips, layouts);
-        track = createTimelineBoundaryTrack();
+        track = createTimelineSelectionTracks();
         track.attach(body);
         return body;
     };

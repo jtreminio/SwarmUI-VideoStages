@@ -35,8 +35,6 @@ import {
     setVideoStagesEnabled,
 } from "./swarmInputs";
 import { createTimelineAudioSegmentTrack } from "./timelineAudioSegmentTrack";
-import { createTimelineAudioTrack } from "./timelineAudioTrack";
-import { createTimelineBoundaryTrack } from "./timelineBoundaryTrack";
 import { safeFps } from "./timelineDetail";
 import { createTimelineDetailStrip } from "./timelineDetailStrip";
 import { createTimelineHistory } from "./timelineHistory";
@@ -45,6 +43,7 @@ import { createTimelineLinking } from "./timelineLinking";
 import { createTimelinePromptTrack } from "./timelinePromptTrack";
 import { createTimelineReferencesTrack } from "./timelineReferencesTrack";
 import { createTimelineRetakeTrack } from "./timelineRetakeTrack";
+import { createTimelineSelectionTracks } from "./timelineSelectionTracks";
 import { applySelectionHighlight } from "./timelineSelectionView";
 import {
     resolveTimelineTiming,
@@ -88,9 +87,8 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const gestures = createGestureRouter();
     const retakeTrack = createTimelineRetakeTrack(capabilities);
     const promptTrack = createTimelinePromptTrack(capabilities);
-    const audioTrack = createTimelineAudioTrack();
     const audioSegmentTrack = createTimelineAudioSegmentTrack(capabilities);
-    const boundaryTrack = createTimelineBoundaryTrack();
+    const selectionTracks = createTimelineSelectionTracks();
     const referencesTrack = createTimelineReferencesTrack(capabilities);
     let addClipInFlight = false;
     let historyNeedsRebase = true;
@@ -375,8 +373,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             audioSegmentTrack.attach(body, gestures);
             linking.attach(body, gestures);
             promptTrack.attach(body, gestures);
-            audioTrack.attach(body);
-            boundaryTrack.attach(body);
+            selectionTracks.attach(body);
             referencesTrack.attach(body, gestures);
             // Bind before the gesture router to preserve capture ordering, but
             // do not read/normalize document state until catalog authority is
@@ -432,8 +429,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         linking.dispose();
         promptTrack.dispose();
         gestures.dispose();
-        audioTrack.dispose();
-        boundaryTrack.dispose();
+        selectionTracks.dispose();
         referencesTrack.dispose();
         detailStrip.dispose();
         selectionUnsub?.();

@@ -3,9 +3,9 @@ import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import { getClips } from "./persistence";
 import { getSelection, resetSelectionForTests } from "./selection";
 import {
-    createTimelineAudioTrack,
-    type TimelineAudioTrack,
-} from "./timelineAudioTrack";
+    createTimelineSelectionTracks,
+    type TimelineSelectionTracks,
+} from "./timelineSelectionTracks";
 import { computeRegionLayout } from "./timelineView/layout";
 import { renderAudioTrackRow } from "./timelineView/trackRows";
 import type { Clip } from "./types";
@@ -43,8 +43,8 @@ const renderAudio = (body: HTMLElement, clips: Clip[]): void => {
     body.innerHTML = renderAudioTrackRow(clips, layouts);
 };
 
-describe("createTimelineAudioTrack (selection wiring)", () => {
-    let track: TimelineAudioTrack | null = null;
+describe("timeline audio selection wiring", () => {
+    let track: TimelineSelectionTracks | null = null;
 
     beforeEach(() => {
         resetSelectionForTests();
@@ -61,7 +61,7 @@ describe("createTimelineAudioTrack (selection wiring)", () => {
         mountPrompt(fixtures);
         const body = makeBody();
         renderAudio(body, getClips());
-        track = createTimelineAudioTrack();
+        track = createTimelineSelectionTracks();
         track.attach(body);
         return body;
     };

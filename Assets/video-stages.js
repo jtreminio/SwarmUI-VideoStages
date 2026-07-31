@@ -7411,36 +7411,6 @@
     return true;
   };
   var isActivateKey = (ke) => ke.key === "Enter" || ke.key === " " || ke.key === "Spacebar";
-  var bindClickSelectableTrack = (body, selector, activate) => {
-    const fromTarget = (target) => {
-      const el = target.closest(selector);
-      if (el instanceof HTMLElement) {
-        activate(el);
-      }
-    };
-    const onClick = (event) => {
-      if (event.target instanceof Element) {
-        fromTarget(event.target);
-      }
-    };
-    const onKeyDown = (event) => {
-      const ke = event;
-      if (!isActivateKey(ke)) {
-        return;
-      }
-      if (!(ke.target instanceof Element) || !ke.target.closest(selector)) {
-        return;
-      }
-      ke.preventDefault();
-      fromTarget(ke.target);
-    };
-    body.addEventListener("click", onClick);
-    body.addEventListener("keydown", onKeyDown);
-    return () => {
-      body.removeEventListener("click", onClick);
-      body.removeEventListener("keydown", onKeyDown);
-    };
-  };
 
   // frontend/windowTrack.ts
   var DRAG_THRESHOLD_PX = 4;
@@ -8088,79 +8058,6 @@
     },
     selectionFor: (trackIdx) => ({ kind: "audio-track", trackIdx })
   });
-
-  // frontend/timelineAudioTrack.ts
-  var CLIP_SELECTOR = '.vst-audio-clip[data-vst-audio="clip"]';
-  var createTimelineAudioTrack = () => {
-    let boundBody = null;
-    let unbind = null;
-    const attach = (body) => {
-      if (boundBody === body) {
-        return;
-      }
-      dispose();
-      boundBody = body;
-      unbind = bindClickSelectableTrack(body, CLIP_SELECTOR, (el) => {
-        const clipIdx = parseIntAttr(el, "data-clip-idx");
-        if (clipIdx !== null) {
-          setSelection({ kind: "audio", clipIdx });
-        }
-      });
-    };
-    const dispose = () => {
-      unbind?.();
-      unbind = null;
-      boundBody = null;
-    };
-    return { attach, dispose };
-  };
-
-  // frontend/timelineBoundaryTrack.ts
-  var CHIP_SELECTOR = "[data-vst-boundary-chip]";
-  var parseLeftClipIdx = (el) => {
-    if (!el) {
-      return null;
-    }
-    const raw = el.getAttribute("data-left-clip-idx");
-    if (raw === null) {
-      return null;
-    }
-    const value = Number.parseInt(raw, 10);
-    return Number.isInteger(value) && value >= 0 ? value : null;
-  };
-  var createTimelineBoundaryTrack = () => {
-    let boundBody = null;
-    let unbind = null;
-    const activateFromTarget = (target) => {
-      const chip = target.closest(CHIP_SELECTOR);
-      if (!(chip instanceof HTMLElement)) {
-        return;
-      }
-      const leftClipIdx = parseLeftClipIdx(chip);
-      if (leftClipIdx === null) {
-        return;
-      }
-      setSelection({ kind: "boundary", leftClipIdx });
-    };
-    const attach = (body) => {
-      if (boundBody === body) {
-        return;
-      }
-      dispose();
-      boundBody = body;
-      unbind = bindClickSelectableTrack(
-        body,
-        CHIP_SELECTOR,
-        (el) => activateFromTarget(el)
-      );
-    };
-    const dispose = () => {
-      unbind?.();
-      unbind = null;
-      boundBody = null;
-    };
-    return { attach, dispose };
-  };
 
   // frontend/detailWidgets.ts
   var sliderSeq = 0;
@@ -16053,6 +15950,67 @@ The conversion is one undoable change.`;
     selectionFor: (clipIdx) => ({ kind: "retake", clipIdx })
   });
 
+  // frontend/timelineSelectionTracks.ts
+  var RULES = [
+    {
+      selector: '.vst-audio-clip[data-vst-audio="clip"]',
+      select: (element) => {
+        const clipIdx = parseIntAttr(element, "data-clip-idx");
+        return clipIdx === null ? null : { kind: "audio", clipIdx };
+      }
+    },
+    {
+      selector: "[data-vst-boundary-chip]",
+      select: (element) => {
+        const leftClipIdx = parseIntAttr(element, "data-left-clip-idx");
+        return leftClipIdx === null ? null : { kind: "boundary", leftClipIdx };
+      }
+    }
+  ];
+  var createTimelineSelectionTracks = () => {
+    let boundBody = null;
+    const selector = RULES.map((rule) => rule.selector).join(", ");
+    const activate = (target) => {
+      const element = target.closest(selector);
+      if (!(element instanceof HTMLElement)) {
+        return;
+      }
+      const selection = RULES.find(
+        (rule) => element.matches(rule.selector)
+      )?.select(element);
+      if (selection) {
+        setSelection(selection);
+      }
+    };
+    const onClick = (event) => {
+      if (event.target instanceof Element) {
+        activate(event.target);
+      }
+    };
+    const onKeyDown = (event) => {
+      if (!isActivateKey(event) || !(event.target instanceof Element) || !event.target.closest(selector)) {
+        return;
+      }
+      event.preventDefault();
+      activate(event.target);
+    };
+    const dispose = () => {
+      boundBody?.removeEventListener("click", onClick);
+      boundBody?.removeEventListener("keydown", onKeyDown);
+      boundBody = null;
+    };
+    const attach = (body) => {
+      if (boundBody === body) {
+        return;
+      }
+      dispose();
+      boundBody = body;
+      body.addEventListener("click", onClick);
+      body.addEventListener("keydown", onKeyDown);
+    };
+    return { attach, dispose };
+  };
+
   // frontend/timelineViewState.ts
   var VIEW_STATE_KEY = "videostages.timeline.viewState";
   var loadViewState = () => {
@@ -16200,9 +16158,8 @@ The conversion is one undoable change.`;
     const gestures = createGestureRouter();
     const retakeTrack = createTimelineRetakeTrack(capabilities);
     const promptTrack = createTimelinePromptTrack(capabilities);
-    const audioTrack = createTimelineAudioTrack();
     const audioSegmentTrack = createTimelineAudioSegmentTrack(capabilities);
-    const boundaryTrack = createTimelineBoundaryTrack();
+    const selectionTracks = createTimelineSelectionTracks();
     const referencesTrack = createTimelineReferencesTrack(capabilities);
     let addClipInFlight = false;
     let historyNeedsRebase = true;
@@ -16434,8 +16391,7 @@ The conversion is one undoable change.`;
         audioSegmentTrack.attach(body, gestures);
         linking.attach(body, gestures);
         promptTrack.attach(body, gestures);
-        audioTrack.attach(body);
-        boundaryTrack.attach(body);
+        selectionTracks.attach(body);
         referencesTrack.attach(body, gestures);
         detailStrip.attach(body, ensureDock(body), false);
         gestures.attach(body);
@@ -16478,8 +16434,7 @@ The conversion is one undoable change.`;
       linking.dispose();
       promptTrack.dispose();
       gestures.dispose();
-      audioTrack.dispose();
-      boundaryTrack.dispose();
+      selectionTracks.dispose();
       referencesTrack.dispose();
       detailStrip.dispose();
       selectionUnsub?.();
