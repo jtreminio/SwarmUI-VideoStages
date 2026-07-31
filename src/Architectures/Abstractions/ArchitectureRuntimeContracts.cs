@@ -120,7 +120,8 @@ internal sealed record ArchitectureTimelinePreparationContext(
 /// from the compiled plan and the host session alone, because no workflow mutation has happened yet.
 /// </summary>
 internal sealed record ArchitectureRequestPreflightContext(
-    VideoExecutionPlan Plan);
+    VideoExecutionPlan Plan,
+    ArchitectureId? RootOwnerArchitectureId);
 
 internal sealed record ArchitectureTimelineSessionContext(
     VideoExecutionPlan Plan,

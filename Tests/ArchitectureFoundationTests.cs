@@ -1189,7 +1189,8 @@ public class ArchitectureFoundationTests
         ArchitectureRuntimeSessionFactoryRegistry runtimes = new(
         [
             new RecordingSessionFactory(new("fake"), calls),
-        ]);
+        ],
+        new VideoExecutionPlanContext(plan));
         AudioRuntimeSources audio = new(
             null,
             new Dictionary<int, SwarmUI.Builtin_ComfyUIBackend.WGNodeData>(),
@@ -1236,7 +1237,8 @@ public class ArchitectureFoundationTests
         [
             new ExclusiveFinalizerFactory(new("ltx2"), calls),
             new ExclusiveFinalizerFactory(new("fake"), calls),
-        ]);
+        ],
+        new VideoExecutionPlanContext(plan));
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
             runtimes.FinalizeTimeline(new(plan, Publication: null)));
@@ -1383,7 +1385,7 @@ public class ArchitectureFoundationTests
                     calls,
                     runtimeContexts),
             ]);
-        VideoExecutionPlanContext request = new(plan, () => host);
+        VideoExecutionPlanContext request = new(plan, _ => host);
         request.PrepareRequest();
 
         host.RunConfiguredStages();

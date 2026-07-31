@@ -75,10 +75,8 @@ internal sealed class RootVideoStageResizer(
         {
             return false;
         }
-        return ArchitectureRootOwnerResolver.TryResolve(
-                context.Plan,
-                out ArchitectureId? rootOwner)
-            && rootOwner == Ltx2ArchitectureModule.ArchitectureId;
+        return context.RootOwnerArchitectureId
+            == Ltx2ArchitectureModule.ArchitectureId;
     }
 
     private static bool TryGetVideoContextResizerWithRootSize(

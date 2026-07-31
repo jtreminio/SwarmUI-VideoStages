@@ -399,7 +399,9 @@ public class HostVideoRuntimeFlowTests
         VideoExecutionPlan plan = generator.RequireVideoExecutionPlanContext().Plan;
 
         HostVideoExecutionAdapter adapter = new(generator);
-        Assert.Empty(adapter.PreflightRequest(new(plan)));
+        Assert.Empty(adapter.PreflightRequest(new(
+            plan,
+            Ltx2ArchitectureModule.ArchitectureId)));
         Assert.DoesNotContain(
             plan.Diagnostics,
             diagnostic => diagnostic.Code.StartsWith(

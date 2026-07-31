@@ -16,6 +16,19 @@ namespace VideoStages.Tests;
 public class ArchitectureRuntimeOwnershipTests
 {
     [Fact]
+    public void Request_context_caches_active_architectures_and_root_owner()
+    {
+        VideoExecutionPlanContext context = new(MixedSourcedLeadingPlan());
+
+        Assert.Equal(
+            [new ArchitectureId("sourced-arch"), new ArchitectureId("future-arch")],
+            context.ActiveArchitectureIds);
+        Assert.Equal(
+            new ArchitectureId("future-arch"),
+            context.RootOwnerArchitectureId);
+    }
+
+    [Fact]
     public void Sourced_leading_architecture_does_not_claim_exclusive_root_phases()
     {
         VideoExecutionPlan plan = MixedSourcedLeadingPlan();
@@ -63,7 +76,9 @@ public class ArchitectureRuntimeOwnershipTests
         VideoExecutionPlan plan = MixedSourcedLeadingPlan();
         RecordingFactory sourced = new(new("sourced-arch"));
         RecordingFactory future = new(new("future-arch"));
-        ArchitectureRuntimeSessionFactoryRegistry registry = new([sourced, future]);
+        ArchitectureRuntimeSessionFactoryRegistry registry = new(
+            [sourced, future],
+            new VideoExecutionPlanContext(plan));
         AudioRuntimeSources audio = EmptyAudio();
         RootExecutionPolicy policy = new(plan);
 
@@ -87,7 +102,7 @@ public class ArchitectureRuntimeOwnershipTests
         JObject before = (JObject)generator.Workflow.DeepClone();
         WGNodeData beforeMedia = generator.CurrentMedia;
         VideoArchitectureExecutionHost host = new(generator, plan, [sourced, future]);
-        VideoExecutionPlanContext request = new(plan, () => host);
+        VideoExecutionPlanContext request = new(plan, _ => host);
 
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(() =>
             request.PrepareRequest());
@@ -118,7 +133,7 @@ public class ArchitectureRuntimeOwnershipTests
         int bindingCount = 0;
         VideoExecutionPlanContext request = new(
             plan,
-            () =>
+            _ =>
             {
                 bindingCount++;
                 return new(generator, plan, [sourced, future]);
@@ -187,7 +202,7 @@ public class ArchitectureRuntimeOwnershipTests
             generator,
             plan,
             [sourced, future]);
-        VideoExecutionPlanContext request = new(plan, () => host);
+        VideoExecutionPlanContext request = new(plan, _ => host);
         request.PrepareRequest();
 
         InvalidOperationException first = Assert.Throws<InvalidOperationException>(() =>
@@ -337,7 +352,7 @@ public class ArchitectureRuntimeOwnershipTests
         IEnumerable<IArchitectureGenerationSessionFactoryProvider> providers)
     {
         VideoArchitectureExecutionHost host = new(generator, plan, providers);
-        VideoExecutionPlanContext request = new(plan, () => host);
+        VideoExecutionPlanContext request = new(plan, _ => host);
         request.PrepareRequest();
         return request.RequirePreparedExecutionHost();
     }

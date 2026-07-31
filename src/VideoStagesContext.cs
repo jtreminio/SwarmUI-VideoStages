@@ -4,6 +4,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
 namespace VideoStages;
@@ -102,7 +103,7 @@ internal static class VideoStagesContext
         PlanDiagnosticReporter.ReportToRequest(plan.Diagnostics, g.UserInput);
         return new PlanCacheEntry(new VideoExecutionPlanContext(
             plan,
-            () => new VideoArchitectureExecutionHost(g, plan)));
+            context => new VideoArchitectureExecutionHost(g, context)));
     }
 
     private static bool HasVideoRefineSource(WorkflowGenerator g)
@@ -145,7 +146,8 @@ internal enum VideoExecutionState
 internal sealed class VideoExecutionPlanContext
 {
     private readonly object _preparationLock = new();
-    private readonly Func<VideoArchitectureExecutionHost> _createExecutionHost;
+    private readonly Func<VideoExecutionPlanContext, VideoArchitectureExecutionHost>
+        _createExecutionHost;
     private VideoArchitectureExecutionHost _executionHost;
     private ExceptionDispatchInfo _failure;
 
@@ -155,13 +157,25 @@ internal sealed class VideoExecutionPlanContext
 
     internal VideoExecutionPlanContext(
         VideoExecutionPlan plan,
-        Func<VideoArchitectureExecutionHost> createExecutionHost)
+        Func<VideoExecutionPlanContext, VideoArchitectureExecutionHost> createExecutionHost)
     {
         Plan = plan ?? throw new ArgumentNullException(nameof(plan));
+        ActiveArchitectureIds = Array.AsReadOnly(plan.Clips
+            .Where(clip => clip.Architecture is not null)
+            .Select(clip => clip.Architecture.Id)
+            .Distinct()
+            .ToArray());
+        RootOwnerArchitectureId = ArchitectureRootOwnerResolver.TryResolve(
+            plan,
+            out ArchitectureId? rootOwner)
+            ? rootOwner
+            : null;
         _createExecutionHost = createExecutionHost;
     }
 
     public VideoExecutionPlan Plan { get; }
+    public IReadOnlyList<ArchitectureId> ActiveArchitectureIds { get; }
+    public ArchitectureId? RootOwnerArchitectureId { get; }
 
     public VideoExecutionState State { get; private set; } =
         VideoExecutionState.Compiled;
@@ -192,7 +206,7 @@ internal sealed class VideoExecutionPlanContext
                 PlanDiagnosticReporter.ThrowIfBlocking(
                     Plan.Diagnostics,
                     "VideoStages could not create a valid architecture execution plan");
-                _executionHost = _createExecutionHost?.Invoke()
+                _executionHost = _createExecutionHost?.Invoke(this)
                     ?? throw new InvalidOperationException(
                         "This video execution plan context has no runtime provider binding.");
                 _executionHost.BindExecutionContext(this);

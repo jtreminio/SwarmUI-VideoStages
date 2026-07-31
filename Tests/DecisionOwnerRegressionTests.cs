@@ -507,7 +507,7 @@ public class DecisionOwnerRegressionTests
             generator,
             plan,
             innerProviders.Select(provider => new HostPhaseTestProvider(provider)));
-        VideoExecutionPlanContext request = new(plan, () => host);
+        VideoExecutionPlanContext request = new(plan, _ => host);
         request.PrepareRequest();
         return request.RequirePreparedExecutionHost();
     }

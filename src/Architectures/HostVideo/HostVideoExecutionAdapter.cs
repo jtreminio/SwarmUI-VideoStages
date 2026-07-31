@@ -18,7 +18,7 @@ internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
         ArchitectureRequestPreflightContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        if (ArchitectureRootOwnerResolver.Resolve(context.Plan) != ArchitectureId)
+        if (context.RootOwnerArchitectureId != ArchitectureId)
         {
             return [];
         }
@@ -111,10 +111,8 @@ internal static class HostVideoCorePassIsolation
         {
             return;
         }
-        if (!ArchitectureRootOwnerResolver.TryResolve(
-                context.Plan,
-                out ArchitectureId? rootOwner)
-            || rootOwner != HostVideoArchitectureModule.ArchitectureId)
+        if (context.RootOwnerArchitectureId
+            != HostVideoArchitectureModule.ArchitectureId)
         {
             return;
         }
