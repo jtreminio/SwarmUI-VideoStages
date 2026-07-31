@@ -312,7 +312,7 @@ public class MultiClipCrossfadeMergerTests
         BoundaryBudgetResolution boundaries = BoundaryPlanFixture.Resolve(
             [17, 17, 17], ["continue", "crossfade", "cut"], [8, 8, 8], [9, 0]);
         Assert.Equal(9, boundaries.Boundaries[0].ContinuityWindowFrames);
-        Assert.Equal(BoundaryExecutionMode.Cut, boundaries.Boundaries[1].Effective);
+        Assert.Equal(BoundaryJoinType.Cut, boundaries.Boundaries[1].Effective);
         Merger(g).Apply(Artifacts(clips), boundaries.Boundaries);
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
@@ -627,8 +627,8 @@ public class MultiClipCrossfadeMergerTests
             artifacts,
             PlansFor(clips, ["crossfade", "cut", "crossfade", "cut"]));
 
-        Assert.Equal(BoundaryExecutionMode.Crossfade, resolution.Boundaries[0].Effective);
-        Assert.Equal(BoundaryExecutionMode.Cut, resolution.Boundaries[2].Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[0].Effective);
+        Assert.Equal(BoundaryJoinType.Cut, resolution.Boundaries[2].Effective);
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
     }
@@ -648,7 +648,7 @@ public class MultiClipCrossfadeMergerTests
             PlansFor(clips, ["crossfade", "cut", "cut"]));
 
         Assert.False(resolution.Degraded);
-        Assert.Equal(BoundaryExecutionMode.Crossfade, resolution.Boundaries[0].Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[0].Effective);
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
         ImageScaleNode conform = Assert.Single(bridge.Graph.NodesOfType<ImageScaleNode>());

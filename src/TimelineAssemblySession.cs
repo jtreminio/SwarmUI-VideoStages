@@ -35,7 +35,7 @@ internal sealed class TimelineAssemblySession
     {
         int boundaryIndex = BoundaryIndex(fromClipId);
         if (boundaryIndex >= 0
-            && _effectiveBoundaries[boundaryIndex].Effective == BoundaryExecutionMode.Continue)
+            && _effectiveBoundaries[boundaryIndex].Effective == BoundaryJoinType.Continue)
         {
             window = _effectiveBoundaries[boundaryIndex].ContinuityWindowFrames;
             return true;
@@ -50,7 +50,7 @@ internal sealed class TimelineAssemblySession
         if (boundaryIndex >= 0
             && _effectiveBoundaries[boundaryIndex] is BoundaryPlan
             {
-                Effective: not BoundaryExecutionMode.Cut,
+                Effective: not BoundaryJoinType.Cut,
                 CarryAudio: true,
             } boundary)
         {
@@ -65,7 +65,7 @@ internal sealed class TimelineAssemblySession
     {
         int boundaryIndex = BoundaryIndex(fromClipId);
         if (boundaryIndex < 0
-            || _effectiveBoundaries[boundaryIndex].Effective == BoundaryExecutionMode.Cut)
+            || _effectiveBoundaries[boundaryIndex].Effective == BoundaryJoinType.Cut)
         {
             return;
         }

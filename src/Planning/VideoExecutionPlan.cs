@@ -163,7 +163,7 @@ internal enum StageInputKind
 }
 
 
-internal enum IntermediateOutputPolicy
+internal enum IntermediateOutputEligibility
 {
     NotEligible,
     ControlledByHostSetting,
@@ -171,18 +171,18 @@ internal enum IntermediateOutputPolicy
 
 internal sealed record StageOutputPlan(
     bool IsTimelineTerminal,
-    IntermediateOutputPolicy IntermediatePolicy,
+    IntermediateOutputEligibility IntermediatePolicy,
     bool PreserveConfiguredAudioTrackSave);
 
 /// <summary>A normalized outgoing boundary from clip N to clip N + 1.</summary>
 internal sealed record BoundaryPlan(
     int FromClipId,
-    BoundaryExecutionMode Requested,
-    BoundaryExecutionMode Effective,
+    BoundaryJoinType Requested,
+    BoundaryJoinType Effective,
     int OverlapFrames,
     int ContinuityWindowFrames,
     bool RequiresRuntimeMergeValidation,
-    BoundaryFallback Fallback)
+    BoundaryFallbackReason Fallback)
 {
     public int FrameStep { get; init; } = 1;
 
@@ -195,14 +195,14 @@ internal sealed record BoundaryPlan(
     public bool CarryAudio { get; init; }
 }
 
-internal enum BoundaryExecutionMode
+internal enum BoundaryJoinType
 {
     Cut,
     Continue,
     Crossfade,
 }
 
-internal enum BoundaryFallback
+internal enum BoundaryFallbackReason
 {
     None,
     TargetIsSourcedVideo,

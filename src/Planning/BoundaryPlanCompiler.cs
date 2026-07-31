@@ -9,8 +9,8 @@ internal static class BoundaryPlanCompiler
     internal static BoundaryPlanningResult Compile(
         IReadOnlyList<ClipSpec> clips,
         IReadOnlyList<ClipPlan> plannedClips = null,
-        IReadOnlyDictionary<int, BoundaryExecutionMode> authoredBoundaryModes = null,
-        IReadOnlyDictionary<int, BoundaryFallback> projectedBoundaryFallbacks = null)
+        IReadOnlyDictionary<int, BoundaryJoinType> authoredBoundaryModes = null,
+        IReadOnlyDictionary<int, BoundaryFallbackReason> projectedBoundaryFallbacks = null)
     {
         ImmutableArray<BoundaryPlan>.Builder boundaries = ImmutableArray.CreateBuilder<BoundaryPlan>();
         ImmutableArray<PlanDiagnostic>.Builder diagnostics =
@@ -18,24 +18,24 @@ internal static class BoundaryPlanCompiler
         for (int i = 0; i < clips.Count - 1; i++)
         {
             ClipSpec from = clips[i];
-            BoundaryExecutionMode effectiveRequested =
+            BoundaryJoinType effectiveRequested =
                 BoundaryPolicy.ParsePlanMode(from.BoundaryOut, out bool isKnown);
-            BoundaryExecutionMode requested =
+            BoundaryJoinType requested =
                 authoredBoundaryModes?.GetValueOrDefault(from.Id)
                 ?? effectiveRequested;
             ClipSpec to = clips[i + 1];
-            BoundaryFallback projectedFallback = BoundaryFallback.None;
+            BoundaryFallbackReason projectedFallback = BoundaryFallbackReason.None;
             bool hasProjectedFallback =
                 projectedBoundaryFallbacks is not null
                 && projectedBoundaryFallbacks.TryGetValue(
                     from.Id,
                     out projectedFallback);
-            BoundaryFallback fallback = hasProjectedFallback
+            BoundaryFallbackReason fallback = hasProjectedFallback
                 ? projectedFallback
                 : isKnown
-                    ? BoundaryFallback.None
-                    : BoundaryFallback.UnknownBoundaryKind;
-            BoundaryExecutionMode effective = effectiveRequested;
+                    ? BoundaryFallbackReason.None
+                    : BoundaryFallbackReason.UnknownBoundaryKind;
+            BoundaryJoinType effective = effectiveRequested;
             ClipPlan plannedFrom = plannedClips is not null && i < plannedClips.Count
                 ? plannedClips[i]
                 : null;
@@ -49,15 +49,15 @@ internal static class BoundaryPlanCompiler
             BoundaryRuleConstraints constraints = modePolicy?.Constraints;
             if (!isKnown)
             {
-                effective = BoundaryExecutionMode.Cut;
+                effective = BoundaryJoinType.Cut;
             }
-            else if (effectiveRequested != BoundaryExecutionMode.Cut
+            else if (effectiveRequested != BoundaryJoinType.Cut
                 && plannedFrom?.Architecture is not null
                 && plannedTo?.Architecture is not null
                 && plannedFrom.Architecture.Id != plannedTo.Architecture.Id)
             {
-                effective = BoundaryExecutionMode.Cut;
-                fallback = BoundaryFallback.ArchitectureRuleUnsupported;
+                effective = BoundaryJoinType.Cut;
+                fallback = BoundaryFallbackReason.ArchitectureRuleUnsupported;
                 diagnostics.Add(new PlanDiagnostic(
                     PlanDiagnosticSeverity.Error,
                     "boundary-cross-architecture-non-cut",
@@ -66,34 +66,34 @@ internal static class BoundaryPlanCompiler
                         + $"'{plannedTo.Architecture.Id}'. Cross-architecture boundaries must be cuts.",
                     from.Id));
             }
-            else if (effectiveRequested != BoundaryExecutionMode.Cut
+            else if (effectiveRequested != BoundaryJoinType.Cut
                 && modePolicy is { Support: RuleSupport.Unsupported })
             {
-                effective = BoundaryExecutionMode.Cut;
-                fallback = BoundaryFallback.ArchitectureRuleUnsupported;
+                effective = BoundaryJoinType.Cut;
+                fallback = BoundaryFallbackReason.ArchitectureRuleUnsupported;
                 diagnostics.Add(new PlanDiagnostic(
                     PlanDiagnosticSeverity.Error,
                     modePolicy.Code,
                     modePolicy.Reason,
                     from.Id));
             }
-            else if (effectiveRequested != BoundaryExecutionMode.Cut
+            else if (effectiveRequested != BoundaryJoinType.Cut
                 && EvaluateTarget(constraints, to) is { } targetFallback)
             {
-                effective = BoundaryExecutionMode.Cut;
+                effective = BoundaryJoinType.Cut;
                 fallback = targetFallback;
             }
 
-            int overlap = effective == BoundaryExecutionMode.Cut
+            int overlap = effective == BoundaryJoinType.Cut
                 ? 0
                 : modePolicy?.NormalizeOverlap(from.BoundaryOutOverlap)
                     ?? Math.Max(1, from.BoundaryOutOverlap);
-            int continuityWindow = effective == BoundaryExecutionMode.Continue
+            int continuityWindow = effective == BoundaryJoinType.Continue
                 ? overlap + (constraints?.ContinuityExtraFrames ?? 0)
                 : 0;
             bool targetHasGenerationStage = plannedTo?.Stages is { Count: > 0 }
                 || (plannedTo is null && to.Stages is { Count: > 0 });
-            if (fallback != BoundaryFallback.None && !hasProjectedFallback)
+            if (fallback != BoundaryFallbackReason.None && !hasProjectedFallback)
             {
                 diagnostics.Add(new PlanDiagnostic(
                     PlanDiagnosticSeverity.Warning,
@@ -102,7 +102,7 @@ internal static class BoundaryPlanCompiler
                     from.Id));
             }
             if (from.BoundaryOutCarryAudio
-                && effective != BoundaryExecutionMode.Cut
+                && effective != BoundaryJoinType.Cut
                 && !targetHasGenerationStage)
             {
                 diagnostics.Add(new PlanDiagnostic(
@@ -118,14 +118,14 @@ internal static class BoundaryPlanCompiler
                 effective,
                 overlap,
                 continuityWindow,
-                RequiresRuntimeMergeValidation: effective != BoundaryExecutionMode.Cut,
+                RequiresRuntimeMergeValidation: effective != BoundaryJoinType.Cut,
                 fallback)
             {
                 FrameStep = constraints?.FrameStep ?? 1,
-                MinFrames = effective == BoundaryExecutionMode.Cut
+                MinFrames = effective == BoundaryJoinType.Cut
                     ? 0
                     : constraints?.MinFrames ?? 1,
-                CarryAudio = effective != BoundaryExecutionMode.Cut
+                CarryAudio = effective != BoundaryJoinType.Cut
                     && from.BoundaryOutCarryAudio
                     && targetHasGenerationStage,
             });
@@ -133,7 +133,7 @@ internal static class BoundaryPlanCompiler
         return new BoundaryPlanningResult(boundaries.ToImmutable(), diagnostics.ToImmutable());
     }
 
-    private static BoundaryFallback? EvaluateTarget(
+    private static BoundaryFallbackReason? EvaluateTarget(
         BoundaryRuleConstraints constraints,
         ClipSpec target)
     {
@@ -143,15 +143,15 @@ internal static class BoundaryPlanCompiler
         }
         if (constraints.TargetRequiresGeneratedEntry && target.SourceVideo is not null)
         {
-            return BoundaryFallback.TargetIsSourcedVideo;
+            return BoundaryFallbackReason.TargetIsSourcedVideo;
         }
         if (constraints.TargetRequiresStage && target.Stages is not { Count: > 0 })
         {
-            return BoundaryFallback.TargetHasNoStage;
+            return BoundaryFallbackReason.TargetHasNoStage;
         }
         if (constraints.TargetDisallowsInitialReference && HasExplicitFirstFrameReference(target))
         {
-            return BoundaryFallback.TargetHasFirstFrameReference;
+            return BoundaryFallbackReason.TargetHasFirstFrameReference;
         }
         return null;
     }
@@ -159,14 +159,14 @@ internal static class BoundaryPlanCompiler
     private static bool HasExplicitFirstFrameReference(ClipSpec clip) =>
         clip.ImageRefs?.Any(reference => !reference.FromEnd && reference.Frame == 1) == true;
 
-    private static string DescribeFallback(BoundaryFallback fallback) => fallback switch
+    private static string DescribeFallback(BoundaryFallbackReason fallback) => fallback switch
     {
-        BoundaryFallback.TargetIsSourcedVideo => "the next clip is sourced footage",
-        BoundaryFallback.TargetHasNoStage => "the next clip has no stage that can consume continuity",
-        BoundaryFallback.TargetHasFirstFrameReference => "the next clip has an explicit first-frame reference",
-        BoundaryFallback.UnknownBoundaryKind => "the requested boundary mode is unknown",
-        BoundaryFallback.InsufficientFrameBudget => "the adjacent clips are too short for the requested overlap",
-        BoundaryFallback.ArchitectureRuleUnsupported => "the clip architecture does not support the requested join",
+        BoundaryFallbackReason.TargetIsSourcedVideo => "the next clip is sourced footage",
+        BoundaryFallbackReason.TargetHasNoStage => "the next clip has no stage that can consume continuity",
+        BoundaryFallbackReason.TargetHasFirstFrameReference => "the next clip has an explicit first-frame reference",
+        BoundaryFallbackReason.UnknownBoundaryKind => "the requested boundary mode is unknown",
+        BoundaryFallbackReason.InsufficientFrameBudget => "the adjacent clips are too short for the requested overlap",
+        BoundaryFallbackReason.ArchitectureRuleUnsupported => "the clip architecture does not support the requested join",
         _ => "the boundary is not applicable",
     };
 }

@@ -158,7 +158,7 @@ internal class StageRunner
                     RawSource: "Continue",
                     Base2EditStageIndex: null,
                     Frame: 1,
-                    ImageReferenceFrameOrigin.Start,
+                    ImageReferenceFrameEdge.Start,
                     Strength: 1.0,
                     UploadFileName: null,
                     InlineData: null),

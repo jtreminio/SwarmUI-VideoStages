@@ -122,7 +122,7 @@ public class RealArchitectureContractTests
         Assert.All(descriptor.EntryModes, mode => Assert.True(Enum.IsDefined(mode)));
         Assert.True(descriptor.FrameGrid > 0);
         Assert.All(
-            Enum.GetValues<BoundaryExecutionMode>(),
+            Enum.GetValues<BoundaryJoinType>(),
             mode => Assert.True(descriptor.BoundaryRules.ContainsKey(mode)));
         Assert.True(
             descriptor.Capabilities.Architecture.HasFlag(

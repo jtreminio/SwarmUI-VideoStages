@@ -203,7 +203,7 @@ internal sealed class MultiClipParallelMerger(
         {
             bool endOfTimeline = boundaryIndex == boundaries.Count;
             if (!endOfTimeline
-                && boundaries[boundaryIndex].Effective != BoundaryExecutionMode.Cut)
+                && boundaries[boundaryIndex].Effective != BoundaryJoinType.Cut)
             {
                 continue;
             }

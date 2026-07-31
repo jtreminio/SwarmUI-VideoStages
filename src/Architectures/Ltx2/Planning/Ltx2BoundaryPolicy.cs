@@ -10,12 +10,12 @@ internal static class Ltx2BoundaryPolicy
     internal const int MaxFrames = 48;
 
     internal static ArchitectureBoundaryPolicy Instance { get; } =
-        new(new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
+        new(new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>
         {
-            [BoundaryExecutionMode.Cut] = ArchitectureBoundaryModePolicy.Supported(
+            [BoundaryJoinType.Cut] = ArchitectureBoundaryModePolicy.Supported(
                 "ltx2.boundary.cut",
                 "Decoded LTX clips can be joined with a hard cut."),
-            [BoundaryExecutionMode.Continue] = ArchitectureBoundaryModePolicy.Conditional(
+            [BoundaryJoinType.Continue] = ArchitectureBoundaryModePolicy.Conditional(
                 "ltx2.boundary.continue",
                 "Continue requires adjacent LTX clips and a compatible generated target.",
                 new BoundaryRuleConstraints(
@@ -27,7 +27,7 @@ internal static class Ltx2BoundaryPolicy
                     TargetRequiresGeneratedEntry: true,
                     TargetRequiresStage: true,
                     TargetDisallowsInitialReference: true)),
-            [BoundaryExecutionMode.Crossfade] = ArchitectureBoundaryModePolicy.Conditional(
+            [BoundaryJoinType.Crossfade] = ArchitectureBoundaryModePolicy.Conditional(
                 "ltx2.boundary.crossfade",
                 "Crossfade currently uses the LTX-owned decoded transition path.",
                 new BoundaryRuleConstraints(

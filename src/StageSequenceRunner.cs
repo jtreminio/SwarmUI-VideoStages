@@ -38,7 +38,7 @@ internal sealed class StageSequenceRunner(
         {
             ClipPlan plannedClip = plannedClips[clipIndex];
             bool exposesPrevious = clipIndex > 0
-                && plan.Boundaries[clipIndex - 1].Effective != BoundaryExecutionMode.Cut
+                && plan.Boundaries[clipIndex - 1].Effective != BoundaryJoinType.Cut
                 && previousClip?.Architecture.Id == plannedClip.Architecture.Id;
             ArchitectureClipRuntimeContext runtimeContext = new(
                 plannedClip,

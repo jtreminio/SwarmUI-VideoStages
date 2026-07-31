@@ -346,10 +346,10 @@ public class ArchitectureFoundationTests
             architecture);
 
         BoundaryPlan boundary = Assert.Single(plan.Boundaries);
-        Assert.Equal(BoundaryExecutionMode.Crossfade, boundary.Requested);
-        Assert.Equal(BoundaryExecutionMode.Cut, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, boundary.Requested);
+        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
         Assert.Equal(
-            BoundaryFallback.ArchitectureRuleUnsupported,
+            BoundaryFallbackReason.ArchitectureRuleUnsupported,
             boundary.Fallback);
         Assert.Single(
             plan.Diagnostics,
@@ -1079,8 +1079,8 @@ public class ArchitectureFoundationTests
 
         Assert.All(plan.Boundaries, boundary =>
         {
-            Assert.Equal(BoundaryExecutionMode.Cut, boundary.Requested);
-            Assert.Equal(BoundaryExecutionMode.Cut, boundary.Effective);
+            Assert.Equal(BoundaryJoinType.Cut, boundary.Requested);
+            Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
         });
         Assert.Equal(ids, calls);
         Assert.Equal(
@@ -1523,9 +1523,9 @@ public class ArchitectureFoundationTests
         VideoArchitectureDescriptor invalid = Descriptor("fake") with
         {
             BoundaryPolicy = new ArchitectureBoundaryPolicy(
-                new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
+                new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>
                 {
-                    [BoundaryExecutionMode.Cut] = ArchitectureBoundaryModePolicy.Supported(
+                    [BoundaryJoinType.Cut] = ArchitectureBoundaryModePolicy.Supported(
                         "fake.cut",
                         "cut"),
                 }),
@@ -1951,15 +1951,15 @@ public class ArchitectureFoundationTests
                 ClipCapability.Prompts,
                 StageCapability.ImageInput | StageCapability.VideoInput),
             new ArchitectureBoundaryPolicy(
-                new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
+                new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>
                 {
-                    [BoundaryExecutionMode.Cut] = ArchitectureBoundaryModePolicy.Supported(
+                    [BoundaryJoinType.Cut] = ArchitectureBoundaryModePolicy.Supported(
                         $"{id}.cut",
                         "cut"),
-                    [BoundaryExecutionMode.Continue] = BoundaryMode(
+                    [BoundaryJoinType.Continue] = BoundaryMode(
                         $"{id}.continue",
                         "same architecture"),
-                    [BoundaryExecutionMode.Crossfade] = BoundaryMode(
+                    [BoundaryJoinType.Crossfade] = BoundaryMode(
                         $"{id}.crossfade",
                         "same architecture"),
                 }));

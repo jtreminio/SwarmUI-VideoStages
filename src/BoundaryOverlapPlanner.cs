@@ -64,7 +64,7 @@ internal static class BoundaryOverlapPlanner
                 return DegradeAllToCuts(
                     resolved,
                     "planned clip frame counts cannot fund the requested boundary windows",
-                    BoundaryFallback.InsufficientFrameBudget);
+                    BoundaryFallbackReason.InsufficientFrameBudget);
             }
 
             resolved[candidate] = ReduceOnPolicyGridOrCut(resolved[candidate]);
@@ -107,16 +107,16 @@ internal static class BoundaryOverlapPlanner
         {
             return DegradeToCut(boundary) with
             {
-                Fallback = BoundaryFallback.InsufficientFrameBudget,
+                Fallback = BoundaryFallbackReason.InsufficientFrameBudget,
             };
         }
-        int continuityExtra = boundary.Effective == BoundaryExecutionMode.Continue
+        int continuityExtra = boundary.Effective == BoundaryJoinType.Continue
             ? Math.Max(0, boundary.ContinuityWindowFrames - boundary.OverlapFrames)
             : 0;
         return boundary with
         {
             OverlapFrames = nextOverlap,
-            ContinuityWindowFrames = boundary.Effective == BoundaryExecutionMode.Continue
+            ContinuityWindowFrames = boundary.Effective == BoundaryJoinType.Continue
                 ? nextOverlap + continuityExtra
                 : 0,
         };
@@ -169,7 +169,7 @@ internal static class BoundaryOverlapPlanner
             {
                 resolved[start + i] = DegradeToCut(resolved[start + i]) with
                 {
-                    Fallback = BoundaryFallback.InsufficientFrameBudget,
+                    Fallback = BoundaryFallbackReason.InsufficientFrameBudget,
                 };
             }
             reasons.Add($"clips {start}-{start + boundaryCount}");
@@ -216,18 +216,18 @@ internal static class BoundaryOverlapPlanner
     internal static BoundaryBudgetResolution DegradeAllToCuts(
         IReadOnlyList<BoundaryPlan> boundaries,
         string reason,
-        BoundaryFallback fallback = BoundaryFallback.None)
+        BoundaryFallbackReason fallback = BoundaryFallbackReason.None)
     {
         IReadOnlyList<BoundaryPlan> source = boundaries ?? [];
         return new(
             Array.AsReadOnly(source.Select(boundary => boundary with
             {
-                Effective = BoundaryExecutionMode.Cut,
+                Effective = BoundaryJoinType.Cut,
                 OverlapFrames = 0,
                 ContinuityWindowFrames = 0,
                 RequiresRuntimeMergeValidation = false,
                 CarryAudio = false,
-                Fallback = fallback == BoundaryFallback.None ? boundary.Fallback : fallback,
+                Fallback = fallback == BoundaryFallbackReason.None ? boundary.Fallback : fallback,
             }).ToArray()),
             Degraded: source.Any(IsOverlapped),
             reason);
@@ -236,7 +236,7 @@ internal static class BoundaryOverlapPlanner
     internal static BoundaryPlan DegradeToCut(BoundaryPlan boundary) =>
         boundary with
         {
-            Effective = BoundaryExecutionMode.Cut,
+            Effective = BoundaryJoinType.Cut,
             OverlapFrames = 0,
             ContinuityWindowFrames = 0,
             RequiresRuntimeMergeValidation = false,
@@ -244,13 +244,13 @@ internal static class BoundaryOverlapPlanner
         };
 
     private static bool IsOverlapped(BoundaryPlan boundary) =>
-        boundary?.Effective is BoundaryExecutionMode.Continue or BoundaryExecutionMode.Crossfade;
+        boundary?.Effective is BoundaryJoinType.Continue or BoundaryJoinType.Crossfade;
 
     internal static int EffectiveOverlapFrames(BoundaryPlan boundary) =>
         boundary.Effective switch
         {
-            BoundaryExecutionMode.Continue => Math.Max(1, boundary.ContinuityWindowFrames),
-            BoundaryExecutionMode.Crossfade => Math.Max(1, boundary.OverlapFrames),
+            BoundaryJoinType.Continue => Math.Max(1, boundary.ContinuityWindowFrames),
+            BoundaryJoinType.Crossfade => Math.Max(1, boundary.OverlapFrames),
             _ => 0,
         };
 

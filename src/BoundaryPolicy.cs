@@ -23,24 +23,24 @@ internal static class BoundaryPolicy
         return Constants.BoundaryOutCut;
     }
 
-    public static BoundaryExecutionMode ParsePlanMode(string value, out bool isKnown)
+    public static BoundaryJoinType ParsePlanMode(string value, out bool isKnown)
     {
         if (string.Equals(value, Constants.BoundaryOutContinue, StringComparison.OrdinalIgnoreCase))
         {
             isKnown = true;
-            return BoundaryExecutionMode.Continue;
+            return BoundaryJoinType.Continue;
         }
         if (string.Equals(value, Constants.BoundaryOutCrossfade, StringComparison.OrdinalIgnoreCase))
         {
             isKnown = true;
-            return BoundaryExecutionMode.Crossfade;
+            return BoundaryJoinType.Crossfade;
         }
         if (string.IsNullOrWhiteSpace(value) || string.Equals(value, Constants.BoundaryOutCut, StringComparison.OrdinalIgnoreCase))
         {
             isKnown = true;
-            return BoundaryExecutionMode.Cut;
+            return BoundaryJoinType.Cut;
         }
         isKnown = false;
-        return BoundaryExecutionMode.Cut;
+        return BoundaryJoinType.Cut;
     }
 }

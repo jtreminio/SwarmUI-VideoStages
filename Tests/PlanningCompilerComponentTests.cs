@@ -39,8 +39,8 @@ public class PlanningCompilerComponentTests
         BoundaryPlanningResult result = BoundaryPlanCompiler.Compile(spec.Clips, plan.Clips);
 
         BoundaryPlan boundary = Assert.Single(result.Boundaries);
-        Assert.Equal(BoundaryExecutionMode.Cut, boundary.Effective);
-        Assert.Equal(BoundaryFallback.TargetIsSourcedVideo, boundary.Fallback);
+        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
+        Assert.Equal(BoundaryFallbackReason.TargetIsSourcedVideo, boundary.Fallback);
         Assert.Equal(0, boundary.OverlapFrames);
         Assert.False(boundary.CarryAudio);
         Assert.Contains(result.Diagnostics, diagnostic =>
@@ -65,7 +65,7 @@ public class PlanningCompilerComponentTests
         BoundaryPlan boundary = Assert.Single(
             BoundaryPlanCompiler.Compile(spec.Clips, plan.Clips).Boundaries);
 
-        Assert.Equal(BoundaryExecutionMode.Crossfade, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, boundary.Effective);
         Assert.True(boundary.CarryAudio);
     }
 
@@ -100,7 +100,7 @@ public class PlanningCompilerComponentTests
         BoundaryPlan boundary = Assert.Single(
             BoundaryPlanCompiler.Compile(spec.Clips, planned).Boundaries);
 
-        Assert.Equal(BoundaryExecutionMode.Continue, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Continue, boundary.Effective);
         Assert.Equal(15, boundary.OverlapFrames);
         Assert.Equal(18, boundary.ContinuityWindowFrames);
         Assert.Equal(5, boundary.FrameStep);
@@ -885,9 +885,9 @@ public class PlanningCompilerComponentTests
 
     private static readonly ArchitectureBoundaryPolicy FakeBoundaryPolicy =
         new ArchitectureBoundaryPolicy(
-            new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
+            new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>
             {
-                [BoundaryExecutionMode.Continue] = ArchitectureBoundaryModePolicy.Conditional(
+                [BoundaryJoinType.Continue] = ArchitectureBoundaryModePolicy.Conditional(
                     "fake.continue",
                     "Fake policy with a different grid and permissive target.",
                     new BoundaryRuleConstraints(

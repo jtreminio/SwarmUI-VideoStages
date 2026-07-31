@@ -326,12 +326,12 @@ public class HostVideoArchitectureTests
                 ClipCapability.Prompts,
                 StageCapability.Lora),
             new ArchitectureBoundaryPolicy(new Dictionary<
-                BoundaryExecutionMode,
+                BoundaryJoinType,
                 ArchitectureBoundaryModePolicy>
             {
-                [BoundaryExecutionMode.Cut] = boundary,
-                [BoundaryExecutionMode.Continue] = boundary,
-                [BoundaryExecutionMode.Crossfade] = boundary,
+                [BoundaryJoinType.Cut] = boundary,
+                [BoundaryJoinType.Continue] = boundary,
+                [BoundaryJoinType.Crossfade] = boundary,
             }));
     }
 }

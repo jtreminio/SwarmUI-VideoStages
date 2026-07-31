@@ -13,7 +13,7 @@ public class BoundaryOverlapPlannerTests
 {
     private static BoundaryPlan Boundary(
         int from,
-        BoundaryExecutionMode mode,
+        BoundaryJoinType mode,
         int overlap = 8,
         int continuityWindow = 0,
         int frameStep = 8,
@@ -22,13 +22,13 @@ public class BoundaryOverlapPlannerTests
             from,
             mode,
             mode,
-            mode == BoundaryExecutionMode.Cut ? 0 : overlap,
-            mode == BoundaryExecutionMode.Continue ? continuityWindow : 0,
-            RequiresRuntimeMergeValidation: mode != BoundaryExecutionMode.Cut,
-            BoundaryFallback.None)
+            mode == BoundaryJoinType.Cut ? 0 : overlap,
+            mode == BoundaryJoinType.Continue ? continuityWindow : 0,
+            RequiresRuntimeMergeValidation: mode != BoundaryJoinType.Cut,
+            BoundaryFallbackReason.None)
         {
             FrameStep = frameStep,
-            MinFrames = mode == BoundaryExecutionMode.Cut ? 0 : minFrames,
+            MinFrames = mode == BoundaryJoinType.Cut ? 0 : minFrames,
         };
 
     [Fact]
@@ -37,15 +37,15 @@ public class BoundaryOverlapPlannerTests
         BoundaryBudgetResolution resolution = BoundaryOverlapPlanner.ResolvePlanBudgets(
             [17, 17, 17],
             [
-                Boundary(0, BoundaryExecutionMode.Continue, continuityWindow: 9),
-                Boundary(1, BoundaryExecutionMode.Crossfade),
+                Boundary(0, BoundaryJoinType.Continue, continuityWindow: 9),
+                Boundary(1, BoundaryJoinType.Crossfade),
             ]);
 
         Assert.Equal(9, resolution.Boundaries[0].ContinuityWindowFrames);
-        Assert.Equal(BoundaryExecutionMode.Cut, resolution.Boundaries[1].Effective);
+        Assert.Equal(BoundaryJoinType.Cut, resolution.Boundaries[1].Effective);
         Assert.Equal(0, resolution.Boundaries[1].OverlapFrames);
         Assert.Equal(
-            BoundaryFallback.InsufficientFrameBudget,
+            BoundaryFallbackReason.InsufficientFrameBudget,
             resolution.Boundaries[1].Fallback);
     }
 
@@ -54,10 +54,10 @@ public class BoundaryOverlapPlannerTests
     {
         BoundaryBudgetResolution resolution = BoundaryOverlapPlanner.ResolvePlanBudgets(
             [5, 5],
-            [Boundary(0, BoundaryExecutionMode.Continue, continuityWindow: 9)]);
+            [Boundary(0, BoundaryJoinType.Continue, continuityWindow: 9)]);
         BoundaryPlan boundary = Assert.Single(resolution.Boundaries);
 
-        Assert.Equal(BoundaryExecutionMode.Cut, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
         Assert.Equal(0, boundary.ContinuityWindowFrames);
         Assert.Equal(0, boundary.OverlapFrames);
         Assert.True(resolution.Degraded);
@@ -72,14 +72,14 @@ public class BoundaryOverlapPlannerTests
             [
                 Boundary(
                     0,
-                    BoundaryExecutionMode.Crossfade,
+                    BoundaryJoinType.Crossfade,
                     overlap: 13,
                     frameStep: 4,
                     minFrames: 5),
             ]);
         BoundaryPlan boundary = Assert.Single(resolution.Boundaries);
 
-        Assert.Equal(BoundaryExecutionMode.Crossfade, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, boundary.Effective);
         Assert.Equal(9, boundary.OverlapFrames);
         Assert.Equal(0, (boundary.OverlapFrames - boundary.MinFrames) % boundary.FrameStep);
     }
@@ -112,7 +112,7 @@ public class BoundaryOverlapPlannerTests
     {
         BoundaryPlan compiled = Boundary(
             0,
-            BoundaryExecutionMode.Continue,
+            BoundaryJoinType.Continue,
             overlap: 8,
             continuityWindow: 9);
         static DecodedClipArtifact Clip(int id) => new(
@@ -129,7 +129,7 @@ public class BoundaryOverlapPlannerTests
             BoundaryOverlapPlanner.ValidateRuntime([Clip(1), Clip(2)], [compiled]);
 
         Assert.True(resolution.Degraded);
-        Assert.Equal(BoundaryExecutionMode.Cut, Assert.Single(resolution.Boundaries).Effective);
+        Assert.Equal(BoundaryJoinType.Cut, Assert.Single(resolution.Boundaries).Effective);
         Assert.Contains("runtime clip lengths", resolution.Reason);
     }
 }

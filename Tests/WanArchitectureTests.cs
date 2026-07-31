@@ -242,13 +242,13 @@ public class WanArchitectureTests
 
         Assert.Equal(
             RuleSupport.Supported,
-            descriptor.BoundaryRules[BoundaryExecutionMode.Cut].Support);
+            descriptor.BoundaryRules[BoundaryJoinType.Cut].Support);
         Assert.Equal(
             RuleSupport.Unsupported,
-            descriptor.BoundaryRules[BoundaryExecutionMode.Continue].Support);
+            descriptor.BoundaryRules[BoundaryJoinType.Continue].Support);
         Assert.Equal(
             RuleSupport.Unsupported,
-            descriptor.BoundaryRules[BoundaryExecutionMode.Crossfade].Support);
+            descriptor.BoundaryRules[BoundaryJoinType.Crossfade].Support);
         Assert.Equal(WanArchitectureModule.FrameGrid, descriptor.FrameGrid);
     }
 

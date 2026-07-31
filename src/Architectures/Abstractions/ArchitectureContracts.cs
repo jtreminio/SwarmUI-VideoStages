@@ -302,36 +302,36 @@ internal sealed record ArchitectureBoundaryModePolicy
 internal sealed class ArchitectureBoundaryPolicy
 {
     internal ArchitectureBoundaryPolicy(
-        IReadOnlyDictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy> modes)
+        IReadOnlyDictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy> modes)
     {
-        Modes = new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>(
+        Modes = new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>(
             modes ?? throw new ArgumentNullException(nameof(modes)));
         PublishedRules = Modes.ToDictionary(
             pair => pair.Key,
             pair => pair.Value.ToRuleDecision());
     }
 
-    internal IReadOnlyDictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy> Modes
+    internal IReadOnlyDictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy> Modes
     {
         get;
     }
 
-    internal IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> PublishedRules { get; }
+    internal IReadOnlyDictionary<BoundaryJoinType, RuleDecision> PublishedRules { get; }
 
     internal static ArchitectureBoundaryPolicy CutOnly(
         string codePrefix,
         string cutReason,
         string continueReason,
         string crossfadeReason) =>
-        new(new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
+        new(new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>
         {
-            [BoundaryExecutionMode.Cut] = ArchitectureBoundaryModePolicy.Supported(
+            [BoundaryJoinType.Cut] = ArchitectureBoundaryModePolicy.Supported(
                 $"{codePrefix}.boundary.cut",
                 cutReason),
-            [BoundaryExecutionMode.Continue] = ArchitectureBoundaryModePolicy.Unsupported(
+            [BoundaryJoinType.Continue] = ArchitectureBoundaryModePolicy.Unsupported(
                 $"{codePrefix}.boundary.continue.unsupported",
                 continueReason),
-            [BoundaryExecutionMode.Crossfade] = ArchitectureBoundaryModePolicy.Unsupported(
+            [BoundaryJoinType.Crossfade] = ArchitectureBoundaryModePolicy.Unsupported(
                 $"{codePrefix}.boundary.crossfade.unsupported",
                 crossfadeReason),
         });
@@ -361,7 +361,7 @@ internal sealed record VideoArchitectureDescriptor(
         StageGuideReferencePolicy.GeneratedOnly;
 
     /// <summary>The catalog projection of <see cref="BoundaryPolicy"/>; never a separate source.</summary>
-    public IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> BoundaryRules =>
+    public IReadOnlyDictionary<BoundaryJoinType, RuleDecision> BoundaryRules =>
         BoundaryPolicy.PublishedRules;
 
     public IReadOnlyList<RuleDecision> Rules { get; init; } = [];

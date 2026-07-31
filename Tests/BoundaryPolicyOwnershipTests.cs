@@ -20,9 +20,9 @@ public class BoundaryPolicyOwnershipTests
             ArchitectureBoundaryPolicy policy = descriptor.BoundaryPolicy;
             Assert.NotNull(policy);
             Assert.Equal(
-                Enum.GetValues<BoundaryExecutionMode>().Order(),
+                Enum.GetValues<BoundaryJoinType>().Order(),
                 policy.Modes.Keys.Order());
-            foreach (BoundaryExecutionMode mode in Enum.GetValues<BoundaryExecutionMode>())
+            foreach (BoundaryJoinType mode in Enum.GetValues<BoundaryJoinType>())
             {
                 Assert.Equal(
                     policy.Modes[mode].ToRuleDecision(),
@@ -67,9 +67,9 @@ public class BoundaryPolicyOwnershipTests
                 Architecture = plan.Clips[0].Architecture with
                 {
                     BoundaryPolicy = new ArchitectureBoundaryPolicy(
-                        new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
+                        new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>
                         {
-                            [BoundaryExecutionMode.Continue] = continueMode,
+                            [BoundaryJoinType.Continue] = continueMode,
                         }),
                 },
             },
@@ -79,7 +79,7 @@ public class BoundaryPolicyOwnershipTests
         BoundaryPlan boundary = Assert.Single(
             BoundaryPlanCompiler.Compile(spec.Clips, planned).Boundaries);
 
-        Assert.Equal(BoundaryExecutionMode.Continue, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Continue, boundary.Effective);
         Assert.Equal(continueMode.NormalizeOverlap(22), boundary.OverlapFrames);
         Assert.Equal(20, boundary.OverlapFrames);
         Assert.Equal(continueMode.Constraints.FrameStep, boundary.FrameStep);

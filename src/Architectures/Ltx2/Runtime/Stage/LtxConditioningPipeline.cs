@@ -249,11 +249,11 @@ internal sealed class LtxConditioningPipeline(
         guidePreprocessReuse.ResolvePreprocessedGuidePath(guideImagePath, targetMedia);
 
     private static bool UseLtxvInplaceForRef(ImageReferencePlan reference) =>
-        reference.FrameOrigin == ImageReferenceFrameOrigin.Start
+        reference.FrameOrigin == ImageReferenceFrameEdge.Start
         && reference.Frame == 1;
 
     private static int ComputeLtxvAddGuideFrameIndex(ImageReferencePlan reference) =>
-        reference.FrameOrigin == ImageReferenceFrameOrigin.End
+        reference.FrameOrigin == ImageReferenceFrameEdge.End
             ? -Math.Max(1, reference.Frame)
             : Math.Max(1, reference.Frame);
 }

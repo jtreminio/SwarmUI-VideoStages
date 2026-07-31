@@ -244,12 +244,12 @@ public class ArchitectureRuntimeOwnershipTests
             [
                 new(
                     0,
-                    BoundaryExecutionMode.Cut,
-                    BoundaryExecutionMode.Cut,
+                    BoundaryJoinType.Cut,
+                    BoundaryJoinType.Cut,
                     0,
                     0,
                     RequiresRuntimeMergeValidation: false,
-                    BoundaryFallback.None)
+                    BoundaryFallbackReason.None)
             ],
             []);
     }
@@ -271,7 +271,7 @@ public class ArchitectureRuntimeOwnershipTests
             payload,
             new(
                 IsTimelineTerminal: false,
-                IntermediateOutputPolicy.NotEligible,
+                IntermediateOutputEligibility.NotEligible,
                 PreserveConfiguredAudioTrackSave: false));
         return new(
             id,
@@ -300,7 +300,7 @@ public class ArchitectureRuntimeOwnershipTests
                 ClipCapability.SourceVideo,
                 StageCapability.ImageInput | StageCapability.VideoInput),
             new ArchitectureBoundaryPolicy(
-                new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>()));
+                new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>()));
     }
 
     private static WorkflowGenerator Generator(bool withRefineSource = false)

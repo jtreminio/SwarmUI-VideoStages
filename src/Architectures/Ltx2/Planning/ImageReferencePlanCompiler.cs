@@ -20,7 +20,7 @@ internal static class ImageReferencePlanCompiler
                 reference.Source?.Trim() ?? "",
                 editStage,
                 reference.Frame,
-                reference.FromEnd ? ImageReferenceFrameOrigin.End : ImageReferenceFrameOrigin.Start,
+                reference.FromEnd ? ImageReferenceFrameEdge.End : ImageReferenceFrameEdge.Start,
                 i < strengths.Count ? strengths[i] : Constants.DefaultStageRefStrength,
                 reference.UploadFileName,
                 reference.Data));

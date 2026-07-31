@@ -98,8 +98,8 @@ internal sealed record ArchitectureEffectiveRequestProjection(
 internal sealed record EffectiveVideoRequest(
     VideoStagesSpec Spec,
     IReadOnlyList<EffectiveRequestDecision> Decisions,
-    IReadOnlyDictionary<int, BoundaryExecutionMode> AuthoredBoundaryModes,
-    IReadOnlyDictionary<int, BoundaryFallback> ProjectedBoundaryFallbacks)
+    IReadOnlyDictionary<int, BoundaryJoinType> AuthoredBoundaryModes,
+    IReadOnlyDictionary<int, BoundaryFallbackReason> ProjectedBoundaryFallbacks)
 {
     internal IReadOnlyList<PlanDiagnostic> Diagnostics =>
         Decisions
@@ -236,8 +236,8 @@ internal static class EffectiveVideoRequestProjector
 
         List<EffectiveRequestDecision> decisions =
             clips.SelectMany(clip => clip.Decisions).ToList();
-        Dictionary<int, BoundaryExecutionMode> authoredBoundaryModes = [];
-        Dictionary<int, BoundaryFallback> projectedBoundaryFallbacks = [];
+        Dictionary<int, BoundaryJoinType> authoredBoundaryModes = [];
+        Dictionary<int, BoundaryFallbackReason> projectedBoundaryFallbacks = [];
         ProjectUnsupportedBoundaries(
             clips,
             decisions,
@@ -608,8 +608,8 @@ internal static class EffectiveVideoRequestProjector
     private static void ProjectUnsupportedBoundaries(
         IReadOnlyList<EffectiveClipPlanningContext> clips,
         ICollection<EffectiveRequestDecision> decisions,
-        IDictionary<int, BoundaryExecutionMode> authoredBoundaryModes,
-        IDictionary<int, BoundaryFallback> projectedBoundaryFallbacks)
+        IDictionary<int, BoundaryJoinType> authoredBoundaryModes,
+        IDictionary<int, BoundaryFallbackReason> projectedBoundaryFallbacks)
     {
         int[] executableIndexes = clips
             .Select((clip, index) => (clip, index))
@@ -625,10 +625,10 @@ internal static class EffectiveVideoRequestProjector
             EffectiveClipPlanningContext source = clips[fromIndex];
             EffectiveClipPlanningContext target = clips[toIndex];
             ClipSpec sourceClip = source.Effective;
-            BoundaryExecutionMode requested =
+            BoundaryJoinType requested =
                 BoundaryPolicy.ParsePlanMode(sourceClip.BoundaryOut, out bool known);
             if (!known
-                || requested == BoundaryExecutionMode.Cut)
+                || requested == BoundaryJoinType.Cut)
             {
                 continue;
             }
@@ -657,7 +657,7 @@ internal static class EffectiveVideoRequestProjector
                 sourceClip.Id));
             authoredBoundaryModes[sourceClip.Id] = requested;
             projectedBoundaryFallbacks[sourceClip.Id] =
-                BoundaryFallback.ArchitectureRuleUnsupported;
+                BoundaryFallbackReason.ArchitectureRuleUnsupported;
             source.Effective = sourceClip with
             {
                 BoundaryOut = Constants.BoundaryOutCut,

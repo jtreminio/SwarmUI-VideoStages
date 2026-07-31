@@ -32,8 +32,8 @@ internal static class ClipPlanCompiler
                 new StageOutputPlan(
                     IsTimelineTerminal: isClipTerminal && context.IsLastClip && !context.IsMultiClip,
                     context.FirstStageOrdinal + i < context.TotalStageCount - 1
-                        ? IntermediateOutputPolicy.ControlledByHostSetting
-                        : IntermediateOutputPolicy.NotEligible,
+                        ? IntermediateOutputEligibility.ControlledByHostSetting
+                        : IntermediateOutputEligibility.NotEligible,
                     clip.SaveAudioTrack))
             {
                 ResolvedModel = resolvedModel,

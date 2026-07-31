@@ -56,7 +56,7 @@ internal sealed class LtxClipRefResolver(
     {
         foreach (ResolvedClipRef clipRef in clipRefs)
         {
-            if (clipRef.Reference.FrameOrigin == ImageReferenceFrameOrigin.Start
+            if (clipRef.Reference.FrameOrigin == ImageReferenceFrameEdge.Start
                 && clipRef.Reference.Frame == 1)
             {
                 return clipRef;

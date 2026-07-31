@@ -47,7 +47,7 @@ internal static class Ltx2StagePlanExtensions
     /// <summary>The stage authors its own opening frame, which outranks any implicit frame-1 guide.</summary>
     internal static bool HasExplicitFirstFrameReference(this StagePlan stage) =>
         stage.RequireLtx2Payload().FrameReferences.Any(reference =>
-            reference.FrameOrigin == ImageReferenceFrameOrigin.Start && reference.Frame == 1);
+            reference.FrameOrigin == ImageReferenceFrameEdge.Start && reference.Frame == 1);
 
     internal static Ltx2ClipPayload RequireLtx2Payload(this ClipPlan clip)
     {
@@ -164,7 +164,7 @@ internal enum ImageReferenceSourceKind
     Unknown,
 }
 
-internal enum ImageReferenceFrameOrigin
+internal enum ImageReferenceFrameEdge
 {
     Start,
     End,
@@ -175,7 +175,7 @@ internal sealed record ImageReferencePlan(
     string RawSource,
     int? Base2EditStageIndex,
     int Frame,
-    ImageReferenceFrameOrigin FrameOrigin,
+    ImageReferenceFrameEdge FrameOrigin,
     double Strength,
     string UploadFileName,
     string InlineData);

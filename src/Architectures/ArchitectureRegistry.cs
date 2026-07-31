@@ -47,8 +47,8 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                     $"Video architecture '{descriptor.Id}' has missing, duplicate, or invalid "
                         + "entry modes.");
             }
-            BoundaryExecutionMode[] missingBoundaryModes = [
-                .. Enum.GetValues<BoundaryExecutionMode>()
+            BoundaryJoinType[] missingBoundaryModes = [
+                .. Enum.GetValues<BoundaryJoinType>()
                     .Where(mode => !descriptor.BoundaryRules.ContainsKey(mode))
             ];
             if (missingBoundaryModes.Length > 0)

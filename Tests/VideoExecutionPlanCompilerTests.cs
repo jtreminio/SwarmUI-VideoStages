@@ -322,7 +322,7 @@ public class VideoExecutionPlanCompilerTests
             {
                 Assert.Equal(ImageReferenceSourceKind.Upload, reference.SourceKind);
                 Assert.Equal(5, reference.Frame);
-                Assert.Equal(ImageReferenceFrameOrigin.Start, reference.FrameOrigin);
+                Assert.Equal(ImageReferenceFrameEdge.Start, reference.FrameOrigin);
                 Assert.Equal(0.25, reference.Strength);
                 Assert.Equal("opening.png", reference.UploadFileName);
             },
@@ -330,12 +330,12 @@ public class VideoExecutionPlanCompilerTests
             {
                 Assert.Equal(ImageReferenceSourceKind.Base2Edit, reference.SourceKind);
                 Assert.Equal(2, reference.Base2EditStageIndex);
-                Assert.Equal(ImageReferenceFrameOrigin.End, reference.FrameOrigin);
+                Assert.Equal(ImageReferenceFrameEdge.End, reference.FrameOrigin);
                 Assert.Equal(0.9, reference.Strength);
             });
         Assert.Equal(StageAudioAction.CaptureForReuse, ltx.AudioAction);
         Assert.Equal(
-            IntermediateOutputPolicy.ControlledByHostSetting,
+            IntermediateOutputEligibility.ControlledByHostSetting,
             compiled.Output.IntermediatePolicy);
         Assert.True(compiled.Output.PreserveConfiguredAudioTrackSave);
 
@@ -517,10 +517,10 @@ public class VideoExecutionPlanCompilerTests
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, source));
 
         BoundaryPlan boundary = plan.Boundaries[0];
-        Assert.Equal(BoundaryExecutionMode.Continue, boundary.Requested);
-        Assert.Equal(BoundaryExecutionMode.Cut, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Continue, boundary.Requested);
+        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
         Assert.Equal(
-            BoundaryFallback.ArchitectureRuleUnsupported,
+            BoundaryFallbackReason.ArchitectureRuleUnsupported,
             boundary.Fallback);
         Assert.Equal(0, boundary.ContinuityWindowFrames);
         Assert.Contains(plan.Diagnostics, d =>
@@ -543,8 +543,8 @@ public class VideoExecutionPlanCompilerTests
 
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, next));
 
-        Assert.Equal(BoundaryFallback.TargetHasFirstFrameReference, plan.Boundaries[0].Fallback);
-        Assert.Equal(BoundaryExecutionMode.Cut, plan.Boundaries[0].Effective);
+        Assert.Equal(BoundaryFallbackReason.TargetHasFirstFrameReference, plan.Boundaries[0].Fallback);
+        Assert.Equal(BoundaryJoinType.Cut, plan.Boundaries[0].Effective);
     }
 
     [Fact]
@@ -553,7 +553,7 @@ public class VideoExecutionPlanCompilerTests
         ClipSpec first = GeneratedClip(0, Stage(10)) with { BoundaryOut = Constants.BoundaryOutContinue };
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, GeneratedClip(1, Stage(11))));
 
-        Assert.Equal(BoundaryExecutionMode.Continue, plan.Boundaries[0].Effective);
+        Assert.Equal(BoundaryJoinType.Continue, plan.Boundaries[0].Effective);
     }
 
     [Fact]
@@ -569,7 +569,7 @@ public class VideoExecutionPlanCompilerTests
 
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, second));
 
-        Assert.Equal(BoundaryExecutionMode.Cut, plan.Boundaries[0].Effective);
+        Assert.Equal(BoundaryJoinType.Cut, plan.Boundaries[0].Effective);
         Assert.Equal(0, plan.Boundaries[0].ContinuityWindowFrames);
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "boundary-frame-budget-reconciled");
@@ -587,7 +587,7 @@ public class VideoExecutionPlanCompilerTests
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, GeneratedClip(1, Stage(11))));
 
         BoundaryPlan boundary = plan.Boundaries[0];
-        Assert.Equal(BoundaryExecutionMode.Crossfade, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, boundary.Effective);
         Assert.Equal(24, boundary.OverlapFrames);
         Assert.True(boundary.RequiresRuntimeMergeValidation);
         Assert.Single(plan.Boundaries);

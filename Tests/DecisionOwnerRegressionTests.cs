@@ -571,7 +571,7 @@ public class DecisionOwnerRegressionTests
                 ArchitecturePayload: null,
                 new(
                     IsTimelineTerminal: true,
-                    IntermediateOutputPolicy.NotEligible,
+                    IntermediateOutputEligibility.NotEligible,
                     PreserveConfiguredAudioTrackSave: false))
         ],
         Audio: null)
@@ -592,7 +592,7 @@ public class DecisionOwnerRegressionTests
                 ClipCapability.None,
                 StageCapability.ImageInput),
             new ArchitectureBoundaryPolicy(
-                new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>()));
+                new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>()));
     }
 
     /// <summary>

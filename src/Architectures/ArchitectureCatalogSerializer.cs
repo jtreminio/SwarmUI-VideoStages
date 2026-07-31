@@ -186,11 +186,11 @@ internal static class ArchitectureCatalogSerializer
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
-    private static string SerializeBoundaryMode(BoundaryExecutionMode mode) => mode switch
+    private static string SerializeBoundaryMode(BoundaryJoinType mode) => mode switch
     {
-        BoundaryExecutionMode.Cut => "cut",
-        BoundaryExecutionMode.Continue => "continue",
-        BoundaryExecutionMode.Crossfade => "crossfade",
+        BoundaryJoinType.Cut => "cut",
+        BoundaryJoinType.Continue => "continue",
+        BoundaryJoinType.Crossfade => "crossfade",
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
 

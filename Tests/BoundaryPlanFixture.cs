@@ -22,7 +22,7 @@ internal static class BoundaryPlanFixture
             string raw = boundaryOuts is not null && i < boundaryOuts.Count
                 ? boundaryOuts[i]
                 : Constants.BoundaryOutCut;
-            BoundaryExecutionMode mode = BoundaryPolicy.ParsePlanMode(raw, out bool known);
+            BoundaryJoinType mode = BoundaryPolicy.ParsePlanMode(raw, out bool known);
             int overlap = boundaryOverlapPrefs is not null && i < boundaryOverlapPrefs.Count
                 ? boundaryOverlapPrefs[i]
                 : Ltx2BoundaryPolicy.DefaultFrames;
@@ -35,13 +35,13 @@ internal static class BoundaryPlanFixture
                 i,
                 mode,
                 mode,
-                mode == BoundaryExecutionMode.Cut ? 0 : overlap,
-                mode == BoundaryExecutionMode.Continue ? continuityWindow : 0,
-                RequiresRuntimeMergeValidation: mode != BoundaryExecutionMode.Cut,
-                known ? BoundaryFallback.None : BoundaryFallback.UnknownBoundaryKind)
+                mode == BoundaryJoinType.Cut ? 0 : overlap,
+                mode == BoundaryJoinType.Continue ? continuityWindow : 0,
+                RequiresRuntimeMergeValidation: mode != BoundaryJoinType.Cut,
+                known ? BoundaryFallbackReason.None : BoundaryFallbackReason.UnknownBoundaryKind)
             {
                 FrameStep = 8,
-                MinFrames = mode == BoundaryExecutionMode.Cut ? 0 : 8,
+                MinFrames = mode == BoundaryJoinType.Cut ? 0 : 8,
             });
         }
         return BoundaryOverlapPlanner.ResolvePlanBudgets(frames ?? [], boundaries);
