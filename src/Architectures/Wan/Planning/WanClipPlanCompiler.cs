@@ -7,7 +7,7 @@ namespace VideoStages.Architectures.Wan.Planning;
 
 internal sealed record WanClipPlanCompilation(
     WanClipPayload Payload,
-    IReadOnlyDictionary<int, WanStagePayload> Stages,
+    IReadOnlyDictionary<int, StockHostVideoStagePayload> Stages,
     IReadOnlyList<PlanDiagnostic> Diagnostics);
 
 /// <summary>
@@ -40,7 +40,7 @@ internal static class WanClipPlanCompiler
             }
         }
 
-        Dictionary<int, WanStagePayload> stages = [];
+        Dictionary<int, StockHostVideoStagePayload> stages = [];
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
         bool sourcedEntry = clip.SourceVideo is not null;
         Refuse(
@@ -103,19 +103,19 @@ internal static class WanClipPlanCompiler
                         stage.Control),
                 "decoded-input partial control that quantizes to sampler start step 0",
                 stage.Id);
-            WanStagePayload payload = new(
+            StockHostVideoStagePayload payload = new(
+                    WanArchitectureModule.ArchitectureId,
                     resolved.ModelName,
+                    resolved.ModelClassId,
+                    resolved.CompatibilityClassId,
+                    NormalLoraTargetPolicy.ModelOnly,
                     stage.Control,
                     stage.Steps,
                     stage.CfgScale,
                     stage.Sampler,
                     stage.Scheduler,
                     StageUpscalePlanCompiler.Compile(stage),
-                    loras)
-            {
-                ModelClassId = resolved.ModelClassId,
-                CompatibilityClassId = resolved.CompatibilityClassId,
-            };
+                    loras);
             stages.Add(stage.ClipStageRawIndex, payload);
         }
         WanFrameReferencePlan firstReference = CompileReference(

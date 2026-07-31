@@ -122,7 +122,7 @@ public class HostVideoArchitectureTests
                 new Dictionary<int, ResolvedVideoModel> { [0] = resolved },
                 new(512, 512, 24));
 
-        HostVideoStagePayload payload = Assert.IsType<HostVideoStagePayload>(
+        StockHostVideoStagePayload payload = Assert.IsType<StockHostVideoStagePayload>(
             compilation.StagePayloads[0]);
         Assert.Equal(
             targetsTextEncoder

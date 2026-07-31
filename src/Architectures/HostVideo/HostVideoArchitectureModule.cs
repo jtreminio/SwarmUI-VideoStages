@@ -266,7 +266,8 @@ internal sealed class HostVideoArchitectureModule :
                     stage.ClipStageRawIndex));
             }
 
-            stages[stage.ClipStageRawIndex] = new HostVideoStagePayload(
+            stages[stage.ClipStageRawIndex] = new StockHostVideoStagePayload(
+                ArchitectureId,
                 resolved.ModelName,
                 resolved.ModelClassId,
                 resolved.CompatibilityClassId,
@@ -343,25 +344,6 @@ internal sealed class HostVideoArchitectureModule :
             TargetDisallowsInitialReference: false);
 }
 
-internal sealed record HostVideoStagePayload(
-    string Model,
-    string ModelClassId,
-    string CompatibilityClassId,
-    NormalLoraTargetPolicy LoraTargetPolicy,
-    double Control,
-    int Steps,
-    double CfgScale,
-    string Sampler,
-    string Scheduler,
-    StageUpscalePlan Upscale,
-    ImmutableArray<NormalLoraPlan> Loras) :
-    IArchitectureStagePayload,
-    IHostVideoStageSettings
-{
-    public ArchitectureId ArchitectureId =>
-        HostVideoArchitectureModule.ArchitectureId;
-}
-
 internal sealed record HostVideoClipPayload(
     int ClipId,
     string CompatibilityClassId) :
@@ -380,8 +362,14 @@ internal sealed record HostVideoClipPayload(
 
 internal static class HostVideoPlanExtensions
 {
-    internal static HostVideoStagePayload RequireHostVideoPayload(this StagePlan stage) =>
-        stage?.ArchitecturePayload as HostVideoStagePayload
-        ?? throw new InvalidOperationException(
-            $"Stage {stage?.StageId} has no generic host-video payload.");
+    internal static StockHostVideoStagePayload RequireHostVideoPayload(this StagePlan stage)
+    {
+        if (stage?.ArchitecturePayload is not StockHostVideoStagePayload payload
+            || payload.ArchitectureId != HostVideoArchitectureModule.ArchitectureId)
+        {
+            throw new InvalidOperationException(
+                $"Stage {stage?.StageId} has no generic host-video payload.");
+        }
+        return payload;
+    }
 }

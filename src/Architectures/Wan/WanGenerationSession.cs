@@ -113,7 +113,7 @@ internal sealed class WanGenerationSession(
         HostVideoDecodedStageInput stageInput,
         int sectionId)
     {
-        WanStagePayload payload = stage.RequireWanPayload();
+        StockHostVideoStagePayload payload = stage.RequireWanPayload();
         using (ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
             g.UserInput,
             clip.ClipId,
@@ -216,7 +216,7 @@ internal sealed class WanGenerationSession(
         StagePlan stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        WanStagePayload payload = stage.RequireWanPayload();
+        StockHostVideoStagePayload payload = stage.RequireWanPayload();
         if (clip.EntryMode != ArchitectureEntryMode.TextToVideo
             || clip.Input != ClipInputKind.EmptyLatent
             || stage.ClipStageIndex != 0)
@@ -462,7 +462,7 @@ internal sealed class WanGenerationSession(
         StagePlan stage,
         int sectionId)
     {
-        WanStagePayload payload = stage.RequireWanPayload();
+        StockHostVideoStagePayload payload = stage.RequireWanPayload();
         T2IModel videoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId)
             ?? throw new SwarmUserErrorException(
                 $"VideoStages: clip {clip.ClipId} could not resolve Wan video model "

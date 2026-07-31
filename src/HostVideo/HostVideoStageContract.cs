@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
@@ -23,6 +24,22 @@ internal interface IHostVideoStageSettings
 
     StageUpscalePlan Upscale { get; }
 }
+
+internal sealed record StockHostVideoStagePayload(
+    ArchitectureId ArchitectureId,
+    string Model,
+    string ModelClassId,
+    string CompatibilityClassId,
+    NormalLoraTargetPolicy LoraTargetPolicy,
+    double Control,
+    int Steps,
+    double CfgScale,
+    string Sampler,
+    string Scheduler,
+    StageUpscalePlan Upscale,
+    ImmutableArray<NormalLoraPlan> Loras) :
+    IArchitectureStagePayload,
+    IHostVideoStageSettings;
 
 /// <summary>
 /// Shared sampler-step arithmetic for stock-host decoded-video refinement.

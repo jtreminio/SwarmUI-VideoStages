@@ -85,7 +85,7 @@ internal sealed class HostVideoGenerationSession(
         HostVideoDecodedStageInput stageInput,
         int sectionId)
     {
-        HostVideoStagePayload payload = stage.RequireHostVideoPayload();
+        StockHostVideoStagePayload payload = stage.RequireHostVideoPayload();
         using (ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
             generator.UserInput,
             clip.ClipId,
@@ -151,7 +151,7 @@ internal sealed class HostVideoGenerationSession(
         StagePlan stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        HostVideoStagePayload payload = stage.RequireHostVideoPayload();
+        StockHostVideoStagePayload payload = stage.RequireHostVideoPayload();
         if (clip.EntryMode != ArchitectureEntryMode.TextToVideo
             || clip.Input != ClipInputKind.EmptyLatent
             || stage.ClipStageIndex != 0)
@@ -256,7 +256,7 @@ internal sealed class HostVideoGenerationSession(
         StagePlan stage,
         int sectionId)
     {
-        HostVideoStagePayload payload = stage.RequireHostVideoPayload();
+        StockHostVideoStagePayload payload = stage.RequireHostVideoPayload();
         T2IModel videoModel = generator.UserInput.Get(
             T2IParamTypes.VideoModel,
             null,

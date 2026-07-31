@@ -6,6 +6,7 @@ using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.HostVideo;
 using VideoStages.Architectures.Wan;
 using VideoStages.Architectures.Wan.Planning;
+using VideoStages.HostVideo;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -671,7 +672,7 @@ public sealed class EffectiveVideoRequestTests
             plan.Diagnostics,
             diagnostic => diagnostic.Code
                 == "effective-request.unsupported-upscale-ignored");
-        WanStagePayload payload = plan.Clips[0].Stages[1].RequireWanPayload();
+        StockHostVideoStagePayload payload = plan.Clips[0].Stages[1].RequireWanPayload();
         Assert.Equal(StageUpscaleMode.None, payload.Upscale.Mode);
         Assert.Equal(1, payload.Upscale.Factor);
     }

@@ -580,8 +580,8 @@ public class WanArchitectureTests
         Assert.Equal(2, compiled.Stages.Count);
         Assert.Equal(StageInputKind.RootMedia, compiled.Stages[0].Input);
         Assert.Equal(StageInputKind.PreviousStage, compiled.Stages[1].Input);
-        WanStagePayload firstPayload = compiled.Stages[0].RequireWanPayload();
-        WanStagePayload secondPayload = compiled.Stages[1].RequireWanPayload();
+        StockHostVideoStagePayload firstPayload = compiled.Stages[0].RequireWanPayload();
+        StockHostVideoStagePayload secondPayload = compiled.Stages[1].RequireWanPayload();
         Assert.Equal("wan-model", firstPayload.Model);
         Assert.Equal(1, firstPayload.Control);
         Assert.Equal(12, firstPayload.Steps);
@@ -605,7 +605,7 @@ public class WanArchitectureTests
             UpscaleMethod = "pixel-bicubic",
         };
 
-        WanStagePayload payload = Assert.Single(
+        StockHostVideoStagePayload payload = Assert.Single(
             Assert.Single(Compile(GeneratedClip(0, stage)).Clips).Stages)
             .RequireWanPayload();
 
@@ -699,7 +699,7 @@ public class WanArchitectureTests
             ],
         };
 
-        WanStagePayload payload = Assert.Single(
+        StockHostVideoStagePayload payload = Assert.Single(
             Assert.Single(Compile(clip).Clips).Stages).RequireWanPayload();
 
         Assert.Collection(
