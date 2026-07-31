@@ -51,7 +51,7 @@ internal class StageRunner
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
         ClipContext clipContext,
-        StageExecutionOptions executionOptions,
+        bool requiresDedicatedOutput,
         RootExecutionPolicy rootPolicy)
     {
         ArgumentNullException.ThrowIfNull(stage);
@@ -83,7 +83,7 @@ internal class StageRunner
             stage,
             sectionId,
             clipContext,
-            executionOptions,
+            requiresDedicatedOutput,
             rootPolicy);
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
         using IDisposable controlNetScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>

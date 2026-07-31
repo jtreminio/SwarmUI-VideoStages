@@ -21,8 +21,11 @@ internal sealed record StageClipExecutionContext(
     StageSequenceRootSources RootSources,
     TimelineAssemblySession Assembly,
     StageHostExecutionScope HostScope,
-    StageExecutionOptions ExecutionOptions,
-    RootExecutionPolicy RootPolicy);
+    RootExecutionPolicy RootPolicy)
+{
+    public bool RequiresDedicatedOutput =>
+        Plan.Clips.Count > 1 || HostScope.PublishesIntermediateStages;
+}
 
 /// <summary>Executes one planned clip and returns its terminal runtime artifact.</summary>
 internal sealed class StageClipExecutor(
@@ -181,7 +184,7 @@ internal sealed class StageClipExecutor(
             guideRef,
             store,
             clipContext,
-            context.ExecutionOptions,
+            context.RequiresDedicatedOutput,
             context.RootPolicy);
         guideReferences.CaptureStageOutput(plannedStage);
         context.HostScope.PublishIntermediate(plannedStage);

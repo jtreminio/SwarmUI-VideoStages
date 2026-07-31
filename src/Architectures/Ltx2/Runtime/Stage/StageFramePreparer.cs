@@ -18,12 +18,11 @@ internal sealed class StageFramePreparer(
         StagePlan stage,
         int sectionId,
         ClipContext clipContext,
-        StageExecutionOptions executionOptions,
+        bool requiresDedicatedOutput,
         RootExecutionPolicy rootPolicy)
     {
         ArgumentNullException.ThrowIfNull(stage);
         ArgumentNullException.ThrowIfNull(clipContext);
-        ArgumentNullException.ThrowIfNull(executionOptions);
         ArgumentNullException.ThrowIfNull(rootPolicy);
 
         WGNodeData currentMedia = g.CurrentMedia
@@ -60,7 +59,7 @@ internal sealed class StageFramePreparer(
             postVideoChain,
             sourceMedia,
             genInfo,
-            executionOptions);
+            requiresDedicatedOutput);
     }
 
     private WorkflowGenerator.ImageToVideoGenInfo BuildGenInfo(

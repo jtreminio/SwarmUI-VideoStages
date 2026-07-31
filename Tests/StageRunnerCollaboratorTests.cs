@@ -1,13 +1,11 @@
 using System.Collections.Immutable;
 using ComfyTyped.Core;
-using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
-using VideoStages.Architectures.Ltx2;
 using VideoStages.Planning;
 using Xunit;
 
@@ -29,7 +27,7 @@ public class StageRunnerCollaboratorTests
             typeof(StagePlan),
             typeof(int),
             typeof(ClipContext),
-            typeof(StageExecutionOptions),
+            typeof(bool),
             typeof(RootExecutionPolicy));
         AssertTypedMethod(
             typeof(StageUpscaleGraphBuilder),

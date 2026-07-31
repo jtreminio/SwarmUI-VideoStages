@@ -14,7 +14,7 @@ internal sealed class StageFrame
         LtxPostVideoChainCapture postVideoChain,
         WGNodeData sourceMedia,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageExecutionOptions executionOptions)
+        bool requiresDedicatedOutput)
     {
         Stage = stage;
         ClipContext = clipContext;
@@ -23,7 +23,7 @@ internal sealed class StageFrame
         PostVideoChain = postVideoChain;
         SourceMedia = sourceMedia;
         GenInfo = genInfo;
-        ExecutionOptions = executionOptions;
+        RequiresDedicatedOutput = requiresDedicatedOutput;
     }
 
     public StagePlan Stage { get; }
@@ -33,7 +33,7 @@ internal sealed class StageFrame
     public LtxPostVideoChainCapture PostVideoChain { get; }
     public WGNodeData SourceMedia { get; }
     public WorkflowGenerator.ImageToVideoGenInfo GenInfo { get; }
-    public StageExecutionOptions ExecutionOptions { get; }
+    public bool RequiresDedicatedOutput { get; }
 
     public bool NeedsCropGuidesAfterSampler { get; set; }
 
@@ -52,11 +52,4 @@ internal sealed class StageFrame
     public JArray AudioReferencePreWrapPosCond { get; set; }
 
     public JArray AudioReferencePreWrapNegCond { get; set; }
-}
-
-internal sealed record StageExecutionOptions(
-    bool IsParallelMultiClip,
-    bool PublishIntermediateStages)
-{
-    public bool RequiresDedicatedOutput => IsParallelMultiClip || PublishIntermediateStages;
 }

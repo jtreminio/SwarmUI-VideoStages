@@ -22,10 +22,10 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
         int outputWidth = stageFrame.ClipContext.Dimensions.Width;
         int outputHeight = stageFrame.ClipContext.Dimensions.Height;
         bool splicedIntoNativeChain = postVideoChain is not null;
-        bool parallelMultiClip = stageFrame.ExecutionOptions.RequiresDedicatedOutput;
+        bool requiresDedicatedOutput = stageFrame.RequiresDedicatedOutput;
         if (splicedIntoNativeChain)
         {
-            if (parallelMultiClip)
+            if (requiresDedicatedOutput)
             {
                 LtxPostVideoChainSplicer.SpliceCurrentOutputToDedicatedBranch(
                     postVideoChain,
@@ -41,7 +41,7 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
                 LtxPostVideoChainSplicer.SpliceCurrentOutput(postVideoChain, g, genInfo.Vae);
             }
 
-            if (!parallelMultiClip && postVideoChain.HasPostDecodeWrappers)
+            if (!requiresDedicatedOutput && postVideoChain.HasPostDecodeWrappers)
             {
                 ApplyCurrentMediaOutputMetadata(
                     outputWidth,
