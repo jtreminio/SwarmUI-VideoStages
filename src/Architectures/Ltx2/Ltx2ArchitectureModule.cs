@@ -64,7 +64,6 @@ internal sealed class Ltx2ArchitectureModule :
                 | StageCapability.LatentModelUpscale
                 | StageCapability.Lora
                 | StageCapability.IcLora
-                | StageCapability.Hdr
                 | StageCapability.FrameReferences),
         Ltx2BoundaryPolicy.Instance)
     {
@@ -126,7 +125,7 @@ internal sealed class Ltx2ArchitectureModule :
         IReadOnlyList<ClipPlan> architectureClips,
         IReadOnlyList<ClipPlan> timelineClips,
         RootPlan root) =>
-        Ltx2ConditionalRulePolicySource.Validate(architectureClips, timelineClips, root);
+        Ltx2ConditionalRulePolicySource.Validate(architectureClips);
 
 }
 
@@ -134,8 +133,7 @@ internal sealed record Ltx2ClipPayload(
     AudioReusePlan AudioReuse,
     Ltx2AudioInjectionPlan AudioInjection,
     int? ControlNetSourceIndex,
-    ReferenceFramingMode ReferenceFraming,
-    bool RequiresHdrFinalization) :
+    ReferenceFramingMode ReferenceFraming) :
     IArchitectureClipPayload,
     IArchitectureControlNetSourcePlan,
     IArchitectureClipGeometryProjection

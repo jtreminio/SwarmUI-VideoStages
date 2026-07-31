@@ -54,10 +54,7 @@ internal sealed class VideoStagesCoordinator(
         }
         // This is the common pipeline's only post-clip write to the host compatibility surface.
         finalArtifact.PublishTo(g);
-        OutputPublication publication = rootSession.PublishTimeline(finalArtifact);
-        runtimeFactories.FinalizeTimeline(new(
-            planContext.Plan,
-            publication));
+        rootSession.PublishTimeline(finalArtifact);
     }
 
     private void InstallRefineSourceVideo(RootPlan root)

@@ -144,11 +144,7 @@ request preparation. Its lifecycle is:
 1. `PrepareTimeline` for each active factory, with `OwnsGeneratedRoot`;
 2. `CreateSession` once per active architecture;
 3. execute clips through `ArchitectureRuntimeDispatcher`;
-4. dispose every session, including constructor rollback on partial failure;
-5. after publication, run finalizers that report work.
-
-At most one factory may claim `WholeTimelineExclusive` finalization. LTX uses
-that narrow seam for an all-LTX HDR timeline.
+4. dispose every session, including constructor rollback on partial failure.
 
 ## 5. Common clip loop
 
@@ -277,19 +273,18 @@ The ComfyTyped surface has two different meanings of “retention”:
 For code-generation pruning, `comfytyped.keep.json` retains the
 `custom_nodes.ComfyUI-LTXVideo` module and the `SwarmFrameImage` class type.
 Generation expands those facts into `src/Generated/PruneManifest.g.cs`.
-The current generated directory contains 85 node wrappers: 79 are in
-`PruneManifest.AlwaysKeep`; the remaining six are extension-owned Swarm nodes
+The current generated directory contains 83 node wrappers: 78 are in
+`PruneManifest.AlwaysKeep`; the remaining five are extension-owned Swarm nodes
 directly referenced by production C# and are therefore discovered by the prune
 source scan:
 
 - `SwarmAudioLengthToFramesNode`;
 - `SwarmFrameWindowNode`;
 - `SwarmPromptRelayEncodeNode`;
-- `SwarmRampMaskBatchNode`;
-- `SwarmSaveHDRAnimationWSNode`; and
+- `SwarmRampMaskBatchNode`; and
 - `SwarmSetAudioMaskWindowsNode`.
 
-`GeneratedBindingRetentionTests` makes that 79-plus-6 classification exhaustive
+`GeneratedBindingRetentionTests` makes that 78-plus-5 classification exhaustive
 and verifies that every manifest entry names an existing unique generated node.
 
 At runtime, `VideoStagesExtension.OnInit` calls both

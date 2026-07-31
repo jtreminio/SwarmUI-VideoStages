@@ -520,7 +520,6 @@
       latentModelUpscale: "latent-model-upscale",
       lora: "lora",
       icLora: "ic-lora",
-      hdr: "hdr",
       frameReferences: "frame-references"
     }
   };
@@ -535,7 +534,6 @@
     "controlSignalDerivedDuration",
     "stageLoras",
     "icLora",
-    "hdr",
     "upscale"
   ];
   var AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY = [
@@ -557,7 +555,6 @@
     controlSignalDerivedDuration: "Control-signal-derived clip duration",
     stageLoras: "LoRAs",
     icLora: "IC-LoRA",
-    hdr: "HDR",
     upscale: "Stage upscaling"
   };
   var AUTHORING_FEATURE_CAPABILITIES = {
@@ -585,7 +582,6 @@
     ],
     stageLoras: [["stage", CAPABILITY_WIRE_NAMES.stage.lora, null]],
     icLora: [["stage", CAPABILITY_WIRE_NAMES.stage.icLora, null]],
-    hdr: [["stage", CAPABILITY_WIRE_NAMES.stage.hdr, null]],
     upscale: [
       ["stage", CAPABILITY_WIRE_NAMES.stage.pixelUpscale, "pixel"],
       ["stage", CAPABILITY_WIRE_NAMES.stage.modelUpscale, "model"],
@@ -602,8 +598,7 @@
     normalLoraRequiresSamplingStage: "normal-lora-requires-sampling-stage",
     promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
     retakeExcludesReferences: "retake-frame-references-unsupported",
-    retakeRequiresSource: "retake-source-required",
-    uniformTimelineHdr: "mixed-hdr-timeline-unsupported"
+    retakeRequiresSource: "retake-source-required"
   };
 
   // frontend/architectures/conditionalRules.ts
@@ -635,16 +630,6 @@
         return clip !== void 0 && clip.refs.length > 0 && clip.sourceVideo !== null;
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:
         return clip !== void 0 && clip.sourceVideo === null;
-      case CONDITIONAL_RULE_CODES.uniformTimelineHdr: {
-        const clips = context.timelineClips;
-        const hasActiveHdr = context.hasActiveHdr;
-        if (!clips || !hasActiveHdr) return false;
-        if (clips.length < finiteConstraint(rule, "minimumTimelineClips", 2)) {
-          return false;
-        }
-        const hdr = clips.map(hasActiveHdr);
-        return hdr.some(Boolean) && hdr.some((value) => !value);
-      }
       default:
         return true;
     }
@@ -1026,11 +1011,6 @@
         return value.scope === "stage" && hasExactKeys(constraints, ["mutuallyExclusive"]) && isUniqueStringArray(constraints.mutuallyExclusive) && constraints.mutuallyExclusive.length === 2 && constraints.mutuallyExclusive.includes("retake") && constraints.mutuallyExclusive.includes("frameReferences");
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:
         return value.scope === "clip" && hasExactKeys(constraints, ["requiresAnyEntryMode"]) && isEntryModeArray(constraints.requiresAnyEntryMode) && constraints.requiresAnyEntryMode.length === 2 && constraints.requiresAnyEntryMode.includes("source-video") && constraints.requiresAnyEntryMode.includes("refine-video");
-      case CONDITIONAL_RULE_CODES.uniformTimelineHdr:
-        return value.scope === "architecture" && hasExactKeys(constraints, [
-          "uniformTimelineFeature",
-          "minimumTimelineClips"
-        ]) && constraints.uniformTimelineFeature === "hdr" && Number.isInteger(constraints.minimumTimelineClips) && Number(constraints.minimumTimelineClips) >= 2;
     }
     return false;
   };
@@ -1562,657 +1542,6 @@
     };
   };
 
-  // frontend/architectures/ltx2/icLoraPresets.ts
-  var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
-  var IC_LORA_AUTO = "[AUTO]";
-  var DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT = {
-    acceptedKinds: ["image", "video"],
-    driveData: "visual"
-  };
-  var LIPDUB_DRIVE_MEDIA_CONTRACT = {
-    acceptedKinds: ["audio", "video"],
-    driveData: "audio"
-  };
-  var icLoraDriveMediaContractForData = (driveData) => {
-    if (driveData === "audio") {
-      return LIPDUB_DRIVE_MEDIA_CONTRACT;
-    }
-    if (driveData === "visual") {
-      return DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
-    }
-    return { acceptedKinds: [], driveData: "none" };
-  };
-  var IC_LORA_PRESET_CUSTOM_ID = "custom";
-  var IC_LORA_DEFAULT_PRESET_ID = "union-control";
-  var HF = "https://huggingface.co";
-  var IC_LORA_PRESETS = [
-    {
-      id: "union-control",
-      displayName: "Union Control",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "depth",
-      allowedControlTypes: ["none", "canny", "depth", "normal"],
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`,
-      note: "Structural control from depth/canny/normal signals; pick the control type to render. Dims snap to multiples of 64."
-    },
-    {
-      id: "motion-track-control",
-      displayName: "Motion Track Control",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control/resolve/main/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors`,
-      note: "Feed an LTXVDrawTracks-rendered track video (e.g. saved from the official workflow) — hand-made dot videos don't match the training format. Dims snap to multiples of 64."
-    },
-    {
-      id: "in-outpainting",
-      displayName: "In/Outpainting",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting/resolve/main/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors`,
-      note: "Feed a pre-masked clip: masked region must be hard #66FF00 green, slightly dilated, losslessly encoded. Kept regions are still re-generated, not composited back."
-    },
-    {
-      id: "ingredients",
-      displayName: "Ingredients",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients/resolve/main/ltx-2.3-22b-ic-lora-ingredients-0.9.safetensors`,
-      note: "Feed the reference sheet as drive media (a still image works). Prompt pattern: '### Reference Sheet Description' per cell, then '### Target Description'."
-    },
-    {
-      id: "lipdub",
-      displayName: "LipDub",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors`,
-      note: "Generates new speech + lips from the prompt's words. The drive source supplies the speaker sample: audio is used directly, and video sources contribute only their audio while their frames are ignored.",
-      driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT
-    },
-    {
-      id: "hdr",
-      displayName: "HDR",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      // The repo also ships an auxiliary hdr-scene-emb file; only the LoRA itself is fetched.
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-HDR/resolve/main/ltx-2.3-22b-ic-lora-hdr-0.9.safetensors`,
-      hdr: true,
-      note: "HDR generation; feed the SDR clip as the drive video. Output is auto-tonemapped to SDR (LogC3 decompressed). Suggested prompt: 'HDR footage'."
-    },
-    {
-      id: "pixel-spatial-upscaler-x2",
-      displayName: "Pixel Spatial Upscaler ×2",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors`,
-      note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64."
-    },
-    {
-      id: "pixel-spatial-upscaler-x4",
-      displayName: "Pixel Spatial Upscaler ×4",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors`,
-      note: "Apply on a refine stage with Upscale ×4 and source Incoming media. Dims snap to multiples of 128."
-    },
-    {
-      id: "deblur",
-      displayName: "Deblur",
-      triggerPhrase: "DEBLUR",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Deblur/resolve/main/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors`,
-      note: "Feed the blurry clip directly. Lower toward 0.8 if over-sharpened."
-    },
-    {
-      id: "decompression",
-      displayName: "Decompression",
-      triggerPhrase: "ENHANCE QUALITY",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Decompression/resolve/main/ltx-2.3-22b-ic-lora-decompression-0.9.safetensors`,
-      note: "Removes compression artifacts; feed a low-bitrate clip directly."
-    },
-    {
-      id: "water-simulation",
-      displayName: "Water Simulation",
-      triggerPhrase: "ADD WATER",
-      strength: 1.2,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Water-Simulation/resolve/main/ltx-2.3-22b-ic-lora-water-simulation-0.9.safetensors`,
-      note: "Sweet spot ~1.2 (1.0 subtle; ≥1.5 warps faces). Feed a dry clip."
-    },
-    {
-      id: "instant-shave",
-      displayName: "Instant Shave",
-      triggerPhrase: "REMOVEBEARD",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Instant-Shave/resolve/main/ltx-2.3-22b-ic-lora-instant-shave-0.9.safetensors`,
-      note: "Feed a bearded clip directly. Lower toward 0.8 if artifacts appear."
-    },
-    {
-      id: "colorization",
-      displayName: "Colorization",
-      triggerPhrase: "COLORIZE",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Colorization/resolve/main/ltx-2.3-22b-ic-lora-colorization-0.9.safetensors`,
-      note: "Feed the grayscale clip; describe the restored colors after the COLORIZE trigger."
-    },
-    {
-      id: "cross-eyed",
-      displayName: "Cross-Eyed",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Cross-Eyed/resolve/main/ltx-2.3-22b-ic-lora-cross-eyed-0.9.safetensors`,
-      note: "Turns straight eyes inward (convergent strabismus) in close-up portrait clips; describe the effect in the prompt."
-    },
-    {
-      id: "day-to-night",
-      displayName: "Day to Night",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Day-To-Night/resolve/main/ltx-2.3-22b-ic-lora-day-to-night-0.9.safetensors`,
-      note: "Relights a daytime clip to night. Prompt the night look and add 'Only the lighting changes from day to night'. Best at ~4s clips."
-    },
-    {
-      id: "restyle",
-      displayName: "ReStyle",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Cseti/LTX2.3-22B_ReStyle_IC-LoRA/resolve/main/852654_LTX2.3-22B_ReStyle_IC-LoRA_8000_v0.1.safetensors`,
-      note: "Style transfer over an existing clip; see README for style prompts."
-    },
-    {
-      id: "cameraman",
-      displayName: "Cameraman",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2/resolve/main/LTX2.3-22B_IC-LoRA-Cameraman_v2_14000.safetensors`,
-      note: "Camera-motion control driven by the reference video's movement."
-    },
-    {
-      id: "crossview-prompt",
-      displayName: "CrossView Prompt",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt/resolve/main/LTX2.3-22B_IC-LoRA-CrossView-Prompt_v0.9_13700.safetensors`,
-      note: "Re-renders the scene from a prompted new camera viewpoint."
-    },
-    {
-      id: "outpaint",
-      displayName: "Outpaint",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint/resolve/main/ltx-2.3-22b-ic-lora-outpaint.safetensors`,
-      note: "Extends the frame beyond the source video's borders."
-    },
-    {
-      id: "refocus",
-      displayName: "ReFocus",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus/resolve/main/ltx-2.3-22b-ic-lora-refocus.safetensors`,
-      note: "Fixes lens blur / refocuses; feed the blurred clip directly."
-    },
-    {
-      id: "vr360-outpaint",
-      displayName: "VR 360 Outpaint",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA/resolve/main/360vroutpaint_v2_step09000.safetensors`,
-      note: "Outpaints to an equirectangular 360° panorama."
-    }
-  ];
-  var findIcLoraPreset = (id) => {
-    const wanted = `${id ?? ""}`.trim();
-    if (!wanted || wanted === IC_LORA_PRESET_CUSTOM_ID) {
-      return null;
-    }
-    return IC_LORA_PRESETS.find((preset) => preset.id === wanted) ?? null;
-  };
-  var icLoraDisplayName = (entry) => {
-    if (entry.preset === IC_LORA_PRESET_CUSTOM_ID) {
-      return entry.lora;
-    }
-    return findIcLoraPreset(entry.preset)?.displayName ?? entry.preset;
-  };
-  var icLoraDriveMediaContract = (preset) => preset?.driveMedia ?? DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
-  var icLoraWeightsStem = (preset) => preset.weightsUrl.slice(preset.weightsUrl.lastIndexOf("/") + 1).replace(/\.safetensors$/i, "");
-  var icLoraAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset).replaceAll(".", "_")}`;
-  var icLoraLegacyAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset)}`;
-  var icLoraRepoUrl = (preset) => preset.weightsUrl.split("/resolve/")[0];
-  var icLoraTriggerHint = (preset) => {
-    if (!preset?.triggerPhrase) {
-      return "";
-    }
-    return `Prepend "${preset.triggerPhrase}" to your prompt`;
-  };
-
-  // frontend/architectures/ltx2/dimensionPolicy.ts
-  var presetFactors = /* @__PURE__ */ new Map([
-    ["union-control", 2],
-    ["motion-track-control", 2],
-    ["pixel-spatial-upscaler-x2", 2],
-    ["pixel-spatial-upscaler-x4", 4]
-  ]);
-  var normalizeModelName = (value) => {
-    const normalized = `${value ?? ""}`.trim().replaceAll("\\", "/");
-    const basename = normalized.slice(normalized.lastIndexOf("/") + 1);
-    return basename.replace(/\.safetensors$/i, "").toLowerCase();
-  };
-  var curatedModelFactors = /* @__PURE__ */ new Map();
-  for (const [presetId, factor] of presetFactors) {
-    const preset = findIcLoraPreset(presetId);
-    for (const name of preset ? [icLoraAutoModelName(preset), icLoraLegacyAutoModelName(preset)] : []) {
-      curatedModelFactors.set(normalizeModelName(name), factor);
-    }
-  }
-  var icLoraDimensionFactor = (entry) => {
-    const presetFactor = presetFactors.get(
-      `${entry.preset ?? ""}`.trim().toLowerCase()
-    );
-    if (presetFactor) {
-      return presetFactor;
-    }
-    return curatedModelFactors.get(normalizeModelName(entry.lora)) ?? 1;
-  };
-  var ltx2DimensionFactor = (clip) => Math.max(1, ...clip.icLoras.map((entry) => icLoraDimensionFactor(entry)));
-  var ltx2DimensionMultiple = (clip) => ROOT_DIMENSION_STEP * ltx2DimensionFactor(clip);
-
-  // frontend/icLoraAuthoring.ts
-  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
-  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
-  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
-  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
-  var IC_LORA_SOURCE_UPLOAD = "Upload";
-  var IC_LORA_SOURCE_INCOMING = "Incoming";
-  var IC_LORA_STAGE_ALL = -1;
-  var IC_LORA_STRENGTH_MIN = 0;
-  var IC_LORA_STRENGTH_MAX = 2;
-  var IC_LORA_STRENGTH_STEP = 0.05;
-  var IC_LORA_STRENGTH_DEFAULT = 1;
-  var IC_LORA_ATTENTION_MIN = 0;
-  var IC_LORA_ATTENTION_MAX = 1;
-  var IC_LORA_ATTENTION_STEP = 0.05;
-  var IC_LORA_ATTENTION_DEFAULT = 1;
-
-  // frontend/architectures/ltx2/icLoraDriveAvailability.ts
-  var canUseIncomingIcLoraDrive = (entry, clip, clipIdx, clips, generatedEntryMode) => {
-    const executable = executableClipIndexes(clips);
-    if (entry.driveData === "none" || !executable.includes(clipIdx)) {
-      return false;
-    }
-    const acceptedKinds = entry.driveMediaKinds;
-    const activeStageIndexes = clip.stages.slice(0, activeStageCount(clip)).map((_stage, rawIndex) => rawIndex);
-    const targetedStages = entry.stage >= 0 ? activeStageIndexes.includes(entry.stage) ? [entry.stage] : [] : activeStageIndexes;
-    const hasPreviousClipOutput = executable.some((index) => index < clipIdx);
-    return targetedStages.length > 0 && targetedStages.every((targetStage) => {
-      const activeStageIndex = activeStageIndexes.indexOf(targetStage);
-      const incomingKind = activeStageIndex > 0 || clip.sourceVideo ? "video" : hasPreviousClipOutput ? "video" : generatedEntryMode === "image-to-video" ? "image" : null;
-      return incomingKind !== null && acceptedKinds.includes(incomingKind);
-    });
-  };
-  var reconcileIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode) => {
-    const clip = clips[clipIdx];
-    if (!clip) {
-      return false;
-    }
-    let changed = false;
-    for (const entry of clip.icLoras) {
-      if (entry.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
-        entry,
-        clip,
-        clipIdx,
-        clips,
-        generatedEntryMode
-      )) {
-        entry.driveSource = IC_LORA_SOURCE_UPLOAD;
-        changed = true;
-      }
-    }
-    return changed;
-  };
-
-  // frontend/normalizationMedia.ts
-  var normalizePromptWindow = (raw) => {
-    const duration = numberOr(raw.duration, 0);
-    if (!(duration > 0)) {
-      return null;
-    }
-    const start = nonNegativeNumber(raw.start);
-    return {
-      id: normalizeOptionalEntityId(raw.id),
-      prompt: text(raw.prompt),
-      start,
-      duration
-    };
-  };
-  var normalizePromptWindows = (rawClip) => {
-    const rawList = rawClip.promptWindows;
-    if (!Array.isArray(rawList)) {
-      return [];
-    }
-    return rawList.map((entry) => normalizePromptWindow(isRecord(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
-  };
-  var normalizeRetake = (value, clipDuration) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const startRaw = nonNegativeNumber(value.startSeconds);
-    const lengthRaw = numberOr(value.lengthSeconds, 0);
-    const window2 = clampWindowInDuration(
-      startRaw,
-      lengthRaw,
-      clipDuration,
-      RETAKE_MIN_DURATION
-    );
-    if (!window2) {
-      return null;
-    }
-    const strengthRaw = value.strength;
-    const strength = strengthRaw == null ? RETAKE_STRENGTH_DEFAULT : clampedNumber(
-      strengthRaw,
-      RETAKE_STRENGTH_DEFAULT,
-      RETAKE_STRENGTH_MIN,
-      RETAKE_STRENGTH_MAX
-    );
-    return {
-      id: normalizeOptionalEntityId(value.id),
-      startSeconds: roundToTenth(window2.startSeconds),
-      lengthSeconds: roundToTenth(window2.lengthSeconds),
-      strength
-    };
-  };
-  var normalizeSourceVideo = (value) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const data = trimmedText(value.data);
-    if (!data) {
-      return null;
-    }
-    const durationSeconds = nonNegativeNumber(value.durationSeconds);
-    let startSeconds = nonNegativeNumber(value.startSeconds);
-    let lengthSeconds = nonNegativeNumber(value.lengthSeconds);
-    if (durationSeconds > 0) {
-      startSeconds = Math.min(
-        startSeconds,
-        Math.max(0, durationSeconds - CLIP_DURATION_MIN)
-      );
-      if (!(lengthSeconds > 0)) {
-        lengthSeconds = durationSeconds - startSeconds;
-      }
-      lengthSeconds = Math.min(lengthSeconds, durationSeconds - startSeconds);
-    }
-    if (!(lengthSeconds > 0)) {
-      return null;
-    }
-    return {
-      data,
-      fileName: normalizeUploadFileName(
-        value.fileName == null ? null : text(value.fileName)
-      ),
-      fps: nonNegativeNumber(value.fps),
-      durationSeconds: roundToTenth(durationSeconds),
-      startSeconds: roundToTenth(startSeconds),
-      lengthSeconds: roundToTenth(lengthSeconds)
-    };
-  };
-  var normalizeUploadedMedia = (value) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const data = trimmedText(value.data);
-    if (!data) {
-      return null;
-    }
-    return {
-      data,
-      fileName: normalizeUploadFileName(
-        value.fileName == null ? null : text(value.fileName)
-      )
-    };
-  };
-
-  // frontend/architectures/ltx2/icLoraNormalization.ts
-  var CONTROLNET_SOURCE_OPTIONS = [
-    "ControlNet 1",
-    "ControlNet 2",
-    "ControlNet 3"
-  ];
-  var controlNetSourceIndex = (value) => {
-    const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
-    if (!compact.startsWith("controlnet")) {
-      return null;
-    }
-    const rawIndex = compact.slice("controlnet".length);
-    if (!/^[+-]?\d+$/.test(rawIndex)) {
-      return null;
-    }
-    const oneBased = Number(rawIndex);
-    return Number.isSafeInteger(oneBased) && oneBased >= 1 && oneBased <= 3 ? oneBased - 1 : null;
-  };
-  var canonicalControlNetSource = (value) => {
-    const index = controlNetSourceIndex(value);
-    return index === null ? null : CONTROLNET_SOURCE_OPTIONS[index];
-  };
-  var defaultIcLora = (overrides = {}) => ({
-    lora: "",
-    preset: IC_LORA_PRESET_CUSTOM_ID,
-    driveSource: IC_LORA_SOURCE_UPLOAD,
-    driveData: "visual",
-    driveMediaKinds: ["image", "video"],
-    stage: IC_LORA_STAGE_ALL,
-    strength: IC_LORA_STRENGTH_DEFAULT,
-    attentionStrength: IC_LORA_ATTENTION_DEFAULT,
-    controlType: "none",
-    hdr: false,
-    driveMedia: null,
-    ...overrides
-  });
-  var normalizeControlNetLora = (value) => {
-    const raw = `${value ?? ""}`.trim();
-    if (!raw) {
-      return "";
-    }
-    const squeezed = raw.replace(/\s+/g, "").toLowerCase();
-    if (squeezed === "(none)") {
-      return "";
-    }
-    return raw;
-  };
-  var normalizeIcLoraControlType = (value) => {
-    const raw = `${value ?? ""}`.trim().toLowerCase();
-    return raw === "canny" || raw === "depth" || raw === "normal" ? raw : "none";
-  };
-  var normalizeIcLoraDriveSource = (value) => {
-    const authored = `${value ?? ""}`.trim();
-    const compact = authored.replace(/\s+/g, "").toLowerCase();
-    if (!compact || compact === "upload") {
-      return IC_LORA_SOURCE_UPLOAD;
-    }
-    if (compact === "incoming" || compact === "stageinput") {
-      return IC_LORA_SOURCE_INCOMING;
-    }
-    return canonicalControlNetSource(authored) ?? authored;
-  };
-  var normalizeIcLoraDriveData = (value) => {
-    const compact = `${value ?? ""}`.trim().toLowerCase();
-    return compact === "none" || compact === "audio" ? compact : "visual";
-  };
-  var mediaKindsForData = (driveData) => icLoraDriveMediaContractForData(driveData).acceptedKinds;
-  var normalizeIcLoraDriveMediaKinds = (value, driveData) => {
-    const allowed = mediaKindsForData(driveData);
-    if (!Array.isArray(value)) {
-      return [...allowed];
-    }
-    const kinds = [];
-    for (const rawKind of value) {
-      const kind = `${rawKind ?? ""}`.trim().toLowerCase();
-      if ((kind === "image" || kind === "video" || kind === "audio") && allowed.includes(kind) && !kinds.includes(kind)) {
-        kinds.push(kind);
-      }
-    }
-    return kinds;
-  };
-  var normalizeIcLoraStage = (value, stageCount) => {
-    if (value == null || `${value}`.trim() === "") {
-      return IC_LORA_STAGE_ALL;
-    }
-    const stage = Math.trunc(Number(value));
-    if (!Number.isFinite(stage) || stage < 0) {
-      return IC_LORA_STAGE_ALL;
-    }
-    return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
-  };
-  var normalizeIcLora = (raw, stageCount = 0, _sourcedClip = false) => {
-    if (!isRecord(raw)) {
-      return null;
-    }
-    const lora = normalizeControlNetLora(raw.lora);
-    if (!lora) {
-      return null;
-    }
-    const preset = `${raw.preset ?? ""}`.trim();
-    const repairsLegacyCustomAuto = lora === IC_LORA_AUTO && (!preset || preset === IC_LORA_PRESET_CUSTOM_ID);
-    const normalizedPreset = repairsLegacyCustomAuto ? IC_LORA_DEFAULT_PRESET_ID : preset || IC_LORA_PRESET_CUSTOM_ID;
-    const repairedPreset = repairsLegacyCustomAuto ? findIcLoraPreset(normalizedPreset) : null;
-    const driveData = normalizeIcLoraDriveData(raw.driveData);
-    const driveMediaKinds = normalizeIcLoraDriveMediaKinds(
-      raw.driveMediaKinds,
-      driveData
-    );
-    const normalizedDriveMedia = normalizeUploadedMedia(raw.driveMedia);
-    let driveSource = normalizeIcLoraDriveSource(raw.driveSource);
-    const driveMedia = driveSource === IC_LORA_SOURCE_UPLOAD && driveData !== "none" && normalizedDriveMedia && driveMediaKinds.some(
-      (kind) => normalizedDriveMedia.data.startsWith(`data:${kind}/`)
-    ) ? normalizedDriveMedia : null;
-    const stage = normalizeIcLoraStage(raw.stage, stageCount);
-    if (driveData === "none") {
-      driveSource = IC_LORA_SOURCE_UPLOAD;
-    }
-    return {
-      id: normalizeOptionalEntityId(raw.id),
-      lora,
-      preset: normalizedPreset,
-      driveSource,
-      driveData,
-      driveMediaKinds,
-      stage,
-      strength: repairsLegacyCustomAuto ? repairedPreset?.strength ?? IC_LORA_STRENGTH_DEFAULT : snapValueToStep(
-        raw.strength,
-        IC_LORA_STRENGTH_DEFAULT,
-        IC_LORA_STRENGTH_MIN,
-        IC_LORA_STRENGTH_MAX,
-        IC_LORA_STRENGTH_STEP
-      ),
-      attentionStrength: snapValueToStep(
-        raw.attentionStrength,
-        IC_LORA_ATTENTION_DEFAULT,
-        IC_LORA_ATTENTION_MIN,
-        IC_LORA_ATTENTION_MAX,
-        IC_LORA_ATTENTION_STEP
-      ),
-      controlType: driveData !== "visual" ? "none" : repairsLegacyCustomAuto ? repairedPreset?.controlType ?? "none" : normalizeIcLoraControlType(raw.controlType),
-      // Documents authored before the flag existed carry only the preset id; the preset table
-      // (not a name match) seeds the intent, so those documents keep working.
-      hdr: typeof raw.hdr === "boolean" ? raw.hdr : findIcLoraPreset(normalizedPreset)?.hdr ?? false,
-      driveMedia
-    };
-  };
-  var normalizeIcLoras = (rawClip, stageCount = 0, sourcedClip = false) => {
-    if (!Array.isArray(rawClip.icLoras)) {
-      return [];
-    }
-    return rawClip.icLoras.map((entry) => normalizeIcLora(entry, stageCount, sourcedClip)).filter((entry) => entry !== null);
-  };
-  var canonicalizeIcLoraFields = (entry) => {
-    if (entry.driveData === "none") {
-      entry.driveSource = IC_LORA_SOURCE_UPLOAD;
-      entry.driveMedia = null;
-    }
-    entry.driveMediaKinds = normalizeIcLoraDriveMediaKinds(
-      entry.driveMediaKinds,
-      entry.driveData
-    );
-  };
-  var isHdrFeature = (entry) => entry.hdr === true;
-  var hasSlotSourcedIcLora = (icLoras) => icLoras.some((entry) => controlNetSourceIndex(entry.driveSource) !== null);
-
-  // frontend/architectures/ltx2/identity.ts
-  var LTX2_ARCHITECTURE_ID = "ltx2";
-
-  // frontend/architectures/behaviorRegistry.ts
-  var isLtx2 = (architectureId) => architectureId === LTX2_ARCHITECTURE_ID;
-  var architectureDimensionMultiple = (clip, architectureId) => {
-    const requested = isLtx2(architectureId) ? ltx2DimensionMultiple(clip) : ROOT_DIMENSION_STEP;
-    if (!Number.isFinite(requested)) {
-      return ROOT_DIMENSION_STEP;
-    }
-    return Math.max(
-      ROOT_DIMENSION_STEP,
-      Math.ceil(requested / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP
-    );
-  };
-  var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, sourcedClip, options = {}) => {
-    if (isLtx2(architectureId)) {
-      return normalizeIcLoras(
-        rawClip,
-        stageCount,
-        sourcedClip
-      );
-    }
-    return options.preserveDormantLtx === true && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? normalizeIcLoras(rawClip, stageCount, sourcedClip) : [];
-  };
-  var canonicalizeArchitectureIcLoraFields = (architectureId, entry) => {
-    if (isLtx2(architectureId)) {
-      canonicalizeIcLoraFields(entry);
-    }
-  };
-  var reconcileArchitectureIncomingIcLoraDrives = (clips, generatedEntryMode, catalog) => {
-    let changed = false;
-    clips.forEach((clip, clipIdx) => {
-      const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
-      changed = isLtx2(architectureId) && reconcileIncomingIcLoraDrives(
-        clips,
-        clipIdx,
-        generatedEntryMode
-      ) || changed;
-    });
-    return changed;
-  };
-  var reconcileClipArchitectureIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode, catalog) => {
-    const clip = clips[clipIdx];
-    if (!clip) return false;
-    const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
-    return isLtx2(architectureId) && reconcileIncomingIcLoraDrives(clips, clipIdx, generatedEntryMode);
-  };
-  var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => isLtx2(architectureId) && hasSlotSourcedIcLora(entries);
-  var isArchitectureHdrFeature = (architectureId, entry) => isLtx2(architectureId) && isHdrFeature(entry);
-  var architectureIcLoraDisplayName = (architectureId, entry) => isLtx2(architectureId) ? icLoraDisplayName(entry) : entry.lora;
-  var clipHasActiveHdrForArchitecture = (clip, architectureId) => clip.icLoras.some(
-    (entry) => isArchitectureHdrFeature(architectureId, entry) && clip.stages.slice(0, activeStageCount(clip)).some(
-      (_stage, rawStageIdx) => entry.stage < 0 || entry.stage === rawStageIdx
-    )
-  );
-
   // frontend/architectures/policy/clipStageViews.ts
   var UNRESOLVED_ARCHITECTURE_ID = "unsupported";
   var FEATURE_RULE_CODES = {
@@ -2221,21 +1550,16 @@
     retake: [
       CONDITIONAL_RULE_CODES.retakeRequiresSource,
       CONDITIONAL_RULE_CODES.retakeExcludesReferences
-    ],
-    hdr: [CONDITIONAL_RULE_CODES.uniformTimelineHdr]
+    ]
   };
-  var conditionalRuleFor = (clip, feature, descriptor, scope, effectiveArchitectureId) => {
+  var conditionalRuleFor = (clip, feature, descriptor, scope) => {
     const codes = FEATURE_RULE_CODES[feature];
     if (!codes) return void 0;
     for (const code of codes) {
       const rule = conditionalRule(descriptor.rules, code);
       if (rule && evaluateConditionalRule(rule, {
         clip,
-        timelineClips: scope.timelineClips,
-        hasActiveHdr: (target) => clipHasActiveHdrForArchitecture(
-          target,
-          effectiveArchitectureId(target)
-        )
+        timelineClips: scope.timelineClips
       })) {
         return rule;
       }
@@ -2279,8 +1603,7 @@
           clip,
           feature,
           descriptor,
-          scope,
-          (target) => effectiveClipIdentity(target).architectureId
+          scope
         );
         const supported = architectureFeatureSupport(feature, {
           capabilities
@@ -3102,6 +2425,635 @@
     }
     console.debug(`[VideoStages debug ${area}]`, message, ...details);
   };
+
+  // frontend/architectures/ltx2/icLoraPresets.ts
+  var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
+  var IC_LORA_AUTO = "[AUTO]";
+  var DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT = {
+    acceptedKinds: ["image", "video"],
+    driveData: "visual"
+  };
+  var LIPDUB_DRIVE_MEDIA_CONTRACT = {
+    acceptedKinds: ["audio", "video"],
+    driveData: "audio"
+  };
+  var icLoraDriveMediaContractForData = (driveData) => {
+    if (driveData === "audio") {
+      return LIPDUB_DRIVE_MEDIA_CONTRACT;
+    }
+    if (driveData === "visual") {
+      return DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
+    }
+    return { acceptedKinds: [], driveData: "none" };
+  };
+  var IC_LORA_PRESET_CUSTOM_ID = "custom";
+  var IC_LORA_DEFAULT_PRESET_ID = "union-control";
+  var HF = "https://huggingface.co";
+  var IC_LORA_PRESETS = [
+    {
+      id: "union-control",
+      displayName: "Union Control",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "depth",
+      allowedControlTypes: ["none", "canny", "depth", "normal"],
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`,
+      note: "Structural control from depth/canny/normal signals; pick the control type to render. Dims snap to multiples of 64."
+    },
+    {
+      id: "motion-track-control",
+      displayName: "Motion Track Control",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control/resolve/main/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors`,
+      note: "Feed an LTXVDrawTracks-rendered track video (e.g. saved from the official workflow) — hand-made dot videos don't match the training format. Dims snap to multiples of 64."
+    },
+    {
+      id: "in-outpainting",
+      displayName: "In/Outpainting",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting/resolve/main/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors`,
+      note: "Feed a pre-masked clip: masked region must be hard #66FF00 green, slightly dilated, losslessly encoded. Kept regions are still re-generated, not composited back."
+    },
+    {
+      id: "ingredients",
+      displayName: "Ingredients",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients/resolve/main/ltx-2.3-22b-ic-lora-ingredients-0.9.safetensors`,
+      note: "Feed the reference sheet as drive media (a still image works). Prompt pattern: '### Reference Sheet Description' per cell, then '### Target Description'."
+    },
+    {
+      id: "lipdub",
+      displayName: "LipDub",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors`,
+      note: "Generates new speech + lips from the prompt's words. The drive source supplies the speaker sample: audio is used directly, and video sources contribute only their audio while their frames are ignored.",
+      driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT
+    },
+    {
+      id: "pixel-spatial-upscaler-x2",
+      displayName: "Pixel Spatial Upscaler ×2",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors`,
+      note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64."
+    },
+    {
+      id: "pixel-spatial-upscaler-x4",
+      displayName: "Pixel Spatial Upscaler ×4",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors`,
+      note: "Apply on a refine stage with Upscale ×4 and source Incoming media. Dims snap to multiples of 128."
+    },
+    {
+      id: "deblur",
+      displayName: "Deblur",
+      triggerPhrase: "DEBLUR",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Deblur/resolve/main/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors`,
+      note: "Feed the blurry clip directly. Lower toward 0.8 if over-sharpened."
+    },
+    {
+      id: "decompression",
+      displayName: "Decompression",
+      triggerPhrase: "ENHANCE QUALITY",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Decompression/resolve/main/ltx-2.3-22b-ic-lora-decompression-0.9.safetensors`,
+      note: "Removes compression artifacts; feed a low-bitrate clip directly."
+    },
+    {
+      id: "water-simulation",
+      displayName: "Water Simulation",
+      triggerPhrase: "ADD WATER",
+      strength: 1.2,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Water-Simulation/resolve/main/ltx-2.3-22b-ic-lora-water-simulation-0.9.safetensors`,
+      note: "Sweet spot ~1.2 (1.0 subtle; ≥1.5 warps faces). Feed a dry clip."
+    },
+    {
+      id: "instant-shave",
+      displayName: "Instant Shave",
+      triggerPhrase: "REMOVEBEARD",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Instant-Shave/resolve/main/ltx-2.3-22b-ic-lora-instant-shave-0.9.safetensors`,
+      note: "Feed a bearded clip directly. Lower toward 0.8 if artifacts appear."
+    },
+    {
+      id: "colorization",
+      displayName: "Colorization",
+      triggerPhrase: "COLORIZE",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Colorization/resolve/main/ltx-2.3-22b-ic-lora-colorization-0.9.safetensors`,
+      note: "Feed the grayscale clip; describe the restored colors after the COLORIZE trigger."
+    },
+    {
+      id: "cross-eyed",
+      displayName: "Cross-Eyed",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Cross-Eyed/resolve/main/ltx-2.3-22b-ic-lora-cross-eyed-0.9.safetensors`,
+      note: "Turns straight eyes inward (convergent strabismus) in close-up portrait clips; describe the effect in the prompt."
+    },
+    {
+      id: "day-to-night",
+      displayName: "Day to Night",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Day-To-Night/resolve/main/ltx-2.3-22b-ic-lora-day-to-night-0.9.safetensors`,
+      note: "Relights a daytime clip to night. Prompt the night look and add 'Only the lighting changes from day to night'. Best at ~4s clips."
+    },
+    {
+      id: "restyle",
+      displayName: "ReStyle",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Cseti/LTX2.3-22B_ReStyle_IC-LoRA/resolve/main/852654_LTX2.3-22B_ReStyle_IC-LoRA_8000_v0.1.safetensors`,
+      note: "Style transfer over an existing clip; see README for style prompts."
+    },
+    {
+      id: "cameraman",
+      displayName: "Cameraman",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2/resolve/main/LTX2.3-22B_IC-LoRA-Cameraman_v2_14000.safetensors`,
+      note: "Camera-motion control driven by the reference video's movement."
+    },
+    {
+      id: "crossview-prompt",
+      displayName: "CrossView Prompt",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt/resolve/main/LTX2.3-22B_IC-LoRA-CrossView-Prompt_v0.9_13700.safetensors`,
+      note: "Re-renders the scene from a prompted new camera viewpoint."
+    },
+    {
+      id: "outpaint",
+      displayName: "Outpaint",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint/resolve/main/ltx-2.3-22b-ic-lora-outpaint.safetensors`,
+      note: "Extends the frame beyond the source video's borders."
+    },
+    {
+      id: "refocus",
+      displayName: "ReFocus",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus/resolve/main/ltx-2.3-22b-ic-lora-refocus.safetensors`,
+      note: "Fixes lens blur / refocuses; feed the blurred clip directly."
+    },
+    {
+      id: "vr360-outpaint",
+      displayName: "VR 360 Outpaint",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA/resolve/main/360vroutpaint_v2_step09000.safetensors`,
+      note: "Outpaints to an equirectangular 360° panorama."
+    }
+  ];
+  var findIcLoraPreset = (id) => {
+    const wanted = `${id ?? ""}`.trim();
+    if (!wanted || wanted === IC_LORA_PRESET_CUSTOM_ID) {
+      return null;
+    }
+    return IC_LORA_PRESETS.find((preset) => preset.id === wanted) ?? null;
+  };
+  var icLoraDisplayName = (entry) => {
+    if (entry.preset === IC_LORA_PRESET_CUSTOM_ID) {
+      return entry.lora;
+    }
+    return findIcLoraPreset(entry.preset)?.displayName ?? entry.preset;
+  };
+  var icLoraDriveMediaContract = (preset) => preset?.driveMedia ?? DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
+  var icLoraWeightsStem = (preset) => preset.weightsUrl.slice(preset.weightsUrl.lastIndexOf("/") + 1).replace(/\.safetensors$/i, "");
+  var icLoraAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset).replaceAll(".", "_")}`;
+  var icLoraLegacyAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset)}`;
+  var icLoraRepoUrl = (preset) => preset.weightsUrl.split("/resolve/")[0];
+  var icLoraTriggerHint = (preset) => {
+    if (!preset?.triggerPhrase) {
+      return "";
+    }
+    return `Prepend "${preset.triggerPhrase}" to your prompt`;
+  };
+
+  // frontend/architectures/ltx2/dimensionPolicy.ts
+  var presetFactors = /* @__PURE__ */ new Map([
+    ["union-control", 2],
+    ["motion-track-control", 2],
+    ["pixel-spatial-upscaler-x2", 2],
+    ["pixel-spatial-upscaler-x4", 4]
+  ]);
+  var normalizeModelName = (value) => {
+    const normalized = `${value ?? ""}`.trim().replaceAll("\\", "/");
+    const basename = normalized.slice(normalized.lastIndexOf("/") + 1);
+    return basename.replace(/\.safetensors$/i, "").toLowerCase();
+  };
+  var curatedModelFactors = /* @__PURE__ */ new Map();
+  for (const [presetId, factor] of presetFactors) {
+    const preset = findIcLoraPreset(presetId);
+    for (const name of preset ? [icLoraAutoModelName(preset), icLoraLegacyAutoModelName(preset)] : []) {
+      curatedModelFactors.set(normalizeModelName(name), factor);
+    }
+  }
+  var icLoraDimensionFactor = (entry) => {
+    const presetFactor = presetFactors.get(
+      `${entry.preset ?? ""}`.trim().toLowerCase()
+    );
+    if (presetFactor) {
+      return presetFactor;
+    }
+    return curatedModelFactors.get(normalizeModelName(entry.lora)) ?? 1;
+  };
+  var ltx2DimensionFactor = (clip) => Math.max(1, ...clip.icLoras.map((entry) => icLoraDimensionFactor(entry)));
+  var ltx2DimensionMultiple = (clip) => ROOT_DIMENSION_STEP * ltx2DimensionFactor(clip);
+
+  // frontend/icLoraAuthoring.ts
+  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
+  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
+  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
+  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
+  var IC_LORA_SOURCE_UPLOAD = "Upload";
+  var IC_LORA_SOURCE_INCOMING = "Incoming";
+  var IC_LORA_STAGE_ALL = -1;
+  var IC_LORA_STRENGTH_MIN = 0;
+  var IC_LORA_STRENGTH_MAX = 2;
+  var IC_LORA_STRENGTH_STEP = 0.05;
+  var IC_LORA_STRENGTH_DEFAULT = 1;
+  var IC_LORA_ATTENTION_MIN = 0;
+  var IC_LORA_ATTENTION_MAX = 1;
+  var IC_LORA_ATTENTION_STEP = 0.05;
+  var IC_LORA_ATTENTION_DEFAULT = 1;
+
+  // frontend/architectures/ltx2/icLoraDriveAvailability.ts
+  var canUseIncomingIcLoraDrive = (entry, clip, clipIdx, clips, generatedEntryMode) => {
+    const executable = executableClipIndexes(clips);
+    if (entry.driveData === "none" || !executable.includes(clipIdx)) {
+      return false;
+    }
+    const acceptedKinds = entry.driveMediaKinds;
+    const activeStageIndexes = clip.stages.slice(0, activeStageCount(clip)).map((_stage, rawIndex) => rawIndex);
+    const targetedStages = entry.stage >= 0 ? activeStageIndexes.includes(entry.stage) ? [entry.stage] : [] : activeStageIndexes;
+    const hasPreviousClipOutput = executable.some((index) => index < clipIdx);
+    return targetedStages.length > 0 && targetedStages.every((targetStage) => {
+      const activeStageIndex = activeStageIndexes.indexOf(targetStage);
+      const incomingKind = activeStageIndex > 0 || clip.sourceVideo ? "video" : hasPreviousClipOutput ? "video" : generatedEntryMode === "image-to-video" ? "image" : null;
+      return incomingKind !== null && acceptedKinds.includes(incomingKind);
+    });
+  };
+  var reconcileIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode) => {
+    const clip = clips[clipIdx];
+    if (!clip) {
+      return false;
+    }
+    let changed = false;
+    for (const entry of clip.icLoras) {
+      if (entry.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+        entry,
+        clip,
+        clipIdx,
+        clips,
+        generatedEntryMode
+      )) {
+        entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+        changed = true;
+      }
+    }
+    return changed;
+  };
+
+  // frontend/normalizationMedia.ts
+  var normalizePromptWindow = (raw) => {
+    const duration = numberOr(raw.duration, 0);
+    if (!(duration > 0)) {
+      return null;
+    }
+    const start = nonNegativeNumber(raw.start);
+    return {
+      id: normalizeOptionalEntityId(raw.id),
+      prompt: text(raw.prompt),
+      start,
+      duration
+    };
+  };
+  var normalizePromptWindows = (rawClip) => {
+    const rawList = rawClip.promptWindows;
+    if (!Array.isArray(rawList)) {
+      return [];
+    }
+    return rawList.map((entry) => normalizePromptWindow(isRecord(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
+  };
+  var normalizeRetake = (value, clipDuration) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const startRaw = nonNegativeNumber(value.startSeconds);
+    const lengthRaw = numberOr(value.lengthSeconds, 0);
+    const window2 = clampWindowInDuration(
+      startRaw,
+      lengthRaw,
+      clipDuration,
+      RETAKE_MIN_DURATION
+    );
+    if (!window2) {
+      return null;
+    }
+    const strengthRaw = value.strength;
+    const strength = strengthRaw == null ? RETAKE_STRENGTH_DEFAULT : clampedNumber(
+      strengthRaw,
+      RETAKE_STRENGTH_DEFAULT,
+      RETAKE_STRENGTH_MIN,
+      RETAKE_STRENGTH_MAX
+    );
+    return {
+      id: normalizeOptionalEntityId(value.id),
+      startSeconds: roundToTenth(window2.startSeconds),
+      lengthSeconds: roundToTenth(window2.lengthSeconds),
+      strength
+    };
+  };
+  var normalizeSourceVideo = (value) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const data = trimmedText(value.data);
+    if (!data) {
+      return null;
+    }
+    const durationSeconds = nonNegativeNumber(value.durationSeconds);
+    let startSeconds = nonNegativeNumber(value.startSeconds);
+    let lengthSeconds = nonNegativeNumber(value.lengthSeconds);
+    if (durationSeconds > 0) {
+      startSeconds = Math.min(
+        startSeconds,
+        Math.max(0, durationSeconds - CLIP_DURATION_MIN)
+      );
+      if (!(lengthSeconds > 0)) {
+        lengthSeconds = durationSeconds - startSeconds;
+      }
+      lengthSeconds = Math.min(lengthSeconds, durationSeconds - startSeconds);
+    }
+    if (!(lengthSeconds > 0)) {
+      return null;
+    }
+    return {
+      data,
+      fileName: normalizeUploadFileName(
+        value.fileName == null ? null : text(value.fileName)
+      ),
+      fps: nonNegativeNumber(value.fps),
+      durationSeconds: roundToTenth(durationSeconds),
+      startSeconds: roundToTenth(startSeconds),
+      lengthSeconds: roundToTenth(lengthSeconds)
+    };
+  };
+  var normalizeUploadedMedia = (value) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const data = trimmedText(value.data);
+    if (!data) {
+      return null;
+    }
+    return {
+      data,
+      fileName: normalizeUploadFileName(
+        value.fileName == null ? null : text(value.fileName)
+      )
+    };
+  };
+
+  // frontend/architectures/ltx2/icLoraNormalization.ts
+  var CONTROLNET_SOURCE_OPTIONS = [
+    "ControlNet 1",
+    "ControlNet 2",
+    "ControlNet 3"
+  ];
+  var controlNetSourceIndex = (value) => {
+    const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
+    if (!compact.startsWith("controlnet")) {
+      return null;
+    }
+    const rawIndex = compact.slice("controlnet".length);
+    if (!/^[+-]?\d+$/.test(rawIndex)) {
+      return null;
+    }
+    const oneBased = Number(rawIndex);
+    return Number.isSafeInteger(oneBased) && oneBased >= 1 && oneBased <= 3 ? oneBased - 1 : null;
+  };
+  var canonicalControlNetSource = (value) => {
+    const index = controlNetSourceIndex(value);
+    return index === null ? null : CONTROLNET_SOURCE_OPTIONS[index];
+  };
+  var defaultIcLora = (overrides = {}) => ({
+    lora: "",
+    preset: IC_LORA_PRESET_CUSTOM_ID,
+    driveSource: IC_LORA_SOURCE_UPLOAD,
+    driveData: "visual",
+    driveMediaKinds: ["image", "video"],
+    stage: IC_LORA_STAGE_ALL,
+    strength: IC_LORA_STRENGTH_DEFAULT,
+    attentionStrength: IC_LORA_ATTENTION_DEFAULT,
+    controlType: "none",
+    driveMedia: null,
+    ...overrides
+  });
+  var normalizeControlNetLora = (value) => {
+    const raw = `${value ?? ""}`.trim();
+    if (!raw) {
+      return "";
+    }
+    const squeezed = raw.replace(/\s+/g, "").toLowerCase();
+    if (squeezed === "(none)") {
+      return "";
+    }
+    return raw;
+  };
+  var normalizeIcLoraControlType = (value) => {
+    const raw = `${value ?? ""}`.trim().toLowerCase();
+    return raw === "canny" || raw === "depth" || raw === "normal" ? raw : "none";
+  };
+  var normalizeIcLoraDriveSource = (value) => {
+    const authored = `${value ?? ""}`.trim();
+    const compact = authored.replace(/\s+/g, "").toLowerCase();
+    if (!compact || compact === "upload") {
+      return IC_LORA_SOURCE_UPLOAD;
+    }
+    if (compact === "incoming" || compact === "stageinput") {
+      return IC_LORA_SOURCE_INCOMING;
+    }
+    return canonicalControlNetSource(authored) ?? authored;
+  };
+  var normalizeIcLoraDriveData = (value) => {
+    const compact = `${value ?? ""}`.trim().toLowerCase();
+    return compact === "none" || compact === "audio" ? compact : "visual";
+  };
+  var mediaKindsForData = (driveData) => icLoraDriveMediaContractForData(driveData).acceptedKinds;
+  var normalizeIcLoraDriveMediaKinds = (value, driveData) => {
+    const allowed = mediaKindsForData(driveData);
+    if (!Array.isArray(value)) {
+      return [...allowed];
+    }
+    const kinds = [];
+    for (const rawKind of value) {
+      const kind = `${rawKind ?? ""}`.trim().toLowerCase();
+      if ((kind === "image" || kind === "video" || kind === "audio") && allowed.includes(kind) && !kinds.includes(kind)) {
+        kinds.push(kind);
+      }
+    }
+    return kinds;
+  };
+  var normalizeIcLoraStage = (value, stageCount) => {
+    if (value == null || `${value}`.trim() === "") {
+      return IC_LORA_STAGE_ALL;
+    }
+    const stage = Math.trunc(Number(value));
+    if (!Number.isFinite(stage) || stage < 0) {
+      return IC_LORA_STAGE_ALL;
+    }
+    return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
+  };
+  var normalizeIcLora = (raw, stageCount = 0, _sourcedClip = false) => {
+    if (!isRecord(raw)) {
+      return null;
+    }
+    const lora = normalizeControlNetLora(raw.lora);
+    if (!lora) {
+      return null;
+    }
+    const preset = `${raw.preset ?? ""}`.trim();
+    const repairsLegacyCustomAuto = lora === IC_LORA_AUTO && (!preset || preset === IC_LORA_PRESET_CUSTOM_ID);
+    const normalizedPreset = repairsLegacyCustomAuto ? IC_LORA_DEFAULT_PRESET_ID : preset || IC_LORA_PRESET_CUSTOM_ID;
+    const repairedPreset = repairsLegacyCustomAuto ? findIcLoraPreset(normalizedPreset) : null;
+    const driveData = normalizeIcLoraDriveData(raw.driveData);
+    const driveMediaKinds = normalizeIcLoraDriveMediaKinds(
+      raw.driveMediaKinds,
+      driveData
+    );
+    const normalizedDriveMedia = normalizeUploadedMedia(raw.driveMedia);
+    let driveSource = normalizeIcLoraDriveSource(raw.driveSource);
+    const driveMedia = driveSource === IC_LORA_SOURCE_UPLOAD && driveData !== "none" && normalizedDriveMedia && driveMediaKinds.some(
+      (kind) => normalizedDriveMedia.data.startsWith(`data:${kind}/`)
+    ) ? normalizedDriveMedia : null;
+    const stage = normalizeIcLoraStage(raw.stage, stageCount);
+    if (driveData === "none") {
+      driveSource = IC_LORA_SOURCE_UPLOAD;
+    }
+    return {
+      id: normalizeOptionalEntityId(raw.id),
+      lora,
+      preset: normalizedPreset,
+      driveSource,
+      driveData,
+      driveMediaKinds,
+      stage,
+      strength: repairsLegacyCustomAuto ? repairedPreset?.strength ?? IC_LORA_STRENGTH_DEFAULT : snapValueToStep(
+        raw.strength,
+        IC_LORA_STRENGTH_DEFAULT,
+        IC_LORA_STRENGTH_MIN,
+        IC_LORA_STRENGTH_MAX,
+        IC_LORA_STRENGTH_STEP
+      ),
+      attentionStrength: snapValueToStep(
+        raw.attentionStrength,
+        IC_LORA_ATTENTION_DEFAULT,
+        IC_LORA_ATTENTION_MIN,
+        IC_LORA_ATTENTION_MAX,
+        IC_LORA_ATTENTION_STEP
+      ),
+      controlType: driveData !== "visual" ? "none" : repairsLegacyCustomAuto ? repairedPreset?.controlType ?? "none" : normalizeIcLoraControlType(raw.controlType),
+      driveMedia
+    };
+  };
+  var normalizeIcLoras = (rawClip, stageCount = 0, sourcedClip = false) => {
+    if (!Array.isArray(rawClip.icLoras)) {
+      return [];
+    }
+    return rawClip.icLoras.map((entry) => normalizeIcLora(entry, stageCount, sourcedClip)).filter((entry) => entry !== null);
+  };
+  var canonicalizeIcLoraFields = (entry) => {
+    if (entry.driveData === "none") {
+      entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+      entry.driveMedia = null;
+    }
+    entry.driveMediaKinds = normalizeIcLoraDriveMediaKinds(
+      entry.driveMediaKinds,
+      entry.driveData
+    );
+  };
+  var hasSlotSourcedIcLora = (icLoras) => icLoras.some((entry) => controlNetSourceIndex(entry.driveSource) !== null);
+
+  // frontend/architectures/ltx2/identity.ts
+  var LTX2_ARCHITECTURE_ID = "ltx2";
+
+  // frontend/architectures/behaviorRegistry.ts
+  var isLtx2 = (architectureId) => architectureId === LTX2_ARCHITECTURE_ID;
+  var architectureDimensionMultiple = (clip, architectureId) => {
+    const requested = isLtx2(architectureId) ? ltx2DimensionMultiple(clip) : ROOT_DIMENSION_STEP;
+    if (!Number.isFinite(requested)) {
+      return ROOT_DIMENSION_STEP;
+    }
+    return Math.max(
+      ROOT_DIMENSION_STEP,
+      Math.ceil(requested / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP
+    );
+  };
+  var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, sourcedClip, options = {}) => {
+    if (isLtx2(architectureId)) {
+      return normalizeIcLoras(
+        rawClip,
+        stageCount,
+        sourcedClip
+      );
+    }
+    return options.preserveDormantLtx === true && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? normalizeIcLoras(rawClip, stageCount, sourcedClip) : [];
+  };
+  var canonicalizeArchitectureIcLoraFields = (architectureId, entry) => {
+    if (isLtx2(architectureId)) {
+      canonicalizeIcLoraFields(entry);
+    }
+  };
+  var reconcileArchitectureIncomingIcLoraDrives = (clips, generatedEntryMode, catalog) => {
+    let changed = false;
+    clips.forEach((clip, clipIdx) => {
+      const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
+      changed = isLtx2(architectureId) && reconcileIncomingIcLoraDrives(
+        clips,
+        clipIdx,
+        generatedEntryMode
+      ) || changed;
+    });
+    return changed;
+  };
+  var reconcileClipArchitectureIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode, catalog) => {
+    const clip = clips[clipIdx];
+    if (!clip) return false;
+    const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
+    return isLtx2(architectureId) && reconcileIncomingIcLoraDrives(clips, clipIdx, generatedEntryMode);
+  };
+  var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => isLtx2(architectureId) && hasSlotSourcedIcLora(entries);
+  var architectureIcLoraDisplayName = (architectureId, entry) => isLtx2(architectureId) ? icLoraDisplayName(entry) : entry.lora;
 
   // frontend/architectures/conversion/entryModePolicy.ts
   var firstActiveStageIndex = (clip) => {
@@ -5313,7 +5265,6 @@
           strength: entry.strength,
           attentionStrength: entry.attentionStrength,
           controlType: entry.controlType,
-          hdr: entry.hdr,
           driveMedia: entry.driveMedia
         })),
         saveAudioTrack: clip.saveAudioTrack,
@@ -6253,14 +6204,6 @@
       "IC-LoRA"
     );
     unsupported(
-      !supports("hdr") && clip.icLoras.some(
-        (entry) => isArchitectureHdrFeature(architectureId, entry)
-      ),
-      "hdr",
-      "hdr",
-      "HDR"
-    );
-    unsupported(
       !supports("retake") && clip.retake !== null,
       "retake",
       "retake",
@@ -6589,12 +6532,6 @@
           );
         }
       }
-    }
-    const hdrRule = executable.map(({ clip }) => capabilityViews?.forClip(clip).decision("hdr").rule).find(
-      (rule) => rule?.code === CONDITIONAL_RULE_CODES.uniformTimelineHdr
-    );
-    if (hdrRule) {
-      diagnostics.push(diagnostic("error", hdrRule.code, hdrRule.reason));
     }
     return diagnostics;
   };
@@ -10526,7 +10463,6 @@
                   preset: defaultPreset.id,
                   strength: defaultPreset.strength,
                   controlType: defaultPreset.controlType,
-                  hdr: defaultPreset.hdr === true,
                   driveData: defaultContract.driveData,
                   driveMediaKinds: [
                     ...defaultContract.acceptedKinds
@@ -10572,16 +10508,12 @@
       col.className = "vst-detail-col vst-detail-instance-fields vst-detail-iclora vst-detail-iclora-col";
       col.setAttribute("data-vst-iclora-idx", `${entryIdx2}`);
       const entryAt = (clips, index) => clips[clipIdx]?.icLoras[index];
-      const hdrDecision = clipCapabilities.decision("hdr");
       {
         const fields = col;
-        const persistedHdr = isHdrFeature(entry);
         const preset = findIcLoraPreset(entry.preset);
         const driveMediaKinds = entry.driveMediaKinds;
         const audioDriveMedia = entry.driveData === "audio";
-        const presetOptions = IC_LORA_PRESETS.filter(
-          (preset2) => hdrDecision.supported || preset2.hdr !== true
-        );
+        const presetOptions = IC_LORA_PRESETS;
         const presetSpecs = [
           {
             value: IC_LORA_PRESET_CUSTOM_ID,
@@ -10634,7 +10566,6 @@
                   }
                 }
               }
-              target.hdr = preset2?.hdr === true;
               const nextContract = icLoraDriveMediaContract(preset2);
               target.driveData = nextContract.driveData;
               target.driveMediaKinds = [
@@ -10999,13 +10930,7 @@
           }
           fields.appendChild(hint);
         }
-        if (!persistedHdr || hdrDecision.supported) {
-          ensureIcLoraAutoWeights(
-            entry,
-            defaults.loraValues,
-            context.render
-          );
-        }
+        ensureIcLoraAutoWeights(entry, defaults.loraValues, context.render);
         const autoText = icLoraAutoHint(entry, defaults.loraValues);
         if (autoText) {
           const autoHint = document.createElement("small");
@@ -11015,9 +10940,6 @@
           }
           autoHint.textContent = autoText;
           fields.appendChild(autoHint);
-        }
-        if (persistedHdr && !hdrDecision.supported) {
-          disableCapabilityControls(fields, hdrDecision);
         }
       }
       return col;

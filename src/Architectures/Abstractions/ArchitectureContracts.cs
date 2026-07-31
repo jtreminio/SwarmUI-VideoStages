@@ -86,7 +86,6 @@ internal enum StageCapability
     LatentModelUpscale = 1 << 5,
     Lora = 1 << 6,
     IcLora = 1 << 7,
-    Hdr = 1 << 8,
     FrameReferences = 1 << 9,
 }
 
@@ -142,7 +141,6 @@ internal enum ConditionalRuleFeature
 {
     Retake,
     FrameReferences,
-    Hdr,
 }
 
 internal sealed record MutuallyExclusiveRuleConstraints(
@@ -150,10 +148,6 @@ internal sealed record MutuallyExclusiveRuleConstraints(
 
 internal sealed record RequiredEntryModesRuleConstraints(
     IReadOnlyList<ArchitectureEntryMode> RequiresAnyEntryMode) : RuleConstraints;
-
-internal sealed record UniformTimelineFeatureRuleConstraints(
-    ConditionalRuleFeature UniformTimelineFeature,
-    int MinimumTimelineClips) : RuleConstraints;
 
 /// <summary>
 /// Every conditional rule the frontend evaluates. The wire spelling lives in
@@ -167,7 +161,6 @@ internal enum ConditionalRuleCodeId
     PromptRelayRequiresFixedLength,
     RetakeExcludesReferences,
     RetakeRequiresSource,
-    UniformTimelineHdr,
 }
 
 internal sealed record RuleDecision(
@@ -354,7 +347,6 @@ internal enum AuthoringFeature
     ControlSignalDerivedDuration,
     StageLoras,
     IcLora,
-    Hdr,
     Upscale,
 }
 

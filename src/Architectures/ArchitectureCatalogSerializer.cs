@@ -94,12 +94,6 @@ internal static class ArchitectureCatalogSerializer
                 ["requiresAnyEntryMode"] = new JArray(
                     value.RequiresAnyEntryMode.Select(SerializeEntryMode)),
             },
-            UniformTimelineFeatureRuleConstraints value => new()
-            {
-                ["uniformTimelineFeature"] =
-                    SerializeConditionalFeature(value.UniformTimelineFeature),
-                ["minimumTimelineClips"] = value.MinimumTimelineClips,
-            },
             _ => throw new ArgumentOutOfRangeException(
                 nameof(constraints),
                 constraints,

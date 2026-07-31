@@ -755,7 +755,6 @@ describe("createTimelineDetailStrip", () => {
             strength: 1,
             attentionStrength: 1,
             controlType: "depth",
-            hdr: false,
             driveMedia: null,
         });
         expect(clips[0].stages[0].icLoraStrengths).toEqual([1]);

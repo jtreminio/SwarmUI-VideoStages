@@ -12,26 +12,6 @@ import { deriveAuthoringDiagnostics } from "./authoringDiagnostics";
 import { activeStageCount } from "./clipSemantics";
 import type { Clip } from "./types";
 
-const catalogWithWan = () => {
-    const catalog = testArchitectureCatalog();
-    const ltx = catalog.architectures[0];
-    const wan = structuredClone(ltx);
-    wan.id = "wan22";
-    wan.label = "WAN";
-    wan.rules = [];
-    catalog.architectures.push(wan);
-    catalog.entries.push({
-        value: "wan.safetensors",
-        label: "WAN",
-        architectureId: "wan22",
-        modelProfileId: "wan-profile",
-        modelClassId: "wan-video",
-        compatibilityClassId: "wan-video",
-        entryModes: ["text-to-video", "image-to-video"],
-    });
-    return catalog;
-};
-
 const codes = (clips: Clip[]): string[] =>
     deriveAuthoringDiagnostics(clips, {
         catalog: testArchitectureCatalog(),
@@ -143,96 +123,6 @@ describe("backend-aligned authoring diagnostics", () => {
         ).toContain("retake-frame-references-unsupported");
     });
 
-    it("rejects a mixed HDR and non-HDR executable timeline", () => {
-        const hdr = minimalClip({
-            icLoras: [
-                {
-                    lora: "ltx-ic-lora-hdr.safetensors",
-                    preset: "hdr",
-                    driveSource: "Upload",
-                    driveData: "visual",
-                    driveMediaKinds: ["image", "video"],
-                    stage: -1,
-                    strength: 1,
-                    attentionStrength: 1,
-                    controlType: "none",
-                    hdr: true,
-                    driveMedia: null,
-                },
-            ],
-        });
-        expect(codes([hdr, minimalClip()])).toContain(
-            "mixed-hdr-timeline-unsupported",
-        );
-        expect(codes([hdr, structuredClone(hdr)])).not.toContain(
-            "mixed-hdr-timeline-unsupported",
-        );
-    });
-
-    it("does not apply stale LTX HDR ownership to a model that resolves as WAN", () => {
-        const staleWan = minimalClip({
-            architectureHint: "ltx2",
-            modelProfileId: "ltx-2.3",
-            icLoras: [
-                {
-                    lora: "persisted-hdr.safetensors",
-                    preset: "hdr",
-                    driveSource: "Upload",
-                    driveData: "visual",
-                    driveMediaKinds: ["image", "video"],
-                    stage: -1,
-                    strength: 1,
-                    attentionStrength: 1,
-                    controlType: "none",
-                    hdr: true,
-                    driveMedia: null,
-                },
-            ],
-            stages: [
-                minimalStage({
-                    model: "wan.safetensors",
-                    modelProfileId: "wan-profile",
-                }),
-            ],
-        });
-
-        expect(
-            deriveAuthoringDiagnostics([staleWan, minimalClip()], {
-                catalog: catalogWithWan(),
-            }).map(({ code }) => code),
-        ).not.toContain("mixed-hdr-timeline-unsupported");
-    });
-
-    it("ignores skipped clips and HDR entries targeting skipped stages", () => {
-        const inactiveHdr = minimalClip({
-            icLoras: [
-                {
-                    lora: "ltx-ic-lora-hdr.safetensors",
-                    preset: "hdr",
-                    driveSource: "Upload",
-                    driveData: "visual",
-                    driveMediaKinds: ["image", "video"],
-                    stage: 1,
-                    strength: 1,
-                    attentionStrength: 1,
-                    controlType: "none",
-                    hdr: true,
-                    driveMedia: null,
-                },
-            ],
-            stages: [minimalStage(), minimalStage({ skipped: true })],
-        });
-        expect(codes([inactiveHdr, minimalClip()])).not.toContain(
-            "mixed-hdr-timeline-unsupported",
-        );
-        expect(
-            codes([
-                minimalClip({ ...structuredClone(inactiveHdr), skipped: true }),
-                minimalClip(),
-            ]),
-        ).not.toContain("mixed-hdr-timeline-unsupported");
-    });
-
     it("does not diagnose architectures after the first skipped clip", () => {
         const catalog = fakeArchitectureCatalog();
         const fakeClip = minimalClip({
@@ -291,7 +181,6 @@ describe("backend-aligned authoring diagnostics", () => {
                 "prompt-relay-dynamic-length-unsupported",
                 "retake-frame-references-unsupported",
                 "retake-source-required",
-                "mixed-hdr-timeline-unsupported",
             ]),
         );
     });

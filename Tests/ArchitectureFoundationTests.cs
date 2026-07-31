@@ -1281,65 +1281,6 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Runtime_registry_rejects_multiple_active_whole_timeline_finalizers()
-    {
-        ClipSpec first = GeneratedClip(0, Stage(10, "ltx-model")) with
-        {
-            AuthoredArchitectureHint = "ltx2",
-            AuthoredStages = [new(0, "ltx-model", "ltx-profile", false)],
-            BoundaryOut = Constants.BoundaryOutCut,
-        };
-        ClipSpec second = GeneratedClip(1, Stage(11, "fake-model")) with
-        {
-            AuthoredArchitectureHint = "fake",
-            AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
-        };
-        VideoStagesSpec spec = Spec(first, second);
-        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
-            spec,
-            RootEnvironment.FromSpec(spec),
-            ArchitecturePlanResolver.Resolve(spec, new FakeRegistry()));
-        List<string> calls = [];
-        ArchitectureRuntimeSessionFactoryRegistry runtimes = new(
-        [
-            new RecordingFinalizerFactory(new("ltx2"), calls),
-            new RecordingFinalizerFactory(new("fake"), calls),
-        ],
-        new VideoExecutionPlanContext(plan));
-
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            runtimes.FinalizeTimeline(new(plan, Publication: null)));
-
-        Assert.Contains("Multiple architectures", error.Message);
-        Assert.Empty(calls);
-    }
-
-    [Fact]
-    public void Runtime_registry_evaluates_finalization_ownership_once()
-    {
-        ClipSpec clip = GeneratedClip(0, Stage(10, "fake-model")) with
-        {
-            AuthoredArchitectureHint = "fake",
-            AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
-        };
-        VideoStagesSpec spec = Spec(clip);
-        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
-            spec,
-            RootEnvironment.FromSpec(spec),
-            ArchitecturePlanResolver.Resolve(spec, new FakeRegistry()));
-        List<string> calls = [];
-        RecordingFinalizerFactory finalizer = new(new("fake"), calls);
-        ArchitectureRuntimeSessionFactoryRegistry runtimes = new(
-            [finalizer],
-            new VideoExecutionPlanContext(plan));
-
-        runtimes.FinalizeTimeline(new(plan, Publication: null));
-
-        Assert.Equal(1, finalizer.WorkChecks);
-        Assert.Equal(["fake"], calls);
-    }
-
-    [Fact]
     public void Production_manifest_keeps_module_and_runtime_registration_in_lockstep()
     {
         WorkflowGenerator generator = new()
@@ -1723,10 +1664,6 @@ public class ArchitectureFoundationTests
             rules.Values<JObject>(),
             rule => rule["code"]?.ToString() == "retake-frame-references-unsupported"
                 && rule["scope"]?.ToString() == "stage");
-        Assert.Contains(
-            rules.Values<JObject>(),
-            rule => rule["code"]?.ToString() == "mixed-hdr-timeline-unsupported"
-                && rule["constraints"]?["uniformTimelineFeature"]?.ToString() == "hdr");
         Assert.Contains(
             rules.Values<JObject>(),
             rule => rule["code"]?.ToString() == "audio.reuse.requires_three_stages"
@@ -2170,26 +2107,4 @@ public class ArchitectureFoundationTests
             new RecordingSessionFactory(architectureId, calls, contexts);
     }
 
-    private sealed class RecordingFinalizerFactory(
-        ArchitectureId architectureId,
-        ICollection<string> calls) : IArchitectureGenerationSessionFactory
-    {
-        public ArchitectureId ArchitectureId => architectureId;
-
-        internal int WorkChecks { get; private set; }
-
-        public bool HasFinalizationWork(
-            ArchitectureTimelineFinalizationContext context)
-        {
-            WorkChecks++;
-            return true;
-        }
-
-        public IVideoGenerationSession CreateSession(
-            ArchitectureTimelineSessionContext context) =>
-            throw new NotSupportedException();
-
-        public void FinalizeTimeline(ArchitectureTimelineFinalizationContext context) =>
-            calls.Add(architectureId.Value);
-    }
 }

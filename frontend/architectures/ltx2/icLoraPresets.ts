@@ -18,7 +18,6 @@ export interface IcLoraPreset {
     weightsUrl: string;
     note: string;
     driveMedia?: IcLoraDriveMediaContract;
-    hdr?: boolean;
 }
 
 export interface IcLoraDriveMediaContract {
@@ -100,17 +99,6 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors`,
         note: "Generates new speech + lips from the prompt's words. The drive source supplies the speaker sample: audio is used directly, and video sources contribute only their audio while their frames are ignored.",
         driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT,
-    },
-    {
-        id: "hdr",
-        displayName: "HDR",
-        triggerPhrase: "",
-        strength: 1,
-        controlType: "none",
-        // The repo also ships an auxiliary hdr-scene-emb file; only the LoRA itself is fetched.
-        weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-HDR/resolve/main/ltx-2.3-22b-ic-lora-hdr-0.9.safetensors`,
-        hdr: true,
-        note: "HDR generation; feed the SDR clip as the drive video. Output is auto-tonemapped to SDR (LogC3 decompressed). Suggested prompt: 'HDR footage'.",
     },
     {
         id: "pixel-spatial-upscaler-x2",

@@ -22,7 +22,6 @@ export interface ConditionalRuleContext {
     clip?: Clip;
     stage?: Stage;
     timelineClips?: readonly Clip[];
-    hasActiveHdr?: (clip: Clip) => boolean;
 }
 
 export const conditionalRule = (
@@ -88,18 +87,6 @@ export const evaluateConditionalRule = (
             );
         case CONDITIONAL_RULE_CODES.retakeRequiresSource:
             return clip !== undefined && clip.sourceVideo === null;
-        case CONDITIONAL_RULE_CODES.uniformTimelineHdr: {
-            const clips = context.timelineClips;
-            const hasActiveHdr = context.hasActiveHdr;
-            if (!clips || !hasActiveHdr) return false;
-            if (
-                clips.length < finiteConstraint(rule, "minimumTimelineClips", 2)
-            ) {
-                return false;
-            }
-            const hdr = clips.map(hasActiveHdr);
-            return hdr.some(Boolean) && hdr.some((value) => !value);
-        }
         default:
             // Catalog parsing rejects unknown executable rules atomically.
             // Fail closed as a defense if an unchecked runtime value reaches

@@ -31,7 +31,6 @@ export const testArchitectureCapabilities = (
         "video-input",
         "lora",
         "ic-lora",
-        "hdr",
         "frame-references",
         "pixel-upscale",
     ],
@@ -133,16 +132,6 @@ export const testArchitectureCatalog = (
                     scope: "clip",
                     constraints: {
                         requiresAnyEntryMode: ["source-video", "refine-video"],
-                    },
-                },
-                {
-                    support: "conditional",
-                    code: "mixed-hdr-timeline-unsupported",
-                    reason: "HDR must be uniform across the timeline.",
-                    scope: "architecture",
-                    constraints: {
-                        uniformTimelineFeature: "hdr",
-                        minimumTimelineClips: 2,
                     },
                 },
             ],

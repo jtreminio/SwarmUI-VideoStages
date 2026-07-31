@@ -1,6 +1,5 @@
 import { activeStageCount } from "../../clipSemantics";
 import type { Clip, Stage } from "../../types";
-import { clipHasActiveHdrForArchitecture } from "../behaviorRegistry";
 import {
     CONDITIONAL_RULE_CODES,
     type ConditionalRuleCode,
@@ -55,7 +54,6 @@ const FEATURE_RULE_CODES: Partial<
         CONDITIONAL_RULE_CODES.retakeRequiresSource,
         CONDITIONAL_RULE_CODES.retakeExcludesReferences,
     ],
-    hdr: [CONDITIONAL_RULE_CODES.uniformTimelineHdr],
 };
 
 const conditionalRuleFor = (
@@ -63,7 +61,6 @@ const conditionalRuleFor = (
     feature: AuthoringFeature,
     descriptor: ArchitectureCatalogEntryDto,
     scope: CapabilityRuleScopeContext,
-    effectiveArchitectureId: (target: Clip) => string,
 ): CapabilityRuleDecision | undefined => {
     const codes = FEATURE_RULE_CODES[feature];
     if (!codes) return undefined;
@@ -74,11 +71,6 @@ const conditionalRuleFor = (
             evaluateConditionalRule(rule, {
                 clip,
                 timelineClips: scope.timelineClips,
-                hasActiveHdr: (target) =>
-                    clipHasActiveHdrForArchitecture(
-                        target,
-                        effectiveArchitectureId(target),
-                    ),
             })
         ) {
             return rule;
@@ -143,7 +135,6 @@ export const createClipStageCapabilityViews = (
                 feature,
                 descriptor,
                 scope,
-                (target) => effectiveClipIdentity(target).architectureId,
             );
             const supported =
                 architectureFeatureSupport(feature, {

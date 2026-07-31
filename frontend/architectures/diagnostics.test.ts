@@ -5,7 +5,7 @@ import {
     testSourceOnlyArchitecture,
 } from "../__test_helpers__/architectureFixtures";
 import {
-    hdrIcLoraFixture,
+    icLoraFixture,
     minimalClip,
     minimalRef,
     minimalStage,
@@ -38,7 +38,7 @@ const wanCatalog = (): ArchitectureModelCatalog => {
     wan.id = "wan22";
     wan.label = "WAN 2.2";
     wan.capabilities.stage = wan.capabilities.stage.filter(
-        (capability) => capability !== "ic-lora" && capability !== "hdr",
+        (capability) => capability !== "ic-lora",
     );
     wan.capabilities.clip = wan.capabilities.clip.filter(
         (capability) =>
@@ -171,39 +171,11 @@ describe("architecture diagnostics", () => {
         );
     });
 
-    it("uses the resolved WAN identity for existing HDR and IC-LoRA source checks", () => {
-        const clip = minimalClip({
-            architectureHint: "ltx2",
-            modelProfileId: "ltx-2.3",
-            clipLengthFromControlNet: true,
-            icLoras: [
-                hdrIcLoraFixture({
-                    hdr: true,
-                    driveSource: "ControlNet 1",
-                }),
-            ],
-            stages: [
-                minimalStage({
-                    model: "wan-14b.safetensors",
-                    modelProfileId: "wan22-i2v-14b",
-                }),
-            ],
-        });
-
-        const diagnostics = deriveArchitectureDiagnostics([clip], wanCatalog());
-        const codes = diagnostics.map(({ code }) => code);
-        expect(codes).toContain("architecture.unsupported.ic-lora");
-        expect(codes).toContain(
-            "architecture.unusable.clip-length-from-control-net",
-        );
-        expect(codes).not.toContain("architecture.unsupported.hdr");
-    });
-
     it("warns for safely ignored WAN IC-LoRA and advanced upscale values", () => {
         const clip = minimalClip({
             architectureHint: "wan22",
             modelProfileId: "wan22-i2v-14b",
-            icLoras: [hdrIcLoraFixture({ hdr: false })],
+            icLoras: [icLoraFixture()],
             refFraming: "fit",
             promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
             reuseAudio: true,
@@ -246,7 +218,7 @@ describe("architecture diagnostics", () => {
             refFraming: "fit",
             promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
             reuseAudio: true,
-            icLoras: [hdrIcLoraFixture({ hdr: false })],
+            icLoras: [icLoraFixture()],
             stages: [
                 minimalStage({
                     model: "host-video.safetensors",
@@ -539,8 +511,7 @@ describe("architecture diagnostics", () => {
         const valid = minimalClip({
             clipLengthFromControlNet: true,
             icLoras: [
-                hdrIcLoraFixture({
-                    hdr: false,
+                icLoraFixture({
                     driveSource: "ControlNet 3",
                 }),
             ],

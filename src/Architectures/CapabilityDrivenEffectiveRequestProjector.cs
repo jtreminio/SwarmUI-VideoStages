@@ -128,20 +128,6 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                 })
                 .ToArray();
         }
-        else if (ignored.Contains(AuthoringFeature.Hdr))
-        {
-            Ignore(
-                effective.IcLoras?.Any(entry => entry.Hdr) == true,
-                AuthoringFeature.Hdr,
-                "HDR IC-LoRA behavior");
-            effective = effective with
-            {
-                IcLoras = effective.IcLoras?
-                    .Select(entry => entry with { Hdr = false })
-                    .ToArray(),
-            };
-        }
-
         if (ignored.Contains(AuthoringFeature.ClipAudio))
         {
             Ignore(

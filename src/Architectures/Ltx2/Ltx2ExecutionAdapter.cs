@@ -142,15 +142,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         public IArchitectureBoundaryAssembler BoundaryAssembler { get; } =
             new Ltx2BoundaryAssembler();
 
-        public bool HasFinalizationWork(
-            ArchitectureTimelineFinalizationContext context) =>
-            context.Plan.Clips.All(clip => clip.Architecture.Id == ArchitectureId)
-            && context.Plan.Clips.Any(clip =>
-                clip.ArchitecturePayload is Ltx2ClipPayload
-                {
-                    RequiresHdrFinalization: true,
-                });
-
         public void PrepareTimeline(
             ArchitectureTimelinePreparationContext context)
         {
@@ -188,14 +179,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
                 context.Plan,
                 context.Assembly,
                 context.RootPolicy);
-        }
-
-        public void FinalizeTimeline(
-            ArchitectureTimelineFinalizationContext context)
-        {
-            new HdrPostprocessApplicator(generator)
-                .ApplyHdrPostprocessToFinalSaves(
-                    context.Publication.SaveNodeIds);
         }
     }
 

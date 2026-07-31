@@ -463,33 +463,6 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_MixedHdrMultiClipTimeline_IsRejected()
-    {
-        IcLoraSpec hdr = new(
-            "ltx-2.3-22b-ic-lora-hdr-0.9",
-            Constants.IcLoraSourceUpload,
-            1,
-            1,
-            Constants.IcLoraControlNone,
-            null,
-            Preset: "hdr",
-            Hdr: true);
-        ClipSpec hdrClip = GeneratedClip(0, Stage(10)) with { IcLoras = [hdr] };
-        ClipSpec sdrClip = GeneratedClip(1, Stage(11));
-
-        VideoExecutionPlan mixed = TestPlanCompiler.Compile(Spec(false, hdrClip, sdrClip));
-        VideoExecutionPlan allHdr = TestPlanCompiler.Compile(
-            Spec(false, hdrClip, GeneratedClip(1, Stage(11)) with { IcLoras = [hdr] }));
-
-        Assert.Contains(mixed.Diagnostics, diagnostic =>
-            diagnostic.Code == "mixed-hdr-timeline-unsupported"
-            && diagnostic.Severity == PlanDiagnosticSeverity.Error);
-        Assert.DoesNotContain(
-            allHdr.Diagnostics,
-            diagnostic => diagnostic.Code == "mixed-hdr-timeline-unsupported");
-    }
-
-    [Fact]
     public void Compile_DuplicateClipIds_RejectsLaterOccurrenceDeterministically()
     {
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(

@@ -13,10 +13,7 @@ import {
     testArchitectureCatalogDto,
     testRootDefaults,
 } from "../__test_helpers__/architectureFixtures";
-import {
-    hdrIcLoraFixture,
-    minimalClip,
-} from "../__test_helpers__/clipFixtures";
+import { icLoraFixture, minimalClip } from "../__test_helpers__/clipFixtures";
 import {
     mountPromptBox,
     mountSelect,
@@ -215,7 +212,7 @@ describe("detail structural stage operations", () => {
                 architectureHint: "ltx2",
                 modelProfileId: "stale-profile",
                 loras: [{ name: "detail.safetensors" }],
-                icLoras: [hdrIcLoraFixture()],
+                icLoras: [icLoraFixture()],
                 stages: [],
             }),
         ];

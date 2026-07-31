@@ -32,12 +32,6 @@
     "legacyAutoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-lipdub-0.9"
   },
   {
-    "id": "hdr",
-    "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-HDR/resolve/main/ltx-2.3-22b-ic-lora-hdr-0.9.safetensors",
-    "autoModelName": "LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-hdr-0_9",
-    "legacyAutoModelName": "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-hdr-0.9"
-  },
-  {
     "id": "pixel-spatial-upscaler-x2",
     "weightsUrl": "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors",
     "autoModelName": "LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-pixel-spatial-upscaler-x2-0_9",

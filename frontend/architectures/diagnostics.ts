@@ -5,10 +5,7 @@ import {
     executableClipIndexes,
 } from "../clipSemantics";
 import type { Clip } from "../types";
-import {
-    hasArchitectureSlotSourcedIcLora,
-    isArchitectureHdrFeature,
-} from "./behaviorRegistry";
+import { hasArchitectureSlotSourcedIcLora } from "./behaviorRegistry";
 import { resolvedClipArchitectureId } from "./clipIdentity";
 import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
 import {
@@ -102,15 +99,6 @@ const persistedCapabilityIssues = (
         "icLora",
         "ic-lora",
         "IC-LoRA",
-    );
-    unsupported(
-        !supports("hdr") &&
-            clip.icLoras.some((entry) =>
-                isArchitectureHdrFeature(architectureId, entry),
-            ),
-        "hdr",
-        "hdr",
-        "HDR",
     );
     unsupported(
         !supports("retake") && clip.retake !== null,

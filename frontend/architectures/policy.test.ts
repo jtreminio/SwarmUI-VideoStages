@@ -5,7 +5,7 @@ import {
     testSourceOnlyArchitecture,
 } from "../__test_helpers__/architectureFixtures";
 import {
-    hdrIcLoraFixture,
+    icLoraFixture,
     minimalClip,
     minimalRef,
     minimalStage,
@@ -16,7 +16,6 @@ import {
     detailBreadcrumb,
 } from "../detailStrip/panelRouter";
 import { renderTimeline } from "../timelineView";
-import type { Clip } from "../types";
 import { reconcileClipArchitectureIdentity } from "./clipIdentity";
 import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
 import {
@@ -48,10 +47,7 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
     wan.id = "wan22";
     wan.label = "WAN 2.2";
     wan.capabilities.stage = wan.capabilities.stage.filter(
-        (capability) =>
-            capability !== "lora" &&
-            capability !== "ic-lora" &&
-            capability !== "hdr",
+        (capability) => capability !== "lora" && capability !== "ic-lora",
     );
     wan.capabilities.upscaleModes = ["pixel"];
     models.architectures.push(wan);
@@ -187,7 +183,7 @@ describe("catalog-backed authoring policy", () => {
     it("does not use a persisted architecture hint when Stage 0 is unresolved", () => {
         const clip = minimalClip({
             architectureHint: "ltx2",
-            icLoras: [hdrIcLoraFixture()],
+            icLoras: [icLoraFixture()],
             stages: [
                 minimalStage({
                     model: "removed-model.safetensors",
@@ -340,35 +336,6 @@ describe("catalog-backed authoring policy", () => {
             supported: false,
             reason: "Retake and frame references are mutually exclusive.",
         });
-    });
-
-    it("routes timeline HDR uniformity through the same decision", () => {
-        const models = catalog();
-        const hdr = minimalClip({ icLoras: [hdrIcLoraFixture()] });
-        const plain = minimalClip();
-
-        expect(
-            createCapabilityViewResolver(models, {
-                timelineClips: [hdr, plain],
-            })
-                .forClip(hdr)
-                .decision("hdr"),
-        ).toMatchObject({
-            supported: false,
-            reason: "HDR must be uniform across the timeline.",
-        });
-        expect(
-            createCapabilityViewResolver(models, {
-                timelineClips: [hdr, structuredClone(hdr)],
-            })
-                .forClip(hdr)
-                .decision("hdr").supported,
-        ).toBe(true);
-        // Without the timeline context the rule stays inert.
-        expect(
-            createCapabilityViewResolver(models).forClip(hdr).decision("hdr")
-                .supported,
-        ).toBe(true);
     });
 
     it("truncates the executable sequence at the first skipped clip", () => {
@@ -527,40 +494,6 @@ describe("catalog-backed authoring policy", () => {
         expect(stageView.decision("scheduler").supported).toBe(true);
         expect(stageView.decision("stageLoras").supported).toBe(false);
         expect(clip).toEqual(before);
-    });
-
-    it("evaluates conditional HDR state with the resolved architecture ID", () => {
-        const models = catalogWithWan();
-        const wan = models.architectures.find((entry) => entry.id === "wan22");
-        if (!wan) throw new Error("missing WAN architecture");
-        // Keep HDR authoring available so this isolates the conditional
-        // behavior lookup from the basic capability check.
-        wan.capabilities.stage.push("hdr");
-        const wanClip = (icLoras: Clip["icLoras"] = []) =>
-            minimalClip({
-                architectureHint: "ltx2",
-                modelProfileId: "ltx-2.3",
-                icLoras,
-                stages: [
-                    minimalStage({
-                        model: "wan-14b.safetensors",
-                        modelProfileId: "ltx-2.3",
-                    }),
-                ],
-            });
-        const hdr = wanClip([hdrIcLoraFixture()]);
-        const plain = wanClip();
-
-        expect(
-            createCapabilityViewResolver(models, {
-                timelineClips: [hdr, plain],
-            })
-                .forClip(hdr)
-                .decision("hdr"),
-        ).toMatchObject({
-            supported: true,
-            rule: null,
-        });
     });
 
     it("applies an architecture stage-control rule only to stage LoRA authoring", () => {

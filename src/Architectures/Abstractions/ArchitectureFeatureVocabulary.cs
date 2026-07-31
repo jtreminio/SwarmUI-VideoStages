@@ -92,7 +92,6 @@ internal static class ArchitectureFeatureVocabulary
             "latent-model"),
         For(StageCapability.Lora, "lora"),
         For(StageCapability.IcLora, "ic-lora"),
-        For(StageCapability.Hdr, "hdr"),
         For(StageCapability.FrameReferences, "frame-references"),
     ];
 
@@ -174,12 +173,6 @@ internal static class ArchitectureFeatureVocabulary
             "IC-LoRA",
             [Capability(StageCapability.IcLora)]),
         new(
-            AuthoringFeature.Hdr,
-            "hdr",
-            "HDR",
-            [Capability(StageCapability.Hdr)],
-            ConditionalRuleFeature.Hdr),
-        new(
             AuthoringFeature.Upscale,
             "upscale",
             "Stage upscaling",
@@ -209,7 +202,6 @@ internal static class ArchitectureFeatureVocabulary
             ConditionalRuleCodeId.RetakeExcludesReferences,
             "retake-frame-references-unsupported"),
         new(ConditionalRuleCodeId.RetakeRequiresSource, "retake-source-required"),
-        new(ConditionalRuleCodeId.UniformTimelineHdr, "mixed-hdr-timeline-unsupported"),
     ];
 
     internal static string RuleCode(ConditionalRuleCodeId id) =>

@@ -668,8 +668,7 @@ public sealed class EffectiveVideoRequestTests
                     1,
                     1,
                     Constants.IcLoraControlNone,
-                    null,
-                    Hdr: true),
+                    null),
             ],
         };
         VideoStagesSpec authored = Spec(clip);
@@ -694,7 +693,6 @@ public sealed class EffectiveVideoRequestTests
                 AuthoringFeature.AudioDerivedDuration,
                 AuthoringFeature.ControlSignalDerivedDuration,
                 AuthoringFeature.IcLora,
-                AuthoringFeature.Hdr,
             }.SetEquals(
                 ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(
                     HostVideoArchitectureModule.Instance.Descriptor.Capabilities)));
@@ -749,7 +747,6 @@ public sealed class EffectiveVideoRequestTests
                 AuthoringFeature.AudioDerivedDuration,
                 AuthoringFeature.ControlSignalDerivedDuration,
                 AuthoringFeature.IcLora,
-                AuthoringFeature.Hdr,
             }.SetEquals(
                 ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(
                     WanArchitectureModule.Instance.Descriptor.Capabilities)));

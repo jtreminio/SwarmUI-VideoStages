@@ -186,11 +186,6 @@ export interface IcLora {
     strength: number;
     attentionStrength: number;
     controlType: IcLoraControlType;
-    /**
-     * Explicit, preset-independent HDR intent. The backend's uniform-timeline rule and final HDR
-     * publication read this typed flag; neither side matches preset or LoRA names.
-     */
-    hdr: boolean;
     driveMedia: UploadedMedia | null;
 }
 

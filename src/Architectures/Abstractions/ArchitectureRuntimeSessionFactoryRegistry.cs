@@ -62,25 +62,6 @@ internal sealed class ArchitectureRuntimeSessionFactoryRegistry
             _activeFactories.Select(factory => factory.CreateSession(context)));
     }
 
-    internal void FinalizeTimeline(ArchitectureTimelineFinalizationContext context)
-    {
-        RequirePlan(context?.Plan);
-        IArchitectureGenerationSessionFactory[] finalizers = [
-            .. _activeFactories.Where(factory =>
-                factory.HasFinalizationWork(context))
-        ];
-        if (finalizers.Length > 1)
-        {
-            throw new InvalidOperationException(
-                "Multiple architectures attempted to own whole-timeline finalization: "
-                + string.Join(", ", finalizers.Select(factory => $"'{factory.ArchitectureId}'")));
-        }
-        if (finalizers.SingleOrDefault() is { } finalizer)
-        {
-            finalizer.FinalizeTimeline(context);
-        }
-    }
-
     internal IReadOnlyDictionary<ArchitectureId, IArchitectureBoundaryAssembler>
         BoundaryAssemblers =>
         _activeFactories

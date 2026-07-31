@@ -3,14 +3,13 @@ import { testArchitectureCatalog } from "../__test_helpers__/architectureFixture
 import type { Clip, IcLora } from "../types";
 import {
     hasArchitectureSlotSourcedIcLora,
-    isArchitectureHdrFeature,
     normalizeArchitectureIcLoras,
     reconcileArchitectureIncomingIcLoraDrives,
 } from "./behaviorRegistry";
 
-const hdrEntry: IcLora = {
-    lora: "ltx-hdr.safetensors",
-    preset: "hdr",
+const baseEntry: IcLora = {
+    lora: "ltx-ic-lora-pose.safetensors",
+    preset: "pose",
     driveSource: "Upload",
     driveData: "visual",
     driveMediaKinds: ["image", "video"],
@@ -18,39 +17,13 @@ const hdrEntry: IcLora = {
     strength: 1,
     attentionStrength: 1,
     controlType: "none",
-    hdr: true,
     driveMedia: null,
 };
 
 describe("architecture-owned LTX behavior", () => {
-    it("keeps LTX feature recognition behind the LTX adapter", () => {
-        expect(isArchitectureHdrFeature("ltx2", hdrEntry)).toBe(true);
-        expect(isArchitectureHdrFeature("future-video", hdrEntry)).toBe(false);
-    });
-
-    it("reads the typed hdr contract instead of matching preset or lora names", () => {
-        // A LoRA named "MyHDRUpscale" used to be HDR to the UI (name contains "hdr") and not to
-        // the backend, so the user was told HDR was on and got flat log footage.
-        const namedButNotHdr: IcLora = {
-            ...hdrEntry,
-            lora: "MyHDRUpscale.safetensors",
-            preset: "custom",
-            hdr: false,
-        };
-        const unnamedButHdr: IcLora = {
-            ...hdrEntry,
-            lora: "plain-name.safetensors",
-            preset: "custom",
-            hdr: true,
-        };
-
-        expect(isArchitectureHdrFeature("ltx2", namedButNotHdr)).toBe(false);
-        expect(isArchitectureHdrFeature("ltx2", unnamedButHdr)).toBe(true);
-    });
-
     it("recognizes the finite backend ControlNet source vocabulary", () => {
         const entry = (driveSource: string): IcLora => ({
-            ...hdrEntry,
+            ...baseEntry,
             driveSource,
         });
 
@@ -78,7 +51,7 @@ describe("architecture-owned LTX behavior", () => {
     });
 
     it("does not silently apply LTX normalization to another architecture", () => {
-        const raw = { icLoras: [hdrEntry] };
+        const raw = { icLoras: [baseEntry] };
 
         expect(
             normalizeArchitectureIcLoras("future-video", raw, 1, false),
@@ -92,7 +65,7 @@ describe("architecture-owned LTX behavior", () => {
 
     it("repairs only an owning architecture's Incoming entries", () => {
         const incoming = {
-            ...hdrEntry,
+            ...baseEntry,
             preset: "custom",
             driveSource: "Incoming",
             stage: 0,
@@ -124,7 +97,7 @@ describe("architecture-owned LTX behavior", () => {
 
     it("resolves the behavior owner from Stage 0 when a catalog is supplied", () => {
         const incoming = {
-            ...hdrEntry,
+            ...baseEntry,
             preset: "custom",
             driveSource: "Incoming",
             stage: 0,

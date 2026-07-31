@@ -29,7 +29,6 @@ export const CAPABILITY_WIRE_NAMES = {
         latentModelUpscale: "latent-model-upscale",
         lora: "lora",
         icLora: "ic-lora",
-        hdr: "hdr",
         frameReferences: "frame-references",
     },
 } as const;
@@ -56,7 +55,6 @@ export const AUTHORING_FEATURES = [
     "controlSignalDerivedDuration",
     "stageLoras",
     "icLora",
-    "hdr",
     "upscale",
 ] as const;
 
@@ -73,7 +71,6 @@ export const IGNORED_WHEN_UNSUPPORTED_FEATURES = [
     "controlSignalDerivedDuration",
     "stageLoras",
     "icLora",
-    "hdr",
     "upscale",
 ] as const satisfies readonly GeneratedAuthoringFeature[];
 
@@ -110,7 +107,6 @@ export const AUTHORING_FEATURE_LABELS: Record<
     controlSignalDerivedDuration: "Control-signal-derived clip duration",
     stageLoras: "LoRAs",
     icLora: "IC-LoRA",
-    hdr: "HDR",
     upscale: "Stage upscaling",
 };
 
@@ -142,7 +138,6 @@ export const AUTHORING_FEATURE_CAPABILITIES: Record<
     ],
     stageLoras: [["stage", CAPABILITY_WIRE_NAMES.stage.lora, null]],
     icLora: [["stage", CAPABILITY_WIRE_NAMES.stage.icLora, null]],
-    hdr: [["stage", CAPABILITY_WIRE_NAMES.stage.hdr, null]],
     upscale: [
         ["stage", CAPABILITY_WIRE_NAMES.stage.pixelUpscale, "pixel"],
         ["stage", CAPABILITY_WIRE_NAMES.stage.modelUpscale, "model"],
@@ -161,7 +156,6 @@ export const CONDITIONAL_RULE_CODES = {
     promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
     retakeExcludesReferences: "retake-frame-references-unsupported",
     retakeRequiresSource: "retake-source-required",
-    uniformTimelineHdr: "mixed-hdr-timeline-unsupported",
 } as const;
 
 export type GeneratedConditionalRuleCode =

@@ -15,7 +15,6 @@ public class GeneratedBindingRetentionTests
         nameof(SwarmFrameWindowNode),
         nameof(SwarmPromptRelayEncodeNode),
         nameof(SwarmRampMaskBatchNode),
-        nameof(SwarmSaveHDRAnimationWSNode),
         nameof(SwarmSetAudioMaskWindowsNode),
     ];
 

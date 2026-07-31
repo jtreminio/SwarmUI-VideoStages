@@ -28,7 +28,6 @@ describe("nondestructive architecture conversion", () => {
                     strength: 1,
                     attentionStrength: 1,
                     controlType: "none",
-                    hdr: false,
                 },
             ],
             stages: [

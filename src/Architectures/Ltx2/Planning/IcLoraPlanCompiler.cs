@@ -276,8 +276,7 @@ internal static class IcLoraPlanCompiler
             driveMedia,
             input,
             dimensionDownscaleFactor,
-            guideStrength,
-            entry.Hdr);
+            guideStrength);
     }
 
     private static IcLoraDriveMediaKind ResolveIncomingKind(

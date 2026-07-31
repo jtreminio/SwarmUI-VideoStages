@@ -48,7 +48,7 @@ internal sealed class OutputPublisher(
     OutputRegistry outputs,
     string fallbackSaveId)
 {
-    public OutputPublication Publish(RuntimeArtifact artifact, bool publishAudio)
+    public OutputPublicationResult Publish(RuntimeArtifact artifact, bool publishAudio)
     {
         if (generator.UserInput.Get(T2IParamTypes.DoNotSave, false))
         {
@@ -60,13 +60,13 @@ internal sealed class OutputPublisher(
                     VideoGraphHelpers.RemoveNode(generator, suppressionBridge, saveId);
                 }
             }
-            return OutputPublication.Suppressed;
+            return OutputPublicationResult.Suppressed;
         }
 
         WGNodeData media = artifact.Media?.ToWGNodeData(generator);
         if (media?.Path is not JArray { Count: 2 } mediaPath)
         {
-            return OutputPublication.Failed;
+            return OutputPublicationResult.Failed;
         }
 
         // Parallel multi-clip execution publishes merged audio from a dedicated branch. A retained
@@ -76,7 +76,7 @@ internal sealed class OutputPublisher(
         INodeOutput videoOutput = bridge.ResolvePath(mediaPath);
         if (videoOutput is null)
         {
-            return OutputPublication.Failed;
+            return OutputPublicationResult.Failed;
         }
 
         INodeOutput audioOutput = audio?.Path is JArray { Count: 2 } audioPath
@@ -90,9 +90,7 @@ internal sealed class OutputPublisher(
         {
             WGNodeData vae = artifact.Vae?.ToWGNodeData(generator) ?? generator.CurrentVae;
             media.SaveOutput(vae, generator.CurrentAudioVae, fallbackSaveId);
-            return new(
-                OutputPublicationResult.Published,
-                new HashSet<string>(StringComparer.Ordinal) { fallbackSaveId });
+            return OutputPublicationResult.Published;
         }
 
         HashSet<string> staleAudioNodeIds = [];
@@ -126,9 +124,7 @@ internal sealed class OutputPublisher(
                 protectedNodeIds,
                 generator.NodeHelpers);
         }
-        return new(
-            OutputPublicationResult.Published,
-            new HashSet<string>(hostSaves.Select(save => save.Id), StringComparer.Ordinal));
+        return OutputPublicationResult.Published;
     }
 
     private WGNodeData ResolvePublishedAudio(WGNodeData attachedAudio)
@@ -150,16 +146,3 @@ internal enum OutputPublicationResult
     Failed,
 }
 
-internal sealed record OutputPublication(
-    OutputPublicationResult Result,
-    IReadOnlySet<string> SaveNodeIds)
-{
-    public static OutputPublication NotRequired { get; } =
-        new(OutputPublicationResult.NotRequired, new HashSet<string>());
-
-    public static OutputPublication Suppressed { get; } =
-        new(OutputPublicationResult.Suppressed, new HashSet<string>());
-
-    public static OutputPublication Failed { get; } =
-        new(OutputPublicationResult.Failed, new HashSet<string>());
-}

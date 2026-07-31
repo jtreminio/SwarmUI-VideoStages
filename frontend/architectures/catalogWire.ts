@@ -145,17 +145,6 @@ const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
                 constraints.requiresAnyEntryMode.includes("source-video") &&
                 constraints.requiresAnyEntryMode.includes("refine-video")
             );
-        case CONDITIONAL_RULE_CODES.uniformTimelineHdr:
-            return (
-                value.scope === "architecture" &&
-                hasExactKeys(constraints, [
-                    "uniformTimelineFeature",
-                    "minimumTimelineClips",
-                ]) &&
-                constraints.uniformTimelineFeature === "hdr" &&
-                Number.isInteger(constraints.minimumTimelineClips) &&
-                Number(constraints.minimumTimelineClips) >= 2
-            );
     }
     return false;
 };

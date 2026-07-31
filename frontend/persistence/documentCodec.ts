@@ -103,7 +103,6 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 strength: entry.strength,
                 attentionStrength: entry.attentionStrength,
                 controlType: entry.controlType,
-                hdr: entry.hdr,
                 driveMedia: entry.driveMedia,
             })),
             saveAudioTrack: clip.saveAudioTrack,

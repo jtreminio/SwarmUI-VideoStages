@@ -50,7 +50,6 @@ public static class PruneManifest
         "LTXVExtendSamplerNode",
         "LTXVGemmaCLIPModelLoaderNode",
         "LTXVGemmaEnhancePromptNode",
-        "LTXVHDRDecodePostprocessNode",
         "LTXVImgToVideoAdvancedNode",
         "LTXVImgToVideoConditionOnlyNode",
         "LTXVInContextSamplerNode",

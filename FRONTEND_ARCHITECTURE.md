@@ -196,7 +196,7 @@ them, and diagnostics report them instead.
 
 The feature vocabulary is `multiStage`, `sourceVideo`, `frameReferences`,
 `retake`, `majorPrompt`, `promptRelay`, `clipAudio`, `audioReuse`,
-`stageLoras`, `icLora`, `hdr`, `upscale`, plus per-stage `sampler` and
+`stageLoras`, `icLora`, `upscale`, plus per-stage `sampler` and
 `scheduler`. Supported audio source kinds and upscale modes are lists on the
 same views.
 
@@ -213,10 +213,6 @@ Diagnostics are a second evaluator over the same catalog rules
 (`authoringDiagnostics.ts` → `architectures/diagnostics.ts`,
 `conditionalRules.ts`). Shared rule codes and reasons keep the panel notices and
 the timeline error summary saying the same thing.
-
-`uniformTimelineHdr` is mapped and tested but deliberately not supplied with
-timeline context: gating it would disable the very controls needed to repair a
-mixed-HDR timeline, including removing the offending entry.
 
 ## Clip architecture conversion
 
@@ -410,14 +406,12 @@ the backend document, and tints regions, audio cells, and chips.
 
 ## Architecture-owned authoring
 
-LTX IC-LoRA normalization, HDR recognition, presets, drive availability, weight
-download, and the IC-LoRA editor section remain LTX-local.
+LTX IC-LoRA normalization, presets, drive availability, weight download, and
+the IC-LoRA editor section remain LTX-local.
 `architectures/behaviorRegistry.ts` is a centralized set of explicit LTX
 ownership guards, not a polymorphic registry.
 `architectures/authoringPanels.ts` directly selects either the LTX editor or
-the generic persisted-value removal panel. HDR is a typed
-`hdr` flag on the persisted entry end to end — presets seed it, the preset
-filter reads it, and no name-matching predicate survives on either side.
+the generic persisted-value removal panel.
 
 Architecture policy separates identity, feature values, clip/stage views, and
 boundary policy. Backend catalog/model facts authorize feature visibility;

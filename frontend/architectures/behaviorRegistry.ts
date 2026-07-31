@@ -1,4 +1,3 @@
-import { activeStageCount } from "../clipSemantics";
 import { ROOT_DIMENSION_STEP } from "../constants";
 import type { Clip, IcLora } from "../types";
 import { resolvedClipArchitectureId } from "./clipIdentity";
@@ -111,28 +110,7 @@ export const hasArchitectureSlotSourcedIcLora = (
 ): boolean =>
     isLtx2(architectureId) && icLoraNormalization.hasSlotSourcedIcLora(entries);
 
-export const isArchitectureHdrFeature = (
-    architectureId: string,
-    entry: IcLora,
-): boolean => isLtx2(architectureId) && icLoraNormalization.isHdrFeature(entry);
-
 export const architectureIcLoraDisplayName = (
     architectureId: string,
     entry: IcLora,
 ): string => (isLtx2(architectureId) ? icLoraDisplayName(entry) : entry.lora);
-
-/** True when the clip has an HDR IC-LoRA bound to at least one active stage. */
-export const clipHasActiveHdrForArchitecture = (
-    clip: Clip,
-    architectureId: string,
-): boolean =>
-    clip.icLoras.some(
-        (entry) =>
-            isArchitectureHdrFeature(architectureId, entry) &&
-            clip.stages
-                .slice(0, activeStageCount(clip))
-                .some(
-                    (_stage, rawStageIdx) =>
-                        entry.stage < 0 || entry.stage === rawStageIdx,
-                ),
-    );

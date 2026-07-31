@@ -176,9 +176,6 @@ public class AuthoringDocumentContractTests
         Assert.Equal(0.9, icLora.Strength);
         Assert.Equal(0.8, icLora.AttentionStrength);
         Assert.Equal("canny", icLora.ControlType);
-        // Typed, preset-independent HDR intent: the backend must read the persisted flag rather
-        // than re-deriving HDR from the preset id or the weight file name.
-        Assert.True(icLora.Hdr);
         Assert.Equal("drive.mp4", icLora.DriveMedia.FileName);
 
         // The authored stage 1 is skipped, so only stage 0 survives; a sourced clip keeps its

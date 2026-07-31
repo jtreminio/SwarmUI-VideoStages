@@ -149,7 +149,7 @@ text-only model such as Mochi cannot occupy a decoded later-stage role. The
 baseline advertises prompts, ordinary LoRAs, source video, pixel resize, decoded output, and
 hard-cut multi-stage execution where selected models have image entry. It does
 not advertise arbitrary authored references, audio, IC-LoRA,
-advanced upscalers, end-frame conditioning, swap, or HDR.
+advanced upscalers, end-frame conditioning, or swap.
 
 `ArchitectureCatalogSerializer.Serialize` projects the descriptor catalog and
 the currently resolved, session-authorized host models to:
@@ -638,8 +638,7 @@ compatibility, or architecture payload.
 
 `VideoStagesCoordinator` clears model compatibility from final media and
 publishes through `RootRuntimeSession.PublishTimeline` / `OutputPublisher`.
-Architecture finalization runs only after publication; LTX currently claims
-exclusive finalization only for an all-LTX HDR timeline.
+Publication ends the timeline; no architecture finalization step follows it.
 
 ### Flow B failures
 

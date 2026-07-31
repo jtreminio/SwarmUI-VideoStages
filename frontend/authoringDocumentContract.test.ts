@@ -78,10 +78,7 @@ const contractState = (): VideoStagesConfig => ({
                     stage: 0,
                     strength: 0.9,
                     attentionStrength: 0.8,
-                    // Deliberately not the "hdr" preset: the typed flag is preset-independent and
-                    // must round-trip on its own.
                     controlType: "canny",
-                    hdr: true,
                     driveMedia: {
                         data: "data:video/mp4;base64,QUJD",
                         fileName: "drive.mp4",

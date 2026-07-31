@@ -370,7 +370,6 @@ describe("reduceDocumentCommand", () => {
                 strength: 1,
                 attentionStrength: 1,
                 controlType: "none",
-                hdr: false,
                 driveMedia: null,
             },
         ];
@@ -786,9 +785,9 @@ describe("reduceDocumentCommand", () => {
         };
         targetClip.icLoras = [
             {
-                id: "ic-hdr",
-                lora: "hdr.safetensors",
-                preset: "hdr",
+                id: "ic-pose",
+                lora: "pose.safetensors",
+                preset: "pose",
                 driveSource: "Upload",
                 driveData: "visual",
                 driveMediaKinds: ["image", "video"],
@@ -796,7 +795,6 @@ describe("reduceDocumentCommand", () => {
                 strength: 1,
                 attentionStrength: 1,
                 controlType: "none",
-                hdr: true,
                 driveMedia: null,
             },
         ];
@@ -955,7 +953,6 @@ describe("reduceDocumentCommand", () => {
                 strength: 1,
                 attentionStrength: 1,
                 controlType: "none",
-                hdr: false,
                 driveMedia: null,
             },
         ];
@@ -1749,7 +1746,6 @@ describe("reduceDocumentCommand", () => {
                 strength: 1,
                 attentionStrength: 1,
                 controlType: "none",
-                hdr: false,
                 driveMedia: null,
             },
         ];

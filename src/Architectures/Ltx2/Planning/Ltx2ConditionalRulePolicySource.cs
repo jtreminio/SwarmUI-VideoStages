@@ -46,16 +46,6 @@ internal static class Ltx2ConditionalRulePolicySource
             new RequiredEntryModesRuleConstraints(
                 [ArchitectureEntryMode.SourceVideo, ArchitectureEntryMode.RefineVideo]));
 
-    internal static RuleDecision HdrRequiresUniformTimeline { get; } =
-        RuleDecision.Conditional(
-            ArchitectureFeatureVocabulary.RuleCode(
-                ConditionalRuleCodeId.UniformTimelineHdr),
-            "HDR IC-LoRA activation must be uniform across the complete timeline.",
-            RuleScope.Architecture,
-            new UniformTimelineFeatureRuleConstraints(
-                ConditionalRuleFeature.Hdr,
-                2));
-
     /// <summary>
     /// Every threshold below is read back out of the published rule, so the catalog value and the
     /// value the evaluator enforces are the same number by construction.
@@ -66,22 +56,16 @@ internal static class Ltx2ConditionalRulePolicySource
     internal static IReadOnlyList<ArchitectureEntryMode> RetakeEntryModes { get; } =
         RetakeRequiresSource.Require<RequiredEntryModesRuleConstraints>().RequiresAnyEntryMode;
 
-    internal static int HdrMinimumTimelineClips { get; } = HdrRequiresUniformTimeline
-        .Require<UniformTimelineFeatureRuleConstraints>().MinimumTimelineClips;
-
     internal static IReadOnlyList<RuleDecision> PublishedRules { get; } =
     [
         AudioReuseRequiresThreeStages,
         PromptRelayRequiresFixedLength,
         RetakeAndReferencesAreExclusive,
         RetakeRequiresSource,
-        HdrRequiresUniformTimeline,
     ];
 
     internal static IReadOnlyList<PlanDiagnostic> Validate(
-        IReadOnlyList<ClipPlan> clips,
-        IReadOnlyList<ClipPlan> timelineClips,
-        RootPlan root)
+        IReadOnlyList<ClipPlan> clips)
     {
         List<PlanDiagnostic> diagnostics = [];
         foreach (ClipPlan clip in clips)
@@ -124,18 +108,6 @@ internal static class Ltx2ConditionalRulePolicySource
             }
         }
 
-        if (timelineClips.Count >= HdrMinimumTimelineClips)
-        {
-            bool[] hdrClips = [.. timelineClips.Select(clip =>
-                clip.ArchitecturePayload is Ltx2ClipPayload
-                {
-                    RequiresHdrFinalization: true,
-                })];
-            if (hdrClips.Any(value => value) && hdrClips.Any(value => !value))
-            {
-                diagnostics.Add(Error(HdrRequiresUniformTimeline));
-            }
-        }
         return diagnostics.AsReadOnly();
     }
 

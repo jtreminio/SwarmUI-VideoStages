@@ -110,20 +110,4 @@ describe("typed conditional-rule evaluator", () => {
             ),
         ).toBe(true);
     });
-
-    it("evaluates timeline HDR uniformity with its advertised minimum", () => {
-        const hdr = minimalClip({ prompt: "hdr" });
-        const plain = minimalClip();
-        expect(
-            evaluateConditionalRule(
-                rule(CONDITIONAL_RULE_CODES.uniformTimelineHdr, {
-                    minimumTimelineClips: 2,
-                }),
-                {
-                    timelineClips: [hdr, plain],
-                    hasActiveHdr: (clip) => clip.prompt === "hdr",
-                },
-            ),
-        ).toBe(true);
-    });
 });

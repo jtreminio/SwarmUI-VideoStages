@@ -204,7 +204,7 @@ table:
 - clip: source video, prompts, relay, references, retakes, audio sources, and
   projected audio segments;
 - stage: input modes, each upscale mode (also republished as a flat
-  `upscaleModes` list), LoRA, IC-LoRA, HDR, frame references;
+  `upscaleModes` list), LoRA, IC-LoRA, frame references;
 - boundary: cut, continue, and crossfade rules.
 
 The resolved-model capability set is complete rather than an additive
@@ -234,9 +234,6 @@ Capabilities say what is allowed; these are what they mean.
   frame references.
 - Prompt relay tiles a window list across the clip and requires a fixed frame
   count, so it cannot combine with audio-owned or ControlNet-owned length.
-- HDR is a typed flag on an IC-LoRA entry, not a name match. Its activation
-  must be uniform across the whole timeline, and it is the reason an
-  architecture may finalize after publication.
 - Upscale has four modes selected by the authored method-name prefix: `pixel-`,
   `model-`, `latent-`, and `latentmodel-`.
 - Source video is conformed before use: load, resample to the timeline fps
@@ -314,9 +311,9 @@ LTX IC-LoRAs carry explicit, preset-independent drive intent. `DriveSource`
 chooses an authored upload or Incoming media already available at that
 generation point; `DriveData` chooses Visual, Audio, or None (model-only);
 `DriveMediaKinds` narrows which containers (image, video, or audio) may supply
-that stream; and `Hdr` is a typed flag. Curated presets seed all four fields in
-the frontend, but backend planning and runtime dispatch use the persisted typed
-contract rather than matching preset or model names.
+that stream. Curated presets seed these fields in the frontend, but backend
+planning and runtime dispatch use the persisted typed contract rather than
+matching preset or model names.
 
 ### Timeline audio tracks
 
@@ -352,12 +349,9 @@ is nothing clip-scoped to validate.
   plan committed to refine semantics without its source, a trim that cannot be
   applied, and an upload blob the sanitizer cannot strip are all errors, not
   warnings.
-- At most one architecture owns the host root, and at most one owns
-  whole-timeline finalization.
-- `OutputPublisher` is the only writer of the captured host save set. The one
-  sanctioned exception is the exclusive `FinalizeTimeline` contract after
-  publication: LTX uses it to delete each published animation save and graft in
-  the HDR save. Nothing else may re-target that set.
+- At most one architecture owns the host root.
+- `OutputPublisher` is the only writer of the captured host save set. Nothing
+  else may re-target it.
 - `VideoGraphHelpers` provides common `NodeHelpers` accessors/codecs and is the
   sole owner of invalidation caused by graph-node removal. It recognizes the
   extension's bare-id, JSON `[nodeId, slot]`, and pipe-marker encodings plus
@@ -378,8 +372,8 @@ is nothing clip-scoped to validate.
 
 The extension ships its own ComfyUI package and registers its folder as a
 custom node path at init. It provides Swarm Audio Length To Frames, Swarm Frame
-Window, Swarm Prompt Relay Encode, Swarm Ramp Mask Batch, Swarm Set Audio Mask
-Windows, and the legacy Swarm Save HDR Animation WS. Typed C# bindings are
+Window, Swarm Prompt Relay Encode, Swarm Ramp Mask Batch, and Swarm Set Audio
+Mask Windows. Typed C# bindings are
 generated into `src/Generated/`. The package root imports the ComfyUI-facing
 module lazily so the pure helpers stay importable and testable without ComfyUI.
 The generation-prune and runtime-registration retention audit is recorded in
@@ -425,7 +419,7 @@ Three things look like inconsistencies and are not. Each was considered and
 rejected on the merits.
 
 - **LTX vocabulary stays in the generic capability enums.** `PromptRelay`,
-  `Retake`, `IcLora`, `Hdr`, and the four upscale modes are a published
+  `Retake`, `IcLora`, and the four upscale modes are a published
   cross-language contract. Hiding the spec's LTX-shaped fields behind an opaque
   payload would cost the catalog its typed wire and buy nothing: the meaning of
   each is already module-owned.

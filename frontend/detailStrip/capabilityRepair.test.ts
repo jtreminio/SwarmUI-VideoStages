@@ -8,7 +8,7 @@ import {
     testSourceOnlyArchitecture,
 } from "../__test_helpers__/architectureFixtures";
 import {
-    hdrIcLoraFixture,
+    icLoraFixture,
     minimalClip,
     minimalRef,
     minimalStage,
@@ -466,8 +466,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const clip = minimalClip({
             clipLengthFromControlNet: true,
             icLoras: [
-                hdrIcLoraFixture({
-                    hdr: false,
+                icLoraFixture({
                     driveSource: "ControlNet 2",
                 }),
             ],
@@ -559,8 +558,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const clip = minimalClip({
             clipLengthFromControlNet: true,
             icLoras: [
-                hdrIcLoraFixture({
-                    hdr: false,
+                icLoraFixture({
                     driveSource: "ControlNet 1",
                 }),
             ],

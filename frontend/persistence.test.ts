@@ -284,7 +284,6 @@ describe("persistence", () => {
                             strength: 1,
                             attentionStrength: 1,
                             controlType: "none",
-                            hdr: false,
                             driveMedia: null,
                         },
                     ],
@@ -326,7 +325,6 @@ describe("persistence", () => {
                             strength: 1,
                             attentionStrength: 1,
                             controlType: "none",
-                            hdr: false,
                             driveMedia: null,
                         },
                     ],
@@ -416,7 +414,6 @@ describe("persistence", () => {
                                 strength: 0.8,
                                 attentionStrength: 0.9,
                                 controlType: "canny",
-                                hdr: false,
                                 driveMedia: {
                                     data: "data:video/mp4;base64,GUIDE",
                                     fileName: "guide.mp4",

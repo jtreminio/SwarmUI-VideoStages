@@ -1,4 +1,3 @@
-import { disableCapabilityControls } from "../../detailStrip/capabilityUi";
 import type { DetailStripContext } from "../../detailStrip/context";
 import {
     appendHelp,
@@ -40,11 +39,7 @@ import {
     icLoraAutoHint,
 } from "./icLoraAutoDownload";
 import { canUseIncomingIcLoraDrive } from "./icLoraDriveAvailability";
-import {
-    canonicalizeIcLoraFields,
-    defaultIcLora,
-    isHdrFeature,
-} from "./icLoraNormalization";
+import { canonicalizeIcLoraFields, defaultIcLora } from "./icLoraNormalization";
 import {
     findIcLoraPreset,
     IC_LORA_AUTO,
@@ -149,7 +144,6 @@ export const buildIcLorasSection = (
                                 preset: defaultPreset.id,
                                 strength: defaultPreset.strength,
                                 controlType: defaultPreset.controlType,
-                                hdr: defaultPreset.hdr === true,
                                 driveData: defaultContract.driveData,
                                 driveMediaKinds: [
                                     ...defaultContract.acceptedKinds,
@@ -203,18 +197,14 @@ export const buildIcLorasSection = (
         col.setAttribute("data-vst-iclora-idx", `${entryIdx}`);
         const entryAt = (clips: Clip[], index: number): IcLora | undefined =>
             clips[clipIdx]?.icLoras[index];
-        const hdrDecision = clipCapabilities.decision("hdr");
 
         {
             const fields = col;
 
-            const persistedHdr = isHdrFeature(entry);
             const preset = findIcLoraPreset(entry.preset);
             const driveMediaKinds = entry.driveMediaKinds;
             const audioDriveMedia = entry.driveData === "audio";
-            const presetOptions = IC_LORA_PRESETS.filter(
-                (preset) => hdrDecision.supported || preset.hdr !== true,
-            );
+            const presetOptions = IC_LORA_PRESETS;
             const presetSpecs = [
                 {
                     value: IC_LORA_PRESET_CUSTOM_ID,
@@ -270,9 +260,6 @@ export const buildIcLorasSection = (
                                 }
                             }
                         }
-                        // The preset table is the only thing that declares HDR intent; picking a
-                        // non-HDR preset clears it rather than leaving a stale flag behind.
-                        target.hdr = preset?.hdr === true;
                         const nextContract = icLoraDriveMediaContract(preset);
                         target.driveData = nextContract.driveData;
                         target.driveMediaKinds = [
@@ -705,13 +692,7 @@ export const buildIcLorasSection = (
                 fields.appendChild(hint);
             }
 
-            if (!persistedHdr || hdrDecision.supported) {
-                ensureIcLoraAutoWeights(
-                    entry,
-                    defaults.loraValues,
-                    context.render,
-                );
-            }
+            ensureIcLoraAutoWeights(entry, defaults.loraValues, context.render);
             const autoText = icLoraAutoHint(entry, defaults.loraValues);
             if (autoText) {
                 const autoHint = document.createElement("small");
@@ -721,9 +702,6 @@ export const buildIcLorasSection = (
                 }
                 autoHint.textContent = autoText;
                 fields.appendChild(autoHint);
-            }
-            if (persistedHdr && !hdrDecision.supported) {
-                disableCapabilityControls(fields, hdrDecision);
             }
         }
 

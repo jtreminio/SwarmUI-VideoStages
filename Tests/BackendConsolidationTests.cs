@@ -334,10 +334,6 @@ public class BackendConsolidationTests
                 .Require<MinimumActiveStagesRuleConstraints>().MinimumActiveStages,
             Ltx2ConditionalRulePolicySource.AudioReuseMinimumActiveStages);
         Assert.Equal(
-            Ltx2ConditionalRulePolicySource.HdrRequiresUniformTimeline
-                .Require<UniformTimelineFeatureRuleConstraints>().MinimumTimelineClips,
-            Ltx2ConditionalRulePolicySource.HdrMinimumTimelineClips);
-        Assert.Equal(
             [ArchitectureEntryMode.SourceVideo, ArchitectureEntryMode.RefineVideo],
             Ltx2ConditionalRulePolicySource.RetakeEntryModes);
     }

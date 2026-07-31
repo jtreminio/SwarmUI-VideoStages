@@ -55,9 +55,9 @@ Two independent things:
 - **Clip audio** — the audio the clip itself owns, from the model's native audio, an upload, an AceStep track, or a ControlNet source. A clip can take its length from its audio.
 - **Timeline audio tracks** — audio lanes laid across the whole timeline, free to cross clip boundaries. Drag to place and trim them, set a per-lane volume, and overlap as many as you want; they mix additively over the finished video.
 
-## LoRAs, IC-LoRAs, and HDR
+## LoRAs and IC-LoRAs
 
-Normal LoRAs can be attached per stage. **IC-LoRAs** are the control-style adapters: pick one of the curated presets (union control, motion tracking, in/outpainting, lip sync, spatial upscalers, deblur, colorization, restyle, and more) or choose Custom and point it at your own weights, then choose what drives it — an upload you supply or whatever media is already flowing into that stage, as visual, audio, or model-only. **HDR** is one of these; when it is on, the finished video is written as a 10-bit HDR10 file.
+Normal LoRAs can be attached per stage. **IC-LoRAs** are the control-style adapters: pick one of the curated presets (union control, motion tracking, in/outpainting, lip sync, spatial upscalers, deblur, colorization, restyle, and more) or choose Custom and point it at your own weights, then choose what drives it — an upload you supply or whatever media is already flowing into that stage, as visual, audio, or model-only.
 
 ## Upscaling
 

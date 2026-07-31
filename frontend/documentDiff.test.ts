@@ -588,7 +588,6 @@ describe("diffDocuments", () => {
                 strength: 1,
                 attentionStrength: 1,
                 controlType: "none",
-                hdr: false,
                 driveMedia: null,
             },
         ];
@@ -782,7 +781,6 @@ describe("diffDocuments", () => {
                         strength: 0.75,
                         attentionStrength: 0.5,
                         controlType: "depth",
-                        hdr: false,
                         driveMedia: null,
                     },
                 ];

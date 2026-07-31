@@ -31,7 +31,6 @@
         "latent-model-upscale",
         "lora",
         "ic-lora",
-        "hdr",
         "frame-references"
       ],
       "upscaleModes": [
@@ -139,16 +138,6 @@
             "source-video",
             "refine-video"
           ]
-        }
-      },
-      {
-        "support": "conditional",
-        "code": "mixed-hdr-timeline-unsupported",
-        "reason": "HDR IC-LoRA activation must be uniform across the complete timeline.",
-        "scope": "architecture",
-        "constraints": {
-          "uniformTimelineFeature": "hdr",
-          "minimumTimelineClips": 2
         }
       }
     ]

@@ -1,4 +1,3 @@
-import { CONDITIONAL_RULE_CODES } from "./architectures/conditionalRules";
 import { deriveArchitectureDiagnostics } from "./architectures/diagnostics";
 import { createCapabilityViewResolver } from "./architectures/policy";
 import type { ArchitectureModelCatalog } from "./architectures/types";
@@ -84,15 +83,6 @@ export const deriveAuthoringDiagnostics = (
                 );
             }
         }
-    }
-
-    const hdrRule = executable
-        .map(({ clip }) => capabilityViews?.forClip(clip).decision("hdr").rule)
-        .find(
-            (rule) => rule?.code === CONDITIONAL_RULE_CODES.uniformTimelineHdr,
-        );
-    if (hdrRule) {
-        diagnostics.push(diagnostic("error", hdrRule.code, hdrRule.reason));
     }
 
     return diagnostics;

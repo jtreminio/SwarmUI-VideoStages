@@ -131,10 +131,6 @@ internal sealed record ArchitectureTimelineSessionContext(
     RootExecutionPolicy RootPolicy,
     TimelineAssemblySession Assembly);
 
-internal sealed record ArchitectureTimelineFinalizationContext(
-    VideoExecutionPlan Plan,
-    OutputPublication Publication);
-
 /// <summary>Creates one timeline-scoped session for one architecture.</summary>
 internal interface IArchitectureGenerationSessionFactory
 {
@@ -142,17 +138,11 @@ internal interface IArchitectureGenerationSessionFactory
 
     IArchitectureBoundaryAssembler BoundaryAssembler => null;
 
-    bool HasFinalizationWork(ArchitectureTimelineFinalizationContext context) => false;
-
     void PrepareTimeline(ArchitectureTimelinePreparationContext context)
     {
     }
 
     IVideoGenerationSession CreateSession(ArchitectureTimelineSessionContext context);
-
-    void FinalizeTimeline(ArchitectureTimelineFinalizationContext context)
-    {
-    }
 }
 
 /// <summary>
