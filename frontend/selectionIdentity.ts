@@ -17,7 +17,7 @@
  * whichever entity happens to occupy the old slot.
  */
 
-import { getState } from "./persistence";
+import { getState } from "./persistence/repository";
 import type { TimelineSelection } from "./selectionTypes";
 import type { Clip, VideoStagesConfig } from "./types";
 

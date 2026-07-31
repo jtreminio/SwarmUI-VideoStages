@@ -6,7 +6,7 @@ import {
 } from "./constants";
 import type { GestureRouter } from "./gestureRouter";
 import { freeIntervalAt } from "./intervals";
-import { getClips } from "./persistence";
+import { getClips } from "./persistence/repository";
 import { otherSpans } from "./promptWindowEdits";
 import { selectionAfterRemoval, setSelection } from "./selection";
 import { clipDurationOf, parseIntAttr } from "./trackDomUtils";

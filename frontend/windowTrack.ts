@@ -26,7 +26,7 @@ import {
     type GestureRouter,
     type GestureSession,
 } from "./gestureRouter";
-import { getClips, saveClips } from "./persistence";
+import { getClips, saveClips } from "./persistence/repository";
 import { activateSelection, setSelection } from "./selection";
 import type { UpdateOrigin } from "./store";
 import { getTimelineAuthoringSettings } from "./timelineAuthoringSettings";

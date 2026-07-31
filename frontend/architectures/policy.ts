@@ -7,7 +7,6 @@ import type {
 } from "./policy/types";
 import type { ArchitectureModelCatalog } from "./types";
 
-export type { FeatureSupportScope } from "./policy/featureValues";
 export {
     architectureFeatureSupport,
     isAudioSourceSupported,

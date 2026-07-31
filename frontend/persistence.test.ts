@@ -28,6 +28,13 @@ import {
     setVideoStagesHostBridgeForTests,
 } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
+import { resetTimelineCarrierAdapterForTests } from "./persistence/carrierAdapter";
+import {
+    decodeStoredDocument,
+    serializeClipsForStorage,
+    serializeStateForDurableStorage,
+    serializeStateForStorage,
+} from "./persistence/documentCodec";
 import {
     __resetPersistenceForTests,
     dispatchDocumentCommand,
@@ -36,12 +43,7 @@ import {
     getTimelineStore,
     saveClips,
     saveState,
-    serializeClipsForStorage,
-    serializeStateForDurableStorage,
-    serializeStateForStorage,
-} from "./persistence";
-import { resetTimelineCarrierAdapterForTests } from "./persistence/carrierAdapter";
-import { decodeStoredDocument } from "./persistence/documentCodec";
+} from "./persistence/repository";
 import type { StoredClip } from "./storageTypes";
 import { REF_SOURCE_BASE, type VideoStagesConfig } from "./types";
 import { clearUiStateForTests } from "./uiState";

@@ -24,7 +24,7 @@ import {
     boundaryImpactForLeftClip,
     resolveTimelineTiming,
 } from "../timelineTiming";
-import { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "../timelineView";
+import { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "../timelineView/regionRenderer";
 import type {
     BoundaryOut,
     TimelineSelection,

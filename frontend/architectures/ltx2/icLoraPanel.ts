@@ -36,7 +36,6 @@ import type {
 import {
     clearIcLoraAutoFailure,
     ensureIcLoraAutoWeights,
-    IC_LORA_AUTO,
     IC_LORA_AUTO_HINT_ATTR,
     icLoraAutoHint,
 } from "./icLoraAutoDownload";
@@ -48,6 +47,7 @@ import {
 } from "./icLoraNormalization";
 import {
     findIcLoraPreset,
+    IC_LORA_AUTO,
     IC_LORA_DEFAULT_PRESET_ID,
     IC_LORA_PRESET_CUSTOM_ID,
     IC_LORA_PRESETS,

@@ -27,7 +27,7 @@ import {
     getState,
     getTimelineStore,
     saveState,
-} from "../persistence";
+} from "../persistence/repository";
 import { createTimelineHistory } from "../timelineHistory";
 import { buildClipLorasSection } from "./clipLorasPanel";
 import type { DetailStripContext } from "./context";

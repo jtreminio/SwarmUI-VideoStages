@@ -18,12 +18,12 @@ import {
     collectAuthoringEntityIds,
     ensureAuthoringDocumentIdentity,
 } from "./identity";
+import { serializeStateForStorage } from "./persistence/documentCodec";
 import {
     __resetPersistenceForTests,
     getState,
     saveState,
-    serializeStateForStorage,
-} from "./persistence";
+} from "./persistence/repository";
 import {
     CURRENT_AUTHORING_SCHEMA_VERSION,
     type VideoStagesConfig,

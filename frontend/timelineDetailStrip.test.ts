@@ -22,13 +22,11 @@ import {
 } from "./__test_helpers__/dom";
 import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
 import { CONDITIONAL_RULE_CODES } from "./architectures/conditionalRules";
-import {
-    IC_LORA_AUTO,
-    resetIcLoraAutoDownloads,
-} from "./architectures/ltx2/icLoraAutoDownload";
+import { resetIcLoraAutoDownloads } from "./architectures/ltx2/icLoraAutoDownload";
+import { IC_LORA_AUTO } from "./architectures/ltx2/icLoraPresets";
 import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
-import * as persistence from "./persistence";
+import * as persistence from "./persistence/repository";
 import {
     activateSelection,
     getSelection,

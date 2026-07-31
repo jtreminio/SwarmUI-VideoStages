@@ -8,7 +8,7 @@ import {
     buildStackSection,
     clampStartLength,
 } from "../detailWidgets";
-import { getTimelineStore, saveClips } from "../persistence";
+import { getTimelineStore, saveClips } from "../persistence/repository";
 import { probeSourceVideo } from "../sourceVideoProbe";
 import {
     beginSourceVideoProbeOperation,

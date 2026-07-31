@@ -464,186 +464,6 @@
     return Math.round(clampedNumber(value, fallback, min, max) * unitScale) / unitScale;
   };
 
-  // frontend/normalizationMedia.ts
-  var normalizePromptWindow = (raw) => {
-    const duration = numberOr(raw.duration, 0);
-    if (!(duration > 0)) {
-      return null;
-    }
-    const start = nonNegativeNumber(raw.start);
-    return {
-      id: normalizeOptionalEntityId(raw.id),
-      prompt: text(raw.prompt),
-      start,
-      duration
-    };
-  };
-  var normalizePromptWindows = (rawClip) => {
-    const rawList = rawClip.promptWindows;
-    if (!Array.isArray(rawList)) {
-      return [];
-    }
-    return rawList.map((entry) => normalizePromptWindow(isRecord(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
-  };
-  var normalizeRetake = (value, clipDuration) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const startRaw = nonNegativeNumber(value.startSeconds);
-    const lengthRaw = numberOr(value.lengthSeconds, 0);
-    const window2 = clampWindowInDuration(
-      startRaw,
-      lengthRaw,
-      clipDuration,
-      RETAKE_MIN_DURATION
-    );
-    if (!window2) {
-      return null;
-    }
-    const strengthRaw = value.strength;
-    const strength = strengthRaw == null ? RETAKE_STRENGTH_DEFAULT : clampedNumber(
-      strengthRaw,
-      RETAKE_STRENGTH_DEFAULT,
-      RETAKE_STRENGTH_MIN,
-      RETAKE_STRENGTH_MAX
-    );
-    return {
-      id: normalizeOptionalEntityId(value.id),
-      startSeconds: roundToTenth(window2.startSeconds),
-      lengthSeconds: roundToTenth(window2.lengthSeconds),
-      strength
-    };
-  };
-  var normalizeSourceVideo = (value) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const data = trimmedText(value.data);
-    if (!data) {
-      return null;
-    }
-    const durationSeconds = nonNegativeNumber(value.durationSeconds);
-    let startSeconds = nonNegativeNumber(value.startSeconds);
-    let lengthSeconds = nonNegativeNumber(value.lengthSeconds);
-    if (durationSeconds > 0) {
-      startSeconds = Math.min(
-        startSeconds,
-        Math.max(0, durationSeconds - CLIP_DURATION_MIN)
-      );
-      if (!(lengthSeconds > 0)) {
-        lengthSeconds = durationSeconds - startSeconds;
-      }
-      lengthSeconds = Math.min(lengthSeconds, durationSeconds - startSeconds);
-    }
-    if (!(lengthSeconds > 0)) {
-      return null;
-    }
-    return {
-      data,
-      fileName: normalizeUploadFileName(
-        value.fileName == null ? null : text(value.fileName)
-      ),
-      fps: nonNegativeNumber(value.fps),
-      durationSeconds: roundToTenth(durationSeconds),
-      startSeconds: roundToTenth(startSeconds),
-      lengthSeconds: roundToTenth(lengthSeconds)
-    };
-  };
-  var normalizeUploadedMedia = (value) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const data = trimmedText(value.data);
-    if (!data) {
-      return null;
-    }
-    return {
-      data,
-      fileName: normalizeUploadFileName(
-        value.fileName == null ? null : text(value.fileName)
-      )
-    };
-  };
-
-  // frontend/normalizationAudio.ts
-  var normalizeAudioTrackSourceKind = (value) => {
-    const compact = trimmedText(value).toLowerCase();
-    switch (compact) {
-      case "upload":
-        return "Upload";
-      case "acestepfun":
-        return "AceStepFun";
-      case "native":
-        return "Native";
-      case "controlnet":
-        return "ControlNet";
-      default:
-        return "External";
-    }
-  };
-  var normalizeAudioTrackSpan = (value) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const sourceStart = optionalNonNegativeNumber(value.sourceStartSeconds) ?? 0;
-    return {
-      id: normalizeOptionalEntityId(value.id),
-      timelineStartSeconds: optionalNonNegativeNumber(
-        value.timelineStartSeconds
-      ),
-      timelineLengthSeconds: optionalPositiveNumber(
-        value.timelineLengthSeconds
-      ),
-      sourceStartSeconds: sourceStart
-    };
-  };
-  var splitSpansIntoLanes = (track) => {
-    if (track.spans.length <= 1) {
-      return [track];
-    }
-    return track.spans.map((span, spanIndex) => ({
-      ...track,
-      id: track.id === void 0 ? void 0 : `${track.id}:${spanIndex}`,
-      source: { ...track.source },
-      spans: [span]
-    }));
-  };
-  var normalizeAudioTracks = (value) => {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    const tracks = [];
-    for (const rawTrack of value) {
-      if (!isRecord(rawTrack)) {
-        continue;
-      }
-      const rawSource = rawTrack.source;
-      const source = isRecord(rawSource) ? rawSource : {};
-      const rawSpans = rawTrack.spans;
-      const volume = rawTrack.volume === void 0 ? void 0 : clampedNumber(
-        rawTrack.volume,
-        AUDIO_SEGMENT_VOLUME_DEFAULT,
-        AUDIO_SEGMENT_VOLUME_MIN,
-        AUDIO_SEGMENT_VOLUME_MAX
-      );
-      tracks.push(
-        ...splitSpansIntoLanes({
-          id: normalizeOptionalEntityId(rawTrack.id),
-          source: {
-            kind: normalizeAudioTrackSourceKind(source.kind),
-            reference: trimmedText(source.reference),
-            uploadedAudio: normalizeUploadedMedia(source.uploadedAudio)
-          },
-          spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter(
-            (span) => span !== null
-          ) : [],
-          ...volume === void 0 ? {} : { volume }
-        })
-      );
-    }
-    return tracks;
-  };
-
   // frontend/architectures/catalogQueries.ts
   var architectureDescriptor = (catalog, architectureId) => (architectureId ? catalog?.architectures.find((entry) => entry.id === architectureId) : null) ?? null;
   var modelCatalogEntry = (catalog, model) => (model ? catalog?.entries.find((entry) => entry.value === model) : null) ?? null;
@@ -668,712 +488,6 @@
       ...entry.entryAbilities === void 0 ? {} : { entryAbilities: [...entry.entryAbilities] },
       entryModes: [...entry.entryModes]
     } : null;
-  };
-
-  // frontend/architectures/none/identity.ts
-  var NONE_ARCHITECTURE_ID = "none";
-
-  // frontend/architectures/clipIdentity.ts
-  var modelIdentityFromCatalog = (catalog, model) => {
-    if (!catalog) return null;
-    const entry = modelCatalogEntry(catalog, model);
-    if (!entry?.architectureId || !entry.modelProfileId || !entry.compatibilityClassId) {
-      return null;
-    }
-    return {
-      architectureId: entry.architectureId,
-      modelProfileId: entry.modelProfileId,
-      compatibilityClassId: entry.compatibilityClassId
-    };
-  };
-  var resolvedClipArchitectureId = (clip, catalog) => {
-    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
-      return NONE_ARCHITECTURE_ID;
-    }
-    const stageZeroModel = clip.stages[0]?.model;
-    return stageZeroModel ? modelIdentityFromCatalog(catalog, stageZeroModel)?.architectureId ?? null : null;
-  };
-  var deriveClipArchitectureIdentity = (clip, catalog) => {
-    if (!catalog) return null;
-    const identities = clip.stages.map((stage) => ({
-      stage,
-      identity: modelIdentityFromCatalog(catalog, stage.model)
-    }));
-    if (identities.some(({ identity }) => !identity)) {
-      return null;
-    }
-    const authored = identities[0]?.identity ?? null;
-    if (authored && identities.some(
-      ({ identity }) => identity?.architectureId !== authored.architectureId || identity.compatibilityClassId !== authored.compatibilityClassId
-    )) {
-      return null;
-    }
-    const authoredIdentity = {
-      authoredArchitectureId: authored?.architectureId ?? null,
-      authoredModelProfileId: authored?.modelProfileId ?? null
-    };
-    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
-      return {
-        architectureId: NONE_ARCHITECTURE_ID,
-        modelProfileId: NONE_ARCHITECTURE_ID,
-        ...authoredIdentity
-      };
-    }
-    if (authored) {
-      return {
-        architectureId: authored.architectureId,
-        modelProfileId: authored.modelProfileId,
-        ...authoredIdentity
-      };
-    }
-    if (clip.architectureHint === NONE_ARCHITECTURE_ID && clip.modelProfileId === NONE_ARCHITECTURE_ID) {
-      return {
-        architectureId: NONE_ARCHITECTURE_ID,
-        modelProfileId: NONE_ARCHITECTURE_ID,
-        ...authoredIdentity
-      };
-    }
-    const validEmptyIdentity = catalog.architectures.some(
-      (architecture) => architecture.id === clip.architectureHint
-    );
-    return validEmptyIdentity ? {
-      architectureId: clip.architectureHint,
-      modelProfileId: clip.modelProfileId,
-      ...authoredIdentity
-    } : null;
-  };
-  var reconcileClipArchitectureIdentity = (clip, catalog) => {
-    const identity = deriveClipArchitectureIdentity(clip, catalog);
-    if (!identity) return false;
-    clip.architectureHint = identity.architectureId;
-    clip.modelProfileId = identity.modelProfileId;
-    return true;
-  };
-
-  // frontend/architectures/ltx2/icLoraPresets.ts
-  var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
-  var IC_LORA_AUTO = "[AUTO]";
-  var DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT = {
-    acceptedKinds: ["image", "video"],
-    driveData: "visual"
-  };
-  var LIPDUB_DRIVE_MEDIA_CONTRACT = {
-    acceptedKinds: ["audio", "video"],
-    driveData: "audio"
-  };
-  var icLoraDriveMediaContractForData = (driveData) => {
-    if (driveData === "audio") {
-      return LIPDUB_DRIVE_MEDIA_CONTRACT;
-    }
-    if (driveData === "visual") {
-      return DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
-    }
-    return { acceptedKinds: [], driveData: "none" };
-  };
-  var IC_LORA_PRESET_CUSTOM_ID = "custom";
-  var IC_LORA_DEFAULT_PRESET_ID = "union-control";
-  var HF = "https://huggingface.co";
-  var IC_LORA_PRESETS = [
-    {
-      id: "union-control",
-      displayName: "Union Control",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "depth",
-      allowedControlTypes: ["none", "canny", "depth", "normal"],
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`,
-      note: "Structural control from depth/canny/normal signals; pick the control type to render. Dims snap to multiples of 64."
-    },
-    {
-      id: "motion-track-control",
-      displayName: "Motion Track Control",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control/resolve/main/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors`,
-      note: "Feed an LTXVDrawTracks-rendered track video (e.g. saved from the official workflow) — hand-made dot videos don't match the training format. Dims snap to multiples of 64."
-    },
-    {
-      id: "in-outpainting",
-      displayName: "In/Outpainting",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting/resolve/main/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors`,
-      note: "Feed a pre-masked clip: masked region must be hard #66FF00 green, slightly dilated, losslessly encoded. Kept regions are still re-generated, not composited back."
-    },
-    {
-      id: "ingredients",
-      displayName: "Ingredients",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients/resolve/main/ltx-2.3-22b-ic-lora-ingredients-0.9.safetensors`,
-      note: "Feed the reference sheet as drive media (a still image works). Prompt pattern: '### Reference Sheet Description' per cell, then '### Target Description'."
-    },
-    {
-      id: "lipdub",
-      displayName: "LipDub",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors`,
-      note: "Generates new speech + lips from the prompt's words. The drive source supplies the speaker sample: audio is used directly, and video sources contribute only their audio while their frames are ignored.",
-      driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT
-    },
-    {
-      id: "hdr",
-      displayName: "HDR",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      // The repo also ships an auxiliary hdr-scene-emb file; only the LoRA itself is fetched.
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-HDR/resolve/main/ltx-2.3-22b-ic-lora-hdr-0.9.safetensors`,
-      hdr: true,
-      note: "HDR generation; feed the SDR clip as the drive video. Output is auto-tonemapped to SDR (LogC3 decompressed). Suggested prompt: 'HDR footage'."
-    },
-    {
-      id: "pixel-spatial-upscaler-x2",
-      displayName: "Pixel Spatial Upscaler ×2",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors`,
-      note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64."
-    },
-    {
-      id: "pixel-spatial-upscaler-x4",
-      displayName: "Pixel Spatial Upscaler ×4",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors`,
-      note: "Apply on a refine stage with Upscale ×4 and source Incoming media. Dims snap to multiples of 128."
-    },
-    {
-      id: "deblur",
-      displayName: "Deblur",
-      triggerPhrase: "DEBLUR",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Deblur/resolve/main/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors`,
-      note: "Feed the blurry clip directly. Lower toward 0.8 if over-sharpened."
-    },
-    {
-      id: "decompression",
-      displayName: "Decompression",
-      triggerPhrase: "ENHANCE QUALITY",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Decompression/resolve/main/ltx-2.3-22b-ic-lora-decompression-0.9.safetensors`,
-      note: "Removes compression artifacts; feed a low-bitrate clip directly."
-    },
-    {
-      id: "water-simulation",
-      displayName: "Water Simulation",
-      triggerPhrase: "ADD WATER",
-      strength: 1.2,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Water-Simulation/resolve/main/ltx-2.3-22b-ic-lora-water-simulation-0.9.safetensors`,
-      note: "Sweet spot ~1.2 (1.0 subtle; ≥1.5 warps faces). Feed a dry clip."
-    },
-    {
-      id: "instant-shave",
-      displayName: "Instant Shave",
-      triggerPhrase: "REMOVEBEARD",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Instant-Shave/resolve/main/ltx-2.3-22b-ic-lora-instant-shave-0.9.safetensors`,
-      note: "Feed a bearded clip directly. Lower toward 0.8 if artifacts appear."
-    },
-    {
-      id: "colorization",
-      displayName: "Colorization",
-      triggerPhrase: "COLORIZE",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Colorization/resolve/main/ltx-2.3-22b-ic-lora-colorization-0.9.safetensors`,
-      note: "Feed the grayscale clip; describe the restored colors after the COLORIZE trigger."
-    },
-    {
-      id: "cross-eyed",
-      displayName: "Cross-Eyed",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Cross-Eyed/resolve/main/ltx-2.3-22b-ic-lora-cross-eyed-0.9.safetensors`,
-      note: "Turns straight eyes inward (convergent strabismus) in close-up portrait clips; describe the effect in the prompt."
-    },
-    {
-      id: "day-to-night",
-      displayName: "Day to Night",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Day-To-Night/resolve/main/ltx-2.3-22b-ic-lora-day-to-night-0.9.safetensors`,
-      note: "Relights a daytime clip to night. Prompt the night look and add 'Only the lighting changes from day to night'. Best at ~4s clips."
-    },
-    {
-      id: "restyle",
-      displayName: "ReStyle",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Cseti/LTX2.3-22B_ReStyle_IC-LoRA/resolve/main/852654_LTX2.3-22B_ReStyle_IC-LoRA_8000_v0.1.safetensors`,
-      note: "Style transfer over an existing clip; see README for style prompts."
-    },
-    {
-      id: "cameraman",
-      displayName: "Cameraman",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2/resolve/main/LTX2.3-22B_IC-LoRA-Cameraman_v2_14000.safetensors`,
-      note: "Camera-motion control driven by the reference video's movement."
-    },
-    {
-      id: "crossview-prompt",
-      displayName: "CrossView Prompt",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt/resolve/main/LTX2.3-22B_IC-LoRA-CrossView-Prompt_v0.9_13700.safetensors`,
-      note: "Re-renders the scene from a prompted new camera viewpoint."
-    },
-    {
-      id: "outpaint",
-      displayName: "Outpaint",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint/resolve/main/ltx-2.3-22b-ic-lora-outpaint.safetensors`,
-      note: "Extends the frame beyond the source video's borders."
-    },
-    {
-      id: "refocus",
-      displayName: "ReFocus",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus/resolve/main/ltx-2.3-22b-ic-lora-refocus.safetensors`,
-      note: "Fixes lens blur / refocuses; feed the blurred clip directly."
-    },
-    {
-      id: "vr360-outpaint",
-      displayName: "VR 360 Outpaint",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      weightsUrl: `${HF}/TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA/resolve/main/360vroutpaint_v2_step09000.safetensors`,
-      note: "Outpaints to an equirectangular 360° panorama."
-    }
-  ];
-  var findIcLoraPreset = (id) => {
-    const wanted = `${id ?? ""}`.trim();
-    if (!wanted || wanted === IC_LORA_PRESET_CUSTOM_ID) {
-      return null;
-    }
-    return IC_LORA_PRESETS.find((preset) => preset.id === wanted) ?? null;
-  };
-  var icLoraDisplayName = (entry) => {
-    if (entry.preset === IC_LORA_PRESET_CUSTOM_ID) {
-      return entry.lora;
-    }
-    return findIcLoraPreset(entry.preset)?.displayName ?? entry.preset;
-  };
-  var icLoraDriveMediaContract = (preset) => preset?.driveMedia ?? DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
-  var icLoraWeightsStem = (preset) => preset.weightsUrl.slice(preset.weightsUrl.lastIndexOf("/") + 1).replace(/\.safetensors$/i, "");
-  var icLoraAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset).replaceAll(".", "_")}`;
-  var icLoraLegacyAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset)}`;
-  var icLoraRepoUrl = (preset) => preset.weightsUrl.split("/resolve/")[0];
-  var icLoraTriggerHint = (preset) => {
-    if (!preset?.triggerPhrase) {
-      return "";
-    }
-    return `Prepend "${preset.triggerPhrase}" to your prompt`;
-  };
-
-  // frontend/architectures/ltx2/dimensionPolicy.ts
-  var presetFactors = /* @__PURE__ */ new Map([
-    ["union-control", 2],
-    ["motion-track-control", 2],
-    ["pixel-spatial-upscaler-x2", 2],
-    ["pixel-spatial-upscaler-x4", 4]
-  ]);
-  var normalizeModelName = (value) => {
-    const normalized = `${value ?? ""}`.trim().replaceAll("\\", "/");
-    const basename = normalized.slice(normalized.lastIndexOf("/") + 1);
-    return basename.replace(/\.safetensors$/i, "").toLowerCase();
-  };
-  var curatedModelFactors = /* @__PURE__ */ new Map();
-  for (const [presetId, factor] of presetFactors) {
-    const preset = findIcLoraPreset(presetId);
-    for (const name of preset ? [icLoraAutoModelName(preset), icLoraLegacyAutoModelName(preset)] : []) {
-      curatedModelFactors.set(normalizeModelName(name), factor);
-    }
-  }
-  var icLoraDimensionFactor = (entry) => {
-    const presetFactor = presetFactors.get(
-      `${entry.preset ?? ""}`.trim().toLowerCase()
-    );
-    if (presetFactor) {
-      return presetFactor;
-    }
-    return curatedModelFactors.get(normalizeModelName(entry.lora)) ?? 1;
-  };
-  var ltx2DimensionFactor = (clip) => Math.max(1, ...clip.icLoras.map((entry) => icLoraDimensionFactor(entry)));
-  var ltx2DimensionMultiple = (clip) => ROOT_DIMENSION_STEP * ltx2DimensionFactor(clip);
-
-  // frontend/icLoraAuthoring.ts
-  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
-  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
-  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
-  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
-  var IC_LORA_SOURCE_UPLOAD = "Upload";
-  var IC_LORA_SOURCE_INCOMING = "Incoming";
-  var IC_LORA_STAGE_ALL = -1;
-  var IC_LORA_STRENGTH_MIN = 0;
-  var IC_LORA_STRENGTH_MAX = 2;
-  var IC_LORA_STRENGTH_STEP = 0.05;
-  var IC_LORA_STRENGTH_DEFAULT = 1;
-  var IC_LORA_ATTENTION_MIN = 0;
-  var IC_LORA_ATTENTION_MAX = 1;
-  var IC_LORA_ATTENTION_STEP = 0.05;
-  var IC_LORA_ATTENTION_DEFAULT = 1;
-
-  // frontend/architectures/ltx2/icLoraDriveAvailability.ts
-  var canUseIncomingIcLoraDrive = (entry, clip, clipIdx, clips, generatedEntryMode) => {
-    const executable = executableClipIndexes(clips);
-    if (entry.driveData === "none" || !executable.includes(clipIdx)) {
-      return false;
-    }
-    const acceptedKinds = entry.driveMediaKinds;
-    const activeStageIndexes = clip.stages.slice(0, activeStageCount(clip)).map((_stage, rawIndex) => rawIndex);
-    const targetedStages = entry.stage >= 0 ? activeStageIndexes.includes(entry.stage) ? [entry.stage] : [] : activeStageIndexes;
-    const hasPreviousClipOutput = executable.some((index) => index < clipIdx);
-    return targetedStages.length > 0 && targetedStages.every((targetStage) => {
-      const activeStageIndex = activeStageIndexes.indexOf(targetStage);
-      const incomingKind = activeStageIndex > 0 || clip.sourceVideo ? "video" : hasPreviousClipOutput ? "video" : generatedEntryMode === "image-to-video" ? "image" : null;
-      return incomingKind !== null && acceptedKinds.includes(incomingKind);
-    });
-  };
-  var reconcileIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode) => {
-    const clip = clips[clipIdx];
-    if (!clip) {
-      return false;
-    }
-    let changed = false;
-    for (const entry of clip.icLoras) {
-      if (entry.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
-        entry,
-        clip,
-        clipIdx,
-        clips,
-        generatedEntryMode
-      )) {
-        entry.driveSource = IC_LORA_SOURCE_UPLOAD;
-        changed = true;
-      }
-    }
-    return changed;
-  };
-
-  // frontend/architectures/ltx2/icLoraNormalization.ts
-  var CONTROLNET_SOURCE_OPTIONS = [
-    "ControlNet 1",
-    "ControlNet 2",
-    "ControlNet 3"
-  ];
-  var controlNetSourceIndex = (value) => {
-    const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
-    if (!compact.startsWith("controlnet")) {
-      return null;
-    }
-    const rawIndex = compact.slice("controlnet".length);
-    if (!/^[+-]?\d+$/.test(rawIndex)) {
-      return null;
-    }
-    const oneBased = Number(rawIndex);
-    return Number.isSafeInteger(oneBased) && oneBased >= 1 && oneBased <= 3 ? oneBased - 1 : null;
-  };
-  var canonicalControlNetSource = (value) => {
-    const index = controlNetSourceIndex(value);
-    return index === null ? null : CONTROLNET_SOURCE_OPTIONS[index];
-  };
-  var defaultIcLora = (overrides = {}) => ({
-    lora: "",
-    preset: IC_LORA_PRESET_CUSTOM_ID,
-    driveSource: IC_LORA_SOURCE_UPLOAD,
-    driveData: "visual",
-    driveMediaKinds: ["image", "video"],
-    stage: IC_LORA_STAGE_ALL,
-    strength: IC_LORA_STRENGTH_DEFAULT,
-    attentionStrength: IC_LORA_ATTENTION_DEFAULT,
-    controlType: "none",
-    hdr: false,
-    driveMedia: null,
-    ...overrides
-  });
-  var normalizeControlNetLora = (value) => {
-    const raw = `${value ?? ""}`.trim();
-    if (!raw) {
-      return "";
-    }
-    const squeezed = raw.replace(/\s+/g, "").toLowerCase();
-    if (squeezed === "(none)") {
-      return "";
-    }
-    return raw;
-  };
-  var normalizeIcLoraControlType = (value) => {
-    const raw = `${value ?? ""}`.trim().toLowerCase();
-    return raw === "canny" || raw === "depth" || raw === "normal" ? raw : "none";
-  };
-  var normalizeIcLoraDriveSource = (value) => {
-    const authored = `${value ?? ""}`.trim();
-    const compact = authored.replace(/\s+/g, "").toLowerCase();
-    if (!compact || compact === "upload") {
-      return IC_LORA_SOURCE_UPLOAD;
-    }
-    if (compact === "incoming" || compact === "stageinput") {
-      return IC_LORA_SOURCE_INCOMING;
-    }
-    return canonicalControlNetSource(authored) ?? authored;
-  };
-  var normalizeIcLoraDriveData = (value) => {
-    const compact = `${value ?? ""}`.trim().toLowerCase();
-    return compact === "none" || compact === "audio" ? compact : "visual";
-  };
-  var mediaKindsForData = (driveData) => icLoraDriveMediaContractForData(driveData).acceptedKinds;
-  var normalizeIcLoraDriveMediaKinds = (value, driveData) => {
-    const allowed = mediaKindsForData(driveData);
-    if (!Array.isArray(value)) {
-      return [...allowed];
-    }
-    const kinds = [];
-    for (const rawKind of value) {
-      const kind = `${rawKind ?? ""}`.trim().toLowerCase();
-      if ((kind === "image" || kind === "video" || kind === "audio") && allowed.includes(kind) && !kinds.includes(kind)) {
-        kinds.push(kind);
-      }
-    }
-    return kinds;
-  };
-  var normalizeIcLoraStage = (value, stageCount) => {
-    if (value == null || `${value}`.trim() === "") {
-      return IC_LORA_STAGE_ALL;
-    }
-    const stage = Math.trunc(Number(value));
-    if (!Number.isFinite(stage) || stage < 0) {
-      return IC_LORA_STAGE_ALL;
-    }
-    return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
-  };
-  var normalizeIcLora = (raw, stageCount = 0, _sourcedClip = false) => {
-    if (!isRecord(raw)) {
-      return null;
-    }
-    const lora = normalizeControlNetLora(raw.lora);
-    if (!lora) {
-      return null;
-    }
-    const preset = `${raw.preset ?? ""}`.trim();
-    const repairsLegacyCustomAuto = lora === IC_LORA_AUTO && (!preset || preset === IC_LORA_PRESET_CUSTOM_ID);
-    const normalizedPreset = repairsLegacyCustomAuto ? IC_LORA_DEFAULT_PRESET_ID : preset || IC_LORA_PRESET_CUSTOM_ID;
-    const repairedPreset = repairsLegacyCustomAuto ? findIcLoraPreset(normalizedPreset) : null;
-    const driveData = normalizeIcLoraDriveData(raw.driveData);
-    const driveMediaKinds = normalizeIcLoraDriveMediaKinds(
-      raw.driveMediaKinds,
-      driveData
-    );
-    const normalizedDriveMedia = normalizeUploadedMedia(raw.driveMedia);
-    let driveSource = normalizeIcLoraDriveSource(raw.driveSource);
-    const driveMedia = driveSource === IC_LORA_SOURCE_UPLOAD && driveData !== "none" && normalizedDriveMedia && driveMediaKinds.some(
-      (kind) => normalizedDriveMedia.data.startsWith(`data:${kind}/`)
-    ) ? normalizedDriveMedia : null;
-    const stage = normalizeIcLoraStage(raw.stage, stageCount);
-    if (driveData === "none") {
-      driveSource = IC_LORA_SOURCE_UPLOAD;
-    }
-    return {
-      lora,
-      preset: normalizedPreset,
-      driveSource,
-      driveData,
-      driveMediaKinds,
-      stage,
-      strength: repairsLegacyCustomAuto ? repairedPreset?.strength ?? IC_LORA_STRENGTH_DEFAULT : snapValueToStep(
-        raw.strength,
-        IC_LORA_STRENGTH_DEFAULT,
-        IC_LORA_STRENGTH_MIN,
-        IC_LORA_STRENGTH_MAX,
-        IC_LORA_STRENGTH_STEP
-      ),
-      attentionStrength: snapValueToStep(
-        raw.attentionStrength,
-        IC_LORA_ATTENTION_DEFAULT,
-        IC_LORA_ATTENTION_MIN,
-        IC_LORA_ATTENTION_MAX,
-        IC_LORA_ATTENTION_STEP
-      ),
-      controlType: driveData !== "visual" ? "none" : repairsLegacyCustomAuto ? repairedPreset?.controlType ?? "none" : normalizeIcLoraControlType(raw.controlType),
-      // Documents authored before the flag existed carry only the preset id; the preset table
-      // (not a name match) seeds the intent, so those documents keep working.
-      hdr: typeof raw.hdr === "boolean" ? raw.hdr : findIcLoraPreset(normalizedPreset)?.hdr ?? false,
-      driveMedia
-    };
-  };
-  var normalizeIcLoras = (rawClip, stageCount = 0, sourcedClip = false) => {
-    if (!Array.isArray(rawClip.icLoras)) {
-      return [];
-    }
-    return rawClip.icLoras.map((entry) => normalizeIcLora(entry, stageCount, sourcedClip)).filter((entry) => entry !== null);
-  };
-  var canonicalizeIcLoraFields = (entry) => {
-    if (entry.driveData === "none") {
-      entry.driveSource = IC_LORA_SOURCE_UPLOAD;
-      entry.driveMedia = null;
-    }
-    entry.driveMediaKinds = normalizeIcLoraDriveMediaKinds(
-      entry.driveMediaKinds,
-      entry.driveData
-    );
-  };
-  var isHdrFeature = (entry) => entry.hdr === true;
-  var hasSlotSourcedIcLora = (icLoras) => icLoras.some((entry) => controlNetSourceIndex(entry.driveSource) !== null);
-
-  // frontend/architectures/ltx2/behavior.ts
-  var ltx2Behavior = {
-    dimensionMultiple: ltx2DimensionMultiple,
-    normalizeIcLoras,
-    canonicalizeIcLoraFields,
-    reconcileIncomingIcLoraDrives,
-    hasSlotSourcedIcLora,
-    isHdrFeature,
-    icLoraDisplayName
-  };
-
-  // frontend/architectures/ltx2/identity.ts
-  var LTX2_ARCHITECTURE_ID = "ltx2";
-
-  // frontend/architectures/behaviorRegistry.ts
-  var behaviors = /* @__PURE__ */ new Map([
-    [LTX2_ARCHITECTURE_ID, ltx2Behavior]
-  ]);
-  var architectureBehavior = (architectureId) => behaviors.get(architectureId) ?? null;
-  var architectureDimensionMultiple = (clip, architectureId) => {
-    const requested = architectureBehavior(architectureId)?.dimensionMultiple(clip) ?? ROOT_DIMENSION_STEP;
-    if (!Number.isFinite(requested)) {
-      return ROOT_DIMENSION_STEP;
-    }
-    return Math.max(
-      ROOT_DIMENSION_STEP,
-      Math.ceil(requested / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP
-    );
-  };
-  var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, sourcedClip, options = {}) => {
-    const behavior = architectureBehavior(architectureId);
-    if (behavior) {
-      return behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip);
-    }
-    return options.preserveDormantLtx === true && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? ltx2Behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip) : [];
-  };
-  var canonicalizeArchitectureIcLoraFields = (architectureId, entry) => {
-    architectureBehavior(architectureId)?.canonicalizeIcLoraFields(entry);
-  };
-  var reconcileArchitectureIncomingIcLoraDrives = (clips, generatedEntryMode, catalog) => {
-    let changed = false;
-    clips.forEach((clip, clipIdx) => {
-      const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
-      changed = architectureBehavior(architectureId)?.reconcileIncomingIcLoraDrives(
-        clips,
-        clipIdx,
-        generatedEntryMode
-      ) || changed;
-    });
-    return changed;
-  };
-  var reconcileClipArchitectureIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode, catalog) => {
-    const clip = clips[clipIdx];
-    if (!clip) return false;
-    const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
-    return architectureBehavior(architectureId)?.reconcileIncomingIcLoraDrives(
-      clips,
-      clipIdx,
-      generatedEntryMode
-    ) ?? false;
-  };
-  var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => architectureBehavior(architectureId)?.hasSlotSourcedIcLora(entries) ?? false;
-  var isArchitectureHdrFeature = (architectureId, entry) => architectureBehavior(architectureId)?.isHdrFeature(entry) ?? false;
-  var architectureIcLoraDisplayName = (architectureId, entry) => architectureBehavior(architectureId)?.icLoraDisplayName(entry) ?? entry.lora;
-  var clipHasActiveHdrForArchitecture = (clip, architectureId) => clip.icLoras.some(
-    (entry) => isArchitectureHdrFeature(architectureId, entry) && clip.stages.slice(0, activeStageCount(clip)).some(
-      (_stage, rawStageIdx) => entry.stage < 0 || entry.stage === rawStageIdx
-    )
-  );
-
-  // frontend/architectures/boundaryConstraints.ts
-  var GENERIC_BOUNDARY_CONSTRAINTS = {
-    frameStep: 1,
-    minFrames: 1,
-    maxFrames: Number.MAX_SAFE_INTEGER,
-    defaultFrames: 1,
-    continuityExtraFrames: 0
-  };
-  var finitePositive = (value, fallback, allowZero = false) => {
-    const numeric = Math.trunc(Number(value));
-    return Number.isFinite(numeric) && (allowZero ? numeric >= 0 : numeric > 0) ? numeric : fallback;
-  };
-  var boundaryOverlapConstraints = (rule) => {
-    const raw = rule?.constraints;
-    const frameStep = finitePositive(
-      raw?.frameStep,
-      GENERIC_BOUNDARY_CONSTRAINTS.frameStep
-    );
-    const minFrames = finitePositive(
-      raw?.minFrames,
-      GENERIC_BOUNDARY_CONSTRAINTS.minFrames
-    );
-    const maxFrames = Math.max(
-      minFrames,
-      finitePositive(raw?.maxFrames, GENERIC_BOUNDARY_CONSTRAINTS.maxFrames)
-    );
-    const authoredDefault = finitePositive(raw?.defaultFrames, minFrames);
-    return {
-      frameStep,
-      minFrames,
-      maxFrames,
-      defaultFrames: Math.max(
-        minFrames,
-        Math.min(maxFrames, authoredDefault)
-      ),
-      continuityExtraFrames: finitePositive(
-        raw?.continuityExtraFrames,
-        GENERIC_BOUNDARY_CONSTRAINTS.continuityExtraFrames,
-        true
-      )
-    };
-  };
-  var normalizeBoundaryOverlap = (value, constraints) => {
-    const numeric = Math.trunc(Number(value));
-    if (!Number.isFinite(numeric) || numeric <= 0) {
-      return constraints.defaultFrames;
-    }
-    const snapped = numeric < constraints.minFrames ? constraints.minFrames : constraints.minFrames + Math.floor(
-      (numeric - constraints.minFrames) / constraints.frameStep
-    ) * constraints.frameStep;
-    return Math.max(
-      constraints.minFrames,
-      Math.min(constraints.maxFrames, snapped)
-    );
-  };
-  var boundaryOverlapChoices = (constraints) => {
-    const choices = [];
-    for (let value = constraints.minFrames; value <= constraints.maxFrames; value += constraints.frameStep) {
-      choices.push(value);
-      if (choices.length >= 100) break;
-    }
-    return choices;
   };
 
   // frontend/architectures/generatedFeatures.ts
@@ -2222,794 +1336,1097 @@
     };
   };
 
-  // frontend/architectures/identity.ts
-  var normalizeClipArchitecture = (rawArchitecture, stageZeroModel, catalog) => {
-    const persisted = `${rawArchitecture ?? ""}`.trim();
-    if (persisted) {
-      return persisted;
-    }
-    const fromCatalog = catalog && stageZeroModel ? architectureForModel(catalog, stageZeroModel) : null;
-    if (fromCatalog) {
-      return fromCatalog;
-    }
-    return "unsupported";
+  // frontend/architectures/boundaryConstraints.ts
+  var GENERIC_BOUNDARY_CONSTRAINTS = {
+    frameStep: 1,
+    minFrames: 1,
+    maxFrames: Number.MAX_SAFE_INTEGER,
+    defaultFrames: 1,
+    continuityExtraFrames: 0
   };
-
-  // frontend/clipColor.ts
-  var HUE_MIN = 0;
-  var HUE_MAX = 359;
-  var HUE_RANGE = 360;
-  var BASE_HUE = 210;
-  var UNASSIGNED_HUE = -1;
-  var HUE_SATURATION = 65;
-  var HUE_LIGHTNESS = 55;
-  var isAssignedHue = (value) => typeof value === "number" && Number.isInteger(value) && value >= HUE_MIN && value <= HUE_MAX;
-  var normalizeStoredHue = (value) => {
-    if (value == null || value === "") {
-      return UNASSIGNED_HUE;
-    }
-    const num = typeof value === "number" ? value : Number(value);
-    if (!Number.isFinite(num)) {
-      return UNASSIGNED_HUE;
-    }
-    return (Math.round(num) % HUE_RANGE + HUE_RANGE) % HUE_RANGE;
+  var finitePositive = (value, fallback, allowZero = false) => {
+    const numeric = Math.trunc(Number(value));
+    return Number.isFinite(numeric) && (allowZero ? numeric >= 0 : numeric > 0) ? numeric : fallback;
   };
-  var hueDistance = (a, b) => {
-    const d = Math.abs(a - b) % HUE_RANGE;
-    return d > 180 ? HUE_RANGE - d : d;
-  };
-  var pickDistinctHue = (existing) => {
-    const inUse = existing.filter(isAssignedHue);
-    if (inUse.length === 0) {
-      return BASE_HUE;
-    }
-    let best = 0;
-    let bestScore = -1;
-    for (let hue = HUE_MIN; hue <= HUE_MAX; hue++) {
-      let minDist = 180;
-      for (const used of inUse) {
-        const d = hueDistance(hue, used);
-        if (d < minDist) {
-          minDist = d;
-        }
-      }
-      if (minDist > bestScore) {
-        bestScore = minDist;
-        best = hue;
-      }
-    }
-    return best;
-  };
-  var assignMissingHues = (clips) => {
-    const assigned = [];
-    for (const clip of clips) {
-      if (isAssignedHue(clip.hue)) {
-        assigned.push(clip.hue);
-      }
-    }
-    for (const clip of clips) {
-      if (isAssignedHue(clip.hue)) {
-        continue;
-      }
-      const hue = pickDistinctHue(assigned);
-      clip.hue = hue;
-      assigned.push(hue);
-    }
-  };
-  var clipHueCss = (hue) => {
-    const resolved = isAssignedHue(hue) ? hue : BASE_HUE;
-    return `hsl(${resolved} ${HUE_SATURATION}% ${HUE_LIGHTNESS}%)`;
-  };
-
-  // frontend/loraAuthoring.ts
-  var LORA_WEIGHT_DEFAULT = 1;
-  var LORA_WEIGHT_STEP = 0.05;
-  var defaultLoraWeight = (defaults, modelName) => {
-    const index = defaults.loraValues.indexOf(modelName);
-    const value = index >= 0 ? defaults.loraDefaultWeights[index] : null;
-    return typeof value === "number" && Number.isFinite(value) ? value : LORA_WEIGHT_DEFAULT;
-  };
-  var appendLoraToClip = (clip, name, initialWeight) => {
-    clip.loras.push({ name });
-    for (const stage of clip.stages) {
-      stage.loraWeights.push(initialWeight);
-    }
-  };
-  var replaceLoraModelAt = (clip, index, name, initialWeight) => {
-    const entry = clip.loras[index];
-    if (!entry) {
-      return false;
-    }
-    entry.name = name;
-    for (const stage of clip.stages) {
-      stage.loraWeights[index] = initialWeight;
-    }
-    return true;
-  };
-  var removeLoraAt = (clip, index) => {
-    if (index < 0 || index >= clip.loras.length) {
-      return false;
-    }
-    clip.loras.splice(index, 1);
-    for (const stage of clip.stages) {
-      if (index < stage.loraWeights.length) {
-        stage.loraWeights.splice(index, 1);
-      }
-    }
-    return true;
-  };
-
-  // frontend/renderUtils.ts
-  var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  var framesForClip = (durationSeconds, fps, rawFrameGrid) => {
-    const frameGrid = Number.isInteger(rawFrameGrid) && rawFrameGrid > 0 ? rawFrameGrid : 1;
-    return Math.max(
-      1,
-      Math.ceil(
-        Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) / frameGrid
-      ) * frameGrid + 1
+  var boundaryOverlapConstraints = (rule) => {
+    const raw = rule?.constraints;
+    const frameStep = finitePositive(
+      raw?.frameStep,
+      GENERIC_BOUNDARY_CONSTRAINTS.frameStep
     );
-  };
-  var snapDurationToFps = (seconds, fps) => {
-    if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
-      return seconds;
-    }
-    const frames = Math.max(1, Math.ceil(seconds * fps));
-    const aligned = frames / fps;
-    return Math.max(0.1, Math.floor(aligned * 10) / 10);
-  };
-
-  // frontend/types.ts
-  var CURRENT_AUTHORING_SCHEMA_VERSION = 6;
-  var REF_SOURCE_BASE = "Base";
-  var REF_SOURCE_REFINER = "Refiner";
-  var REF_SOURCE_UPLOAD = "Upload";
-
-  // frontend/normalizationStage.ts
-  var normalizeStageRefStrengthValue = (value) => snapValueToStep(
-    value,
-    STAGE_REF_STRENGTH_DEFAULT,
-    STAGE_REF_STRENGTH_MIN,
-    STAGE_REF_STRENGTH_MAX,
-    STAGE_REF_STRENGTH_STEP
-  );
-  var normalizeStageControlNetStrengthValue = (value) => snapValueToStep(
-    value,
-    STAGE_CONTROLNET_STRENGTH_DEFAULT,
-    STAGE_CONTROLNET_STRENGTH_MIN,
-    STAGE_CONTROLNET_STRENGTH_MAX,
-    STAGE_CONTROLNET_STRENGTH_STEP
-  );
-  var normalizeStageIcLoraStrengths = (rawStrengths, icLoraCount, fallbackStrength = 1, perLoraFallbacks = []) => {
-    const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
-    return Array.from(
-      { length: icLoraCount },
-      (_, index) => normalizeStageControlNetStrengthValue(
-        rawValues[index] ?? perLoraFallbacks[index] ?? fallbackStrength
+    const minFrames = finitePositive(
+      raw?.minFrames,
+      GENERIC_BOUNDARY_CONSTRAINTS.minFrames
+    );
+    const maxFrames = Math.max(
+      minFrames,
+      finitePositive(raw?.maxFrames, GENERIC_BOUNDARY_CONSTRAINTS.maxFrames)
+    );
+    const authoredDefault = finitePositive(raw?.defaultFrames, minFrames);
+    return {
+      frameStep,
+      minFrames,
+      maxFrames,
+      defaultFrames: Math.max(
+        minFrames,
+        Math.min(maxFrames, authoredDefault)
+      ),
+      continuityExtraFrames: finitePositive(
+        raw?.continuityExtraFrames,
+        GENERIC_BOUNDARY_CONSTRAINTS.continuityExtraFrames,
+        true
       )
+    };
+  };
+  var normalizeBoundaryOverlap = (value, constraints) => {
+    const numeric = Math.trunc(Number(value));
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return constraints.defaultFrames;
+    }
+    const snapped = numeric < constraints.minFrames ? constraints.minFrames : constraints.minFrames + Math.floor(
+      (numeric - constraints.minFrames) / constraints.frameStep
+    ) * constraints.frameStep;
+    return Math.max(
+      constraints.minFrames,
+      Math.min(constraints.maxFrames, snapped)
     );
   };
-  var buildDefaultStageRefStrengths = (refCount, defaultStrength = STAGE_REF_STRENGTH_DEFAULT) => Array.from({ length: refCount }, () => defaultStrength);
-  var normalizeStageRefStrengths = (rawStrengths, refCount) => {
-    const strengths = [];
-    const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
-    for (let i = 0; i < refCount; i++) {
-      strengths.push(normalizeStageRefStrengthValue(rawValues[i]));
+  var boundaryOverlapChoices = (constraints) => {
+    const choices = [];
+    for (let value = constraints.minFrames; value <= constraints.maxFrames; value += constraints.frameStep) {
+      choices.push(value);
+      if (choices.length >= 100) break;
     }
-    return strengths;
+    return choices;
   };
-  var readRawStageProp = (raw, key) => readProp(raw, key);
-  var readRawStageString = (raw, key) => {
-    const value = readRawStageProp(raw, key);
-    if (value == null) {
-      return void 0;
+
+  // frontend/architectures/none/identity.ts
+  var NONE_ARCHITECTURE_ID = "none";
+
+  // frontend/architectures/clipIdentity.ts
+  var modelIdentityFromCatalog = (catalog, model) => {
+    if (!catalog) return null;
+    const entry = modelCatalogEntry(catalog, model);
+    if (!entry?.architectureId || !entry.modelProfileId || !entry.compatibilityClassId) {
+      return null;
     }
-    return trimmedText(value) || void 0;
+    return {
+      architectureId: entry.architectureId,
+      modelProfileId: entry.modelProfileId,
+      compatibilityClassId: entry.compatibilityClassId
+    };
   };
-  var normalizeStageLoras = (raw) => {
-    if (!Array.isArray(raw)) {
+  var resolvedClipArchitectureId = (clip, catalog) => {
+    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
+      return NONE_ARCHITECTURE_ID;
+    }
+    const stageZeroModel = clip.stages[0]?.model;
+    return stageZeroModel ? modelIdentityFromCatalog(catalog, stageZeroModel)?.architectureId ?? null : null;
+  };
+  var deriveClipArchitectureIdentity = (clip, catalog) => {
+    if (!catalog) return null;
+    const identities = clip.stages.map((stage) => ({
+      stage,
+      identity: modelIdentityFromCatalog(catalog, stage.model)
+    }));
+    if (identities.some(({ identity }) => !identity)) {
+      return null;
+    }
+    const authored = identities[0]?.identity ?? null;
+    if (authored && identities.some(
+      ({ identity }) => identity?.architectureId !== authored.architectureId || identity.compatibilityClassId !== authored.compatibilityClassId
+    )) {
+      return null;
+    }
+    const authoredIdentity = {
+      authoredArchitectureId: authored?.architectureId ?? null,
+      authoredModelProfileId: authored?.modelProfileId ?? null
+    };
+    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
+      return {
+        architectureId: NONE_ARCHITECTURE_ID,
+        modelProfileId: NONE_ARCHITECTURE_ID,
+        ...authoredIdentity
+      };
+    }
+    if (authored) {
+      return {
+        architectureId: authored.architectureId,
+        modelProfileId: authored.modelProfileId,
+        ...authoredIdentity
+      };
+    }
+    if (clip.architectureHint === NONE_ARCHITECTURE_ID && clip.modelProfileId === NONE_ARCHITECTURE_ID) {
+      return {
+        architectureId: NONE_ARCHITECTURE_ID,
+        modelProfileId: NONE_ARCHITECTURE_ID,
+        ...authoredIdentity
+      };
+    }
+    const validEmptyIdentity = catalog.architectures.some(
+      (architecture) => architecture.id === clip.architectureHint
+    );
+    return validEmptyIdentity ? {
+      architectureId: clip.architectureHint,
+      modelProfileId: clip.modelProfileId,
+      ...authoredIdentity
+    } : null;
+  };
+  var reconcileClipArchitectureIdentity = (clip, catalog) => {
+    const identity = deriveClipArchitectureIdentity(clip, catalog);
+    if (!identity) return false;
+    clip.architectureHint = identity.architectureId;
+    clip.modelProfileId = identity.modelProfileId;
+    return true;
+  };
+
+  // frontend/architectures/policy/boundaryPolicy.ts
+  var forceCrossArchitectureCutsForConversion = (clips, catalog) => {
+    for (const boundary of executableBoundaries(clips)) {
+      const left = clips[boundary.leftIdx];
+      const right = clips[boundary.rightIdx];
+      const leftArchitectureId = resolvedClipArchitectureId(left, catalog);
+      const rightArchitectureId = resolvedClipArchitectureId(right, catalog);
+      if (leftArchitectureId !== null && rightArchitectureId !== null && leftArchitectureId !== rightArchitectureId) {
+        left.boundaryOut = "cut";
+      }
+    }
+  };
+  var createBoundaryCapabilityViews = (architectureById, forClip) => {
+    const byTimeline = /* @__PURE__ */ new WeakMap();
+    const forBoundary = (left, right, leftClipIdx = -1, rightClipIdx = null) => {
+      const leftView = forClip(left);
+      const rightView = right === null ? null : forClip(right);
+      const leftDescriptor = architectureById.get(leftView.architectureId);
+      const crossArchitecture = rightView !== null && leftView.architectureId !== rightView.architectureId;
+      const hasInitialReference = right?.refs.some(
+        (reference) => reference.fromEnd !== true && Math.max(1, Math.round(reference.frame)) === 1
+      ) ?? false;
+      const rightHasActiveStage = right !== null && activeStageCount(right) > 0;
+      const supportsMode = (mode) => {
+        const rule = leftDescriptor?.boundaryRules[mode];
+        if (!rule || rule.support === "unsupported") {
+          return mode === "cut" && !leftDescriptor;
+        }
+        const constraints = rule.constraints;
+        if (constraints?.sameArchitecture === true && crossArchitecture) {
+          return false;
+        }
+        if (constraints?.targetRequiresGeneratedEntry === true && right?.sourceVideo !== null) {
+          return false;
+        }
+        if (constraints?.targetRequiresStage === true && right !== null && !rightHasActiveStage) {
+          return false;
+        }
+        if (constraints?.targetDisallowsInitialReference === true && hasInitialReference) {
+          return false;
+        }
+        return true;
+      };
+      const ruleModes = ["cut", "continue", "crossfade"].filter(
+        supportsMode
+      );
+      const modes = ruleModes.length > 0 ? ruleModes : ["cut"];
+      const requestedRule = leftDescriptor?.boundaryRules[left.boundaryOut] ?? null;
+      const reason = crossArchitecture ? "Executable clips from different architectures can only use a cut." : modes.length === 1 && modes[0] === "cut" ? requestedRule?.reason ?? `${leftView.architectureLabel} only supports cut boundaries.` : "";
+      return {
+        leftClipIdx,
+        rightClipIdx,
+        modes,
+        crossArchitecture,
+        reason,
+        overlapConstraints: (mode) => boundaryOverlapConstraints(
+          leftDescriptor?.boundaryRules[mode] ?? null
+        ),
+        effective: (requested) => supportsMode(requested) ? requested : "cut"
+      };
+    };
+    const forBoundaryIndex = (clips, leftClipIdx) => {
+      let timelineViews = byTimeline.get(clips);
+      if (!timelineViews) {
+        timelineViews = /* @__PURE__ */ new Map();
+        byTimeline.set(clips, timelineViews);
+      }
+      const cached = timelineViews.get(leftClipIdx);
+      if (cached) {
+        return cached;
+      }
+      const left = clips[leftClipIdx];
+      if (!left) {
+        throw new Error(`Missing left clip at index ${leftClipIdx}.`);
+      }
+      const rightClipIdx = executableBoundaryForLeftClip(clips, leftClipIdx)?.rightIdx ?? null;
+      const view = forBoundary(
+        left,
+        rightClipIdx === null ? null : clips[rightClipIdx],
+        leftClipIdx,
+        rightClipIdx
+      );
+      timelineViews.set(leftClipIdx, view);
+      return view;
+    };
+    return {
+      forBoundary,
+      forBoundaryIndex
+    };
+  };
+
+  // frontend/architectures/ltx2/icLoraPresets.ts
+  var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
+  var IC_LORA_AUTO = "[AUTO]";
+  var DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT = {
+    acceptedKinds: ["image", "video"],
+    driveData: "visual"
+  };
+  var LIPDUB_DRIVE_MEDIA_CONTRACT = {
+    acceptedKinds: ["audio", "video"],
+    driveData: "audio"
+  };
+  var icLoraDriveMediaContractForData = (driveData) => {
+    if (driveData === "audio") {
+      return LIPDUB_DRIVE_MEDIA_CONTRACT;
+    }
+    if (driveData === "visual") {
+      return DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
+    }
+    return { acceptedKinds: [], driveData: "none" };
+  };
+  var IC_LORA_PRESET_CUSTOM_ID = "custom";
+  var IC_LORA_DEFAULT_PRESET_ID = "union-control";
+  var HF = "https://huggingface.co";
+  var IC_LORA_PRESETS = [
+    {
+      id: "union-control",
+      displayName: "Union Control",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "depth",
+      allowedControlTypes: ["none", "canny", "depth", "normal"],
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`,
+      note: "Structural control from depth/canny/normal signals; pick the control type to render. Dims snap to multiples of 64."
+    },
+    {
+      id: "motion-track-control",
+      displayName: "Motion Track Control",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control/resolve/main/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors`,
+      note: "Feed an LTXVDrawTracks-rendered track video (e.g. saved from the official workflow) — hand-made dot videos don't match the training format. Dims snap to multiples of 64."
+    },
+    {
+      id: "in-outpainting",
+      displayName: "In/Outpainting",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting/resolve/main/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors`,
+      note: "Feed a pre-masked clip: masked region must be hard #66FF00 green, slightly dilated, losslessly encoded. Kept regions are still re-generated, not composited back."
+    },
+    {
+      id: "ingredients",
+      displayName: "Ingredients",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients/resolve/main/ltx-2.3-22b-ic-lora-ingredients-0.9.safetensors`,
+      note: "Feed the reference sheet as drive media (a still image works). Prompt pattern: '### Reference Sheet Description' per cell, then '### Target Description'."
+    },
+    {
+      id: "lipdub",
+      displayName: "LipDub",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors`,
+      note: "Generates new speech + lips from the prompt's words. The drive source supplies the speaker sample: audio is used directly, and video sources contribute only their audio while their frames are ignored.",
+      driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT
+    },
+    {
+      id: "hdr",
+      displayName: "HDR",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      // The repo also ships an auxiliary hdr-scene-emb file; only the LoRA itself is fetched.
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-HDR/resolve/main/ltx-2.3-22b-ic-lora-hdr-0.9.safetensors`,
+      hdr: true,
+      note: "HDR generation; feed the SDR clip as the drive video. Output is auto-tonemapped to SDR (LogC3 decompressed). Suggested prompt: 'HDR footage'."
+    },
+    {
+      id: "pixel-spatial-upscaler-x2",
+      displayName: "Pixel Spatial Upscaler ×2",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors`,
+      note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64."
+    },
+    {
+      id: "pixel-spatial-upscaler-x4",
+      displayName: "Pixel Spatial Upscaler ×4",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors`,
+      note: "Apply on a refine stage with Upscale ×4 and source Incoming media. Dims snap to multiples of 128."
+    },
+    {
+      id: "deblur",
+      displayName: "Deblur",
+      triggerPhrase: "DEBLUR",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Deblur/resolve/main/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors`,
+      note: "Feed the blurry clip directly. Lower toward 0.8 if over-sharpened."
+    },
+    {
+      id: "decompression",
+      displayName: "Decompression",
+      triggerPhrase: "ENHANCE QUALITY",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Decompression/resolve/main/ltx-2.3-22b-ic-lora-decompression-0.9.safetensors`,
+      note: "Removes compression artifacts; feed a low-bitrate clip directly."
+    },
+    {
+      id: "water-simulation",
+      displayName: "Water Simulation",
+      triggerPhrase: "ADD WATER",
+      strength: 1.2,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Water-Simulation/resolve/main/ltx-2.3-22b-ic-lora-water-simulation-0.9.safetensors`,
+      note: "Sweet spot ~1.2 (1.0 subtle; ≥1.5 warps faces). Feed a dry clip."
+    },
+    {
+      id: "instant-shave",
+      displayName: "Instant Shave",
+      triggerPhrase: "REMOVEBEARD",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Instant-Shave/resolve/main/ltx-2.3-22b-ic-lora-instant-shave-0.9.safetensors`,
+      note: "Feed a bearded clip directly. Lower toward 0.8 if artifacts appear."
+    },
+    {
+      id: "colorization",
+      displayName: "Colorization",
+      triggerPhrase: "COLORIZE",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Colorization/resolve/main/ltx-2.3-22b-ic-lora-colorization-0.9.safetensors`,
+      note: "Feed the grayscale clip; describe the restored colors after the COLORIZE trigger."
+    },
+    {
+      id: "cross-eyed",
+      displayName: "Cross-Eyed",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Cross-Eyed/resolve/main/ltx-2.3-22b-ic-lora-cross-eyed-0.9.safetensors`,
+      note: "Turns straight eyes inward (convergent strabismus) in close-up portrait clips; describe the effect in the prompt."
+    },
+    {
+      id: "day-to-night",
+      displayName: "Day to Night",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Day-To-Night/resolve/main/ltx-2.3-22b-ic-lora-day-to-night-0.9.safetensors`,
+      note: "Relights a daytime clip to night. Prompt the night look and add 'Only the lighting changes from day to night'. Best at ~4s clips."
+    },
+    {
+      id: "restyle",
+      displayName: "ReStyle",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Cseti/LTX2.3-22B_ReStyle_IC-LoRA/resolve/main/852654_LTX2.3-22B_ReStyle_IC-LoRA_8000_v0.1.safetensors`,
+      note: "Style transfer over an existing clip; see README for style prompts."
+    },
+    {
+      id: "cameraman",
+      displayName: "Cameraman",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2/resolve/main/LTX2.3-22B_IC-LoRA-Cameraman_v2_14000.safetensors`,
+      note: "Camera-motion control driven by the reference video's movement."
+    },
+    {
+      id: "crossview-prompt",
+      displayName: "CrossView Prompt",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt/resolve/main/LTX2.3-22B_IC-LoRA-CrossView-Prompt_v0.9_13700.safetensors`,
+      note: "Re-renders the scene from a prompted new camera viewpoint."
+    },
+    {
+      id: "outpaint",
+      displayName: "Outpaint",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint/resolve/main/ltx-2.3-22b-ic-lora-outpaint.safetensors`,
+      note: "Extends the frame beyond the source video's borders."
+    },
+    {
+      id: "refocus",
+      displayName: "ReFocus",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus/resolve/main/ltx-2.3-22b-ic-lora-refocus.safetensors`,
+      note: "Fixes lens blur / refocuses; feed the blurred clip directly."
+    },
+    {
+      id: "vr360-outpaint",
+      displayName: "VR 360 Outpaint",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      weightsUrl: `${HF}/TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA/resolve/main/360vroutpaint_v2_step09000.safetensors`,
+      note: "Outpaints to an equirectangular 360° panorama."
+    }
+  ];
+  var findIcLoraPreset = (id) => {
+    const wanted = `${id ?? ""}`.trim();
+    if (!wanted || wanted === IC_LORA_PRESET_CUSTOM_ID) {
+      return null;
+    }
+    return IC_LORA_PRESETS.find((preset) => preset.id === wanted) ?? null;
+  };
+  var icLoraDisplayName = (entry) => {
+    if (entry.preset === IC_LORA_PRESET_CUSTOM_ID) {
+      return entry.lora;
+    }
+    return findIcLoraPreset(entry.preset)?.displayName ?? entry.preset;
+  };
+  var icLoraDriveMediaContract = (preset) => preset?.driveMedia ?? DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
+  var icLoraWeightsStem = (preset) => preset.weightsUrl.slice(preset.weightsUrl.lastIndexOf("/") + 1).replace(/\.safetensors$/i, "");
+  var icLoraAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset).replaceAll(".", "_")}`;
+  var icLoraLegacyAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset)}`;
+  var icLoraRepoUrl = (preset) => preset.weightsUrl.split("/resolve/")[0];
+  var icLoraTriggerHint = (preset) => {
+    if (!preset?.triggerPhrase) {
+      return "";
+    }
+    return `Prepend "${preset.triggerPhrase}" to your prompt`;
+  };
+
+  // frontend/architectures/ltx2/dimensionPolicy.ts
+  var presetFactors = /* @__PURE__ */ new Map([
+    ["union-control", 2],
+    ["motion-track-control", 2],
+    ["pixel-spatial-upscaler-x2", 2],
+    ["pixel-spatial-upscaler-x4", 4]
+  ]);
+  var normalizeModelName = (value) => {
+    const normalized = `${value ?? ""}`.trim().replaceAll("\\", "/");
+    const basename = normalized.slice(normalized.lastIndexOf("/") + 1);
+    return basename.replace(/\.safetensors$/i, "").toLowerCase();
+  };
+  var curatedModelFactors = /* @__PURE__ */ new Map();
+  for (const [presetId, factor] of presetFactors) {
+    const preset = findIcLoraPreset(presetId);
+    for (const name of preset ? [icLoraAutoModelName(preset), icLoraLegacyAutoModelName(preset)] : []) {
+      curatedModelFactors.set(normalizeModelName(name), factor);
+    }
+  }
+  var icLoraDimensionFactor = (entry) => {
+    const presetFactor = presetFactors.get(
+      `${entry.preset ?? ""}`.trim().toLowerCase()
+    );
+    if (presetFactor) {
+      return presetFactor;
+    }
+    return curatedModelFactors.get(normalizeModelName(entry.lora)) ?? 1;
+  };
+  var ltx2DimensionFactor = (clip) => Math.max(1, ...clip.icLoras.map((entry) => icLoraDimensionFactor(entry)));
+  var ltx2DimensionMultiple = (clip) => ROOT_DIMENSION_STEP * ltx2DimensionFactor(clip);
+
+  // frontend/icLoraAuthoring.ts
+  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
+  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
+  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
+  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
+  var IC_LORA_SOURCE_UPLOAD = "Upload";
+  var IC_LORA_SOURCE_INCOMING = "Incoming";
+  var IC_LORA_STAGE_ALL = -1;
+  var IC_LORA_STRENGTH_MIN = 0;
+  var IC_LORA_STRENGTH_MAX = 2;
+  var IC_LORA_STRENGTH_STEP = 0.05;
+  var IC_LORA_STRENGTH_DEFAULT = 1;
+  var IC_LORA_ATTENTION_MIN = 0;
+  var IC_LORA_ATTENTION_MAX = 1;
+  var IC_LORA_ATTENTION_STEP = 0.05;
+  var IC_LORA_ATTENTION_DEFAULT = 1;
+
+  // frontend/architectures/ltx2/icLoraDriveAvailability.ts
+  var canUseIncomingIcLoraDrive = (entry, clip, clipIdx, clips, generatedEntryMode) => {
+    const executable = executableClipIndexes(clips);
+    if (entry.driveData === "none" || !executable.includes(clipIdx)) {
+      return false;
+    }
+    const acceptedKinds = entry.driveMediaKinds;
+    const activeStageIndexes = clip.stages.slice(0, activeStageCount(clip)).map((_stage, rawIndex) => rawIndex);
+    const targetedStages = entry.stage >= 0 ? activeStageIndexes.includes(entry.stage) ? [entry.stage] : [] : activeStageIndexes;
+    const hasPreviousClipOutput = executable.some((index) => index < clipIdx);
+    return targetedStages.length > 0 && targetedStages.every((targetStage) => {
+      const activeStageIndex = activeStageIndexes.indexOf(targetStage);
+      const incomingKind = activeStageIndex > 0 || clip.sourceVideo ? "video" : hasPreviousClipOutput ? "video" : generatedEntryMode === "image-to-video" ? "image" : null;
+      return incomingKind !== null && acceptedKinds.includes(incomingKind);
+    });
+  };
+  var reconcileIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode) => {
+    const clip = clips[clipIdx];
+    if (!clip) {
+      return false;
+    }
+    let changed = false;
+    for (const entry of clip.icLoras) {
+      if (entry.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+        entry,
+        clip,
+        clipIdx,
+        clips,
+        generatedEntryMode
+      )) {
+        entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+        changed = true;
+      }
+    }
+    return changed;
+  };
+
+  // frontend/normalizationMedia.ts
+  var normalizePromptWindow = (raw) => {
+    const duration = numberOr(raw.duration, 0);
+    if (!(duration > 0)) {
+      return null;
+    }
+    const start = nonNegativeNumber(raw.start);
+    return {
+      id: normalizeOptionalEntityId(raw.id),
+      prompt: text(raw.prompt),
+      start,
+      duration
+    };
+  };
+  var normalizePromptWindows = (rawClip) => {
+    const rawList = rawClip.promptWindows;
+    if (!Array.isArray(rawList)) {
       return [];
     }
-    const out = [];
-    for (const entry of raw) {
-      if (!isRecord(entry)) {
-        continue;
-      }
-      const name = trimmedText(readRawStageProp(entry, "name"));
-      if (!name) {
-        continue;
-      }
-      out.push({
-        name,
-        weight: numberOr(readRawStageProp(entry, "weight"), 1)
-      });
-    }
-    return out;
+    return rawList.map((entry) => normalizePromptWindow(isRecord(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
   };
-  var buildDefaultStage = (getRootDefaults2, getDefaultStageModel2, previousStage, refCount, initialLoraWeights = [], initialIcLoraStrengths = []) => {
-    const defaults = getRootDefaults2();
-    const model = previousStage ? previousStage.model : getDefaultStageModel2(defaults.modelValues);
-    return {
-      skipped: false,
-      control: previousStage ? previousStage.control : defaults.control,
-      controlNetStrength: previousStage ? previousStage.controlNetStrength : STAGE_CONTROLNET_STRENGTH_DEFAULT,
-      icLoraStrengths: previousStage ? [...previousStage.icLoraStrengths] : initialIcLoraStrengths.map(normalizeStageControlNetStrengthValue),
-      loraWeights: previousStage ? [...previousStage.loraWeights] : [...initialLoraWeights],
-      refStrengths: buildDefaultStageRefStrengths(refCount),
-      upscale: previousStage ? previousStage.upscale : defaults.upscale,
-      upscaleMethod: previousStage ? previousStage.upscaleMethod : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
-      model,
-      modelProfileId: previousStage?.modelProfileId ?? modelProfileForModel(defaults.modelCatalog, model) ?? "unsupported",
-      steps: previousStage ? previousStage.steps : defaults.steps,
-      cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
-      sampler: previousStage ? previousStage.sampler : defaults.samplerValues[0] ?? "euler",
-      scheduler: previousStage ? previousStage.scheduler : defaults.schedulerValues[0] ?? "normal"
-    };
-  };
-  var buildDefaultRef = (source = REF_SOURCE_REFINER) => ({
-    source,
-    uploadFileName: null,
-    uploadedImage: null,
-    frame: REF_FRAME_MIN,
-    fromEnd: false
-  });
-  var appendRefToClip = (clip, ref) => {
-    clip.refs.push(ref);
-    for (const stage of clip.stages) {
-      stage.refStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
-    }
-  };
-  var removeRefAt = (clip, refIdx) => {
-    if (refIdx < 0 || refIdx >= clip.refs.length) {
-      return false;
-    }
-    clip.refs.splice(refIdx, 1);
-    for (const stage of clip.stages) {
-      if (refIdx < stage.refStrengths.length) {
-        stage.refStrengths.splice(refIdx, 1);
-      }
-    }
-    return true;
-  };
-  var appendIcLoraStrengthToClip = (clip, initialStrength = 1) => {
-    for (const stage of clip.stages) {
-      stage.icLoraStrengths.push(
-        normalizeStageControlNetStrengthValue(initialStrength)
-      );
-    }
-  };
-  var removeIcLoraStrengthAt = (clip, entryIdx) => {
-    for (const stage of clip.stages) {
-      if (entryIdx < stage.icLoraStrengths.length) {
-        stage.icLoraStrengths.splice(entryIdx, 1);
-      }
-    }
-  };
-  var getReferenceFrameMax = (getRootDefaults2, clip, effectiveFps) => {
-    const defaults = getRootDefaults2();
-    const fps = typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps;
-    if (clip) {
-      const frameGrid = clip.stages ? resolvedClipFrameGrid(
-        { ...clip, stages: clip.stages },
-        defaults.modelCatalog
-      ) : 1;
-      return Math.max(
-        REF_FRAME_MIN,
-        framesForClip(clip.duration, fps, frameGrid)
-      );
-    }
-    return Math.max(REF_FRAME_MIN, defaults.frames);
-  };
-  var getKnownReferenceFrameMax = (getRootDefaults2, clip, effectiveFps) => {
-    const defaults = getRootDefaults2();
-    const resolution = resolveClipFrameGrid(clip, defaults.modelCatalog);
-    if (resolution.status !== "resolved") {
+  var normalizeRetake = (value, clipDuration) => {
+    if (!isRecord(value)) {
       return null;
     }
-    const fps = typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps;
-    return Math.max(
-      REF_FRAME_MIN,
-      framesForClip(clip.duration, fps, resolution.frameGrid)
+    const startRaw = nonNegativeNumber(value.startSeconds);
+    const lengthRaw = numberOr(value.lengthSeconds, 0);
+    const window2 = clampWindowInDuration(
+      startRaw,
+      lengthRaw,
+      clipDuration,
+      RETAKE_MIN_DURATION
     );
-  };
-  var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, sourcedClip = false, clipLoras = [], clipLoraDefaultWeights = []) => {
-    const defaults = getRootDefaults2();
-    const fallback = buildDefaultStage(
-      getRootDefaults2,
-      getDefaultStageModel2,
-      previousStage,
-      refCount,
-      clipLoraDefaultWeights
-    );
-    const forcedFirstStage = stageIndexInClip === 0 && !sourcedClip;
-    let firstStageUpscale;
-    let control;
-    if (forcedFirstStage) {
-      firstStageUpscale = {
-        upscale: defaults.upscale,
-        upscaleMethod: resolveRootPreferredUpscaleMethod(
-          defaults.upscaleMethodValues
-        )
-      };
-      control = clamp(
-        defaults.control,
-        defaults.controlMin,
-        defaults.controlMax
-      );
-    } else {
-      firstStageUpscale = {
-        upscale: snapToStep(
-          clampedNumber(
-            readRawStageProp(rawStage, "upscale"),
-            fallback.upscale,
-            defaults.upscaleMin,
-            defaults.upscaleMax
-          ),
-          defaults.upscaleStep
-        ),
-        upscaleMethod: textOr(
-          readRawStageString(rawStage, "upscaleMethod"),
-          fallback.upscaleMethod
-        )
-      };
-      control = clampedNumber(
-        readRawStageProp(rawStage, "control"),
-        fallback.control,
-        defaults.controlMin,
-        defaults.controlMax
-      );
+    if (!window2) {
+      return null;
     }
-    const rawLoraWeights = readRawStageProp(rawStage, "loraWeights");
-    const legacyLoras = normalizeStageLoras(
-      readRawStageProp(rawStage, "loras")
-    );
-    const legacyWeights = new Map(
-      legacyLoras.map((entry) => [entry.name, entry.weight])
-    );
-    const hasLegacyLoras = Array.isArray(readRawStageProp(rawStage, "loras"));
-    const loraWeights = clipLoras.map((entry, index) => {
-      if (Array.isArray(rawLoraWeights)) {
-        return numberOr(
-          rawLoraWeights[index],
-          clipLoraDefaultWeights[index] ?? 1
-        );
-      }
-      const legacyWeight = legacyWeights.get(entry.name);
-      if (legacyWeight !== void 0) {
-        return legacyWeight;
-      }
-      if (hasLegacyLoras) {
-        return clipLoraDefaultWeights[index] ?? 0;
-      }
-      return fallback.loraWeights[index] ?? clipLoraDefaultWeights[index] ?? 1;
-    });
-    const stage = {
-      id: normalizeOptionalEntityId(rawStage.id),
-      skipped: !!rawStage.skipped,
-      control,
-      controlNetStrength: normalizeStageControlNetStrengthValue(
-        readRawStageProp(rawStage, "controlNetStrength") ?? fallback.controlNetStrength
-      ),
-      icLoraStrengths: Array.isArray(rawStage.icLoraStrengths) ? rawStage.icLoraStrengths.map(
-        normalizeStageControlNetStrengthValue
-      ) : [...fallback.icLoraStrengths],
-      loraWeights,
-      refStrengths: normalizeStageRefStrengths(
-        rawStage.refStrengths,
-        refCount
-      ),
-      upscale: firstStageUpscale.upscale,
-      upscaleMethod: firstStageUpscale.upscaleMethod,
-      model: textOr(rawStage.model, fallback.model),
-      modelProfileId: "unsupported",
-      steps: Math.max(
-        1,
-        Math.round(
-          clampedNumber(
-            rawStage.steps,
-            fallback.steps,
-            defaults.stepsMin,
-            defaults.stepsMax
-          )
-        )
-      ),
-      cfgScale: clampedNumber(
-        rawStage.cfgScale,
-        fallback.cfgScale,
-        defaults.cfgScaleMin,
-        defaults.cfgScaleMax
-      ),
-      sampler: textOr(rawStage.sampler, fallback.sampler),
-      scheduler: textOr(rawStage.scheduler, fallback.scheduler)
-    };
-    stage.modelProfileId = trimmedText(readRawStageProp(rawStage, "modelProfileId")) || modelProfileForModel(defaults.modelCatalog, stage.model) || fallback.modelProfileId;
-    if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
-      stage.upscaleMethod = forcedFirstStage ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
-    }
-    return stage;
-  };
-  var normalizeRef = (rawRef, frameMax) => {
-    const fallback = buildDefaultRef();
-    const source = textOr(rawRef.source, fallback.source);
-    const authoredFrame = Math.max(
-      REF_FRAME_MIN,
-      Math.round(numberOr(rawRef.frame, fallback.frame))
+    const strengthRaw = value.strength;
+    const strength = strengthRaw == null ? RETAKE_STRENGTH_DEFAULT : clampedNumber(
+      strengthRaw,
+      RETAKE_STRENGTH_DEFAULT,
+      RETAKE_STRENGTH_MIN,
+      RETAKE_STRENGTH_MAX
     );
     return {
-      id: normalizeOptionalEntityId(rawRef.id),
-      source,
-      uploadFileName: textOr(rawRef.uploadFileName, "") || null,
-      uploadedImage: normalizeUploadedMedia(rawRef.uploadedImage),
-      frame: frameMax === null ? authoredFrame : clamp(authoredFrame, REF_FRAME_MIN, frameMax),
-      fromEnd: !!rawRef.fromEnd
+      id: normalizeOptionalEntityId(value.id),
+      startSeconds: roundToTenth(window2.startSeconds),
+      lengthSeconds: roundToTenth(window2.lengthSeconds),
+      strength
     };
   };
-
-  // frontend/normalizationClip.ts
-  var normalizeBoundaryOut = (value) => {
-    const raw = trimmedText(value).toLowerCase();
-    return raw === "continue" || raw === "crossfade" ? raw : "cut";
-  };
-  var normalizeContinueOverlap = (value, constraints = boundaryOverlapConstraints(null)) => {
-    const numeric = Math.trunc(Number(value));
-    return Number.isFinite(numeric) && numeric > 0 ? numeric : normalizeBoundaryOverlap(value, constraints);
-  };
-  var normalizeReferenceFraming = (value) => value === "stretch" || value === "fit" || value === "fit-green" ? value : "crop";
-  var preserveArchitecturePayload = (value) => isRecord(value) ? structuredClone(value) : null;
-  var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
-    const defaults = getRootDefaults2();
-    const refs = includeDefaultRef ? [buildDefaultRef()] : [];
-    const loras = previousClip?.loras.map((entry) => ({ ...entry })) ?? [];
-    const initialLoraWeights = loras.map(
-      (entry, index) => previousClip?.stages[0]?.loraWeights[index] ?? defaults.loraDefaultWeights[defaults.loraValues.indexOf(entry.name)] ?? 1
-    );
-    const firstStage = {
-      ...buildDefaultStage(
-        getRootDefaults2,
-        getDefaultStageModel2,
-        previousClip?.stages[0] ?? null,
-        refs.length,
-        initialLoraWeights
+  var normalizeSourceVideo = (value) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const data = trimmedText(value.data);
+    if (!data) {
+      return null;
+    }
+    const durationSeconds = nonNegativeNumber(value.durationSeconds);
+    let startSeconds = nonNegativeNumber(value.startSeconds);
+    let lengthSeconds = nonNegativeNumber(value.lengthSeconds);
+    if (durationSeconds > 0) {
+      startSeconds = Math.min(
+        startSeconds,
+        Math.max(0, durationSeconds - CLIP_DURATION_MIN)
+      );
+      if (!(lengthSeconds > 0)) {
+        lengthSeconds = durationSeconds - startSeconds;
+      }
+      lengthSeconds = Math.min(lengthSeconds, durationSeconds - startSeconds);
+    }
+    if (!(lengthSeconds > 0)) {
+      return null;
+    }
+    return {
+      data,
+      fileName: normalizeUploadFileName(
+        value.fileName == null ? null : text(value.fileName)
       ),
-      refStrengths: buildDefaultStageRefStrengths(
-        refs.length,
-        includeDefaultRef ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH : STAGE_REF_STRENGTH_DEFAULT
+      fps: nonNegativeNumber(value.fps),
+      durationSeconds: roundToTenth(durationSeconds),
+      startSeconds: roundToTenth(startSeconds),
+      lengthSeconds: roundToTenth(lengthSeconds)
+    };
+  };
+  var normalizeUploadedMedia = (value) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const data = trimmedText(value.data);
+    if (!data) {
+      return null;
+    }
+    return {
+      data,
+      fileName: normalizeUploadFileName(
+        value.fileName == null ? null : text(value.fileName)
       )
     };
-    const architecture = (previousClip?.architectureHint !== NONE_ARCHITECTURE_ID ? previousClip?.architectureHint : null) ?? architectureForModel(defaults.modelCatalog, firstStage.model) ?? "unsupported";
-    const continueRule = architectureDescriptor(
-      defaults.modelCatalog,
-      architecture
-    )?.boundaryRules.continue;
-    return {
-      architectureHint: architecture,
-      modelProfileId: (previousClip?.architectureHint !== NONE_ARCHITECTURE_ID ? previousClip?.modelProfileId : null) ?? modelProfileForModel(defaults.modelCatalog, firstStage.model) ?? firstStage.modelProfileId,
-      architecturePayload: null,
-      skipped: previousClip?.skipped === true,
-      hue: UNASSIGNED_HUE,
-      boundaryOut: "cut",
-      boundaryOutCarryAudio: false,
-      boundaryOutOverlap: boundaryOverlapConstraints(continueRule).defaultFrames,
-      duration: previousClip ? previousClip.duration : snapDurationToFps(
-        Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
-        defaults.fps
-      ),
-      refFraming: "crop",
-      audioSource: AUDIO_SOURCE_NATIVE,
-      loras,
-      icLoras: [],
-      saveAudioTrack: false,
-      clipLengthFromAudio: false,
-      clipLengthFromControlNet: false,
-      reuseAudio: false,
-      uploadedAudio: null,
-      prompt: "",
-      promptWindows: [],
-      retake: null,
-      sourceVideo: null,
-      refs,
-      stages: [firstStage]
-    };
-  };
-  var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2, effectiveFps) => {
-    const defaults = getRootDefaults2();
-    const rawAudioSource = text(rawClip.audioSource, AUDIO_SOURCE_NATIVE);
-    const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
-    const sourceVideo = normalizeSourceVideo(rawClip.sourceVideo);
-    const fps = Math.max(
-      1,
-      typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps
-    );
-    const rawDuration = sourceVideo?.lengthSeconds ?? numberOr(rawClip.duration, defaults.frames / fps);
-    const duration = snapDurationToFps(
-      Math.max(CLIP_DURATION_MIN, rawDuration),
-      fps
-    );
-    const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
-    const clipScopedLoras = normalizeStageLoras(rawClip.loras);
-    const loraNames = [];
-    const loraDefaultWeightByName = /* @__PURE__ */ new Map();
-    const appendLoraName = (name, defaultWeight) => {
-      if (loraDefaultWeightByName.has(name)) {
-        return;
-      }
-      loraNames.push(name);
-      loraDefaultWeightByName.set(name, defaultWeight);
-    };
-    for (const entry of clipScopedLoras) {
-      appendLoraName(entry.name, entry.weight);
-    }
-    for (const rawStage of stagesRaw) {
-      if (!isRecord(rawStage)) {
-        continue;
-      }
-      for (const entry of normalizeStageLoras(rawStage.loras)) {
-        appendLoraName(entry.name, 0);
-      }
-    }
-    const loras = loraNames.map((name) => ({ name }));
-    const loraDefaultWeights = loraNames.map(
-      (name) => loraDefaultWeightByName.get(name) ?? 1
-    );
-    const stages = [];
-    for (let i = 0; i < stagesRaw.length; i++) {
-      const previousStage = i > 0 ? stages[i - 1] : null;
-      stages.push(
-        normalizeStage(
-          getRootDefaults2,
-          getDefaultStageModel2,
-          isRecord(stagesRaw[i]) ? stagesRaw[i] : {},
-          previousStage,
-          refsRaw.length,
-          i,
-          sourceVideo !== null,
-          loras,
-          loraDefaultWeights
-        )
-      );
-    }
-    const firstSkippedStage = stages.findIndex(
-      (stage) => stage.skipped === true
-    );
-    if (firstSkippedStage >= 0) {
-      for (let index = firstSkippedStage; index < stages.length; index++) {
-        stages[index].skipped = true;
-      }
-    }
-    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
-    const clipLengthFromAudio = !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
-    const retake = normalizeRetake(rawClip.retake, duration);
-    const refFrameMax = getKnownReferenceFrameMax(
-      getRootDefaults2,
-      {
-        duration,
-        stages,
-        sourceVideo,
-        retake,
-        clipLengthFromAudio,
-        clipLengthFromControlNet
-      },
-      fps
-    );
-    const refs = refsRaw.map(
-      (rawRef) => normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax)
-    );
-    const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
-    const stageZero = stages[0] ?? null;
-    const persistedArchitecture = trimmedText(rawClip.architectureHint);
-    const persistedProfile = trimmedText(rawClip.modelProfileId);
-    const isSourceOnly = sourceVideo !== null && stages.every((stage) => stage.skipped);
-    const architecture = isSourceOnly ? persistedArchitecture || "none" : normalizeClipArchitecture(
-      persistedArchitecture,
-      stageZero?.model ?? null,
-      defaults.modelCatalog
-    );
-    const resolvedArchitecture = isSourceOnly ? NONE_ARCHITECTURE_ID : architectureForModel(
-      defaults.modelCatalog,
-      stageZero?.model ?? ""
-    ) ?? "unsupported";
-    const modelProfileId = isSourceOnly ? persistedProfile || (architecture === NONE_ARCHITECTURE_ID ? NONE_ARCHITECTURE_ID : "unsupported") : persistedProfile || stageZero?.modelProfileId || "unsupported";
-    const icLoras = normalizeArchitectureIcLoras(
-      resolvedArchitecture,
-      rawClip,
-      stagesRaw.length,
-      sourceVideo !== null,
-      { preserveDormantLtx: true }
-    );
-    const icLoraDefaultStrengths = icLoras.map(
-      (entry) => defaultLoraWeight(defaults, entry.lora)
-    );
-    for (let index = 0; index < stages.length; index++) {
-      const stage = stages[index];
-      const rawStage = isRecord(stagesRaw[index]) ? stagesRaw[index] : {};
-      const hasLegacyControlNetStrength = Object.hasOwn(
-        rawStage,
-        "controlNetStrength"
-      );
-      const legacyFallback = hasLegacyControlNetStrength ? stage.controlNetStrength : 1;
-      stage.icLoraStrengths = normalizeStageIcLoraStrengths(
-        rawStage.icLoraStrengths,
-        icLoras.length,
-        legacyFallback,
-        hasLegacyControlNetStrength ? [] : stages[index - 1]?.icLoraStrengths ?? icLoraDefaultStrengths
-      );
-    }
-    const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
-    const boundaryRule = architectureDescriptor(
-      defaults.modelCatalog,
-      resolvedArchitecture
-    )?.boundaryRules[boundaryOut];
-    return {
-      id: normalizeOptionalEntityId(rawClip.id),
-      architectureHint: architecture,
-      modelProfileId,
-      architecturePayload: preserveArchitecturePayload(
-        rawClip.architecturePayload
-      ),
-      skipped: !!rawClip.skipped,
-      hue: normalizeStoredHue(rawClip.hue),
-      boundaryOut,
-      boundaryOutCarryAudio: !!rawClip.boundaryOutCarryAudio,
-      boundaryOutOverlap: normalizeContinueOverlap(
-        rawClip.boundaryOutOverlap,
-        boundaryOverlapConstraints(boundaryRule)
-      ),
-      duration,
-      refFraming: normalizeReferenceFraming(rawClip.refFraming),
-      audioSource,
-      loras,
-      icLoras,
-      saveAudioTrack: !!rawClip.saveAudioTrack,
-      clipLengthFromAudio,
-      clipLengthFromControlNet,
-      reuseAudio: !!rawClip.reuseAudio,
-      uploadedAudio: normalizeUploadedMedia(rawClip.uploadedAudio),
-      prompt: text(rawClip.prompt),
-      promptWindows: normalizePromptWindows(rawClip),
-      retake,
-      sourceVideo,
-      refs,
-      stages
-    };
   };
 
-  // frontend/identity.ts
-  var fallbackSequence = 0;
-  var normalizedExistingId = (value) => {
-    if (typeof value !== "string") {
+  // frontend/architectures/ltx2/icLoraNormalization.ts
+  var CONTROLNET_SOURCE_OPTIONS = [
+    "ControlNet 1",
+    "ControlNet 2",
+    "ControlNet 3"
+  ];
+  var controlNetSourceIndex = (value) => {
+    const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
+    if (!compact.startsWith("controlnet")) {
       return null;
     }
-    const id = value.trim();
-    return id.length > 0 ? id : null;
-  };
-  var createEntityId = (kind) => {
-    const randomUuid = globalThis.crypto?.randomUUID?.();
-    if (randomUuid) {
-      return `${kind}_${randomUuid}`;
+    const rawIndex = compact.slice("controlnet".length);
+    if (!/^[+-]?\d+$/.test(rawIndex)) {
+      return null;
     }
-    fallbackSequence += 1;
-    return `${kind}_${Date.now().toString(36)}_${fallbackSequence.toString(36)}`;
+    const oneBased = Number(rawIndex);
+    return Number.isSafeInteger(oneBased) && oneBased >= 1 && oneBased <= 3 ? oneBased - 1 : null;
   };
-  var assignUniqueId = (entry, reserved, used) => {
-    const reservedId = reserved.get(entry.entity);
-    if (reservedId) {
-      entry.entity.id = reservedId;
-      return reservedId;
-    }
-    const base = `${entry.kind}_legacy_${entry.repairPath}`;
-    let id = base;
-    let collision = 1;
-    while (used.has(id)) {
-      collision += 1;
-      id = `${base}_${collision}`;
-    }
-    entry.entity.id = id;
-    used.add(id);
-    return id;
+  var canonicalControlNetSource = (value) => {
+    const index = controlNetSourceIndex(value);
+    return index === null ? null : CONTROLNET_SOURCE_OPTIONS[index];
   };
-  var clipIdentityEntries = (clips) => {
-    const entries = [];
-    for (let clipIndex = 0; clipIndex < clips.length; clipIndex++) {
-      const clip = clips[clipIndex];
-      entries.push({
-        entity: clip,
-        kind: "clip",
-        repairPath: `${clipIndex}`
-      });
-      for (let stageIndex = 0; stageIndex < clip.stages.length; stageIndex++) {
-        entries.push({
-          entity: clip.stages[stageIndex],
-          kind: "stage",
-          repairPath: `${clipIndex}_${stageIndex}`
-        });
-      }
-      for (let refIndex = 0; refIndex < clip.refs.length; refIndex++) {
-        entries.push({
-          entity: clip.refs[refIndex],
-          kind: "ref",
-          repairPath: `${clipIndex}_${refIndex}`
-        });
-      }
-      for (let windowIndex = 0; windowIndex < clip.promptWindows.length; windowIndex++) {
-        entries.push({
-          entity: clip.promptWindows[windowIndex],
-          kind: "prompt_window",
-          repairPath: `${clipIndex}_${windowIndex}`
-        });
-      }
-      if (clip.retake) {
-        entries.push({
-          entity: clip.retake,
-          kind: "retake",
-          repairPath: `${clipIndex}`
-        });
-      }
+  var defaultIcLora = (overrides = {}) => ({
+    lora: "",
+    preset: IC_LORA_PRESET_CUSTOM_ID,
+    driveSource: IC_LORA_SOURCE_UPLOAD,
+    driveData: "visual",
+    driveMediaKinds: ["image", "video"],
+    stage: IC_LORA_STAGE_ALL,
+    strength: IC_LORA_STRENGTH_DEFAULT,
+    attentionStrength: IC_LORA_ATTENTION_DEFAULT,
+    controlType: "none",
+    hdr: false,
+    driveMedia: null,
+    ...overrides
+  });
+  var normalizeControlNetLora = (value) => {
+    const raw = `${value ?? ""}`.trim();
+    if (!raw) {
+      return "";
     }
-    return entries;
+    const squeezed = raw.replace(/\s+/g, "").toLowerCase();
+    if (squeezed === "(none)") {
+      return "";
+    }
+    return raw;
   };
-  var audioTrackIdentityEntries = (tracks) => {
-    const entries = [];
-    for (let trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
-      const track = tracks[trackIndex];
-      entries.push({
-        entity: track,
-        kind: "audio_track",
-        repairPath: `${trackIndex}`
-      });
-      for (let spanIndex = 0; spanIndex < track.spans.length; spanIndex++) {
-        entries.push({
-          entity: track.spans[spanIndex],
-          kind: "audio_span",
-          repairPath: `${trackIndex}_${spanIndex}`
-        });
+  var normalizeIcLoraControlType = (value) => {
+    const raw = `${value ?? ""}`.trim().toLowerCase();
+    return raw === "canny" || raw === "depth" || raw === "normal" ? raw : "none";
+  };
+  var normalizeIcLoraDriveSource = (value) => {
+    const authored = `${value ?? ""}`.trim();
+    const compact = authored.replace(/\s+/g, "").toLowerCase();
+    if (!compact || compact === "upload") {
+      return IC_LORA_SOURCE_UPLOAD;
+    }
+    if (compact === "incoming" || compact === "stageinput") {
+      return IC_LORA_SOURCE_INCOMING;
+    }
+    return canonicalControlNetSource(authored) ?? authored;
+  };
+  var normalizeIcLoraDriveData = (value) => {
+    const compact = `${value ?? ""}`.trim().toLowerCase();
+    return compact === "none" || compact === "audio" ? compact : "visual";
+  };
+  var mediaKindsForData = (driveData) => icLoraDriveMediaContractForData(driveData).acceptedKinds;
+  var normalizeIcLoraDriveMediaKinds = (value, driveData) => {
+    const allowed = mediaKindsForData(driveData);
+    if (!Array.isArray(value)) {
+      return [...allowed];
+    }
+    const kinds = [];
+    for (const rawKind of value) {
+      const kind = `${rawKind ?? ""}`.trim().toLowerCase();
+      if ((kind === "image" || kind === "video" || kind === "audio") && allowed.includes(kind) && !kinds.includes(kind)) {
+        kinds.push(kind);
       }
     }
-    return entries;
+    return kinds;
   };
-  var assignEntryIdentities = (entries, used) => {
-    const reserved = /* @__PURE__ */ new Map();
-    for (const { entity } of entries) {
-      const existing = normalizedExistingId(entity.id);
-      if (existing && !used.has(existing)) {
-        reserved.set(entity, existing);
-        used.add(existing);
-      }
+  var normalizeIcLoraStage = (value, stageCount) => {
+    if (value == null || `${value}`.trim() === "") {
+      return IC_LORA_STAGE_ALL;
     }
-    for (const entry of entries) {
-      assignUniqueId(entry, reserved, used);
+    const stage = Math.trunc(Number(value));
+    if (!Number.isFinite(stage) || stage < 0) {
+      return IC_LORA_STAGE_ALL;
     }
+    return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
   };
-  var ensureClipEntityIdentities = (clips, seen = /* @__PURE__ */ new Set()) => {
-    assignEntryIdentities(clipIdentityEntries(clips), seen);
-    return seen;
-  };
-  function ensureAuthoringDocumentIdentity(state) {
-    state.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
-    state.audioTracks ??= [];
-    assignEntryIdentities(
-      [
-        ...clipIdentityEntries(state.clips),
-        ...audioTrackIdentityEntries(state.audioTracks)
-      ],
-      /* @__PURE__ */ new Set()
+  var normalizeIcLora = (raw, stageCount = 0, _sourcedClip = false) => {
+    if (!isRecord(raw)) {
+      return null;
+    }
+    const lora = normalizeControlNetLora(raw.lora);
+    if (!lora) {
+      return null;
+    }
+    const preset = `${raw.preset ?? ""}`.trim();
+    const repairsLegacyCustomAuto = lora === IC_LORA_AUTO && (!preset || preset === IC_LORA_PRESET_CUSTOM_ID);
+    const normalizedPreset = repairsLegacyCustomAuto ? IC_LORA_DEFAULT_PRESET_ID : preset || IC_LORA_PRESET_CUSTOM_ID;
+    const repairedPreset = repairsLegacyCustomAuto ? findIcLoraPreset(normalizedPreset) : null;
+    const driveData = normalizeIcLoraDriveData(raw.driveData);
+    const driveMediaKinds = normalizeIcLoraDriveMediaKinds(
+      raw.driveMediaKinds,
+      driveData
     );
-  }
-  var collectAuthoringEntityIds = (state) => {
-    const ids = [];
-    for (const clip of state.clips) {
-      if (clip.id) ids.push(clip.id);
-      for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
-      for (const ref of clip.refs) if (ref.id) ids.push(ref.id);
-      for (const window2 of clip.promptWindows) {
-        if (window2.id) ids.push(window2.id);
+    const normalizedDriveMedia = normalizeUploadedMedia(raw.driveMedia);
+    let driveSource = normalizeIcLoraDriveSource(raw.driveSource);
+    const driveMedia = driveSource === IC_LORA_SOURCE_UPLOAD && driveData !== "none" && normalizedDriveMedia && driveMediaKinds.some(
+      (kind) => normalizedDriveMedia.data.startsWith(`data:${kind}/`)
+    ) ? normalizedDriveMedia : null;
+    const stage = normalizeIcLoraStage(raw.stage, stageCount);
+    if (driveData === "none") {
+      driveSource = IC_LORA_SOURCE_UPLOAD;
+    }
+    return {
+      lora,
+      preset: normalizedPreset,
+      driveSource,
+      driveData,
+      driveMediaKinds,
+      stage,
+      strength: repairsLegacyCustomAuto ? repairedPreset?.strength ?? IC_LORA_STRENGTH_DEFAULT : snapValueToStep(
+        raw.strength,
+        IC_LORA_STRENGTH_DEFAULT,
+        IC_LORA_STRENGTH_MIN,
+        IC_LORA_STRENGTH_MAX,
+        IC_LORA_STRENGTH_STEP
+      ),
+      attentionStrength: snapValueToStep(
+        raw.attentionStrength,
+        IC_LORA_ATTENTION_DEFAULT,
+        IC_LORA_ATTENTION_MIN,
+        IC_LORA_ATTENTION_MAX,
+        IC_LORA_ATTENTION_STEP
+      ),
+      controlType: driveData !== "visual" ? "none" : repairsLegacyCustomAuto ? repairedPreset?.controlType ?? "none" : normalizeIcLoraControlType(raw.controlType),
+      // Documents authored before the flag existed carry only the preset id; the preset table
+      // (not a name match) seeds the intent, so those documents keep working.
+      hdr: typeof raw.hdr === "boolean" ? raw.hdr : findIcLoraPreset(normalizedPreset)?.hdr ?? false,
+      driveMedia
+    };
+  };
+  var normalizeIcLoras = (rawClip, stageCount = 0, sourcedClip = false) => {
+    if (!Array.isArray(rawClip.icLoras)) {
+      return [];
+    }
+    return rawClip.icLoras.map((entry) => normalizeIcLora(entry, stageCount, sourcedClip)).filter((entry) => entry !== null);
+  };
+  var canonicalizeIcLoraFields = (entry) => {
+    if (entry.driveData === "none") {
+      entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+      entry.driveMedia = null;
+    }
+    entry.driveMediaKinds = normalizeIcLoraDriveMediaKinds(
+      entry.driveMediaKinds,
+      entry.driveData
+    );
+  };
+  var isHdrFeature = (entry) => entry.hdr === true;
+  var hasSlotSourcedIcLora = (icLoras) => icLoras.some((entry) => controlNetSourceIndex(entry.driveSource) !== null);
+
+  // frontend/architectures/ltx2/behavior.ts
+  var ltx2Behavior = {
+    dimensionMultiple: ltx2DimensionMultiple,
+    normalizeIcLoras,
+    canonicalizeIcLoraFields,
+    reconcileIncomingIcLoraDrives,
+    hasSlotSourcedIcLora,
+    isHdrFeature,
+    icLoraDisplayName
+  };
+
+  // frontend/architectures/ltx2/identity.ts
+  var LTX2_ARCHITECTURE_ID = "ltx2";
+
+  // frontend/architectures/behaviorRegistry.ts
+  var behaviors = /* @__PURE__ */ new Map([
+    [LTX2_ARCHITECTURE_ID, ltx2Behavior]
+  ]);
+  var architectureBehavior = (architectureId) => behaviors.get(architectureId) ?? null;
+  var architectureDimensionMultiple = (clip, architectureId) => {
+    const requested = architectureBehavior(architectureId)?.dimensionMultiple(clip) ?? ROOT_DIMENSION_STEP;
+    if (!Number.isFinite(requested)) {
+      return ROOT_DIMENSION_STEP;
+    }
+    return Math.max(
+      ROOT_DIMENSION_STEP,
+      Math.ceil(requested / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP
+    );
+  };
+  var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, sourcedClip, options = {}) => {
+    const behavior = architectureBehavior(architectureId);
+    if (behavior) {
+      return behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip);
+    }
+    return options.preserveDormantLtx === true && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? ltx2Behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip) : [];
+  };
+  var canonicalizeArchitectureIcLoraFields = (architectureId, entry) => {
+    architectureBehavior(architectureId)?.canonicalizeIcLoraFields(entry);
+  };
+  var reconcileArchitectureIncomingIcLoraDrives = (clips, generatedEntryMode, catalog) => {
+    let changed = false;
+    clips.forEach((clip, clipIdx) => {
+      const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
+      changed = architectureBehavior(architectureId)?.reconcileIncomingIcLoraDrives(
+        clips,
+        clipIdx,
+        generatedEntryMode
+      ) || changed;
+    });
+    return changed;
+  };
+  var reconcileClipArchitectureIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode, catalog) => {
+    const clip = clips[clipIdx];
+    if (!clip) return false;
+    const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
+    return architectureBehavior(architectureId)?.reconcileIncomingIcLoraDrives(
+      clips,
+      clipIdx,
+      generatedEntryMode
+    ) ?? false;
+  };
+  var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => architectureBehavior(architectureId)?.hasSlotSourcedIcLora(entries) ?? false;
+  var isArchitectureHdrFeature = (architectureId, entry) => architectureBehavior(architectureId)?.isHdrFeature(entry) ?? false;
+  var architectureIcLoraDisplayName = (architectureId, entry) => architectureBehavior(architectureId)?.icLoraDisplayName(entry) ?? entry.lora;
+  var clipHasActiveHdrForArchitecture = (clip, architectureId) => clip.icLoras.some(
+    (entry) => isArchitectureHdrFeature(architectureId, entry) && clip.stages.slice(0, activeStageCount(clip)).some(
+      (_stage, rawStageIdx) => entry.stage < 0 || entry.stage === rawStageIdx
+    )
+  );
+
+  // frontend/architectures/policy/clipStageViews.ts
+  var UNRESOLVED_ARCHITECTURE_ID = "unsupported";
+  var FEATURE_RULE_CODES = {
+    promptRelay: [CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength],
+    audioReuse: [CONDITIONAL_RULE_CODES.audioReuseRequiresStages],
+    retake: [
+      CONDITIONAL_RULE_CODES.retakeRequiresSource,
+      CONDITIONAL_RULE_CODES.retakeExcludesReferences
+    ],
+    hdr: [CONDITIONAL_RULE_CODES.uniformTimelineHdr]
+  };
+  var conditionalRuleFor = (clip, feature, descriptor, scope, effectiveArchitectureId) => {
+    const codes = FEATURE_RULE_CODES[feature];
+    if (!codes) return void 0;
+    for (const code of codes) {
+      const rule = conditionalRule(descriptor.rules, code);
+      if (rule && evaluateConditionalRule(rule, {
+        clip,
+        timelineClips: scope.timelineClips,
+        hasActiveHdr: (target) => clipHasActiveHdrForArchitecture(
+          target,
+          effectiveArchitectureId(target)
+        )
+      })) {
+        return rule;
       }
-      if (clip.retake?.id) ids.push(clip.retake.id);
     }
-    for (const track of state.audioTracks ?? []) {
-      if (track.id) ids.push(track.id);
-      for (const span of track.spans) if (span.id) ids.push(span.id);
-    }
-    return ids;
+    return void 0;
+  };
+  var createClipStageCapabilityViews = (architectureById, modelByName, scope = {}) => {
+    const clipViews = /* @__PURE__ */ new WeakMap();
+    const stageViews = /* @__PURE__ */ new WeakMap();
+    const effectiveClipIdentity = (clip) => {
+      const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+      const resolvedModel = sourceOnly ? void 0 : modelByName.get(clip.stages[0]?.model ?? "");
+      const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID;
+      return {
+        architectureId,
+        descriptor: architectureById.get(architectureId)
+      };
+    };
+    const forClip = (clip) => {
+      const cached = clipViews.get(clip);
+      if (cached) {
+        return cached;
+      }
+      const identity = effectiveClipIdentity(clip);
+      const { architectureId, descriptor } = identity;
+      const capabilities = descriptor ? effectiveClipCapabilities(
+        clip,
+        descriptor,
+        (model) => modelByName.get(model)
+      ) : null;
+      const label = descriptor?.label ?? (architectureId === NONE_ARCHITECTURE_ID ? "source-only clips" : `unknown architecture '${architectureId}'`);
+      const decision = (feature) => {
+        if (!descriptor || !capabilities) {
+          return {
+            supported: false,
+            reason: noArchitectureReason(feature),
+            rule: null
+          };
+        }
+        const conditionalRule2 = conditionalRuleFor(
+          clip,
+          feature,
+          descriptor,
+          scope,
+          (target) => effectiveClipIdentity(target).architectureId
+        );
+        const supported = architectureFeatureSupport(feature, {
+          capabilities
+        }) && !conditionalRule2;
+        return {
+          supported,
+          reason: supported ? "" : conditionalRule2?.reason ?? architectureReason(label, feature),
+          rule: conditionalRule2 ?? null
+        };
+      };
+      const frameGridResolution = resolveClipFrameGridForLookup(
+        clip,
+        (model) => modelByName.get(model),
+        (architectureId2) => architectureById.get(architectureId2)
+      );
+      const view = {
+        architectureId,
+        architectureLabel: label,
+        known: descriptor !== void 0,
+        frameGrid: frameGridResolution.status === "resolved" ? frameGridResolution.frameGrid : 1,
+        frameGridResolution,
+        audioSourceKinds: capabilities?.audioSourceKinds ?? [],
+        decision,
+        authoringState: (feature, persisted) => {
+          const result = decision(feature);
+          return {
+            ...result,
+            visible: result.supported || persisted,
+            enabled: result.supported
+          };
+        }
+      };
+      clipViews.set(clip, view);
+      return view;
+    };
+    const forStage = (clip, stage) => {
+      let viewsForClip = stageViews.get(clip);
+      if (!viewsForClip) {
+        viewsForClip = /* @__PURE__ */ new WeakMap();
+        stageViews.set(clip, viewsForClip);
+      }
+      const cached = viewsForClip.get(stage);
+      if (cached) {
+        return cached;
+      }
+      const view = forClip(clip);
+      const sourceOnly = view.architectureId === NONE_ARCHITECTURE_ID && activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+      const resolvedModel = sourceOnly ? void 0 : modelByName.get(stage.model);
+      const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID;
+      const descriptor = architectureById.get(architectureId);
+      const capabilities = descriptor ? effectiveModelCapabilities(resolvedModel, descriptor) : null;
+      const decision = (feature) => {
+        if (feature === "stageLoras" && descriptor && capabilities) {
+          const supported2 = architectureFeatureSupport(feature, {
+            capabilities
+          });
+          const architectureRule = supported2 ? conditionalRule(
+            descriptor.rules,
+            CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
+          ) : null;
+          const violatedRule = architectureRule && evaluateConditionalRule(architectureRule, { clip, stage }) ? architectureRule : null;
+          return {
+            supported: supported2 && !violatedRule,
+            reason: supported2 && !violatedRule ? "" : violatedRule?.reason ?? `LoRAs are not supported by ${descriptor.label}.`,
+            rule: violatedRule
+          };
+        }
+        if (feature === "sampler" || feature === "scheduler") {
+          const supported2 = descriptor !== void 0 && resolvedModel !== void 0 && ((resolvedModel.entryAbilities?.length ?? 0) > 0 || resolvedModel.entryModes.length > 0);
+          return {
+            supported: supported2,
+            reason: supported2 ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection requires a resolved generating video model.`,
+            rule: null
+          };
+        }
+        const supported = descriptor !== void 0 && capabilities !== null && architectureFeatureSupport("upscale", {
+          capabilities
+        });
+        return {
+          supported,
+          reason: supported ? "" : descriptor ? architectureReason(descriptor.label, "upscale") : noArchitectureReason("upscale"),
+          rule: null
+        };
+      };
+      const stageView = {
+        upscaleModes: capabilities?.upscaleModes ?? [],
+        decision,
+        authoringState: (feature, persisted) => {
+          const result = decision(feature);
+          return {
+            ...result,
+            visible: result.supported || persisted,
+            enabled: result.supported
+          };
+        }
+      };
+      viewsForClip.set(stage, stageView);
+      return stageView;
+    };
+    return { forClip, forStage };
+  };
+
+  // frontend/architectures/policy.ts
+  var createCapabilityViewResolver = (catalog, scope = {}) => {
+    const architectureById = new Map(
+      catalog.architectures.map((entry) => [entry.id, entry])
+    );
+    const modelByName = new Map(
+      catalog.entries.map((entry) => [entry.value, entry])
+    );
+    const clipStage = createClipStageCapabilityViews(
+      architectureById,
+      modelByName,
+      scope
+    );
+    const boundaries = createBoundaryCapabilityViews(
+      architectureById,
+      clipStage.forClip
+    );
+    return {
+      catalog,
+      ...clipStage,
+      ...boundaries,
+      executableClipIndexes
+    };
   };
 
   // frontend/dimensionSnap.ts
@@ -3618,715 +3035,6 @@
     };
   };
 
-  // frontend/persistence/documentCodec.ts
-  var toIntOrNull = (value) => {
-    const num = optionalNonNegativeNumber(value);
-    return num === null ? null : Math.round(num);
-  };
-  var resolveRootDims = (inherited, stored) => {
-    const width = toIntOrNull(stored.width);
-    const height = toIntOrNull(stored.height);
-    const dimsExplicit = width !== null && width >= ROOT_DIMENSION_MIN && height !== null && height >= ROOT_DIMENSION_MIN;
-    return {
-      width: dimsExplicit ? width : inherited.width,
-      height: dimsExplicit ? height : inherited.height,
-      // fps is never stored: the timeline always follows the core Video FPS
-      // param (the backend falls back to it too when the JSON has no fps).
-      fps: inherited.fps,
-      dimsExplicit
-    };
-  };
-  var createRootConfig = (dims, clips, audioTracks = []) => {
-    const config = {
-      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
-      ...dims,
-      clips,
-      audioTracks
-    };
-    ensureAuthoringDocumentIdentity(config);
-    return config;
-  };
-  var serializeClipsForStorage = (clips) => {
-    ensureClipEntityIdentities(clips);
-    return clips.map(
-      (clip) => ({
-        id: clip.id,
-        architectureHint: clip.architectureHint,
-        modelProfileId: clip.modelProfileId,
-        architecturePayload: clip.architecturePayload,
-        skipped: clip.skipped,
-        boundaryOut: clip.boundaryOut,
-        boundaryOutCarryAudio: clip.boundaryOutCarryAudio,
-        boundaryOutOverlap: clip.boundaryOutOverlap,
-        duration: clip.duration,
-        refFraming: clip.refFraming,
-        audioSource: clip.audioSource,
-        loras: clip.loras.map((entry) => ({
-          name: entry.name
-        })),
-        icLoras: clip.icLoras.map((entry) => ({
-          lora: entry.lora,
-          preset: entry.preset,
-          driveSource: entry.driveSource,
-          driveData: entry.driveData,
-          driveMediaKinds: entry.driveMediaKinds,
-          stage: entry.stage,
-          strength: entry.strength,
-          attentionStrength: entry.attentionStrength,
-          controlType: entry.controlType,
-          hdr: entry.hdr,
-          driveMedia: entry.driveMedia
-        })),
-        saveAudioTrack: clip.saveAudioTrack,
-        clipLengthFromAudio: clip.clipLengthFromAudio,
-        clipLengthFromControlNet: clip.clipLengthFromControlNet,
-        reuseAudio: clip.reuseAudio,
-        uploadedAudio: clip.uploadedAudio,
-        sourceVideo: clip.sourceVideo ? {
-          data: clip.sourceVideo.data,
-          fileName: clip.sourceVideo.fileName,
-          fps: clip.sourceVideo.fps,
-          durationSeconds: clip.sourceVideo.durationSeconds,
-          startSeconds: clip.sourceVideo.startSeconds,
-          lengthSeconds: clip.sourceVideo.lengthSeconds
-        } : null,
-        retake: clip.retake ? {
-          id: clip.retake.id,
-          startSeconds: clip.retake.startSeconds,
-          lengthSeconds: clip.retake.lengthSeconds,
-          strength: clip.retake.strength
-        } : null,
-        refs: clip.refs.map((ref) => ({
-          id: ref.id,
-          source: ref.source,
-          uploadFileName: ref.uploadFileName,
-          uploadedImage: ref.uploadedImage,
-          frame: ref.frame,
-          fromEnd: ref.fromEnd
-        })),
-        stages: clip.stages.map((stage) => ({
-          id: stage.id,
-          skipped: stage.skipped,
-          control: stage.control,
-          controlNetStrength: stage.controlNetStrength,
-          icLoraStrengths: stage.icLoraStrengths,
-          loraWeights: stage.loraWeights,
-          refStrengths: stage.refStrengths,
-          upscale: stage.upscale,
-          upscaleMethod: stage.upscaleMethod,
-          model: stage.model,
-          modelProfileId: stage.modelProfileId,
-          steps: stage.steps,
-          cfgScale: stage.cfgScale,
-          sampler: stage.sampler,
-          scheduler: stage.scheduler
-        }))
-      })
-    );
-  };
-  var timelinePointProjection = (clips, seconds, edge) => {
-    if (!Number.isFinite(seconds) || seconds < 0 || clips.length === 0) {
-      return null;
-    }
-    let cursor = 0;
-    for (let index = 0; index < clips.length; index++) {
-      const clip = clips[index];
-      const duration = Math.max(0, clip.duration || 0);
-      const clipEnd = cursor + duration;
-      const isLast = index === clips.length - 1;
-      const ownsPoint = edge === "start" ? seconds < clipEnd || isLast : seconds <= clipEnd || isLast;
-      if (ownsPoint) {
-        return {
-          clipId: clip.id,
-          offsetSeconds: Math.max(
-            0,
-            Math.min(duration, seconds - cursor)
-          )
-        };
-      }
-      cursor = clipEnd;
-    }
-    return null;
-  };
-  var timelineSpanProjection = (clips, span) => {
-    if (span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
-      return null;
-    }
-    const start = timelinePointProjection(
-      clips,
-      span.timelineStartSeconds,
-      "start"
-    );
-    const end = timelinePointProjection(
-      clips,
-      span.timelineStartSeconds + span.timelineLengthSeconds,
-      "end"
-    );
-    return start && end ? {
-      firstClipId: start.clipId,
-      lastClipId: end.clipId,
-      clipStartOffsetSeconds: start.offsetSeconds,
-      clipEndOffsetSeconds: end.offsetSeconds
-    } : null;
-  };
-  var serializeStateForStorage = (state) => {
-    ensureAuthoringDocumentIdentity(state);
-    const canonical = state;
-    const out = {
-      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION
-    };
-    if (state.dimsExplicit) {
-      out.width = Math.round(state.width);
-      out.height = Math.round(state.height);
-    }
-    out.clips = serializeClipsForStorage(state.clips);
-    out.audioTracks = canonical.audioTracks.map((track) => ({
-      id: track.id,
-      ...track.volume === void 0 ? {} : { volume: track.volume },
-      source: {
-        kind: track.source.kind,
-        reference: track.source.reference,
-        uploadedAudio: track.source.uploadedAudio
-      },
-      spans: track.spans.map((span) => ({
-        id: span.id,
-        timelineStartSeconds: span.timelineStartSeconds,
-        timelineLengthSeconds: span.timelineLengthSeconds,
-        sourceStartSeconds: span.sourceStartSeconds,
-        projection: timelineSpanProjection(canonical.clips, span)
-      }))
-    }));
-    return JSON.stringify(out);
-  };
-  var isTransientBrowserMedia = (media) => {
-    const data = media?.data.trim().toLowerCase() ?? "";
-    return data.startsWith("data:") || data.startsWith("blob:");
-  };
-  var serializeStateForDurableStorage = (state) => {
-    ensureAuthoringDocumentIdentity(state);
-    const durable = structuredClone(state);
-    for (const clip of durable.clips) {
-      if (isTransientBrowserMedia(clip.uploadedAudio)) {
-        clip.uploadedAudio = null;
-      }
-      if (clip.sourceVideo && isTransientBrowserMedia({ data: clip.sourceVideo.data })) {
-        clip.sourceVideo = null;
-      }
-      for (const ref of clip.refs) {
-        if (isTransientBrowserMedia(ref.uploadedImage)) {
-          ref.uploadedImage = null;
-        }
-      }
-      for (const icLora of clip.icLoras) {
-        if (isTransientBrowserMedia(icLora.driveMedia)) {
-          icLora.driveMedia = null;
-        }
-      }
-    }
-    for (const track of durable.audioTracks ?? []) {
-      if (isTransientBrowserMedia(track.source.uploadedAudio)) {
-        track.source.uploadedAudio = null;
-      }
-    }
-    return serializeStateForStorage(durable);
-  };
-  var hasArrayOfRecords = (owner, key) => {
-    if (!Object.hasOwn(owner, key)) {
-      return true;
-    }
-    const value = owner[key];
-    return Array.isArray(value) && value.every(isRecord);
-  };
-  var hasValidStoredCollections = (parsed) => {
-    if (!Array.isArray(parsed.clips) || !parsed.clips.every(isRecord)) {
-      return false;
-    }
-    if (!hasArrayOfRecords(parsed, "audioTracks") || !hasArrayOfRecords(parsed, "clips")) {
-      return false;
-    }
-    for (const clip of parsed.clips) {
-      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "refs") || !hasArrayOfRecords(clip, "icLoras") || Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras")) {
-        return false;
-      }
-      const stages = Array.isArray(clip.stages) ? clip.stages : [];
-      for (const stage of stages) {
-        if (Object.hasOwn(stage, "loras") && !hasArrayOfRecords(stage, "loras") || Object.hasOwn(stage, "loraWeights") && (!Array.isArray(stage.loraWeights) || !stage.loraWeights.every(
-          (weight) => typeof weight === "number" && Number.isFinite(weight)
-        )) || Object.hasOwn(stage, "icLoraStrengths") && (!Array.isArray(stage.icLoraStrengths) || !stage.icLoraStrengths.every(
-          (strength) => typeof strength === "number" && Number.isFinite(strength)
-        )) || Object.hasOwn(stage, "refStrengths") && (!Array.isArray(stage.refStrengths) || !stage.refStrengths.every(
-          (strength) => typeof strength === "number" && Number.isFinite(strength)
-        ))) {
-          return false;
-        }
-      }
-    }
-    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
-    return tracks.every(
-      (track) => hasArrayOfRecords(track, "spans") && (!Object.hasOwn(track, "source") || isRecord(track.source))
-    );
-  };
-  var OUTDATED_SCHEMA_NOTICE = "VideoStages: the saved timeline was created by an older version and could not be loaded.";
-  var noticedOutdatedDocument = null;
-  var noticeOutdatedSchema = (serialized) => {
-    if (noticedOutdatedDocument === serialized) {
-      return;
-    }
-    noticedOutdatedDocument = serialized;
-    getVideoStagesHostBridge().showError(OUTDATED_SCHEMA_NOTICE);
-  };
-  var DIVERGENT_PROJECTION_NOTICE = "VideoStages: the saved timeline has audio spans whose clip anchors disagree with their timeline seconds. The seconds were used and the anchors will be rewritten on the next save — re-check those segments.";
-  var noticedDivergentProjection = null;
-  var SPAN_PROJECTION_TOLERANCE = 1e-6;
-  var numberAt = (owner, key) => typeof owner[key] === "number" && Number.isFinite(owner[key]) ? owner[key] : null;
-  var storedSpanProjection = (span) => {
-    const raw = span.projection;
-    if (!isRecord(raw)) {
-      return null;
-    }
-    const first = raw.firstClipId;
-    const last = raw.lastClipId;
-    const startOffset = numberAt(raw, "clipStartOffsetSeconds");
-    const endOffset = numberAt(raw, "clipEndOffsetSeconds");
-    return typeof first === "string" && typeof last === "string" && startOffset !== null && endOffset !== null ? {
-      firstClipId: first,
-      lastClipId: last,
-      clipStartOffsetSeconds: startOffset,
-      clipEndOffsetSeconds: endOffset
-    } : null;
-  };
-  var hasDivergentSpanProjection = (parsed) => {
-    const clips = parsed.clips.map((clip) => ({
-      id: typeof clip.id === "string" ? clip.id : "",
-      duration: numberAt(clip, "duration") ?? 0
-    }));
-    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
-    for (const track of tracks) {
-      const spans = isRecord(track) && Array.isArray(track.spans) ? track.spans : [];
-      for (const span of spans) {
-        if (!isRecord(span)) {
-          continue;
-        }
-        const stored = storedSpanProjection(span);
-        if (!stored) {
-          continue;
-        }
-        const expected = timelineSpanProjection(clips, {
-          timelineStartSeconds: numberAt(span, "timelineStartSeconds"),
-          timelineLengthSeconds: numberAt(span, "timelineLengthSeconds")
-        });
-        if (!expected || expected.firstClipId !== stored.firstClipId || expected.lastClipId !== stored.lastClipId || Math.abs(
-          expected.clipStartOffsetSeconds - stored.clipStartOffsetSeconds
-        ) > SPAN_PROJECTION_TOLERANCE || Math.abs(
-          expected.clipEndOffsetSeconds - stored.clipEndOffsetSeconds
-        ) > SPAN_PROJECTION_TOLERANCE) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-  var noticeDivergentProjection = (serialized) => {
-    if (noticedDivergentProjection === serialized) {
-      return;
-    }
-    noticedDivergentProjection = serialized;
-    getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
-  };
-  var ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION = 5;
-  var migrateStoredDocument = (parsed) => {
-    if (parsed.schemaVersion === CURRENT_AUTHORING_SCHEMA_VERSION) {
-      return parsed;
-    }
-    if (parsed.schemaVersion !== ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION || !Array.isArray(parsed.clips)) {
-      return null;
-    }
-    const migrated = structuredClone(parsed);
-    migrated.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
-    for (const rawClip of migrated.clips) {
-      if (!isRecord(rawClip)) {
-        continue;
-      }
-      if (rawClip.architectureHint === void 0) {
-        rawClip.architectureHint = rawClip.architecture;
-      }
-      delete rawClip.architecture;
-    }
-    return migrated;
-  };
-  var decodeStoredDocument = (serialized, inherited) => {
-    try {
-      const parsed = JSON.parse(serialized);
-      if (!isRecord(parsed)) {
-        return null;
-      }
-      const current = migrateStoredDocument(parsed);
-      if (!current) {
-        noticeOutdatedSchema(serialized);
-        return null;
-      }
-      if (!hasValidStoredCollections(current)) {
-        return null;
-      }
-      if (hasDivergentSpanProjection(current)) {
-        noticeDivergentProjection(serialized);
-      }
-      const dims = resolveRootDims(inherited, {
-        width: current.width,
-        height: current.height
-      });
-      const clips = current.clips.map(
-        (entry) => normalizeClip(
-          entry,
-          getRootDefaults,
-          getDefaultStageModel,
-          dims.fps
-        )
-      );
-      const firstSkippedClip = clips.findIndex(
-        (clip) => clip.skipped === true
-      );
-      if (firstSkippedClip >= 0) {
-        for (let index = firstSkippedClip; index < clips.length; index++) {
-          clips[index].skipped = true;
-        }
-      }
-      return {
-        dims,
-        clips,
-        audioTracks: normalizeAudioTracks(current.audioTracks)
-      };
-    } catch {
-      return null;
-    }
-  };
-  var hasCanonicalStoredId = (value, seen) => {
-    if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || value.id.trim() !== value.id || seen.has(value.id)) {
-      return false;
-    }
-    seen.add(value.id);
-    return true;
-  };
-  var storedDocumentNeedsCanonicalIdRepair = (serialized) => {
-    try {
-      const parsed = JSON.parse(serialized);
-      if (!isRecord(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION || !Array.isArray(parsed.clips) || !Array.isArray(parsed.audioTracks)) {
-        return true;
-      }
-      const seenIds = /* @__PURE__ */ new Set();
-      for (const rawClip of parsed.clips) {
-        if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
-        for (const key of ["stages", "refs"]) {
-          const children = rawClip[key];
-          if (!Array.isArray(children) || children.some(
-            (child) => !hasCanonicalStoredId(child, seenIds)
-          )) {
-            return true;
-          }
-        }
-        if (rawClip.retake !== null && !hasCanonicalStoredId(rawClip.retake, seenIds)) {
-          return true;
-        }
-      }
-      for (const rawTrack of parsed.audioTracks) {
-        if (!hasCanonicalStoredId(rawTrack, seenIds) || !Array.isArray(rawTrack.spans) || rawTrack.spans.some(
-          (span) => !hasCanonicalStoredId(span, seenIds)
-        )) {
-          return true;
-        }
-      }
-      return false;
-    } catch {
-      return true;
-    }
-  };
-
-  // frontend/architectures/policy/boundaryPolicy.ts
-  var forceCrossArchitectureCutsForConversion = (clips, catalog) => {
-    for (const boundary of executableBoundaries(clips)) {
-      const left = clips[boundary.leftIdx];
-      const right = clips[boundary.rightIdx];
-      const leftArchitectureId = resolvedClipArchitectureId(left, catalog);
-      const rightArchitectureId = resolvedClipArchitectureId(right, catalog);
-      if (leftArchitectureId !== null && rightArchitectureId !== null && leftArchitectureId !== rightArchitectureId) {
-        left.boundaryOut = "cut";
-      }
-    }
-  };
-  var createBoundaryCapabilityViews = (architectureById, forClip) => {
-    const byTimeline = /* @__PURE__ */ new WeakMap();
-    const forBoundary = (left, right, leftClipIdx = -1, rightClipIdx = null) => {
-      const leftView = forClip(left);
-      const rightView = right === null ? null : forClip(right);
-      const leftDescriptor = architectureById.get(leftView.architectureId);
-      const crossArchitecture = rightView !== null && leftView.architectureId !== rightView.architectureId;
-      const hasInitialReference = right?.refs.some(
-        (reference) => reference.fromEnd !== true && Math.max(1, Math.round(reference.frame)) === 1
-      ) ?? false;
-      const rightHasActiveStage = right !== null && activeStageCount(right) > 0;
-      const supportsMode = (mode) => {
-        const rule = leftDescriptor?.boundaryRules[mode];
-        if (!rule || rule.support === "unsupported") {
-          return mode === "cut" && !leftDescriptor;
-        }
-        const constraints = rule.constraints;
-        if (constraints?.sameArchitecture === true && crossArchitecture) {
-          return false;
-        }
-        if (constraints?.targetRequiresGeneratedEntry === true && right?.sourceVideo !== null) {
-          return false;
-        }
-        if (constraints?.targetRequiresStage === true && right !== null && !rightHasActiveStage) {
-          return false;
-        }
-        if (constraints?.targetDisallowsInitialReference === true && hasInitialReference) {
-          return false;
-        }
-        return true;
-      };
-      const ruleModes = ["cut", "continue", "crossfade"].filter(
-        supportsMode
-      );
-      const modes = ruleModes.length > 0 ? ruleModes : ["cut"];
-      const requestedRule = leftDescriptor?.boundaryRules[left.boundaryOut] ?? null;
-      const reason = crossArchitecture ? "Executable clips from different architectures can only use a cut." : modes.length === 1 && modes[0] === "cut" ? requestedRule?.reason ?? `${leftView.architectureLabel} only supports cut boundaries.` : "";
-      return {
-        leftClipIdx,
-        rightClipIdx,
-        modes,
-        crossArchitecture,
-        reason,
-        overlapConstraints: (mode) => boundaryOverlapConstraints(
-          leftDescriptor?.boundaryRules[mode] ?? null
-        ),
-        effective: (requested) => supportsMode(requested) ? requested : "cut"
-      };
-    };
-    const forBoundaryIndex = (clips, leftClipIdx) => {
-      let timelineViews = byTimeline.get(clips);
-      if (!timelineViews) {
-        timelineViews = /* @__PURE__ */ new Map();
-        byTimeline.set(clips, timelineViews);
-      }
-      const cached = timelineViews.get(leftClipIdx);
-      if (cached) {
-        return cached;
-      }
-      const left = clips[leftClipIdx];
-      if (!left) {
-        throw new Error(`Missing left clip at index ${leftClipIdx}.`);
-      }
-      const rightClipIdx = executableBoundaryForLeftClip(clips, leftClipIdx)?.rightIdx ?? null;
-      const view = forBoundary(
-        left,
-        rightClipIdx === null ? null : clips[rightClipIdx],
-        leftClipIdx,
-        rightClipIdx
-      );
-      timelineViews.set(leftClipIdx, view);
-      return view;
-    };
-    return {
-      forBoundary,
-      forBoundaryIndex
-    };
-  };
-
-  // frontend/architectures/policy/clipStageViews.ts
-  var UNRESOLVED_ARCHITECTURE_ID = "unsupported";
-  var FEATURE_RULE_CODES = {
-    promptRelay: [CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength],
-    audioReuse: [CONDITIONAL_RULE_CODES.audioReuseRequiresStages],
-    retake: [
-      CONDITIONAL_RULE_CODES.retakeRequiresSource,
-      CONDITIONAL_RULE_CODES.retakeExcludesReferences
-    ],
-    hdr: [CONDITIONAL_RULE_CODES.uniformTimelineHdr]
-  };
-  var conditionalRuleFor = (clip, feature, descriptor, scope, effectiveArchitectureId) => {
-    const codes = FEATURE_RULE_CODES[feature];
-    if (!codes) return void 0;
-    for (const code of codes) {
-      const rule = conditionalRule(descriptor.rules, code);
-      if (rule && evaluateConditionalRule(rule, {
-        clip,
-        timelineClips: scope.timelineClips,
-        hasActiveHdr: (target) => clipHasActiveHdrForArchitecture(
-          target,
-          effectiveArchitectureId(target)
-        )
-      })) {
-        return rule;
-      }
-    }
-    return void 0;
-  };
-  var createClipStageCapabilityViews = (architectureById, modelByName, scope = {}) => {
-    const clipViews = /* @__PURE__ */ new WeakMap();
-    const stageViews = /* @__PURE__ */ new WeakMap();
-    const effectiveClipIdentity = (clip) => {
-      const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
-      const resolvedModel = sourceOnly ? void 0 : modelByName.get(clip.stages[0]?.model ?? "");
-      const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID;
-      return {
-        architectureId,
-        descriptor: architectureById.get(architectureId)
-      };
-    };
-    const forClip = (clip) => {
-      const cached = clipViews.get(clip);
-      if (cached) {
-        return cached;
-      }
-      const identity = effectiveClipIdentity(clip);
-      const { architectureId, descriptor } = identity;
-      const capabilities = descriptor ? effectiveClipCapabilities(
-        clip,
-        descriptor,
-        (model) => modelByName.get(model)
-      ) : null;
-      const label = descriptor?.label ?? (architectureId === NONE_ARCHITECTURE_ID ? "source-only clips" : `unknown architecture '${architectureId}'`);
-      const decision = (feature) => {
-        if (!descriptor || !capabilities) {
-          return {
-            supported: false,
-            reason: noArchitectureReason(feature),
-            rule: null
-          };
-        }
-        const conditionalRule2 = conditionalRuleFor(
-          clip,
-          feature,
-          descriptor,
-          scope,
-          (target) => effectiveClipIdentity(target).architectureId
-        );
-        const supported = architectureFeatureSupport(feature, {
-          capabilities
-        }) && !conditionalRule2;
-        return {
-          supported,
-          reason: supported ? "" : conditionalRule2?.reason ?? architectureReason(label, feature),
-          rule: conditionalRule2 ?? null
-        };
-      };
-      const frameGridResolution = resolveClipFrameGridForLookup(
-        clip,
-        (model) => modelByName.get(model),
-        (architectureId2) => architectureById.get(architectureId2)
-      );
-      const view = {
-        architectureId,
-        architectureLabel: label,
-        known: descriptor !== void 0,
-        frameGrid: frameGridResolution.status === "resolved" ? frameGridResolution.frameGrid : 1,
-        frameGridResolution,
-        audioSourceKinds: capabilities?.audioSourceKinds ?? [],
-        decision,
-        authoringState: (feature, persisted) => {
-          const result = decision(feature);
-          return {
-            ...result,
-            visible: result.supported || persisted,
-            enabled: result.supported
-          };
-        }
-      };
-      clipViews.set(clip, view);
-      return view;
-    };
-    const forStage = (clip, stage) => {
-      let viewsForClip = stageViews.get(clip);
-      if (!viewsForClip) {
-        viewsForClip = /* @__PURE__ */ new WeakMap();
-        stageViews.set(clip, viewsForClip);
-      }
-      const cached = viewsForClip.get(stage);
-      if (cached) {
-        return cached;
-      }
-      const view = forClip(clip);
-      const sourceOnly = view.architectureId === NONE_ARCHITECTURE_ID && activeStageCount(clip) === 0 && clip.sourceVideo !== null;
-      const resolvedModel = sourceOnly ? void 0 : modelByName.get(stage.model);
-      const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID;
-      const descriptor = architectureById.get(architectureId);
-      const capabilities = descriptor ? effectiveModelCapabilities(resolvedModel, descriptor) : null;
-      const decision = (feature) => {
-        if (feature === "stageLoras" && descriptor && capabilities) {
-          const supported2 = architectureFeatureSupport(feature, {
-            capabilities
-          });
-          const architectureRule = supported2 ? conditionalRule(
-            descriptor.rules,
-            CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
-          ) : null;
-          const violatedRule = architectureRule && evaluateConditionalRule(architectureRule, { clip, stage }) ? architectureRule : null;
-          return {
-            supported: supported2 && !violatedRule,
-            reason: supported2 && !violatedRule ? "" : violatedRule?.reason ?? `LoRAs are not supported by ${descriptor.label}.`,
-            rule: violatedRule
-          };
-        }
-        if (feature === "sampler" || feature === "scheduler") {
-          const supported2 = descriptor !== void 0 && resolvedModel !== void 0 && ((resolvedModel.entryAbilities?.length ?? 0) > 0 || resolvedModel.entryModes.length > 0);
-          return {
-            supported: supported2,
-            reason: supported2 ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection requires a resolved generating video model.`,
-            rule: null
-          };
-        }
-        const supported = descriptor !== void 0 && capabilities !== null && architectureFeatureSupport("upscale", {
-          capabilities
-        });
-        return {
-          supported,
-          reason: supported ? "" : descriptor ? architectureReason(descriptor.label, "upscale") : noArchitectureReason("upscale"),
-          rule: null
-        };
-      };
-      const stageView = {
-        upscaleModes: capabilities?.upscaleModes ?? [],
-        decision,
-        authoringState: (feature, persisted) => {
-          const result = decision(feature);
-          return {
-            ...result,
-            visible: result.supported || persisted,
-            enabled: result.supported
-          };
-        }
-      };
-      viewsForClip.set(stage, stageView);
-      return stageView;
-    };
-    return { forClip, forStage };
-  };
-
-  // frontend/architectures/policy.ts
-  var createCapabilityViewResolver = (catalog, scope = {}) => {
-    const architectureById = new Map(
-      catalog.architectures.map((entry) => [entry.id, entry])
-    );
-    const modelByName = new Map(
-      catalog.entries.map((entry) => [entry.value, entry])
-    );
-    const clipStage = createClipStageCapabilityViews(
-      architectureById,
-      modelByName,
-      scope
-    );
-    const boundaries = createBoundaryCapabilityViews(
-      architectureById,
-      clipStage.forClip
-    );
-    return {
-      catalog,
-      ...clipStage,
-      ...boundaries,
-      executableClipIndexes
-    };
-  };
-
   // frontend/authoringSnapshot.ts
   var captureAuthoringTransactionSnapshot = () => {
     const catalogStatus = getArchitectureCatalogSnapshot();
@@ -4339,6 +3047,72 @@
         defaults.modelCatalog
       )
     };
+  };
+
+  // frontend/clipColor.ts
+  var HUE_MIN = 0;
+  var HUE_MAX = 359;
+  var HUE_RANGE = 360;
+  var BASE_HUE = 210;
+  var UNASSIGNED_HUE = -1;
+  var HUE_SATURATION = 65;
+  var HUE_LIGHTNESS = 55;
+  var isAssignedHue = (value) => typeof value === "number" && Number.isInteger(value) && value >= HUE_MIN && value <= HUE_MAX;
+  var normalizeStoredHue = (value) => {
+    if (value == null || value === "") {
+      return UNASSIGNED_HUE;
+    }
+    const num = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(num)) {
+      return UNASSIGNED_HUE;
+    }
+    return (Math.round(num) % HUE_RANGE + HUE_RANGE) % HUE_RANGE;
+  };
+  var hueDistance = (a, b) => {
+    const d = Math.abs(a - b) % HUE_RANGE;
+    return d > 180 ? HUE_RANGE - d : d;
+  };
+  var pickDistinctHue = (existing) => {
+    const inUse = existing.filter(isAssignedHue);
+    if (inUse.length === 0) {
+      return BASE_HUE;
+    }
+    let best = 0;
+    let bestScore = -1;
+    for (let hue = HUE_MIN; hue <= HUE_MAX; hue++) {
+      let minDist = 180;
+      for (const used of inUse) {
+        const d = hueDistance(hue, used);
+        if (d < minDist) {
+          minDist = d;
+        }
+      }
+      if (minDist > bestScore) {
+        bestScore = minDist;
+        best = hue;
+      }
+    }
+    return best;
+  };
+  var assignMissingHues = (clips) => {
+    const assigned = [];
+    for (const clip of clips) {
+      if (isAssignedHue(clip.hue)) {
+        assigned.push(clip.hue);
+      }
+    }
+    for (const clip of clips) {
+      if (isAssignedHue(clip.hue)) {
+        continue;
+      }
+      const hue = pickDistinctHue(assigned);
+      clip.hue = hue;
+      assigned.push(hue);
+    }
+  };
+  var clipHueCss = (hue) => {
+    const resolved = isAssignedHue(hue) ? hue : BASE_HUE;
+    return `hsl(${resolved} ${HUE_SATURATION}% ${HUE_LIGHTNESS}%)`;
   };
 
   // frontend/debugLog.ts
@@ -5037,6 +3811,151 @@
     return { changed, before, after, multiple };
   };
 
+  // frontend/types.ts
+  var CURRENT_AUTHORING_SCHEMA_VERSION = 6;
+  var REF_SOURCE_BASE = "Base";
+  var REF_SOURCE_REFINER = "Refiner";
+  var REF_SOURCE_UPLOAD = "Upload";
+
+  // frontend/identity.ts
+  var fallbackSequence = 0;
+  var normalizedExistingId = (value) => {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const id = value.trim();
+    return id.length > 0 ? id : null;
+  };
+  var createEntityId = (kind) => {
+    const randomUuid = globalThis.crypto?.randomUUID?.();
+    if (randomUuid) {
+      return `${kind}_${randomUuid}`;
+    }
+    fallbackSequence += 1;
+    return `${kind}_${Date.now().toString(36)}_${fallbackSequence.toString(36)}`;
+  };
+  var assignUniqueId = (entry, reserved, used) => {
+    const reservedId = reserved.get(entry.entity);
+    if (reservedId) {
+      entry.entity.id = reservedId;
+      return reservedId;
+    }
+    const base = `${entry.kind}_legacy_${entry.repairPath}`;
+    let id = base;
+    let collision = 1;
+    while (used.has(id)) {
+      collision += 1;
+      id = `${base}_${collision}`;
+    }
+    entry.entity.id = id;
+    used.add(id);
+    return id;
+  };
+  var clipIdentityEntries = (clips) => {
+    const entries = [];
+    for (let clipIndex = 0; clipIndex < clips.length; clipIndex++) {
+      const clip = clips[clipIndex];
+      entries.push({
+        entity: clip,
+        kind: "clip",
+        repairPath: `${clipIndex}`
+      });
+      for (let stageIndex = 0; stageIndex < clip.stages.length; stageIndex++) {
+        entries.push({
+          entity: clip.stages[stageIndex],
+          kind: "stage",
+          repairPath: `${clipIndex}_${stageIndex}`
+        });
+      }
+      for (let refIndex = 0; refIndex < clip.refs.length; refIndex++) {
+        entries.push({
+          entity: clip.refs[refIndex],
+          kind: "ref",
+          repairPath: `${clipIndex}_${refIndex}`
+        });
+      }
+      for (let windowIndex = 0; windowIndex < clip.promptWindows.length; windowIndex++) {
+        entries.push({
+          entity: clip.promptWindows[windowIndex],
+          kind: "prompt_window",
+          repairPath: `${clipIndex}_${windowIndex}`
+        });
+      }
+      if (clip.retake) {
+        entries.push({
+          entity: clip.retake,
+          kind: "retake",
+          repairPath: `${clipIndex}`
+        });
+      }
+    }
+    return entries;
+  };
+  var audioTrackIdentityEntries = (tracks) => {
+    const entries = [];
+    for (let trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
+      const track = tracks[trackIndex];
+      entries.push({
+        entity: track,
+        kind: "audio_track",
+        repairPath: `${trackIndex}`
+      });
+      for (let spanIndex = 0; spanIndex < track.spans.length; spanIndex++) {
+        entries.push({
+          entity: track.spans[spanIndex],
+          kind: "audio_span",
+          repairPath: `${trackIndex}_${spanIndex}`
+        });
+      }
+    }
+    return entries;
+  };
+  var assignEntryIdentities = (entries, used) => {
+    const reserved = /* @__PURE__ */ new Map();
+    for (const { entity } of entries) {
+      const existing = normalizedExistingId(entity.id);
+      if (existing && !used.has(existing)) {
+        reserved.set(entity, existing);
+        used.add(existing);
+      }
+    }
+    for (const entry of entries) {
+      assignUniqueId(entry, reserved, used);
+    }
+  };
+  var ensureClipEntityIdentities = (clips, seen = /* @__PURE__ */ new Set()) => {
+    assignEntryIdentities(clipIdentityEntries(clips), seen);
+    return seen;
+  };
+  function ensureAuthoringDocumentIdentity(state) {
+    state.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    state.audioTracks ??= [];
+    assignEntryIdentities(
+      [
+        ...clipIdentityEntries(state.clips),
+        ...audioTrackIdentityEntries(state.audioTracks)
+      ],
+      /* @__PURE__ */ new Set()
+    );
+  }
+  var collectAuthoringEntityIds = (state) => {
+    const ids = [];
+    for (const clip of state.clips) {
+      if (clip.id) ids.push(clip.id);
+      for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
+      for (const ref of clip.refs) if (ref.id) ids.push(ref.id);
+      for (const window2 of clip.promptWindows) {
+        if (window2.id) ids.push(window2.id);
+      }
+      if (clip.retake?.id) ids.push(clip.retake.id);
+    }
+    for (const track of state.audioTracks ?? []) {
+      if (track.id) ids.push(track.id);
+      for (const span of track.spans) if (span.id) ids.push(span.id);
+    }
+    return ids;
+  };
+
   // frontend/documentCommands/helpers.ts
   var clone2 = (value) => structuredClone(value);
   var findClip = (document2, clipId) => document2.clips.find((clip) => clip.id === clipId) ?? null;
@@ -5653,6 +4572,1087 @@
     try {
       localStorage.setItem(UI_STATE_KEY, serializeUiState(clips));
     } catch {
+    }
+  };
+
+  // frontend/normalizationAudio.ts
+  var normalizeAudioTrackSourceKind = (value) => {
+    const compact = trimmedText(value).toLowerCase();
+    switch (compact) {
+      case "upload":
+        return "Upload";
+      case "acestepfun":
+        return "AceStepFun";
+      case "native":
+        return "Native";
+      case "controlnet":
+        return "ControlNet";
+      default:
+        return "External";
+    }
+  };
+  var normalizeAudioTrackSpan = (value) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const sourceStart = optionalNonNegativeNumber(value.sourceStartSeconds) ?? 0;
+    return {
+      id: normalizeOptionalEntityId(value.id),
+      timelineStartSeconds: optionalNonNegativeNumber(
+        value.timelineStartSeconds
+      ),
+      timelineLengthSeconds: optionalPositiveNumber(
+        value.timelineLengthSeconds
+      ),
+      sourceStartSeconds: sourceStart
+    };
+  };
+  var splitSpansIntoLanes = (track) => {
+    if (track.spans.length <= 1) {
+      return [track];
+    }
+    return track.spans.map((span, spanIndex) => ({
+      ...track,
+      id: track.id === void 0 ? void 0 : `${track.id}:${spanIndex}`,
+      source: { ...track.source },
+      spans: [span]
+    }));
+  };
+  var normalizeAudioTracks = (value) => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const tracks = [];
+    for (const rawTrack of value) {
+      if (!isRecord(rawTrack)) {
+        continue;
+      }
+      const rawSource = rawTrack.source;
+      const source = isRecord(rawSource) ? rawSource : {};
+      const rawSpans = rawTrack.spans;
+      const volume = rawTrack.volume === void 0 ? void 0 : clampedNumber(
+        rawTrack.volume,
+        AUDIO_SEGMENT_VOLUME_DEFAULT,
+        AUDIO_SEGMENT_VOLUME_MIN,
+        AUDIO_SEGMENT_VOLUME_MAX
+      );
+      tracks.push(
+        ...splitSpansIntoLanes({
+          id: normalizeOptionalEntityId(rawTrack.id),
+          source: {
+            kind: normalizeAudioTrackSourceKind(source.kind),
+            reference: trimmedText(source.reference),
+            uploadedAudio: normalizeUploadedMedia(source.uploadedAudio)
+          },
+          spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter(
+            (span) => span !== null
+          ) : [],
+          ...volume === void 0 ? {} : { volume }
+        })
+      );
+    }
+    return tracks;
+  };
+
+  // frontend/architectures/identity.ts
+  var normalizeClipArchitecture = (rawArchitecture, stageZeroModel, catalog) => {
+    const persisted = `${rawArchitecture ?? ""}`.trim();
+    if (persisted) {
+      return persisted;
+    }
+    const fromCatalog = catalog && stageZeroModel ? architectureForModel(catalog, stageZeroModel) : null;
+    if (fromCatalog) {
+      return fromCatalog;
+    }
+    return "unsupported";
+  };
+
+  // frontend/loraAuthoring.ts
+  var LORA_WEIGHT_DEFAULT = 1;
+  var LORA_WEIGHT_STEP = 0.05;
+  var defaultLoraWeight = (defaults, modelName) => {
+    const index = defaults.loraValues.indexOf(modelName);
+    const value = index >= 0 ? defaults.loraDefaultWeights[index] : null;
+    return typeof value === "number" && Number.isFinite(value) ? value : LORA_WEIGHT_DEFAULT;
+  };
+  var appendLoraToClip = (clip, name, initialWeight) => {
+    clip.loras.push({ name });
+    for (const stage of clip.stages) {
+      stage.loraWeights.push(initialWeight);
+    }
+  };
+  var replaceLoraModelAt = (clip, index, name, initialWeight) => {
+    const entry = clip.loras[index];
+    if (!entry) {
+      return false;
+    }
+    entry.name = name;
+    for (const stage of clip.stages) {
+      stage.loraWeights[index] = initialWeight;
+    }
+    return true;
+  };
+  var removeLoraAt = (clip, index) => {
+    if (index < 0 || index >= clip.loras.length) {
+      return false;
+    }
+    clip.loras.splice(index, 1);
+    for (const stage of clip.stages) {
+      if (index < stage.loraWeights.length) {
+        stage.loraWeights.splice(index, 1);
+      }
+    }
+    return true;
+  };
+
+  // frontend/renderUtils.ts
+  var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  var framesForClip = (durationSeconds, fps, rawFrameGrid) => {
+    const frameGrid = Number.isInteger(rawFrameGrid) && rawFrameGrid > 0 ? rawFrameGrid : 1;
+    return Math.max(
+      1,
+      Math.ceil(
+        Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) / frameGrid
+      ) * frameGrid + 1
+    );
+  };
+  var snapDurationToFps = (seconds, fps) => {
+    if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
+      return seconds;
+    }
+    const frames = Math.max(1, Math.ceil(seconds * fps));
+    const aligned = frames / fps;
+    return Math.max(0.1, Math.floor(aligned * 10) / 10);
+  };
+
+  // frontend/normalizationStage.ts
+  var normalizeStageRefStrengthValue = (value) => snapValueToStep(
+    value,
+    STAGE_REF_STRENGTH_DEFAULT,
+    STAGE_REF_STRENGTH_MIN,
+    STAGE_REF_STRENGTH_MAX,
+    STAGE_REF_STRENGTH_STEP
+  );
+  var normalizeStageControlNetStrengthValue = (value) => snapValueToStep(
+    value,
+    STAGE_CONTROLNET_STRENGTH_DEFAULT,
+    STAGE_CONTROLNET_STRENGTH_MIN,
+    STAGE_CONTROLNET_STRENGTH_MAX,
+    STAGE_CONTROLNET_STRENGTH_STEP
+  );
+  var normalizeStageIcLoraStrengths = (rawStrengths, icLoraCount, fallbackStrength = 1, perLoraFallbacks = []) => {
+    const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
+    return Array.from(
+      { length: icLoraCount },
+      (_, index) => normalizeStageControlNetStrengthValue(
+        rawValues[index] ?? perLoraFallbacks[index] ?? fallbackStrength
+      )
+    );
+  };
+  var buildDefaultStageRefStrengths = (refCount, defaultStrength = STAGE_REF_STRENGTH_DEFAULT) => Array.from({ length: refCount }, () => defaultStrength);
+  var normalizeStageRefStrengths = (rawStrengths, refCount) => {
+    const strengths = [];
+    const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
+    for (let i = 0; i < refCount; i++) {
+      strengths.push(normalizeStageRefStrengthValue(rawValues[i]));
+    }
+    return strengths;
+  };
+  var readRawStageProp = (raw, key) => readProp(raw, key);
+  var readRawStageString = (raw, key) => {
+    const value = readRawStageProp(raw, key);
+    if (value == null) {
+      return void 0;
+    }
+    return trimmedText(value) || void 0;
+  };
+  var normalizeStageLoras = (raw) => {
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+    const out = [];
+    for (const entry of raw) {
+      if (!isRecord(entry)) {
+        continue;
+      }
+      const name = trimmedText(readRawStageProp(entry, "name"));
+      if (!name) {
+        continue;
+      }
+      out.push({
+        name,
+        weight: numberOr(readRawStageProp(entry, "weight"), 1)
+      });
+    }
+    return out;
+  };
+  var buildDefaultStage = (getRootDefaults2, getDefaultStageModel2, previousStage, refCount, initialLoraWeights = [], initialIcLoraStrengths = []) => {
+    const defaults = getRootDefaults2();
+    const model = previousStage ? previousStage.model : getDefaultStageModel2(defaults.modelValues);
+    return {
+      skipped: false,
+      control: previousStage ? previousStage.control : defaults.control,
+      controlNetStrength: previousStage ? previousStage.controlNetStrength : STAGE_CONTROLNET_STRENGTH_DEFAULT,
+      icLoraStrengths: previousStage ? [...previousStage.icLoraStrengths] : initialIcLoraStrengths.map(normalizeStageControlNetStrengthValue),
+      loraWeights: previousStage ? [...previousStage.loraWeights] : [...initialLoraWeights],
+      refStrengths: buildDefaultStageRefStrengths(refCount),
+      upscale: previousStage ? previousStage.upscale : defaults.upscale,
+      upscaleMethod: previousStage ? previousStage.upscaleMethod : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
+      model,
+      modelProfileId: previousStage?.modelProfileId ?? modelProfileForModel(defaults.modelCatalog, model) ?? "unsupported",
+      steps: previousStage ? previousStage.steps : defaults.steps,
+      cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
+      sampler: previousStage ? previousStage.sampler : defaults.samplerValues[0] ?? "euler",
+      scheduler: previousStage ? previousStage.scheduler : defaults.schedulerValues[0] ?? "normal"
+    };
+  };
+  var buildDefaultRef = (source = REF_SOURCE_REFINER) => ({
+    source,
+    uploadFileName: null,
+    uploadedImage: null,
+    frame: REF_FRAME_MIN,
+    fromEnd: false
+  });
+  var appendRefToClip = (clip, ref) => {
+    clip.refs.push(ref);
+    for (const stage of clip.stages) {
+      stage.refStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
+    }
+  };
+  var removeRefAt = (clip, refIdx) => {
+    if (refIdx < 0 || refIdx >= clip.refs.length) {
+      return false;
+    }
+    clip.refs.splice(refIdx, 1);
+    for (const stage of clip.stages) {
+      if (refIdx < stage.refStrengths.length) {
+        stage.refStrengths.splice(refIdx, 1);
+      }
+    }
+    return true;
+  };
+  var appendIcLoraStrengthToClip = (clip, initialStrength = 1) => {
+    for (const stage of clip.stages) {
+      stage.icLoraStrengths.push(
+        normalizeStageControlNetStrengthValue(initialStrength)
+      );
+    }
+  };
+  var removeIcLoraStrengthAt = (clip, entryIdx) => {
+    for (const stage of clip.stages) {
+      if (entryIdx < stage.icLoraStrengths.length) {
+        stage.icLoraStrengths.splice(entryIdx, 1);
+      }
+    }
+  };
+  var getReferenceFrameMax = (getRootDefaults2, clip, effectiveFps) => {
+    const defaults = getRootDefaults2();
+    const fps = typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps;
+    if (clip) {
+      const frameGrid = clip.stages ? resolvedClipFrameGrid(
+        { ...clip, stages: clip.stages },
+        defaults.modelCatalog
+      ) : 1;
+      return Math.max(
+        REF_FRAME_MIN,
+        framesForClip(clip.duration, fps, frameGrid)
+      );
+    }
+    return Math.max(REF_FRAME_MIN, defaults.frames);
+  };
+  var getKnownReferenceFrameMax = (getRootDefaults2, clip, effectiveFps) => {
+    const defaults = getRootDefaults2();
+    const resolution = resolveClipFrameGrid(clip, defaults.modelCatalog);
+    if (resolution.status !== "resolved") {
+      return null;
+    }
+    const fps = typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps;
+    return Math.max(
+      REF_FRAME_MIN,
+      framesForClip(clip.duration, fps, resolution.frameGrid)
+    );
+  };
+  var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, sourcedClip = false, clipLoras = [], clipLoraDefaultWeights = []) => {
+    const defaults = getRootDefaults2();
+    const fallback = buildDefaultStage(
+      getRootDefaults2,
+      getDefaultStageModel2,
+      previousStage,
+      refCount,
+      clipLoraDefaultWeights
+    );
+    const forcedFirstStage = stageIndexInClip === 0 && !sourcedClip;
+    let firstStageUpscale;
+    let control;
+    if (forcedFirstStage) {
+      firstStageUpscale = {
+        upscale: defaults.upscale,
+        upscaleMethod: resolveRootPreferredUpscaleMethod(
+          defaults.upscaleMethodValues
+        )
+      };
+      control = clamp(
+        defaults.control,
+        defaults.controlMin,
+        defaults.controlMax
+      );
+    } else {
+      firstStageUpscale = {
+        upscale: snapToStep(
+          clampedNumber(
+            readRawStageProp(rawStage, "upscale"),
+            fallback.upscale,
+            defaults.upscaleMin,
+            defaults.upscaleMax
+          ),
+          defaults.upscaleStep
+        ),
+        upscaleMethod: textOr(
+          readRawStageString(rawStage, "upscaleMethod"),
+          fallback.upscaleMethod
+        )
+      };
+      control = clampedNumber(
+        readRawStageProp(rawStage, "control"),
+        fallback.control,
+        defaults.controlMin,
+        defaults.controlMax
+      );
+    }
+    const rawLoraWeights = readRawStageProp(rawStage, "loraWeights");
+    const legacyLoras = normalizeStageLoras(
+      readRawStageProp(rawStage, "loras")
+    );
+    const legacyWeights = new Map(
+      legacyLoras.map((entry) => [entry.name, entry.weight])
+    );
+    const hasLegacyLoras = Array.isArray(readRawStageProp(rawStage, "loras"));
+    const loraWeights = clipLoras.map((entry, index) => {
+      if (Array.isArray(rawLoraWeights)) {
+        return numberOr(
+          rawLoraWeights[index],
+          clipLoraDefaultWeights[index] ?? 1
+        );
+      }
+      const legacyWeight = legacyWeights.get(entry.name);
+      if (legacyWeight !== void 0) {
+        return legacyWeight;
+      }
+      if (hasLegacyLoras) {
+        return clipLoraDefaultWeights[index] ?? 0;
+      }
+      return fallback.loraWeights[index] ?? clipLoraDefaultWeights[index] ?? 1;
+    });
+    const stage = {
+      id: normalizeOptionalEntityId(rawStage.id),
+      skipped: !!rawStage.skipped,
+      control,
+      controlNetStrength: normalizeStageControlNetStrengthValue(
+        readRawStageProp(rawStage, "controlNetStrength") ?? fallback.controlNetStrength
+      ),
+      icLoraStrengths: Array.isArray(rawStage.icLoraStrengths) ? rawStage.icLoraStrengths.map(
+        normalizeStageControlNetStrengthValue
+      ) : [...fallback.icLoraStrengths],
+      loraWeights,
+      refStrengths: normalizeStageRefStrengths(
+        rawStage.refStrengths,
+        refCount
+      ),
+      upscale: firstStageUpscale.upscale,
+      upscaleMethod: firstStageUpscale.upscaleMethod,
+      model: textOr(rawStage.model, fallback.model),
+      modelProfileId: "unsupported",
+      steps: Math.max(
+        1,
+        Math.round(
+          clampedNumber(
+            rawStage.steps,
+            fallback.steps,
+            defaults.stepsMin,
+            defaults.stepsMax
+          )
+        )
+      ),
+      cfgScale: clampedNumber(
+        rawStage.cfgScale,
+        fallback.cfgScale,
+        defaults.cfgScaleMin,
+        defaults.cfgScaleMax
+      ),
+      sampler: textOr(rawStage.sampler, fallback.sampler),
+      scheduler: textOr(rawStage.scheduler, fallback.scheduler)
+    };
+    stage.modelProfileId = trimmedText(readRawStageProp(rawStage, "modelProfileId")) || modelProfileForModel(defaults.modelCatalog, stage.model) || fallback.modelProfileId;
+    if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
+      stage.upscaleMethod = forcedFirstStage ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
+    }
+    return stage;
+  };
+  var normalizeRef = (rawRef, frameMax) => {
+    const fallback = buildDefaultRef();
+    const source = textOr(rawRef.source, fallback.source);
+    const authoredFrame = Math.max(
+      REF_FRAME_MIN,
+      Math.round(numberOr(rawRef.frame, fallback.frame))
+    );
+    return {
+      id: normalizeOptionalEntityId(rawRef.id),
+      source,
+      uploadFileName: textOr(rawRef.uploadFileName, "") || null,
+      uploadedImage: normalizeUploadedMedia(rawRef.uploadedImage),
+      frame: frameMax === null ? authoredFrame : clamp(authoredFrame, REF_FRAME_MIN, frameMax),
+      fromEnd: !!rawRef.fromEnd
+    };
+  };
+
+  // frontend/normalizationClip.ts
+  var normalizeBoundaryOut = (value) => {
+    const raw = trimmedText(value).toLowerCase();
+    return raw === "continue" || raw === "crossfade" ? raw : "cut";
+  };
+  var normalizeContinueOverlap = (value, constraints = boundaryOverlapConstraints(null)) => {
+    const numeric = Math.trunc(Number(value));
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : normalizeBoundaryOverlap(value, constraints);
+  };
+  var normalizeReferenceFraming = (value) => value === "stretch" || value === "fit" || value === "fit-green" ? value : "crop";
+  var preserveArchitecturePayload = (value) => isRecord(value) ? structuredClone(value) : null;
+  var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
+    const defaults = getRootDefaults2();
+    const refs = includeDefaultRef ? [buildDefaultRef()] : [];
+    const loras = previousClip?.loras.map((entry) => ({ ...entry })) ?? [];
+    const initialLoraWeights = loras.map(
+      (entry, index) => previousClip?.stages[0]?.loraWeights[index] ?? defaults.loraDefaultWeights[defaults.loraValues.indexOf(entry.name)] ?? 1
+    );
+    const firstStage = {
+      ...buildDefaultStage(
+        getRootDefaults2,
+        getDefaultStageModel2,
+        previousClip?.stages[0] ?? null,
+        refs.length,
+        initialLoraWeights
+      ),
+      refStrengths: buildDefaultStageRefStrengths(
+        refs.length,
+        includeDefaultRef ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH : STAGE_REF_STRENGTH_DEFAULT
+      )
+    };
+    const architecture = (previousClip?.architectureHint !== NONE_ARCHITECTURE_ID ? previousClip?.architectureHint : null) ?? architectureForModel(defaults.modelCatalog, firstStage.model) ?? "unsupported";
+    const continueRule = architectureDescriptor(
+      defaults.modelCatalog,
+      architecture
+    )?.boundaryRules.continue;
+    return {
+      architectureHint: architecture,
+      modelProfileId: (previousClip?.architectureHint !== NONE_ARCHITECTURE_ID ? previousClip?.modelProfileId : null) ?? modelProfileForModel(defaults.modelCatalog, firstStage.model) ?? firstStage.modelProfileId,
+      architecturePayload: null,
+      skipped: previousClip?.skipped === true,
+      hue: UNASSIGNED_HUE,
+      boundaryOut: "cut",
+      boundaryOutCarryAudio: false,
+      boundaryOutOverlap: boundaryOverlapConstraints(continueRule).defaultFrames,
+      duration: previousClip ? previousClip.duration : snapDurationToFps(
+        Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
+        defaults.fps
+      ),
+      refFraming: "crop",
+      audioSource: AUDIO_SOURCE_NATIVE,
+      loras,
+      icLoras: [],
+      saveAudioTrack: false,
+      clipLengthFromAudio: false,
+      clipLengthFromControlNet: false,
+      reuseAudio: false,
+      uploadedAudio: null,
+      prompt: "",
+      promptWindows: [],
+      retake: null,
+      sourceVideo: null,
+      refs,
+      stages: [firstStage]
+    };
+  };
+  var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2, effectiveFps) => {
+    const defaults = getRootDefaults2();
+    const rawAudioSource = text(rawClip.audioSource, AUDIO_SOURCE_NATIVE);
+    const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
+    const sourceVideo = normalizeSourceVideo(rawClip.sourceVideo);
+    const fps = Math.max(
+      1,
+      typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps
+    );
+    const rawDuration = sourceVideo?.lengthSeconds ?? numberOr(rawClip.duration, defaults.frames / fps);
+    const duration = snapDurationToFps(
+      Math.max(CLIP_DURATION_MIN, rawDuration),
+      fps
+    );
+    const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
+    const clipScopedLoras = normalizeStageLoras(rawClip.loras);
+    const loraNames = [];
+    const loraDefaultWeightByName = /* @__PURE__ */ new Map();
+    const appendLoraName = (name, defaultWeight) => {
+      if (loraDefaultWeightByName.has(name)) {
+        return;
+      }
+      loraNames.push(name);
+      loraDefaultWeightByName.set(name, defaultWeight);
+    };
+    for (const entry of clipScopedLoras) {
+      appendLoraName(entry.name, entry.weight);
+    }
+    for (const rawStage of stagesRaw) {
+      if (!isRecord(rawStage)) {
+        continue;
+      }
+      for (const entry of normalizeStageLoras(rawStage.loras)) {
+        appendLoraName(entry.name, 0);
+      }
+    }
+    const loras = loraNames.map((name) => ({ name }));
+    const loraDefaultWeights = loraNames.map(
+      (name) => loraDefaultWeightByName.get(name) ?? 1
+    );
+    const stages = [];
+    for (let i = 0; i < stagesRaw.length; i++) {
+      const previousStage = i > 0 ? stages[i - 1] : null;
+      stages.push(
+        normalizeStage(
+          getRootDefaults2,
+          getDefaultStageModel2,
+          isRecord(stagesRaw[i]) ? stagesRaw[i] : {},
+          previousStage,
+          refsRaw.length,
+          i,
+          sourceVideo !== null,
+          loras,
+          loraDefaultWeights
+        )
+      );
+    }
+    const firstSkippedStage = stages.findIndex(
+      (stage) => stage.skipped === true
+    );
+    if (firstSkippedStage >= 0) {
+      for (let index = firstSkippedStage; index < stages.length; index++) {
+        stages[index].skipped = true;
+      }
+    }
+    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
+    const clipLengthFromAudio = !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
+    const retake = normalizeRetake(rawClip.retake, duration);
+    const refFrameMax = getKnownReferenceFrameMax(
+      getRootDefaults2,
+      {
+        duration,
+        stages,
+        sourceVideo,
+        retake,
+        clipLengthFromAudio,
+        clipLengthFromControlNet
+      },
+      fps
+    );
+    const refs = refsRaw.map(
+      (rawRef) => normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax)
+    );
+    const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
+    const stageZero = stages[0] ?? null;
+    const persistedArchitecture = trimmedText(rawClip.architectureHint);
+    const persistedProfile = trimmedText(rawClip.modelProfileId);
+    const isSourceOnly = sourceVideo !== null && stages.every((stage) => stage.skipped);
+    const architecture = isSourceOnly ? persistedArchitecture || "none" : normalizeClipArchitecture(
+      persistedArchitecture,
+      stageZero?.model ?? null,
+      defaults.modelCatalog
+    );
+    const resolvedArchitecture = isSourceOnly ? NONE_ARCHITECTURE_ID : architectureForModel(
+      defaults.modelCatalog,
+      stageZero?.model ?? ""
+    ) ?? "unsupported";
+    const modelProfileId = isSourceOnly ? persistedProfile || (architecture === NONE_ARCHITECTURE_ID ? NONE_ARCHITECTURE_ID : "unsupported") : persistedProfile || stageZero?.modelProfileId || "unsupported";
+    const icLoras = normalizeArchitectureIcLoras(
+      resolvedArchitecture,
+      rawClip,
+      stagesRaw.length,
+      sourceVideo !== null,
+      { preserveDormantLtx: true }
+    );
+    const icLoraDefaultStrengths = icLoras.map(
+      (entry) => defaultLoraWeight(defaults, entry.lora)
+    );
+    for (let index = 0; index < stages.length; index++) {
+      const stage = stages[index];
+      const rawStage = isRecord(stagesRaw[index]) ? stagesRaw[index] : {};
+      const hasLegacyControlNetStrength = Object.hasOwn(
+        rawStage,
+        "controlNetStrength"
+      );
+      const legacyFallback = hasLegacyControlNetStrength ? stage.controlNetStrength : 1;
+      stage.icLoraStrengths = normalizeStageIcLoraStrengths(
+        rawStage.icLoraStrengths,
+        icLoras.length,
+        legacyFallback,
+        hasLegacyControlNetStrength ? [] : stages[index - 1]?.icLoraStrengths ?? icLoraDefaultStrengths
+      );
+    }
+    const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
+    const boundaryRule = architectureDescriptor(
+      defaults.modelCatalog,
+      resolvedArchitecture
+    )?.boundaryRules[boundaryOut];
+    return {
+      id: normalizeOptionalEntityId(rawClip.id),
+      architectureHint: architecture,
+      modelProfileId,
+      architecturePayload: preserveArchitecturePayload(
+        rawClip.architecturePayload
+      ),
+      skipped: !!rawClip.skipped,
+      hue: normalizeStoredHue(rawClip.hue),
+      boundaryOut,
+      boundaryOutCarryAudio: !!rawClip.boundaryOutCarryAudio,
+      boundaryOutOverlap: normalizeContinueOverlap(
+        rawClip.boundaryOutOverlap,
+        boundaryOverlapConstraints(boundaryRule)
+      ),
+      duration,
+      refFraming: normalizeReferenceFraming(rawClip.refFraming),
+      audioSource,
+      loras,
+      icLoras,
+      saveAudioTrack: !!rawClip.saveAudioTrack,
+      clipLengthFromAudio,
+      clipLengthFromControlNet,
+      reuseAudio: !!rawClip.reuseAudio,
+      uploadedAudio: normalizeUploadedMedia(rawClip.uploadedAudio),
+      prompt: text(rawClip.prompt),
+      promptWindows: normalizePromptWindows(rawClip),
+      retake,
+      sourceVideo,
+      refs,
+      stages
+    };
+  };
+
+  // frontend/persistence/documentCodec.ts
+  var toIntOrNull = (value) => {
+    const num = optionalNonNegativeNumber(value);
+    return num === null ? null : Math.round(num);
+  };
+  var resolveRootDims = (inherited, stored) => {
+    const width = toIntOrNull(stored.width);
+    const height = toIntOrNull(stored.height);
+    const dimsExplicit = width !== null && width >= ROOT_DIMENSION_MIN && height !== null && height >= ROOT_DIMENSION_MIN;
+    return {
+      width: dimsExplicit ? width : inherited.width,
+      height: dimsExplicit ? height : inherited.height,
+      // fps is never stored: the timeline always follows the core Video FPS
+      // param (the backend falls back to it too when the JSON has no fps).
+      fps: inherited.fps,
+      dimsExplicit
+    };
+  };
+  var createRootConfig = (dims, clips, audioTracks = []) => {
+    const config = {
+      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
+      ...dims,
+      clips,
+      audioTracks
+    };
+    ensureAuthoringDocumentIdentity(config);
+    return config;
+  };
+  var serializeClipsForStorage = (clips) => {
+    ensureClipEntityIdentities(clips);
+    return clips.map(
+      (clip) => ({
+        id: clip.id,
+        architectureHint: clip.architectureHint,
+        modelProfileId: clip.modelProfileId,
+        architecturePayload: clip.architecturePayload,
+        skipped: clip.skipped,
+        boundaryOut: clip.boundaryOut,
+        boundaryOutCarryAudio: clip.boundaryOutCarryAudio,
+        boundaryOutOverlap: clip.boundaryOutOverlap,
+        duration: clip.duration,
+        refFraming: clip.refFraming,
+        audioSource: clip.audioSource,
+        loras: clip.loras.map((entry) => ({
+          name: entry.name
+        })),
+        icLoras: clip.icLoras.map((entry) => ({
+          lora: entry.lora,
+          preset: entry.preset,
+          driveSource: entry.driveSource,
+          driveData: entry.driveData,
+          driveMediaKinds: entry.driveMediaKinds,
+          stage: entry.stage,
+          strength: entry.strength,
+          attentionStrength: entry.attentionStrength,
+          controlType: entry.controlType,
+          hdr: entry.hdr,
+          driveMedia: entry.driveMedia
+        })),
+        saveAudioTrack: clip.saveAudioTrack,
+        clipLengthFromAudio: clip.clipLengthFromAudio,
+        clipLengthFromControlNet: clip.clipLengthFromControlNet,
+        reuseAudio: clip.reuseAudio,
+        uploadedAudio: clip.uploadedAudio,
+        sourceVideo: clip.sourceVideo ? {
+          data: clip.sourceVideo.data,
+          fileName: clip.sourceVideo.fileName,
+          fps: clip.sourceVideo.fps,
+          durationSeconds: clip.sourceVideo.durationSeconds,
+          startSeconds: clip.sourceVideo.startSeconds,
+          lengthSeconds: clip.sourceVideo.lengthSeconds
+        } : null,
+        retake: clip.retake ? {
+          id: clip.retake.id,
+          startSeconds: clip.retake.startSeconds,
+          lengthSeconds: clip.retake.lengthSeconds,
+          strength: clip.retake.strength
+        } : null,
+        refs: clip.refs.map((ref) => ({
+          id: ref.id,
+          source: ref.source,
+          uploadFileName: ref.uploadFileName,
+          uploadedImage: ref.uploadedImage,
+          frame: ref.frame,
+          fromEnd: ref.fromEnd
+        })),
+        stages: clip.stages.map((stage) => ({
+          id: stage.id,
+          skipped: stage.skipped,
+          control: stage.control,
+          controlNetStrength: stage.controlNetStrength,
+          icLoraStrengths: stage.icLoraStrengths,
+          loraWeights: stage.loraWeights,
+          refStrengths: stage.refStrengths,
+          upscale: stage.upscale,
+          upscaleMethod: stage.upscaleMethod,
+          model: stage.model,
+          modelProfileId: stage.modelProfileId,
+          steps: stage.steps,
+          cfgScale: stage.cfgScale,
+          sampler: stage.sampler,
+          scheduler: stage.scheduler
+        }))
+      })
+    );
+  };
+  var timelinePointProjection = (clips, seconds, edge) => {
+    if (!Number.isFinite(seconds) || seconds < 0 || clips.length === 0) {
+      return null;
+    }
+    let cursor = 0;
+    for (let index = 0; index < clips.length; index++) {
+      const clip = clips[index];
+      const duration = Math.max(0, clip.duration || 0);
+      const clipEnd = cursor + duration;
+      const isLast = index === clips.length - 1;
+      const ownsPoint = edge === "start" ? seconds < clipEnd || isLast : seconds <= clipEnd || isLast;
+      if (ownsPoint) {
+        return {
+          clipId: clip.id,
+          offsetSeconds: Math.max(
+            0,
+            Math.min(duration, seconds - cursor)
+          )
+        };
+      }
+      cursor = clipEnd;
+    }
+    return null;
+  };
+  var timelineSpanProjection = (clips, span) => {
+    if (span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
+      return null;
+    }
+    const start = timelinePointProjection(
+      clips,
+      span.timelineStartSeconds,
+      "start"
+    );
+    const end = timelinePointProjection(
+      clips,
+      span.timelineStartSeconds + span.timelineLengthSeconds,
+      "end"
+    );
+    return start && end ? {
+      firstClipId: start.clipId,
+      lastClipId: end.clipId,
+      clipStartOffsetSeconds: start.offsetSeconds,
+      clipEndOffsetSeconds: end.offsetSeconds
+    } : null;
+  };
+  var serializeStateForStorage = (state) => {
+    ensureAuthoringDocumentIdentity(state);
+    const canonical = state;
+    const out = {
+      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION
+    };
+    if (state.dimsExplicit) {
+      out.width = Math.round(state.width);
+      out.height = Math.round(state.height);
+    }
+    out.clips = serializeClipsForStorage(state.clips);
+    out.audioTracks = canonical.audioTracks.map((track) => ({
+      id: track.id,
+      ...track.volume === void 0 ? {} : { volume: track.volume },
+      source: {
+        kind: track.source.kind,
+        reference: track.source.reference,
+        uploadedAudio: track.source.uploadedAudio
+      },
+      spans: track.spans.map((span) => ({
+        id: span.id,
+        timelineStartSeconds: span.timelineStartSeconds,
+        timelineLengthSeconds: span.timelineLengthSeconds,
+        sourceStartSeconds: span.sourceStartSeconds,
+        projection: timelineSpanProjection(canonical.clips, span)
+      }))
+    }));
+    return JSON.stringify(out);
+  };
+  var isTransientBrowserMedia = (media) => {
+    const data = media?.data.trim().toLowerCase() ?? "";
+    return data.startsWith("data:") || data.startsWith("blob:");
+  };
+  var serializeStateForDurableStorage = (state) => {
+    ensureAuthoringDocumentIdentity(state);
+    const durable = structuredClone(state);
+    for (const clip of durable.clips) {
+      if (isTransientBrowserMedia(clip.uploadedAudio)) {
+        clip.uploadedAudio = null;
+      }
+      if (clip.sourceVideo && isTransientBrowserMedia({ data: clip.sourceVideo.data })) {
+        clip.sourceVideo = null;
+      }
+      for (const ref of clip.refs) {
+        if (isTransientBrowserMedia(ref.uploadedImage)) {
+          ref.uploadedImage = null;
+        }
+      }
+      for (const icLora of clip.icLoras) {
+        if (isTransientBrowserMedia(icLora.driveMedia)) {
+          icLora.driveMedia = null;
+        }
+      }
+    }
+    for (const track of durable.audioTracks ?? []) {
+      if (isTransientBrowserMedia(track.source.uploadedAudio)) {
+        track.source.uploadedAudio = null;
+      }
+    }
+    return serializeStateForStorage(durable);
+  };
+  var hasArrayOfRecords = (owner, key) => {
+    if (!Object.hasOwn(owner, key)) {
+      return true;
+    }
+    const value = owner[key];
+    return Array.isArray(value) && value.every(isRecord);
+  };
+  var hasValidStoredCollections = (parsed) => {
+    if (!Array.isArray(parsed.clips) || !parsed.clips.every(isRecord)) {
+      return false;
+    }
+    if (!hasArrayOfRecords(parsed, "audioTracks") || !hasArrayOfRecords(parsed, "clips")) {
+      return false;
+    }
+    for (const clip of parsed.clips) {
+      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "refs") || !hasArrayOfRecords(clip, "icLoras") || Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras")) {
+        return false;
+      }
+      const stages = Array.isArray(clip.stages) ? clip.stages : [];
+      for (const stage of stages) {
+        if (Object.hasOwn(stage, "loras") && !hasArrayOfRecords(stage, "loras") || Object.hasOwn(stage, "loraWeights") && (!Array.isArray(stage.loraWeights) || !stage.loraWeights.every(
+          (weight) => typeof weight === "number" && Number.isFinite(weight)
+        )) || Object.hasOwn(stage, "icLoraStrengths") && (!Array.isArray(stage.icLoraStrengths) || !stage.icLoraStrengths.every(
+          (strength) => typeof strength === "number" && Number.isFinite(strength)
+        )) || Object.hasOwn(stage, "refStrengths") && (!Array.isArray(stage.refStrengths) || !stage.refStrengths.every(
+          (strength) => typeof strength === "number" && Number.isFinite(strength)
+        ))) {
+          return false;
+        }
+      }
+    }
+    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
+    return tracks.every(
+      (track) => hasArrayOfRecords(track, "spans") && (!Object.hasOwn(track, "source") || isRecord(track.source))
+    );
+  };
+  var OUTDATED_SCHEMA_NOTICE = "VideoStages: the saved timeline was created by an older version and could not be loaded.";
+  var noticedOutdatedDocument = null;
+  var noticeOutdatedSchema = (serialized) => {
+    if (noticedOutdatedDocument === serialized) {
+      return;
+    }
+    noticedOutdatedDocument = serialized;
+    getVideoStagesHostBridge().showError(OUTDATED_SCHEMA_NOTICE);
+  };
+  var DIVERGENT_PROJECTION_NOTICE = "VideoStages: the saved timeline has audio spans whose clip anchors disagree with their timeline seconds. The seconds were used and the anchors will be rewritten on the next save — re-check those segments.";
+  var noticedDivergentProjection = null;
+  var SPAN_PROJECTION_TOLERANCE = 1e-6;
+  var numberAt = (owner, key) => typeof owner[key] === "number" && Number.isFinite(owner[key]) ? owner[key] : null;
+  var storedSpanProjection = (span) => {
+    const raw = span.projection;
+    if (!isRecord(raw)) {
+      return null;
+    }
+    const first = raw.firstClipId;
+    const last = raw.lastClipId;
+    const startOffset = numberAt(raw, "clipStartOffsetSeconds");
+    const endOffset = numberAt(raw, "clipEndOffsetSeconds");
+    return typeof first === "string" && typeof last === "string" && startOffset !== null && endOffset !== null ? {
+      firstClipId: first,
+      lastClipId: last,
+      clipStartOffsetSeconds: startOffset,
+      clipEndOffsetSeconds: endOffset
+    } : null;
+  };
+  var hasDivergentSpanProjection = (parsed) => {
+    const clips = parsed.clips.map((clip) => ({
+      id: typeof clip.id === "string" ? clip.id : "",
+      duration: numberAt(clip, "duration") ?? 0
+    }));
+    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
+    for (const track of tracks) {
+      const spans = isRecord(track) && Array.isArray(track.spans) ? track.spans : [];
+      for (const span of spans) {
+        if (!isRecord(span)) {
+          continue;
+        }
+        const stored = storedSpanProjection(span);
+        if (!stored) {
+          continue;
+        }
+        const expected = timelineSpanProjection(clips, {
+          timelineStartSeconds: numberAt(span, "timelineStartSeconds"),
+          timelineLengthSeconds: numberAt(span, "timelineLengthSeconds")
+        });
+        if (!expected || expected.firstClipId !== stored.firstClipId || expected.lastClipId !== stored.lastClipId || Math.abs(
+          expected.clipStartOffsetSeconds - stored.clipStartOffsetSeconds
+        ) > SPAN_PROJECTION_TOLERANCE || Math.abs(
+          expected.clipEndOffsetSeconds - stored.clipEndOffsetSeconds
+        ) > SPAN_PROJECTION_TOLERANCE) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+  var noticeDivergentProjection = (serialized) => {
+    if (noticedDivergentProjection === serialized) {
+      return;
+    }
+    noticedDivergentProjection = serialized;
+    getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
+  };
+  var ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION = 5;
+  var migrateStoredDocument = (parsed) => {
+    if (parsed.schemaVersion === CURRENT_AUTHORING_SCHEMA_VERSION) {
+      return parsed;
+    }
+    if (parsed.schemaVersion !== ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION || !Array.isArray(parsed.clips)) {
+      return null;
+    }
+    const migrated = structuredClone(parsed);
+    migrated.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    for (const rawClip of migrated.clips) {
+      if (!isRecord(rawClip)) {
+        continue;
+      }
+      if (rawClip.architectureHint === void 0) {
+        rawClip.architectureHint = rawClip.architecture;
+      }
+      delete rawClip.architecture;
+    }
+    return migrated;
+  };
+  var decodeStoredDocument = (serialized, inherited) => {
+    try {
+      const parsed = JSON.parse(serialized);
+      if (!isRecord(parsed)) {
+        return null;
+      }
+      const current = migrateStoredDocument(parsed);
+      if (!current) {
+        noticeOutdatedSchema(serialized);
+        return null;
+      }
+      if (!hasValidStoredCollections(current)) {
+        return null;
+      }
+      if (hasDivergentSpanProjection(current)) {
+        noticeDivergentProjection(serialized);
+      }
+      const dims = resolveRootDims(inherited, {
+        width: current.width,
+        height: current.height
+      });
+      const clips = current.clips.map(
+        (entry) => normalizeClip(
+          entry,
+          getRootDefaults,
+          getDefaultStageModel,
+          dims.fps
+        )
+      );
+      const firstSkippedClip = clips.findIndex(
+        (clip) => clip.skipped === true
+      );
+      if (firstSkippedClip >= 0) {
+        for (let index = firstSkippedClip; index < clips.length; index++) {
+          clips[index].skipped = true;
+        }
+      }
+      return {
+        dims,
+        clips,
+        audioTracks: normalizeAudioTracks(current.audioTracks)
+      };
+    } catch {
+      return null;
+    }
+  };
+  var hasCanonicalStoredId = (value, seen) => {
+    if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || value.id.trim() !== value.id || seen.has(value.id)) {
+      return false;
+    }
+    seen.add(value.id);
+    return true;
+  };
+  var storedDocumentNeedsCanonicalIdRepair = (serialized) => {
+    try {
+      const parsed = JSON.parse(serialized);
+      if (!isRecord(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION || !Array.isArray(parsed.clips) || !Array.isArray(parsed.audioTracks)) {
+        return true;
+      }
+      const seenIds = /* @__PURE__ */ new Set();
+      for (const rawClip of parsed.clips) {
+        if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
+        for (const key of ["stages", "refs"]) {
+          const children = rawClip[key];
+          if (!Array.isArray(children) || children.some(
+            (child) => !hasCanonicalStoredId(child, seenIds)
+          )) {
+            return true;
+          }
+        }
+        if (rawClip.retake !== null && !hasCanonicalStoredId(rawClip.retake, seenIds)) {
+          return true;
+        }
+      }
+      for (const rawTrack of parsed.audioTracks) {
+        if (!hasCanonicalStoredId(rawTrack, seenIds) || !Array.isArray(rawTrack.spans) || rawTrack.spans.some(
+          (span) => !hasCanonicalStoredId(span, seenIds)
+        )) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return true;
     }
   };
 
@@ -10083,446 +10083,6 @@
       timing?.outputGeometryAvailable === true ? timing.boundaries : [],
       pxPerSecond
     ) + renderBoundarySeams(clips, layouts, capabilities, timing, pxPerSecond) + `</div></div>`;
-  };
-
-  // frontend/timelineView/toolbar.ts
-  var renderDiagnosticPanel = (diagnostics = []) => {
-    const content = diagnostics.map(
-      (item) => `<div class="vst-diagnostic vst-diagnostic-${item.severity}" data-vst-diagnostic="${escapeAttr(item.code)}">${item.clipIdx === void 0 ? "" : `<strong>Clip ${item.clipIdx}:</strong> `}${escapeAttr(item.message)}</div>`
-    ).join("");
-    return content ? `<div class="vst-diagnostics" role="status">${content}</div>` : "";
-  };
-  var renderTimelineHeader = (clipCount, totalSeconds, fps, unit, pxPerSecond, options, timing) => {
-    const toggleLabel = unit === "frames" ? "Show seconds" : "Show frames";
-    const clipWord = `clip${clipCount === 1 ? "" : "s"}`;
-    const totalLabel = unit === "frames" ? `${timing?.outputFrames ?? Math.round(totalSeconds * fps)}f` : formatSecondsTenth(totalSeconds);
-    const zoomPct = Math.round(pxPerSecond / DEFAULT_PX_PER_SECOND * 100);
-    const rawSelected = options?.selectedIndex;
-    const selectedIndex = typeof rawSelected === "number" && Number.isInteger(rawSelected) && rawSelected >= 0 && rawSelected < clipCount ? rawSelected : null;
-    const selectedHidden = selectedIndex === null ? " hidden" : "";
-    const joinFrames = timing?.joinFrames ?? 0;
-    const joinSeconds = timing?.joinSeconds ?? 0;
-    const joinFrameLabel = `${joinFrames > 0 ? "−" : ""}${joinFrames}f`;
-    const joinSecondsLabel = `${joinSeconds > 0 ? "−" : ""}${formatSecondsTenth(joinSeconds)}`;
-    const secondary = unit === "frames" ? `${timing?.generatedFrames ?? 0}f generated · ${joinFrameLabel} shared` : `${formatSecondsTenth(timing?.authoredSeconds ?? totalSeconds)} authored · ${joinSecondsLabel} joins`;
-    const readout = `<span class="vst-readout" data-vst-readout><span class="vst-readout-output" title="Published sequence length">${escapeAttr(totalLabel)} output</span><span class="vst-readout-detail" title="Authored length and resolved shared joins">${escapeAttr(secondary)}</span><span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
-    const width = Math.max(0, Math.round(options?.width ?? 0));
-    const height = Math.max(0, Math.round(options?.height ?? 0));
-    const dimsExplicit = options?.dimsExplicit === true;
-    const ratioId = dimsExplicit && width > 0 && height > 0 ? matchAspectRatio(width, height) : null;
-    const dimsSource = dimsExplicit ? ratioId ? `${ratioId} aspect ratio` : "custom" : "inherited from image resolution";
-    const fpsSource = "synced with Video FPS";
-    const settingsTip = `Resolution: ${dimsSource}; FPS: ${fpsSource}. Click to edit.`;
-    const settingsChip = `<button type="button" class="basic-button small-button vst-settings-chip" data-vst-settings title="${escapeAttr(settingsTip)}" aria-label="${escapeAttr(settingsTip)}"><span class="vst-settings-dims">${width}×${height}</span><span class="vst-settings-chip-sep" aria-hidden="true">·</span><span class="vst-settings-fps">${fps} fps</span></button>`;
-    const enabled = options?.enabled !== false;
-    const enableToggle = `<label class="vst-enable" title="Enable VideoStages. While off, none of this timeline is sent to the backend — a normal image/video generates as usual."><span class="toggle-switch"><input type="checkbox" class="auto-slider-toggle vst-enable-input" role="switch" data-vst-enable${enabled ? " checked" : ""}><div class="auto-slider-toggle-content"></div></span><span class="vst-enable-label">Enable</span></label>`;
-    return `<div class="vst-topbar${enabled ? "" : " vst-topbar-disabled"}"><div class="vst-topbar-main"><span class="vst-title">Timeline</span>` + enableToggle + `<span class="vst-sub"><span class="vst-stat-num">${clipCount}</span> ${clipWord}</span>` + settingsChip + `</div><div class="vst-topbar-tools"><button type="button" class="basic-button small-button btn-primary vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button><span class="vst-tool-sep" aria-hidden="true"></span><div class="vst-zoom" role="group" aria-label="Timeline zoom (Ctrl+wheel over the track)"><button type="button" class="basic-button small-button" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button><span class="vst-zoom-pct" data-vst-zoom-pct title="Zoom level (100% = default)">${zoomPct}%</span><input type="range" class="vst-zoom-slider" data-vst-zoom-slider min="${MIN_PX_PER_SECOND}" max="${MAX_PX_PER_SECOND}" step="1" value="${Math.round(pxPerSecond)}" aria-label="Zoom (pixels per second)" title="Zoom (applies on release)"><button type="button" class="basic-button small-button" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button><button type="button" class="basic-button small-button" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button></div><span class="vst-tool-sep" aria-hidden="true"></span><button type="button" class="basic-button small-button vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button></div>` + readout + `</div>`;
-  };
-  var wireTimelineToolbar = (body, options) => {
-    const wire = (selector, handler) => {
-      if (!handler) {
-        return;
-      }
-      body.querySelector(selector)?.addEventListener(
-        "click",
-        () => handler()
-      );
-    };
-    const enableInput = body.querySelector("[data-vst-enable]");
-    if (enableInput && options?.onToggleEnabled) {
-      enableInput.addEventListener("change", () => {
-        options.onToggleEnabled?.(enableInput.checked);
-      });
-    }
-    const settingsButton = body.querySelector(
-      "[data-vst-settings]"
-    );
-    if (settingsButton && options?.onOpenSettings) {
-      settingsButton.addEventListener("click", () => {
-        options.onOpenSettings?.(settingsButton);
-      });
-    }
-    wire("[data-vst-unit-toggle]", options?.onToggleUnit);
-    wire("[data-vst-zoom-in]", options?.onZoomIn);
-    wire("[data-vst-zoom-out]", options?.onZoomOut);
-    wire("[data-vst-zoom-fit]", options?.onZoomFit);
-    wire("[data-vst-undo]", options?.onUndo);
-    wire("[data-vst-redo]", options?.onRedo);
-    const slider = body.querySelector(
-      "[data-vst-zoom-slider]"
-    );
-    if (slider) {
-      slider.addEventListener("input", () => {
-        const percent = body.querySelector(
-          "[data-vst-zoom-pct]"
-        );
-        if (percent) {
-          const value = Number.parseFloat(slider.value);
-          percent.textContent = `${Math.round(value / DEFAULT_PX_PER_SECOND * 100)}%`;
-        }
-      });
-      if (options?.onZoomSlider) {
-        slider.addEventListener("change", () => {
-          options.onZoomSlider?.(Number.parseFloat(slider.value));
-        });
-      }
-    }
-    if (options?.onAddClip) {
-      for (const button of body.querySelectorAll("[data-vst-add-clip]")) {
-        button.addEventListener("click", () => options.onAddClip?.());
-      }
-    }
-  };
-  var wireTimelineZoomWheel = (body, options) => {
-    const onZoomWheel = options?.onZoomWheel;
-    if (!onZoomWheel) {
-      return;
-    }
-    body.querySelector(".vst-scroll")?.addEventListener(
-      "wheel",
-      (event) => {
-        if (!event.ctrlKey && !event.metaKey) {
-          return;
-        }
-        event.preventDefault();
-        const factor = event.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
-        onZoomWheel(factor, event.clientX);
-      },
-      { passive: false }
-    );
-  };
-
-  // frontend/timelineView/trackRows.ts
-  var promptWindowGeom = (layout, window2, pxPerSecond) => {
-    const geometry = spanGeometry(
-      window2.start,
-      window2.duration,
-      layout.durationSeconds,
-      { unit: "px", pxPerSecond, minWidth: 2 }
-    );
-    return {
-      startSec: geometry.startSeconds,
-      endSec: geometry.endSeconds,
-      leftPx: geometry.left,
-      widthPx: geometry.width,
-      active: `${window2.prompt ?? ""}`.trim() !== ""
-    };
-  };
-  var PROMPT_PLACEHOLDER = "(no prompt)";
-  var renderPromptTrackRow = (clips, layouts, pxPerSecond, globalPrompt, capabilities) => {
-    const globalTrimmed = `${globalPrompt ?? ""}`.trim();
-    const parts = [];
-    for (let i = 0; i < layouts.length; i++) {
-      const layout = layouts[i];
-      const clip = clips[i];
-      if (!clip) {
-        continue;
-      }
-      const width = clipInnerWidth(layout.widthPx);
-      const windows = clip.promptWindows ?? [];
-      const clipCapabilities = capabilities?.forClip(clip);
-      const majorSupported = clipCapabilities?.decision("majorPrompt").supported ?? true;
-      const relaySupported = clipCapabilities?.decision("promptRelay").supported ?? true;
-      const ownPrompt = `${clip.prompt ?? ""}`.trim();
-      const inherited = ownPrompt === "";
-      const major = inherited ? globalTrimmed : ownPrompt;
-      const overlays = windows.map((window2) => promptWindowGeom(layout, window2, pxPerSecond)).filter(
-        (geometry) => geometry.active && geometry.endSec > geometry.startSec
-      ).map(
-        (geometry) => `<div class="vst-major-off" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" aria-hidden="true"></div>`
-      ).join("");
-      const majorText = major === "" ? PROMPT_PLACEHOLDER : truncate(major, 120);
-      const majorClass = (major === "" ? " vst-major-empty" : "") + (inherited && major !== "" ? " vst-major-inherited" : "");
-      const majorTitle = (major === "" ? PROMPT_PLACEHOLDER : major) + (inherited && major !== "" ? " — inherited from the global prompt; click to set a clip prompt" : " — click to edit");
-      if (majorSupported || ownPrompt !== "") {
-        const renderedMajorTitle = majorSupported ? majorTitle : "Persisted major prompt is unsupported by this architecture; click to inspect or remove it";
-        parts.push(
-          `<div class="vst-major-seg${majorClass}${majorSupported ? "" : " vst-capability-disabled"}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(renderedMajorTitle)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
-        );
-      }
-      const minorSegments = windows.map((window2, windowIdx) => {
-        const geometry = promptWindowGeom(layout, window2, pxPerSecond);
-        const text2 = `${window2.prompt ?? ""}`.trim();
-        const label = text2 === "" ? "(empty)" : truncate(text2, 60);
-        const title = relaySupported ? `${text2 || "(empty minor prompt)"} · Shift+click to delete` : "Persisted relay prompt is unsupported by this architecture; click to inspect or Shift+click to delete";
-        return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeAttr(title)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
-      }).join("");
-      if (relaySupported || windows.length > 0) {
-        parts.push(
-          `<div class="vst-minor-lane${relaySupported ? "" : " vst-capability-disabled"}"${relaySupported ? " data-vst-prompt-add" : ""} data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${relaySupported ? "Click empty space to add a minor prompt" : "Relay prompts are unsupported; existing windows can be inspected or removed"}">${minorSegments}</div>`
-        );
-      }
-    }
-    return `<div class="vst-track-row vst-track-prompt">` + renderTrackHead(
-      "vst-track-icon-prompt",
-      "✎",
-      "Prompt",
-      headTag("major", "Major", { active: true }) + headTag("relay", "Relay", {
-        active: clips.some(
-          (clip) => (clip.promptWindows?.length ?? 0) > 0
-        )
-      })
-    ) + `<div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div></div>`;
-  };
-  var audioFlagChips = (clip) => {
-    const chips = [];
-    if (clip.reuseAudio === true) {
-      chips.push(
-        `<span class="vst-audio-flag" title="Capture audio after the second active stage and reuse it from the third active stage onward">↻</span>`
-      );
-    }
-    if (clip.clipLengthFromAudio === true) {
-      chips.push(
-        `<span class="vst-audio-flag" title="Clip length follows the audio length">⇥</span>`
-      );
-    }
-    if (clip.saveAudioTrack === true) {
-      chips.push(
-        `<span class="vst-audio-flag" title="Save a standalone MP3 for this clip's audio">MP3</span>`
-      );
-    }
-    return chips.length === 0 ? "" : `<span class="vst-audio-flags" aria-hidden="true">${chips.join("")}</span>`;
-  };
-  var renderTimelineAudioSegmentBlock = (track, trackIdx, totalSeconds) => {
-    const span = track.spans[0];
-    if (!span || span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
-      return "";
-    }
-    const { startSeconds: start, endSeconds: end } = spanGeometry(
-      span.timelineStartSeconds,
-      span.timelineLengthSeconds,
-      totalSeconds
-    );
-    const labelText = track.source.reference || track.source.uploadedAudio?.fileName || "audio segment";
-    const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
-    const waveform = audioSegmentWaveBarHeights(trackIdx, trackIdx, 40).map((height) => `<span style="height:${height}%"></span>`).join("");
-    return renderWindowSpan({
-      className: "vst-audio-seg",
-      extraClassName: `vst-audio-seg-tone-${trackIdx % 5}`,
-      dataAttrs: `data-vst-audio-seg data-track-idx="${trackIdx}"`,
-      edgeAttr: "data-vst-audio-seg-edge",
-      labelClass: "vst-audio-label",
-      label: labelText,
-      title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
-      ariaLabel: `Edit timeline audio segment ${trackIdx}`,
-      startSeconds: start,
-      lengthSeconds: end - start,
-      durationSeconds: totalSeconds,
-      decoration: `<span class="vst-audio-seg-wave" aria-hidden="true">${waveform}</span>`
-    });
-  };
-  var renderTimelineAudioSegmentLanes = (tracks, totalSeconds, totalWidthPx) => {
-    const place = (laneIdx) => `left:0;width:${totalWidthPx}px;--vst-audio-lane-idx:${laneIdx}`;
-    const lanes = tracks.map(
-      (track, trackIdx) => `<div class="vst-audio-seg-lane" data-track-idx="${trackIdx}" style="${place(trackIdx)}">` + renderTimelineAudioSegmentBlock(track, trackIdx, totalSeconds) + `</div>`
-    );
-    lanes.push(
-      `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add style="${place(tracks.length)}" title="Click or drag to add a timeline-wide audio segment"></div>`
-    );
-    return lanes.join("");
-  };
-  var renderAudioTrackRow = (clips, layouts, capabilities, audioTracks = [], pxPerSecond = 1, timelineTotalSeconds) => {
-    const baseSegments = layouts.map((layout) => {
-      const clip = clips[layout.index];
-      if (!clip) {
-        return "";
-      }
-      const badge = audioSourceBadge(clip.audioSource ?? "");
-      const clipCapabilities = capabilities?.forClip(clip);
-      const clipAudioSupported = clipCapabilities?.decision("clipAudio").supported ?? true;
-      const persistedAudio = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.reuseAudio || clip.clipLengthFromAudio || clip.saveAudioTrack;
-      const audioOperable = clipAudioSupported || persistedAudio;
-      const native = badge.label === "Native";
-      const width = clipInnerWidth(layout.widthPx);
-      const kindClass = native ? " vst-audio-native vst-audio-kind-native" : isAceStepFunAudioSource(clip.audioSource ?? "") ? " vst-audio-kind-ace" : " vst-audio-kind-upload";
-      const upload = !native && clip.audioSource === "Upload" ? clip.uploadedAudio?.fileName : null;
-      const labelText = upload ? `${badge.label} · ${upload}` : badge.label;
-      const title = native ? "Audio: Native — click to choose an audio source" : `${badge.title} — click to edit`;
-      const barCount = Math.min(
-        400,
-        Math.max(8, Math.floor(width / 5.5))
-      );
-      const bars = waveBarHeights(layout.index, barCount).map((height) => `<span style="height:${height}%"></span>`).join("");
-      const hint = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : "";
-      const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
-      const renderedTitle = clipAudioSupported ? title : persistedAudio ? "Clip audio is unsupported; click persisted audio to inspect or remove it" : "Clip audio is unsupported by this architecture";
-      const ariaLabel = clipAudioSupported ? `Edit audio for clip ${layout.index}` : persistedAudio ? `Inspect unsupported persisted audio for clip ${layout.index}` : `Audio unavailable for clip ${layout.index}`;
-      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${audioOperable ? ' data-vst-audio="clip" role="button" tabindex="0"' : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(renderedTitle)}" aria-label="${ariaLabel}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>`;
-    }).join("");
-    const totalSeconds = timelineTotalSeconds ?? layouts.reduce(
-      (max, layout) => Math.max(
-        max,
-        layout.startSeconds + layout.timelineDurationSeconds
-      ),
-      0
-    );
-    const totalWidthPx = totalSeconds * pxPerSecond;
-    const overlaySegments = renderTimelineAudioSegmentLanes(
-      audioTracks,
-      totalSeconds,
-      totalWidthPx
-    );
-    const laneCount = Math.max(1, audioTracks.length + 1);
-    const laneTags = [headTag("src", "Clip", { active: true })];
-    for (let i = 0; i < laneCount; i++) {
-      const blank = i === laneCount - 1;
-      laneTags.push(
-        headTag("seg", blank ? "+" : `S${i}`, {
-          active: !blank,
-          muted: blank,
-          style: `--vst-audio-lane-idx:${i}`
-        })
-      );
-    }
-    return `<div class="vst-track-row vst-track-audio" style="--vst-audio-lane-count:${laneCount}">` + renderTrackHead(
-      "vst-track-icon-audio",
-      "♪",
-      "Audio",
-      laneTags.join("")
-    ) + `<div class="vst-track-cell vst-audio-cell">${baseSegments}${overlaySegments}</div></div>`;
-  };
-  var REF_EDGE_ALIGN_FRAMES = 3;
-  var renderReferencesTrackRow = (clips, layouts, fps, unit, capabilities) => {
-    const lanes = layouts.map((layout) => {
-      const clip = clips[layout.index];
-      if (!clip) {
-        return "";
-      }
-      const width = clipInnerWidth(layout.widthPx);
-      const refsSupported = capabilities?.forClip(clip).decision("frameReferences").supported ?? true;
-      const marks = (clip.refs ?? []).map((ref, refIdx) => {
-        const isEnd = ref.fromEnd === true;
-        const frame = Math.max(0, ref.frame ?? 0);
-        const isPrimary = frame === 1 && !isEnd;
-        const time = keyframeTimeSeconds(
-          ref.frame,
-          isEnd,
-          layout.generatedDurationSeconds,
-          fps
-        );
-        const left = keyframeLeftPercent(
-          time,
-          layout.generatedDurationSeconds
-        );
-        const source = refSourceLabel(ref.source ?? "");
-        const image = ref.uploadedImage?.data;
-        const thumbnailData = image ? backgroundImageDataAttr(mediaPreviewSrc(image)) : "";
-        const frameLabel = `R ${isEnd ? "-" : ""}${frame}`;
-        const thumbnailClass = `vst-refs-thumb${image ? " vst-refs-has-image" : ""}`;
-        const alignClass = frame > REF_EDGE_ALIGN_FRAMES ? "" : isEnd ? " vst-refs-align-end" : " vst-refs-align-start";
-        const kindClass = (isPrimary ? " vst-refs-primary" : "") + (isEnd ? " vst-refs-fromend" : "") + alignClass;
-        const title = refsSupported ? `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move · Shift+click to delete` : `Persisted reference ${refIdx} is unsupported by this architecture · click to inspect or Shift+click to delete`;
-        const label = refsSupported ? `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})` : `Inspect unsupported persisted reference ${refIdx} for removal`;
-        return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}"><span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeAttr(frameLabel)}</span></span></div>`;
-      }).join("");
-      return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.refs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a reference image at this frame" : "Frame references are unsupported; existing references can be inspected or removed"}">${marks}</div>`;
-    }).join("");
-    return `<div class="vst-track-row vst-track-refs">` + renderTrackHead("vst-track-icon-refs", "⧉", "References", "") + `<div class="vst-track-cell">${lanes}</div></div>`;
-  };
-
-  // frontend/timelineView.ts
-  var renderRulerTicks = (layouts, totalSeconds, endPx, pxPerSecond, fps, unit, timing) => {
-    const endLabel = formatRulerLabel(totalSeconds, unit, fps);
-    const gridTicks = computeRulerTicks(totalSeconds, pxPerSecond).filter(
-      (tick) => Math.abs(tick.seconds - totalSeconds) > 1e-6 && !(formatRulerLabel(tick.seconds, unit, fps) === endLabel && Math.abs(tick.x - endPx) < 40)
-    ).map(
-      (tick) => `<span class="vst-tick vst-tick-grid" style="left:${tick.x}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(tick.seconds, unit, fps))}</span></span>`
-    );
-    const minorStep = chooseRulerStepSeconds(pxPerSecond) / 5;
-    const minorTicks = [];
-    const maxMinorTicks = 5e3;
-    for (let i = 1; i <= maxMinorTicks; i++) {
-      const seconds = i * minorStep;
-      if (seconds > totalSeconds + 1e-6) {
-        break;
-      }
-      if (i % 5 === 0) {
-        continue;
-      }
-      minorTicks.push(
-        `<span class="vst-tick vst-tick-minor" style="left:${seconds * pxPerSecond}px" aria-hidden="true"></span>`
-      );
-    }
-    const seamTicks = timing.boundaries.map((boundary) => {
-      const editPoint = layouts[boundary.rightIdx]?.startPx ?? 0;
-      return `<span class="vst-tick vst-tick-seam" style="left:${editPoint}px" aria-hidden="true"></span>`;
-    });
-    const endTick = `<span class="vst-tick vst-tick-end" style="left:${endPx}px"><span class="vst-tick-label">${escapeAttr(endLabel)}</span></span>`;
-    const outputTick = timing.outputSeconds < totalSeconds - 1e-6 ? `<span class="vst-tick vst-tick-output" style="left:${timing.outputSeconds * pxPerSecond}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(timing.outputSeconds, unit, fps))} output</span></span>` : "";
-    return [
-      ...minorTicks,
-      ...gridTicks,
-      ...seamTicks,
-      outputTick,
-      endTick
-    ].join("");
-  };
-  var renderTimeline = (body, clips, options) => {
-    const fps = safeFps(options?.fps);
-    const unit = options?.unit === "frames" ? "frames" : "seconds";
-    const pxPerSecond = clampPxPerSecond(
-      options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND
-    );
-    body.dataset.vstPps = String(pxPerSecond);
-    body.dataset.vstFps = String(fps);
-    const timing = resolveTimelineTiming(clips, fps, options?.capabilities);
-    const layouts = computeRegionLayout(clips, { pxPerSecond, timing });
-    const totalSeconds = timelineDisplaySeconds(clips, timing);
-    const totalPx = layouts.reduce(
-      (max, layout) => Math.max(max, layout.startPx + layout.widthPx),
-      0
-    );
-    const header = renderTimelineHeader(
-      clips.length,
-      timing.outputSeconds,
-      fps,
-      unit,
-      pxPerSecond,
-      options,
-      timing
-    );
-    const diagnostics = renderDiagnosticPanel(options?.diagnostics);
-    if (clips.length === 0) {
-      body.innerHTML = `${header}${diagnostics}<div class="vst-empty"><div class="vst-empty-icon" aria-hidden="true">🎬</div><div class="vst-empty-title">No clips yet.</div><div class="vst-empty-hint">Use the button below to start building your sequence.</div><button type="button" class="basic-button btn-primary vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button></div>`;
-      wireTimelineToolbar(body, options);
-      return;
-    }
-    const promptRow = renderPromptTrackRow(
-      clips,
-      layouts,
-      pxPerSecond,
-      `${options?.globalPrompt ?? ""}`,
-      options?.capabilities
-    );
-    const videoRow = renderVideoTrackRow(
-      clips,
-      layouts,
-      fps,
-      unit,
-      options?.capabilities,
-      timing,
-      pxPerSecond
-    );
-    const referencesRow = renderReferencesTrackRow(
-      clips,
-      layouts,
-      fps,
-      unit,
-      options?.capabilities
-    );
-    const renderedAudioRow = renderAudioTrackRow(
-      clips,
-      layouts,
-      options?.capabilities,
-      options?.audioTracks,
-      pxPerSecond,
-      timing.outputSeconds
-    );
-    const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
-    body.innerHTML = `${header}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, totalSeconds * pxPerSecond, pxPerSecond, fps, unit, timing)}</div></div>` + promptRow + videoRow + referencesRow + renderedAudioRow + `</div></div>`;
-    applyBackgroundImages(body);
-    wireTimelineToolbar(body, options);
-    wireTimelineZoomWheel(body, options);
   };
 
   // frontend/detailStrip/boundaryPanel.ts
@@ -16004,6 +15564,446 @@ The conversion is one undoable change.`;
       body.addEventListener("keydown", onKeyDown);
     };
     return { attach, dispose };
+  };
+
+  // frontend/timelineView/toolbar.ts
+  var renderDiagnosticPanel = (diagnostics = []) => {
+    const content = diagnostics.map(
+      (item) => `<div class="vst-diagnostic vst-diagnostic-${item.severity}" data-vst-diagnostic="${escapeAttr(item.code)}">${item.clipIdx === void 0 ? "" : `<strong>Clip ${item.clipIdx}:</strong> `}${escapeAttr(item.message)}</div>`
+    ).join("");
+    return content ? `<div class="vst-diagnostics" role="status">${content}</div>` : "";
+  };
+  var renderTimelineHeader = (clipCount, totalSeconds, fps, unit, pxPerSecond, options, timing) => {
+    const toggleLabel = unit === "frames" ? "Show seconds" : "Show frames";
+    const clipWord = `clip${clipCount === 1 ? "" : "s"}`;
+    const totalLabel = unit === "frames" ? `${timing?.outputFrames ?? Math.round(totalSeconds * fps)}f` : formatSecondsTenth(totalSeconds);
+    const zoomPct = Math.round(pxPerSecond / DEFAULT_PX_PER_SECOND * 100);
+    const rawSelected = options?.selectedIndex;
+    const selectedIndex = typeof rawSelected === "number" && Number.isInteger(rawSelected) && rawSelected >= 0 && rawSelected < clipCount ? rawSelected : null;
+    const selectedHidden = selectedIndex === null ? " hidden" : "";
+    const joinFrames = timing?.joinFrames ?? 0;
+    const joinSeconds = timing?.joinSeconds ?? 0;
+    const joinFrameLabel = `${joinFrames > 0 ? "−" : ""}${joinFrames}f`;
+    const joinSecondsLabel = `${joinSeconds > 0 ? "−" : ""}${formatSecondsTenth(joinSeconds)}`;
+    const secondary = unit === "frames" ? `${timing?.generatedFrames ?? 0}f generated · ${joinFrameLabel} shared` : `${formatSecondsTenth(timing?.authoredSeconds ?? totalSeconds)} authored · ${joinSecondsLabel} joins`;
+    const readout = `<span class="vst-readout" data-vst-readout><span class="vst-readout-output" title="Published sequence length">${escapeAttr(totalLabel)} output</span><span class="vst-readout-detail" title="Authored length and resolved shared joins">${escapeAttr(secondary)}</span><span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
+    const width = Math.max(0, Math.round(options?.width ?? 0));
+    const height = Math.max(0, Math.round(options?.height ?? 0));
+    const dimsExplicit = options?.dimsExplicit === true;
+    const ratioId = dimsExplicit && width > 0 && height > 0 ? matchAspectRatio(width, height) : null;
+    const dimsSource = dimsExplicit ? ratioId ? `${ratioId} aspect ratio` : "custom" : "inherited from image resolution";
+    const fpsSource = "synced with Video FPS";
+    const settingsTip = `Resolution: ${dimsSource}; FPS: ${fpsSource}. Click to edit.`;
+    const settingsChip = `<button type="button" class="basic-button small-button vst-settings-chip" data-vst-settings title="${escapeAttr(settingsTip)}" aria-label="${escapeAttr(settingsTip)}"><span class="vst-settings-dims">${width}×${height}</span><span class="vst-settings-chip-sep" aria-hidden="true">·</span><span class="vst-settings-fps">${fps} fps</span></button>`;
+    const enabled = options?.enabled !== false;
+    const enableToggle = `<label class="vst-enable" title="Enable VideoStages. While off, none of this timeline is sent to the backend — a normal image/video generates as usual."><span class="toggle-switch"><input type="checkbox" class="auto-slider-toggle vst-enable-input" role="switch" data-vst-enable${enabled ? " checked" : ""}><div class="auto-slider-toggle-content"></div></span><span class="vst-enable-label">Enable</span></label>`;
+    return `<div class="vst-topbar${enabled ? "" : " vst-topbar-disabled"}"><div class="vst-topbar-main"><span class="vst-title">Timeline</span>` + enableToggle + `<span class="vst-sub"><span class="vst-stat-num">${clipCount}</span> ${clipWord}</span>` + settingsChip + `</div><div class="vst-topbar-tools"><button type="button" class="basic-button small-button btn-primary vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button><span class="vst-tool-sep" aria-hidden="true"></span><div class="vst-zoom" role="group" aria-label="Timeline zoom (Ctrl+wheel over the track)"><button type="button" class="basic-button small-button" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button><span class="vst-zoom-pct" data-vst-zoom-pct title="Zoom level (100% = default)">${zoomPct}%</span><input type="range" class="vst-zoom-slider" data-vst-zoom-slider min="${MIN_PX_PER_SECOND}" max="${MAX_PX_PER_SECOND}" step="1" value="${Math.round(pxPerSecond)}" aria-label="Zoom (pixels per second)" title="Zoom (applies on release)"><button type="button" class="basic-button small-button" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button><button type="button" class="basic-button small-button" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button></div><span class="vst-tool-sep" aria-hidden="true"></span><button type="button" class="basic-button small-button vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button></div>` + readout + `</div>`;
+  };
+  var wireTimelineToolbar = (body, options) => {
+    const wire = (selector, handler) => {
+      if (!handler) {
+        return;
+      }
+      body.querySelector(selector)?.addEventListener(
+        "click",
+        () => handler()
+      );
+    };
+    const enableInput = body.querySelector("[data-vst-enable]");
+    if (enableInput && options?.onToggleEnabled) {
+      enableInput.addEventListener("change", () => {
+        options.onToggleEnabled?.(enableInput.checked);
+      });
+    }
+    const settingsButton = body.querySelector(
+      "[data-vst-settings]"
+    );
+    if (settingsButton && options?.onOpenSettings) {
+      settingsButton.addEventListener("click", () => {
+        options.onOpenSettings?.(settingsButton);
+      });
+    }
+    wire("[data-vst-unit-toggle]", options?.onToggleUnit);
+    wire("[data-vst-zoom-in]", options?.onZoomIn);
+    wire("[data-vst-zoom-out]", options?.onZoomOut);
+    wire("[data-vst-zoom-fit]", options?.onZoomFit);
+    wire("[data-vst-undo]", options?.onUndo);
+    wire("[data-vst-redo]", options?.onRedo);
+    const slider = body.querySelector(
+      "[data-vst-zoom-slider]"
+    );
+    if (slider) {
+      slider.addEventListener("input", () => {
+        const percent = body.querySelector(
+          "[data-vst-zoom-pct]"
+        );
+        if (percent) {
+          const value = Number.parseFloat(slider.value);
+          percent.textContent = `${Math.round(value / DEFAULT_PX_PER_SECOND * 100)}%`;
+        }
+      });
+      if (options?.onZoomSlider) {
+        slider.addEventListener("change", () => {
+          options.onZoomSlider?.(Number.parseFloat(slider.value));
+        });
+      }
+    }
+    if (options?.onAddClip) {
+      for (const button of body.querySelectorAll("[data-vst-add-clip]")) {
+        button.addEventListener("click", () => options.onAddClip?.());
+      }
+    }
+  };
+  var wireTimelineZoomWheel = (body, options) => {
+    const onZoomWheel = options?.onZoomWheel;
+    if (!onZoomWheel) {
+      return;
+    }
+    body.querySelector(".vst-scroll")?.addEventListener(
+      "wheel",
+      (event) => {
+        if (!event.ctrlKey && !event.metaKey) {
+          return;
+        }
+        event.preventDefault();
+        const factor = event.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
+        onZoomWheel(factor, event.clientX);
+      },
+      { passive: false }
+    );
+  };
+
+  // frontend/timelineView/trackRows.ts
+  var promptWindowGeom = (layout, window2, pxPerSecond) => {
+    const geometry = spanGeometry(
+      window2.start,
+      window2.duration,
+      layout.durationSeconds,
+      { unit: "px", pxPerSecond, minWidth: 2 }
+    );
+    return {
+      startSec: geometry.startSeconds,
+      endSec: geometry.endSeconds,
+      leftPx: geometry.left,
+      widthPx: geometry.width,
+      active: `${window2.prompt ?? ""}`.trim() !== ""
+    };
+  };
+  var PROMPT_PLACEHOLDER = "(no prompt)";
+  var renderPromptTrackRow = (clips, layouts, pxPerSecond, globalPrompt, capabilities) => {
+    const globalTrimmed = `${globalPrompt ?? ""}`.trim();
+    const parts = [];
+    for (let i = 0; i < layouts.length; i++) {
+      const layout = layouts[i];
+      const clip = clips[i];
+      if (!clip) {
+        continue;
+      }
+      const width = clipInnerWidth(layout.widthPx);
+      const windows = clip.promptWindows ?? [];
+      const clipCapabilities = capabilities?.forClip(clip);
+      const majorSupported = clipCapabilities?.decision("majorPrompt").supported ?? true;
+      const relaySupported = clipCapabilities?.decision("promptRelay").supported ?? true;
+      const ownPrompt = `${clip.prompt ?? ""}`.trim();
+      const inherited = ownPrompt === "";
+      const major = inherited ? globalTrimmed : ownPrompt;
+      const overlays = windows.map((window2) => promptWindowGeom(layout, window2, pxPerSecond)).filter(
+        (geometry) => geometry.active && geometry.endSec > geometry.startSec
+      ).map(
+        (geometry) => `<div class="vst-major-off" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" aria-hidden="true"></div>`
+      ).join("");
+      const majorText = major === "" ? PROMPT_PLACEHOLDER : truncate(major, 120);
+      const majorClass = (major === "" ? " vst-major-empty" : "") + (inherited && major !== "" ? " vst-major-inherited" : "");
+      const majorTitle = (major === "" ? PROMPT_PLACEHOLDER : major) + (inherited && major !== "" ? " — inherited from the global prompt; click to set a clip prompt" : " — click to edit");
+      if (majorSupported || ownPrompt !== "") {
+        const renderedMajorTitle = majorSupported ? majorTitle : "Persisted major prompt is unsupported by this architecture; click to inspect or remove it";
+        parts.push(
+          `<div class="vst-major-seg${majorClass}${majorSupported ? "" : " vst-capability-disabled"}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(renderedMajorTitle)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
+        );
+      }
+      const minorSegments = windows.map((window2, windowIdx) => {
+        const geometry = promptWindowGeom(layout, window2, pxPerSecond);
+        const text2 = `${window2.prompt ?? ""}`.trim();
+        const label = text2 === "" ? "(empty)" : truncate(text2, 60);
+        const title = relaySupported ? `${text2 || "(empty minor prompt)"} · Shift+click to delete` : "Persisted relay prompt is unsupported by this architecture; click to inspect or Shift+click to delete";
+        return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeAttr(title)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
+      }).join("");
+      if (relaySupported || windows.length > 0) {
+        parts.push(
+          `<div class="vst-minor-lane${relaySupported ? "" : " vst-capability-disabled"}"${relaySupported ? " data-vst-prompt-add" : ""} data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${relaySupported ? "Click empty space to add a minor prompt" : "Relay prompts are unsupported; existing windows can be inspected or removed"}">${minorSegments}</div>`
+        );
+      }
+    }
+    return `<div class="vst-track-row vst-track-prompt">` + renderTrackHead(
+      "vst-track-icon-prompt",
+      "✎",
+      "Prompt",
+      headTag("major", "Major", { active: true }) + headTag("relay", "Relay", {
+        active: clips.some(
+          (clip) => (clip.promptWindows?.length ?? 0) > 0
+        )
+      })
+    ) + `<div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div></div>`;
+  };
+  var audioFlagChips = (clip) => {
+    const chips = [];
+    if (clip.reuseAudio === true) {
+      chips.push(
+        `<span class="vst-audio-flag" title="Capture audio after the second active stage and reuse it from the third active stage onward">↻</span>`
+      );
+    }
+    if (clip.clipLengthFromAudio === true) {
+      chips.push(
+        `<span class="vst-audio-flag" title="Clip length follows the audio length">⇥</span>`
+      );
+    }
+    if (clip.saveAudioTrack === true) {
+      chips.push(
+        `<span class="vst-audio-flag" title="Save a standalone MP3 for this clip's audio">MP3</span>`
+      );
+    }
+    return chips.length === 0 ? "" : `<span class="vst-audio-flags" aria-hidden="true">${chips.join("")}</span>`;
+  };
+  var renderTimelineAudioSegmentBlock = (track, trackIdx, totalSeconds) => {
+    const span = track.spans[0];
+    if (!span || span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
+      return "";
+    }
+    const { startSeconds: start, endSeconds: end } = spanGeometry(
+      span.timelineStartSeconds,
+      span.timelineLengthSeconds,
+      totalSeconds
+    );
+    const labelText = track.source.reference || track.source.uploadedAudio?.fileName || "audio segment";
+    const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
+    const waveform = audioSegmentWaveBarHeights(trackIdx, trackIdx, 40).map((height) => `<span style="height:${height}%"></span>`).join("");
+    return renderWindowSpan({
+      className: "vst-audio-seg",
+      extraClassName: `vst-audio-seg-tone-${trackIdx % 5}`,
+      dataAttrs: `data-vst-audio-seg data-track-idx="${trackIdx}"`,
+      edgeAttr: "data-vst-audio-seg-edge",
+      labelClass: "vst-audio-label",
+      label: labelText,
+      title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
+      ariaLabel: `Edit timeline audio segment ${trackIdx}`,
+      startSeconds: start,
+      lengthSeconds: end - start,
+      durationSeconds: totalSeconds,
+      decoration: `<span class="vst-audio-seg-wave" aria-hidden="true">${waveform}</span>`
+    });
+  };
+  var renderTimelineAudioSegmentLanes = (tracks, totalSeconds, totalWidthPx) => {
+    const place = (laneIdx) => `left:0;width:${totalWidthPx}px;--vst-audio-lane-idx:${laneIdx}`;
+    const lanes = tracks.map(
+      (track, trackIdx) => `<div class="vst-audio-seg-lane" data-track-idx="${trackIdx}" style="${place(trackIdx)}">` + renderTimelineAudioSegmentBlock(track, trackIdx, totalSeconds) + `</div>`
+    );
+    lanes.push(
+      `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add style="${place(tracks.length)}" title="Click or drag to add a timeline-wide audio segment"></div>`
+    );
+    return lanes.join("");
+  };
+  var renderAudioTrackRow = (clips, layouts, capabilities, audioTracks = [], pxPerSecond = 1, timelineTotalSeconds) => {
+    const baseSegments = layouts.map((layout) => {
+      const clip = clips[layout.index];
+      if (!clip) {
+        return "";
+      }
+      const badge = audioSourceBadge(clip.audioSource ?? "");
+      const clipCapabilities = capabilities?.forClip(clip);
+      const clipAudioSupported = clipCapabilities?.decision("clipAudio").supported ?? true;
+      const persistedAudio = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.reuseAudio || clip.clipLengthFromAudio || clip.saveAudioTrack;
+      const audioOperable = clipAudioSupported || persistedAudio;
+      const native = badge.label === "Native";
+      const width = clipInnerWidth(layout.widthPx);
+      const kindClass = native ? " vst-audio-native vst-audio-kind-native" : isAceStepFunAudioSource(clip.audioSource ?? "") ? " vst-audio-kind-ace" : " vst-audio-kind-upload";
+      const upload = !native && clip.audioSource === "Upload" ? clip.uploadedAudio?.fileName : null;
+      const labelText = upload ? `${badge.label} · ${upload}` : badge.label;
+      const title = native ? "Audio: Native — click to choose an audio source" : `${badge.title} — click to edit`;
+      const barCount = Math.min(
+        400,
+        Math.max(8, Math.floor(width / 5.5))
+      );
+      const bars = waveBarHeights(layout.index, barCount).map((height) => `<span style="height:${height}%"></span>`).join("");
+      const hint = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : "";
+      const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
+      const renderedTitle = clipAudioSupported ? title : persistedAudio ? "Clip audio is unsupported; click persisted audio to inspect or remove it" : "Clip audio is unsupported by this architecture";
+      const ariaLabel = clipAudioSupported ? `Edit audio for clip ${layout.index}` : persistedAudio ? `Inspect unsupported persisted audio for clip ${layout.index}` : `Audio unavailable for clip ${layout.index}`;
+      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${audioOperable ? ' data-vst-audio="clip" role="button" tabindex="0"' : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(renderedTitle)}" aria-label="${ariaLabel}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>`;
+    }).join("");
+    const totalSeconds = timelineTotalSeconds ?? layouts.reduce(
+      (max, layout) => Math.max(
+        max,
+        layout.startSeconds + layout.timelineDurationSeconds
+      ),
+      0
+    );
+    const totalWidthPx = totalSeconds * pxPerSecond;
+    const overlaySegments = renderTimelineAudioSegmentLanes(
+      audioTracks,
+      totalSeconds,
+      totalWidthPx
+    );
+    const laneCount = Math.max(1, audioTracks.length + 1);
+    const laneTags = [headTag("src", "Clip", { active: true })];
+    for (let i = 0; i < laneCount; i++) {
+      const blank = i === laneCount - 1;
+      laneTags.push(
+        headTag("seg", blank ? "+" : `S${i}`, {
+          active: !blank,
+          muted: blank,
+          style: `--vst-audio-lane-idx:${i}`
+        })
+      );
+    }
+    return `<div class="vst-track-row vst-track-audio" style="--vst-audio-lane-count:${laneCount}">` + renderTrackHead(
+      "vst-track-icon-audio",
+      "♪",
+      "Audio",
+      laneTags.join("")
+    ) + `<div class="vst-track-cell vst-audio-cell">${baseSegments}${overlaySegments}</div></div>`;
+  };
+  var REF_EDGE_ALIGN_FRAMES = 3;
+  var renderReferencesTrackRow = (clips, layouts, fps, unit, capabilities) => {
+    const lanes = layouts.map((layout) => {
+      const clip = clips[layout.index];
+      if (!clip) {
+        return "";
+      }
+      const width = clipInnerWidth(layout.widthPx);
+      const refsSupported = capabilities?.forClip(clip).decision("frameReferences").supported ?? true;
+      const marks = (clip.refs ?? []).map((ref, refIdx) => {
+        const isEnd = ref.fromEnd === true;
+        const frame = Math.max(0, ref.frame ?? 0);
+        const isPrimary = frame === 1 && !isEnd;
+        const time = keyframeTimeSeconds(
+          ref.frame,
+          isEnd,
+          layout.generatedDurationSeconds,
+          fps
+        );
+        const left = keyframeLeftPercent(
+          time,
+          layout.generatedDurationSeconds
+        );
+        const source = refSourceLabel(ref.source ?? "");
+        const image = ref.uploadedImage?.data;
+        const thumbnailData = image ? backgroundImageDataAttr(mediaPreviewSrc(image)) : "";
+        const frameLabel = `R ${isEnd ? "-" : ""}${frame}`;
+        const thumbnailClass = `vst-refs-thumb${image ? " vst-refs-has-image" : ""}`;
+        const alignClass = frame > REF_EDGE_ALIGN_FRAMES ? "" : isEnd ? " vst-refs-align-end" : " vst-refs-align-start";
+        const kindClass = (isPrimary ? " vst-refs-primary" : "") + (isEnd ? " vst-refs-fromend" : "") + alignClass;
+        const title = refsSupported ? `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move · Shift+click to delete` : `Persisted reference ${refIdx} is unsupported by this architecture · click to inspect or Shift+click to delete`;
+        const label = refsSupported ? `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})` : `Inspect unsupported persisted reference ${refIdx} for removal`;
+        return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}"><span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeAttr(frameLabel)}</span></span></div>`;
+      }).join("");
+      return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.refs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a reference image at this frame" : "Frame references are unsupported; existing references can be inspected or removed"}">${marks}</div>`;
+    }).join("");
+    return `<div class="vst-track-row vst-track-refs">` + renderTrackHead("vst-track-icon-refs", "⧉", "References", "") + `<div class="vst-track-cell">${lanes}</div></div>`;
+  };
+
+  // frontend/timelineView.ts
+  var renderRulerTicks = (layouts, totalSeconds, endPx, pxPerSecond, fps, unit, timing) => {
+    const endLabel = formatRulerLabel(totalSeconds, unit, fps);
+    const gridTicks = computeRulerTicks(totalSeconds, pxPerSecond).filter(
+      (tick) => Math.abs(tick.seconds - totalSeconds) > 1e-6 && !(formatRulerLabel(tick.seconds, unit, fps) === endLabel && Math.abs(tick.x - endPx) < 40)
+    ).map(
+      (tick) => `<span class="vst-tick vst-tick-grid" style="left:${tick.x}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(tick.seconds, unit, fps))}</span></span>`
+    );
+    const minorStep = chooseRulerStepSeconds(pxPerSecond) / 5;
+    const minorTicks = [];
+    const maxMinorTicks = 5e3;
+    for (let i = 1; i <= maxMinorTicks; i++) {
+      const seconds = i * minorStep;
+      if (seconds > totalSeconds + 1e-6) {
+        break;
+      }
+      if (i % 5 === 0) {
+        continue;
+      }
+      minorTicks.push(
+        `<span class="vst-tick vst-tick-minor" style="left:${seconds * pxPerSecond}px" aria-hidden="true"></span>`
+      );
+    }
+    const seamTicks = timing.boundaries.map((boundary) => {
+      const editPoint = layouts[boundary.rightIdx]?.startPx ?? 0;
+      return `<span class="vst-tick vst-tick-seam" style="left:${editPoint}px" aria-hidden="true"></span>`;
+    });
+    const endTick = `<span class="vst-tick vst-tick-end" style="left:${endPx}px"><span class="vst-tick-label">${escapeAttr(endLabel)}</span></span>`;
+    const outputTick = timing.outputSeconds < totalSeconds - 1e-6 ? `<span class="vst-tick vst-tick-output" style="left:${timing.outputSeconds * pxPerSecond}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(timing.outputSeconds, unit, fps))} output</span></span>` : "";
+    return [
+      ...minorTicks,
+      ...gridTicks,
+      ...seamTicks,
+      outputTick,
+      endTick
+    ].join("");
+  };
+  var renderTimeline = (body, clips, options) => {
+    const fps = safeFps(options?.fps);
+    const unit = options?.unit === "frames" ? "frames" : "seconds";
+    const pxPerSecond = clampPxPerSecond(
+      options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND
+    );
+    body.dataset.vstPps = String(pxPerSecond);
+    body.dataset.vstFps = String(fps);
+    const timing = resolveTimelineTiming(clips, fps, options?.capabilities);
+    const layouts = computeRegionLayout(clips, { pxPerSecond, timing });
+    const totalSeconds = timelineDisplaySeconds(clips, timing);
+    const totalPx = layouts.reduce(
+      (max, layout) => Math.max(max, layout.startPx + layout.widthPx),
+      0
+    );
+    const header = renderTimelineHeader(
+      clips.length,
+      timing.outputSeconds,
+      fps,
+      unit,
+      pxPerSecond,
+      options,
+      timing
+    );
+    const diagnostics = renderDiagnosticPanel(options?.diagnostics);
+    if (clips.length === 0) {
+      body.innerHTML = `${header}${diagnostics}<div class="vst-empty"><div class="vst-empty-icon" aria-hidden="true">🎬</div><div class="vst-empty-title">No clips yet.</div><div class="vst-empty-hint">Use the button below to start building your sequence.</div><button type="button" class="basic-button btn-primary vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button></div>`;
+      wireTimelineToolbar(body, options);
+      return;
+    }
+    const promptRow = renderPromptTrackRow(
+      clips,
+      layouts,
+      pxPerSecond,
+      `${options?.globalPrompt ?? ""}`,
+      options?.capabilities
+    );
+    const videoRow = renderVideoTrackRow(
+      clips,
+      layouts,
+      fps,
+      unit,
+      options?.capabilities,
+      timing,
+      pxPerSecond
+    );
+    const referencesRow = renderReferencesTrackRow(
+      clips,
+      layouts,
+      fps,
+      unit,
+      options?.capabilities
+    );
+    const renderedAudioRow = renderAudioTrackRow(
+      clips,
+      layouts,
+      options?.capabilities,
+      options?.audioTracks,
+      pxPerSecond,
+      timing.outputSeconds
+    );
+    const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
+    body.innerHTML = `${header}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, totalSeconds * pxPerSecond, pxPerSecond, fps, unit, timing)}</div></div>` + promptRow + videoRow + referencesRow + renderedAudioRow + `</div></div>`;
+    applyBackgroundImages(body);
+    wireTimelineToolbar(body, options);
+    wireTimelineZoomWheel(body, options);
   };
 
   // frontend/timelineViewState.ts

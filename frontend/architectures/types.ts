@@ -3,7 +3,6 @@ export type ModelProfileId = string;
 
 import type { GeneratedAuthoringFeature } from "./generatedFeatures";
 
-export { AUTHORING_FEATURES } from "./generatedFeatures";
 export type CatalogAuthoringFeature = GeneratedAuthoringFeature;
 
 export type CapabilitySupport = "supported" | "unsupported" | "conditional";

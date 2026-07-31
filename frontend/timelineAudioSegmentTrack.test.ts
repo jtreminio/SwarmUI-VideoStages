@@ -8,7 +8,7 @@ import {
 } from "@jest/globals";
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
-import * as persistence from "./persistence";
+import * as persistence from "./persistence/repository";
 import { getSelection, resetSelectionForTests } from "./selection";
 import {
     createTimelineAudioSegmentTrack,

@@ -14,7 +14,11 @@ import {
 import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
-import { __resetPersistenceForTests, getClips, getState } from "../persistence";
+import {
+    __resetPersistenceForTests,
+    getClips,
+    getState,
+} from "../persistence/repository";
 import type { DetailStripContext } from "./context";
 import { buildRefBody } from "./refPanel";
 

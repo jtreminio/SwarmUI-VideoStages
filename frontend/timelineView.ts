@@ -1,7 +1,7 @@
+import { escapeAttr as escapeHtml } from "./renderUtils";
 import {
     chooseRulerStepSeconds,
     computeRulerTicks,
-    escapeHtml,
     formatRulerLabel,
     safeFps,
     type TimelineUnit,
@@ -43,7 +43,6 @@ export {
     zoomAnchorScrollLeft,
     zoomAnchorTime,
 } from "./timelineView/layout";
-export { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "./timelineView/regionRenderer";
 
 const renderRulerTicks = (
     layouts: RegionLayout[],

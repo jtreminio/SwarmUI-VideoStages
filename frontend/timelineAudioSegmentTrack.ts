@@ -6,7 +6,7 @@ import {
 } from "./constants";
 import type { GestureRouter } from "./gestureRouter";
 import { createEntityId } from "./identity";
-import { getState, saveState } from "./persistence";
+import { getState, saveState } from "./persistence/repository";
 import { selectionAfterRemoval } from "./selection";
 import { timelineClipEdges } from "./timelineSnap";
 import { resolveTimelineTiming } from "./timelineTiming";

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
-import { getClips } from "./persistence";
+import { getClips } from "./persistence/repository";
 import { getSelection, resetSelectionForTests } from "./selection";
 import {
     createTimelineSelectionTracks,

@@ -10,7 +10,7 @@ import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures
 import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
 import { boundaryOverlapConstraints } from "./architectures/boundaryConstraints";
 import { crossfadePlanForClips } from "./boundaryPlan";
-import * as persistence from "./persistence";
+import * as persistence from "./persistence/repository";
 import { getSelection, resetSelectionForTests } from "./selection";
 import {
     createTimelineSelectionTracks,

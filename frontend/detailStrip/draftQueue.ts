@@ -7,7 +7,7 @@ import {
     getTimelineStore,
     saveClips,
     saveState,
-} from "../persistence";
+} from "../persistence/repository";
 import { setSelection } from "../selection";
 import { isVideoStagesEnabled } from "../swarmInputs";
 import type { Clip, TimelineSelection, VideoStagesConfig } from "../types";

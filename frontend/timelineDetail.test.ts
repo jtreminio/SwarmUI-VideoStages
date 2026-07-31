@@ -1,9 +1,9 @@
 import { describe, expect, it } from "@jest/globals";
+import { escapeAttr as escapeHtml } from "./renderUtils";
 import {
     audioSourceBadge,
     chooseRulerStepSeconds,
     computeRulerTicks,
-    escapeHtml,
     formatRulerLabel,
     formatTimeLabel,
     keyframeTimeSeconds,

@@ -14,7 +14,7 @@ import {
     getReferenceFrameMax,
     removeRefAt,
 } from "./normalization";
-import { getClips, getState } from "./persistence";
+import { getClips, getState } from "./persistence/repository";
 import { nextAllowedReferencePosition } from "./referenceAuthoring";
 import { getRootDefaults } from "./rootDefaults";
 import { activateSelection, setSelection } from "./selection";

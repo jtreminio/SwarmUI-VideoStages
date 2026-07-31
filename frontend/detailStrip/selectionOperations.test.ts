@@ -34,7 +34,7 @@ import {
     getClips,
     getTimelineStore,
     saveClips,
-} from "../persistence";
+} from "../persistence/repository";
 import { getSelection, setSelection } from "../selection";
 import { createTimelineHistory } from "../timelineHistory";
 import type { Clip, TimelineSelection } from "../types";

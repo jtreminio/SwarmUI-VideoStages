@@ -19,8 +19,6 @@ export interface AuthoringDiagnosticContext {
     catalog?: ArchitectureModelCatalog;
 }
 
-export { activeStageCount } from "./clipSemantics";
-
 const diagnostic = (
     severity: AuthoringDiagnosticSeverity,
     code: string,

@@ -1,4 +1,4 @@
-import { escapeHtml } from "../timelineDetail";
+import { escapeAttr as escapeHtml } from "../renderUtils";
 import { spanGeometry } from "../trackDomUtils";
 
 export const clipInnerWidth = (widthPx: number): number =>

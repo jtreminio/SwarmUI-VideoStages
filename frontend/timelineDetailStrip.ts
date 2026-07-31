@@ -15,7 +15,7 @@ import {
 import { renderDetailShell } from "./detailStrip/renderShell";
 import { createDetailSelectionOperations } from "./detailStrip/selectionOperations";
 import { closeTimelineAuthoringSettingsModal } from "./detailStrip/settingsModal";
-import { getState } from "./persistence";
+import { getState } from "./persistence/repository";
 import {
     getSelection,
     isSameSelection,

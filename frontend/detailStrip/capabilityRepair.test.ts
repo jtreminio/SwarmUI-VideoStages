@@ -15,7 +15,7 @@ import {
     sourceVideoFixture,
 } from "../__test_helpers__/clipFixtures";
 import type { ArchitectureModelCatalog } from "../architectures/types";
-import { __resetPersistenceForTests } from "../persistence";
+import { __resetPersistenceForTests } from "../persistence/repository";
 import type { Clip, VideoStagesConfig } from "../types";
 import { buildAudioBody } from "./audioPanel";
 import { buildClipBody } from "./clipPanel";

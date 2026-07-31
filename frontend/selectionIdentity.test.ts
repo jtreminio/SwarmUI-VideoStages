@@ -12,7 +12,7 @@ import {
     getClips,
     getState,
     saveClips,
-} from "./persistence";
+} from "./persistence/repository";
 import {
     getSelection,
     resetSelectionForTests,

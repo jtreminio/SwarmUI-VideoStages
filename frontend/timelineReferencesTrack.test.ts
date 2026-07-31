@@ -22,7 +22,7 @@ import { createCapabilityViewResolver } from "./architectures/policy";
 import { createGestureRouter } from "./gestureRouter";
 import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
-import * as persistence from "./persistence";
+import * as persistence from "./persistence/repository";
 import {
     getSelection,
     resetSelectionForTests,

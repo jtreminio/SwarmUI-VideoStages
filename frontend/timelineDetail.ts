@@ -1,7 +1,4 @@
 import { parseBase2EditStageIndex } from "./constants";
-
-export { escapeAttr as escapeHtml } from "./renderUtils";
-
 import { REF_SOURCE_REFINER, type Stage } from "./types";
 
 export type TimelineUnit = "seconds" | "frames";

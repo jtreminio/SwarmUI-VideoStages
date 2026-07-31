@@ -15,7 +15,10 @@ import {
     buildOptionSelect,
     type OptionSpec,
 } from "../../detailWidgets";
-import { dispatchDocumentCommand, getTimelineStore } from "../../persistence";
+import {
+    dispatchDocumentCommand,
+    getTimelineStore,
+} from "../../persistence/repository";
 import type { StagePanelBindings } from "./types";
 
 export const appendStageModelSection = ({

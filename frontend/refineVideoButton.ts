@@ -1,7 +1,7 @@
 import { activeStageCount } from "./clipSemantics";
 import { getVideoStagesHostBridge } from "./host";
-import { readProp } from "./normalization";
-import { getState } from "./persistence";
+import { readProp } from "./normalizationShared";
+import { getState } from "./persistence/repository";
 import { isVideoStagesEnabled } from "./swarmInputs";
 import type { VideoStagesConfig } from "./types";
 import { isRecord, safeJsonParse } from "./utils";

@@ -12,8 +12,6 @@ import {
     icLoraLegacyAutoModelName,
 } from "./icLoraPresets";
 
-export { IC_LORA_AUTO } from "./icLoraPresets";
-
 // Fulfills "[AUTO]" IC-LoRA entries: kicks off the extension's VideoStagesDownloadIcLoraWS to fetch
 // the preset's safetensors into LTX-2/IC-LoRA/. Download state is tracked per preset id
 // (module-level, shared by every entry using that preset); progress repaints only the tagged hint

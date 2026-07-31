@@ -2,7 +2,7 @@ import { reconcileArchitectureIncomingIcLoraDrives } from "./architectures/behav
 import { applyClipSkip } from "./detailStrip/selectionDomainOperations";
 import { documentFps } from "./documentQueries";
 import type { GestureRouter, GestureSession } from "./gestureRouter";
-import { getClips, getState, saveClips } from "./persistence";
+import { getClips, getState, saveClips } from "./persistence/repository";
 import { getRootDefaults } from "./rootDefaults";
 import { getSelectedClipIndex, getSelection, setSelection } from "./selection";
 import { getRootGeneratedEntryMode } from "./swarmInputs";

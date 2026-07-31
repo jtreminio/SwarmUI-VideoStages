@@ -12,7 +12,7 @@ import {
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
-import * as persistence from "./persistence";
+import * as persistence from "./persistence/repository";
 import { resetSelectionForTests } from "./selection";
 import {
     createTimelineLinking,

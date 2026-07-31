@@ -25,7 +25,7 @@ import {
     getTimelineStore,
     saveClips,
     saveState,
-} from "./persistence";
+} from "./persistence/repository";
 import { getDefaultStageModel } from "./rootDefaults";
 import { setSelection, subscribeSelection } from "./selection";
 import type { UpdateMeta } from "./store";

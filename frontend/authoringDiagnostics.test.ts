@@ -8,10 +8,8 @@ import {
     minimalRef,
     minimalStage,
 } from "./__test_helpers__/clipFixtures";
-import {
-    activeStageCount,
-    deriveAuthoringDiagnostics,
-} from "./authoringDiagnostics";
+import { deriveAuthoringDiagnostics } from "./authoringDiagnostics";
+import { activeStageCount } from "./clipSemantics";
 import type { Clip } from "./types";
 
 const catalogWithWan = () => {

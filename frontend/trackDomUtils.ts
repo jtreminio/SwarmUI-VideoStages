@@ -3,7 +3,11 @@
  */
 
 import { clamp } from "./constants";
-import { getClips, getTimelineStore, saveClips } from "./persistence";
+import {
+    getClips,
+    getTimelineStore,
+    saveClips,
+} from "./persistence/repository";
 import type { UpdateOrigin } from "./store";
 import { DEFAULT_PX_PER_SECOND } from "./timelineView/layout";
 import type { Clip } from "./types";

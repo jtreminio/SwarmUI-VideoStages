@@ -30,7 +30,7 @@ import {
     getTimelineStore,
     saveClips,
     saveState,
-} from "./persistence";
+} from "./persistence/repository";
 import {
     getSelection,
     resetSelectionForTests,

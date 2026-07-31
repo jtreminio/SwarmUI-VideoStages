@@ -5,7 +5,7 @@ import {
     clipTimelineWindow,
 } from "../documentQueries";
 import { normalizeAudioTracks } from "../normalization";
-import { serializeStateForStorage } from "../persistence";
+import { serializeStateForStorage } from "../persistence/documentCodec";
 import {
     getSelection,
     resetSelectionForTests,

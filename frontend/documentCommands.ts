@@ -30,7 +30,6 @@ import type {
 } from "./documentCommands/types";
 import type { CanonicalClip, CanonicalVideoStagesConfig } from "./types";
 
-export { reconcileClipArchitectureIdentity } from "./architectures/clipIdentity";
 export type {
     CommandFailure,
     DocumentCommand,
