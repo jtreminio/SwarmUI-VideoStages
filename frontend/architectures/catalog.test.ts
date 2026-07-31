@@ -217,7 +217,7 @@ describe("architecture catalog wire contract", () => {
         const missingOverviewMode = structuredClone(dto);
         missingOverviewMode.architectures[0].capabilities.entryModes =
             missingOverviewMode.architectures[0].capabilities.entryModes.filter(
-                (mode) => mode !== "source-video",
+                (mode) => mode !== "init-video",
             );
         expect(
             parseVideoArchitectureCatalog(missingOverviewMode),
@@ -356,7 +356,7 @@ describe("architecture catalog wire contract", () => {
             ],
         });
         const right = minimalClip({
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AA==",
                 fileName: "source.mp4",
                 fps: 24,

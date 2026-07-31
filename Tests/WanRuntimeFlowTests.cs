@@ -27,9 +27,9 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class WanRuntimeFlowTests
 {
-    private const int WanSourcedFrames = 17;
-    private const double WanSourcedDuration = 0.6;
-    private const double WanSourcedStartSeconds = 1;
+    private const int WanInitVideoFrames = 17;
+    private const double WanInitVideoDuration = 0.6;
+    private const double WanInitVideoStartSeconds = 1;
     private static readonly string[] WanSourceFeatures =
         [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
     private static readonly string[] WanReferenceFeatures = WanSourceFeatures;
@@ -936,7 +936,7 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Wan5b_sourced_multistage_partial_and_passthrough_preserve_decoded_provenance()
+    public void Wan5b_init_video_multistage_partial_and_passthrough_preserve_decoded_provenance()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
@@ -953,7 +953,7 @@ public class WanRuntimeFlowTests
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            MakeDocument(MakeWanSourcedClip(
+            MakeDocument(MakeWanInitVideoClip(
                 models.VideoModel.Name,
                 control: 1,
                 steps: 10,
@@ -998,7 +998,7 @@ public class WanRuntimeFlowTests
             bridge,
             bridge.ResolvePath(generator.CurrentMedia.Path)?.Node,
             second.Id));
-        Assert.Equal(WanSourcedFrames, generator.CurrentMedia.Frames);
+        Assert.Equal(WanInitVideoFrames, generator.CurrentMedia.Frames);
         ComfyNode retainedNativeLatent = Assert.Single(
             NodesOfClass(bridge, "Wan22ImageToVideoLatent"));
         Assert.Same(firstLatent, retainedNativeLatent);
@@ -1016,7 +1016,7 @@ public class WanRuntimeFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
         AddLoraModel("UnitTest_Wan5b_Failure_Prompt.safetensors");
         AddLoraModel("UnitTest_Wan5b_Failure_Persisted.safetensors");
-        JObject clip = MakeWanSourcedClip(
+        JObject clip = MakeWanInitVideoClip(
             models.VideoModel.Name,
             control: 0.5,
             steps: 12);
@@ -1520,13 +1520,13 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Sourced_generating_Wan_stage_applies_its_clip_LoRA()
+    public void InitVideo_generating_Wan_stage_applies_its_clip_LoRA()
     {
         using SwarmUiTestContext context = new();
         EnableHostLoraLoading();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         AddLoraModel("UnitTest_Wan_Source_Lora.safetensors");
-        JObject clip = MakeWanSourcedClip(
+        JObject clip = MakeWanInitVideoClip(
             models.VideoModel.Name,
             control: 0.5,
             steps: 10);
@@ -2014,11 +2014,11 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Partial_sourced_Wan_stage_uses_conformed_video_for_conditioning_and_latent()
+    public void Partial_init_video_Wan_stage_uses_conformed_video_for_conditioning_and_latent()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        JObject clip = MakeWanSourcedClip(
+        JObject clip = MakeWanInitVideoClip(
             models.VideoModel.Name,
             control: 0.5,
             steps: 10);
@@ -2057,7 +2057,7 @@ public class WanRuntimeFlowTests
         ImageFromBatchNode encodedFrames = Assert.IsType<ImageFromBatchNode>(
             sourceEncode.FindInput("pixels").Connection?.Node);
         Assert.Equal(0, encodedFrames.BatchIndex.LiteralAsInt());
-        Assert.Equal(WanSourcedFrames, encodedFrames.Length.LiteralAsInt());
+        Assert.Equal(WanInitVideoFrames, encodedFrames.Length.LiteralAsInt());
         Assert.NotSame(firstFrame, encodedFrames);
         Assert.False(ReachesUpstream(bridge, encodedFrames, firstFrame.Id));
         Assert.False(ReachesUpstream(bridge, sourceEncode, firstFrame.Id));
@@ -2079,15 +2079,15 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Sourced_Wan_without_optional_filename_materializes_and_runs()
+    public void InitVideo_Wan_without_optional_filename_materializes_and_runs()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        JObject clip = MakeWanSourcedClip(
+        JObject clip = MakeWanInitVideoClip(
             models.VideoModel.Name,
             control: 0.5,
             steps: 10);
-        ((JObject)clip["sourceVideo"]).Remove("fileName");
+        ((JObject)clip["initVideo"]).Remove("fileName");
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
@@ -2113,14 +2113,14 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Full_control_sourced_Wan_stage_uses_only_the_source_first_frame()
+    public void Full_control_init_video_Wan_stage_uses_only_the_source_first_frame()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            MakeDocument(MakeWanSourcedClip(
+            MakeDocument(MakeWanInitVideoClip(
                 models.VideoModel.Name,
                 control: 1,
                 steps: 10)).ToString());
@@ -2160,14 +2160,14 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Sourced_Wan_clip_prunes_the_real_host_core_lineage_and_publishes_only_source_result()
+    public void InitVideo_Wan_clip_prunes_the_real_host_core_lineage_and_publishes_only_source_result()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            MakeDocument(MakeWanSourcedClip(
+            MakeDocument(MakeWanInitVideoClip(
                 models.VideoModel.Name,
                 control: 0.5,
                 steps: 10)).ToString());
@@ -2233,14 +2233,14 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Sourced_Wan_stage_zero_passthrough_publishes_trimmed_source_without_a_sampler()
+    public void InitVideo_Wan_stage_zero_passthrough_publishes_trimmed_source_without_a_sampler()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            MakeDocument(MakeWanSourcedClip(
+            MakeDocument(MakeWanInitVideoClip(
                 models.VideoModel.Name,
                 control: 0,
                 steps: 10)).ToString());
@@ -2277,14 +2277,14 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Sourced_Wan_passthrough_then_refine_consumes_source_and_publishes_intermediate()
+    public void InitVideo_Wan_passthrough_then_refine_consumes_source_and_publishes_intermediate()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            MakeDocument(MakeWanSourcedClip(
+            MakeDocument(MakeWanInitVideoClip(
                 models.VideoModel.Name,
                 control: 0,
                 steps: 8,
@@ -2382,24 +2382,24 @@ public class WanRuntimeFlowTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Generated_and_sourced_Wan_clips_keep_root_and_source_provenance_isolated(
-        bool sourcedFirst)
+    public void Generated_and_init_video_Wan_clips_keep_root_and_source_provenance_isolated(
+        bool initVideoFirst)
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         JObject generated = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 8));
-        generated["duration"] = WanSourcedDuration;
-        JObject sourced = MakeWanSourcedClip(
+        generated["duration"] = WanInitVideoDuration;
+        JObject initVideoClip = MakeWanInitVideoClip(
             models.VideoModel.Name,
             control: 0.5,
             steps: 10);
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            MakeDocument(sourcedFirst
-                ? [sourced, generated]
-                : [generated, sourced]).ToString());
+            MakeDocument(initVideoFirst
+                ? [initVideoClip, generated]
+                : [generated, initVideoClip]).ToString());
 
         (JObject workflow, WorkflowGenerator generator) =
             WorkflowTestHarness.GenerateWithStepsAndState(
@@ -2410,24 +2410,24 @@ public class WanRuntimeFlowTests
 
         SwarmFrameWindowNode sourceWindow = AssertWanSourceConformChain(bridge, 512, 512);
         ComfyNode[] samplers = [.. SamplerNodes(bridge)];
-        ComfyNode generatedSampler = SamplerBySeed(samplers, sourcedFirst ? 44 : 43);
-        ComfyNode sourcedSampler = SamplerBySeed(samplers, sourcedFirst ? 43 : 44);
+        ComfyNode generatedSampler = SamplerBySeed(samplers, initVideoFirst ? 44 : 43);
+        ComfyNode initVideoSampler = SamplerBySeed(samplers, initVideoFirst ? 43 : 44);
         ComfyNode generatedConditioning =
             generatedSampler.FindInput("positive").Connection?.Node;
-        ComfyNode sourcedConditioning =
-            sourcedSampler.FindInput("positive").Connection?.Node;
+        ComfyNode initVideoConditioning =
+            initVideoSampler.FindInput("positive").Connection?.Node;
         Assert.False(ReachesUpstream(
             bridge,
             generatedConditioning.FindInput("start_image").Connection?.Node,
             sourceWindow.Id));
         Assert.True(ReachesUpstream(
             bridge,
-            sourcedConditioning.FindInput("start_image").Connection?.Node,
+            initVideoConditioning.FindInput("start_image").Connection?.Node,
             sourceWindow.Id));
-        VAEEncodeNode sourcedInput = Assert.IsType<VAEEncodeNode>(
-            sourcedSampler.FindInput("latent_image").Connection?.Node);
-        Assert.True(ReachesUpstream(bridge, sourcedInput, sourceWindow.Id));
-        Assert.False(ReachesUpstream(bridge, sourcedInput, generatedSampler.Id));
+        VAEEncodeNode initVideoInput = Assert.IsType<VAEEncodeNode>(
+            initVideoSampler.FindInput("latent_image").Connection?.Node);
+        Assert.True(ReachesUpstream(bridge, initVideoInput, sourceWindow.Id));
+        Assert.False(ReachesUpstream(bridge, initVideoInput, generatedSampler.Id));
         BatchImagesNodeNode merged = Assert.Single(
             bridge.Graph.NodesOfType<BatchImagesNodeNode>());
         Assert.Equal(new JArray(merged.Id, 0), generator.CurrentMedia.Path);
@@ -3022,7 +3022,7 @@ public class WanRuntimeFlowTests
     [InlineData("ltx2", true)]
     [InlineData("wan22", false)]
     [InlineData("wan22", true)]
-    public void Mixed_hard_cut_keeps_sourced_Wan_and_Ltx_provenance_audio_and_publication_isolated(
+    public void Mixed_hard_cut_keeps_init_video_Wan_and_Ltx_provenance_audio_and_publication_isolated(
         string firstFamily,
         bool doNotSave)
     {
@@ -3034,7 +3034,7 @@ public class WanRuntimeFlowTests
             : models.LtxVideoModel;
         JObject ltxClip = MakeClip(
             MakeStage(models.LtxVideoModel.Name, "Generated", steps: 7));
-        JObject wanClip = MakeWanSourcedClip(
+        JObject wanClip = MakeWanInitVideoClip(
             models.WanVideoModel.Name,
             control: 0.5,
             steps: 9);
@@ -3465,14 +3465,14 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Global_end_image_warns_and_is_ignored_for_sourced_Wan_clip()
+    public void Global_end_image_warns_and_is_ignored_for_init_video_Wan_clip()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            MakeDocument(MakeWanSourcedClip(
+            MakeDocument(MakeWanInitVideoClip(
                 models.VideoModel.Name,
                 control: 1,
                 steps: 10)).ToString());
@@ -3684,7 +3684,7 @@ public class WanRuntimeFlowTests
             models.VideoModel,
             JsonSingleClipStages(MakeStage(models.VideoModel.Name, "Generated", steps: steps)));
 
-    private static JObject MakeWanSourcedClip(
+    private static JObject MakeWanInitVideoClip(
         string model,
         double control,
         int steps,
@@ -3693,13 +3693,13 @@ public class WanRuntimeFlowTests
         JObject first = MakeStage(model, "Generated", control: control, steps: steps);
         first.Remove("imageReference");
         JObject clip = MakeClip([first, .. laterStages]);
-        clip["duration"] = WanSourcedDuration;
-        clip["sourceVideo"] = new JObject
+        clip["duration"] = WanInitVideoDuration;
+        clip["initVideo"] = new JObject
         {
             ["data"] = "data:video/mp4;base64,"
                 + Convert.ToBase64String([0x11, 0x22, 0x33]),
             ["fileName"] = "wan-source.mp4",
-            ["startSeconds"] = WanSourcedStartSeconds,
+            ["startSeconds"] = WanInitVideoStartSeconds,
         };
         return clip;
     }
@@ -3721,7 +3721,7 @@ public class WanRuntimeFlowTests
         WorkflowBridge bridge,
         int width,
         int height,
-        int expectedFrames = WanSourcedFrames)
+        int expectedFrames = WanInitVideoFrames)
     {
         SwarmLoadVideoB64Node load = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -3737,7 +3737,7 @@ public class WanRuntimeFlowTests
             bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
         Assert.Same(resample, window.ImagesInput.Connection?.Node);
         Assert.Equal(
-            (int)Math.Round(WanSourcedStartSeconds * 24),
+            (int)Math.Round(WanInitVideoStartSeconds * 24),
             window.StartFrame.LiteralAsInt());
         Assert.Equal(expectedFrames, window.FrameCount.LiteralAsInt());
         ImageScaleNode scale = Assert.Single(

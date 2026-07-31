@@ -100,7 +100,7 @@ internal sealed class HostVideoDecodedStageInput
     private void ValidateDecodedInput(ClipPlan clip, StagePlan stage, int? expectedFrames)
     {
         WGNodeData media = _generator.CurrentMedia;
-        string owner = stage.Input == StageInputKind.SourceVideo
+        string owner = stage.Input == StageInputKind.InitVideo
             ? "conformed source video"
             : "immediately previous stage's decoded video";
         using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);

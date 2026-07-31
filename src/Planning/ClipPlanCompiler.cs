@@ -8,12 +8,12 @@ internal static class ClipPlanCompiler
 {
     internal static ClipPlan Compile(ClipSpec clip, ClipPlanCompilationContext context)
     {
-        bool sourced = clip.SourceVideo is not null;
+        bool initVideoClip = clip.InitVideo is not null;
         AudioPlan audio = AudioPlanCompiler.Compile(clip);
         ArchitectureClipCompilation architectureCompilation =
             ValidateArchitectureCompilation(clip, context);
-        ClipInputKind clipInput = sourced
-            ? ClipInputKind.SourceVideo
+        ClipInputKind clipInput = initVideoClip
+            ? ClipInputKind.InitVideo
             : context.IsTextToVideo ? ClipInputKind.EmptyLatent : ClipInputKind.RootMedia;
         List<StagePlan> stages = [];
         for (int i = 0; i < (clip.Stages?.Count ?? 0); i++)
@@ -44,9 +44,9 @@ internal static class ClipPlanCompiler
             clip.Id,
             clip.Frames,
             clipInput,
-            sourced,
-            CompileSourceVideo(
-                clip.SourceVideo,
+            initVideoClip,
+            CompileInitVideo(
+                clip.InitVideo,
                 context.Width,
                 context.Height,
                 context.FramesPerSecond),
@@ -59,13 +59,13 @@ internal static class ClipPlanCompiler
         };
     }
 
-    private static SourceVideoPlan CompileSourceVideo(
-        SourceVideoSpec source,
+    private static InitVideoPlan CompileInitVideo(
+        InitVideoSpec source,
         int width,
         int height,
         int framesPerSecond) => source is null
             ? null
-            : new SourceVideoPlan(
+            : new InitVideoPlan(
                 source.Data,
                 source.FileName,
                 source.StartSeconds,
@@ -82,7 +82,7 @@ internal static class ClipPlanCompiler
         return clipInput switch
         {
             ClipInputKind.EmptyLatent => StageInputKind.EmptyLatent,
-            ClipInputKind.SourceVideo => StageInputKind.SourceVideo,
+            ClipInputKind.InitVideo => StageInputKind.InitVideo,
             _ => StageInputKind.RootMedia,
         };
     }

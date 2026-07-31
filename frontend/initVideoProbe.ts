@@ -8,10 +8,10 @@
  */
 
 import { getVideoStagesHostBridge } from "./host";
-import type { SourceVideo } from "./types";
+import type { InitVideo } from "./types";
 import { roundToTenth } from "./utils";
 
-export interface SourceVideoProbe {
+export interface InitVideoProbe {
     durationSeconds: number;
     fps: number | null;
 }
@@ -21,12 +21,12 @@ export interface SourceVideoProbe {
  * when it reports no duration. Kept here so the two authoring paths — the detail
  * strip picker and the Refine Video button — cannot drift on that fallback.
  */
-export const sourceVideoFromProbe = (
-    probe: SourceVideoProbe | null,
+export const initVideoFromProbe = (
+    probe: InitVideoProbe | null,
     data: string,
     fileName: string | null,
     clipDuration: number,
-): SourceVideo => {
+): InitVideo => {
     const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
     return {
         data,
@@ -76,17 +76,17 @@ export const estimateFpsFromMediaTimes = (
     return fps >= 1 && fps <= MAX_PLAUSIBLE_FPS ? fps : null;
 };
 
-export const probeSourceVideo = (
+export const probeInitVideo = (
     src: string,
     timeoutMs = 8000,
-): Promise<SourceVideoProbe | null> =>
+): Promise<InitVideoProbe | null> =>
     new Promise((resolve) => {
         const video =
-            getVideoStagesHostBridge().createSourceVideoElement() as VideoWithFrameCallback;
+            getVideoStagesHostBridge().createInitVideoElement() as VideoWithFrameCallback;
         video.muted = true;
         video.preload = "auto";
         let settled = false;
-        const finish = (result: SourceVideoProbe | null): void => {
+        const finish = (result: InitVideoProbe | null): void => {
             if (settled) {
                 return;
             }

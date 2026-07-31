@@ -41,20 +41,24 @@ export const normalizeArchitectureIcLoras = (
     architectureId: string,
     rawClip: Record<string, unknown>,
     stageCount: number,
-    sourcedClip: boolean,
+    initVideoClip: boolean,
     options: IcLoraNormalizationOptions = {},
 ): IcLora[] => {
     if (isLtx2(architectureId)) {
         return icLoraNormalization.normalizeIcLoras(
             rawClip,
             stageCount,
-            sourcedClip,
+            initVideoClip,
         );
     }
     return options.preserveDormantLtx === true &&
         Array.isArray(rawClip.icLoras) &&
         rawClip.icLoras.length > 0
-        ? icLoraNormalization.normalizeIcLoras(rawClip, stageCount, sourcedClip)
+        ? icLoraNormalization.normalizeIcLoras(
+              rawClip,
+              stageCount,
+              initVideoClip,
+          )
         : [];
 };
 

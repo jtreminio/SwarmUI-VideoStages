@@ -3,11 +3,11 @@
 export const CAPABILITY_WIRE_NAMES = {
     architecture: {
         generatedEntry: "generated-entry",
-        sourcedEntry: "sourced-entry",
+        initVideoEntry: "init-video-entry",
         nativeAudio: "native-audio",
     },
     clip: {
-        sourceVideo: "source-video",
+        initVideo: "init-video",
         prompts: "prompts",
         promptRelay: "prompt-relay",
         references: "references",
@@ -41,7 +41,7 @@ export type GeneratedAuthoringFeatureCapability = readonly [
 ];
 
 export const AUTHORING_FEATURES = [
-    "sourceVideo",
+    "initVideo",
     "frameReferences",
     "referenceFraming",
     "retake",
@@ -92,7 +92,7 @@ export const AUTHORING_FEATURE_LABELS: Record<
     GeneratedAuthoringFeature,
     string
 > = {
-    sourceVideo: "Source video",
+    initVideo: "Source video",
     frameReferences: "Frame references",
     referenceFraming: "Reference framing",
     retake: "Retakes",
@@ -111,7 +111,7 @@ export const AUTHORING_FEATURE_CAPABILITIES: Record<
     GeneratedAuthoringFeature,
     readonly GeneratedAuthoringFeatureCapability[]
 > = {
-    sourceVideo: [["clip", CAPABILITY_WIRE_NAMES.clip.sourceVideo, null]],
+    initVideo: [["clip", CAPABILITY_WIRE_NAMES.clip.initVideo, null]],
     frameReferences: [
         ["clip", CAPABILITY_WIRE_NAMES.clip.references, null],
         ["stage", CAPABILITY_WIRE_NAMES.stage.frameReferences, null],

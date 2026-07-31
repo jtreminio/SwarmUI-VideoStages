@@ -81,7 +81,7 @@ const clip = (id: string): CanonicalClip => ({
     prompt: id,
     promptWindows: [],
     retake: null,
-    sourceVideo: null,
+    initVideo: null,
     refs: [],
     stages: [],
 });
@@ -241,9 +241,9 @@ describe("reduceDocumentCommand", () => {
         expect(source).toEqual(before);
     });
 
-    it("toggles stage skip suffixes and reconciles sourced clip identity", () => {
+    it("toggles stage skip suffixes and reconciles init-video clip identity", () => {
         const source = document();
-        source.clips[0].sourceVideo = {
+        source.clips[0].initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -775,7 +775,7 @@ describe("reduceDocumentCommand", () => {
         targetClip.saveAudioTrack = true;
         targetClip.clipLengthFromAudio = true;
         targetClip.reuseAudio = true;
-        targetClip.sourceVideo = {
+        targetClip.initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -838,7 +838,7 @@ describe("reduceDocumentCommand", () => {
             refs: targetClip.refs,
             promptWindows: targetClip.promptWindows,
             retake: targetClip.retake,
-            sourceVideo: targetClip.sourceVideo,
+            initVideo: targetClip.initVideo,
             icLoras: targetClip.icLoras,
             audioSource: "Upload",
             uploadedAudio: targetClip.uploadedAudio,
@@ -1089,7 +1089,7 @@ describe("reduceDocumentCommand", () => {
     it("uses authored Stage-0 model ownership for a dormant source-only retarget", () => {
         const source = document();
         const targetClip = source.clips[0];
-        targetClip.sourceVideo = {
+        targetClip.initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -1335,7 +1335,7 @@ describe("reduceDocumentCommand", () => {
     it("validates dormant source-only stages by architecture while retaining per-stage profiles", () => {
         const source = document();
         const catalog = catalogWithSecondLtxProfile();
-        source.clips[0].sourceVideo = {
+        source.clips[0].initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -1376,10 +1376,10 @@ describe("reduceDocumentCommand", () => {
         ).toEqual(["ltx-2.3", "ltx-alt"]);
     });
 
-    it("derives none and Stage0 identities across sourced skipped transitions", () => {
+    it("derives none and Stage0 identities across init-video skipped transitions", () => {
         const source = document();
         const catalog = catalogWithSecondLtxProfile();
-        source.clips[0].sourceVideo = {
+        source.clips[0].initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -1463,7 +1463,7 @@ describe("reduceDocumentCommand", () => {
         source.clips[0].stages.forEach((entry) => {
             entry.skipped = true;
         });
-        const sourceVideo = {
+        const initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -1477,7 +1477,7 @@ describe("reduceDocumentCommand", () => {
             {
                 type: "clip.patch",
                 clipId: "clip-a",
-                patch: { sourceVideo },
+                patch: { initVideo },
             },
             { architectureCatalog: catalog },
         );
@@ -1491,7 +1491,7 @@ describe("reduceDocumentCommand", () => {
             {
                 type: "clip.patch",
                 clipId: "clip-a",
-                patch: { sourceVideo: null },
+                patch: { initVideo: null },
             },
             { architectureCatalog: catalog },
         );

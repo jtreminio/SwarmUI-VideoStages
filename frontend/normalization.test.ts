@@ -17,9 +17,9 @@ import {
     buildDefaultStage,
     normalizeClip,
     normalizeContinueOverlap,
+    normalizeInitVideo,
     normalizeRef,
     normalizeRetake,
-    normalizeSourceVideo,
     normalizeStage,
     normalizeStageLoras,
     normalizeStageRefStrengthValue,
@@ -134,7 +134,7 @@ describe("normalization", () => {
     });
 
     it("derives none for fresh source-only clips but preserves invalid v3 identity for diagnostics", () => {
-        const sourceVideo = {
+        const initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -143,7 +143,7 @@ describe("normalization", () => {
             lengthSeconds: 2,
         };
         const fresh = normalizeClip(
-            { sourceVideo, stages: [] },
+            { initVideo, stages: [] },
             getRootDefaults,
             getDefaultStageModel,
         );
@@ -151,7 +151,7 @@ describe("normalization", () => {
             {
                 architectureHint: "removed-architecture",
                 modelProfileId: "removed-profile",
-                sourceVideo,
+                initVideo,
                 stages: [],
             },
             getRootDefaults,
@@ -576,13 +576,13 @@ describe("normalization", () => {
         expect(clip.icLoras[0].stage).toBe(-1);
     });
 
-    it("normalizeClip keeps Control 0 (passthrough) on sourced and refine stages", () => {
-        // Control 0 = passthrough (no sampler): a sourced clip joining others
+    it("normalizeClip keeps Control 0 (passthrough) on init-video and refine stages", () => {
+        // Control 0 = passthrough (no sampler): a initVideoClip clip joining others
         // without changes authors 0 on its stage 0, and refine stages may skip too.
         const clip = normalizeClip(
             {
                 stages: [{ model: "ltx", control: 0 }, { control: 0 }],
-                sourceVideo: {
+                initVideo: {
                     data: "data:video/mp4;base64,QUJD",
                     lengthSeconds: 3,
                 },
@@ -594,11 +594,11 @@ describe("normalization", () => {
         expect(clip.stages[1].control).toBe(0);
     });
 
-    it("normalizeClip keeps an Incoming source at stage 0 on a sourced clip", () => {
+    it("normalizeClip keeps an Incoming source at stage 0 on a init-video clip", () => {
         const clip = normalizeClip(
             {
                 stages: [{ model: "ltx" }],
-                sourceVideo: {
+                initVideo: {
                     data: "data:video/mp4;base64,QUJD",
                     lengthSeconds: 3,
                 },
@@ -607,8 +607,8 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
-        // Stage 0's incoming frames ARE the footage on a sourced clip.
-        expect(clip.sourceVideo).not.toBeNull();
+        // Stage 0's incoming frames ARE the footage on a initVideoClip clip.
+        expect(clip.initVideo).not.toBeNull();
         expect(clip.icLoras[0].driveSource).toBe("Incoming");
         expect(clip.icLoras[0].stage).toBe(0);
     });
@@ -739,7 +739,7 @@ describe("normalization", () => {
         expect(clip.clipLengthFromAudio).toBe(true);
     });
 
-    it("normalizeClip preserves ControlNet length without a slot-sourced IC-LoRA", () => {
+    it("normalizeClip preserves ControlNet length without a slot-init-video IC-LoRA", () => {
         const clip = normalizeClip(
             {
                 audioSource: "Native",
@@ -881,7 +881,7 @@ describe("normalization", () => {
         expect(stage0.control).toBe(0.5);
     });
 
-    it("normalizeStage keeps authored control/upscale on a sourced clip stage 0", () => {
+    it("normalizeStage keeps authored control/upscale on a init-video clip stage 0", () => {
         const stage0 = normalizeStage(
             getRootDefaults,
             getDefaultStageModel,
@@ -897,14 +897,14 @@ describe("normalization", () => {
             true,
         );
 
-        // A sourced stage 0 refines its footage (init-video img2img): authored
+        // A initVideoClip stage 0 refines its footage (initVideoClip img2img): authored
         // Control/Upscale/UpscaleMethod survive, still clamped and 0.25-snapped.
         expect(stage0.control).toBe(0.4);
         expect(stage0.upscale).toBe(1.25);
         expect(stage0.upscaleMethod).toBe("latentmodel-b.safetensors");
     });
 
-    it("normalizeClip keeps authored stage-0 refine params for a sourced clip", () => {
+    it("normalizeClip keeps authored stage-0 refine params for a init-video clip", () => {
         const clip = normalizeClip(
             {
                 stages: [
@@ -915,7 +915,7 @@ describe("normalization", () => {
                         upscaleMethod: "latentmodel-b.safetensors",
                     },
                 ],
-                sourceVideo: {
+                initVideo: {
                     data: "data:video/mp4;base64,QUJD",
                     lengthSeconds: 3,
                 },
@@ -923,7 +923,7 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(clip.sourceVideo).not.toBeNull();
+        expect(clip.initVideo).not.toBeNull();
         expect(clip.stages[0].control).toBe(0.3);
         expect(clip.stages[0].upscale).toBe(2);
         expect(clip.stages[0].upscaleMethod).toBe("latentmodel-b.safetensors");
@@ -1185,12 +1185,12 @@ describe("clip LoRAs with per-stage weights", () => {
     });
 });
 
-describe("normalizeSourceVideo", () => {
+describe("normalizeInitVideo", () => {
     const data = "data:video/mp4;base64,QUJD";
 
     it("keeps a valid source video and rounds its seconds", () => {
         expect(
-            normalizeSourceVideo({
+            normalizeInitVideo({
                 data,
                 fileName: "shot.mp4",
                 fps: 24,
@@ -1209,16 +1209,14 @@ describe("normalizeSourceVideo", () => {
     });
 
     it("rejects a missing data blob or non-record value", () => {
-        expect(normalizeSourceVideo(null)).toBeNull();
-        expect(normalizeSourceVideo("x")).toBeNull();
-        expect(
-            normalizeSourceVideo({ data: " ", lengthSeconds: 2 }),
-        ).toBeNull();
+        expect(normalizeInitVideo(null)).toBeNull();
+        expect(normalizeInitVideo("x")).toBeNull();
+        expect(normalizeInitVideo({ data: " ", lengthSeconds: 2 })).toBeNull();
     });
 
     it("clamps the range inside a known file duration", () => {
         expect(
-            normalizeSourceVideo({
+            normalizeInitVideo({
                 data,
                 fps: 0,
                 durationSeconds: 6,
@@ -1237,7 +1235,7 @@ describe("normalizeSourceVideo", () => {
 
     it("defaults a missing length to the rest of the file", () => {
         expect(
-            normalizeSourceVideo({
+            normalizeInitVideo({
                 data,
                 durationSeconds: 8,
                 startSeconds: 3,
@@ -1254,9 +1252,9 @@ describe("normalizeSourceVideo", () => {
 
     it("keeps a positive length even when the file duration is unknown", () => {
         expect(
-            normalizeSourceVideo({ data, lengthSeconds: 3 })?.lengthSeconds,
+            normalizeInitVideo({ data, lengthSeconds: 3 })?.lengthSeconds,
         ).toBe(3);
-        expect(normalizeSourceVideo({ data })).toBeNull();
+        expect(normalizeInitVideo({ data })).toBeNull();
     });
 
     it("drives the clip duration from the source range in normalizeClip", () => {
@@ -1264,7 +1262,7 @@ describe("normalizeSourceVideo", () => {
             {
                 duration: 2,
                 stages: [minimalStageRaw],
-                sourceVideo: {
+                initVideo: {
                     data,
                     durationSeconds: 10,
                     startSeconds: 1,
@@ -1274,7 +1272,7 @@ describe("normalizeSourceVideo", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(clip.sourceVideo?.startSeconds).toBe(1);
+        expect(clip.initVideo?.startSeconds).toBe(1);
         expect(clip.duration).toBe(3.5);
     });
 });

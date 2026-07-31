@@ -6,10 +6,10 @@ import {
 } from "../__test_helpers__/architectureFixtures";
 import {
     icLoraFixture,
+    initVideoFixture,
     minimalClip,
     minimalRef,
     minimalStage,
-    sourceVideoFixture,
 } from "../__test_helpers__/clipFixtures";
 import {
     clampDetailSelection,
@@ -58,7 +58,7 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
         modelProfileId: "wan22-i2v-14b",
         modelClassId: "wan-i2v",
         compatibilityClassId: "wan-video",
-        entryModes: ["image-to-video", "source-video"],
+        entryModes: ["image-to-video", "init-video"],
     });
     return models;
 };
@@ -203,10 +203,10 @@ describe("catalog-backed authoring policy", () => {
         });
     });
 
-    it("normalizes all-skipped sourced clips to the cataloged none identity", () => {
+    it("normalizes all-skipped init-video clips to the cataloged none identity", () => {
         const models = catalog();
         const clip = minimalClip({
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AA==",
                 fileName: "source.mp4",
                 fps: 24,
@@ -225,7 +225,7 @@ describe("catalog-backed authoring policy", () => {
         });
         const view = createCapabilityViewResolver(models).forClip(clip);
         expect(view.known).toBe(true);
-        expect(view.decision("sourceVideo").supported).toBe(true);
+        expect(view.decision("initVideo").supported).toBe(true);
         expect(view.decision("majorPrompt").supported).toBe(false);
         expect(view.decision("clipAudio").supported).toBe(true);
         expect(view.decision("audioReuse").supported).toBe(false);
@@ -320,17 +320,17 @@ describe("catalog-backed authoring policy", () => {
 
     it("routes the retake/reference exclusion through the same decision", () => {
         const models = catalog();
-        const sourced = minimalClip({ sourceVideo: sourceVideoFixture() });
+        const initVideoClip = minimalClip({ initVideo: initVideoFixture() });
         expect(
             createCapabilityViewResolver(models)
-                .forClip(sourced)
+                .forClip(initVideoClip)
                 .decision("retake").supported,
         ).toBe(true);
 
-        sourced.refs = [minimalRef()];
+        initVideoClip.refs = [minimalRef()];
         expect(
             createCapabilityViewResolver(models)
-                .forClip(sourced)
+                .forClip(initVideoClip)
                 .decision("retake"),
         ).toMatchObject({
             supported: false,
@@ -429,7 +429,7 @@ describe("catalog-backed authoring policy", () => {
         const clip = minimalClip({
             architectureHint: "none",
             modelProfileId: "none",
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AA==",
                 fileName: "source.mp4",
                 fps: 24,
@@ -545,7 +545,7 @@ describe("catalog-backed authoring policy", () => {
         const clip = minimalClip({
             architectureHint: "none",
             modelProfileId: "none",
-            sourceVideo: null,
+            initVideo: null,
             stages: [
                 minimalStage({
                     skipped: true,

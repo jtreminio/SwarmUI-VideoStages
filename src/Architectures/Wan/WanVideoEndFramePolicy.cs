@@ -24,8 +24,8 @@ internal static class WanVideoEndFramePolicy
         if (onlyClip.Architecture?.Id != WanArchitectureModule.ArchitectureId
             || onlyClip.EntryMode != ArchitectureEntryMode.ImageToVideo
             || onlyClip.Input != ClipInputKind.RootMedia
-            || onlyClip.IsSourced
-            || onlyClip.SourceVideo is not null)
+            || onlyClip.HasInitVideo
+            || onlyClip.InitVideo is not null)
         {
             return false;
         }

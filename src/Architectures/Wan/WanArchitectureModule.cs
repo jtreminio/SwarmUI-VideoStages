@@ -63,13 +63,13 @@ internal sealed class WanArchitectureModule :
         [
             ArchitectureEntryMode.TextToVideo,
             ArchitectureEntryMode.ImageToVideo,
-            ArchitectureEntryMode.SourceVideo,
+            ArchitectureEntryMode.InitVideo,
         ],
         new(
             ArchitectureCapability.GeneratedEntry
-                | ArchitectureCapability.SourcedEntry,
+                | ArchitectureCapability.InitVideoEntry,
             ClipCapability.Prompts
-                | ClipCapability.SourceVideo
+                | ClipCapability.InitVideo
                 | ClipCapability.References,
             StageCapability.ImageInput
                 | StageCapability.VideoInput

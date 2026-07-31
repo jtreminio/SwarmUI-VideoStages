@@ -22,7 +22,7 @@ public partial class StageFlowTests
     // Retake now lives in the per-clip JSON (seconds-based); a clip source video is the enable gate.
     // At fps 24, start/length of 1.0s each resolve to frame windows [24, 24), matching the old
     // param-based tests.
-    internal static JObject RetakeSourceVideo() => new()
+    internal static JObject RetakeInitVideo() => new()
     {
         ["data"] = "data:video/mp4;base64," + Convert.ToBase64String([0xDE, 0xAD, 0xBE, 0xEF]),
         ["fileName"] = "refine.mp4",
@@ -40,7 +40,7 @@ public partial class StageFlowTests
         double startSeconds,
         double lengthSeconds,
         double? strength,
-        bool sourced,
+        bool initVideoClip,
         params JObject[] stages)
     {
         JObject clip = MakeClip(stages);
@@ -54,13 +54,13 @@ public partial class StageFlowTests
             retake["strength"] = strength.Value;
         }
         clip["retake"] = retake;
-        if (sourced)
+        if (initVideoClip)
         {
             // A source video is only honoured on a clip with a usable duration; 4.0s @ 24fps aligns
             // up to the 97 frames these tests request through VideoFrames.
             ((JObject)((JArray)clip["stages"])[0]).Remove("imageReference");
             clip["duration"] = 4.0;
-            clip["sourceVideo"] = RetakeSourceVideo();
+            clip["initVideo"] = RetakeInitVideo();
         }
         return new JArray(clip).ToString();
     }
@@ -189,7 +189,7 @@ public partial class StageFlowTests
             ["lengthSeconds"] = 2.0,
             ["strength"] = 0.9
         };
-        clip["sourceVideo"] = RetakeSourceVideo();
+        clip["initVideo"] = RetakeInitVideo();
         string stagesJson = new JArray(clip).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
@@ -244,14 +244,14 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Retake_ignored_when_clip_is_not_sourced()
+    public void Retake_ignored_when_clip_is_not_init_video()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         // Retake window present in the clip JSON but no clip source video => retake never activates.
         string stagesJson = JsonSingleClipStagesWithRetake(
-            startSeconds: 1.0, lengthSeconds: 1.0, strength: 0.8, sourced: false,
+            startSeconds: 1.0, lengthSeconds: 1.0, strength: 0.8, initVideoClip: false,
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);

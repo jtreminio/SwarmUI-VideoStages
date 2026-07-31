@@ -121,7 +121,7 @@ discovers that step at startup and disables unsafe handoff when it is missing
 or ambiguous.
 
 `ArchitectureRootOwnerResolver` selects at most one architecture: the first
-clip whose planned input consumes host root media or an empty latent. A sourced
+clip whose planned input consumes host root media or an empty latent. A init-video
 clip owns its own media and does not claim the host root.
 
 `ArchitectureHostPhasePolicy` is the exhaustive scope table. Adding a phase
@@ -222,7 +222,7 @@ their graph instructions. LTX code interprets those additions under
 ### Source-only
 
 The `none` architecture uses `SourceOnlyGenerationSession` and
-`SourcedClipInstaller`. It creates no model, latent, sampler, or VAE generation
+`InitVideoClipInstaller`. It creates no model, latent, sampler, or VAE generation
 path, but returns the same decoded artifact contract.
 
 ## 7. Assembly and publication

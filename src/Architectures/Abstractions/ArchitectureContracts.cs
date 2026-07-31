@@ -41,7 +41,7 @@ internal enum ArchitectureEntryMode
 {
     TextToVideo,
     ImageToVideo,
-    SourceVideo,
+    InitVideo,
 }
 
 [Flags]
@@ -57,7 +57,7 @@ internal enum ArchitectureCapability
 {
     None = 0,
     GeneratedEntry = 1 << 0,
-    SourcedEntry = 1 << 1,
+    InitVideoEntry = 1 << 1,
     NativeAudio = 1 << 2,
 }
 
@@ -65,7 +65,7 @@ internal enum ArchitectureCapability
 internal enum ClipCapability
 {
     None = 0,
-    SourceVideo = 1 << 0,
+    InitVideo = 1 << 0,
     Prompts = 1 << 1,
     PromptRelay = 1 << 2,
     References = 1 << 3,
@@ -105,7 +105,7 @@ internal sealed record ArchitectureCapabilityDescriptor(
 /// </summary>
 internal enum AuthoringFeature
 {
-    SourceVideo,
+    InitVideo,
     FrameReferences,
     ReferenceFraming,
     Retake,

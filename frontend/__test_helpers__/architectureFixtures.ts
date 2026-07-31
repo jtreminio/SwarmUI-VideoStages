@@ -12,9 +12,9 @@ import type { RootDefaults } from "../types";
 export const testArchitectureCapabilities = (
     overrides: Partial<ArchitectureCapabilities> = {},
 ): ArchitectureCapabilities => ({
-    architecture: ["generated-entry", "sourced-entry"],
+    architecture: ["generated-entry", "init-video-entry"],
     clip: [
-        "source-video",
+        "init-video",
         "prompts",
         "prompt-relay",
         "references",
@@ -35,7 +35,7 @@ export const testArchitectureCapabilities = (
         "pixel-upscale",
     ],
     upscaleModes: ["pixel"],
-    entryModes: ["text-to-video", "image-to-video", "source-video"],
+    entryModes: ["text-to-video", "image-to-video", "init-video"],
     audioSourceKinds: ["Native", "Upload"],
     ...overrides,
 });
@@ -124,7 +124,7 @@ export const testArchitectureCatalog = (
                     reason: "Retake requires source footage.",
                     scope: "clip",
                     constraints: {
-                        requiresAnyEntryMode: ["source-video"],
+                        requiresAnyEntryMode: ["init-video"],
                     },
                 },
             ],
@@ -140,7 +140,7 @@ export const testArchitectureCatalog = (
             compatibilityClassId: "ltx-video",
             frameGrid: 8,
             enhancements: { referencePositions: ["any"] },
-            entryModes: ["text-to-video", "image-to-video", "source-video"],
+            entryModes: ["text-to-video", "image-to-video", "init-video"],
         },
         {
             value: "ltx",
@@ -151,7 +151,7 @@ export const testArchitectureCatalog = (
             compatibilityClassId: "ltx-video",
             frameGrid: 8,
             enhancements: { referencePositions: ["any"] },
-            entryModes: ["text-to-video", "image-to-video", "source-video"],
+            entryModes: ["text-to-video", "image-to-video", "init-video"],
         },
     ],
     ...overrides,
@@ -194,7 +194,7 @@ export const testArchitectureCatalogDto = (
                                     ...(entry.entryModes.some((mode) =>
                                         [
                                             "image-to-video",
-                                            "source-video",
+                                            "init-video",
                                         ].includes(mode),
                                     )
                                         ? ["image"]
@@ -214,32 +214,32 @@ export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
     id: "none",
     label: "Decoded source only",
     capabilities: testArchitectureCapabilities({
-        architecture: ["sourced-entry"],
-        clip: ["source-video", "audio-sources", "audio-segments"],
+        architecture: ["init-video-entry"],
+        clip: ["init-video", "audio-sources", "audio-segments"],
         stage: [],
         upscaleModes: [],
-        entryModes: ["source-video"],
+        entryModes: ["init-video"],
         audioSourceKinds: ["Disabled", "Upload"],
     }),
     boundaryRules: {
         cut: {
             support: "supported",
             code: "none.boundary.cut",
-            reason: "Decoded sourced clips can be joined with a hard cut.",
+            reason: "Decoded init-video clips can be joined with a hard cut.",
             scope: "boundary",
             constraints: null,
         },
         continue: {
             support: "unsupported",
             code: "none.boundary.continue.unsupported",
-            reason: "Sourced-only clips do not support continuation.",
+            reason: "InitVideo-only clips do not support continuation.",
             scope: "boundary",
             constraints: null,
         },
         crossfade: {
             support: "unsupported",
             code: "none.boundary.crossfade.unsupported",
-            reason: "Sourced-only clips do not support crossfade.",
+            reason: "InitVideo-only clips do not support crossfade.",
             scope: "boundary",
             constraints: null,
         },
@@ -259,7 +259,7 @@ export const fakeArchitectureCatalog = (
                 clip: ["prompts"],
                 stage: [],
                 upscaleModes: [],
-                entryModes: ["text-to-video", "image-to-video", "source-video"],
+                entryModes: ["text-to-video", "image-to-video", "init-video"],
                 audioSourceKinds: ["Native"],
             }),
             boundaryRules: {
@@ -297,7 +297,7 @@ export const fakeArchitectureCatalog = (
             modelClassId: "test-video",
             compatibilityClassId: "test-video",
             frameGrid: 1,
-            entryModes: ["text-to-video", "image-to-video", "source-video"],
+            entryModes: ["text-to-video", "image-to-video", "init-video"],
         },
     ],
 });

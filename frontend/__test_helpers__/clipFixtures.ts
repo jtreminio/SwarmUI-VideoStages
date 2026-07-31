@@ -1,15 +1,15 @@
 import {
     type Clip,
     type IcLora,
+    type InitVideo,
     REF_SOURCE_BASE,
     type RefImage,
-    type SourceVideo,
     type Stage,
 } from "../types";
 
-export const sourceVideoFixture = (
-    overrides: Partial<SourceVideo> = {},
-): SourceVideo => ({
+export const initVideoFixture = (
+    overrides: Partial<InitVideo> = {},
+): InitVideo => ({
     data: "data:video/mp4;base64,AA==",
     fileName: "base.mp4",
     fps: 24,
@@ -81,7 +81,7 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     prompt: "",
     promptWindows: [],
     retake: null,
-    sourceVideo: null,
+    initVideo: null,
     refs: [],
     stages: [minimalStage()],
     ...overrides,

@@ -126,7 +126,7 @@ const CLIP_ENTITY = defineList<CanonicalVideoStagesConfig, CanonicalClip>()({
         "reuseAudio",
         "uploadedAudio",
         "prompt",
-        "sourceVideo",
+        "initVideo",
     ],
     reservedKeys: [
         "id",

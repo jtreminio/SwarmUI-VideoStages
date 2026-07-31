@@ -4,7 +4,7 @@ using VideoStages.Execution;
 
 namespace VideoStages.Architectures.None;
 
-/// <summary>Lazy registration for the architecture-neutral sourced-footage runtime.</summary>
+/// <summary>Lazy registration for the architecture-neutral init-video-footage runtime.</summary>
 internal sealed class SourceOnlyExecutionAdapter(
     WorkflowGenerator generator) :
     IArchitectureGenerationSessionFactoryProvider

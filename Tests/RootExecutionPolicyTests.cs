@@ -39,12 +39,12 @@ public class RootExecutionPolicyTests
     }
 
     [Fact]
-    public void Sourced_lead_text_to_video_drops_root_donor_without_suppressing_source_audio()
+    public void InitVideo_lead_text_to_video_drops_root_donor_without_suppressing_source_audio()
     {
         VideoExecutionPlan plan = Compile(
             isTextToVideo: true,
             new RootEnvironment(HostRootKind.TextToVideoRoot, CanHandoffHostCore: true),
-            SourcedClip(0),
+            InitVideoClip(0),
             GeneratedClip(1));
         RootExecutionPolicy policy = For(plan);
         ClipPlan generated = plan.Clips[1];
@@ -57,16 +57,16 @@ public class RootExecutionPolicyTests
     }
 
     [Fact]
-    public void Sourced_image_to_video_clip_bypasses_root_stage_handoff()
+    public void InitVideo_image_to_video_clip_bypasses_root_stage_handoff()
     {
         VideoExecutionPlan plan = Compile(
             isTextToVideo: false,
             new RootEnvironment(HostRootKind.ImageToVideo, CanHandoffHostCore: true),
-            SourcedClip(0));
+            InitVideoClip(0));
         RootExecutionPolicy policy = For(plan);
         ClipPlan clip = Assert.Single(plan.Clips);
 
-        Assert.True(policy.FirstClipIsSourced);
+        Assert.True(policy.FirstClipHasInitVideo);
         Assert.False(policy.UsesStageHandoff);
         Assert.False(policy.ConformsSurvivingRootMedia);
         Assert.False(policy.ReplacesTextToVideoRootStage(null, clip));
@@ -95,9 +95,9 @@ public class RootExecutionPolicyTests
         [],
         [Stage(id)]);
 
-    private static ClipSpec SourcedClip(int id) => GeneratedClip(id) with
+    private static ClipSpec InitVideoClip(int id) => GeneratedClip(id) with
     {
-        SourceVideo = new SourceVideoSpec("data:video/mp4;base64,QUJD", "source.mp4", 0)
+        InitVideo = new InitVideoSpec("data:video/mp4;base64,QUJD", "source.mp4", 0)
     };
 
     private static StageSpec Stage(int id) => new(

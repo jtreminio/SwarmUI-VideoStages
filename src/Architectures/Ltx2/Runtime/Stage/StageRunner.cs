@@ -186,10 +186,10 @@ internal class StageRunner
             IsContinuationTail: isContinuationTail,
             HasOtherFrameReferences: clipRefs is { Count: > 0 },
             ReplacesTextToVideoRoot: stageFrame.ReplacesTextToVideoRoot,
-            // A sourced clip's first stage samples its encoded footage directly (init-video
+            // A initVideoClip clip's first stage samples its encoded footage directly (initVideoClip
             // img2img); reinjecting that same footage as an i2v inplace guide would overwrite the
             // noise mask of every frame it spans. The official upscaler/V2V flows are encode-only.
-            SourcedFootageIsStageInput: clipContext.PlannedClip.IsSourced
+            InitVideoFootageIsStageInput: clipContext.PlannedClip.HasInitVideo
                 && clipContext.IsFirstStage(stage)
                 && payload.Guide.Kind == StageGuideReferenceKind.Generated
                 && !payload.ImageReferenceWasExplicit,

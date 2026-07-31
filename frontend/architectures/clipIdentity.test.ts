@@ -28,7 +28,7 @@ describe("clip architecture identity", () => {
         const clip = minimalClip({
             architectureHint: "none",
             modelProfileId: "none",
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AAAA",
                 fileName: "source.mp4",
                 fps: 24,
@@ -47,12 +47,12 @@ describe("clip architecture identity", () => {
         });
     });
 
-    it("reconciles a sourced clip to its effective source-only identity", () => {
+    it("reconciles a init-video clip to its effective source-only identity", () => {
         const catalog = testArchitectureCatalog();
         const clip = minimalClip({
             architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AAAA",
                 fileName: "source.mp4",
                 fps: 24,

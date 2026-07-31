@@ -61,7 +61,7 @@ public class MetadataSanitizerTests
     }
 
     [Fact]
-    public void StripUploadData_SourceVideo_KeepsRangeFieldsAndFileName()
+    public void StripUploadData_InitVideo_KeepsRangeFieldsAndFileName()
     {
         string raw = new JObject
         {
@@ -69,7 +69,7 @@ public class MetadataSanitizerTests
             {
                 new JObject
                 {
-                    ["sourceVideo"] = new JObject
+                    ["initVideo"] = new JObject
                     {
                         ["data"] = "data:video/mp4;base64,QUJD",
                         ["fileName"] = "footage.mp4",
@@ -80,9 +80,9 @@ public class MetadataSanitizerTests
         }.ToString();
         string sanitized = MetadataSanitizer.StripUploadDataFromJsonParameter(raw);
         JObject clip = (JObject)JObject.Parse(sanitized)["clips"]![0]!;
-        Assert.Null(clip["sourceVideo"]!["data"]);
-        Assert.Equal("footage.mp4", $"{clip["sourceVideo"]!["fileName"]}");
-        Assert.Equal(1.5, (double)clip["sourceVideo"]!["startSeconds"]!);
+        Assert.Null(clip["initVideo"]!["data"]);
+        Assert.Equal("footage.mp4", $"{clip["initVideo"]!["fileName"]}");
+        Assert.Equal(1.5, (double)clip["initVideo"]!["startSeconds"]!);
     }
 
     [Fact]

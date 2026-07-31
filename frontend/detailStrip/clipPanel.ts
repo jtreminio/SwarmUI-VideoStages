@@ -5,9 +5,9 @@ import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import { buildClipColumn, buildClipSkipAction } from "./clipBasics";
 import { buildClipLorasSection } from "./clipLorasPanel";
 import type { DetailStripContext } from "./context";
+import { buildInitVideoSection } from "./initVideoPanel";
 import { buildRefSection } from "./refPanel";
 import { buildRetakeSection } from "./retakePanel";
-import { buildSourceVideoSection } from "./sourceVideoPanel";
 import { buildStageParamsColumn } from "./stagePanel";
 import { buildStageRail } from "./stageRail";
 
@@ -98,7 +98,7 @@ export const buildClipBody = (
             | "frameReferences"
             | "stageLoras"
             | "icLora"
-            | "sourceVideo"
+            | "initVideo"
             | "retake",
         persisted: boolean,
         content: () => HTMLElement | DocumentFragment,
@@ -138,8 +138,8 @@ export const buildClipBody = (
             selection.kind === "ic-lora",
         ),
     );
-    appendCapabilitySection("sourceVideo", clip.sourceVideo !== null, () =>
-        buildSourceVideoSection(context, clip, clipIdx, false),
+    appendCapabilitySection("initVideo", clip.initVideo !== null, () =>
+        buildInitVideoSection(context, clip, clipIdx, false),
     );
     appendCapabilitySection("retake", clip.retake !== null, () =>
         buildRetakeSection(context, clip, clipIdx, selection.kind === "retake"),

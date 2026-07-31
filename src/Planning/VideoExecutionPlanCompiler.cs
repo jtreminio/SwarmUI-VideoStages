@@ -241,13 +241,13 @@ internal static class VideoExecutionPlanCompiler
     }
 
     private static bool IsExecutableClip(ClipSpec clip) =>
-        clip is not null && (clip.SourceVideo is not null || clip.Stages is { Count: > 0 });
+        clip is not null && (clip.InitVideo is not null || clip.Stages is { Count: > 0 });
 
     private static ArchitectureEntryMode ResolveEntryMode(
         VideoStagesSpec spec,
         ClipSpec clip) =>
-        clip.SourceVideo is not null
-            ? ArchitectureEntryMode.SourceVideo
+        clip.InitVideo is not null
+            ? ArchitectureEntryMode.InitVideo
             : spec.IsTextToVideo
                 ? ArchitectureEntryMode.TextToVideo
                 : ArchitectureEntryMode.ImageToVideo;

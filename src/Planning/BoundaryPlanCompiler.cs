@@ -141,9 +141,9 @@ internal static class BoundaryPlanCompiler
         {
             return null;
         }
-        if (constraints.TargetRequiresGeneratedEntry && target.SourceVideo is not null)
+        if (constraints.TargetRequiresGeneratedEntry && target.InitVideo is not null)
         {
-            return BoundaryFallbackReason.TargetIsSourcedVideo;
+            return BoundaryFallbackReason.TargetHasInitVideo;
         }
         if (constraints.TargetRequiresStage && target.Stages is not { Count: > 0 })
         {
@@ -161,7 +161,7 @@ internal static class BoundaryPlanCompiler
 
     private static string DescribeFallback(BoundaryFallbackReason fallback) => fallback switch
     {
-        BoundaryFallbackReason.TargetIsSourcedVideo => "the next clip is sourced footage",
+        BoundaryFallbackReason.TargetHasInitVideo => "the next clip is init-video footage",
         BoundaryFallbackReason.TargetHasNoStage => "the next clip has no stage that can consume continuity",
         BoundaryFallbackReason.TargetHasFirstFrameReference => "the next clip has an explicit first-frame reference",
         BoundaryFallbackReason.UnknownBoundaryKind => "the requested boundary mode is unknown",

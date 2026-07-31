@@ -9,10 +9,10 @@ import {
 } from "../__test_helpers__/architectureFixtures";
 import {
     icLoraFixture,
+    initVideoFixture,
     minimalClip,
     minimalRef,
     minimalStage,
-    sourceVideoFixture,
 } from "../__test_helpers__/clipFixtures";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import { __resetPersistenceForTests } from "../persistence/repository";
@@ -27,7 +27,7 @@ const restrictedCatalog = (): ArchitectureModelCatalog => {
     const models = testArchitectureCatalog();
     models.architectures[0].capabilities = testArchitectureCapabilities({
         clip: [
-            "source-video",
+            "init-video",
             "prompts",
             "prompt-relay",
             "retake",
@@ -267,7 +267,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const clip = minimalClip({
             architectureHint: "none",
             modelProfileId: "none",
-            sourceVideo: sourceVideoFixture(),
+            initVideo: initVideoFixture(),
             stages: [],
             audioSource: "Upload",
             uploadedAudio: {
@@ -526,7 +526,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const clip = minimalClip({
             architectureHint: "none",
             modelProfileId: "none",
-            sourceVideo: sourceVideoFixture(),
+            initVideo: initVideoFixture(),
             stages: [],
             clipLengthFromControlNet: true,
         });

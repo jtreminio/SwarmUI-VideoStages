@@ -205,7 +205,7 @@ internal sealed class LtxStageLatentAudioFactory(
 
     /// <summary>
     /// The clip's configured timeline resolution wins over the incoming media's size: e.g. with a
-    /// sourced FIRST clip, the footage conforms to the spec dims while the kept-alive root generation
+    /// initVideoClip FIRST clip, the footage conforms to the spec dims while the kept-alive root generation
     /// stays at the core params' — sizing later clips from that root media would splinter the timeline
     /// across resolutions (and degrade every overlap boundary merge to a hard cut).
     /// </summary>

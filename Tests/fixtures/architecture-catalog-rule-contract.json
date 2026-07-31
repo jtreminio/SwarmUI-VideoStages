@@ -5,11 +5,11 @@
     "capabilities": {
       "architecture": [
         "generated-entry",
-        "sourced-entry",
+        "init-video-entry",
         "native-audio"
       ],
       "clip": [
-        "source-video",
+        "init-video",
         "prompts",
         "prompt-relay",
         "references",
@@ -41,7 +41,7 @@
       "entryModes": [
         "text-to-video",
         "image-to-video",
-        "source-video"
+        "init-video"
       ],
       "audioSourceKinds": [
         "Native",
@@ -125,11 +125,11 @@
       {
         "support": "conditional",
         "code": "retake-source-required",
-        "reason": "Retake requires a sourced clip.",
+        "reason": "Retake requires an init-video clip.",
         "scope": "clip",
         "constraints": {
           "requiresAnyEntryMode": [
-            "source-video"
+            "init-video"
           ]
         }
       }

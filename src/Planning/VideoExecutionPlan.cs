@@ -89,15 +89,15 @@ internal enum ClipInputKind
 {
     RootMedia,
     EmptyLatent,
-    SourceVideo,
+    InitVideo,
 }
 
 internal sealed record ClipPlan(
     int ClipId,
     int? Frames,
     ClipInputKind Input,
-    bool IsSourced,
-    SourceVideoPlan SourceVideo,
+    bool HasInitVideo,
+    InitVideoPlan InitVideo,
     IReadOnlyList<StagePlan> Stages,
     AudioPlan Audio)
 {
@@ -113,7 +113,7 @@ internal sealed record ClipPlan(
     public IArchitectureClipPayload ArchitecturePayload { get; init; }
 }
 
-internal sealed record SourceVideoPlan(
+internal sealed record InitVideoPlan(
     string Data,
     string FileName,
     double StartSeconds,
@@ -154,7 +154,7 @@ internal enum StageInputKind
 {
     RootMedia,
     EmptyLatent,
-    SourceVideo,
+    InitVideo,
     PreviousStage,
 }
 
@@ -201,7 +201,7 @@ internal enum BoundaryJoinType
 internal enum BoundaryFallbackReason
 {
     None,
-    TargetIsSourcedVideo,
+    TargetHasInitVideo,
     TargetHasNoStage,
     TargetHasFirstFrameReference,
     UnknownBoundaryKind,

@@ -17,10 +17,10 @@ public class ArchitectureRuntimeOwnershipTests
     [Fact]
     public void Request_context_caches_active_architectures_and_root_owner()
     {
-        VideoExecutionPlanContext context = new(MixedSourcedLeadingPlan());
+        VideoExecutionPlanContext context = new(MixedInitVideoLeadingPlan());
 
         Assert.Equal(
-            [new ArchitectureId("sourced-arch"), new ArchitectureId("future-arch")],
+            [new ArchitectureId("init-video-arch"), new ArchitectureId("future-arch")],
             context.ActiveArchitectureIds);
         Assert.Equal(
             new ArchitectureId("future-arch"),
@@ -28,20 +28,20 @@ public class ArchitectureRuntimeOwnershipTests
     }
 
     [Fact]
-    public void Sourced_leading_architecture_does_not_claim_exclusive_root_phases()
+    public void InitVideo_leading_architecture_does_not_claim_exclusive_root_phases()
     {
-        VideoExecutionPlan plan = MixedSourcedLeadingPlan();
+        VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         WorkflowGenerator generator = Generator();
-        RecordingProvider sourced = new(new("sourced-arch"));
+        RecordingProvider initVideoClip = new(new("init-video-arch"));
         RecordingProvider future = new(new("future-arch"));
         VideoArchitectureExecutionHost host = PreparedHost(
             generator,
             plan,
-            [sourced, future]);
+            [initVideoClip, future]);
 
         host.DispatchHostPhase(ArchitectureHostPhase.DropCoreOutput);
 
-        Assert.Empty(sourced.HostPhases);
+        Assert.Empty(initVideoClip.HostPhases);
         ArchitectureHostPhaseContext rootPhase = Assert.Single(future.HostPhases);
         Assert.Equal(new ArchitectureId("future-arch"), rootPhase.RootOwnerArchitectureId);
         Assert.Same(future.Resizer, host.GetRootMediaResizer());
@@ -50,47 +50,47 @@ public class ArchitectureRuntimeOwnershipTests
     [Fact]
     public void Fan_out_host_phase_reaches_all_active_architectures_but_keeps_one_root_owner()
     {
-        VideoExecutionPlan plan = MixedSourcedLeadingPlan();
+        VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         WorkflowGenerator generator = Generator();
-        RecordingProvider sourced = new(new("sourced-arch"));
+        RecordingProvider initVideoClip = new(new("init-video-arch"));
         RecordingProvider future = new(new("future-arch"));
         VideoArchitectureExecutionHost host = PreparedHost(
             generator,
             plan,
-            [sourced, future]);
+            [initVideoClip, future]);
 
         host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors);
 
-        ArchitectureHostPhaseContext sourcedPhase = Assert.Single(sourced.HostPhases);
+        ArchitectureHostPhaseContext initVideoPhase = Assert.Single(initVideoClip.HostPhases);
         ArchitectureHostPhaseContext futurePhase = Assert.Single(future.HostPhases);
-        Assert.Equal(new ArchitectureId("future-arch"), sourcedPhase.RootOwnerArchitectureId);
-        Assert.Equal(sourcedPhase, futurePhase);
+        Assert.Equal(new ArchitectureId("future-arch"), initVideoPhase.RootOwnerArchitectureId);
+        Assert.Equal(initVideoPhase, futurePhase);
     }
 
     [Fact]
-    public void Timeline_preparation_uses_the_same_sourced_aware_root_owner()
+    public void Timeline_preparation_uses_the_same_init_video_aware_root_owner()
     {
-        VideoExecutionPlan plan = MixedSourcedLeadingPlan();
-        RecordingFactory sourced = new(new("sourced-arch"));
+        VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
+        RecordingFactory initVideoClip = new(new("init-video-arch"));
         RecordingFactory future = new(new("future-arch"));
         ArchitectureRuntimeSessionFactoryRegistry registry = new(
-            [sourced, future],
+            [initVideoClip, future],
             new VideoExecutionPlanContext(plan));
         AudioRuntimeSources audio = EmptyAudio();
         RootExecutionPolicy policy = new(plan);
 
         registry.PrepareTimeline(new(plan, audio, policy));
 
-        Assert.Equal([false], sourced.RootOwnership);
+        Assert.Equal([false], initVideoClip.RootOwnership);
         Assert.Equal([true], future.RootOwnership);
     }
 
     [Fact]
     public void Request_preflight_asks_every_active_architecture_and_fails_closed_without_mutating()
     {
-        VideoExecutionPlan plan = MixedSourcedLeadingPlan();
+        VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         List<string> calls = [];
-        RecordingProvider sourced = new(new("sourced-arch"), calls);
+        RecordingProvider initVideoClip = new(new("init-video-arch"), calls);
         RecordingProvider future = new(
             new("future-arch"),
             calls,
@@ -98,7 +98,7 @@ public class ArchitectureRuntimeOwnershipTests
         WorkflowGenerator generator = Generator();
         JObject before = (JObject)generator.Workflow.DeepClone();
         WGNodeData beforeMedia = generator.CurrentMedia;
-        VideoArchitectureExecutionHost host = new(generator, plan, [sourced, future]);
+        VideoArchitectureExecutionHost host = new(generator, plan, [initVideoClip, future]);
         VideoExecutionPlanContext request = new(plan, _ => host);
 
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(() =>
@@ -112,8 +112,8 @@ public class ArchitectureRuntimeOwnershipTests
         Assert.Single(
             request.PreflightDiagnostics,
             diagnostic => diagnostic.Code == "test.preflight");
-        Assert.Equal(["preflight:sourced-arch", "preflight:future-arch"], calls);
-        Assert.Empty(sourced.HostPhases);
+        Assert.Equal(["preflight:init-video-arch", "preflight:future-arch"], calls);
+        Assert.Empty(initVideoClip.HostPhases);
         Assert.Empty(future.HostPhases);
         Assert.Same(beforeMedia, generator.CurrentMedia);
         Assert.True(JToken.DeepEquals(before, generator.Workflow));
@@ -122,9 +122,9 @@ public class ArchitectureRuntimeOwnershipTests
     [Fact]
     public void Prepared_context_binds_active_providers_once_and_reuses_them_for_host_phases()
     {
-        VideoExecutionPlan plan = MixedSourcedLeadingPlan();
+        VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         List<string> calls = [];
-        RecordingProvider sourced = new(new("sourced-arch"), calls);
+        RecordingProvider initVideoClip = new(new("init-video-arch"), calls);
         RecordingProvider future = new(new("future-arch"), calls);
         WorkflowGenerator generator = Generator();
         int bindingCount = 0;
@@ -133,7 +133,7 @@ public class ArchitectureRuntimeOwnershipTests
             _ =>
             {
                 bindingCount++;
-                return new(generator, plan, [sourced, future]);
+                return new(generator, plan, [initVideoClip, future]);
             });
 
         request.PrepareRequest();
@@ -144,37 +144,37 @@ public class ArchitectureRuntimeOwnershipTests
 
         Assert.Equal(1, bindingCount);
         Assert.Equal(
-            ["preflight:sourced-arch", "preflight:future-arch"],
+            ["preflight:init-video-arch", "preflight:future-arch"],
             calls);
-        Assert.Equal(2, sourced.HostPhases.Count);
+        Assert.Equal(2, initVideoClip.HostPhases.Count);
         Assert.Equal(2, future.HostPhases.Count);
     }
 
     [Fact]
     public void Unprepared_host_rejects_mutation_at_the_host_boundary()
     {
-        VideoExecutionPlan plan = MixedSourcedLeadingPlan();
-        RecordingProvider sourced = new(new("sourced-arch"));
+        VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
+        RecordingProvider initVideoClip = new(new("init-video-arch"));
         RecordingProvider future = new(new("future-arch"));
         VideoArchitectureExecutionHost host = new(
             Generator(),
             plan,
-            [sourced, future]);
+            [initVideoClip, future]);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
             host.DispatchHostPhase(ArchitectureHostPhase.CaptureBaseReference));
 
         Assert.Contains("not bound to a prepared", error.Message);
-        Assert.Empty(sourced.HostPhases);
+        Assert.Empty(initVideoClip.HostPhases);
         Assert.Empty(future.HostPhases);
     }
 
     [Fact]
     public void Execution_host_rejects_duplicate_runtime_provider_bindings()
     {
-        VideoExecutionPlan plan = MixedSourcedLeadingPlan();
-        RecordingProvider first = new(new("sourced-arch"));
-        RecordingProvider duplicate = new(new("sourced-arch"));
+        VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
+        RecordingProvider first = new(new("init-video-arch"));
+        RecordingProvider duplicate = new(new("init-video-arch"));
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
             new VideoArchitectureExecutionHost(
@@ -188,9 +188,9 @@ public class ArchitectureRuntimeOwnershipTests
     [Fact]
     public void Host_phase_failure_is_sticky_and_blocks_later_mutation()
     {
-        VideoExecutionPlan plan = MixedSourcedLeadingPlan();
+        VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         InvalidOperationException phaseFailure = new("provider mutation failed");
-        RecordingProvider sourced = new(new("sourced-arch"));
+        RecordingProvider initVideoClip = new(new("init-video-arch"));
         RecordingProvider future = new(
             new("future-arch"),
             hostPhaseFailure: phaseFailure);
@@ -198,7 +198,7 @@ public class ArchitectureRuntimeOwnershipTests
         VideoArchitectureExecutionHost host = new(
             generator,
             plan,
-            [sourced, future]);
+            [initVideoClip, future]);
         VideoExecutionPlanContext request = new(plan, _ => host);
         request.PrepareRequest();
 
@@ -210,26 +210,26 @@ public class ArchitectureRuntimeOwnershipTests
         Assert.Same(phaseFailure, first);
         Assert.Same(first, repeated);
         Assert.Equal(VideoExecutionState.Failed, request.State);
-        Assert.Single(sourced.HostPhases);
+        Assert.Single(initVideoClip.HostPhases);
         Assert.Single(future.HostPhases);
     }
 
-    private static VideoExecutionPlan MixedSourcedLeadingPlan()
+    private static VideoExecutionPlan MixedInitVideoLeadingPlan()
     {
-        VideoArchitectureDescriptor sourcedArchitecture = Descriptor("sourced-arch");
+        VideoArchitectureDescriptor initVideoArchitecture = Descriptor("init-video-arch");
         VideoArchitectureDescriptor futureArchitecture = Descriptor("future-arch");
-        ClipPlan sourced = Clip(
+        ClipPlan initVideoClip = Clip(
             0,
-            ClipInputKind.SourceVideo,
-            StageInputKind.SourceVideo,
-            sourcedArchitecture,
-            isSourced: true);
+            ClipInputKind.InitVideo,
+            StageInputKind.InitVideo,
+            initVideoArchitecture,
+            hasInitVideo: true);
         ClipPlan generated = Clip(
             1,
             ClipInputKind.RootMedia,
             StageInputKind.RootMedia,
             futureArchitecture,
-            isSourced: false);
+            hasInitVideo: false);
         return new(
             512,
             512,
@@ -240,7 +240,7 @@ public class ArchitectureRuntimeOwnershipTests
                 HostCoreDisposition.Handoff,
                 TimelineOutputDisposition.PublishTimelineOutput,
                 NativeAudioDisposition.MakeAvailableToTimeline),
-            [sourced, generated],
+            [initVideoClip, generated],
             [
                 new(
                     0,
@@ -259,7 +259,7 @@ public class ArchitectureRuntimeOwnershipTests
         ClipInputKind clipInput,
         StageInputKind stageInput,
         VideoArchitectureDescriptor architecture,
-        bool isSourced)
+        bool hasInitVideo)
     {
         TestPayload payload = new(architecture.Id);
         StagePlan stage = new(
@@ -277,8 +277,8 @@ public class ArchitectureRuntimeOwnershipTests
             id,
             25,
             clipInput,
-            isSourced,
-            isSourced ? new("data", "source.mp4", 0, 512, 512, 24) : null,
+            hasInitVideo,
+            hasInitVideo ? new("data", "source.mp4", 0, 512, 512, 24) : null,
             [stage],
             Audio: null)
         {
@@ -294,10 +294,10 @@ public class ArchitectureRuntimeOwnershipTests
             architectureId,
             id,
             [AudioSourceKind.Native],
-            [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo],
+            [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.InitVideo],
             new(
-                ArchitectureCapability.GeneratedEntry | ArchitectureCapability.SourcedEntry,
-                ClipCapability.SourceVideo,
+                ArchitectureCapability.GeneratedEntry | ArchitectureCapability.InitVideoEntry,
+                ClipCapability.InitVideo,
                 StageCapability.ImageInput | StageCapability.VideoInput),
             new ArchitectureBoundaryPolicy(
                 new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>()));

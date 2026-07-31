@@ -70,7 +70,7 @@ describe("architecture conversion policy", () => {
 
     it("requires the host-generated root mode and accepts decoded source entry", () => {
         const source = minimalClip({
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AA==",
                 fileName: "source.mp4",
                 fps: 24,
@@ -98,7 +98,7 @@ describe("architecture conversion policy", () => {
         ).toBe(false);
         expect(
             modelSupportsStageEntry(
-                { entryModes: ["source-video"] },
+                { entryModes: ["init-video"] },
                 source,
                 0,
                 "text-to-video",
@@ -216,7 +216,7 @@ describe("architecture conversion policy", () => {
         const catalog = fakeArchitectureCatalog();
         catalog.entries[0].entryModes = ["image-to-video"];
         const source = minimalClip({
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AA==",
                 fileName: "source.mp4",
                 fps: 24,
@@ -239,13 +239,13 @@ describe("architecture conversion policy", () => {
             catalog,
             "text-to-video",
         );
-        expect(conversion?.clip.sourceVideo).toEqual(source.sourceVideo);
+        expect(conversion?.clip.initVideo).toEqual(source.initVideo);
         expect(source).toEqual(before);
     });
 
     it("accepts image-capable models for decoded source refinement", () => {
-        const sourced = minimalClip({
-            sourceVideo: {
+        const initVideoClip = minimalClip({
+            initVideo: {
                 data: "data:video/mp4;base64,AA==",
                 fileName: "source.mp4",
                 fps: 24,
@@ -258,7 +258,7 @@ describe("architecture conversion policy", () => {
         expect(
             modelSupportsStageEntry(
                 { entryModes: ["image-to-video"] },
-                sourced,
+                initVideoClip,
                 0,
                 "text-to-video",
             ),

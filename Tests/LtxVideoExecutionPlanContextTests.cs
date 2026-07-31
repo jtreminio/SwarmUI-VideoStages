@@ -191,14 +191,14 @@ public class VideoExecutionPlanContextTests
     }
 
     [Fact]
-    public void GetPlanContext_ResolvesSourcedOnlyTimelineAsNone()
+    public void GetPlanContext_ResolvesInitVideoOnlyTimelineAsNone()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            SourcedOnlyConfig());
+            InitVideoOnlyConfig());
         WorkflowGenerator generator = CreateGenerator(input);
 
         Assert.Single(generator.GetVideoStagesSpec().Clips);
@@ -206,23 +206,23 @@ public class VideoExecutionPlanContextTests
         Assert.True(Ltx2ModelCompatibility.IsLtxV2VideoModel(hostModel));
 
         VideoExecutionPlanContext context = generator.GetVideoExecutionPlanContext()
-            ?? throw new InvalidOperationException("Expected a sourced-only plan context.");
+            ?? throw new InvalidOperationException("Expected a init-video-only plan context.");
 
         ClipPlan clip = Assert.Single(context.Plan.Clips);
-        Assert.True(clip.IsSourced);
+        Assert.True(clip.HasInitVideo);
         Assert.Empty(clip.Stages);
         Assert.Equal(NoneArchitecture.Id, clip.Architecture.Id);
     }
 
     [Fact]
-    public void GetPlanContext_AllowsSourcedOnlyTimelineWithNonLtxHost()
+    public void GetPlanContext_AllowsInitVideoOnlyTimelineWithNonLtxHost()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            SourcedOnlyConfig());
+            InitVideoOnlyConfig());
 
         VideoExecutionPlanContext context = Assert.IsType<VideoExecutionPlanContext>(
             CreateGenerator(input).GetVideoExecutionPlanContext());
@@ -279,11 +279,11 @@ public class VideoExecutionPlanContextTests
             generator.RequireVideoExecutionPlanContext());
     }
 
-    private static string SourcedOnlyConfig() => MakeRootConfig(new JObject
+    private static string InitVideoOnlyConfig() => MakeRootConfig(new JObject
     {
         ["duration"] = 0.6,
         ["stages"] = new JArray(),
-        ["sourceVideo"] = new JObject
+        ["initVideo"] = new JObject
         {
             ["data"] = "data:video/mp4;base64,QUJD",
             ["fileName"] = "source.mp4",

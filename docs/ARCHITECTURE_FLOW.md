@@ -112,7 +112,7 @@ publishes only the entry abilities its real host branch can perform. Cosmos
 Predict2, SVD, component LoRA/VAE checkpoints, Hunyuan 1.5 SR, and unknown
 synthetic video classes remain unresolved.
 `NoneArchitectureModule.TryResolveModel` always returns false; common planning
-assigns `none` only to source-video clips with no active stages.
+assigns `none` only to init-video clips with no active stages.
 
 Backend recognition is the execution authority. A persisted architecture ID
 or frontend classification cannot authorize an unsupported model.
@@ -134,7 +134,7 @@ four-frame profile grid, and cut-only boundaries. Every WAN compatibility alias
 publishes ordinary persisted clip/stage and prompt-section LoRAs.
 Image-generated stage 0 uses the host root at full control. WAN text entry uses
 an empty latent and does not decode or reinterpret the host's donor image.
-Sourced stage 0 uses its conformed source at finite control in `[0, 1]`; each
+InitVideo stage 0 uses its conformed source at finite control in `[0, 1]`; each
 later stage uses `PreviousStage` with the same bound. Exact control `0` is a
 samplerless decoded-video passthrough for those two decoded inputs, while
 positive partial control still must quantize to a nonzero start step.
@@ -244,7 +244,7 @@ A stage-0 architecture change is an explicit, confirmed
 cannot change the clip architecture.
 
 `deriveClipArchitectureIdentity` verifies catalog identity and same-architecture
-authored stages. A sourced clip with no active stage executes as `none` while
+authored stages. A init-video clip with no active stage executes as `none` while
 retaining dormant authored identity for restoration. Persisted
 `architectureHint` and profile hints are repair/display data only: a resolved
 stage-0 model outranks them, and an unresolved hint never enables authoring
@@ -366,7 +366,7 @@ For WAN, `WanClipPlanCompiler.Compile` produces the smaller `WanClipPayload`
 and the shared `StockHostVideoStagePayload`; both preserve resolved host
 identity. It requires one host compatibility class throughout a clip. A hard
 cut starts a new clip and may select another family. The
-compiler also enforces the generated-root / source-video / previous-stage
+compiler also enforces the generated-root / init-video / previous-stage
 chain, refuses an effective LoRA plan on a samplerless passthrough, and refuses
 unsupported or empty integer schedules that the common capability validator
 cannot yet see. A clip-LoRA weight of zero is the supported per-stage disable
@@ -469,7 +469,7 @@ shape. It does not repeat model-name checks.
 Timeline state such as the plan, prepared audio, assembly session, and root
 policy is captured when each architecture session is created. LTX composes the
 per-clip context with its private root and host state in
-`StageClipExecutionContext`; the sourced-only session captures only frame rate
+`StageClipExecutionContext`; the init-video-only session captures only frame rate
 and audio sources.
 
 ### B6a. LTX graph execution
@@ -499,7 +499,7 @@ splitting, IC-LoRA, and post-video-chain behavior remain under
 `src/Architectures/Ltx2`.
 
 The `none` path uses `SourceOnlyGenerationSession` and
-`SourcedClipInstaller`; it builds no generation latent, VAE, or stage runtime.
+`InitVideoClipInstaller`; it builds no generation latent, VAE, or stage runtime.
 
 ### B6b. WAN on the shared stock-host runtime
 
@@ -522,8 +522,8 @@ CFG, sampler, scheduler, seed, dimensions, and frame count, then decodes the
 result with the prepared VAE. An authored clip duration wins; otherwise text
 entry uses the host text-to-video frame setting (default 81), and later stages
 inherit the preceding decoded frame count. All counts are snapped to the
-selected model's frame grid. A sourced clip instead uses
-`SourcedClipInstaller` to resample, window, and resize its exact clip-local
+selected model's frame grid. A init-video clip instead uses
+`InitVideoClipInstaller` to resample, window, and resize its exact clip-local
 footage to WAN's snapped dimensions and requests video-only installation, so
 the source-audio trim branch is never built. Exact control `0` preserves that
 decoded source, or the immediately preceding decoded stage, without opening a

@@ -20,9 +20,9 @@ export const buildStageParamsColumn = (
 ): HTMLElement => {
     const column = document.createElement("div");
     column.className = "vst-detail-fields vst-detail-params";
-    const sourcedStage0 =
-        stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
-    const isRefine = stageIdx >= 1 || sourcedStage0;
+    const initVideoStage0 =
+        stageIdx === 0 && !!clip.initVideo && stage.skipped !== true;
+    const isRefine = stageIdx >= 1 || initVideoStage0;
     const stageCapabilities = context
         .authoring()
         .capabilities.forStage(clip, stage);
@@ -98,7 +98,7 @@ export const buildStageParamsColumn = (
     appendStageSamplerSchedulerSection(bindings);
     appendStageReferenceGuideSection(bindings);
 
-    if (sourcedStage0) {
+    if (initVideoStage0) {
         const note = document.createElement("p");
         note.className = "vst-detail-note vst-stage-passthrough-note";
         note.textContent =

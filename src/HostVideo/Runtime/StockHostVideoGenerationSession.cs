@@ -24,7 +24,7 @@ internal sealed class StockHostVideoGenerationSession(
     WanStockHostVideoBehavior wanBehavior = null) : IVideoGenerationSession
 {
     private readonly PlannedStagePromptResolver _prompts = new(g);
-    private readonly SourcedClipInstaller _sourcedClipInstaller = new(g);
+    private readonly InitVideoClipInstaller _initVideoClipInstaller = new(g);
     private readonly WanStockHostVideoBehavior _wanBehavior = wanBehavior;
 
     /// <summary>The timeline resolution on the shared VideoStages pixel grid.</summary>
@@ -38,20 +38,20 @@ internal sealed class StockHostVideoGenerationSession(
         ArgumentNullException.ThrowIfNull(context);
         ClipPlan clip = context.Clip;
 
-        if (clip.IsSourced)
+        if (clip.HasInitVideo)
         {
-            SourceVideoPlan source = clip.SourceVideo
+            InitVideoPlan source = clip.InitVideo
                 ?? throw new InvalidOperationException(
-                    $"Sourced {architectureLabel} clip {clip.ClipId} has no source-video plan.");
+                    $"InitVideo {architectureLabel} clip {clip.ClipId} has no init-video plan.");
             ClipPlan sourceInstallPlan = clip with
             {
-                SourceVideo = source with
+                InitVideo = source with
                 {
                     TargetWidth = _dimensions.Width,
                     TargetHeight = _dimensions.Height,
                 },
             };
-            g.CurrentMedia = _sourcedClipInstaller.TryInstall(
+            g.CurrentMedia = _initVideoClipInstaller.TryInstall(
                 sourceInstallPlan,
                 includeSourceAudio: false)
                 ?? throw new SwarmUserErrorException(

@@ -234,7 +234,7 @@ export const getReferenceFrameMax = (
             Pick<
                 Clip,
                 | "stages"
-                | "sourceVideo"
+                | "initVideo"
                 | "retake"
                 | "clipLengthFromAudio"
                 | "clipLengthFromControlNet"
@@ -274,7 +274,7 @@ export const getKnownReferenceFrameMax = (
         Partial<
             Pick<
                 Clip,
-                | "sourceVideo"
+                | "initVideo"
                 | "retake"
                 | "clipLengthFromAudio"
                 | "clipLengthFromControlNet"
@@ -306,7 +306,7 @@ export const normalizeStage = (
     previousStage: Stage | null,
     refCount: number,
     stageIndexInClip: number,
-    sourcedClip = false,
+    initVideoClip = false,
     clipLoras: readonly ClipLora[] = [],
     clipLoraDefaultWeights: readonly number[] = [],
 ): Stage => {
@@ -318,9 +318,9 @@ export const normalizeStage = (
         refCount,
         clipLoraDefaultWeights,
     );
-    // A generation first stage forces control/upscale; a sourced clip's stage 0
-    // refines its footage (init-video img2img), so it keeps authored values.
-    const forcedFirstStage = stageIndexInClip === 0 && !sourcedClip;
+    // A generation first stage forces control/upscale; a initVideoClip clip's stage 0
+    // refines its footage (initVideoClip img2img), so it keeps authored values.
+    const forcedFirstStage = stageIndexInClip === 0 && !initVideoClip;
     let firstStageUpscale: { upscale: number; upscaleMethod: string };
     let control: number;
     if (forcedFirstStage) {

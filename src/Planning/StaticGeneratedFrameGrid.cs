@@ -2,7 +2,7 @@ namespace VideoStages.Planning;
 
 /// <summary>
 /// Pixel-frame grid arithmetic for a known, static generated-video request. This must not be used
-/// for sourced media lengths, runtime-derived counts, boundary windows, or timeline conformance.
+/// for initVideoClip media lengths, runtime-derived counts, boundary windows, or timeline conformance.
 /// </summary>
 internal static class StaticGeneratedFrameGrid
 {

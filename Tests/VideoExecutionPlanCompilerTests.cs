@@ -26,41 +26,41 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_SourcedClip_UsesSourceAndDistinguishesPassthroughRefineAndRetake()
+    public void Compile_InitVideoClip_UsesSourceAndDistinguishesPassthroughRefineAndRetake()
     {
-        ClipSpec sourced = new(
+        ClipSpec initVideoClip = new(
             3, 49, Constants.AudioSourceNative, [], false, false, false, false, null, [],
             [
                 Stage(10, control: 0),
                 Stage(11, control: 0.4),
                 Stage(12, control: 0, retake: new RetakeWindowSpec(8, 16, 1)),
             ],
-            SourceVideo: new SourceVideoSpec("data", "source.mp4", 0));
+            InitVideo: new InitVideoSpec("data", "source.mp4", 0));
 
-        VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, sourced));
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, initVideoClip));
 
         ClipPlan clip = Assert.Single(plan.Clips);
-        Assert.Equal(ClipInputKind.SourceVideo, clip.Input);
-        Assert.Equal(StageInputKind.SourceVideo, clip.Stages[0].Input);
+        Assert.Equal(ClipInputKind.InitVideo, clip.Input);
+        Assert.Equal(StageInputKind.InitVideo, clip.Stages[0].Input);
         Assert.True(clip.Stages[0].IsPassthrough);
         Assert.False(clip.Stages[1].IsPassthrough);
         Assert.False(clip.Stages[2].IsPassthrough);
         Assert.NotNull(clip.Stages[2].RequireLtx2Payload().Retake);
         Assert.Equal(StageInputKind.PreviousStage, clip.Stages[2].Input);
-        Assert.Equal("data", clip.SourceVideo.Data);
-        Assert.Equal("source.mp4", clip.SourceVideo.FileName);
-        Assert.Equal(0, clip.SourceVideo.StartSeconds);
-        Assert.Equal(512, clip.SourceVideo.TargetWidth);
-        Assert.Equal(512, clip.SourceVideo.TargetHeight);
-        Assert.Equal(24, clip.SourceVideo.TargetFramesPerSecond);
+        Assert.Equal("data", clip.InitVideo.Data);
+        Assert.Equal("source.mp4", clip.InitVideo.FileName);
+        Assert.Equal(0, clip.InitVideo.StartSeconds);
+        Assert.Equal(512, clip.InitVideo.TargetWidth);
+        Assert.Equal(512, clip.InitVideo.TargetHeight);
+        Assert.Equal(24, clip.InitVideo.TargetFramesPerSecond);
     }
 
     [Fact]
     public void Compile_RootEnvironment_SeparatesRootUseCoreAndAudioOwnership()
     {
-        ClipSpec sourcedLead = SourcedClip(0);
+        ClipSpec initVideoLead = InitVideoClip(0);
         VideoExecutionPlan plan = TestPlanCompiler.Compile(
-            Spec(false, sourcedLead, GeneratedClip(1, Stage(11))),
+            Spec(false, initVideoLead, GeneratedClip(1, Stage(11))),
             new RootEnvironment(HostRootKind.ImageToVideo, CanHandoffHostCore: true));
 
         Assert.Equal(RootUse.GeneratedClipDonor, plan.Root.Use);
@@ -483,14 +483,14 @@ public class VideoExecutionPlanCompilerTests
         VideoExecutionPlan plan = TestPlanCompiler.Compile(
             Spec(
                 false,
-                SourcedClip(4),
+                InitVideoClip(4),
                 GeneratedClip(4, Stage(10))),
             new RootEnvironment(
                 HostRootKind.ImageToVideo,
                 CanHandoffHostCore: true));
 
         ClipPlan surviving = Assert.Single(plan.Clips);
-        Assert.True(surviving.IsSourced);
+        Assert.True(surviving.HasInitVideo);
         Assert.Equal(RootUse.Discard, plan.Root.Use);
         Assert.Equal(
             HostCoreDisposition.Drop,
@@ -504,7 +504,7 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_ContinueIntoSourcedClip_PreservesAuthoredBoundaryAndWarnsWhileUsingCut()
+    public void Compile_ContinueIntoInitVideoClip_PreservesAuthoredBoundaryAndWarnsWhileUsingCut()
     {
         ClipSpec first = GeneratedClip(0, Stage(10)) with
         {
@@ -512,7 +512,7 @@ public class VideoExecutionPlanCompilerTests
             BoundaryOut = Constants.BoundaryOutContinue,
             BoundaryOutOverlap = 16,
         };
-        ClipSpec source = SourcedClip(1);
+        ClipSpec source = InitVideoClip(1);
 
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, source));
 
@@ -780,9 +780,9 @@ public class VideoExecutionPlanCompilerTests
     private static ClipSpec GeneratedClip(int id, params StageSpec[] stages) =>
         new(id, 49, Constants.AudioSourceNative, [], false, false, false, false, null, [], stages);
 
-    private static ClipSpec SourcedClip(int id) =>
+    private static ClipSpec InitVideoClip(int id) =>
         new(id, 49, Constants.AudioSourceNative, [], false, false, false, false, null, [], [],
-            SourceVideo: new SourceVideoSpec("data", "source.mp4", 0));
+            InitVideo: new InitVideoSpec("data", "source.mp4", 0));
 
     private static StageSpec Stage(
         int id,

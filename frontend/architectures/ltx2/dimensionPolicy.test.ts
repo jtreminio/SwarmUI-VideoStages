@@ -47,7 +47,7 @@ const icLora = (overrides: Partial<IcLora>): IcLora =>
 const clip = (...entries: IcLora[]): Clip =>
     ({
         architectureHint: "ltx2",
-        sourceVideo: null,
+        initVideo: null,
         stages: [{ model: "ltx", skipped: false }],
         icLoras: entries,
     }) as unknown as Clip;

@@ -18,7 +18,7 @@ internal sealed class BoundaryHandoffResolver(
         ClipPlan previousClip,
         WGNodeData previousOutput,
         ClipPlan nextClip,
-        bool nextClipIsSourced,
+        bool nextClipHasInitVideo,
         ClipContext clipContext)
     {
         ArgumentNullException.ThrowIfNull(assembly);
@@ -35,11 +35,11 @@ internal sealed class BoundaryHandoffResolver(
 
         if (wantsContinuity)
         {
-            if (nextClipIsSourced)
+            if (nextClipHasInitVideo)
             {
                 assembly.ReportWarning(
                     $"VideoStages: Clip {previousClip.ClipId} boundary 'continue' flows into "
-                    + $"sourced Clip {nextClip.ClipId}; treating the boundary as a cut.");
+                    + $"init-video Clip {nextClip.ClipId}; treating the boundary as a cut.");
                 assembly.DegradeToCut(previousClip.ClipId);
                 return null;
             }

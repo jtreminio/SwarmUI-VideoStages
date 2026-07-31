@@ -92,9 +92,9 @@ describe("typed conditional-rule evaluator", () => {
             ),
         ).toBe(true);
 
-        const sourced = minimalClip({
+        const initVideoClip = minimalClip({
             refs: [minimalRef({ source: "Upload", frame: 1, fromEnd: false })],
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AA==",
                 fileName: "source.mp4",
                 fps: 24,
@@ -106,7 +106,7 @@ describe("typed conditional-rule evaluator", () => {
         expect(
             evaluateConditionalRule(
                 rule(CONDITIONAL_RULE_CODES.retakeExcludesReferences),
-                { clip: sourced },
+                { clip: initVideoClip },
             ),
         ).toBe(true);
     });

@@ -2,9 +2,9 @@ import { describe, expect, it } from "@jest/globals";
 
 import { testArchitectureCatalog } from "../__test_helpers__/architectureFixtures";
 import {
+    initVideoFixture,
     minimalClip,
     minimalStage,
-    sourceVideoFixture,
 } from "../__test_helpers__/clipFixtures";
 import {
     resolveClipFrameGrid,
@@ -51,15 +51,15 @@ describe("resolved temporal grid", () => {
         expect(resolvedClipFrameGrid(clip, catalog)).toBe(6);
     });
 
-    it("excludes sourced and trailing passthrough handlers from the compatible grid", () => {
+    it("excludes init-video and trailing passthrough handlers from the compatible grid", () => {
         const catalog = testArchitectureCatalog();
         catalog.entries.push({
             ...catalog.entries[0],
             value: "six-grid.safetensors",
             frameGrid: 6,
         });
-        const sourcedPassthrough = minimalClip({
-            sourceVideo: sourceVideoFixture(),
+        const initVideoPassthrough = minimalClip({
+            initVideo: initVideoFixture(),
             stages: [minimalStage({ model: "ltx", control: 0 })],
         });
         const generatedThenPassthrough = minimalClip({
@@ -72,7 +72,7 @@ describe("resolved temporal grid", () => {
             ],
         });
 
-        expect(resolveClipFrameGrid(sourcedPassthrough, catalog)).toEqual({
+        expect(resolveClipFrameGrid(initVideoPassthrough, catalog)).toEqual({
             status: "not-applicable",
         });
         expect(resolvedClipFrameGrid(generatedThenPassthrough, catalog)).toBe(

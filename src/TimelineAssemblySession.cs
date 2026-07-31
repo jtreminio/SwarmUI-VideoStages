@@ -105,7 +105,7 @@ internal sealed class TimelineAssemblySession
     /// <summary>
     /// Returns the one clip's decoded artifact as the timeline output, so publication reads what
     /// the clip actually returned rather than whatever ambient media survived execution. A
-    /// sourced-only clip additionally has no stage finalizer, so assembly owns its terminal trim.
+    /// init-video-only clip additionally has no stage finalizer, so assembly owns its terminal trim.
     /// </summary>
     public RuntimeArtifact FinalizeSingleClip(DecodedClipArtifact clipOutput)
     {

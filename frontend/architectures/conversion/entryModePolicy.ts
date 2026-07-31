@@ -38,13 +38,13 @@ export const modelSupportsStageEntry = (
     if (!isClipRoot) {
         return supportsImage;
     }
-    if (clip.sourceVideo === null) {
+    if (clip.initVideo === null) {
         // Frame references guide this root mode; they do not replace it.
         return generatedEntryMode === "text-to-video"
             ? supportsText
             : supportsImage;
     }
-    return supportsImage || model.entryModes.includes("source-video");
+    return supportsImage || model.entryModes.includes("init-video");
 };
 
 /** Whether one model can perform every active role after a whole-clip retarget. */

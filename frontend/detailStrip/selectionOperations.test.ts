@@ -139,10 +139,10 @@ describe("detail structural stage operations", () => {
         expect(captureTransaction).toHaveBeenCalledTimes(1);
     });
 
-    it("does not remove the first stage, even from a sourced clip", () => {
+    it("does not remove the first stage, even from a init-video clip", () => {
         const clips: Clip[] = [
             minimalClip({
-                sourceVideo: {
+                initVideo: {
                     data: "data:video/mp4;base64,AA==",
                     fileName: "source.mp4",
                     fps: 24,
@@ -224,7 +224,7 @@ describe("detail structural stage operations", () => {
                     architectureHint: "none",
                     modelProfileId: "none",
                     stages: [],
-                    sourceVideo: {
+                    initVideo: {
                         data: "data:video/mp4;base64,AA==",
                         fileName: "source.mp4",
                         fps: 24,

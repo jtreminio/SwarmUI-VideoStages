@@ -65,9 +65,9 @@ internal static class ArchitectureFeatureVocabulary
     internal static IReadOnlyList<CapabilityVocabularyEntry> Capabilities { get; } =
     [
         For(ArchitectureCapability.GeneratedEntry, "generated-entry"),
-        For(ArchitectureCapability.SourcedEntry, "sourced-entry"),
+        For(ArchitectureCapability.InitVideoEntry, "init-video-entry"),
         For(ArchitectureCapability.NativeAudio, "native-audio"),
-        For(ClipCapability.SourceVideo, "source-video"),
+        For(ClipCapability.InitVideo, "init-video"),
         For(ClipCapability.Prompts, "prompts"),
         For(ClipCapability.PromptRelay, "prompt-relay"),
         For(ClipCapability.References, "references"),
@@ -99,10 +99,10 @@ internal static class ArchitectureFeatureVocabulary
     { get; } =
     [
         new(
-            AuthoringFeature.SourceVideo,
-            "sourceVideo",
+            AuthoringFeature.InitVideo,
+            "initVideo",
             "Source video",
-            [Capability(ClipCapability.SourceVideo)],
+            [Capability(ClipCapability.InitVideo)],
             CanIgnoreWhenUnsupported: false),
         new(
             AuthoringFeature.FrameReferences,

@@ -83,7 +83,7 @@ export const createClipStageCapabilityViews = (
 
     const effectiveClipIdentity = (clip: Clip): EffectiveCatalogIdentity => {
         const sourceOnly =
-            activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+            activeStageCount(clip) === 0 && clip.initVideo !== null;
         const resolvedModel = sourceOnly
             ? undefined
             : modelByName.get(clip.stages[0]?.model ?? "");
@@ -182,7 +182,7 @@ export const createClipStageCapabilityViews = (
         const sourceOnly =
             view.architectureId === NONE_ARCHITECTURE_ID &&
             activeStageCount(clip) === 0 &&
-            clip.sourceVideo !== null;
+            clip.initVideo !== null;
         const resolvedModel = sourceOnly
             ? undefined
             : modelByName.get(stage.model);

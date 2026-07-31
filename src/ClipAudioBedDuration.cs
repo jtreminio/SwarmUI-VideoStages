@@ -5,8 +5,8 @@ namespace VideoStages;
 
 /// <summary>
 /// The single rule for the silent-bed length a clip's audio segments are placed against. Both the
-/// staged (<c>ClipAudioPreparer</c>) and sourced-only (<c>SourceOnlyClipAudioPreparer</c>) paths
-/// feed <see cref="AudioSegmentCombiner"/>, so a resampled sourced clip must not shift its segments
+/// staged (<c>ClipAudioPreparer</c>) and init-video-only (<c>SourceOnlyClipAudioPreparer</c>) paths
+/// feed <see cref="AudioSegmentCombiner"/>, so a resampled initVideoClip clip must not shift its segments
 /// purely because it happens to carry stages.
 /// </summary>
 internal static class ClipAudioBedDuration

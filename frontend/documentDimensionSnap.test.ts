@@ -9,7 +9,7 @@ import type { Clip, VideoStagesConfig } from "./types";
 const clip = (architecture: string): Clip =>
     ({
         architectureHint: architecture,
-        sourceVideo: null,
+        initVideo: null,
         stages: [],
         icLoras: [],
     }) as unknown as Clip;

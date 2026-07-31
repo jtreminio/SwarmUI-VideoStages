@@ -2,11 +2,11 @@ import { reconcileClipArchitectureIdentity } from "./architectures/clipIdentity"
 import { captureAuthoringTransactionSnapshot } from "./authoringSnapshot";
 import { activeStageCount } from "./clipSemantics";
 import { getVideoStagesHostBridge } from "./host";
+import type { InitVideoProbe } from "./initVideoProbe";
+import { initVideoFromProbe, probeInitVideo } from "./initVideoProbe";
 import { readProp } from "./normalizationShared";
 import { serializeStateForStorage } from "./persistence/documentCodec";
 import { getState } from "./persistence/repository";
-import type { SourceVideoProbe } from "./sourceVideoProbe";
-import { probeSourceVideo, sourceVideoFromProbe } from "./sourceVideoProbe";
 import { isVideoStagesEnabled } from "./swarmInputs";
 import type { Clip, VideoStagesConfig } from "./types";
 import { isRecord, safeJsonParse } from "./utils";
@@ -65,10 +65,10 @@ export const hasRefinementWorkToDo = (
 export const applyRefineToClipZero = (
     clip: Clip,
     data: string,
-    probe: SourceVideoProbe | null,
+    probe: InitVideoProbe | null,
     skipCount: number,
 ): void => {
-    clip.sourceVideo = sourceVideoFromProbe(
+    clip.initVideo = initVideoFromProbe(
         probe,
         data,
         REFINE_SOURCE_FILE_NAME,
@@ -134,7 +134,7 @@ export const refineVideoButton = (): void => {
                 }
 
                 const videoDataUrl = await host.toDataUrl(src);
-                const probe = await probeSourceVideo(videoDataUrl);
+                const probe = await probeInitVideo(videoDataUrl);
                 // Re-read after the awaits: probing is slow enough that the
                 // author can have edited the timeline while it ran.
                 const state = getState();
@@ -148,7 +148,7 @@ export const refineVideoButton = (): void => {
                 const clips = [...state.clips];
                 clips[0] = structuredClone(clipZero);
                 applyRefineToClipZero(clips[0], videoDataUrl, probe, skipCount);
-                // Becoming sourced can change which architecture identity is
+                // Becoming initVideoClip can change which architecture identity is
                 // valid, exactly as the detail-strip picker reconciles.
                 reconcileClipArchitectureIdentity(
                     clips[0],

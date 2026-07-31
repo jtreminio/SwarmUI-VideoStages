@@ -193,7 +193,7 @@ export const createDefaultVideoStagesHostBridge =
 
         getMediaOutputPrefix: () =>
             typeof getImageOutPrefix === "function" ? getImageOutPrefix() : "",
-        createSourceVideoElement: () => document.createElement("video"),
+        createInitVideoElement: () => document.createElement("video"),
         enableSliders: (element) => {
             if (typeof enableSlidersIn === "function") {
                 enableSlidersIn(element);

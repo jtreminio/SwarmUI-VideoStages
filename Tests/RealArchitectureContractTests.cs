@@ -30,7 +30,7 @@ public class RealArchitectureContractTests
     private const int CrossFamilySourceFrames = 16;
     private const int CrossFamilyGeneratedFrames = 17;
 
-    private static readonly string[] SourcedClipFeatures =
+    private static readonly string[] InitVideoClipFeatures =
         [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
 
     private sealed record FamilyFixture(
@@ -213,9 +213,9 @@ public class RealArchitectureContractTests
     {
         using SwarmUiTestContext context = new();
         FamilyFixture fixture = CreateFixture(generatedFamily);
-        JObject sourced = MakeClip();
-        sourced["duration"] = CrossFamilyClipDuration;
-        sourced["sourceVideo"] = new JObject
+        JObject initVideoClip = MakeClip();
+        initVideoClip["duration"] = CrossFamilyClipDuration;
+        initVideoClip["initVideo"] = new JObject
         {
             ["data"] = "data:video/mp4;base64,ESIz",
             ["fileName"] = "source.mp4",
@@ -227,13 +227,13 @@ public class RealArchitectureContractTests
         T2IParamInput input = BuildNativeInput(
             fixture.BaseModel,
             fixture.Model,
-            MakeDocument(sourced, generated).ToString());
+            MakeDocument(initVideoClip, generated).ToString());
 
         (JObject workflow, WorkflowGenerator generator) =
             WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
                 MixedArchitectureSteps(),
-                features: SourcedClipFeatures);
+                features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         AssertNoDanglingNodeRefs(workflow);

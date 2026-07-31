@@ -146,18 +146,18 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_stage_zero_explicit_generated_reference_uses_the_captured_root()
+    public void InitVideo_stage_zero_explicit_generated_reference_uses_the_captured_root()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        JObject sourced = MakeSourcedClip(models);
-        ((JObject)((JArray)sourced["stages"])[0])["imageReference"] = "Generated";
+        JObject initVideoClip = MakeInitVideoClip(models);
+        ((JObject)((JArray)initVideoClip["stages"])[0])["imageReference"] = "Generated";
 
         (JObject workflow, WorkflowGenerator generator) =
-            GenerateSourcedFlow(models, sourced);
+            GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        SwarmFrameWindowNode sourcedWindow = Assert.Single(
+        SwarmFrameWindowNode initVideoWindow = Assert.Single(
             bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
         LTXVImgToVideoInplaceNode authoredGuide = Assert.Single(
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
@@ -166,7 +166,7 @@ public partial class StageFlowTests
             WorkflowBridge.ToPath(authoredGuide.Image.Connection!),
             new StageRefStore(generator).Generated);
         Assert.False(
-            ReachesUpstream(bridge, authoredGuide.Image.Connection!.Node, sourcedWindow.Id),
-            "The explicit Generated guide was replaced by the sourced footage.");
+            ReachesUpstream(bridge, authoredGuide.Image.Connection!.Node, initVideoWindow.Id),
+            "The explicit Generated guide was replaced by the init-video footage.");
     }
 }

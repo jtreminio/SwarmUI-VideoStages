@@ -149,12 +149,12 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Typed_plan_sourced_ltx_preserves_source_refine_graph()
+    public void Typed_plan_init_video_ltx_preserves_source_refine_graph()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        (JObject workflow, WorkflowGenerator unusedGenerator) = GenerateSourcedFlow(models, MakeSourcedClip(models));
+        (JObject workflow, WorkflowGenerator unusedGenerator) = GenerateInitVideoFlow(models, MakeInitVideoClip(models));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -167,7 +167,7 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        (JObject workflow, WorkflowGenerator unusedGenerator) = GenerateSourcedFlow(
+        (JObject workflow, WorkflowGenerator unusedGenerator) = GenerateInitVideoFlow(
             models,
             MakeGeneratedClip(models),
             MakeGeneratedClip(models));
@@ -197,7 +197,7 @@ public partial class StageFlowTests
             WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
                 BuildNativeSteps(attachAudioToCurrentMedia: true),
-                features: SourcedClipFeatures);
+                features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmTrimFramesNode trim = Assert.Single(bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
@@ -245,7 +245,7 @@ public partial class StageFlowTests
             WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
                 BuildNativeStepsWithTrimWrapper(attachAudioToCurrentMedia: true),
-                features: SourcedClipFeatures);
+                features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         BatchImagesNodeNode merge = Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());

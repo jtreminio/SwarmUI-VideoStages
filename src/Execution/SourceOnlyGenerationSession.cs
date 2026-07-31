@@ -15,7 +15,7 @@ internal sealed class SourceOnlyGenerationSession(
     int framesPerSecond,
     AudioRuntimeSources audioSources) : IVideoGenerationSession
 {
-    private readonly SourcedClipInstaller _sourceInstaller = new(generator);
+    private readonly InitVideoClipInstaller _sourceInstaller = new(generator);
     private readonly SourceOnlyClipAudioPreparer _audio = new(generator);
 
     public ArchitectureId ArchitectureId => NoneArchitecture.Id;
@@ -26,13 +26,13 @@ internal sealed class SourceOnlyGenerationSession(
         if (context.Clip.ArchitecturePayload is not NoneClipPayload)
         {
             throw new InvalidOperationException(
-                $"Clip {context.Clip.ClipId} has no sourced-only architecture payload.");
+                $"Clip {context.Clip.ClipId} has no init-video-only architecture payload.");
         }
-        WGNodeData sourcedMedia = _sourceInstaller.TryInstall(context.Clip)
+        WGNodeData initVideoMedia = _sourceInstaller.TryInstall(context.Clip)
             ?? throw new SwarmUserErrorException(
                 $"VideoStages: clip {context.Clip.ClipId} source video could not be installed.");
-        generator.CurrentMedia = sourcedMedia;
-        _audio.Prepare(context.Clip, framesPerSecond, audioSources, sourcedMedia);
+        generator.CurrentMedia = initVideoMedia;
+        _audio.Prepare(context.Clip, framesPerSecond, audioSources, initVideoMedia);
         using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         RuntimeArtifact output = RuntimeArtifact.Capture(
             generator,

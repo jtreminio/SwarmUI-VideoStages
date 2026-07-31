@@ -107,9 +107,9 @@ const persistedCapabilityIssues = (
         "Major prompt",
     );
     unsupported(
-        !supports("sourceVideo") && clip.sourceVideo !== null,
-        "sourceVideo",
-        "source-video",
+        !supports("initVideo") && clip.initVideo !== null,
+        "initVideo",
+        "init-video",
         "Source video",
     );
     unsupported(
@@ -216,7 +216,7 @@ const persistedCapabilityIssues = (
         diagnostics.push(
             issue(
                 "architecture.unusable.clip-length-from-control-net",
-                `Clip length from the control signal is persisted on Clip ${clipIdx}, but no IC-LoRA supplies one. Turn it off or add a slot-sourced IC-LoRA.`,
+                `Clip length from the control signal is persisted on Clip ${clipIdx}, but no IC-LoRA supplies one. Turn it off or add a slot-init-video IC-LoRA.`,
                 clipIdx,
             ),
         );
@@ -264,7 +264,7 @@ export const deriveArchitectureDiagnostics = (
             );
         }
         const sourceOnly =
-            activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+            activeStageCount(clip) === 0 && clip.initVideo !== null;
         const resolvedFirstModel =
             !sourceOnly && clip.stages.length > 0
                 ? modelByName.get(clip.stages[0].model)

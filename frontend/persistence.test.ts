@@ -333,7 +333,7 @@ describe("persistence", () => {
                     clipLengthFromControlNet: true,
                     reuseAudio: false,
                     uploadedAudio: null,
-                    sourceVideo: null,
+                    initVideo: null,
                     retake: null,
                     refs: [
                         {
@@ -384,7 +384,7 @@ describe("persistence", () => {
                             data: "data:audio/wav;base64,BASE",
                             fileName: "base.wav",
                         },
-                        sourceVideo: {
+                        initVideo: {
                             data: "blob:http://example/source",
                             fileName: "source.mp4",
                             fps: 30,
@@ -445,7 +445,7 @@ describe("persistence", () => {
             ) as {
                 clips: Array<{
                     uploadedAudio: unknown;
-                    sourceVideo: unknown;
+                    initVideo: unknown;
                     refs: Array<{
                         uploadedImage: unknown;
                         frame: number;
@@ -469,7 +469,7 @@ describe("persistence", () => {
             expect(durable.clips[0]).toMatchObject({
                 duration: 4,
                 uploadedAudio: null,
-                sourceVideo: null,
+                initVideo: null,
                 refs: [
                     {
                         uploadedImage: null,

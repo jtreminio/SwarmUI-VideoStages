@@ -4,7 +4,7 @@ using VideoStages.Planning;
 namespace VideoStages.Execution;
 
 /// <summary>
-/// Builds decoded mux audio for sourced footage. Generation conditioning and model audio latents are
+/// Builds decoded mux audio for initVideoClip footage. Generation conditioning and model audio latents are
 /// deliberately outside this path.
 /// </summary>
 internal sealed class SourceOnlyClipAudioPreparer(WorkflowGenerator generator)
@@ -13,9 +13,9 @@ internal sealed class SourceOnlyClipAudioPreparer(WorkflowGenerator generator)
         ClipPlan clip,
         int framesPerSecond,
         AudioRuntimeSources audioSources,
-        WGNodeData sourcedMedia)
+        WGNodeData initVideoMedia)
     {
-        AudioRuntimeSources sources = sourcedMedia.AttachedAudio is WGNodeData nativeAudio
+        AudioRuntimeSources sources = initVideoMedia.AttachedAudio is WGNodeData nativeAudio
             ? audioSources with { NativeAudio = nativeAudio }
             : audioSources;
         WGNodeData baseAudio = PlannedAudioSourceSelector.Select(
@@ -26,14 +26,14 @@ internal sealed class SourceOnlyClipAudioPreparer(WorkflowGenerator generator)
         double duration = ClipAudioBedDuration.Seconds(
             clip,
             framesPerSecond,
-            sourcedMedia);
+            initVideoMedia);
         WGNodeData combinedAudio = new AudioSegmentCombiner(generator).Combine(
             clip.ClipId,
             clip.Audio.Segments,
             baseAudio,
             duration,
             out _);
-        WGNodeData currentMedia = sourcedMedia.Duplicate();
+        WGNodeData currentMedia = initVideoMedia.Duplicate();
         currentMedia.AttachedAudio = combinedAudio;
         generator.CurrentMedia = currentMedia;
     }

@@ -42,7 +42,7 @@ internal static class WanClipPlanCompiler
 
         Dictionary<int, StockHostVideoStagePayload> stages = [];
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
-        bool sourcedEntry = clip.SourceVideo is not null;
+        bool initVideoEntry = clip.InitVideo is not null;
         // The registry owns model-fact validity, the resolver owns same-architecture and
         // same-compatibility admission, and the common capability validator owns stage entry roles.
         // Reaching this compiler means those contracts passed; the indexer is intentionally an
@@ -55,7 +55,7 @@ internal static class WanClipPlanCompiler
             StageSpec stage = activeStages[stageIndex];
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
             bool firstStage = stageIndex == 0;
-            bool decodedStageInput = sourcedEntry || !firstStage;
+            bool decodedStageInput = initVideoEntry || !firstStage;
             ImmutableArray<NormalLoraPlan> loras =
                 NormalLoraPlanCompiler.Compile(
                     clip,

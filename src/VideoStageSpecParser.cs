@@ -45,7 +45,7 @@ internal static class VideoStageSpecParser
         StageParserDefaults defaults,
         int clipRefCount,
         bool isTextToVideoRootWorkflow,
-        bool sourcedClip,
+        bool initVideoClip,
         Action<string> warn = null)
     {
         string location = $"Clip {clipIndex} stage {stageIndex}";
@@ -64,7 +64,7 @@ internal static class VideoStageSpecParser
         string upscaleMethod = VideoStagesJsonReader.GetOptionalString(
             stage, "upscaleMethod", defaults.UpscaleMethod, location, allowEmpty: false, warn);
 
-        bool isGenerationFirstStage = stageIndex == 0 && !sourcedClip;
+        bool isGenerationFirstStage = stageIndex == 0 && !initVideoClip;
         if (isGenerationFirstStage)
         {
             control = FirstStageControl;

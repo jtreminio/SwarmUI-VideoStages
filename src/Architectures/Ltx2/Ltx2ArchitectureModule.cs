@@ -37,13 +37,13 @@ internal sealed class Ltx2ArchitectureModule :
         [
             ArchitectureEntryMode.TextToVideo,
             ArchitectureEntryMode.ImageToVideo,
-            ArchitectureEntryMode.SourceVideo,
+            ArchitectureEntryMode.InitVideo,
         ],
         new(
             ArchitectureCapability.GeneratedEntry
-                | ArchitectureCapability.SourcedEntry
+                | ArchitectureCapability.InitVideoEntry
                 | ArchitectureCapability.NativeAudio,
-            ClipCapability.SourceVideo
+            ClipCapability.InitVideo
                 | ClipCapability.Prompts
                 | ClipCapability.PromptRelay
                 | ClipCapability.References

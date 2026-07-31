@@ -22,7 +22,7 @@ internal sealed record UploadContainerPath(
 internal static class UploadContainers
 {
     public const string ClipAudio = "uploadedAudio";
-    public const string ClipSourceVideo = "sourceVideo";
+    public const string ClipInitVideo = "initVideo";
     public const string IcLoraDriveMedia = "driveMedia";
     public const string RefImage = "uploadedImage";
 
@@ -35,7 +35,7 @@ internal static class UploadContainers
     public static readonly IReadOnlyList<UploadContainerPath> AllPaths =
     [
         new([UploadPathStep.Each(ClipsCollection)], ClipAudio),
-        new([UploadPathStep.Each(ClipsCollection)], ClipSourceVideo),
+        new([UploadPathStep.Each(ClipsCollection)], ClipInitVideo),
         new(
             [UploadPathStep.Each(ClipsCollection), UploadPathStep.Each(IcLorasCollection)],
             IcLoraDriveMedia),

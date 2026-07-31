@@ -110,14 +110,14 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
             clipLengthFromControlNet: clip.clipLengthFromControlNet,
             reuseAudio: clip.reuseAudio,
             uploadedAudio: clip.uploadedAudio,
-            sourceVideo: clip.sourceVideo
+            initVideo: clip.initVideo
                 ? {
-                      data: clip.sourceVideo.data,
-                      fileName: clip.sourceVideo.fileName,
-                      fps: clip.sourceVideo.fps,
-                      durationSeconds: clip.sourceVideo.durationSeconds,
-                      startSeconds: clip.sourceVideo.startSeconds,
-                      lengthSeconds: clip.sourceVideo.lengthSeconds,
+                      data: clip.initVideo.data,
+                      fileName: clip.initVideo.fileName,
+                      fps: clip.initVideo.fps,
+                      durationSeconds: clip.initVideo.durationSeconds,
+                      startSeconds: clip.initVideo.startSeconds,
+                      lengthSeconds: clip.initVideo.lengthSeconds,
                   }
                 : null,
             retake: clip.retake
@@ -291,10 +291,10 @@ export const serializeStateForDurableStorage = (
             clip.uploadedAudio = null;
         }
         if (
-            clip.sourceVideo &&
-            isTransientBrowserMedia({ data: clip.sourceVideo.data })
+            clip.initVideo &&
+            isTransientBrowserMedia({ data: clip.initVideo.data })
         ) {
-            clip.sourceVideo = null;
+            clip.initVideo = null;
         }
         for (const ref of clip.refs) {
             if (isTransientBrowserMedia(ref.uploadedImage)) {

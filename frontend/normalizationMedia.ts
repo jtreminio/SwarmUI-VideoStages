@@ -15,7 +15,7 @@ import {
     text,
     trimmedText,
 } from "./normalizationShared";
-import type { PromptWindow, Retake, SourceVideo, UploadedMedia } from "./types";
+import type { InitVideo, PromptWindow, Retake, UploadedMedia } from "./types";
 import { isRecord, roundToTenth } from "./utils";
 
 const normalizePromptWindow = (
@@ -89,7 +89,7 @@ export const normalizeRetake = (
  * known; unknown metadata (fps/duration 0) is preserved — the backend detects
  * fps at runtime, so a failed probe still produces a usable clip.
  */
-export const normalizeSourceVideo = (value: unknown): SourceVideo | null => {
+export const normalizeInitVideo = (value: unknown): InitVideo | null => {
     if (!isRecord(value)) {
         return null;
     }

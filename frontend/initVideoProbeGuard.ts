@@ -1,12 +1,12 @@
 import type { Clip } from "./types";
 
 /**
- * Fail-closed guard for a source-video metadata probe. The operation is bound
+ * Fail-closed guard for a initVideoClip metadata probe. The operation is bound
  * to one stable clip identity and one document revision; any intervening
  * authoring change invalidates it. A newer probe for the same clip also
  * supersedes the older operation.
  */
-export interface SourceVideoProbeOperation {
+export interface InitVideoProbeOperation {
     readonly clipId: string;
     /** Claim once, immediately before applying the async probe result. */
     claim(currentRevision: number): boolean;
@@ -22,10 +22,10 @@ export const findClipByStableId = (
     clipId: string,
 ): Clip | undefined => clips.find((clip) => clip.id === clipId);
 
-export const beginSourceVideoProbeOperation = (
+export const beginInitVideoProbeOperation = (
     clipId: string,
     revisionAtStart: number,
-): SourceVideoProbeOperation => {
+): InitVideoProbeOperation => {
     const operationId = ++nextOperationId;
     currentOperations.set(clipId, operationId);
 
@@ -48,7 +48,7 @@ export const beginSourceVideoProbeOperation = (
     };
 };
 
-export const resetSourceVideoProbeOperationsForTests = (): void => {
+export const resetInitVideoProbeOperationsForTests = (): void => {
     nextOperationId = 0;
     currentOperations.clear();
 };

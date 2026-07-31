@@ -11,13 +11,13 @@ internal static class RootPlanCompiler
                 TimelineOutputDisposition.PreserveHostOutput, NativeAudioDisposition.KeepHostAudio);
         }
 
-        bool hasGeneratedClip = clips.Any(clip => clip.SourceVideo is null);
-        bool sourcedLeadWithGeneratedClips = clips[0].SourceVideo is not null && hasGeneratedClip;
+        bool hasGeneratedClip = clips.Any(clip => clip.InitVideo is null);
+        bool initVideoLeadWithGeneratedClips = clips[0].InitVideo is not null && hasGeneratedClip;
         return new RootPlan(
             environment.HostKind,
             environment.HostKind == HostRootKind.TextToVideoRoot || !hasGeneratedClip
                 ? RootUse.Discard
-                : sourcedLeadWithGeneratedClips ? RootUse.GeneratedClipDonor : RootUse.ClipZeroSeed,
+                : initVideoLeadWithGeneratedClips ? RootUse.GeneratedClipDonor : RootUse.ClipZeroSeed,
             environment.HostKind == HostRootKind.TextToVideoRoot || !hasGeneratedClip
                 ? HostCoreDisposition.Drop
                 : environment.CanHandoffHostCore ? HostCoreDisposition.Handoff : HostCoreDisposition.Keep,

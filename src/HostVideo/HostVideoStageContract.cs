@@ -56,7 +56,7 @@ internal static class HostVideoStageGeometry
             StageUpscalePlan upscale = stage.Core.Upscale;
             if (upscale?.Mode != StageUpscaleMode.Pixel
                 || stage.Input is not (
-                    StageInputKind.SourceVideo
+                    StageInputKind.InitVideo
                     or StageInputKind.PreviousStage))
             {
                 continue;

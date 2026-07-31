@@ -73,14 +73,14 @@ describe("architecture-owned LTX behavior", () => {
         const ltx = {
             architectureHint: "ltx2",
             skipped: false,
-            sourceVideo: null,
+            initVideo: null,
             stages: [{ model: "ltx", skipped: false }],
             icLoras: [incoming],
         } as unknown as Clip;
         const foreign = {
             architectureHint: "future-video",
             skipped: false,
-            sourceVideo: null,
+            initVideo: null,
             stages: [{ model: "future-model", skipped: false }],
             icLoras: [{ ...incoming }],
         } as unknown as Clip;
@@ -106,7 +106,7 @@ describe("architecture-owned LTX behavior", () => {
             ({
                 architectureHint: architecture,
                 skipped: false,
-                sourceVideo: null,
+                initVideo: null,
                 stages: [{ model, skipped: false }],
                 icLoras: [{ ...incoming }],
             }) as unknown as Clip;

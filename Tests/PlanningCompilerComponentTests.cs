@@ -19,7 +19,7 @@ public class PlanningCompilerComponentTests
                 BoundaryOutOverlap = 16,
                 BoundaryOutCarryAudio = true,
             },
-            SourcedClip(1, Stage(11)),
+            InitVideoClip(1, Stage(11)),
         ]);
         VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
 
@@ -27,11 +27,11 @@ public class PlanningCompilerComponentTests
 
         BoundaryPlan boundary = Assert.Single(result.Boundaries);
         Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
-        Assert.Equal(BoundaryFallbackReason.TargetIsSourcedVideo, boundary.Fallback);
+        Assert.Equal(BoundaryFallbackReason.TargetHasInitVideo, boundary.Fallback);
         Assert.Equal(0, boundary.OverlapFrames);
         Assert.False(boundary.CarryAudio);
         Assert.Contains(result.Diagnostics, diagnostic =>
-            diagnostic.Code == "boundary-targetissourcedvideo");
+            diagnostic.Code == "boundary-targethasinitvideo");
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class PlanningCompilerComponentTests
                 BoundaryOut = Constants.BoundaryOutContinue,
                 BoundaryOutOverlap = 18,
             },
-            SourcedClip(1, Stage(11)) with
+            InitVideoClip(1, Stage(11)) with
             {
                 ImageRefs = [new ImageRefSpec("Upload", 1, false, "first.png")],
             },
@@ -389,9 +389,9 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
-    public void ClipPlanCompiler_PlansSourcedStageChainAndOutputOwnership()
+    public void ClipPlanCompiler_PlansInitVideoStageChainAndOutputOwnership()
     {
-        ClipSpec clip = SourcedClip(7, Stage(10, control: 0), Stage(11, rawIndex: 1));
+        ClipSpec clip = InitVideoClip(7, Stage(10, control: 0), Stage(11, rawIndex: 1));
         Ltx2ClipPlanCompilation compilation = Ltx2ClipPlanCompiler.Compile(
             clip,
             new(640, 360, 30));
@@ -407,7 +407,7 @@ public class PlanningCompilerComponentTests
                 IsMultiClip: false,
                 TotalStageCount: 2,
                 FirstStageOrdinal: 0,
-                EntryMode: ArchitectureEntryMode.SourceVideo,
+                EntryMode: ArchitectureEntryMode.InitVideo,
                 ArchitectureCompilation: new(
                     compilation.Payload,
                     compilation.Stages.ToDictionary(
@@ -415,11 +415,11 @@ public class PlanningCompilerComponentTests
                         pair => (IArchitectureStagePayload)pair.Value),
                     compilation.Diagnostics)));
 
-        Assert.Equal(ClipInputKind.SourceVideo, plan.Input);
+        Assert.Equal(ClipInputKind.InitVideo, plan.Input);
         Assert.True(plan.Stages[0].IsPassthrough);
         Assert.Equal(StageInputKind.PreviousStage, plan.Stages[1].Input);
         Assert.False(plan.Stages[1].IsPassthrough);
-        Assert.Equal(640, plan.SourceVideo.TargetWidth);
+        Assert.Equal(640, plan.InitVideo.TargetWidth);
         Assert.True(plan.Stages[1].Output.IsTimelineTerminal);
     }
 
@@ -590,13 +590,13 @@ public class PlanningCompilerComponentTests
     [Fact]
     public void SourceOnlyCompilationPublishesAnEmptyStagePayloadMap()
     {
-        ClipSpec clip = SourcedClip(7);
+        ClipSpec clip = InitVideoClip(7);
 
         ArchitectureClipCompilation compilation =
             NoneArchitectureModule.Instance.ValidateAndCompileClip(
                 clip,
                 new Dictionary<int, ResolvedVideoModel>(),
-                new(640, 360, 30, ArchitectureEntryMode.SourceVideo));
+                new(640, 360, 30, ArchitectureEntryMode.InitVideo));
 
         Assert.IsType<NoneClipPayload>(compilation.Payload);
         Assert.Empty(compilation.StagePayloads);
@@ -644,7 +644,7 @@ public class PlanningCompilerComponentTests
         [
             new VideoStagesSpec(512, 512, 24, false,
             [
-                SourcedClip(0, Stage(10, control: 0), Stage(11, rawIndex: 1)) with
+                InitVideoClip(0, Stage(10, control: 0), Stage(11, rawIndex: 1)) with
                 {
                     Loras = [new LoraRef("clip", 0.8)],
                     PromptWindows = [new PromptWindowSpec("opening", 0, 1)],
@@ -682,7 +682,7 @@ public class PlanningCompilerComponentTests
         List<ClipSpec> clips = [];
         HashSet<int> seenClipIds = [];
         foreach (ClipSpec clip in (spec.Clips ?? []).Where(clip =>
-                     clip is not null && (clip.SourceVideo is not null || clip.Stages is { Count: > 0 })))
+                     clip is not null && (clip.InitVideo is not null || clip.Stages is { Count: > 0 })))
         {
             if (!seenClipIds.Add(clip.Id))
             {
@@ -731,8 +731,8 @@ public class PlanningCompilerComponentTests
                 clips.Count > 1,
                 totalStages,
                 firstStageOrdinal,
-                clips[i].SourceVideo is not null
-                    ? ArchitectureEntryMode.SourceVideo
+                clips[i].InitVideo is not null
+                    ? ArchitectureEntryMode.InitVideo
                     : spec.IsTextToVideo
                         ? ArchitectureEntryMode.TextToVideo
                         : ArchitectureEntryMode.ImageToVideo,
@@ -835,9 +835,9 @@ public class PlanningCompilerComponentTests
     private static ClipSpec GeneratedClip(int id, params StageSpec[] stages) =>
         new(id, 49, Constants.AudioSourceNative, [], false, false, false, false, null, [], stages);
 
-    private static ClipSpec SourcedClip(int id, params StageSpec[] stages) =>
+    private static ClipSpec InitVideoClip(int id, params StageSpec[] stages) =>
         new(id, 49, Constants.AudioSourceNative, [], false, false, false, false, null, [], stages,
-            SourceVideo: new SourceVideoSpec("data:video/mp4;base64,QQ==", "source.mp4", 1.5));
+            InitVideo: new InitVideoSpec("data:video/mp4;base64,QQ==", "source.mp4", 1.5));
 
     private static StageSpec Stage(int id, double control = 1, int? rawIndex = null) =>
         new(id, control, 1, "pixel-lanczos", "ltx-2", 12, 4.5, "euler", "normal", "Generated",

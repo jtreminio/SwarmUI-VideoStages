@@ -35,7 +35,7 @@ export const canUseIncomingIcLoraDrive = (
         targetedStages.every((targetStage) => {
             const activeStageIndex = activeStageIndexes.indexOf(targetStage);
             const incomingKind =
-                activeStageIndex > 0 || clip.sourceVideo
+                activeStageIndex > 0 || clip.initVideo
                     ? "video"
                     : hasPreviousClipOutput
                       ? "video"

@@ -15,28 +15,28 @@ internal sealed class RootExecutionPolicy
         ArgumentNullException.ThrowIfNull(plan);
         Plan = plan.Root ?? throw new ArgumentException("Plan has no root.", nameof(plan));
         ClipPlan first = plan.Clips.FirstOrDefault();
-        FirstClipIsSourced = first?.IsSourced == true;
-        HasSourcedLeadWithGeneratedClips =
-            FirstClipIsSourced && plan.Clips.Any(clip => !clip.IsSourced);
+        FirstClipHasInitVideo = first?.HasInitVideo == true;
+        HasInitVideoLeadWithGeneratedClips =
+            FirstClipHasInitVideo && plan.Clips.Any(clip => !clip.HasInitVideo);
     }
 
     public RootPlan Plan { get; }
 
-    public bool FirstClipIsSourced { get; }
+    public bool FirstClipHasInitVideo { get; }
 
-    public bool HasSourcedLeadWithGeneratedClips { get; }
+    public bool HasInitVideoLeadWithGeneratedClips { get; }
 
     public bool InterceptsHostCore => Plan.CoreDisposition is not HostCoreDisposition.Keep;
 
     /// <summary>
     /// The current host media is the retained root handed into the first generated stage. A
-    /// supplied refine source and sourced first clip both provide their own stage input instead.
+    /// supplied refine source and initVideoClip first clip both provide their own stage input instead.
     /// </summary>
     public bool UsesStageHandoff => InterceptsHostCore
-        && !FirstClipIsSourced;
+        && !FirstClipHasInitVideo;
 
     public bool DropsTextToVideoRootDonor => Plan.HostKind == HostRootKind.TextToVideoRoot
-        && HasSourcedLeadWithGeneratedClips;
+        && HasInitVideoLeadWithGeneratedClips;
 
     public bool ConformsSurvivingRootMedia =>
         Plan.Use == RootUse.GeneratedClipDonor;

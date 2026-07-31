@@ -174,7 +174,7 @@ describe("applyRefineToClipZero", () => {
             { durationSeconds: 3.5, fps: 24 },
             1,
         );
-        expect(clip.sourceVideo).toEqual({
+        expect(clip.initVideo).toEqual({
             data: "data:video/mp4;base64,AA==",
             fileName: "refine-source",
             fps: 24,
@@ -187,7 +187,7 @@ describe("applyRefineToClipZero", () => {
     it("falls back to the authored clip duration when the probe reports none", () => {
         const clip = minimalClip({ duration: 7, stages: [minimalStage()] });
         applyRefineToClipZero(clip, "data:video/mp4;base64,AA==", null, 1);
-        expect(clip.sourceVideo?.lengthSeconds).toBe(7);
+        expect(clip.initVideo?.lengthSeconds).toBe(7);
     });
 
     it("passes through exactly the already-generated stage prefix", () => {

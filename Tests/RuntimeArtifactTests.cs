@@ -250,8 +250,8 @@ public class RuntimeArtifactTests
         ClipId: 7,
         Frames: 25,
         Input: ClipInputKind.RootMedia,
-        IsSourced: false,
-        SourceVideo: null,
+        HasInitVideo: false,
+        InitVideo: null,
         Stages: [],
         Audio: null)
     {

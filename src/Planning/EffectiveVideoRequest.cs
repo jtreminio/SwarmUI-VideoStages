@@ -176,7 +176,7 @@ internal static class EffectiveVideoRequestProjector
         List<EffectiveRequestDecision> requestDecisions = [];
         int rootTimelineIndex = Array.FindIndex(
             clips,
-            clip => clip.Authored.SourceVideo is null
+            clip => clip.Authored.InitVideo is null
                 && clip.Authored.Stages is { Count: > 0 });
         bool rootCanForceTextToVideoGeneration =
             rootEnvironment.HostKind == HostRootKind.TextToVideoRoot;
@@ -392,7 +392,7 @@ internal static class EffectiveVideoRequestProjector
                     StringComparison.Ordinal));
         if (projected is null
             || projected.Id != canonical.Id
-            || projected.SourceVideo != canonical.SourceVideo
+            || projected.InitVideo != canonical.InitVideo
             || !sameStageTopology
             || projected.AuthoredArchitectureHint != canonical.AuthoredArchitectureHint
             || projected.AuthoredModelProfileHint != canonical.AuthoredModelProfileHint
@@ -613,7 +613,7 @@ internal static class EffectiveVideoRequestProjector
         int[] executableIndexes = clips
             .Select((clip, index) => (clip, index))
             .Where(item =>
-                item.clip.Effective.SourceVideo is not null
+                item.clip.Effective.InitVideo is not null
                 || item.clip.Effective.Stages is { Count: > 0 })
             .Select(item => item.index)
             .ToArray();

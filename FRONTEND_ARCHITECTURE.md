@@ -11,8 +11,8 @@ generic UI code.
 
 For each clip, the user makes three kinds of decisions:
 
-1. Choose starting material: generated from text, guided by an image, sourced
-   from a video, or source-video-only.
+1. Choose starting material: generated from text, guided by an image, init-video
+   from a video, or init-video-only.
 2. Run zero, one, or several stages, all from the same architecture.
 3. Add options supported by that architecture and profile.
 
@@ -68,7 +68,7 @@ plumbing (pointer, keydown, pagehide) that no bridge could usefully wrap.
 
 Host-adjacent state that is not the bridge: `rootDefaults.ts` resolves dropdown
 values and core dimensions through it; `swarmInputs.ts` names the carriers and
-the enable toggle; `sourceVideoProbe.ts` owns probing policy over the bridge's
+the enable toggle; `initVideoProbe.ts` owns probing policy over the bridge's
 raw media element; `timelineHostLifecycle.ts` binds the prompt input's
 input/change events, the group toggle, a 200 ms `syncFromCarrier` poll (host
 presets and cookie restores are not observable any other way), the
@@ -194,7 +194,7 @@ or disabled. Persisted unsupported values stay visible and disabled with an
 inline reason plus a panel-owned removal affordance; normalization never erases
 them, and diagnostics report them instead.
 
-The feature vocabulary is `sourceVideo`, `frameReferences`,
+The feature vocabulary is `initVideo`, `frameReferences`,
 `retake`, `majorPrompt`, `promptRelay`, `clipAudio`, `audioReuse`,
 `stageLoras`, `icLora`, `upscale`, plus per-stage `sampler` and
 `scheduler`. Supported audio source kinds and upscale modes are lists on the
@@ -206,7 +206,7 @@ through plain source predicates.
 
 Boundaries use `BoundaryCapabilityView`. Its `effective(requested)` is the sole
 authority on join validity and honours both support and constraints, so a
-persisted continue into a sourced clip, a clip with no active stage, or a clip
+persisted continue into a init-video clip, a clip with no active stage, or a clip
 with a first-frame reference is reported rather than silently degraded.
 
 Diagnostics are a second evaluator over the same catalog rules
@@ -240,7 +240,7 @@ model profiles.
 
 ## Source-only clips
 
-A sourced clip with no active generation stage resolves to architecture/profile
+A init-video clip with no active generation stage resolves to architecture/profile
 `none`. It remains selectable and editable: its source can be changed or
 removed and a stage can be added, and a clip with a source video may now be
 emptied down to zero stages. Emptying a clip that has no source video is still

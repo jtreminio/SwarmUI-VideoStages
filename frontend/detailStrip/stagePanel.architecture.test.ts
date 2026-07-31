@@ -57,7 +57,7 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
             modelProfileId: "wan-i2v",
             modelClassId: "wan-current",
             compatibilityClassId: "wan-video",
-            entryModes: ["text-to-video", "image-to-video", "source-video"],
+            entryModes: ["text-to-video", "image-to-video", "init-video"],
         },
         {
             value: "wan-alternate.safetensors",
@@ -66,7 +66,7 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
             modelProfileId: "wan-i2v",
             modelClassId: "wan-alternate",
             compatibilityClassId: "wan-video",
-            entryModes: ["text-to-video", "image-to-video", "source-video"],
+            entryModes: ["text-to-video", "image-to-video", "init-video"],
         },
     );
     return models;
@@ -135,7 +135,7 @@ describe("stage architecture model filtering", () => {
                 modelClassId: "wan-i2v-14b",
                 compatibilityClassId: "wan-video",
                 entryAbilities: ["text", "image"],
-                entryModes: ["image-to-video", "source-video"],
+                entryModes: ["image-to-video", "init-video"],
             },
             {
                 value: "wan-5b.safetensors",
@@ -151,12 +151,12 @@ describe("stage architecture model filtering", () => {
         const stage = minimalStage({ model: "ltx" });
         const optionsFor = (
             entryMode: "text-to-video" | "image-to-video",
-            sourceVideo = false,
+            initVideo = false,
             initialReference = false,
         ) => {
             const clip = minimalClip({
                 refs: initialReference ? [minimalRef({ frame: 1 })] : [],
-                sourceVideo: sourceVideo
+                initVideo: initVideo
                     ? {
                           data: "data:video/mp4;base64,AA==",
                           fileName: "source.mp4",
@@ -200,7 +200,7 @@ describe("stage architecture model filtering", () => {
 
         const laterOptionsFor = (
             entryMode: "text-to-video" | "image-to-video",
-            sourceVideo = false,
+            initVideo = false,
             persistedModel = "wan-5b.safetensors",
         ) => {
             const laterStage = minimalStage({
@@ -213,7 +213,7 @@ describe("stage architecture model filtering", () => {
             const clip = minimalClip({
                 architectureHint: "wan22",
                 modelProfileId: "wan22-ti2v-5b",
-                sourceVideo: sourceVideo
+                initVideo: initVideo
                     ? {
                           data: "data:video/mp4;base64,AA==",
                           fileName: "source.mp4",
@@ -607,7 +607,7 @@ describe("stage architecture model filtering", () => {
         }
         target.entryModes = ["image-to-video"];
         const clip = minimalClip({
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AA==",
                 fileName: "source.mp4",
                 fps: 24,
@@ -754,20 +754,20 @@ describe("stage architecture model filtering", () => {
         );
     });
 
-    it("excludes a text-only architecture from a source-video start", () => {
+    it("excludes a text-only architecture from a init-video start", () => {
         const models = catalog();
         const fake = models.architectures.find(
             (entry) => entry.id === "test-video",
         );
         if (!fake) throw new Error("missing fake architecture");
-        fake.capabilities.clip.push("source-video");
+        fake.capabilities.clip.push("init-video");
         const fakeModel = models.entries.find(
             (entry) => entry.value === "test-video.safetensors",
         );
         if (!fakeModel) throw new Error("missing fake model");
         fakeModel.entryModes = ["text-to-video"];
         const clip = minimalClip({
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AA==",
                 fileName: "source.mp4",
                 fps: 24,
@@ -811,7 +811,7 @@ describe("stage architecture model filtering", () => {
         const clip = minimalClip({
             architectureHint: "test-video",
             modelProfileId: "test-profile",
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AA==",
                 fileName: "source.mp4",
                 fps: 24,

@@ -40,7 +40,7 @@ internal sealed class AudioTimelineExecutor
             _ = _audioInjector.TryInject(sources.NativeAudio);
             return;
         }
-        if (rootPolicy.UsesStageHandoff || rootPolicy.FirstClipIsSourced)
+        if (rootPolicy.UsesStageHandoff || rootPolicy.FirstClipHasInitVideo)
         {
             return;
         }

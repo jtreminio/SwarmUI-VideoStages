@@ -105,7 +105,7 @@ public enum IcLoraDriveData
 /// the timeline (fps resample, frame window, resize) and supplies it as the clip's architecture-owned
 /// source input. The architecture decides how each stage consumes or transforms that source.
 /// </summary>
-public sealed record SourceVideoSpec(
+public sealed record InitVideoSpec(
     string Data,
     string FileName,
     double StartSeconds
@@ -195,7 +195,7 @@ public sealed record ClipSpec(
     // for "continue" the frozen-context length (window = overlap+1), for "crossfade" the requested
     // dissolve length; ignored for "cut".
     int BoundaryOutOverlap = 0,
-    SourceVideoSpec SourceVideo = null,
+    InitVideoSpec InitVideo = null,
     // When true on a non-cut boundary, the next generated clip receives the outgoing audio tail
     // as preserved opening context and generates the continuation after that window.
     bool BoundaryOutCarryAudio = false,

@@ -4,7 +4,7 @@ using SwarmUI.Utils;
 namespace VideoStages;
 
 /// <summary>
-/// Parses time-based clip media: source-video ranges, retake windows, and additive audio segments.
+/// Parses time-based clip media: initVideoClip ranges, retake windows, and additive audio segments.
 /// </summary>
 internal static class ClipTimelineSpecParser
 {
@@ -37,7 +37,7 @@ internal static class ClipTimelineSpecParser
         return checked((int)intervals + 1);
     }
 
-    public static SourceVideoSpec ParseSourceVideo(
+    public static InitVideoSpec ParseInitVideo(
         JObject clipObject,
         double durationSeconds,
         int fps,
@@ -45,7 +45,7 @@ internal static class ClipTimelineSpecParser
         Action<string> warn = null)
     {
         UploadedMediaSpec upload = VideoStagesJsonReader.GetEmbeddedUpload(
-            clipObject, UploadContainers.ClipSourceVideo);
+            clipObject, UploadContainers.ClipInitVideo);
         if (upload is null)
         {
             return null;
@@ -59,9 +59,9 @@ internal static class ClipTimelineSpecParser
             return null;
         }
 
-        JObject container = VideoStagesJsonReader.GetObject(clipObject, UploadContainers.ClipSourceVideo);
+        JObject container = VideoStagesJsonReader.GetObject(clipObject, UploadContainers.ClipInitVideo);
         double start = VideoStagesJsonReader.GetOptionalDouble(
-            container, "startSeconds", 0, $"Clip {clipIndex} SourceVideo", warn);
+            container, "startSeconds", 0, $"Clip {clipIndex} InitVideo", warn);
         if (!IsFinite(start) || start < 0)
         {
             start = 0;
@@ -70,10 +70,10 @@ internal static class ClipTimelineSpecParser
         if (!IsRepresentableNonNegativeFrame(Math.Round(roundedStart * fps)))
         {
             throw new SwarmUserErrorException(
-                $"VideoStages: Clip {clipIndex} SourceVideo start exceeds the representable "
+                $"VideoStages: Clip {clipIndex} InitVideo start exceeds the representable "
                     + "frame range.");
         }
-        return new SourceVideoSpec(upload.Data, upload.FileName, roundedStart);
+        return new InitVideoSpec(upload.Data, upload.FileName, roundedStart);
     }
 
     public static RetakeWindowSpec ParseRetake(

@@ -6,10 +6,10 @@ import {
 } from "../__test_helpers__/architectureFixtures";
 import {
     icLoraFixture,
+    initVideoFixture,
     minimalClip,
     minimalRef,
     minimalStage,
-    sourceVideoFixture,
 } from "../__test_helpers__/clipFixtures";
 import type { Clip } from "../types";
 import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
@@ -56,7 +56,7 @@ const wanCatalog = (): ArchitectureModelCatalog => {
         modelClassId: "wan-i2v-14b",
         compatibilityClassId: "wan-video",
         entryAbilities: ["text", "image"],
-        entryModes: ["image-to-video", "source-video"],
+        entryModes: ["image-to-video", "init-video"],
     });
     return models;
 };
@@ -68,7 +68,7 @@ const hostVideoCatalog = (): ArchitectureModelCatalog => {
     const host = structuredClone(template);
     host.id = "host-video";
     host.label = "Host Video";
-    host.capabilities.clip = ["prompts", "source-video"];
+    host.capabilities.clip = ["prompts", "init-video"];
     host.capabilities.stage = [
         "image-input",
         "video-input",
@@ -86,7 +86,7 @@ const hostVideoCatalog = (): ArchitectureModelCatalog => {
         modelClassId: "host-video",
         compatibilityClassId: "host-video",
         entryAbilities: ["text", "image"],
-        entryModes: ["text-to-video", "image-to-video", "source-video"],
+        entryModes: ["text-to-video", "image-to-video", "init-video"],
     });
     return models;
 };
@@ -290,11 +290,11 @@ describe("architecture diagnostics", () => {
         );
         if (!host) throw new Error("missing host fixture");
         host.capabilities.clip = host.capabilities.clip.filter(
-            (capability) => capability !== "source-video",
+            (capability) => capability !== "init-video",
         );
         const clip = minimalClip({
             architectureHint: host.id,
-            sourceVideo: sourceVideoFixture(),
+            initVideo: initVideoFixture(),
             stages: [
                 minimalStage({
                     model: "host-video.safetensors",
@@ -305,7 +305,7 @@ describe("architecture diagnostics", () => {
 
         expect(
             deriveArchitectureDiagnostics([clip], models).find(
-                ({ code }) => code === "architecture.unsupported.source-video",
+                ({ code }) => code === "architecture.unsupported.init-video",
             )?.severity,
         ).toBe("error");
     });
@@ -431,7 +431,7 @@ describe("architecture diagnostics", () => {
         const clip = minimalClip({
             architectureHint: "none",
             modelProfileId: "none",
-            sourceVideo: sourceVideoFixture(),
+            initVideo: initVideoFixture(),
             stages: [],
             reuseAudio: true,
         });
@@ -451,7 +451,7 @@ describe("architecture diagnostics", () => {
         const clip = minimalClip({
             architectureHint: "none",
             modelProfileId: "none",
-            sourceVideo: sourceVideoFixture(),
+            initVideo: initVideoFixture(),
             stages: [],
             audioSource: "Upload",
             uploadedAudio: {
@@ -483,7 +483,7 @@ describe("architecture diagnostics", () => {
         const clip = minimalClip({
             architectureHint: "none",
             modelProfileId: "none",
-            sourceVideo: sourceVideoFixture(),
+            initVideo: initVideoFixture(),
             stages: [],
             clipLengthFromControlNet: true,
         });
@@ -685,15 +685,15 @@ describe("architecture diagnostics", () => {
                 codesFor(
                     minimalClip({
                         stages: [minimalStage({ skipped: true })],
-                        sourceVideo: sourceVideoFixture(),
+                        initVideo: initVideoFixture(),
                     }),
                 ),
             ).toContain("architecture.cross-boundary-cut-only");
         });
 
-        it("warns when a continue target is sourced", () => {
+        it("warns when a continue target is init-video", () => {
             expect(
-                codesFor(minimalClip({ sourceVideo: sourceVideoFixture() })),
+                codesFor(minimalClip({ initVideo: initVideoFixture() })),
             ).toContain("architecture.boundary-unsupported");
         });
 
@@ -708,7 +708,7 @@ describe("architecture diagnostics", () => {
         const sourceOnly = minimalClip({
             architectureHint: "removed-architecture",
             modelProfileId: "removed-profile",
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AAAA",
                 fileName: "source.mp4",
                 fps: 24,
@@ -731,7 +731,7 @@ describe("architecture diagnostics", () => {
         const sourceOnly = minimalClip({
             architectureHint: "none",
             modelProfileId: "none",
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AAAA",
                 fileName: "source.mp4",
                 fps: 24,
@@ -762,7 +762,7 @@ describe("architecture diagnostics", () => {
         const sourceOnly = minimalClip({
             architectureHint: "none",
             modelProfileId: "none",
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,AAAA",
                 fileName: "source.mp4",
                 fps: 24,
@@ -953,7 +953,7 @@ describe("architecture diagnostics", () => {
         wan.capabilities.entryModes = [
             "text-to-video",
             "image-to-video",
-            "source-video",
+            "init-video",
         ];
         models.architectures.push(wan);
         models.entries.push(
@@ -965,7 +965,7 @@ describe("architecture diagnostics", () => {
                 modelClassId: "wan-i2v-14b",
                 compatibilityClassId: "wan-video",
                 entryAbilities: ["text", "image"],
-                entryModes: ["image-to-video", "source-video"],
+                entryModes: ["image-to-video", "init-video"],
             },
             {
                 value: "wan-5b.safetensors",

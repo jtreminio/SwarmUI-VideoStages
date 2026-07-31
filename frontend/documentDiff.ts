@@ -399,14 +399,14 @@ const clipDiffBase = (
             nextIdentity?.authoredArchitectureId !== undefined &&
             previousIdentity.authoredArchitectureId !==
                 nextIdentity.authoredArchitectureId);
-    // Deleting the last stage of a sourced clip leaves a valid source-only clip: the documented
+    // Deleting the last stage of a initVideoClip clip leaves a valid source-only clip: the documented
     // `none` architecture case. It legitimately has no authored Stage 0 and therefore no next
     // authored architecture to convert to, so the stage removals plus the clip's own architecture
-    // patch describe the change completely. An empty clip that is NOT sourced still has no
+    // patch describe the change completely. An empty clip that is NOT initVideoClip still has no
     // authoritative model target and keeps failing below.
     const nextIsSourceOnlyClip =
         next.stages.length === 0 &&
-        next.sourceVideo !== null &&
+        next.initVideo !== null &&
         nextIdentity?.authoredArchitectureId == null &&
         nextIdentity?.architectureId === NONE_ARCHITECTURE_ID;
     if (
@@ -457,13 +457,13 @@ const clipDiffBase = (
     // can enter the clip. Apply those non-identity edits before conversion so
     // the reducer validates the same role that the final atomic document uses.
     const conversionSource = clone(previous);
-    if (!deepEqual(previous.sourceVideo, next.sourceVideo)) {
+    if (!deepEqual(previous.initVideo, next.initVideo)) {
         phases.preConversions.push({
             type: "clip.patch",
             clipId: next.id,
-            patch: { sourceVideo: clone(next.sourceVideo) },
+            patch: { initVideo: clone(next.initVideo) },
         });
-        conversionSource.sourceVideo = clone(next.sourceVideo);
+        conversionSource.initVideo = clone(next.initVideo);
     }
     const nextStagesById = new Map(
         next.stages.map((stage) => [stage.id, stage]),

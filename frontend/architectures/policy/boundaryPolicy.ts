@@ -89,7 +89,7 @@ export const createBoundaryCapabilityViews = (
             }
             if (
                 constraints?.targetRequiresGeneratedEntry === true &&
-                right?.sourceVideo !== null
+                right?.initVideo !== null
             ) {
                 return false;
             }

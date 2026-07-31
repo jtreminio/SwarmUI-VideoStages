@@ -47,7 +47,7 @@
                 "data": "data:audio/wav;base64,QUJD",
                 "fileName": "clip.wav"
             },
-            "sourceVideo": {
+            "initVideo": {
                 "data": "data:video/mp4;base64,REVG",
                 "fileName": "source.mp4",
                 "fps": 30,
@@ -141,7 +141,7 @@
             "clipLengthFromControlNet": false,
             "reuseAudio": false,
             "uploadedAudio": null,
-            "sourceVideo": null,
+            "initVideo": null,
             "retake": null,
             "refs": [],
             "stages": [

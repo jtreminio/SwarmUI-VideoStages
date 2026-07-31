@@ -46,7 +46,7 @@ export const resolvedClipArchitectureId = (
     clip: Clip,
     catalog: ArchitectureModelCatalog | null,
 ): string | null => {
-    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
+    if (clip.initVideo !== null && activeStageCount(clip) === 0) {
         return NONE_ARCHITECTURE_ID;
     }
     const stageZeroModel = clip.stages[0]?.model;
@@ -87,7 +87,7 @@ export const deriveClipArchitectureIdentity = (
         authoredArchitectureId: authored?.architectureId ?? null,
         authoredModelProfileId: authored?.modelProfileId ?? null,
     };
-    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
+    if (clip.initVideo !== null && activeStageCount(clip) === 0) {
         return {
             architectureId: NONE_ARCHITECTURE_ID,
             modelProfileId: NONE_ARCHITECTURE_ID,

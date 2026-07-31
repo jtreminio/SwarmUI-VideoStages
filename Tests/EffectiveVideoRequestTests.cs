@@ -83,7 +83,7 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Fact]
-    public void Passthrough_after_a_sourced_text_to_video_lead_still_replaces_the_text_root()
+    public void Passthrough_after_a_init_video_text_to_video_lead_still_replaces_the_text_root()
     {
         StageSpec sourceStage = Stage(0, rawIndex: 0, model: "grid-model") with
         {
@@ -97,7 +97,7 @@ public sealed class EffectiveVideoRequestTests
         {
             Id = 0,
             Frames = 27,
-            SourceVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
+            InitVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
         };
         ClipSpec trailing = Clip(trailingStage) with { Id = 1, Frames = 27 };
         VideoStagesSpec authored = Spec(source, trailing) with
@@ -289,7 +289,7 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Fact]
-    public void Sourced_passthrough_stages_do_not_change_the_source_frame_count()
+    public void InitVideo_passthrough_stages_do_not_change_the_source_frame_count()
     {
         StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
         {
@@ -298,7 +298,7 @@ public sealed class EffectiveVideoRequestTests
         ClipSpec clip = Clip(stage) with
         {
             Frames = 27,
-            SourceVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
+            InitVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
         };
         VideoStagesSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
@@ -323,7 +323,7 @@ public sealed class EffectiveVideoRequestTests
         ClipSpec clip = Clip(stage) with
         {
             Frames = 28,
-            SourceVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
+            InitVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
         };
         VideoStagesSpec authored = Spec(clip);
 
@@ -631,7 +631,7 @@ public sealed class EffectiveVideoRequestTests
             ],
             PromptWindows = [new("later", 1, 1)],
             ReferenceFraming = ReferenceFramingMode.Fit,
-            SourceVideo = new(
+            InitVideo = new(
                 "data:video/mp4;base64,QUJD",
                 "source.mp4",
                 0),
@@ -704,7 +704,7 @@ public sealed class EffectiveVideoRequestTests
         // Supported authoring remains intact while the unsupported fields are
         // projected away.
         Assert.Equal(2, effective.Stages.Count);
-        Assert.Equal(clip.SourceVideo, effective.SourceVideo);
+        Assert.Equal(clip.InitVideo, effective.InitVideo);
         Assert.Equal(clip.Loras, effective.Loras);
         Assert.Equal(first.Loras, effective.Stages[0].Loras);
     }

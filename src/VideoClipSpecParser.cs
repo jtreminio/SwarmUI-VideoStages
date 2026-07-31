@@ -60,11 +60,11 @@ internal static class VideoClipSpecParser
                 clipObject,
                 clipIndex,
                 context.Warn);
-        SourceVideoSpec sourceVideo = ClipTimelineSpecParser.ParseSourceVideo(
+        InitVideoSpec initVideo = ClipTimelineSpecParser.ParseInitVideo(
             clipObject, duration, context.Fps, clipIndex, context.Warn);
         List<StageSpec> stages = ParseStages(
-            rawStages, clipIndex, references.Count, sourceVideo is not null, context);
-        ApplyRetake(stages, clipObject, clipIndex, duration, sourceVideo is not null, context);
+            rawStages, clipIndex, references.Count, initVideo is not null, context);
+        ApplyRetake(stages, clipObject, clipIndex, duration, initVideo is not null, context);
 
         return new ClipSpec(
             Id: clipIndex,
@@ -91,7 +91,7 @@ internal static class VideoClipSpecParser
                     0,
                     location,
                     context.Warn)),
-            SourceVideo: sourceVideo,
+            InitVideo: initVideo,
             BoundaryOutCarryAudio: VideoStagesJsonReader.GetOptionalBool(
                 clipObject,
                 "boundaryOutCarryAudio",
@@ -137,7 +137,7 @@ internal static class VideoClipSpecParser
         IReadOnlyList<JObject> rawStages,
         int clipIndex,
         int referenceCount,
-        bool sourcedClip,
+        bool initVideoClip,
         VideoClipParseContext context)
     {
         List<StageSpec> stages = [];
@@ -155,7 +155,7 @@ internal static class VideoClipSpecParser
                 context.StageDefaults,
                 referenceCount,
                 context.IsTextToVideoRootWorkflow,
-                sourcedClip,
+                initVideoClip,
                 context.Warn));
         }
         return stages;
@@ -166,10 +166,10 @@ internal static class VideoClipSpecParser
         JObject clipObject,
         int clipIndex,
         double duration,
-        bool hasSourceVideo,
+        bool hasInitVideo,
         VideoClipParseContext context)
     {
-        if (!hasSourceVideo || stages.Count == 0)
+        if (!hasInitVideo || stages.Count == 0)
         {
             return;
         }

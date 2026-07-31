@@ -8,12 +8,12 @@ import {
     buildStackSection,
     clampStartLength,
 } from "../detailWidgets";
-import { getTimelineStore, saveClips } from "../persistence/repository";
-import { probeSourceVideo, sourceVideoFromProbe } from "../sourceVideoProbe";
+import { initVideoFromProbe, probeInitVideo } from "../initVideoProbe";
 import {
-    beginSourceVideoProbeOperation,
+    beginInitVideoProbeOperation,
     findClipByStableId,
-} from "../sourceVideoProbeGuard";
+} from "../initVideoProbeGuard";
+import { getTimelineStore, saveClips } from "../persistence/repository";
 import { applyClipDurationResize } from "../timelineEdit";
 import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
@@ -21,11 +21,11 @@ import type { DetailStripContext } from "./context";
 const DURATION_STEP = 0.1;
 
 /**
- * The only source-video side effect that cannot use DetailStripContext:
+ * The only initVideoClip side effect that cannot use DetailStripContext:
  * metadata probing resolves asynchronously, so it re-reads the current state
  * after the operation guard proves the authored Data value is unchanged.
  */
-const applyPickedSourceVideo = (
+const applyPickedInitVideo = (
     context: DetailStripContext,
     clipId: string,
     data: string,
@@ -33,8 +33,8 @@ const applyPickedSourceVideo = (
 ): void => {
     const store = getTimelineStore();
     const { revision } = store.getSnapshot();
-    const operation = beginSourceVideoProbeOperation(clipId, revision);
-    void probeSourceVideo(data).then((probe) => {
+    const operation = beginInitVideoProbeOperation(clipId, revision);
+    void probeInitVideo(data).then((probe) => {
         if (!operation.claim(store.revision())) {
             return;
         }
@@ -44,17 +44,17 @@ const applyPickedSourceVideo = (
         const { capabilities, defaults } = context.authoring();
         if (
             !target ||
-            !capabilities.forClip(target).decision("sourceVideo").supported
+            !capabilities.forClip(target).decision("initVideo").supported
         ) {
             return;
         }
-        target.sourceVideo = sourceVideoFromProbe(
+        target.initVideo = initVideoFromProbe(
             probe,
             data,
             fileName,
             target.duration,
         );
-        const lengthSeconds = target.sourceVideo.lengthSeconds;
+        const lengthSeconds = target.initVideo.lengthSeconds;
         reconcileClipArchitectureIdentity(target, capabilities.catalog);
         applyClipDurationResize(
             target,
@@ -67,14 +67,14 @@ const applyPickedSourceVideo = (
     }, operation.cancel);
 };
 
-export const buildSourceVideoSection = (
+export const buildInitVideoSection = (
     context: DetailStripContext,
     clip: Clip,
     clipIdx: number,
     open = false,
 ): HTMLElement => {
     const { wrap, col } = buildStackSection(
-        "source-video",
+        "init-video",
         "Source Video",
         "vst-detail-source-col",
         open,
@@ -92,15 +92,15 @@ export const buildSourceVideoSection = (
                 "regenerate part of it.",
         );
     }
-    const source = clip.sourceVideo;
+    const source = clip.initVideo;
     const removeSource = (): void => {
         context.structuralCommit((clips) => {
             const target = clips[clipIdx];
-            if (!target?.sourceVideo) {
+            if (!target?.initVideo) {
                 return null;
             }
             const transaction = context.authoring();
-            target.sourceVideo = null;
+            target.initVideo = null;
             reconcileClipArchitectureIdentity(
                 target,
                 transaction.capabilities.catalog,
@@ -127,7 +127,7 @@ export const buildSourceVideoSection = (
             source?.fileName ?? null,
             (data, fileName) => {
                 if (clip.id) {
-                    applyPickedSourceVideo(context, clip.id, data, fileName);
+                    applyPickedInitVideo(context, clip.id, data, fileName);
                 }
             },
             removeSource,
@@ -158,7 +158,7 @@ export const buildSourceVideoSection = (
             target,
             Math.max(
                 CLIP_DURATION_MIN,
-                target.sourceVideo?.lengthSeconds ?? target.duration,
+                target.initVideo?.lengthSeconds ?? target.duration,
             ),
             () => defaults,
             getTimelineStore().getState().fps,
@@ -176,10 +176,10 @@ export const buildSourceVideoSection = (
         min: 0,
         max: Math.max(0, fileLimit - CLIP_DURATION_MIN),
         step: DURATION_STEP,
-        readBack: (clips) => clips[clipIdx]?.sourceVideo?.startSeconds ?? null,
+        readBack: (clips) => clips[clipIdx]?.initVideo?.startSeconds ?? null,
         mutate: (clips, value) => {
             const target = clips[clipIdx];
-            const targetSource = target?.sourceVideo;
+            const targetSource = target?.initVideo;
             if (target && targetSource) {
                 const next = clampSource(value, targetSource.lengthSeconds);
                 targetSource.startSeconds = next.start;
@@ -204,10 +204,10 @@ export const buildSourceVideoSection = (
         min: CLIP_DURATION_MIN,
         max: fileLimit,
         step: DURATION_STEP,
-        readBack: (clips) => clips[clipIdx]?.sourceVideo?.lengthSeconds ?? null,
+        readBack: (clips) => clips[clipIdx]?.initVideo?.lengthSeconds ?? null,
         mutate: (clips, value) => {
             const target = clips[clipIdx];
-            const targetSource = target?.sourceVideo;
+            const targetSource = target?.initVideo;
             if (target && targetSource) {
                 const next = clampSource(targetSource.startSeconds, value);
                 targetSource.startSeconds = next.start;

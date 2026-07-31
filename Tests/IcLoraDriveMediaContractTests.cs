@@ -111,7 +111,7 @@ public class IcLoraDriveMediaContractTests
 
     [Theory]
     [InlineData((int)ArchitectureEntryMode.ImageToVideo, false)]
-    [InlineData((int)ArchitectureEntryMode.SourceVideo, true)]
+    [InlineData((int)ArchitectureEntryMode.InitVideo, true)]
     public void Image_only_contract_accepts_image_incoming_and_rejects_video_incoming(
         int entryMode,
         bool shouldReject)
@@ -205,7 +205,7 @@ public class IcLoraDriveMediaContractTests
                 DriveData: IcLoraDriveData.Visual),
         ]) with
         {
-            SourceVideo = new(
+            InitVideo = new(
                 "data:video/mp4;base64,QUJD",
                 "source.mp4",
                 0),
@@ -454,9 +454,9 @@ public class IcLoraDriveMediaContractTests
                     0,
                     0,
                     0,
-                    clip.SourceVideo is null
+                    clip.InitVideo is null
                         ? ArchitectureEntryMode.ImageToVideo
-                        : ArchitectureEntryMode.SourceVideo));
+                        : ArchitectureEntryMode.InitVideo));
 
     private static IReadOnlyList<IcLoraPlan> PlansFor(
         ClipSpec clip,

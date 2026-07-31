@@ -14,9 +14,9 @@ export {
     normalizeContinueOverlap,
 } from "./normalizationClip";
 export {
+    normalizeInitVideo,
     normalizePromptWindows,
     normalizeRetake,
-    normalizeSourceVideo,
     normalizeUploadedMedia,
 } from "./normalizationMedia";
 export { readProp } from "./normalizationShared";

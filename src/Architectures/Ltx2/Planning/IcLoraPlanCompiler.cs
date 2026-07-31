@@ -285,9 +285,9 @@ internal static class IcLoraPlanCompiler
         ArchitectureClipCompileContext context)
     {
         if (stage.ClipStageIndex > 0
-            || clip.SourceVideo is not null
+            || clip.InitVideo is not null
             || context.HasPreviousClipOutput
-            || context.EntryMode == ArchitectureEntryMode.SourceVideo)
+            || context.EntryMode == ArchitectureEntryMode.InitVideo)
         {
             return IcLoraDriveMediaKind.Video;
         }

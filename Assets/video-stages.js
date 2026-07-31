@@ -257,7 +257,7 @@
       };
     },
     getMediaOutputPrefix: () => typeof getImageOutPrefix === "function" ? getImageOutPrefix() : "",
-    createSourceVideoElement: () => document.createElement("video"),
+    createInitVideoElement: () => document.createElement("video"),
     enableSliders: (element) => {
       if (typeof enableSlidersIn === "function") {
         enableSlidersIn(element);
@@ -307,7 +307,7 @@
     );
     return firstSkipped < 0 ? clip.stages.length : firstSkipped;
   };
-  var isExecutableClip = (clip) => !clip.skipped && (clip.sourceVideo !== null || activeStageCount(clip) > 0);
+  var isExecutableClip = (clip) => !clip.skipped && (clip.initVideo !== null || activeStageCount(clip) > 0);
   var executableClipIndexes = (clips) => {
     const firstSkipped = clips.findIndex((clip) => clip.skipped === true);
     const prefix = firstSkipped < 0 ? clips : clips.slice(0, firstSkipped);
@@ -378,7 +378,7 @@
     };
   };
   var resolvedClipArchitectureId = (clip, catalog) => {
-    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
+    if (clip.initVideo !== null && activeStageCount(clip) === 0) {
       return NONE_ARCHITECTURE_ID;
     }
     const stageZeroModel = clip.stages[0]?.model;
@@ -403,7 +403,7 @@
       authoredArchitectureId: authored?.architectureId ?? null,
       authoredModelProfileId: authored?.modelProfileId ?? null
     };
-    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
+    if (clip.initVideo !== null && activeStageCount(clip) === 0) {
       return {
         architectureId: NONE_ARCHITECTURE_ID,
         modelProfileId: NONE_ARCHITECTURE_ID,
@@ -445,11 +445,11 @@
   var CAPABILITY_WIRE_NAMES = {
     architecture: {
       generatedEntry: "generated-entry",
-      sourcedEntry: "sourced-entry",
+      initVideoEntry: "init-video-entry",
       nativeAudio: "native-audio"
     },
     clip: {
-      sourceVideo: "source-video",
+      initVideo: "init-video",
       prompts: "prompts",
       promptRelay: "prompt-relay",
       references: "references",
@@ -492,7 +492,7 @@
   var doesAuthoringFeatureRequireEveryCapability = (feature) => AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY.includes(feature);
   var isIgnoredWhenUnsupportedFeature = (feature) => IGNORED_WHEN_UNSUPPORTED_FEATURES.includes(feature);
   var AUTHORING_FEATURE_LABELS = {
-    sourceVideo: "Source video",
+    initVideo: "Source video",
     frameReferences: "Frame references",
     referenceFraming: "Reference framing",
     retake: "Retakes",
@@ -507,7 +507,7 @@
     upscale: "Stage upscaling"
   };
   var AUTHORING_FEATURE_CAPABILITIES = {
-    sourceVideo: [["clip", CAPABILITY_WIRE_NAMES.clip.sourceVideo, null]],
+    initVideo: [["clip", CAPABILITY_WIRE_NAMES.clip.initVideo, null]],
     frameReferences: [
       ["clip", CAPABILITY_WIRE_NAMES.clip.references, null],
       ["stage", CAPABILITY_WIRE_NAMES.stage.frameReferences, null]
@@ -573,9 +573,9 @@
       case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
         return clip !== void 0 && (clip.clipLengthFromAudio || clip.clipLengthFromControlNet);
       case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
-        return clip !== void 0 && clip.refs.length > 0 && clip.sourceVideo !== null;
+        return clip !== void 0 && clip.refs.length > 0 && clip.initVideo !== null;
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-        return clip !== void 0 && clip.sourceVideo === null;
+        return clip !== void 0 && clip.initVideo === null;
       default:
         return true;
     }
@@ -811,11 +811,11 @@
     const firstModel = modelForName(stages[0].model);
     const clipDescriptor = firstModel?.architectureId ? architectureForId(firstModel.architectureId) : void 0;
     const clipCapabilities = clipDescriptor ? effectiveClipCapabilities(clip, clipDescriptor, modelForName) : null;
-    const retakeCanExecute = clip.retake !== null && clip.retake !== void 0 && clip.sourceVideo != null && (!clipDescriptor || !clipCapabilities || architectureFeatureSupport("retake", {
+    const retakeCanExecute = clip.retake !== null && clip.retake !== void 0 && clip.initVideo != null && (!clipDescriptor || !clipCapabilities || architectureFeatureSupport("retake", {
       capabilities: clipCapabilities
     }));
     return stages.filter((stage, stageIndex) => {
-      if (stageIndex === 0 && clip.sourceVideo == null) {
+      if (stageIndex === 0 && clip.initVideo == null) {
         return true;
       }
       if (stage.control > 0 || stageIndex === stages.length - 1 && retakeCanExecute) {
@@ -894,11 +894,7 @@
 
   // frontend/architectures/catalogWire.ts
   var BOUNDARY_MODES = ["cut", "continue", "crossfade"];
-  var ENTRY_MODES = [
-    "text-to-video",
-    "image-to-video",
-    "source-video"
-  ];
+  var ENTRY_MODES = ["text-to-video", "image-to-video", "init-video"];
   var ENTRY_ABILITIES = ["text", "image"];
   var REFERENCE_POSITIONS = ["first", "last", "any"];
   var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -952,7 +948,7 @@
       case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
         return value.scope === "stage" && hasExactKeys(constraints, ["mutuallyExclusive"]) && isUniqueStringArray(constraints.mutuallyExclusive) && constraints.mutuallyExclusive.length === 2 && constraints.mutuallyExclusive.includes("retake") && constraints.mutuallyExclusive.includes("frameReferences");
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-        return value.scope === "clip" && hasExactKeys(constraints, ["requiresAnyEntryMode"]) && isEntryModeArray(constraints.requiresAnyEntryMode) && constraints.requiresAnyEntryMode.length === 1 && constraints.requiresAnyEntryMode.includes("source-video");
+        return value.scope === "clip" && hasExactKeys(constraints, ["requiresAnyEntryMode"]) && isEntryModeArray(constraints.requiresAnyEntryMode) && constraints.requiresAnyEntryMode.length === 1 && constraints.requiresAnyEntryMode.includes("init-video");
     }
     return false;
   };
@@ -1345,7 +1341,7 @@
         if (constraints?.sameArchitecture === true && crossArchitecture) {
           return false;
         }
-        if (constraints?.targetRequiresGeneratedEntry === true && right?.sourceVideo !== null) {
+        if (constraints?.targetRequiresGeneratedEntry === true && right?.initVideo !== null) {
           return false;
         }
         if (constraints?.targetRequiresStage === true && right !== null && !rightHasActiveStage) {
@@ -1429,7 +1425,7 @@
     const clipViews = /* @__PURE__ */ new WeakMap();
     const stageViews = /* @__PURE__ */ new WeakMap();
     const effectiveClipIdentity = (clip) => {
-      const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+      const sourceOnly = activeStageCount(clip) === 0 && clip.initVideo !== null;
       const resolvedModel = sourceOnly ? void 0 : modelByName.get(clip.stages[0]?.model ?? "");
       const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID;
       return {
@@ -1508,7 +1504,7 @@
         return cached;
       }
       const view = forClip(clip);
-      const sourceOnly = view.architectureId === NONE_ARCHITECTURE_ID && activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+      const sourceOnly = view.architectureId === NONE_ARCHITECTURE_ID && activeStageCount(clip) === 0 && clip.initVideo !== null;
       const resolvedModel = sourceOnly ? void 0 : modelByName.get(stage.model);
       const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID;
       const descriptor = architectureById.get(architectureId);
@@ -2285,6 +2281,84 @@
     };
   };
 
+  // frontend/initVideoProbe.ts
+  var initVideoFromProbe = (probe, data, fileName, clipDuration) => {
+    const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
+    return {
+      data,
+      fileName,
+      fps: probe?.fps ?? 0,
+      durationSeconds,
+      startSeconds: 0,
+      lengthSeconds: durationSeconds > 0 ? durationSeconds : clipDuration
+    };
+  };
+  var FPS_SAMPLE_FRAMES = 12;
+  var MIN_FRAME_DELTA_SECONDS = 5e-4;
+  var MAX_PLAUSIBLE_FPS = 240;
+  var estimateFpsFromMediaTimes = (mediaTimes) => {
+    const deltas = [];
+    for (let i = 1; i < mediaTimes.length; i++) {
+      const delta = mediaTimes[i] - mediaTimes[i - 1];
+      if (delta > MIN_FRAME_DELTA_SECONDS) {
+        deltas.push(delta);
+      }
+    }
+    if (deltas.length < 4) {
+      return null;
+    }
+    deltas.sort((a, b) => a - b);
+    const median = deltas[Math.floor(deltas.length / 2)];
+    const fps = Math.round(1 / median);
+    return fps >= 1 && fps <= MAX_PLAUSIBLE_FPS ? fps : null;
+  };
+  var probeInitVideo = (src, timeoutMs = 8e3) => new Promise((resolve) => {
+    const video = getVideoStagesHostBridge().createInitVideoElement();
+    video.muted = true;
+    video.preload = "auto";
+    let settled = false;
+    const finish2 = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      resolve(result);
+    };
+    const timer = setTimeout(() => finish2(null), timeoutMs);
+    video.addEventListener("error", () => finish2(null));
+    video.addEventListener("loadedmetadata", () => {
+      const durationSeconds = Number.isFinite(video.duration) ? video.duration : 0;
+      if (!(durationSeconds > 0)) {
+        finish2(null);
+        return;
+      }
+      const requestFrame = video.requestVideoFrameCallback?.bind(video);
+      if (!requestFrame) {
+        finish2({ durationSeconds, fps: null });
+        return;
+      }
+      const mediaTimes = [];
+      const step = (_now, metadata) => {
+        mediaTimes.push(metadata.mediaTime);
+        if (mediaTimes.length >= FPS_SAMPLE_FRAMES || metadata.mediaTime >= durationSeconds) {
+          finish2({
+            durationSeconds,
+            fps: estimateFpsFromMediaTimes(mediaTimes)
+          });
+          return;
+        }
+        requestFrame(step);
+      };
+      requestFrame(step);
+      video.play()?.catch(() => finish2({ durationSeconds, fps: null }));
+    });
+    video.src = src;
+  });
+
   // frontend/normalizationShared.ts
   var text = (value, fallback = "") => `${value ?? fallback}`;
   var trimmedText = (value, fallback = "") => text(value, fallback).trim();
@@ -2542,7 +2616,7 @@
       strength
     };
   };
-  var normalizeSourceVideo = (value) => {
+  var normalizeInitVideo = (value) => {
     if (!isRecord2(value)) {
       return null;
     }
@@ -2964,7 +3038,7 @@
     const hasPreviousClipOutput = executable.some((index) => index < clipIdx);
     return targetedStages.length > 0 && targetedStages.every((targetStage) => {
       const activeStageIndex = activeStageIndexes.indexOf(targetStage);
-      const incomingKind = activeStageIndex > 0 || clip.sourceVideo ? "video" : hasPreviousClipOutput ? "video" : generatedEntryMode === "image-to-video" ? "image" : null;
+      const incomingKind = activeStageIndex > 0 || clip.initVideo ? "video" : hasPreviousClipOutput ? "video" : generatedEntryMode === "image-to-video" ? "image" : null;
       return incomingKind !== null && acceptedKinds.includes(incomingKind);
     });
   };
@@ -3079,7 +3153,7 @@
     }
     return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
   };
-  var normalizeIcLora = (raw, stageCount = 0, _sourcedClip = false) => {
+  var normalizeIcLora = (raw, stageCount = 0, _initVideoClip = false) => {
     if (!isRecord2(raw)) {
       return null;
     }
@@ -3131,11 +3205,11 @@
       driveMedia
     };
   };
-  var normalizeIcLoras = (rawClip, stageCount = 0, sourcedClip = false) => {
+  var normalizeIcLoras = (rawClip, stageCount = 0, initVideoClip = false) => {
     if (!Array.isArray(rawClip.icLoras)) {
       return [];
     }
-    return rawClip.icLoras.map((entry) => normalizeIcLora(entry, stageCount, sourcedClip)).filter((entry) => entry !== null);
+    return rawClip.icLoras.map((entry) => normalizeIcLora(entry, stageCount, initVideoClip)).filter((entry) => entry !== null);
   };
   var canonicalizeIcLoraFields = (entry) => {
     if (entry.driveData === "none") {
@@ -3164,15 +3238,19 @@
       Math.ceil(requested / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP
     );
   };
-  var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, sourcedClip, options = {}) => {
+  var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, initVideoClip, options = {}) => {
     if (isLtx2(architectureId)) {
       return normalizeIcLoras(
         rawClip,
         stageCount,
-        sourcedClip
+        initVideoClip
       );
     }
-    return options.preserveDormantLtx === true && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? normalizeIcLoras(rawClip, stageCount, sourcedClip) : [];
+    return options.preserveDormantLtx === true && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? normalizeIcLoras(
+      rawClip,
+      stageCount,
+      initVideoClip
+    ) : [];
   };
   var canonicalizeArchitectureIcLoraFields = (architectureId, entry) => {
     if (isLtx2(architectureId)) {
@@ -3484,7 +3562,7 @@
       framesForClip(clip.duration, fps, resolution.frameGrid)
     );
   };
-  var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, sourcedClip = false, clipLoras = [], clipLoraDefaultWeights = []) => {
+  var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, initVideoClip = false, clipLoras = [], clipLoraDefaultWeights = []) => {
     const defaults = getRootDefaults2();
     const fallback = buildDefaultStage(
       getRootDefaults2,
@@ -3493,7 +3571,7 @@
       refCount,
       clipLoraDefaultWeights
     );
-    const forcedFirstStage = stageIndexInClip === 0 && !sourcedClip;
+    const forcedFirstStage = stageIndexInClip === 0 && !initVideoClip;
     let firstStageUpscale;
     let control;
     if (forcedFirstStage) {
@@ -3676,7 +3754,7 @@
       prompt: "",
       promptWindows: [],
       retake: null,
-      sourceVideo: null,
+      initVideo: null,
       refs,
       stages: [firstStage]
     };
@@ -3685,12 +3763,12 @@
     const defaults = getRootDefaults2();
     const rawAudioSource = text(rawClip.audioSource, AUDIO_SOURCE_NATIVE);
     const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
-    const sourceVideo = normalizeSourceVideo(rawClip.sourceVideo);
+    const initVideo = normalizeInitVideo(rawClip.initVideo);
     const fps = Math.max(
       1,
       typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps
     );
-    const rawDuration = sourceVideo?.lengthSeconds ?? numberOr(rawClip.duration, defaults.frames / fps);
+    const rawDuration = initVideo?.lengthSeconds ?? numberOr(rawClip.duration, defaults.frames / fps);
     const duration = snapDurationToFps(
       Math.max(CLIP_DURATION_MIN, rawDuration),
       fps
@@ -3732,7 +3810,7 @@
           previousStage,
           refsRaw.length,
           i,
-          sourceVideo !== null,
+          initVideo !== null,
           loras,
           loraDefaultWeights
         )
@@ -3754,7 +3832,7 @@
       {
         duration,
         stages,
-        sourceVideo,
+        initVideo,
         retake,
         clipLengthFromAudio,
         clipLengthFromControlNet
@@ -3768,7 +3846,7 @@
     const stageZero = stages[0] ?? null;
     const persistedArchitecture = trimmedText(rawClip.architectureHint);
     const persistedProfile = trimmedText(rawClip.modelProfileId);
-    const isSourceOnly = sourceVideo !== null && stages.every((stage) => stage.skipped);
+    const isSourceOnly = initVideo !== null && stages.every((stage) => stage.skipped);
     const architecture = isSourceOnly ? persistedArchitecture || "none" : normalizeClipArchitecture(
       persistedArchitecture,
       stageZero?.model ?? null,
@@ -3783,7 +3861,7 @@
       resolvedArchitecture,
       rawClip,
       stagesRaw.length,
-      sourceVideo !== null,
+      initVideo !== null,
       { preserveDormantLtx: true }
     );
     const icLoraDefaultStrengths = icLoras.map(
@@ -3834,7 +3912,7 @@
       prompt: text(rawClip.prompt),
       promptWindows: normalizePromptWindows(rawClip),
       retake,
-      sourceVideo,
+      initVideo,
       refs,
       stages
     };
@@ -3903,13 +3981,13 @@
         clipLengthFromControlNet: clip.clipLengthFromControlNet,
         reuseAudio: clip.reuseAudio,
         uploadedAudio: clip.uploadedAudio,
-        sourceVideo: clip.sourceVideo ? {
-          data: clip.sourceVideo.data,
-          fileName: clip.sourceVideo.fileName,
-          fps: clip.sourceVideo.fps,
-          durationSeconds: clip.sourceVideo.durationSeconds,
-          startSeconds: clip.sourceVideo.startSeconds,
-          lengthSeconds: clip.sourceVideo.lengthSeconds
+        initVideo: clip.initVideo ? {
+          data: clip.initVideo.data,
+          fileName: clip.initVideo.fileName,
+          fps: clip.initVideo.fps,
+          durationSeconds: clip.initVideo.durationSeconds,
+          startSeconds: clip.initVideo.startSeconds,
+          lengthSeconds: clip.initVideo.lengthSeconds
         } : null,
         retake: clip.retake ? {
           id: clip.retake.id,
@@ -4030,8 +4108,8 @@
       if (isTransientBrowserMedia(clip.uploadedAudio)) {
         clip.uploadedAudio = null;
       }
-      if (clip.sourceVideo && isTransientBrowserMedia({ data: clip.sourceVideo.data })) {
-        clip.sourceVideo = null;
+      if (clip.initVideo && isTransientBrowserMedia({ data: clip.initVideo.data })) {
+        clip.initVideo = null;
       }
       for (const ref of clip.refs) {
         if (isTransientBrowserMedia(ref.uploadedImage)) {
@@ -4286,10 +4364,10 @@
     if (!isClipRoot) {
       return supportsImage;
     }
-    if (clip.sourceVideo === null) {
+    if (clip.initVideo === null) {
       return generatedEntryMode === "text-to-video" ? supportsText : supportsImage;
     }
-    return supportsImage || model.entryModes.includes("source-video");
+    return supportsImage || model.entryModes.includes("init-video");
   };
   var modelSupportsAllActiveStageEntries = (model, clip, generatedEntryMode) => clip.stages.every(
     (stage, stageIdx) => stage.skipped || modelSupportsStageEntry(model, clip, stageIdx, generatedEntryMode)
@@ -4381,7 +4459,7 @@
       "reuseAudio",
       "uploadedAudio",
       "prompt",
-      "sourceVideo"
+      "initVideo"
     ],
     reservedKeys: [
       "id",
@@ -4713,7 +4791,7 @@
       }
     }
     const changesAuthoredArchitecture = repairsUnresolvedStageZero || previousIdentity?.authoredArchitectureId !== null && previousIdentity?.authoredArchitectureId !== void 0 && nextIdentity?.authoredArchitectureId !== null && nextIdentity?.authoredArchitectureId !== void 0 && previousIdentity.authoredArchitectureId !== nextIdentity.authoredArchitectureId;
-    const nextIsSourceOnlyClip = next.stages.length === 0 && next.sourceVideo !== null && nextIdentity?.authoredArchitectureId == null && nextIdentity?.architectureId === NONE_ARCHITECTURE_ID;
+    const nextIsSourceOnlyClip = next.stages.length === 0 && next.initVideo !== null && nextIdentity?.authoredArchitectureId == null && nextIdentity?.architectureId === NONE_ARCHITECTURE_ID;
     if (changesEffectiveIdentity && !changesAuthoredArchitecture && !nextIsSourceOnlyClip && (previousIdentity?.authoredArchitectureId == null || nextIdentity?.authoredArchitectureId == null || previousIdentity.authoredArchitectureId !== nextIdentity.authoredArchitectureId)) {
       throw new DocumentDiffError("architecture-invariant");
     }
@@ -4740,13 +4818,13 @@
       entryModes: clone(targetEntry.entryModes)
     };
     const conversionSource = clone(previous);
-    if (!deepEqual(previous.sourceVideo, next.sourceVideo)) {
+    if (!deepEqual(previous.initVideo, next.initVideo)) {
       phases.preConversions.push({
         type: "clip.patch",
         clipId: next.id,
-        patch: { sourceVideo: clone(next.sourceVideo) }
+        patch: { initVideo: clone(next.initVideo) }
       });
-      conversionSource.sourceVideo = clone(next.sourceVideo);
+      conversionSource.initVideo = clone(next.initVideo);
     }
     const nextStagesById = new Map(
       next.stages.map((stage) => [stage.id, stage])
@@ -5169,7 +5247,7 @@
         }
         const candidate = clone2(clip);
         Object.assign(candidate, clone2(command.patch), { id: clip.id });
-        if (hasOwn(command.patch, "sourceVideo") && !reconcileClipArchitectureIdentity(
+        if (hasOwn(command.patch, "initVideo") && !reconcileClipArchitectureIdentity(
           candidate,
           context.architectureCatalog
         )) {
@@ -5998,84 +6076,6 @@
     saveRequestedState(state, { ...options, notifyDomChange }, snapshot);
   };
 
-  // frontend/sourceVideoProbe.ts
-  var sourceVideoFromProbe = (probe, data, fileName, clipDuration) => {
-    const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
-    return {
-      data,
-      fileName,
-      fps: probe?.fps ?? 0,
-      durationSeconds,
-      startSeconds: 0,
-      lengthSeconds: durationSeconds > 0 ? durationSeconds : clipDuration
-    };
-  };
-  var FPS_SAMPLE_FRAMES = 12;
-  var MIN_FRAME_DELTA_SECONDS = 5e-4;
-  var MAX_PLAUSIBLE_FPS = 240;
-  var estimateFpsFromMediaTimes = (mediaTimes) => {
-    const deltas = [];
-    for (let i = 1; i < mediaTimes.length; i++) {
-      const delta = mediaTimes[i] - mediaTimes[i - 1];
-      if (delta > MIN_FRAME_DELTA_SECONDS) {
-        deltas.push(delta);
-      }
-    }
-    if (deltas.length < 4) {
-      return null;
-    }
-    deltas.sort((a, b) => a - b);
-    const median = deltas[Math.floor(deltas.length / 2)];
-    const fps = Math.round(1 / median);
-    return fps >= 1 && fps <= MAX_PLAUSIBLE_FPS ? fps : null;
-  };
-  var probeSourceVideo = (src, timeoutMs = 8e3) => new Promise((resolve) => {
-    const video = getVideoStagesHostBridge().createSourceVideoElement();
-    video.muted = true;
-    video.preload = "auto";
-    let settled = false;
-    const finish2 = (result) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
-      resolve(result);
-    };
-    const timer = setTimeout(() => finish2(null), timeoutMs);
-    video.addEventListener("error", () => finish2(null));
-    video.addEventListener("loadedmetadata", () => {
-      const durationSeconds = Number.isFinite(video.duration) ? video.duration : 0;
-      if (!(durationSeconds > 0)) {
-        finish2(null);
-        return;
-      }
-      const requestFrame = video.requestVideoFrameCallback?.bind(video);
-      if (!requestFrame) {
-        finish2({ durationSeconds, fps: null });
-        return;
-      }
-      const mediaTimes = [];
-      const step = (_now, metadata) => {
-        mediaTimes.push(metadata.mediaTime);
-        if (mediaTimes.length >= FPS_SAMPLE_FRAMES || metadata.mediaTime >= durationSeconds) {
-          finish2({
-            durationSeconds,
-            fps: estimateFpsFromMediaTimes(mediaTimes)
-          });
-          return;
-        }
-        requestFrame(step);
-      };
-      requestFrame(step);
-      video.play()?.catch(() => finish2({ durationSeconds, fps: null }));
-    });
-    video.src = src;
-  });
-
   // frontend/refineVideoButton.ts
   var REFINE_SOURCE_FILE_NAME = "refine-source";
   var refineNeedsExtraStageMessage = (skipCount) => `Refine Video needs Clip 0 to have at least one active stage after Stage ${skipCount - 1} (for example, an upscale or refine stage). Add a stage in the VideoStages panel, then click Refine Video again.`;
@@ -6112,7 +6112,7 @@
     return activeStageCount(clip0) > skipCount;
   };
   var applyRefineToClipZero = (clip, data, probe, skipCount) => {
-    clip.sourceVideo = sourceVideoFromProbe(
+    clip.initVideo = initVideoFromProbe(
       probe,
       data,
       REFINE_SOURCE_FILE_NAME,
@@ -6163,7 +6163,7 @@
             return;
           }
           const videoDataUrl = await host.toDataUrl(src);
-          const probe = await probeSourceVideo(videoDataUrl);
+          const probe = await probeInitVideo(videoDataUrl);
           const state = getState();
           const clipZero = state.clips[0];
           if (!clipZero) {
@@ -6306,9 +6306,9 @@
       "Major prompt"
     );
     unsupported(
-      !supports("sourceVideo") && clip.sourceVideo !== null,
-      "sourceVideo",
-      "source-video",
+      !supports("initVideo") && clip.initVideo !== null,
+      "initVideo",
+      "init-video",
       "Source video"
     );
     unsupported(
@@ -6395,7 +6395,7 @@
       diagnostics.push(
         issue(
           "architecture.unusable.clip-length-from-control-net",
-          `Clip length from the control signal is persisted on Clip ${clipIdx}, but no IC-LoRA supplies one. Turn it off or add a slot-sourced IC-LoRA.`,
+          `Clip length from the control signal is persisted on Clip ${clipIdx}, but no IC-LoRA supplies one. Turn it off or add a slot-init-video IC-LoRA.`,
           clipIdx
         )
       );
@@ -6424,7 +6424,7 @@
           )
         );
       }
-      const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
+      const sourceOnly = activeStageCount(clip) === 0 && clip.initVideo !== null;
       const resolvedFirstModel = !sourceOnly && clip.stages.length > 0 ? modelByName.get(clip.stages[0].model) : void 0;
       const effectiveArchitectureId = effectiveArchitectureIdForClip(
         clip,
@@ -11169,8 +11169,8 @@
   var buildClipColumn = (context, clip, clipIdx, referenceFramingState) => {
     const column = document.createElement("div");
     column.className = "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
-    const sourced = !!clip.sourceVideo;
-    const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true || sourced;
+    const initVideoClip = !!clip.initVideo;
+    const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true || initVideoClip;
     const durationInput = buildNumber(
       clip.duration,
       CLIP_DURATION_MIN,
@@ -11190,7 +11190,7 @@
     const durationField = buildField(
       "Duration (s)",
       durationInput,
-      lengthDerived2 ? sourced ? "(derived from the source video range)" : "(derived from audio/ControlNet source)" : void 0
+      lengthDerived2 ? initVideoClip ? "(derived from the source video range)" : "(derived from audio/ControlNet source)" : void 0
     );
     if (lengthDerived2) {
       durationInput.disabled = true;
@@ -11364,6 +11364,210 @@
       "Choose the normal LoRA models once for this clip. Each stage sets its own weight below its reference strengths."
     );
     return built.section;
+  };
+
+  // frontend/initVideoProbeGuard.ts
+  var nextOperationId = 0;
+  var currentOperations = /* @__PURE__ */ new Map();
+  var findClipByStableId = (clips, clipId) => clips.find((clip) => clip.id === clipId);
+  var beginInitVideoProbeOperation = (clipId, revisionAtStart) => {
+    const operationId = ++nextOperationId;
+    currentOperations.set(clipId, operationId);
+    const release = () => {
+      if (currentOperations.get(clipId) === operationId) {
+        currentOperations.delete(clipId);
+      }
+    };
+    return {
+      clipId,
+      claim: (currentRevision2) => {
+        const current = currentRevision2 === revisionAtStart && currentOperations.get(clipId) === operationId;
+        release();
+        return current;
+      },
+      cancel: release
+    };
+  };
+
+  // frontend/detailStrip/initVideoPanel.ts
+  var DURATION_STEP2 = 0.1;
+  var applyPickedInitVideo = (context, clipId, data, fileName) => {
+    const store2 = getTimelineStore();
+    const { revision } = store2.getSnapshot();
+    const operation = beginInitVideoProbeOperation(clipId, revision);
+    void probeInitVideo(data).then((probe) => {
+      if (!operation.claim(store2.revision())) {
+        return;
+      }
+      const state = store2.getState();
+      const clips = state.clips;
+      const target = findClipByStableId(clips, operation.clipId);
+      const { capabilities, defaults } = context.authoring();
+      if (!target || !capabilities.forClip(target).decision("initVideo").supported) {
+        return;
+      }
+      target.initVideo = initVideoFromProbe(
+        probe,
+        data,
+        fileName,
+        target.duration
+      );
+      const lengthSeconds = target.initVideo.lengthSeconds;
+      reconcileClipArchitectureIdentity(target, capabilities.catalog);
+      applyClipDurationResize(
+        target,
+        Math.max(CLIP_DURATION_MIN, lengthSeconds),
+        () => defaults,
+        state.fps
+      );
+      saveClips(clips, { origin: "detail-strip" });
+      context.render();
+    }, operation.cancel);
+  };
+  var buildInitVideoSection = (context, clip, clipIdx, open = false) => {
+    const { wrap, col } = buildStackSection(
+      "init-video",
+      "Source Video",
+      "vst-detail-source-col",
+      open
+    );
+    const sectionLabel = wrap.querySelector(
+      ":scope > .input-group-header .header-label"
+    );
+    if (sectionLabel) {
+      appendHelp(
+        sectionLabel,
+        wrap,
+        "Source Video",
+        "Start this clip from an existing video instead of generating it. Stages then refine/upscale the footage and a retake can regenerate part of it."
+      );
+    }
+    const source = clip.initVideo;
+    const removeSource = () => {
+      context.structuralCommit((clips) => {
+        const target = clips[clipIdx];
+        if (!target?.initVideo) {
+          return null;
+        }
+        const transaction = context.authoring();
+        target.initVideo = null;
+        reconcileClipArchitectureIdentity(
+          target,
+          transaction.capabilities.catalog
+        );
+        reconcileArchitectureIncomingIcLoraDrives(
+          clips,
+          transaction.generatedEntryMode,
+          transaction.capabilities.catalog
+        );
+        return "render";
+      });
+    };
+    const hint = document.createElement("small");
+    hint.className = "vst-detail-field-hint";
+    hint.textContent = "Use an existing video file as this clip instead of generating it.";
+    col.appendChild(hint);
+    col.appendChild(
+      buildMediaPickRow(
+        "Video file",
+        "video/*",
+        ["video"],
+        source?.fileName ?? null,
+        (data, fileName) => {
+          if (clip.id) {
+            applyPickedInitVideo(context, clip.id, data, fileName);
+          }
+        },
+        removeSource
+      )
+    );
+    if (!source) {
+      return wrap;
+    }
+    const info = document.createElement("small");
+    info.className = "vst-detail-field-hint";
+    info.textContent = `Detected: ${source.fps > 0 ? `${source.fps} fps` : "unknown fps"} · ${source.durationSeconds > 0 ? `${source.durationSeconds.toFixed(1)} s` : "unknown length"}`;
+    col.appendChild(info);
+    const fileLimit = source.durationSeconds > 0 ? source.durationSeconds : source.startSeconds + source.lengthSeconds;
+    const syncClipDuration = (target) => {
+      const defaults = context.authoring().defaults;
+      applyClipDurationResize(
+        target,
+        Math.max(
+          CLIP_DURATION_MIN,
+          target.initVideo?.lengthSeconds ?? target.duration
+        ),
+        () => defaults,
+        getTimelineStore().getState().fps
+      );
+    };
+    const clampSource = (start, length) => clampStartLength(start, length, fileLimit, CLIP_DURATION_MIN);
+    const startInput = context.buildClampedNumber({
+      key: "source-start",
+      value: source.startSeconds,
+      min: 0,
+      max: Math.max(0, fileLimit - CLIP_DURATION_MIN),
+      step: DURATION_STEP2,
+      readBack: (clips) => clips[clipIdx]?.initVideo?.startSeconds ?? null,
+      mutate: (clips, value) => {
+        const target = clips[clipIdx];
+        const targetSource = target?.initVideo;
+        if (target && targetSource) {
+          const next = clampSource(value, targetSource.lengthSeconds);
+          targetSource.startSeconds = next.start;
+          targetSource.lengthSeconds = next.length;
+          syncClipDuration(target);
+        }
+      }
+    });
+    col.appendChild(
+      buildField(
+        "Start (s)",
+        startInput,
+        void 0,
+        "Where inside the source file this clip's footage begins. Trims the front of the file."
+      )
+    );
+    const lengthInput = context.buildClampedNumber({
+      key: "source-length",
+      value: source.lengthSeconds,
+      min: CLIP_DURATION_MIN,
+      max: fileLimit,
+      step: DURATION_STEP2,
+      readBack: (clips) => clips[clipIdx]?.initVideo?.lengthSeconds ?? null,
+      mutate: (clips, value) => {
+        const target = clips[clipIdx];
+        const targetSource = target?.initVideo;
+        if (target && targetSource) {
+          const next = clampSource(targetSource.startSeconds, value);
+          targetSource.startSeconds = next.start;
+          targetSource.lengthSeconds = next.length;
+          syncClipDuration(target);
+        }
+      }
+    });
+    col.appendChild(
+      buildField(
+        "Length (s)",
+        lengthInput,
+        void 0,
+        "How many seconds of the source file this clip uses, starting at Start. This also becomes the clip's duration."
+      )
+    );
+    const note = document.createElement("p");
+    note.className = "vst-detail-note";
+    note.textContent = "This range (conformed to the timeline fps and size) is the clip's starting point: the first stage refines it using its Control value, later stages refine or upscale it, and a retake regenerates part of it.";
+    col.appendChild(note);
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "interrupt-button vst-btn-tiny vst-detail-delete vst-detail-rail-btn";
+    removeButton.textContent = "Remove source video";
+    removeButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      removeSource();
+    });
+    col.appendChild(removeButton);
+    return wrap;
   };
 
   // frontend/architectures/referenceEndpoints.ts
@@ -11766,210 +11970,6 @@
     note.textContent = "Applies when refining a base video; audio inside the window regenerates with the frames.";
     col.appendChild(note);
     return buildSection();
-  };
-
-  // frontend/sourceVideoProbeGuard.ts
-  var nextOperationId = 0;
-  var currentOperations = /* @__PURE__ */ new Map();
-  var findClipByStableId = (clips, clipId) => clips.find((clip) => clip.id === clipId);
-  var beginSourceVideoProbeOperation = (clipId, revisionAtStart) => {
-    const operationId = ++nextOperationId;
-    currentOperations.set(clipId, operationId);
-    const release = () => {
-      if (currentOperations.get(clipId) === operationId) {
-        currentOperations.delete(clipId);
-      }
-    };
-    return {
-      clipId,
-      claim: (currentRevision2) => {
-        const current = currentRevision2 === revisionAtStart && currentOperations.get(clipId) === operationId;
-        release();
-        return current;
-      },
-      cancel: release
-    };
-  };
-
-  // frontend/detailStrip/sourceVideoPanel.ts
-  var DURATION_STEP2 = 0.1;
-  var applyPickedSourceVideo = (context, clipId, data, fileName) => {
-    const store2 = getTimelineStore();
-    const { revision } = store2.getSnapshot();
-    const operation = beginSourceVideoProbeOperation(clipId, revision);
-    void probeSourceVideo(data).then((probe) => {
-      if (!operation.claim(store2.revision())) {
-        return;
-      }
-      const state = store2.getState();
-      const clips = state.clips;
-      const target = findClipByStableId(clips, operation.clipId);
-      const { capabilities, defaults } = context.authoring();
-      if (!target || !capabilities.forClip(target).decision("sourceVideo").supported) {
-        return;
-      }
-      target.sourceVideo = sourceVideoFromProbe(
-        probe,
-        data,
-        fileName,
-        target.duration
-      );
-      const lengthSeconds = target.sourceVideo.lengthSeconds;
-      reconcileClipArchitectureIdentity(target, capabilities.catalog);
-      applyClipDurationResize(
-        target,
-        Math.max(CLIP_DURATION_MIN, lengthSeconds),
-        () => defaults,
-        state.fps
-      );
-      saveClips(clips, { origin: "detail-strip" });
-      context.render();
-    }, operation.cancel);
-  };
-  var buildSourceVideoSection = (context, clip, clipIdx, open = false) => {
-    const { wrap, col } = buildStackSection(
-      "source-video",
-      "Source Video",
-      "vst-detail-source-col",
-      open
-    );
-    const sectionLabel = wrap.querySelector(
-      ":scope > .input-group-header .header-label"
-    );
-    if (sectionLabel) {
-      appendHelp(
-        sectionLabel,
-        wrap,
-        "Source Video",
-        "Start this clip from an existing video instead of generating it. Stages then refine/upscale the footage and a retake can regenerate part of it."
-      );
-    }
-    const source = clip.sourceVideo;
-    const removeSource = () => {
-      context.structuralCommit((clips) => {
-        const target = clips[clipIdx];
-        if (!target?.sourceVideo) {
-          return null;
-        }
-        const transaction = context.authoring();
-        target.sourceVideo = null;
-        reconcileClipArchitectureIdentity(
-          target,
-          transaction.capabilities.catalog
-        );
-        reconcileArchitectureIncomingIcLoraDrives(
-          clips,
-          transaction.generatedEntryMode,
-          transaction.capabilities.catalog
-        );
-        return "render";
-      });
-    };
-    const hint = document.createElement("small");
-    hint.className = "vst-detail-field-hint";
-    hint.textContent = "Use an existing video file as this clip instead of generating it.";
-    col.appendChild(hint);
-    col.appendChild(
-      buildMediaPickRow(
-        "Video file",
-        "video/*",
-        ["video"],
-        source?.fileName ?? null,
-        (data, fileName) => {
-          if (clip.id) {
-            applyPickedSourceVideo(context, clip.id, data, fileName);
-          }
-        },
-        removeSource
-      )
-    );
-    if (!source) {
-      return wrap;
-    }
-    const info = document.createElement("small");
-    info.className = "vst-detail-field-hint";
-    info.textContent = `Detected: ${source.fps > 0 ? `${source.fps} fps` : "unknown fps"} · ${source.durationSeconds > 0 ? `${source.durationSeconds.toFixed(1)} s` : "unknown length"}`;
-    col.appendChild(info);
-    const fileLimit = source.durationSeconds > 0 ? source.durationSeconds : source.startSeconds + source.lengthSeconds;
-    const syncClipDuration = (target) => {
-      const defaults = context.authoring().defaults;
-      applyClipDurationResize(
-        target,
-        Math.max(
-          CLIP_DURATION_MIN,
-          target.sourceVideo?.lengthSeconds ?? target.duration
-        ),
-        () => defaults,
-        getTimelineStore().getState().fps
-      );
-    };
-    const clampSource = (start, length) => clampStartLength(start, length, fileLimit, CLIP_DURATION_MIN);
-    const startInput = context.buildClampedNumber({
-      key: "source-start",
-      value: source.startSeconds,
-      min: 0,
-      max: Math.max(0, fileLimit - CLIP_DURATION_MIN),
-      step: DURATION_STEP2,
-      readBack: (clips) => clips[clipIdx]?.sourceVideo?.startSeconds ?? null,
-      mutate: (clips, value) => {
-        const target = clips[clipIdx];
-        const targetSource = target?.sourceVideo;
-        if (target && targetSource) {
-          const next = clampSource(value, targetSource.lengthSeconds);
-          targetSource.startSeconds = next.start;
-          targetSource.lengthSeconds = next.length;
-          syncClipDuration(target);
-        }
-      }
-    });
-    col.appendChild(
-      buildField(
-        "Start (s)",
-        startInput,
-        void 0,
-        "Where inside the source file this clip's footage begins. Trims the front of the file."
-      )
-    );
-    const lengthInput = context.buildClampedNumber({
-      key: "source-length",
-      value: source.lengthSeconds,
-      min: CLIP_DURATION_MIN,
-      max: fileLimit,
-      step: DURATION_STEP2,
-      readBack: (clips) => clips[clipIdx]?.sourceVideo?.lengthSeconds ?? null,
-      mutate: (clips, value) => {
-        const target = clips[clipIdx];
-        const targetSource = target?.sourceVideo;
-        if (target && targetSource) {
-          const next = clampSource(targetSource.startSeconds, value);
-          targetSource.startSeconds = next.start;
-          targetSource.lengthSeconds = next.length;
-          syncClipDuration(target);
-        }
-      }
-    });
-    col.appendChild(
-      buildField(
-        "Length (s)",
-        lengthInput,
-        void 0,
-        "How many seconds of the source file this clip uses, starting at Start. This also becomes the clip's duration."
-      )
-    );
-    const note = document.createElement("p");
-    note.className = "vst-detail-note";
-    note.textContent = "This range (conformed to the timeline fps and size) is the clip's starting point: the first stage refines it using its Control value, later stages refine or upscale it, and a retake regenerates part of it.";
-    col.appendChild(note);
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.className = "interrupt-button vst-btn-tiny vst-detail-delete vst-detail-rail-btn";
-    removeButton.textContent = "Remove source video";
-    removeButton.addEventListener("click", (event) => {
-      event.preventDefault();
-      removeSource();
-    });
-    col.appendChild(removeButton);
-    return wrap;
   };
 
   // frontend/architectures/conversion/presentation.ts
@@ -12481,8 +12481,8 @@ The conversion is one undoable change.`;
   var buildStageParamsColumn = (context, clip, clipIdx, stageIdx, stage, defaults) => {
     const column = document.createElement("div");
     column.className = "vst-detail-fields vst-detail-params";
-    const sourcedStage0 = stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
-    const isRefine = stageIdx >= 1 || sourcedStage0;
+    const initVideoStage0 = stageIdx === 0 && !!clip.initVideo && stage.skipped !== true;
+    const isRefine = stageIdx >= 1 || initVideoStage0;
     const stageCapabilities = context.authoring().capabilities.forStage(clip, stage);
     if (clip.loras.length > 0) {
       column.dataset.vstStageLorasSupported = `${stageCapabilities.decision("stageLoras").supported}`;
@@ -12537,7 +12537,7 @@ The conversion is one undoable change.`;
     appendStageUpscaleSection(bindings, isRefine);
     appendStageSamplerSchedulerSection(bindings);
     appendStageReferenceGuideSection(bindings);
-    if (sourcedStage0) {
+    if (initVideoStage0) {
       const note = document.createElement("p");
       note.className = "vst-detail-note vst-stage-passthrough-note";
       note.textContent = "This stage starts from the source footage — Control sets how much is re-generated (0 passes it through).";
@@ -12696,9 +12696,9 @@ The conversion is one undoable change.`;
       )
     );
     appendCapabilitySection(
-      "sourceVideo",
-      clip.sourceVideo !== null,
-      () => buildSourceVideoSection(context, clip, clipIdx, false)
+      "initVideo",
+      clip.initVideo !== null,
+      () => buildInitVideoSection(context, clip, clipIdx, false)
     );
     appendCapabilitySection(
       "retake",
@@ -14648,7 +14648,7 @@ The conversion is one undoable change.`;
             "linking",
             (clips) => {
               const clip = clips[state.idx];
-              if (state.idx < 0 || state.idx >= clips.length || clip.clipLengthFromAudio || clip.clipLengthFromControlNet || clip.sourceVideo) {
+              if (state.idx < 0 || state.idx >= clips.length || clip.clipLengthFromAudio || clip.clipLengthFromControlNet || clip.initVideo) {
                 return null;
               }
               const fps = documentFps(getState());

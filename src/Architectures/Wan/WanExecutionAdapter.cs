@@ -54,7 +54,7 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
         {
             diagnostics.Add(Refuse(
                 "'Video2Video Creativity' is request-global, but Wan refinement strength is "
-                + "clip-local. Use sourced stage 0 or each later stage's authored 'Control' "
+                + "clip-local. Use init-video stage 0 or each later stage's authored 'Control' "
                 + "value instead."));
         }
         return diagnostics;

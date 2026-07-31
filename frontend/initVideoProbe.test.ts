@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { estimateFpsFromMediaTimes } from "./sourceVideoProbe";
+import { estimateFpsFromMediaTimes } from "./initVideoProbe";
 
 const uniformTimes = (fps: number, count: number): number[] =>
     Array.from({ length: count }, (_, i) => i / fps);

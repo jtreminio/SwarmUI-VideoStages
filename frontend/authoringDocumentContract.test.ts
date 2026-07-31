@@ -101,7 +101,7 @@ const contractState = (): VideoStagesConfig => ({
                 lengthSeconds: 1.5,
                 strength: 0.7,
             },
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,REVG",
                 fileName: "source.mp4",
                 fps: 30,
@@ -181,7 +181,7 @@ const contractState = (): VideoStagesConfig => ({
             prompt: "",
             promptWindows: [],
             retake: null,
-            sourceVideo: null,
+            initVideo: null,
             refs: [],
             stages: [
                 {

@@ -30,7 +30,7 @@ it supports:
 - text-to-video;
 - host image or user init image to video;
 - source video followed by zero, one, or several generation stages;
-- source-video-only clips; and
+- init-video-only clips; and
 - the Refine Video media button, which authors an existing video onto clip 0 as
   its source and passes through the stages that already produced it.
 
@@ -53,7 +53,7 @@ preflighted document.
 Each phase is scoped either to the single root-owning architecture or to every
 active architecture. `ArchitectureRootOwnerResolver` picks the root owner: the
 first clip with stages whose input is host root media or an empty latent.
-Sourced clips consume their own media and never claim the host root. The
+InitVideo clips consume their own media and never claim the host root. The
 ControlNet preprocessor capture is architecture-neutral and therefore runs for
 every active architecture, including the source-only adapter, guarded so a
 mixed timeline captures once.
@@ -99,7 +99,7 @@ against that architecture, even when a stage is skipped. Later stages may
 resolve to different profiles inside the same architecture; each stage keeps
 its own resolved profile. Persisted `architectureHint` and model-profile hints
 exist only to explain or repair a document whose model can no longer resolve.
-They never enable features or authorize execution. A sourced clip with no
+They never enable features or authorize execution. A init-video clip with no
 active generation stages executes through the neutral `none` runtime, while
 its dormant authored stage chain is still checked for architecture and
 per-stage profile consistency.
@@ -229,7 +229,7 @@ crossfade budgeting, IC-LoRA presets, and the IC-LoRA drive contract.
 Capabilities say what is allowed; these are what they mean.
 
 - Retake regenerates only a frame window of the base video. It requires a
-  sourced clip and is mutually exclusive with frame references.
+  init-video clip and is mutually exclusive with frame references.
 - Prompt relay tiles a window list across the clip and requires a fixed frame
   count, so it cannot combine with audio-owned or ControlNet-owned length.
 - Upscale has four modes selected by the authored method-name prefix: `pixel-`,
@@ -257,7 +257,7 @@ Cross-architecture boundaries are cut-only. A persisted invalid continue or
 crossfade keeps its requested value for repair and compiles to an effective
 cut. A cross-architecture join, or one the owning architecture marks
 unsupported, blocks generation; a join that merely does not apply to its target
-— sourced target, target without a stage, target with an explicit first-frame
+— init-video target, target without a stage, target with an explicit first-frame
 reference, an unknown mode, or an insufficient frame budget — degrades to a cut
 with a warning that now actually reaches the user. Within one architecture, its
 boundary rules determine whether continue or crossfade is valid and how the
@@ -296,7 +296,7 @@ blocks rather than falling through to native audio.
 
 Clip-local base-source selection, clip-length ownership, segments, and
 stage-latent reuse are separate decisions. `ClipAudioBedDuration` is the single
-rule for how long a clip's audio bed is, so a sourced clip at a resampled fps
+rule for how long a clip's audio bed is, so a init-video clip at a resampled fps
 places segments the same way whether or not it has stages. Architecture-specific
 conditioning media, such as IC-LoRA drive audio, stays outside the base track
 and timeline mix. Architecture modules own any model-latent audio behavior.

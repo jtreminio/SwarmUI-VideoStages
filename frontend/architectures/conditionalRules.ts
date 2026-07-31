@@ -82,10 +82,10 @@ export const evaluateConditionalRule = (
             return (
                 clip !== undefined &&
                 clip.refs.length > 0 &&
-                clip.sourceVideo !== null
+                clip.initVideo !== null
             );
         case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-            return clip !== undefined && clip.sourceVideo === null;
+            return clip !== undefined && clip.initVideo === null;
         default:
             // Catalog parsing rejects unknown executable rules atomically.
             // Fail closed as a defense if an unchecked runtime value reaches

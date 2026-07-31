@@ -9,7 +9,7 @@ export const activeStageCount = (clip: Pick<Clip, "stages">): number => {
 };
 
 export const isExecutableClip = (clip: Clip): boolean =>
-    !clip.skipped && (clip.sourceVideo !== null || activeStageCount(clip) > 0);
+    !clip.skipped && (clip.initVideo !== null || activeStageCount(clip) > 0);
 
 export const executableClipIndexes = (clips: readonly Clip[]): number[] => {
     const firstSkipped = clips.findIndex((clip) => clip.skipped === true);

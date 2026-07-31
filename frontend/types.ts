@@ -132,7 +132,7 @@ export interface Retake {
  * stage 0 refines it according to its Control value, later stages
  * refine/upscale it, and a retake window regenerates part of it.
  */
-export interface SourceVideo {
+export interface InitVideo {
     data: string;
     fileName: string | null;
     fps: number;
@@ -224,7 +224,7 @@ export interface Clip {
     prompt: string;
     promptWindows: PromptWindow[];
     retake: Retake | null;
-    sourceVideo: SourceVideo | null;
+    initVideo: InitVideo | null;
     refs: RefImage[];
     stages: Stage[];
 }

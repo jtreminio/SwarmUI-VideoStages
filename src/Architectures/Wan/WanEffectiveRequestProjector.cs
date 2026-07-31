@@ -103,11 +103,11 @@ internal static class WanEffectiveRequestProjector
                     effective.Id));
                 continue;
             }
-            if (first && effective.SourceVideo is not null)
+            if (first && effective.InitVideo is not null)
             {
                 decisions.Add(EffectiveRequestDecision.Ignore(
-                    "effective-request.wan-sourced-first-frame-reference-ignored",
-                    $"Clip {effective.Id} already enters from sourced video, so its separate "
+                    "effective-request.wan-init-video-first-frame-reference-ignored",
+                    $"Clip {effective.Id} already enters from init-video video, so its separate "
                         + "first-frame reference remains saved and is ignored for this "
                         + "generation.",
                     effective.Id));

@@ -36,7 +36,7 @@ internal sealed class StageClipExecutor(
     StageGuideReferenceState guideReferences,
     BoundaryHandoffResolver boundaryHandoffResolver)
 {
-    private readonly SourcedClipInstaller _sourcedClipInstaller = new(g);
+    private readonly InitVideoClipInstaller _initVideoClipInstaller = new(g);
 
     public RuntimeArtifact Execute(StageClipExecutionContext context)
     {
@@ -49,19 +49,19 @@ internal sealed class StageClipExecutor(
             context.RootSources.SourceMedia,
             context.RootSources.SourceVae);
 
-        WGNodeData sourcedMedia = InstallSourceIfPlanned(plannedClip);
+        WGNodeData initVideoMedia = InstallSourceIfPlanned(plannedClip);
         clipContext.IcLoraEntryIncomingMedia =
-            sourcedMedia
+            initVideoMedia
             ?? context.PreviousTimelineClipOutput
             ?? context.RootSources.SourceMedia;
         LtxBoundaryAudioCarry boundaryAudioCarry =
-            PrepareCrossClipInput(context, sourcedMedia, clipContext);
-        if (sourcedMedia is not null)
+            PrepareCrossClipInput(context, initVideoMedia, clipContext);
+        if (initVideoMedia is not null)
         {
-            g.CurrentMedia = sourcedMedia;
+            g.CurrentMedia = initVideoMedia;
         }
 
-        PrepareClipAudio(context, clipContext, sourcedMedia, boundaryAudioCarry);
+        PrepareClipAudio(context, clipContext, initVideoMedia, boundaryAudioCarry);
         if (plannedClip.Stages.Count == 0)
         {
             return CaptureStageInputArtifact();
@@ -81,22 +81,22 @@ internal sealed class StageClipExecutor(
 
     private WGNodeData InstallSourceIfPlanned(ClipPlan plannedClip)
     {
-        if (!plannedClip.IsSourced)
+        if (!plannedClip.HasInitVideo)
         {
             return null;
         }
-        WGNodeData sourcedMedia = _sourcedClipInstaller.TryInstall(plannedClip);
-        if (sourcedMedia is null)
+        WGNodeData initVideoMedia = _initVideoClipInstaller.TryInstall(plannedClip);
+        if (initVideoMedia is null)
         {
             throw new SwarmUserErrorException(
                 $"VideoStages: clip {plannedClip.ClipId} source video could not be installed.");
         }
-        return sourcedMedia;
+        return initVideoMedia;
     }
 
     private LtxBoundaryAudioCarry PrepareCrossClipInput(
         StageClipExecutionContext context,
-        WGNodeData sourcedMedia,
+        WGNodeData initVideoMedia,
         ClipContext clipContext)
     {
         if (context.Plan.Clips.Count <= 1 || context.Runtime.ClipIndex == 0)
@@ -104,7 +104,7 @@ internal sealed class StageClipExecutor(
             return null;
         }
 
-        if (sourcedMedia is null)
+        if (initVideoMedia is null)
         {
             if (clipContext.SourceMedia is null)
             {
@@ -128,22 +128,22 @@ internal sealed class StageClipExecutor(
             context.Runtime.PreviousClip,
             context.PreviousClipOutput,
             context.Runtime.Clip,
-            nextClipIsSourced: sourcedMedia is not null,
+            nextClipHasInitVideo: initVideoMedia is not null,
             clipContext);
     }
 
     private void PrepareClipAudio(
         StageClipExecutionContext context,
         ClipContext clipContext,
-        WGNodeData sourcedMedia,
+        WGNodeData initVideoMedia,
         LtxBoundaryAudioCarry boundaryAudioCarry)
     {
         ClipPlan plannedClip = context.Runtime.Clip;
         StagePlan firstStage = plannedClip.Stages.FirstOrDefault();
         audioTimelineExecutor.ApplyControlNetClipLength(plannedClip);
         AudioRuntimeSources clipAudioSources =
-            sourcedMedia?.AttachedAudio is WGNodeData sourcedAudio
-                ? context.RootSources.AudioSources with { NativeAudio = sourcedAudio }
+            initVideoMedia?.AttachedAudio is WGNodeData initVideoAudio
+                ? context.RootSources.AudioSources with { NativeAudio = initVideoAudio }
                 : context.RootSources.AudioSources;
         audioTimelineExecutor.PrepareClipAudio(new(
             firstStage,

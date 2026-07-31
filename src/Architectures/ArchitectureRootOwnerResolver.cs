@@ -4,7 +4,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures;
 
 /// <summary>
-/// Resolves the single architecture allowed to own host-root transformations. Sourced clip stages
+/// Resolves the single architecture allowed to own host-root transformations. InitVideo clip stages
 /// consume their own media, so they cannot claim the host root merely by appearing first.
 /// </summary>
 internal static class ArchitectureRootOwnerResolver

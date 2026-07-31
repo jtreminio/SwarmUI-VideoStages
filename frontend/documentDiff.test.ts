@@ -85,7 +85,7 @@ const clip = (id: string): CanonicalClip => ({
     prompt: id,
     promptWindows: [],
     retake: null,
-    sourceVideo: null,
+    initVideo: null,
     refs: [],
     stages: [],
 });
@@ -201,12 +201,12 @@ describe("diffDocuments", () => {
         ).toThrow(new DocumentDiffError("architecture-invariant"));
     });
 
-    it("accepts deleting the last stage of a sourced clip", () => {
-        // A sourced clip with no stages is the documented `none` architecture case, but the diff
+    it("accepts deleting the last stage of a init-video clip", () => {
+        // A initVideoClip clip with no stages is the documented `none` architecture case, but the diff
         // used to reject a null next authored architecture outright, so the delete threw
         // architecture-invariant on save (and the undo across it silently did nothing).
         const before = document();
-        before.clips[0].sourceVideo = {
+        before.clips[0].initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -260,7 +260,7 @@ describe("diffDocuments", () => {
     it("accepts only catalog-derived source/skipped identity transitions", () => {
         const before = document();
         const after = structuredClone(before);
-        after.clips[0].sourceVideo = {
+        after.clips[0].initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -332,7 +332,7 @@ describe("diffDocuments", () => {
 
     it("round-trips a same-architecture retarget in dormant source-only stages", () => {
         const before = document();
-        before.clips[0].sourceVideo = {
+        before.clips[0].initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -444,9 +444,9 @@ describe("diffDocuments", () => {
         expect(result.document).toEqual(after);
     });
 
-    it("rejects an atomic sourced-to-generated conversion whose target cannot enter the final root role", () => {
+    it("rejects an atomic init-video-to-generated conversion whose target cannot enter the final root role", () => {
         const before = document();
-        before.clips[0].sourceVideo = {
+        before.clips[0].initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -460,9 +460,9 @@ describe("diffDocuments", () => {
         );
         if (!targetEntry) throw new Error("missing target model");
         targetEntry.entryAbilities = ["image"];
-        targetEntry.entryModes = ["image-to-video", "source-video"];
+        targetEntry.entryModes = ["image-to-video", "init-video"];
         const after = structuredClone(before);
-        after.clips[0].sourceVideo = null;
+        after.clips[0].initVideo = null;
         after.clips[0].architectureHint = target.architectureId;
         after.clips[0].modelProfileId = target.modelProfileId;
         after.clips[0].stages.forEach((entry) => {
@@ -478,7 +478,7 @@ describe("diffDocuments", () => {
         ).toThrow(new DocumentDiffError("architecture-invariant"));
     });
 
-    it("applies the final source role before an atomic generated-to-sourced conversion", () => {
+    it("applies the final source role before an atomic generated-to-init-video conversion", () => {
         const before = document();
         const { catalog, target } = crossArchitectureCatalog();
         const targetEntry = catalog.entries.find(
@@ -486,9 +486,9 @@ describe("diffDocuments", () => {
         );
         if (!targetEntry) throw new Error("missing target model");
         targetEntry.entryAbilities = ["image"];
-        targetEntry.entryModes = ["image-to-video", "source-video"];
+        targetEntry.entryModes = ["image-to-video", "init-video"];
         const after = structuredClone(before);
-        after.clips[0].sourceVideo = {
+        after.clips[0].initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -568,7 +568,7 @@ describe("diffDocuments", () => {
         targetClip.architectureHint = "test-video";
         targetClip.modelProfileId = "test-profile";
         targetClip.skipped = true;
-        targetClip.sourceVideo = {
+        targetClip.initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -641,7 +641,7 @@ describe("diffDocuments", () => {
 
     it("detects architecture conversion in dormant source-only authored stages", () => {
         const before = document();
-        before.clips[0].sourceVideo = {
+        before.clips[0].initVideo = {
             data: "data:video/mp4;base64,AAAA",
             fileName: "source.mp4",
             fps: 24,
@@ -659,7 +659,7 @@ describe("diffDocuments", () => {
             (entry) => entry.id === "test-video",
         );
         if (!fake) throw new Error("missing fake descriptor");
-        fake.capabilities.clip = [...fake.capabilities.clip, "source-video"];
+        fake.capabilities.clip = [...fake.capabilities.clip, "init-video"];
         const planned = planArchitectureConversion(
             before.clips[0],
             target,

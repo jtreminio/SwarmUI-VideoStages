@@ -13,11 +13,7 @@ import type {
 } from "./types";
 
 const BOUNDARY_MODES = ["cut", "continue", "crossfade"] as const;
-const ENTRY_MODES = [
-    "text-to-video",
-    "image-to-video",
-    "source-video",
-] as const;
+const ENTRY_MODES = ["text-to-video", "image-to-video", "init-video"] as const;
 const ENTRY_ABILITIES = ["text", "image"] as const;
 const REFERENCE_POSITIONS = ["first", "last", "any"] as const;
 
@@ -133,7 +129,7 @@ const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
                 hasExactKeys(constraints, ["requiresAnyEntryMode"]) &&
                 isEntryModeArray(constraints.requiresAnyEntryMode) &&
                 constraints.requiresAnyEntryMode.length === 1 &&
-                constraints.requiresAnyEntryMode.includes("source-video")
+                constraints.requiresAnyEntryMode.includes("init-video")
             );
     }
     return false;

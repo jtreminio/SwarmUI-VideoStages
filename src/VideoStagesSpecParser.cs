@@ -66,7 +66,7 @@ internal static class VideoStagesSpecParser
 
             ClipSpec clip = VideoClipSpecParser.Parse(clipObject, clipIndex, context);
             if (clip.Stages.Count == 0
-                && clip.SourceVideo is null
+                && clip.InitVideo is null
                 && clip.AuthoredStages.Count == 0)
             {
                 continue;

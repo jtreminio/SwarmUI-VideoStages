@@ -97,7 +97,7 @@ type TemporalClip = Pick<Clip, "stages"> &
     Partial<
         Pick<
             Clip,
-            | "sourceVideo"
+            | "initVideo"
             | "retake"
             | "clipLengthFromAudio"
             | "clipLengthFromControlNet"
@@ -125,7 +125,7 @@ const effectiveGridModels = (
     const retakeCanExecute =
         clip.retake !== null &&
         clip.retake !== undefined &&
-        clip.sourceVideo != null &&
+        clip.initVideo != null &&
         (!clipDescriptor ||
             !clipCapabilities ||
             architectureFeatureSupport("retake", {
@@ -134,7 +134,7 @@ const effectiveGridModels = (
 
     return stages
         .filter((stage, stageIndex) => {
-            if (stageIndex === 0 && clip.sourceVideo == null) {
+            if (stageIndex === 0 && clip.initVideo == null) {
                 return true;
             }
             if (

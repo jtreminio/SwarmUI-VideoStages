@@ -34,7 +34,7 @@ public partial class StageFlowTests
                     SeedUnrelatedPublicationAndSharedRootLoaderSinkStep()
                 }
                 .Concat(WorkflowTestHarness.VideoStagesSteps()),
-                features: SourcedClipFeatures);
+                features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmSaveAnimationWSNode unrelatedSave =
@@ -99,7 +99,7 @@ public partial class StageFlowTests
                     WorkflowTestHarness.CorePreVideoSavePrepStep()
                 }
                 .Concat(WorkflowTestHarness.VideoStagesSteps()),
-                features: SourcedClipFeatures);
+                features: InitVideoClipFeatures);
 
         // The merged video reaches the save through a BatchImagesNode autogrow list, and the root
         // VAE loader is reachable only through it. Every clip decode still reads that loader, so the

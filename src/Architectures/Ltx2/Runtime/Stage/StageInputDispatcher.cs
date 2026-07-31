@@ -22,10 +22,10 @@ internal enum StageInputCase
     FrameReferencesOnly,
 
     /// <summary>
-    /// A sourced clip's own footage is the stage input; re-injecting it as an i2v guide would
+    /// A initVideoClip clip's own footage is the stage input; re-injecting it as an i2v guide would
     /// overwrite the noise mask of every frame it spans.
     /// </summary>
-    SourcedFootage,
+    InitVideoFootage,
 
     /// <summary>A defaulted stage past the opening one refines its incoming latent directly.</summary>
     IncomingLatentRefine,
@@ -47,7 +47,7 @@ internal readonly record struct StageInputFacts(
     bool IsContinuationTail,
     bool HasOtherFrameReferences,
     bool ReplacesTextToVideoRoot,
-    bool SourcedFootageIsStageInput,
+    bool InitVideoFootageIsStageInput,
     bool RefinesIncomingLatent,
     bool PriorStageLatentIsReusable);
 
@@ -62,7 +62,7 @@ internal static class StageInputDispatcher
         { HasPrimaryGuide: true } => StageInputCase.AuthoredGuideReference,
         { ReplacesTextToVideoRoot: true } => StageInputCase.TextToVideoRootReplacement,
         { HasOtherFrameReferences: true } => StageInputCase.FrameReferencesOnly,
-        { SourcedFootageIsStageInput: true } => StageInputCase.SourcedFootage,
+        { InitVideoFootageIsStageInput: true } => StageInputCase.InitVideoFootage,
         { RefinesIncomingLatent: true } => StageInputCase.IncomingLatentRefine,
         { PriorStageLatentIsReusable: true } => StageInputCase.PriorStageLatentReuse,
         _ => StageInputCase.GuideReinjection,
@@ -74,7 +74,7 @@ internal static class StageInputDispatcher
     internal static bool SkipsGuideReinjection(StageInputCase inputCase) => inputCase
         is StageInputCase.TextToVideoRootReplacement
         or StageInputCase.FrameReferencesOnly
-        or StageInputCase.SourcedFootage
+        or StageInputCase.InitVideoFootage
         or StageInputCase.IncomingLatentRefine
         or StageInputCase.PriorStageLatentReuse;
 }

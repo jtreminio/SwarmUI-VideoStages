@@ -76,7 +76,7 @@ interface ClipFixture {
         lengthSeconds: number;
         strength: number;
     };
-    sourceVideo?: {
+    initVideo?: {
         data: string;
         fileName: string;
         fps: number;
@@ -109,7 +109,7 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     refs: clip.refs ?? [],
     promptWindows: [],
     ...(clip.retake ? { retake: clip.retake } : {}),
-    ...(clip.sourceVideo ? { sourceVideo: clip.sourceVideo } : {}),
+    ...(clip.initVideo ? { initVideo: clip.initVideo } : {}),
 });
 
 // Prompt windows + clip prompts ride in the prompt box as tags.
@@ -236,7 +236,7 @@ const committedClips = (): Clip[] => persistence.getClips();
 const retakeFieldByLabel = (label: string): HTMLElement =>
     fieldByLabel(label, ".vst-detail-retake-col");
 
-/** Retakes are only authorable on a sourced clip (`retake-source-required`). */
+/** Retakes are only authorable on a initVideoClip clip (`retake-source-required`). */
 const RETAKE_SOURCE = {
     data: "data:video/mp4;base64,AA==",
     fileName: "base.mp4",
@@ -568,7 +568,7 @@ describe("createTimelineDetailStrip", () => {
         );
     });
 
-    it("places the source-video explanation at the top of its group", () => {
+    it("places the init-video explanation at the top of its group", () => {
         setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const content = detailBody()?.querySelector<HTMLElement>(
@@ -1096,12 +1096,12 @@ describe("createTimelineDetailStrip", () => {
         expect(controlNetLabels()).toContain("Drive Media");
     });
 
-    it("sourced clip renders the IC-LoRA Source select and footage-drive hint on an all-stages entry", () => {
+    it("init-video clip renders the IC-LoRA Source select and footage-drive hint on an all-stages entry", () => {
         setup([
             {
                 duration: 4,
                 stages: [{}, {}],
-                sourceVideo: {
+                initVideo: {
                     data: "data:video/mp4;base64,AA==",
                     fileName: "clip.mp4",
                     fps: 24,
@@ -1123,12 +1123,12 @@ describe("createTimelineDetailStrip", () => {
         expect(icLoraSelect("source").options[1].disabled).toBe(false);
     });
 
-    it("sourced clip Incoming entry shows its data source at stage 0", () => {
+    it("init-video clip Incoming entry shows its data source at stage 0", () => {
         setup([
             {
                 duration: 4,
                 stages: [{}, {}],
-                sourceVideo: {
+                initVideo: {
                     data: "data:video/mp4;base64,AA==",
                     fileName: "clip.mp4",
                     fps: 24,
@@ -1154,7 +1154,7 @@ describe("createTimelineDetailStrip", () => {
         );
     });
 
-    it("unsourced clip disables Incoming on a stage-0/all entry", () => {
+    it("non-init-video clip disables Incoming on a stage-0/all entry", () => {
         setup([
             {
                 duration: 4,
@@ -1647,7 +1647,7 @@ describe("createTimelineDetailStrip", () => {
         setup([
             {
                 duration: 4,
-                sourceVideo: {
+                initVideo: {
                     data: "data:video/mp4;base64,AA==",
                     fileName: "source.mp4",
                     fps: 24,
@@ -1822,8 +1822,8 @@ describe("createTimelineDetailStrip", () => {
         ).toEqual([false, false, false]);
     });
 
-    describe("sourced clip stage 0 refine params", () => {
-        const SOURCE_VIDEO = {
+    describe("init-video clip stage 0 refine params", () => {
+        const INIT_VIDEO = {
             data: "data:video/mp4;base64,AA==",
             fileName: "clip.mp4",
             fps: 24,
@@ -1837,16 +1837,16 @@ describe("createTimelineDetailStrip", () => {
             document.querySelector(".vst-stage-passthrough-note")
                 ?.textContent ?? "";
 
-        it("renders enabled refine params and a footage note on sourced stage 0", () => {
+        it("renders enabled refine params and a footage note on init-video stage 0", () => {
             setup([
                 {
                     duration: 4,
                     stages: [{ control: 0.5, upscale: 2 }, {}],
-                    sourceVideo: SOURCE_VIDEO,
+                    initVideo: INIT_VIDEO,
                 },
             ]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-            // Sourced stage 0 refines its footage: no passthrough gating.
+            // InitVideo stage 0 refines its footage: no passthrough gating.
             expect(
                 fields()?.classList.contains("vst-stage-fields-passthrough"),
             ).toBe(false);
@@ -1869,7 +1869,7 @@ describe("createTimelineDetailStrip", () => {
             expect(note()).toBe("");
         });
 
-        it("leaves stage 0 of an unsourced clip without refine params or note", () => {
+        it("leaves stage 0 of an non-init-video clip without refine params or note", () => {
             setup([{ duration: 4, stages: [{}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             expect(
@@ -1917,7 +1917,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("shows a + Retake button on a clip without a retake and creates+selects one", () => {
-        setup([{ duration: 4, stages: [{}], sourceVideo: RETAKE_SOURCE }]);
+        setup([{ duration: 4, stages: [{}], initVideo: RETAKE_SOURCE }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const addBtn = document.querySelector<HTMLElement>(
             ".vst-detail-add-retake",
@@ -1939,7 +1939,7 @@ describe("createTimelineDetailStrip", () => {
                 duration: 10,
                 stages: [{}],
                 retake: { startSeconds: 2, lengthSeconds: 3, strength: 1 },
-                sourceVideo: RETAKE_SOURCE,
+                initVideo: RETAKE_SOURCE,
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
@@ -1954,7 +1954,7 @@ describe("createTimelineDetailStrip", () => {
                 duration: 10,
                 stages: [{}],
                 retake: { startSeconds: 2, lengthSeconds: 3, strength: 0.6 },
-                sourceVideo: RETAKE_SOURCE,
+                initVideo: RETAKE_SOURCE,
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
@@ -1986,7 +1986,7 @@ describe("createTimelineDetailStrip", () => {
                 duration: 10,
                 stages: [{}],
                 retake: { startSeconds: 2, lengthSeconds: 3, strength: 1 },
-                sourceVideo: RETAKE_SOURCE,
+                initVideo: RETAKE_SOURCE,
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
@@ -2010,7 +2010,7 @@ describe("createTimelineDetailStrip", () => {
                 duration: 10,
                 stages: [{}],
                 retake: { startSeconds: 2, lengthSeconds: 3, strength: 1 },
-                sourceVideo: RETAKE_SOURCE,
+                initVideo: RETAKE_SOURCE,
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
@@ -2045,7 +2045,7 @@ describe("createTimelineDetailStrip", () => {
                 duration: 10,
                 stages: [{}],
                 retake: { startSeconds: 2, lengthSeconds: 3, strength: 1 },
-                sourceVideo: RETAKE_SOURCE,
+                initVideo: RETAKE_SOURCE,
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
@@ -2071,7 +2071,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("keeps the empty single-instance Retake section selectable", () => {
-        setup([{ duration: 4, stages: [{}], sourceVideo: RETAKE_SOURCE }]);
+        setup([{ duration: 4, stages: [{}], initVideo: RETAKE_SOURCE }]);
         setSelection({ kind: "retake", clipIdx: 0 });
         expect(crumbText()).toBe("Retake · Clip 0");
         expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
@@ -3593,7 +3593,7 @@ describe("createTimelineDetailStrip", () => {
                         lengthSeconds: 1,
                         strength: 1,
                     },
-                    sourceVideo: RETAKE_SOURCE,
+                    initVideo: RETAKE_SOURCE,
                 },
             ]);
             wireLiveRenders();
@@ -3628,7 +3628,7 @@ describe("createTimelineDetailStrip", () => {
                         lengthSeconds: 1,
                         strength: 1,
                     },
-                    sourceVideo: RETAKE_SOURCE,
+                    initVideo: RETAKE_SOURCE,
                 },
             ]);
             wireLiveRenders();
@@ -3930,7 +3930,7 @@ describe("createTimelineDetailStrip", () => {
                 {
                     duration: 4,
                     stages: [{}, {}, {}],
-                    sourceVideo: RETAKE_SOURCE,
+                    initVideo: RETAKE_SOURCE,
                 },
             ]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
@@ -4143,7 +4143,7 @@ describe("createTimelineDetailStrip", () => {
                 '[data-vst-repeater-key="stages"]',
             );
             const source = detailBody()?.querySelector<HTMLElement>(
-                '[data-vst-accordion-key="source-video"]',
+                '[data-vst-accordion-key="init-video"]',
             );
             expect(stages?.classList.contains("input-group-open")).toBe(true);
             source
@@ -4193,7 +4193,7 @@ describe("createTimelineDetailStrip", () => {
                 '[data-vst-repeater-key="stages"]',
             );
             const source = detailBody()?.querySelector<HTMLElement>(
-                '[data-vst-accordion-key="source-video"]',
+                '[data-vst-accordion-key="init-video"]',
             );
             source
                 ?.querySelector<HTMLElement>(":scope > .input-group-header")
@@ -4209,7 +4209,7 @@ describe("createTimelineDetailStrip", () => {
             ).toBe(true);
             expect(
                 detailBody()
-                    ?.querySelector('[data-vst-accordion-key="source-video"]')
+                    ?.querySelector('[data-vst-accordion-key="init-video"]')
                     ?.classList.contains("input-group-open"),
             ).toBe(true);
         });

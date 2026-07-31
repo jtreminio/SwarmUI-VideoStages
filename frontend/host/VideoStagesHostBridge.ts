@@ -38,7 +38,7 @@ export interface VideoStagesHostBridge {
     addParamRefreshHook(hook: () => unknown): (() => void) | null;
 
     getMediaOutputPrefix(): string;
-    createSourceVideoElement(): HTMLVideoElement;
+    createInitVideoElement(): HTMLVideoElement;
     enableSliders(element: HTMLElement): void;
 
     registerRefineVideoButton(

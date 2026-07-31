@@ -80,15 +80,15 @@ describe("backend-aligned authoring diagnostics", () => {
         expect(diagnostic?.severity).toBe("error");
     });
 
-    it("allows retake source preconditions in sourced flows", () => {
+    it("allows retake source preconditions in init-video flows", () => {
         const retake = {
             startSeconds: 0,
             lengthSeconds: 1,
             strength: 1,
         };
-        const sourced = minimalClip({
+        const initVideoClip = minimalClip({
             retake,
-            sourceVideo: {
+            initVideo: {
                 data: "data:video/mp4;base64,QQ==",
                 fileName: "source.mp4",
                 fps: 24,
@@ -97,14 +97,14 @@ describe("backend-aligned authoring diagnostics", () => {
                 lengthSeconds: 2,
             },
         });
-        expect(codes([sourced])).not.toContain("retake-source-required");
+        expect(codes([initVideoClip])).not.toContain("retake-source-required");
     });
 
     it("rejects frame references combined with an executable retake", () => {
         expect(
             codes([
                 minimalClip({
-                    sourceVideo: {
+                    initVideo: {
                         data: "data:video/mp4;base64,QQ==",
                         fileName: "source.mp4",
                         fps: 24,

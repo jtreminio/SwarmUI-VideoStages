@@ -99,12 +99,12 @@ internal sealed class HostVideoArchitectureModule :
         [
             ArchitectureEntryMode.TextToVideo,
             ArchitectureEntryMode.ImageToVideo,
-            ArchitectureEntryMode.SourceVideo,
+            ArchitectureEntryMode.InitVideo,
         ],
         new(
             ArchitectureCapability.GeneratedEntry
-                | ArchitectureCapability.SourcedEntry,
-            ClipCapability.Prompts | ClipCapability.SourceVideo,
+                | ArchitectureCapability.InitVideoEntry,
+            ClipCapability.Prompts | ClipCapability.InitVideo,
             StageCapability.ImageInput
                 | StageCapability.VideoInput
                 | StageCapability.PixelUpscale
@@ -205,7 +205,7 @@ internal sealed class HostVideoArchitectureModule :
         foreach (StageSpec stage in activeStages)
         {
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
-            bool decodedInput = clip.SourceVideo is not null
+            bool decodedInput = clip.InitVideo is not null
                 || stage.ClipStageIndex > 0;
             NormalLoraTargetPolicy loraTargetPolicy =
                 resolved.LorasTargetTextEncoder == false

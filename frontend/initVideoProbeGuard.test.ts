@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from "@jest/globals";
 import { minimalClip } from "./__test_helpers__/clipFixtures";
 import {
-    beginSourceVideoProbeOperation,
+    beginInitVideoProbeOperation,
     findClipByStableId,
-    resetSourceVideoProbeOperationsForTests,
-} from "./sourceVideoProbeGuard";
+    resetInitVideoProbeOperationsForTests,
+} from "./initVideoProbeGuard";
 
-afterEach(() => resetSourceVideoProbeOperationsForTests());
+afterEach(() => resetInitVideoProbeOperationsForTests());
 
-describe("source-video probe operation guard", () => {
+describe("init-video probe operation guard", () => {
     const revision = 7;
 
     it.each([
@@ -17,7 +17,7 @@ describe("source-video probe operation guard", () => {
         "clip replacement",
         "unrelated document edit",
     ])("rejects after a revision change caused by %s", () => {
-        const operation = beginSourceVideoProbeOperation("clip-a", revision);
+        const operation = beginInitVideoProbeOperation("clip-a", revision);
         expect(operation.claim(revision + 1)).toBe(false);
     });
 
@@ -33,21 +33,21 @@ describe("source-video probe operation guard", () => {
     });
 
     it("rejects a cancelled probe", () => {
-        const operation = beginSourceVideoProbeOperation("clip-a", revision);
+        const operation = beginInitVideoProbeOperation("clip-a", revision);
         operation.cancel();
         expect(operation.claim(revision)).toBe(false);
     });
 
     it("lets only the latest overlapping pick for one clip commit", () => {
-        const first = beginSourceVideoProbeOperation("clip-a", revision);
-        const second = beginSourceVideoProbeOperation("clip-a", revision);
+        const first = beginInitVideoProbeOperation("clip-a", revision);
+        const second = beginInitVideoProbeOperation("clip-a", revision);
         expect(first.claim(revision)).toBe(false);
         expect(second.claim(revision)).toBe(true);
     });
 
     it("keeps concurrent picks for different clips independent", () => {
-        const first = beginSourceVideoProbeOperation("clip-a", revision);
-        const second = beginSourceVideoProbeOperation("clip-b", revision);
+        const first = beginInitVideoProbeOperation("clip-a", revision);
+        const second = beginInitVideoProbeOperation("clip-b", revision);
         expect(first.claim(revision)).toBe(true);
         expect(second.claim(revision)).toBe(true);
     });

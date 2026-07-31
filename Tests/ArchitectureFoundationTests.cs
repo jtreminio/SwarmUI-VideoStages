@@ -181,9 +181,9 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Resolver_validates_all_skipped_sourced_chain_before_executing_as_none()
+    public void Resolver_validates_all_skipped_init_video_chain_before_executing_as_none()
     {
-        ClipSpec sourced = SourcedClip(0) with
+        ClipSpec initVideoClip = InitVideoClip(0) with
         {
             AuthoredArchitectureHint = "ltx2",
             AuthoredModelProfileHint = "ltx-profile",
@@ -195,7 +195,7 @@ public class ArchitectureFoundationTests
         };
 
         ArchitecturePlanningResult result =
-            ArchitecturePlanResolver.Resolve(Spec(sourced), new FakeRegistry());
+            ArchitecturePlanResolver.Resolve(Spec(initVideoClip), new FakeRegistry());
 
         Assert.Equal(NoneArchitecture.Id, result.Clips[0].Architecture.Id);
         PlanDiagnostic diagnostic = Assert.Single(
@@ -208,7 +208,7 @@ public class ArchitectureFoundationTests
     [Fact]
     public void Source_only_clip_is_none_and_rejects_an_authored_generation_architecture()
     {
-        ClipSpec clip = SourcedClip(0) with { AuthoredArchitectureHint = "ltx2" };
+        ClipSpec clip = InitVideoClip(0) with { AuthoredArchitectureHint = "ltx2" };
 
         ArchitecturePlanningResult result =
             ArchitecturePlanResolver.Resolve(Spec(clip), new FakeRegistry());
@@ -240,9 +240,9 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Sourced_only_dormant_mixed_stages_report_only_the_dormant_architecture_error()
+    public void InitVideo_only_dormant_mixed_stages_report_only_the_dormant_architecture_error()
     {
-        ClipSpec clip = SourcedClip(0) with
+        ClipSpec clip = InitVideoClip(0) with
         {
             AuthoredArchitectureHint = "none",
             AuthoredModelProfileHint = "none",
@@ -269,9 +269,9 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Sourced_only_same_architecture_dormant_stages_plan_as_none_without_identity_error()
+    public void InitVideo_only_same_architecture_dormant_stages_plan_as_none_without_identity_error()
     {
-        ClipSpec clip = SourcedClip(0) with
+        ClipSpec clip = InitVideoClip(0) with
         {
             AuthoredArchitectureHint = "none",
             AuthoredModelProfileHint = "none",
@@ -297,9 +297,9 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Sourced_only_same_architecture_dormant_stages_may_use_different_profiles()
+    public void InitVideo_only_same_architecture_dormant_stages_may_use_different_profiles()
     {
-        ClipSpec clip = SourcedClip(0) with
+        ClipSpec clip = InitVideoClip(0) with
         {
             AuthoredArchitectureHint = "none",
             AuthoredModelProfileHint = "none",
@@ -502,7 +502,7 @@ public class ArchitectureFoundationTests
     [Fact]
     public void Source_only_none_ignores_dormant_generation_authoring_options()
     {
-        ClipSpec clip = SourcedClip(0) with
+        ClipSpec clip = InitVideoClip(0) with
         {
             PromptWindows = [new("dormant relay", 0, 1)],
             ImageRefs = [new("Upload", 1, false, "ref.png")],
@@ -536,7 +536,7 @@ public class ArchitectureFoundationTests
     [Fact]
     public void Source_only_none_ignores_captured_stage_audio_reuse()
     {
-        ClipSpec clip = SourcedClip(0) with
+        ClipSpec clip = InitVideoClip(0) with
         {
             ReuseAudio = true,
             AuthoredArchitectureHint = "none",
@@ -556,7 +556,7 @@ public class ArchitectureFoundationTests
     [Fact]
     public void Source_only_none_ignores_audio_derived_duration_but_accepts_uploaded_audio()
     {
-        ClipSpec clip = SourcedClip(0) with
+        ClipSpec clip = InitVideoClip(0) with
         {
             AudioSource = Constants.AudioSourceUpload,
             UploadedAudio = new("data:audio/wav;base64,AA==", "voice.wav"),
@@ -587,7 +587,7 @@ public class ArchitectureFoundationTests
     [Fact]
     public void Source_only_none_ignores_control_signal_derived_duration()
     {
-        ClipSpec clip = SourcedClip(0) with
+        ClipSpec clip = InitVideoClip(0) with
         {
             ClipLengthFromControlNet = true,
             AuthoredArchitectureHint = "none",
@@ -798,18 +798,18 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Sourced_only_architecture_needs_no_major_prompt_support()
+    public void InitVideo_only_architecture_needs_no_major_prompt_support()
     {
-        // The sourced-only architecture publishes no prompt capability and runs no stage, so the
+        // The init-video-only architecture publishes no prompt capability and runs no stage, so the
         // prompt gate must not fire for it.
         VideoArchitectureDescriptor descriptor = NoneArchitecture.Descriptor;
-        ClipSpec clip = SourcedClip(0);
+        ClipSpec clip = InitVideoClip(0);
 
         IReadOnlyList<PlanDiagnostic> diagnostics =
             ArchitectureCapabilityValidator.Validate(
                 clip,
                 descriptor,
-                ArchitectureEntryMode.SourceVideo,
+                ArchitectureEntryMode.InitVideo,
                 new Dictionary<int, ResolvedVideoModel>());
 
         Assert.DoesNotContain(
@@ -1565,10 +1565,10 @@ public class ArchitectureFoundationTests
         Assert.Null(none["profiles"]);
         Assert.Null(none["extras"]);
         Assert.Equal(
-            ["sourced-entry"],
+            ["init-video-entry"],
             none["capabilities"]["architecture"].Values<string>());
         Assert.Equal(
-            ["source-video", "audio-sources", "audio-segments"],
+            ["init-video", "audio-sources", "audio-segments"],
             none["capabilities"]["clip"].Values<string>());
         Assert.Equal(
             ["Disabled", "Upload"],
@@ -1590,13 +1590,13 @@ public class ArchitectureFoundationTests
         Assert.Equal(
             [
                 "generated-entry",
-                "sourced-entry",
+                "init-video-entry",
                 "native-audio",
             ],
             capabilities["architecture"].Values<string>());
         Assert.Equal(
             [
-                "source-video",
+                "init-video",
                 "prompts",
                 "prompt-relay",
                 "references",
@@ -1613,7 +1613,7 @@ public class ArchitectureFoundationTests
         Assert.Equal(
             ["pixel", "model", "latent", "latent-model"],
             capabilities["upscaleModes"].Values<string>());
-        Assert.Null(capabilities["sourceVideo"]);
+        Assert.Null(capabilities["initVideo"]);
         JObject crossfadeRule = (JObject)ltx["boundaryRules"]["crossfade"];
         Assert.Equal("boundary", crossfadeRule["scope"]);
         Assert.Equal("conditional", crossfadeRule["support"]);
@@ -1641,7 +1641,7 @@ public class ArchitectureFoundationTests
             item => item["id"]?.ToString() == "wan22");
         Assert.Null(wan["ignoredUnsupportedFeatures"]);
         Assert.Equal(
-            ["text-to-video", "image-to-video", "source-video"],
+            ["text-to-video", "image-to-video", "init-video"],
             wan["capabilities"]["entryModes"].Values<string>());
         JObject model = Assert.Single(
             ((JArray)catalog["models"]).Values<JObject>(),
@@ -1701,7 +1701,7 @@ public class ArchitectureFoundationTests
             [],
             stages);
 
-    private static ClipSpec SourcedClip(int id) =>
+    private static ClipSpec InitVideoClip(int id) =>
         new(
             id,
             25,
@@ -1714,7 +1714,7 @@ public class ArchitectureFoundationTests
             null,
             [],
             [],
-            SourceVideo: new("data", "source.mp4", 0));
+            InitVideo: new("data", "source.mp4", 0));
 
     private static StageSpec Stage(int id, string model) =>
         new(id, 1, 1, "pixel-lanczos", model, 12, 4.5, "euler", "normal", "Generated");
@@ -1868,7 +1868,7 @@ public class ArchitectureFoundationTests
                         : VideoModelEntryAbility.None)
                     | (entryModes.Any(mode => mode is
                             ArchitectureEntryMode.ImageToVideo
-                            or ArchitectureEntryMode.SourceVideo)
+                            or ArchitectureEntryMode.InitVideo)
                         ? VideoModelEntryAbility.ImageToVideo
                         : VideoModelEntryAbility.None)));
         }

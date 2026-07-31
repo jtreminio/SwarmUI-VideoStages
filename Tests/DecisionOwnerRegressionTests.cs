@@ -191,10 +191,10 @@ public class DecisionOwnerRegressionTests
         Assert.False(generator.NodeHelpers.ContainsKey(ControlNetCaptureKeys.Image(0)));
     }
 
-    // ---- 4d: sourced-only timelines participate in the ControlNet capture phase ------------
+    // ---- 4d: init-video-only timelines participate in the ControlNet capture phase ------------
 
     [Fact]
-    public void Sourced_only_timeline_runs_the_controlnet_capture_host_phase()
+    public void InitVideo_only_timeline_runs_the_controlnet_capture_host_phase()
     {
         WorkflowGenerator generator = Generator();
         // Stale captures from a previous pass; running the capture re-evaluates and clears them.
@@ -202,7 +202,7 @@ public class DecisionOwnerRegressionTests
             Formatting.None);
         generator.NodeHelpers[ControlNetCaptureKeys.Audio(0)] = new JArray("1", 1).ToString(
             Formatting.None);
-        VideoExecutionPlan plan = SourcedOnlyPlan();
+        VideoExecutionPlan plan = InitVideoOnlyPlan();
         VideoArchitectureExecutionHost host = BoundHost(generator, plan);
 
         host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors);
@@ -320,10 +320,10 @@ public class DecisionOwnerRegressionTests
         WorkflowGenerator generator = GeneratorWithVideoControlNet();
         VideoArchitectureDescriptor foreign = ForeignArchitecture();
         VideoArchitectureDescriptor ltx = Ltx2ArchitectureModule.Instance.Descriptor;
-        // Host phases run in clip order, so LTX runs first only as a sourced clip: the root belongs
+        // Host phases run in clip order, so LTX runs first only as a initVideoClip clip: the root belongs
         // to the foreign generated clip either way.
         ClipPlan[] clips = ltxRunsFirst
-            ? [SourcedClip(0, ltx), GeneratedClip(1, foreign)]
+            ? [InitVideoClip(0, ltx), GeneratedClip(1, foreign)]
             : [GeneratedClip(0, foreign), GeneratedClip(1, ltx)];
         VideoExecutionPlan plan = Plan(clips);
         VideoArchitectureExecutionHost host = BoundHost(
@@ -380,23 +380,23 @@ public class DecisionOwnerRegressionTests
         {
             FPS = 30,
         };
-        ClipPlan clip = new(0, 48, ClipInputKind.SourceVideo, true, null, [], Audio: null);
+        ClipPlan clip = new(0, 48, ClipInputKind.InitVideo, true, null, [], Audio: null);
 
-        // The sourced path used to read media fps only, so a resampled sourced clip placed its
+        // The initVideoClip path used to read media fps only, so a resampled initVideoClip clip placed its
         // segments against a different bed than the same clip with stages.
         Assert.Equal(2.0, ClipAudioBedDuration.Seconds(clip, 24, media));
         Assert.Equal(1.6, ClipAudioBedDuration.Seconds(clip, 0, media), 6);
         Assert.Equal(0, ClipAudioBedDuration.Seconds(clip, 0, null));
     }
 
-    private static VideoExecutionPlan SourcedOnlyPlan()
+    private static VideoExecutionPlan InitVideoOnlyPlan()
     {
         StagePlan[] noStages = [];
         ClipPlan clip = new(
             0,
             25,
-            ClipInputKind.SourceVideo,
-            IsSourced: true,
+            ClipInputKind.InitVideo,
+            HasInitVideo: true,
             new("data", "source.mp4", 0, 512, 512, 24),
             noStages,
             Audio: null)
@@ -478,7 +478,7 @@ public class DecisionOwnerRegressionTests
         params VideoArchitectureDescriptor[] architectures) =>
         Plan([.. architectures.Select((architecture, index) =>
             architecture.Id == NoneArchitecture.Id
-                ? SourcedClip(index, architecture)
+                ? InitVideoClip(index, architecture)
                 : GeneratedClip(index, architecture))]);
 
     private static VideoExecutionPlan Plan(ClipPlan[] clips) => new(
@@ -537,13 +537,13 @@ public class DecisionOwnerRegressionTests
             (inner as IArchitectureRootMediaResizerProvider)?.CreateRootMediaResizer();
     }
 
-    private static ClipPlan SourcedClip(
+    private static ClipPlan InitVideoClip(
         int id,
         VideoArchitectureDescriptor architecture) => new(
         id,
         25,
-        ClipInputKind.SourceVideo,
-        IsSourced: true,
+        ClipInputKind.InitVideo,
+        HasInitVideo: true,
         new("data", $"source-{id}.mp4", 0, 512, 512, 24),
         Stages: [],
         Audio: null)
@@ -559,8 +559,8 @@ public class DecisionOwnerRegressionTests
         id,
         25,
         ClipInputKind.RootMedia,
-        IsSourced: false,
-        SourceVideo: null,
+        HasInitVideo: false,
+        InitVideo: null,
         [
             new StagePlan(
                 id,

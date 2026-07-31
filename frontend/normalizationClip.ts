@@ -21,9 +21,9 @@ import {
 } from "./constants";
 import { defaultLoraWeight } from "./loraAuthoring";
 import {
+    normalizeInitVideo,
     normalizePromptWindows,
     normalizeRetake,
-    normalizeSourceVideo,
     normalizeUploadedMedia,
 } from "./normalizationMedia";
 import {
@@ -151,7 +151,7 @@ export const buildDefaultClip = (
         prompt: "",
         promptWindows: [],
         retake: null,
-        sourceVideo: null,
+        initVideo: null,
         refs,
         stages: [firstStage],
     };
@@ -166,7 +166,7 @@ export const normalizeClip = (
     const defaults = getRootDefaults();
     const rawAudioSource = text(rawClip.audioSource, AUDIO_SOURCE_NATIVE);
     const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
-    const sourceVideo = normalizeSourceVideo(rawClip.sourceVideo);
+    const initVideo = normalizeInitVideo(rawClip.initVideo);
     const fps = Math.max(
         1,
         typeof effectiveFps === "number" &&
@@ -175,9 +175,9 @@ export const normalizeClip = (
             ? effectiveFps
             : defaults.fps,
     );
-    // A sourced clip's duration IS its used source range.
+    // A initVideoClip clip's duration IS its used source range.
     const rawDuration =
-        sourceVideo?.lengthSeconds ??
+        initVideo?.lengthSeconds ??
         numberOr(rawClip.duration, defaults.frames / fps);
     const duration = snapDurationToFps(
         Math.max(CLIP_DURATION_MIN, rawDuration),
@@ -223,7 +223,7 @@ export const normalizeClip = (
                 previousStage,
                 refsRaw.length,
                 i,
-                sourceVideo !== null,
+                initVideo !== null,
                 loras,
                 loraDefaultWeights,
             ),
@@ -250,7 +250,7 @@ export const normalizeClip = (
         {
             duration,
             stages,
-            sourceVideo,
+            initVideo,
             retake,
             clipLengthFromAudio,
             clipLengthFromControlNet,
@@ -265,7 +265,7 @@ export const normalizeClip = (
     const persistedArchitecture = trimmedText(rawClip.architectureHint);
     const persistedProfile = trimmedText(rawClip.modelProfileId);
     const isSourceOnly =
-        sourceVideo !== null && stages.every((stage) => stage.skipped);
+        initVideo !== null && stages.every((stage) => stage.skipped);
     const architecture = isSourceOnly
         ? persistedArchitecture || "none"
         : normalizeClipArchitecture(
@@ -289,7 +289,7 @@ export const normalizeClip = (
         resolvedArchitecture,
         rawClip,
         stagesRaw.length,
-        sourceVideo !== null,
+        initVideo !== null,
         { preserveDormantLtx: true },
     );
     const icLoraDefaultStrengths = icLoras.map((entry) =>
@@ -345,7 +345,7 @@ export const normalizeClip = (
         prompt: text(rawClip.prompt),
         promptWindows: normalizePromptWindows(rawClip),
         retake,
-        sourceVideo,
+        initVideo,
         refs,
         stages,
     };

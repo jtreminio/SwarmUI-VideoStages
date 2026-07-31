@@ -30,8 +30,8 @@ internal static class ClipGeometryProjection
             }
             projected[clip.ClipId] = projection.ProjectFinalDimensions(
                 clip.Stages,
-                clip.SourceVideo?.TargetWidth ?? rootWidth,
-                clip.SourceVideo?.TargetHeight ?? rootHeight);
+                clip.InitVideo?.TargetWidth ?? rootWidth,
+                clip.InitVideo?.TargetHeight ?? rootHeight);
         }
 
         int targetWidth = projected.Values.Min(size => size.Width);

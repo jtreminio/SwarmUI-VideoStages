@@ -14,18 +14,18 @@ namespace VideoStages.Tests;
 public partial class StageFlowTests
 {
     [Fact]
-    public void Plan_backed_sourced_only_ltx_clip_publishes_conformed_footage_without_a_sampler()
+    public void Plan_backed_init_video_only_ltx_clip_publishes_conformed_footage_without_a_sampler()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        JObject sourced = MakeSourcedClip(models);
-        sourced["stages"] = new JArray();
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["stages"] = new JArray();
 
-        (JObject workflow, WorkflowGenerator generator) = GenerateSourcedFlow(models, sourced);
+        (JObject workflow, WorkflowGenerator generator) = GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode window =
-            AssertSourcedConformChain(bridge, SourcedOnlyClipFrames);
+            AssertInitVideoConformChain(bridge, InitVideoOnlyClipFrames);
         Assert.Empty(SamplerNodesOrdered(bridge));
         INodeOutput currentOutput = bridge.ResolvePath((JArray)generator.CurrentMedia.Path);
         Assert.True(ReachesUpstream(bridge, currentOutput.Node, window.Id));
@@ -33,16 +33,16 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_only_clip_interpolates_once_and_preserves_its_audio_at_publication()
+    public void InitVideo_only_clip_interpolates_once_and_preserves_its_audio_at_publication()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        JObject sourced = MakeSourcedClip(models);
-        sourced["stages"] = new JArray();
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["stages"] = new JArray();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            MakeRootConfig(512, 512, sourced).ToString());
+            MakeRootConfig(512, 512, initVideoClip).ToString());
         input.Set(ComfyUIBackendExtension.VideoFrameInterpolationMultiplier, 2);
         input.Set(ComfyUIBackendExtension.VideoFrameInterpolationMethod, "RIFE");
 
@@ -50,16 +50,16 @@ public partial class StageFlowTests
             WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
                 BuildNativeSteps(attachAudioToCurrentMedia: true),
-                features: SourcedClipFeatures.Concat(["frameinterps"]));
+                features: InitVideoClipFeatures.Concat(["frameinterps"]));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode sourceWindow =
-            AssertSourcedConformChain(bridge, SourcedOnlyClipFrames);
+            AssertInitVideoConformChain(bridge, InitVideoOnlyClipFrames);
         ComfyNode rife = Assert.Single(
             bridge.Graph.Nodes.Values,
             node => node.ClassTypeName == "RIFE VFI");
         Assert.True(ReachesUpstream(bridge, rife, sourceWindow.Id));
-        Assert.Equal(SourcedOnlyClipFrames * 2 - 1, generator.CurrentMedia.Frames);
+        Assert.Equal(InitVideoOnlyClipFrames * 2 - 1, generator.CurrentMedia.Frames);
         Assert.Equal(48, generator.CurrentMedia.GetRawFPS());
         Assert.Equal(new JArray(rife.Id, 0), generator.CurrentMedia.Path);
 
@@ -88,13 +88,13 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_only_clip_executes_planned_audio_segments_without_a_sampler()
+    public void InitVideo_only_clip_executes_planned_audio_segments_without_a_sampler()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        JObject sourced = MakeSourcedClip(models);
-        sourced["stages"] = new JArray();
-        JObject root = MakeRootConfig(512, 512, sourced);
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["stages"] = new JArray();
+        JObject root = MakeRootConfig(512, 512, initVideoClip);
         root["audioTracks"] = new JArray(new JObject
         {
             ["id"] = "track-overlay",
@@ -116,7 +116,7 @@ public partial class StageFlowTests
             }),
         });
 
-        (JObject workflow, WorkflowGenerator generator) = GenerateSourcedRootFlow(models, root);
+        (JObject workflow, WorkflowGenerator generator) = GenerateInitVideoRootFlow(models, root);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Empty(SamplerNodesOrdered(bridge));
@@ -127,16 +127,16 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_only_single_clip_trims_video_and_audio_once_at_the_terminal_boundary()
+    public void InitVideo_only_single_clip_trims_video_and_audio_once_at_the_terminal_boundary()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        JObject sourced = MakeSourcedClip(models);
-        sourced["stages"] = new JArray();
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["stages"] = new JArray();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            MakeRootConfig(512, 512, sourced).ToString());
+            MakeRootConfig(512, 512, initVideoClip).ToString());
         input.Set(T2IParamTypes.TrimVideoStartFrames, 2);
         input.Set(T2IParamTypes.TrimVideoEndFrames, 3);
 
@@ -144,33 +144,33 @@ public partial class StageFlowTests
             WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
                 BuildNativeSteps(attachAudioToCurrentMedia: true),
-                features: SourcedClipFeatures);
+                features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Empty(SamplerNodesOrdered(bridge));
         SwarmTrimFramesNode videoTrim = Assert.Single(
             bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
         Assert.Equal(new JArray(videoTrim.Id, 0), generator.CurrentMedia.Path);
-        Assert.Equal(SourcedOnlyClipFrames - 5, generator.CurrentMedia.Frames);
+        Assert.Equal(InitVideoOnlyClipFrames - 5, generator.CurrentMedia.Frames);
 
         TrimAudioDurationNode audioTrim = Assert.IsType<TrimAudioDurationNode>(
             bridge.ResolvePath(generator.CurrentMedia.AttachedAudio.Path).Node);
         Assert.Equal(2 / 24.0, audioTrim.StartIndex.LiteralAsDouble()!.Value, precision: 6);
         Assert.Equal(
-            (SourcedOnlyClipFrames - 5) / 24.0,
+            (InitVideoOnlyClipFrames - 5) / 24.0,
             audioTrim.Duration.LiteralAsDouble()!.Value,
             precision: 6);
         AssertWorkflowHasNoCycles(workflow);
     }
 
     [Fact]
-    public void Sourced_only_multi_clip_timeline_assembles_then_trims_video_and_audio_once()
+    public void InitVideo_only_multi_clip_timeline_assembles_then_trims_video_and_audio_once()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        JObject first = MakeSourcedClip(models);
+        JObject first = MakeInitVideoClip(models);
         first["stages"] = new JArray();
-        JObject second = MakeSourcedClip(models);
+        JObject second = MakeInitVideoClip(models);
         second["stages"] = new JArray();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
@@ -183,7 +183,7 @@ public partial class StageFlowTests
             WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
                 BuildNativeSteps(attachAudioToCurrentMedia: true),
-                features: SourcedClipFeatures);
+                features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Empty(SamplerNodesOrdered(bridge));
@@ -192,7 +192,7 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
         Assert.True(ReachesUpstream(bridge, videoTrim.Image.Connection!.Node, merge.Id));
         Assert.Equal(new JArray(videoTrim.Id, 0), generator.CurrentMedia.Path);
-        Assert.Equal(SourcedOnlyClipFrames * 2 - 3, generator.CurrentMedia.Frames);
+        Assert.Equal(InitVideoOnlyClipFrames * 2 - 3, generator.CurrentMedia.Frames);
 
         TrimAudioDurationNode audioTrim = Assert.IsType<TrimAudioDurationNode>(
             bridge.ResolvePath(generator.CurrentMedia.AttachedAudio.Path).Node);
@@ -200,7 +200,7 @@ public partial class StageFlowTests
         Assert.True(ReachesUpstream(bridge, audioTrim, audioConcat.Id));
         Assert.Equal(1 / 24.0, audioTrim.StartIndex.LiteralAsDouble()!.Value, precision: 6);
         Assert.Equal(
-            (SourcedOnlyClipFrames * 2 - 3) / 24.0,
+            (InitVideoOnlyClipFrames * 2 - 3) / 24.0,
             audioTrim.Duration.LiteralAsDouble()!.Value,
             precision: 6);
         AssertWorkflowHasNoCycles(workflow);

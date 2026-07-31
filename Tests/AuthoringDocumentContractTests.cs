@@ -26,12 +26,12 @@ public class AuthoringDocumentContractTests
         "clips[].refs[].id",
         "clips[].icLoras[].id",
         "clips[].retake.id",
-        "clips[].sourceVideo.id",
+        "clips[].initVideo.id",
         "audioTracks[].spans[].id",
         // Display-only probed metadata: the backend conforms the picked range itself.
-        "clips[].sourceVideo.fps",
-        "clips[].sourceVideo.durationSeconds",
-        "clips[].sourceVideo.lengthSeconds",
+        "clips[].initVideo.fps",
+        "clips[].initVideo.durationSeconds",
+        "clips[].initVideo.lengthSeconds",
     ];
 
     /// <summary>Keys the backend reads that the frontend deliberately never emits, with the reason
@@ -156,8 +156,8 @@ public class AuthoringDocumentContractTests
         Assert.Equal("ltx-2.3", clip.AuthoredModelProfileHint);
         Assert.Equal("data:audio/wav;base64,QUJD", clip.UploadedAudio.Data);
         Assert.Equal("clip.wav", clip.UploadedAudio.FileName);
-        Assert.Equal("source.mp4", clip.SourceVideo.FileName);
-        Assert.Equal(1, clip.SourceVideo.StartSeconds);
+        Assert.Equal("source.mp4", clip.InitVideo.FileName);
+        Assert.Equal(1, clip.InitVideo.StartSeconds);
 
         ImageRefSpec reference = Assert.Single(clip.ImageRefs);
         Assert.Equal("Upload", reference.Source);
@@ -178,7 +178,7 @@ public class AuthoringDocumentContractTests
         Assert.Equal("canny", icLora.ControlType);
         Assert.Equal("drive.mp4", icLora.DriveMedia.FileName);
 
-        // The authored stage 1 is skipped, so only stage 0 survives; a sourced clip keeps its
+        // The authored stage 1 is skipped, so only stage 0 survives; a initVideoClip clip keeps its
         // authored stage-0 control instead of the forced full-generation value.
         StageSpec stage = Assert.Single(clip.Stages);
         Assert.Equal("ltx-2.3.safetensors", stage.Model);

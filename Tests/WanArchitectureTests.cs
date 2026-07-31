@@ -200,7 +200,7 @@ public class WanArchitectureTests
             ["first"],
             catalogModel["enhancements"]["referencePositions"].Values<string>());
         Assert.Equal(
-            ["text-to-video", "image-to-video", "source-video"],
+            ["text-to-video", "image-to-video", "init-video"],
             catalogModel["capabilities"]["entryModes"].Values<string>());
         Assert.Null(catalogModel["entryModes"]);
         Assert.Null(catalogModel["enhancements"]["extras"]);
@@ -258,9 +258,9 @@ public class WanArchitectureTests
         VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
 
         Assert.True(descriptor.Capabilities.Architecture.HasFlag(
-            ArchitectureCapability.SourcedEntry));
-        Assert.True(descriptor.Capabilities.Clip.HasFlag(ClipCapability.SourceVideo));
-        Assert.Contains(ArchitectureEntryMode.SourceVideo, descriptor.EntryModes);
+            ArchitectureCapability.InitVideoEntry));
+        Assert.True(descriptor.Capabilities.Clip.HasFlag(ClipCapability.InitVideo));
+        Assert.Contains(ArchitectureEntryMode.InitVideo, descriptor.EntryModes);
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.ImageInput));
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.VideoInput));
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.PixelUpscale));
@@ -712,7 +712,7 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Compilation_accepts_bounded_sourced_stage_zero_and_previous_stage_chaining()
+    public void Compilation_accepts_bounded_init_video_stage_zero_and_previous_stage_chaining()
     {
         StageSpec first = Stage(10, "wan-model") with { Control = 0.5 };
         StageSpec second = Stage(11, "wan-model") with
@@ -723,11 +723,11 @@ public class WanArchitectureTests
             ClipStageRawIndex = 1,
         };
         ClipPlan compiled = Assert.Single(
-            Compile(SourcedClip(0, first, second)).Clips);
+            Compile(InitVideoClip(0, first, second)).Clips);
 
-        Assert.Equal(ArchitectureEntryMode.SourceVideo, compiled.EntryMode);
-        Assert.Equal(ClipInputKind.SourceVideo, compiled.Input);
-        Assert.Equal(StageInputKind.SourceVideo, compiled.Stages[0].Input);
+        Assert.Equal(ArchitectureEntryMode.InitVideo, compiled.EntryMode);
+        Assert.Equal(ClipInputKind.InitVideo, compiled.Input);
+        Assert.Equal(StageInputKind.InitVideo, compiled.Stages[0].Input);
         Assert.Equal(StageInputKind.PreviousStage, compiled.Stages[1].Input);
         Assert.Equal(0.5, compiled.Stages[0].Core.Control);
         Assert.Equal(1, compiled.Stages[1].Core.Control);
@@ -1074,10 +1074,10 @@ public class WanArchitectureTests
         };
 
         ClipPlan compiled = Assert.Single(
-            Compile(SourcedClip(0, first, second)).Clips);
+            Compile(InitVideoClip(0, first, second)).Clips);
 
         Assert.All(compiled.Stages, stage => Assert.True(stage.IsPassthrough));
-        Assert.Equal(StageInputKind.SourceVideo, compiled.Stages[0].Input);
+        Assert.Equal(StageInputKind.InitVideo, compiled.Stages[0].Input);
         Assert.Equal(StageInputKind.PreviousStage, compiled.Stages[1].Input);
         Assert.All(
             compiled.Stages,
@@ -1091,14 +1091,14 @@ public class WanArchitectureTests
 
         AssertBlocked(
             Compile(
-                SourcedClip(0, passthrough) with
+                InitVideoClip(0, passthrough) with
                 {
                     Loras = [new("clip-active", 0.5)],
                 }),
             HostVideoStageRules.NormalLoraRequiresSamplingStageCode,
             HostVideoStageRules.NormalLoraRequiresSamplingStageReason);
         VideoExecutionPlan textOnly = Compile(
-            SourcedClip(
+            InitVideoClip(
                 0,
                 passthrough with
                 {
@@ -1113,7 +1113,7 @@ public class WanArchitectureTests
             Assert.Single(textOnly.Clips).Stages[0].Core.Loras);
         AssertBlocked(
             Compile(
-                SourcedClip(
+                InitVideoClip(
                     0,
                     passthrough with
                     {
@@ -1123,7 +1123,7 @@ public class WanArchitectureTests
             HostVideoStageRules.NormalLoraRequiresSamplingStageCode,
             HostVideoStageRules.NormalLoraRequiresSamplingStageReason);
 
-        ClipSpec disabled = SourcedClip(
+        ClipSpec disabled = InitVideoClip(
             0,
             passthrough with { LoraWeights = [0] }) with
         {
@@ -1134,7 +1134,7 @@ public class WanArchitectureTests
         Assert.Empty(compiled.Stages[0].Core.Loras);
 
         VideoExecutionPlan stageNoOp = Compile(
-            SourcedClip(
+            InitVideoClip(
                 0,
                 passthrough with
                 {
@@ -1149,7 +1149,7 @@ public class WanArchitectureTests
             Assert.Single(stageNoOp.Clips).Stages[0].Core.Loras);
 
         VideoExecutionPlan sampled = Compile(
-            SourcedClip(0, passthrough with { Control = 0.5 }) with
+            InitVideoClip(0, passthrough with { Control = 0.5 }) with
             {
                 Loras = [new("clip-active", 0.5)],
             });
@@ -1251,13 +1251,13 @@ public class WanArchitectureTests
                 }),
             "quantizes to sampler start step 0");
         AssertRefused(
-            SourcedClip(0, stage with { Control = 1.1 }),
+            InitVideoClip(0, stage with { Control = 1.1 }),
             "decoded-input control outside the finite range [0, 1]");
         AssertRefused(
-            SourcedClip(0, stage with { Control = double.NaN }),
+            InitVideoClip(0, stage with { Control = double.NaN }),
             "decoded-input control outside the finite range [0, 1]");
         AssertRefused(
-            SourcedClip(0, stage with { Control = 0.9, Steps = 8 }),
+            InitVideoClip(0, stage with { Control = 0.9, Steps = 8 }),
             "quantizes to sampler start step 0");
     }
 
@@ -1485,10 +1485,10 @@ public class WanArchitectureTests
             [],
             stages);
 
-    private static ClipSpec SourcedClip(int id, params StageSpec[] stages) =>
+    private static ClipSpec InitVideoClip(int id, params StageSpec[] stages) =>
         GeneratedClip(id, stages) with
         {
-            SourceVideo = new("data", "source.mp4", 0),
+            InitVideo = new("data", "source.mp4", 0),
         };
 
     private static StageSpec Stage(int id, string model) =>

@@ -115,7 +115,7 @@ internal sealed class RootVideoStageResizer(
     /// <summary>
     /// Pixel-resizes the current media to the configured timeline resolution, with no text-to-video
     /// metadata shortcut — for flows where the root generation SURVIVES as the clips' shared source
-    /// (sourced first clip) instead of being handed off. Left at the core params' size it would
+    /// (initVideoClip first clip) instead of being handed off. Left at the core params' size it would
     /// splinter the timeline's resolutions and degrade every overlap-boundary merge to a hard cut.
     /// </summary>
     public void ApplyConfiguredRootStageResolutionToSurvivingRootMedia()

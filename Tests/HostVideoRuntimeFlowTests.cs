@@ -170,7 +170,7 @@ public class HostVideoRuntimeFlowTests
                 control: 0.5,
                 steps: 8));
         clip["duration"] = 0.6;
-        clip["sourceVideo"] = new JObject
+        clip["initVideo"] = new JObject
         {
             ["data"] = "data:video/mp4;base64,"
                 + Convert.ToBase64String([0x11, 0x22, 0x33]),

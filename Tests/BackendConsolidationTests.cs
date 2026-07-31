@@ -301,7 +301,7 @@ public class BackendConsolidationTests
                 .Require<MinimumActiveStagesRuleConstraints>().MinimumActiveStages,
             Ltx2ConditionalRulePolicySource.AudioReuseMinimumActiveStages);
         Assert.Equal(
-            [ArchitectureEntryMode.SourceVideo],
+            [ArchitectureEntryMode.InitVideo],
             Ltx2ConditionalRulePolicySource.RetakeEntryModes);
     }
 
@@ -318,7 +318,7 @@ public class BackendConsolidationTests
                 IsContinuationTail: true,
                 HasOtherFrameReferences: true,
                 ReplacesTextToVideoRoot: true,
-                SourcedFootageIsStageInput: true,
+                InitVideoFootageIsStageInput: true,
                 RefinesIncomingLatent: true,
                 PriorStageLatentIsReusable: true)));
         Assert.Equal(
@@ -336,7 +336,7 @@ public class BackendConsolidationTests
     [Theory]
     [InlineData(nameof(StageInputFacts.ReplacesTextToVideoRoot), (int)StageInputCase.TextToVideoRootReplacement)]
     [InlineData(nameof(StageInputFacts.HasOtherFrameReferences), (int)StageInputCase.FrameReferencesOnly)]
-    [InlineData(nameof(StageInputFacts.SourcedFootageIsStageInput), (int)StageInputCase.SourcedFootage)]
+    [InlineData(nameof(StageInputFacts.InitVideoFootageIsStageInput), (int)StageInputCase.InitVideoFootage)]
     [InlineData(nameof(StageInputFacts.RefinesIncomingLatent), (int)StageInputCase.IncomingLatentRefine)]
     [InlineData(nameof(StageInputFacts.PriorStageLatentIsReusable), (int)StageInputCase.PriorStageLatentReuse)]
     public void Stage_input_dispatch_names_every_guide_free_case(
@@ -349,8 +349,8 @@ public class BackendConsolidationTests
                 Facts() with { ReplacesTextToVideoRoot = true },
             nameof(StageInputFacts.HasOtherFrameReferences) =>
                 Facts() with { HasOtherFrameReferences = true },
-            nameof(StageInputFacts.SourcedFootageIsStageInput) =>
-                Facts() with { SourcedFootageIsStageInput = true },
+            nameof(StageInputFacts.InitVideoFootageIsStageInput) =>
+                Facts() with { InitVideoFootageIsStageInput = true },
             nameof(StageInputFacts.RefinesIncomingLatent) =>
                 Facts() with { RefinesIncomingLatent = true },
             _ => Facts() with { PriorStageLatentIsReusable = true },
@@ -383,7 +383,7 @@ public class BackendConsolidationTests
                 IsContinuationTail: (mask & 4) != 0,
                 HasOtherFrameReferences: (mask & 8) != 0,
                 ReplacesTextToVideoRoot: (mask & 16) != 0,
-                SourcedFootageIsStageInput: (mask & 32) != 0,
+                InitVideoFootageIsStageInput: (mask & 32) != 0,
                 RefinesIncomingLatent: (mask & 64) != 0,
                 PriorStageLatentIsReusable: (mask & 128) != 0)));
         }
@@ -416,7 +416,7 @@ public class BackendConsolidationTests
         IsContinuationTail: false,
         HasOtherFrameReferences: false,
         ReplacesTextToVideoRoot: false,
-        SourcedFootageIsStageInput: false,
+        InitVideoFootageIsStageInput: false,
         RefinesIncomingLatent: false,
         PriorStageLatentIsReusable: false);
 

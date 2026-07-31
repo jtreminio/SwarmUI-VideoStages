@@ -16,25 +16,25 @@ public partial class StageFlowTests
 {
     // Duration 0.6s at the harness's 24 fps aligns to 17 spec frames (8n+1); the default continue
     // overlap (8) then resolves to a 9-frame window. StartSeconds 1.0 slices from frame 24.
-    private const int SourcedClipFrames = 17;
-    private const int SourcedOnlyClipFrames = 16;
-    private const double SourcedClipDuration = 0.6;
-    private const double SourcedStartSeconds = 1.0;
+    private const int InitVideoClipFrames = 17;
+    private const int InitVideoOnlyClipFrames = 16;
+    private const double InitVideoClipDuration = 0.6;
+    private const double InitVideoStartSeconds = 1.0;
 
-    private static readonly string[] SourcedClipFeatures =
+    private static readonly string[] InitVideoClipFeatures =
         [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
 
-    private static JObject MakeSourcedClip(TestModelBundle models)
+    private static JObject MakeInitVideoClip(TestModelBundle models)
     {
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
         ((JObject)((JArray)clip["stages"])[0]).Remove("imageReference");
-        clip["duration"] = SourcedClipDuration;
-        clip["sourceVideo"] = new JObject
+        clip["duration"] = InitVideoClipDuration;
+        clip["initVideo"] = new JObject
         {
             ["data"] = "data:video/mp4;base64," + Convert.ToBase64String([0x11, 0x22, 0x33]),
             ["fileName"] = "footage.mp4",
-            ["startSeconds"] = SourcedStartSeconds
+            ["startSeconds"] = InitVideoStartSeconds
         };
         return clip;
     }
@@ -43,15 +43,15 @@ public partial class StageFlowTests
     {
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-        clip["duration"] = SourcedClipDuration;
+        clip["duration"] = InitVideoClipDuration;
         return clip;
     }
 
-    private static (JObject Workflow, WorkflowGenerator Generator) GenerateSourcedFlow(
+    private static (JObject Workflow, WorkflowGenerator Generator) GenerateInitVideoFlow(
         TestModelBundle models, params JObject[] clips) =>
-        GenerateSourcedRootFlow(models, MakeRootConfig(512, 512, clips));
+        GenerateInitVideoRootFlow(models, MakeRootConfig(512, 512, clips));
 
-    private static (JObject Workflow, WorkflowGenerator Generator) GenerateSourcedRootFlow(
+    private static (JObject Workflow, WorkflowGenerator Generator) GenerateInitVideoRootFlow(
         TestModelBundle models, JObject root)
     {
         T2IParamInput input = BuildNativeInput(
@@ -59,12 +59,12 @@ public partial class StageFlowTests
         return WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: true),
-            features: SourcedClipFeatures);
+            features: InitVideoClipFeatures);
     }
 
-    private static SwarmFrameWindowNode AssertSourcedConformChain(
+    private static SwarmFrameWindowNode AssertInitVideoConformChain(
         WorkflowBridge bridge,
-        int expectedFrames = SourcedClipFrames)
+        int expectedFrames = InitVideoClipFrames)
     {
         SwarmLoadVideoB64Node loadVideo = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -82,7 +82,7 @@ public partial class StageFlowTests
 
         SwarmFrameWindowNode window = Assert.Single(
             bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
-        Assert.Equal((int)Math.Round(SourcedStartSeconds * 24), window.StartFrame.LiteralAsInt());
+        Assert.Equal((int)Math.Round(InitVideoStartSeconds * 24), window.StartFrame.LiteralAsInt());
         Assert.Equal(expectedFrames, window.FrameCount.LiteralAsInt());
         Assert.Equal(resample.Id, window.ImagesInput.Connection!.Node.Id);
 
@@ -95,31 +95,31 @@ public partial class StageFlowTests
         TrimAudioDurationNode trim = Assert.Single(
             bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
             n => ReachesUpstream(bridge, n, components.Id));
-        Assert.Equal(SourcedStartSeconds, trim.StartIndex.LiteralAsDouble());
+        Assert.Equal(InitVideoStartSeconds, trim.StartIndex.LiteralAsDouble());
         Assert.Equal(expectedFrames / 24.0, trim.Duration.LiteralAsDouble()!.Value, precision: 6);
 
         return window;
     }
 
     [Fact]
-    public void Sourced_clip_replaces_generation_with_conform_chain_and_merges()
+    public void InitVideo_clip_replaces_generation_with_conform_chain_and_merges()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        (JObject workflow, WorkflowGenerator g) = GenerateSourcedFlow(
-            models, MakeGeneratedClip(models), MakeSourcedClip(models));
+        (JObject workflow, WorkflowGenerator g) = GenerateInitVideoFlow(
+            models, MakeGeneratedClip(models), MakeInitVideoClip(models));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        SwarmFrameWindowNode window = AssertSourcedConformChain(bridge);
+        SwarmFrameWindowNode window = AssertInitVideoConformChain(bridge);
 
-        // Per-clip refine: the sourced clip's stage 0 (Control 0.5) refines its own footage — its
+        // Per-clip refine: the initVideoClip clip's stage 0 (Control 0.5) refines its own footage — its
         // sampler (start_at_step floor(10 * 0.5) = 5) is seeded from the conform chain — and its
         // output joins the cross-clip merge.
-        SwarmKSamplerNode sourcedSampler = Assert.Single(
+        SwarmKSamplerNode initVideoSampler = Assert.Single(
             SamplerNodesOrdered(bridge),
             sampler => ReachesUpstream(bridge, sampler, window.Id));
-        Assert.Equal(5, sourcedSampler.StartAtStep.LiteralAsInt());
+        Assert.Equal(5, initVideoSampler.StartAtStep.LiteralAsInt());
         Assert.Contains(
             bridge.Graph.NodesOfType<BatchImagesNodeNode>(),
             batch => ReachesUpstream(bridge, batch, window.Id));
@@ -127,7 +127,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_clip_LipDub_keeps_init_video_visuals_and_uses_drive_video_audio_only()
+    public void InitVideo_clip_LipDub_keeps_init_video_visuals_and_uses_drive_video_audio_only()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -140,8 +140,8 @@ public partial class StageFlowTests
             "UnitTest_LipDub.safetensors");
         loraHandler.Models[lipDub.Name] = lipDub;
 
-        JObject sourced = MakeSourcedClip(models);
-        sourced["icLoras"] = new JArray(new JObject
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = lipDub.Name,
             ["preset"] = "lipdub",
@@ -155,7 +155,7 @@ public partial class StageFlowTests
         });
 
         (JObject workflow, WorkflowGenerator _generator) =
-            GenerateSourcedFlow(models, sourced);
+            GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadVideoB64Node sourceLoad = Assert.Single(
@@ -188,7 +188,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_clip_incoming_audio_ic_lora_uses_the_attached_init_video_audio()
+    public void InitVideo_clip_incoming_audio_ic_lora_uses_the_attached_init_video_audio()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -201,8 +201,8 @@ public partial class StageFlowTests
             "UnitTest_IncomingAudio.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
-        JObject sourced = MakeSourcedClip(models);
-        sourced["icLoras"] = new JArray(new JObject
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = icLora.Name,
             ["preset"] = "custom-audio",
@@ -211,7 +211,7 @@ public partial class StageFlowTests
         });
 
         (JObject workflow, WorkflowGenerator _generator) =
-            GenerateSourcedFlow(models, sourced);
+            GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmLoadVideoB64Node sourceLoad =
@@ -240,7 +240,7 @@ public partial class StageFlowTests
             "UnitTest_PreviousClipAudio.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
-        JObject first = MakeSourcedClip(models);
+        JObject first = MakeInitVideoClip(models);
         first["boundaryOut"] = Constants.BoundaryOutCut;
         JObject second = MakeGeneratedClip(models);
         second["icLoras"] = new JArray(new JObject
@@ -252,7 +252,7 @@ public partial class StageFlowTests
         });
 
         (JObject workflow, WorkflowGenerator _generator) =
-            GenerateSourcedFlow(models, first, second);
+            GenerateInitVideoFlow(models, first, second);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -282,10 +282,10 @@ public partial class StageFlowTests
             "UnitTest_MultiStageIncomingAudio.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
-        JObject sourced = MakeSourcedClip(models);
-        ((JArray)sourced["stages"]).Add(
+        JObject initVideoClip = MakeInitVideoClip(models);
+        ((JArray)initVideoClip["stages"]).Add(
             MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: 12));
-        sourced["icLoras"] = new JArray(new JObject
+        initVideoClip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = icLora.Name,
             ["preset"] = "custom-audio",
@@ -294,7 +294,7 @@ public partial class StageFlowTests
         });
 
         (JObject workflow, WorkflowGenerator _generator) =
-            GenerateSourcedFlow(models, sourced);
+            GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         List<LTXVSetAudioRefTokensNode> refTokens =
@@ -310,15 +310,15 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_clip_second_stage_refines_the_passthrough_footage()
+    public void InitVideo_clip_second_stage_refines_the_passthrough_footage()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        JObject sourced = MakeSourcedClip(models);
-        ((JArray)sourced["stages"]).Add(
+        JObject initVideoClip = MakeInitVideoClip(models);
+        ((JArray)initVideoClip["stages"]).Add(
             MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: 12));
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode window = Assert.Single(
@@ -342,7 +342,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_clip_loader_only_ic_lora_emits_a_guide_on_the_refine_stage()
+    public void InitVideo_clip_loader_only_ic_lora_emits_a_guide_on_the_refine_stage()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -354,11 +354,11 @@ public partial class StageFlowTests
 
         // Passthrough stage 0 (Control 0) + a ×2 refine stage. The IC-LoRA explicitly targets the
         // refine stage and consumes the media entering that stage.
-        JObject sourced = MakeSourcedClip(models);
-        ((JArray)sourced["stages"])[0]["control"] = 0.0;
-        ((JArray)sourced["stages"]).Add(
+        JObject initVideoClip = MakeInitVideoClip(models);
+        ((JArray)initVideoClip["stages"])[0]["control"] = 0.0;
+        ((JArray)initVideoClip["stages"]).Add(
             MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, upscale: 2.0, steps: 12));
-        sourced["icLoras"] = new JArray(new JObject
+        initVideoClip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = "UnitTest_IcLoraUpscaler",
             ["driveSource"] = Constants.IcLoraSourceIncoming,
@@ -366,9 +366,9 @@ public partial class StageFlowTests
             ["stage"] = 1,
         });
         // Paired with a generated lead clip: the cross-clip merge owns the final save, so the run
-        // does not take the lone-sourced-clip root-save retarget path.
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
-            models, MakeGeneratedClip(models), sourced);
+        // does not take the lone-init-video-clip root-save retarget path.
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(
+            models, MakeGeneratedClip(models), initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         // Exactly one loader (the passthrough stage 0 has no sampler, so no loader dangles there),
@@ -391,7 +391,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_clip_implicit_ic_lora_drive_guides_from_the_footage()
+    public void InitVideo_clip_implicit_ic_lora_drive_guides_from_the_footage()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -401,24 +401,24 @@ public partial class StageFlowTests
             loraHandler, "/tmp", "/tmp/UnitTest_IcLoraDrive.safetensors", "UnitTest_IcLoraDrive.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
-        // Single sampling stage (Control 0.5, steps 10) + an Incoming IC-LoRA: the sourced
+        // Single sampling stage (Control 0.5, steps 10) + an Incoming IC-LoRA: the initVideoClip
         // footage is the explicit drive, so stage 0 emits the full guide from its incoming frames.
-        // Paired with a generated lead clip so the merge owns the save (the lone-sourced retarget
-        // path is covered by Lone_sourced_clip_with_ic_lora_guide_saves_decoded_audio_not_a_latent).
-        JObject sourced = MakeSourcedClip(models);
-        sourced["icLoras"] = new JArray(new JObject
+        // Paired with a generated lead clip so the merge owns the save (the lone-init-video retarget
+        // path is covered by Lone_init_video_clip_with_ic_lora_guide_saves_decoded_audio_not_a_latent).
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = "UnitTest_IcLoraDrive",
             ["driveSource"] = Constants.IcLoraSourceIncoming,
             ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
-            models, MakeGeneratedClip(models), sourced);
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(
+            models, MakeGeneratedClip(models), initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode window = Assert.Single(
             bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
-        // No footage self-reinjection: sourced stage 0 is encode-only.
+        // No footage self-reinjection: initVideoClip stage 0 is encode-only.
         Assert.Empty(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
         Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
         // The implicit-drive guide encodes from the stage's incoming footage and feeds the video
@@ -427,7 +427,7 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
         Assert.True(
             ReachesUpstream(bridge, guide.Image.Connection!.Node, window.Id),
-            "The guide image does not trace back to the sourced footage conform chain.");
+            "The guide image does not trace back to the init-video footage conform chain.");
         LTXVConcatAVLatentNode concat = Assert.Single(
             bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>(),
             n => n.VideoLatent.Connection?.Node.Id == guide.Id);
@@ -439,12 +439,12 @@ public partial class StageFlowTests
         Assert.Equal(5, sampler.StartAtStep.LiteralAsInt());
         Assert.True(
             ReachesUpstream(bridge, crop, sampler.Id),
-            "LTXVCropGuides does not sit after the sourced clip's sampler.");
+            "LTXVCropGuides does not sit after the init-video clip's sampler.");
         AssertWorkflowHasNoCycles(workflow);
     }
 
     [Fact]
-    public void Sourced_clip_incoming_source_is_legal_at_stage_zero_and_emits_a_guide()
+    public void InitVideo_clip_incoming_source_is_legal_at_stage_zero_and_emits_a_guide()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -454,18 +454,18 @@ public partial class StageFlowTests
             loraHandler, "/tmp", "/tmp/UnitTest_IcLoraDrive.safetensors", "UnitTest_IcLoraDrive.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
-        // On a sourced clip, stage 0's Incoming media IS the footage, so that
+        // On a initVideoClip clip, stage 0's Incoming media IS the footage, so that
         // explicit drive source is legal at Stage 0 and emits a guide.
-        JObject sourced = MakeSourcedClip(models);
-        sourced["icLoras"] = new JArray(new JObject
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = "UnitTest_IcLoraDrive",
             ["driveSource"] = Constants.IcLoraSourceIncoming,
             ["driveData"] = $"{IcLoraDriveData.Visual}",
             ["stage"] = 0,
         });
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
-            models, MakeGeneratedClip(models), sourced);
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(
+            models, MakeGeneratedClip(models), initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode window = Assert.Single(
@@ -474,12 +474,12 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
         Assert.True(
             ReachesUpstream(bridge, guide.Image.Connection!.Node, window.Id),
-            "The Stage-Input guide image does not trace back to the sourced footage.");
+            "The Stage-Input guide image does not trace back to the init-video footage.");
         AssertWorkflowHasNoCycles(workflow);
     }
 
     [Fact]
-    public void Lone_sourced_clip_with_ic_lora_guide_saves_decoded_audio_not_a_latent()
+    public void Lone_init_video_clip_with_ic_lora_guide_saves_decoded_audio_not_a_latent()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -489,18 +489,18 @@ public partial class StageFlowTests
             loraHandler, "/tmp", "/tmp/UnitTest_IcLoraDrive.safetensors", "UnitTest_IcLoraDrive.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
-        // A LONE sourced clip carrying an IC-LoRA guide takes the root-save retarget path. The guide
+        // A LONE initVideoClip clip carrying an IC-LoRA guide takes the root-save retarget path. The guide
         // extends the video latent through LTXVCropGuides, so the concat AV latent no longer decodes
         // into a clean separate node; the fixed AttachDecodedLtxAudioFromCurrentVideo adds an
         // explicit LTXVAudioVAEDecode so the save's audio is decoded AUDIO, not a raw latent.
-        JObject sourced = MakeSourcedClip(models);
-        sourced["icLoras"] = new JArray(new JObject
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = "UnitTest_IcLoraDrive",
             ["driveSource"] = Constants.IcLoraSourceIncoming,
             ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode window = Assert.Single(
@@ -516,23 +516,23 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.True(
             ReachesUpstream(bridge, save.Images.Connection!.Node, window.Id),
-            "Saved video does not trace back to the sourced footage chain.");
+            "Saved video does not trace back to the init-video footage chain.");
         Assert.IsType<LTXVAudioVAEDecodeNode>(save.Audio.Connection!.Node);
         AssertWorkflowHasNoCycles(workflow);
     }
 
     [Fact]
-    public void Sourced_clip_pixel_upscale_retargets_the_conform_scale_instead_of_chaining()
+    public void InitVideo_clip_pixel_upscale_retargets_the_conform_scale_instead_of_chaining()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        JObject sourced = MakeSourcedClip(models);
+        JObject initVideoClip = MakeInitVideoClip(models);
         // Passthrough stage 0 (Control 0): the ×2 pixel refine is the only sampling stage.
-        ((JArray)sourced["stages"])[0]["control"] = 0.0;
-        ((JArray)sourced["stages"]).Add(
+        ((JArray)initVideoClip["stages"])[0]["control"] = 0.0;
+        ((JArray)initVideoClip["stages"]).Add(
             MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, upscale: 2.0, steps: 12));
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode window = Assert.Single(
@@ -555,14 +555,14 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        JObject sourced = MakeSourcedClip(models);
+        JObject initVideoClip = MakeInitVideoClip(models);
         // Passthrough stage 0 (Control 0): stage 1 is the refine stage that owns the conform scale.
-        ((JArray)sourced["stages"])[0]["control"] = 0.0;
-        ((JArray)sourced["stages"]).Add(
+        ((JArray)initVideoClip["stages"])[0]["control"] = 0.0;
+        ((JArray)initVideoClip["stages"]).Add(
             MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, upscale: 2.0, steps: 12));
-        ((JArray)sourced["stages"]).Add(
+        ((JArray)initVideoClip["stages"]).Add(
             MakeStage(models.VideoModel.Name, "Stage0", control: 0.5, upscale: 2.0, steps: 12));
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         // Stage 1 retargeted the conform scale to its own input dims (512×2). Stage 2's Stage0
@@ -579,19 +579,19 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_clip_retake_masks_regenerate_a_window_of_the_footage()
+    public void InitVideo_clip_retake_masks_regenerate_a_window_of_the_footage()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        JObject sourced = MakeSourcedClip(models);
-        sourced["retake"] = new JObject
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["retake"] = new JObject
         {
             ["startSeconds"] = 0.2,
             ["lengthSeconds"] = 0.2,
             ["strength"] = 1.0
         };
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode window = Assert.Single(
@@ -600,7 +600,7 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
         Assert.True(
             ReachesUpstream(bridge, maskNode, window.Id),
-            "Retake noise mask does not apply to the sourced footage's latent.");
+            "Retake noise mask does not apply to the init-video footage's latent.");
         SwarmKSamplerNode sampler = Assert.Single(
             SamplerNodesOrdered(bridge),
             s => ReachesUpstream(bridge, s, window.Id));
@@ -609,22 +609,22 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Continue_from_sourced_clip_freezes_its_tail_as_next_clip_context()
+    public void Continue_from_init_video_clip_freezes_its_tail_as_next_clip_context()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        JObject sourced = MakeSourcedClip(models);
-        sourced["boundaryOut"] = "continue";
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
-            models, sourced, MakeGeneratedClip(models));
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["boundaryOut"] = "continue";
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(
+            models, initVideoClip, MakeGeneratedClip(models));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode window = Assert.Single(
             bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
         int windowFrames = Ltx2BoundaryPolicy.DefaultFrames + 1;
         List<ImageFromBatchNode> tailSlices = [.. bridge.Graph.NodesOfType<ImageFromBatchNode>()
-            .Where(n => n.BatchIndex.LiteralAsInt() == SourcedClipFrames - windowFrames
+            .Where(n => n.BatchIndex.LiteralAsInt() == InitVideoClipFrames - windowFrames
                 && n.Length.LiteralAsInt() == windowFrames
                 && ReachesUpstream(bridge, n, window.Id))];
         Assert.NotEmpty(tailSlices);
@@ -644,19 +644,19 @@ public partial class StageFlowTests
     [InlineData("continue")]
     [InlineData("cut")]
     [InlineData("crossfade")]
-    public void Sourced_lead_clip_boundary_retargets_the_root_save_to_the_merge(string boundaryOut)
+    public void InitVideo_lead_clip_boundary_retargets_the_root_save_to_the_merge(string boundaryOut)
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        // Sourced LEAD clip + a generated clip: the root generation survives as the generated
+        // InitVideo LEAD clip + a generated clip: the root generation survives as the generated
         // clip's source donor and gets pixel-conformed to the timeline resolution. The core save
         // consumes the PRE-conform root output, so the merge retarget must still catch it — a
         // missed retarget ships the unrelated root generation as a second output video.
-        JObject sourced = MakeSourcedClip(models);
-        sourced["boundaryOut"] = boundaryOut;
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
-            models, sourced, MakeGeneratedClip(models));
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["boundaryOut"] = boundaryOut;
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(
+            models, initVideoClip, MakeGeneratedClip(models));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode window = Assert.Single(
@@ -678,25 +678,25 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_lead_then_generated_clip_in_real_native_i2v_step_order_publishes_only_the_timeline()
+    public void InitVideo_lead_then_generated_clip_in_real_native_i2v_step_order_publishes_only_the_timeline()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         // Exercise the actual host priority-10 save preparation and priority-11 native I2V step,
-        // rather than the already-decoded priority-11 fixture used by most sourced-clip tests.
+        // rather than the already-decoded priority-11 fixture used by most init-video-clip tests.
         // Clip 0 owns uploaded footage while clip 1 owns the generated root handoff.
-        JObject sourced = MakeSourcedClip(models);
-        sourced["boundaryOut"] = Constants.BoundaryOutCut;
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["boundaryOut"] = Constants.BoundaryOutCut;
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            MakeRootConfig(512, 512, sourced, MakeGeneratedClip(models)).ToString());
+            MakeRootConfig(512, 512, initVideoClip, MakeGeneratedClip(models)).ToString());
 
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildCoreVideoWorkflowStepsWithPreVideoSave(),
-            features: SourcedClipFeatures);
+            features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode window = Assert.Single(
@@ -711,7 +711,7 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.True(
             ReachesUpstream(bridge, save.Images.Connection!.Node, window.Id),
-            "The sole published video does not trace to the mixed sourced/generated timeline.");
+            "The sole published video does not trace to the mixed init-video/generated timeline.");
         Assert.True(JToken.DeepEquals(
             WorkflowBridge.ToPath(save.Images.Connection),
             generator.CurrentMedia.Path));
@@ -719,19 +719,19 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Passthrough_sourced_lead_continue_join_samples_only_the_generated_clip()
+    public void Passthrough_init_video_lead_continue_join_samples_only_the_generated_clip()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        // Control 0 on the sourced clip's only stage: upload a video and join it to a generated
+        // Control 0 on the initVideoClip clip's only stage: upload a video and join it to a generated
         // clip without altering the footage — no sampler for clip 0, just the conform chain
         // feeding the merge.
-        JObject sourced = MakeSourcedClip(models);
-        ((JArray)sourced["stages"])[0]["control"] = 0.0;
-        sourced["boundaryOut"] = "continue";
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
-            models, sourced, MakeGeneratedClip(models));
+        JObject initVideoClip = MakeInitVideoClip(models);
+        ((JArray)initVideoClip["stages"])[0]["control"] = 0.0;
+        initVideoClip["boundaryOut"] = "continue";
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(
+            models, initVideoClip, MakeGeneratedClip(models));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode window = Assert.Single(
@@ -748,25 +748,25 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Continue_from_sourced_clip_keeps_spec_dims_for_the_generated_clip()
+    public void Continue_from_init_video_clip_keeps_spec_dims_for_the_generated_clip()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         // Spec dims deliberately differ from the harness's core-param (root media) dims: the
         // surviving root media must be conformed to the SPEC resolution so the generated clip runs
-        // at the same dims as the sourced clip. Left at core dims, the merge degrades to a hard cut
+        // at the same dims as the initVideoClip clip. Left at core dims, the merge degrades to a hard cut
         // that repeats the continuity overlap frames.
-        JObject sourced = MakeSourcedClip(models);
-        sourced["boundaryOut"] = "continue";
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["boundaryOut"] = "continue";
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            MakeRootConfig(768, 1024, sourced, MakeGeneratedClip(models)).ToString());
+            MakeRootConfig(768, 1024, initVideoClip, MakeGeneratedClip(models)).ToString());
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeSteps(attachAudioToCurrentMedia: true),
-            features: SourcedClipFeatures);
+            features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         // The overlap plan survived: seam blend + ramp instead of a plain full concat.
@@ -778,15 +778,15 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Continue_into_sourced_clip_degrades_to_cut()
+    public void Continue_into_init_video_clip_degrades_to_cut()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         JObject generated = MakeGeneratedClip(models);
         generated["boundaryOut"] = "continue";
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(
-            models, generated, MakeSourcedClip(models));
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(
+            models, generated, MakeInitVideoClip(models));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         // Fixed footage can't be conditioned on the previous clip's tail: the boundary degrades to
@@ -803,48 +803,48 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Single_sourced_clip_outputs_the_conformed_footage_with_its_audio()
+    public void Single_init_video_clip_outputs_the_conformed_footage_with_its_audio()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         // Passthrough stage 0 (Control 0): the conformed footage IS the output, no sampling at all.
-        JObject sourced = MakeSourcedClip(models);
-        ((JArray)sourced["stages"])[0]["control"] = 0.0;
-        (JObject workflow, WorkflowGenerator g) = GenerateSourcedFlow(models, sourced);
+        JObject initVideoClip = MakeInitVideoClip(models);
+        ((JArray)initVideoClip["stages"])[0]["control"] = 0.0;
+        (JObject workflow, WorkflowGenerator g) = GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        SwarmFrameWindowNode window = AssertSourcedConformChain(
+        SwarmFrameWindowNode window = AssertInitVideoConformChain(
             bridge,
-            SourcedOnlyClipFrames);
-        Assert.Equal(SourcedOnlyClipFrames, g.CurrentMedia.Frames);
+            InitVideoOnlyClipFrames);
+        Assert.Equal(InitVideoOnlyClipFrames, g.CurrentMedia.Frames);
         INodeOutput currentOutput = bridge.ResolvePath((JArray)g.CurrentMedia.Path);
         Assert.True(
             ReachesUpstream(bridge, currentOutput.Node, window.Id),
-            "Final media does not trace back to the sourced footage chain.");
+            "Final media does not trace back to the init-video footage chain.");
         // Passthrough stage + pruned root generation: the workflow samples nothing at all.
         Assert.Empty(SamplerNodesOrdered(bridge));
         AssertWorkflowHasNoCycles(workflow);
     }
 
     [Fact]
-    public void Sourced_clip0_in_text_to_video_flow_encodes_the_footage_not_an_empty_latent()
+    public void InitVideo_clip0_in_text_to_video_flow_encodes_the_footage_not_an_empty_latent()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         T2IParamInput input = BuildTextToVideoInput(
-            models.VideoModel, MakeRootConfig(512, 512, MakeSourcedClip(models)).ToString());
+            models.VideoModel, MakeRootConfig(512, 512, MakeInitVideoClip(models)).ToString());
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildTextToVideoSteps(attachAudioToCurrentMedia: true),
-            features: SourcedClipFeatures);
+            features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // The text-to-video root replacement must not hijack a sourced clip's first stage: that
+        // The text-to-video root replacement must not hijack a initVideoClip clip's first stage: that
         // path built an EmptyLTXVLatentVideo and orphaned the whole conform chain, so the clip
         // rendered noise instead of the uploaded footage.
-        SwarmFrameWindowNode window = AssertSourcedConformChain(bridge);
+        SwarmFrameWindowNode window = AssertInitVideoConformChain(bridge);
         Assert.Empty(bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>());
         // Stage 0 (Control 0.5) refines the footage: exactly one sampler, seeded from the conform
         // chain (start_at_step floor(10 * 0.5) = 5), and the empty-latent root path is pruned.
@@ -852,13 +852,13 @@ public partial class StageFlowTests
         Assert.Equal(5, sampler.StartAtStep.LiteralAsInt());
         Assert.True(
             ReachesUpstream(bridge, sampler, window.Id),
-            "The refine sampler does not trace back to the sourced footage chain.");
+            "The refine sampler does not trace back to the init-video footage chain.");
 
         SwarmSaveAnimationWSNode save = Assert.Single(
             bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.True(
             ReachesUpstream(bridge, save.Images.Connection!.Node, window.Id),
-            "Saved video does not trace back to the sourced footage chain.");
+            "Saved video does not trace back to the init-video footage chain.");
         TrimAudioDurationNode trim = Assert.Single(
             bridge.Graph.NodesOfType<TrimAudioDurationNode>());
         Assert.True(
@@ -909,7 +909,7 @@ public partial class StageFlowTests
         }, 4);
 
     [Fact]
-    public void Sourced_clip_in_real_text_to_video_step_order_leaves_no_dangling_root_sampler()
+    public void InitVideo_clip_in_real_text_to_video_step_order_leaves_no_dangling_root_sampler()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -919,32 +919,32 @@ public partial class StageFlowTests
             loraHandler, "/tmp", "/tmp/UnitTest_StageLora.safetensors", "UnitTest_StageLora.safetensors");
         loraHandler.Models[stageLora.Name] = stageLora;
 
-        JObject sourced = MakeSourcedClip(models);
+        JObject initVideoClip = MakeInitVideoClip(models);
         // Payload parity with the real dangling-sampler report: continue boundary, per-stage loras,
-        // an implicit-drive IC-LoRA (Upload/no-media on a sourced clip), and a ×2 pixel refine stage.
-        sourced["boundaryOut"] = "continue";
-        sourced["boundaryOutOverlap"] = 40;
+        // an implicit-drive IC-LoRA (Upload/no-media on a initVideoClip clip), and a ×2 pixel refine stage.
+        initVideoClip["boundaryOut"] = "continue";
+        initVideoClip["boundaryOutOverlap"] = 40;
         JArray stageLoras = new(new JObject { ["name"] = "UnitTest_StageLora", ["weight"] = 1.0 });
-        ((JArray)sourced["stages"])[0]["loras"] = stageLoras;
+        ((JArray)initVideoClip["stages"])[0]["loras"] = stageLoras;
         JObject refineStage = MakeStage(
             models.VideoModel.Name, "PreviousStage", control: 0.5, upscale: 2.0, steps: 12);
         refineStage["loras"] = stageLoras.DeepClone();
-        ((JArray)sourced["stages"]).Add(refineStage);
-        sourced["icLoras"] = new JArray(new JObject
+        ((JArray)initVideoClip["stages"]).Add(refineStage);
+        initVideoClip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = "UnitTest_StageLora",
             ["driveSource"] = Constants.IcLoraSourceIncoming,
             ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         T2IParamInput input = BuildTextToVideoInput(
-            models.VideoModel, MakeRootConfig(512, 512, sourced).ToString());
+            models.VideoModel, MakeRootConfig(512, 512, initVideoClip).ToString());
         input.Set(T2IParamTypes.TrimVideoStartFrames, 0);
         input.Set(T2IParamTypes.TrimVideoEndFrames, 0);
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             new[] { SeedRawTextToVideoAvLatentRootStep(), WorkflowTestHarness.CorePreVideoSavePrepStep() }
                 .Concat(WorkflowTestHarness.VideoStagesSteps()),
-            features: SourcedClipFeatures);
+            features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         // The root t2v generation must be fully pruned — only the clip's own stages sample. A
@@ -985,7 +985,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         // This is the raw host T2V state before its priority-10 separate/decode/save pass. Unlike
-        // the sourced tests above, no uploaded footage participates: the generated VideoStages
+        // the initVideoClip tests above, no uploaded footage participates: the generated VideoStages
         // clip alone replaces the root AV generation and must own the only surviving output.
         T2IParamInput input = BuildTextToVideoInput(
             models.VideoModel,
@@ -997,7 +997,7 @@ public partial class StageFlowTests
             input,
             new[] { SeedRawTextToVideoAvLatentRootStep(), WorkflowTestHarness.CorePreVideoSavePrepStep() }
                 .Concat(WorkflowTestHarness.VideoStagesSteps()),
-            features: SourcedClipFeatures);
+            features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.False(workflow.ContainsKey("10"), "The discarded root T2V sampler remained pinned.");
@@ -1027,7 +1027,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeTextToVideoStepsWithPreCoreVideo(attachAudioToCurrentMedia: true),
-            features: SourcedClipFeatures);
+            features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.False(workflow.ContainsKey("200"));
@@ -1039,33 +1039,33 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_lead_with_generated_clip_in_t2v_drops_the_root_generation()
+    public void InitVideo_lead_with_generated_clip_in_t2v_drops_the_root_generation()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        // Sourced LEAD clip + generated clip in a real-order text-to-video run: the generated
+        // InitVideo LEAD clip + generated clip in a real-order text-to-video run: the generated
         // clip replaces the root with its own empty latent and self-generates audio, so the root
         // generation has NO consumer and must be dropped. Regression: the root's audio latent was
         // wired in as the generated clip's audio init, pinning the whole unrelated root sampler
         // (a third SwarmKSampler) alive in the graph.
-        JObject sourced = MakeSourcedClip(models);
-        sourced["boundaryOut"] = "continue";
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip["boundaryOut"] = "continue";
         T2IParamInput input = BuildTextToVideoInput(
             models.VideoModel,
-            MakeRootConfig(512, 512, sourced, MakeGeneratedClip(models)).ToString());
+            MakeRootConfig(512, 512, initVideoClip, MakeGeneratedClip(models)).ToString());
         input.Set(T2IParamTypes.TrimVideoStartFrames, 0);
         input.Set(T2IParamTypes.TrimVideoEndFrames, 0);
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             new[] { SeedRawTextToVideoAvLatentRootStep(), WorkflowTestHarness.CorePreVideoSavePrepStep() }
                 .Concat(WorkflowTestHarness.VideoStagesSteps()),
-            features: SourcedClipFeatures);
+            features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode window = Assert.Single(
             bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
-        // Exactly two samplers — sourced clip 0's refine and the generated clip. The root t2v
+        // Exactly two samplers — initVideoClip clip 0's refine and the generated clip. The root t2v
         // sampler ("10") and its AV chain must be gone.
         List<SwarmKSamplerNode> samplers = [.. SamplerNodesOrdered(bridge)];
         Assert.True(
@@ -1083,46 +1083,46 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_clip0_in_text_to_video_flow_takes_over_the_root_save_and_drops_the_root_generation()
+    public void InitVideo_clip0_in_text_to_video_flow_takes_over_the_root_save_and_drops_the_root_generation()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         T2IParamInput input = BuildTextToVideoInput(
-            models.VideoModel, MakeRootConfig(512, 512, MakeSourcedClip(models)).ToString());
+            models.VideoModel, MakeRootConfig(512, 512, MakeInitVideoClip(models)).ToString());
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             BuildNativeTextToVideoStepsWithPreCoreVideo(attachAudioToCurrentMedia: true),
-            features: SourcedClipFeatures);
+            features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         // The native t2v root chain (sampler 200 / separate 201 / decode 202) must not survive as a
-        // dangling generation: its save is retargeted onto the sourced clip's output and the rest
+        // dangling generation: its save is retargeted onto the initVideoClip clip's output and the rest
         // pruned.
         Assert.False(workflow.ContainsKey("200"));
         Assert.False(workflow.ContainsKey("201"));
         Assert.False(workflow.ContainsKey("202"));
-        SwarmFrameWindowNode window = AssertSourcedConformChain(bridge);
+        SwarmFrameWindowNode window = AssertInitVideoConformChain(bridge);
         SwarmSaveAnimationWSNode save = Assert.Single(
             bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.True(
             ReachesUpstream(bridge, save.Images.Connection!.Node, window.Id),
-            "Saved video does not trace back to the sourced footage chain.");
+            "Saved video does not trace back to the init-video footage chain.");
         AssertWorkflowHasNoCycles(workflow);
     }
 
     [Fact]
-    public void Sourced_clip_stage0_pixel_upscale_scales_the_footage_before_sampling()
+    public void InitVideo_clip_stage0_pixel_upscale_scales_the_footage_before_sampling()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        JObject sourced = MakeSourcedClip(models);
+        JObject initVideoClip = MakeInitVideoClip(models);
         // Stage 0 refines its own footage with a ×2 pixel upscale: the conformed footage is scaled
         // to the final 1024×1024 dims before stage 0's sampler (start_at_step 5) encodes it.
-        ((JArray)sourced["stages"])[0]["upscale"] = 2.0;
-        ((JArray)sourced["stages"])[0]["upscaleMethod"] = "pixel-lanczos";
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
+        ((JArray)initVideoClip["stages"])[0]["upscale"] = 2.0;
+        ((JArray)initVideoClip["stages"])[0]["upscaleMethod"] = "pixel-lanczos";
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmFrameWindowNode window = Assert.Single(
@@ -1177,7 +1177,7 @@ public partial class StageFlowTests
             input,
             new[] { SeedRawTextToVideoAvLatentRootStep(), WorkflowTestHarness.CorePreVideoSavePrepStep() }
                 .Concat(WorkflowTestHarness.VideoStagesSteps()),
-            features: SourcedClipFeatures);
+            features: InitVideoClipFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         int guides = bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count();
@@ -1188,19 +1188,19 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_clip_with_a_captured_init_image_does_not_reinject_it()
+    public void InitVideo_clip_with_a_captured_init_image_does_not_reinject_it()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         // No explicit stage ImageReference (the fixture default would set ImageRefWasExplicit and
         // mask the implicit-ref path this test guards).
-        JObject sourced = MakeSourcedClip(models);
-        ((JObject)((JArray)sourced["stages"])[0]).Remove("imageReference");
-        (JObject workflow, WorkflowGenerator g) = GenerateSourcedFlow(models, sourced);
+        JObject initVideoClip = MakeInitVideoClip(models);
+        ((JObject)((JArray)initVideoClip["stages"])[0]).Remove("imageReference");
+        (JObject workflow, WorkflowGenerator g) = GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // The host init image (Refiner ref) is captured in this flow; without the sourced-clip
+        // The host init image (Refiner ref) is captured in this flow; without the init-video-clip
         // guard in ResolveStageClipRefs the implicit image-to-video default ref would become the
         // primary guide and inplace-merge the init image into the encoded footage latent.
         Assert.True(
@@ -1213,14 +1213,14 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Sourced_clip_without_duration_generates_normally()
+    public void InitVideo_clip_without_duration_generates_normally()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        JObject sourced = MakeSourcedClip(models);
-        sourced.Remove("duration");
-        (JObject workflow, WorkflowGenerator _generator) = GenerateSourcedFlow(models, sourced);
+        JObject initVideoClip = MakeInitVideoClip(models);
+        initVideoClip.Remove("duration");
+        (JObject workflow, WorkflowGenerator _generator) = GenerateInitVideoFlow(models, initVideoClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         // Without a clip duration the used range is undefined; the source video is dropped at parse

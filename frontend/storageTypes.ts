@@ -56,7 +56,7 @@ export const STORED_CLIP_KEYS = [
     "reuseAudio",
     "uploadedAudio",
     "retake",
-    "sourceVideo",
+    "initVideo",
     "refs",
     "stages",
 ] as const satisfies readonly (keyof Clip)[];

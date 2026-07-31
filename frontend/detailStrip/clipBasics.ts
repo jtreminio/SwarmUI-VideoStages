@@ -24,11 +24,11 @@ export const buildClipColumn = (
     column.className =
         "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
 
-    const sourced = !!clip.sourceVideo;
+    const initVideoClip = !!clip.initVideo;
     const lengthDerived =
         clip.clipLengthFromAudio === true ||
         clip.clipLengthFromControlNet === true ||
-        sourced;
+        initVideoClip;
     const durationInput = buildNumber(
         clip.duration,
         CLIP_DURATION_MIN,
@@ -49,7 +49,7 @@ export const buildClipColumn = (
         "Duration (s)",
         durationInput,
         lengthDerived
-            ? sourced
+            ? initVideoClip
                 ? "(derived from the source video range)"
                 : "(derived from audio/ControlNet source)"
             : undefined,

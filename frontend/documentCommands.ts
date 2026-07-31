@@ -152,7 +152,7 @@ export const reduceDocumentCommand = (
             const candidate = clone(clip);
             Object.assign(candidate, clone(command.patch), { id: clip.id });
             if (
-                hasOwn(command.patch, "sourceVideo") &&
+                hasOwn(command.patch, "initVideo") &&
                 !reconcileClipArchitectureIdentity(
                     candidate,
                     context.architectureCatalog,

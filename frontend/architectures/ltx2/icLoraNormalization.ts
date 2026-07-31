@@ -157,7 +157,7 @@ const normalizeIcLoraStage = (value: unknown, stageCount: number): number => {
 export const normalizeIcLora = (
     raw: unknown,
     stageCount: number = 0,
-    _sourcedClip = false,
+    _initVideoClip = false,
 ): IcLora | null => {
     if (!isRecord(raw)) {
         return null;
@@ -234,13 +234,13 @@ export const normalizeIcLora = (
 export const normalizeIcLoras = (
     rawClip: Record<string, unknown>,
     stageCount: number = 0,
-    sourcedClip = false,
+    initVideoClip = false,
 ): IcLora[] => {
     if (!Array.isArray(rawClip.icLoras)) {
         return [];
     }
     return rawClip.icLoras
-        .map((entry) => normalizeIcLora(entry, stageCount, sourcedClip))
+        .map((entry) => normalizeIcLora(entry, stageCount, initVideoClip))
         .filter((entry): entry is IcLora => entry !== null);
 };
 

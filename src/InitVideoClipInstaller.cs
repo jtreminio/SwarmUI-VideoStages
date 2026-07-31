@@ -19,10 +19,10 @@ namespace VideoStages;
 /// explicitly audio-disabled architecture can request video-only installation and build no audio
 /// trim branch.
 /// </summary>
-internal sealed class SourcedClipInstaller(WorkflowGenerator g)
+internal sealed class InitVideoClipInstaller(WorkflowGenerator g)
 {
     /// <summary>
-    /// Installs a sourced clip from its immutable execution plan. Architecture execution intentionally does
+    /// Installs a initVideoClip clip from its immutable execution plan. Architecture execution intentionally does
     /// not return to <see cref="ClipSpec"/> for embedded-media identity or timeline dimensions.
     /// <paramref name="includeSourceAudio"/> defaults to the existing source-audio behavior; false
     /// omits the audio branch entirely.
@@ -30,9 +30,9 @@ internal sealed class SourcedClipInstaller(WorkflowGenerator g)
     public WGNodeData TryInstall(ClipPlan plan, bool includeSourceAudio = true)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        SourceVideoPlan source = plan.SourceVideo;
-        ImageFile video = EmbeddedMediaMaterializer.MaterializeSourceVideo(g, source);
-        if (!plan.IsSourced
+        InitVideoPlan source = plan.InitVideo;
+        ImageFile video = EmbeddedMediaMaterializer.MaterializeInitVideo(g, source);
+        if (!plan.HasInitVideo
             || source is null
             || video is null
             || plan.Frames is not int frames
@@ -42,7 +42,7 @@ internal sealed class SourcedClipInstaller(WorkflowGenerator g)
             return null;
         }
 
-        WGNodeData loaded = g.LoadImage(video, $"${{vssourcevideo{plan.ClipId}}}", resize: false);
+        WGNodeData loaded = g.LoadImage(video, $"${{vsinitvideo{plan.ClipId}}}", resize: false);
         int fps = source.TargetFramesPerSecond;
         int startFrame = (int)Math.Round(source.StartSeconds * fps);
 

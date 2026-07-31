@@ -49,8 +49,8 @@ internal static class EmbeddedMediaMaterializer
         }
     }
 
-    /// <summary>Materializes the identity carried by a compiled sourced-clip plan.</summary>
-    public static ImageFile MaterializeSourceVideo(WorkflowGenerator g, SourceVideoPlan source)
+    /// <summary>Materializes the identity carried by a compiled init-video-clip plan.</summary>
+    public static ImageFile MaterializeInitVideo(WorkflowGenerator g, InitVideoPlan source)
     {
         if (source is null || string.IsNullOrWhiteSpace(source.Data))
         {

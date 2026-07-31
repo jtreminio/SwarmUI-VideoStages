@@ -50,19 +50,19 @@ internal static class ArchitecturePlanResolver
 
             if (clip.Stages is not { Count: > 0 })
             {
-                if (clip.SourceVideo is not null)
+                if (clip.InitVideo is not null)
                 {
                     ValidateSourceOnlyIdentity(clip, diagnostics);
                     if (authoredStages.Count > 0
                         && stageModels.TryGetValue(
                         authoredStages[0].RawIndex,
-                        out ResolvedVideoModel inactiveSourcedFirstModel))
+                        out ResolvedVideoModel inactiveInitVideoFirstModel))
                     {
                         ValidateSameArchitecture(
                             clip,
                             authoredStages,
                             stageModels,
-                            inactiveSourcedFirstModel,
+                            inactiveInitVideoFirstModel,
                             diagnostics);
                     }
                     assignments.TryAdd(clip.Id, new(

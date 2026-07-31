@@ -39,17 +39,17 @@ internal static class ArchitectureCapabilityValidator
                 diagnostics);
         }
         Require(
-            clip.SourceVideo is null,
+            clip.InitVideo is null,
             Has(
                 capabilities.Architecture,
                 ArchitectureCapability.GeneratedEntry),
             "generated entry");
         Require(
-            clip.SourceVideo is not null,
+            clip.InitVideo is not null,
             Has(
                 capabilities.Architecture,
-                ArchitectureCapability.SourcedEntry),
-            "sourced entry");
+                ArchitectureCapability.InitVideoEntry),
+            "init-video entry");
         Require(
             clip.SaveAudioTrack,
             Has(
@@ -64,16 +64,16 @@ internal static class ArchitectureCapabilityValidator
             "image stage input");
         Require(
             clip.Stages is { Count: > 0 }
-                && entryMode == ArchitectureEntryMode.SourceVideo,
+                && entryMode == ArchitectureEntryMode.InitVideo,
             Has(capabilities.Stage, StageCapability.VideoInput),
             "video stage input");
         Require(
-            clip.SourceVideo is not null,
-            Has(capabilities.Clip, ClipCapability.SourceVideo),
+            clip.InitVideo is not null,
+            Has(capabilities.Clip, ClipCapability.InitVideo),
             "source video");
         // Every stage runner resolves the host's authored prompt for the clip and stage it is
         // executing, so running a stage is what consumes the major prompt. An architecture that
-        // executes stages must therefore advertise prompt support; a sourced-only clip runs no
+        // executes stages must therefore advertise prompt support; a init-video-only clip runs no
         // stage and consumes no prompt.
         Require(
             hasActiveStages,
