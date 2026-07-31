@@ -12,8 +12,6 @@ internal sealed class StageSequenceRootSetup(
     StageRefStore store,
     IArchitectureRootMediaResizer rootVideoStageResizer)
 {
-    private readonly LtxStageReferenceCapture referenceCapture = new(g);
-
     public StageSequenceRootSources Prepare(
         AudioRuntimeSources preparedAudioSources,
         RootExecutionPolicy rootPolicy)
@@ -64,7 +62,7 @@ internal sealed class StageSequenceRootSetup(
 
     private void CaptureGeneratedReference()
     {
-        StageRefStore.StageRef reference = referenceCapture.Capture();
+        StageRefStore.StageRef reference = store.CaptureCurrentOutputReference();
         store.Capture(
             StageRefStore.StageKind.Generated,
             reference.Media,

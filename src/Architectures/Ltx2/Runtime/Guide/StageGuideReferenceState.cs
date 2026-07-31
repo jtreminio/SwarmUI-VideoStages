@@ -14,7 +14,6 @@ internal sealed class StageGuideReferenceState(
     Base2EditPublishedStageRefs base2EditPublishedStageRefs)
 {
     private readonly Dictionary<int, StageRefStore.StageRef> _stageOutputs = [];
-    private readonly LtxStageReferenceCapture _referenceCapture = new(g);
     private StageRefStore.StageRef _previousStageRef;
 
     /// <summary>
@@ -52,7 +51,7 @@ internal sealed class StageGuideReferenceState(
     public void CaptureStageOutput(StagePlan stage)
     {
         ArgumentNullException.ThrowIfNull(stage);
-        StageRefStore.StageRef captured = _referenceCapture.Capture();
+        StageRefStore.StageRef captured = store.CaptureCurrentOutputReference();
         _stageOutputs[stage.ClipStageIndex] = captured;
         _previousStageRef = captured;
     }

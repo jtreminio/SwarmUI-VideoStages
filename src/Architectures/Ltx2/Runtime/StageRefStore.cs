@@ -68,6 +68,22 @@ internal class StageRefStore(WorkflowGenerator g)
         }
     }
 
+    /// <summary>
+    /// Captures the current decoded stage reference, peeling the LTX post-video chain when present.
+    /// </summary>
+    public StageRef CaptureCurrentOutputReference()
+    {
+        WGNodeData referenceMedia = g.CurrentMedia;
+        WGNodeData referenceVae = g.CurrentVae;
+        LtxPostVideoChainCapture postVideoChain = LtxPostVideoChainCapture.TryCapture(g);
+        if (postVideoChain is not null)
+        {
+            referenceMedia = postVideoChain.CreateStageInput();
+            referenceVae = postVideoChain.CreateStageInputVae();
+        }
+        return new(referenceMedia, referenceVae);
+    }
+
     private StageRef GetIfCaptured(StageKind kind)
     {
         return g.NodeHelpers.ContainsKey(MediaKey(kind)) ? LoadStageRef(kind) : null;
