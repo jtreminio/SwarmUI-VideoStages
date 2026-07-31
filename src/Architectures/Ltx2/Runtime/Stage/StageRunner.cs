@@ -154,7 +154,6 @@ internal class StageRunner
             primaryGuideClipRef = new ResolvedClipRef(
                 clipContext.ContinuityFrame.Duplicate(),
                 new ImageReferencePlan(
-                    Index: -1,
                     ImageReferenceSourceKind.Unknown,
                     RawSource: "Continue",
                     Base2EditStageIndex: null,

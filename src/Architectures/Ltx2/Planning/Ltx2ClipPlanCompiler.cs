@@ -60,7 +60,6 @@ internal static class Ltx2ClipPlanCompiler
         }
         return new(
             new Ltx2ClipPayload(
-                clip.Id,
                 audio.Reuse,
                 audio.Injection,
                 icLoras.PrimaryControlNetSourceIndex,

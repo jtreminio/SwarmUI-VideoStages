@@ -54,7 +54,6 @@ internal sealed class StageFramePreparer(
             replacesTextToVideoRoot);
         return new StageFrame(
             stage,
-            sectionId,
             clipContext,
             priorOutputPath,
             replacesTextToVideoRoot,

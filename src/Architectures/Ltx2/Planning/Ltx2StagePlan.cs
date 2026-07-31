@@ -173,7 +173,6 @@ internal enum ImageReferenceFrameOrigin
 }
 
 internal sealed record ImageReferencePlan(
-    int Index,
     ImageReferenceSourceKind SourceKind,
     string RawSource,
     int? Base2EditStageIndex,

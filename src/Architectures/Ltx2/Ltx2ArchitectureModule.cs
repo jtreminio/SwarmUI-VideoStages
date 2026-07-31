@@ -144,7 +144,6 @@ internal sealed class Ltx2ArchitectureModule :
 }
 
 internal sealed record Ltx2ClipPayload(
-    int ClipId,
     AudioReusePlan AudioReuse,
     Ltx2AudioInjectionPlan AudioInjection,
     int? ControlNetSourceIndex,

@@ -8,7 +8,6 @@ internal sealed class StageFrame
 {
     public StageFrame(
         StagePlan stage,
-        int sectionId,
         ClipContext clipContext,
         JArray priorOutputPath,
         bool replacesTextToVideoRoot,
@@ -18,7 +17,6 @@ internal sealed class StageFrame
         StageExecutionOptions executionOptions)
     {
         Stage = stage;
-        SectionId = sectionId;
         ClipContext = clipContext;
         PriorOutputPath = priorOutputPath;
         ReplacesTextToVideoRoot = replacesTextToVideoRoot;
@@ -29,7 +27,6 @@ internal sealed class StageFrame
     }
 
     public StagePlan Stage { get; }
-    public int SectionId { get; }
     public ClipContext ClipContext { get; }
     public JArray PriorOutputPath { get; }
     public bool ReplacesTextToVideoRoot { get; }

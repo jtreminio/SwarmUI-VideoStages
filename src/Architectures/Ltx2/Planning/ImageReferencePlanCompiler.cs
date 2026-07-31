@@ -16,7 +16,6 @@ internal static class ImageReferencePlanCompiler
             ImageRefSpec reference = references[i];
             (ImageReferenceSourceKind sourceKind, int? editStage) = CompileSource(reference.Source);
             plans.Add(new ImageReferencePlan(
-                i,
                 sourceKind,
                 reference.Source?.Trim() ?? "",
                 editStage,
