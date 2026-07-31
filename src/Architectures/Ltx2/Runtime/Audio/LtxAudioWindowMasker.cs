@@ -131,9 +131,7 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
 
         // Retake: preserved-frame audio stays locked to the base encoding. Matches the video retake mask's
         // frame-count preference (genInfo.Frames first) so both windows describe the same span.
-        if (payload.Retake is not null
-            && Ltx2ModelCompatibility.IsLtxV2VideoModel(
-                stage.ResolvedModel?.ModelName))
+        if (payload.Retake is not null)
         {
             return ComputeRetakeWindow(
                 new RetakeWindowSpec(

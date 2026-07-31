@@ -124,8 +124,7 @@ internal sealed class TimelineAssemblySession
         RuntimeArtifact artifact = RuntimeArtifact.FromDecoded(
             _generator,
             bridge,
-            clipOutput,
-            ArtifactOrigin.ClipAssembly);
+            clipOutput);
         if (_plan.Clips[0].Stages.Count == 0)
         {
             artifact = _outputTrimmer.Apply(artifact);

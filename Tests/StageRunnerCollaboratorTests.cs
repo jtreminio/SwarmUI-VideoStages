@@ -155,7 +155,6 @@ public class StageRunnerCollaboratorTests
             .Capture(MakePlan().Stage);
 
         Assert.True(artifact.HasMedia);
-        Assert.Equal(ArtifactOrigin.StageOutput, artifact.Origin);
         generator.CurrentMedia = null;
         artifact.PublishTo(generator);
         Assert.Equal("901", $"{generator.CurrentMedia.Path[0]}");

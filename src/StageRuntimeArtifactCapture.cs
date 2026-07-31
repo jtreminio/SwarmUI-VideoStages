@@ -13,7 +13,7 @@ internal sealed class StageRuntimeArtifactCapture(WorkflowGenerator g)
     {
         ArgumentNullException.ThrowIfNull(stage);
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        RuntimeArtifact output = RuntimeArtifact.Capture(g, bridge, ArtifactOrigin.StageOutput);
+        RuntimeArtifact output = RuntimeArtifact.Capture(g, bridge);
         if (!output.HasMedia)
         {
             throw new SwarmUserErrorException(

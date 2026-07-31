@@ -42,9 +42,7 @@ internal static class Ltx2StagePlanExtensions
     internal static bool HasActiveRetakeMask(this StagePlan stage)
     {
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
-        return payload.Retake is not null
-            && Ltx2ModelCompatibility.IsLtxV2VideoModel(
-                stage.ResolvedModel?.ModelName);
+        return payload.Retake is not null;
     }
 
     /// <summary>The stage authors its own opening frame, which outranks any implicit frame-1 guide.</summary>

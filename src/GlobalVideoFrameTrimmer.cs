@@ -26,8 +26,7 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
         ValidateHostInput(bridge);
         RuntimeArtifact current = RuntimeArtifact.Capture(
             g,
-            bridge,
-            ArtifactOrigin.ClipAssembly);
+            bridge);
         Apply(current, bridge).PublishTo(g);
     }
 

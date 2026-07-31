@@ -36,8 +36,7 @@ internal sealed class SourceOnlyGenerationSession(
         using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         RuntimeArtifact output = RuntimeArtifact.Capture(
             generator,
-            bridge,
-            ArtifactOrigin.SourceVideo);
+            bridge);
         return DecodedClipArtifact.FromRuntime(output, context.Clip);
     }
 

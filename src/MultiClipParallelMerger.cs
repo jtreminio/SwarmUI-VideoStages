@@ -50,8 +50,7 @@ internal sealed class MultiClipParallelMerger(
                 artifact = RuntimeArtifact.FromDecoded(
                     g,
                     singleBridge,
-                    clipArtifacts[0],
-                    ArtifactOrigin.ClipAssembly);
+                    clipArtifacts[0]);
             }
             return new(
                 new(boundaries ?? [], Degraded: false, Reason: null),
@@ -162,8 +161,7 @@ internal sealed class MultiClipParallelMerger(
             runtimeBoundaries,
             new(
                 mergedMedia,
-                MediaRef.FromWGNodeData(g.CurrentVae, bridge),
-                ArtifactOrigin.ClipAssembly));
+                MediaRef.FromWGNodeData(g.CurrentVae, bridge)));
     }
 
     private static INodeOutput MergeArchitectureRuns(

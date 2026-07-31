@@ -5,55 +5,37 @@ using SwarmUI.Builtin_ComfyUIBackend;
 namespace VideoStages.Execution;
 
 /// <summary>
-/// Semantic provenance for graph-bound media. This is deliberately separate from the pure
-/// planning model: plans describe what should happen, while runtime artifacts point at graph
-/// outputs that already exist.
-/// </summary>
-internal enum ArtifactOrigin
-{
-    HostRoot,
-    SourceVideo,
-    StageOutput,
-    ClipAssembly
-}
-
-/// <summary>
 /// A typed media value at an orchestration boundary. <see cref="MediaRef"/> remains the single
-/// representation of graph media; this envelope adds only VAE ownership and provenance.
+/// representation of graph media; this envelope adds only VAE ownership.
 /// </summary>
 internal sealed record RuntimeArtifact(
     MediaRef Media,
-    MediaRef Vae,
-    ArtifactOrigin Origin)
+    MediaRef Vae)
 {
     public bool HasMedia => Media?.Output is not null;
 
     public static RuntimeArtifact Capture(
         WorkflowGenerator generator,
-        WorkflowBridge bridge,
-        ArtifactOrigin origin)
+        WorkflowBridge bridge)
     {
         ArgumentNullException.ThrowIfNull(generator);
         ArgumentNullException.ThrowIfNull(bridge);
         return new RuntimeArtifact(
             MediaRef.FromWGNodeData(generator.CurrentMedia, bridge),
-            MediaRef.FromWGNodeData(generator.CurrentVae, bridge),
-            origin);
+            MediaRef.FromWGNodeData(generator.CurrentVae, bridge));
     }
 
     public static RuntimeArtifact FromDecoded(
         WorkflowGenerator generator,
         WorkflowBridge bridge,
-        DecodedClipArtifact decoded,
-        ArtifactOrigin origin)
+        DecodedClipArtifact decoded)
     {
         ArgumentNullException.ThrowIfNull(generator);
         ArgumentNullException.ThrowIfNull(bridge);
         ArgumentNullException.ThrowIfNull(decoded);
         return new(
             MediaRef.FromWGNodeData(decoded.ToHostMedia(generator), bridge),
-            MediaRef.FromWGNodeData(generator.CurrentVae, bridge),
-            origin);
+            MediaRef.FromWGNodeData(generator.CurrentVae, bridge));
     }
 
     /// <summary>

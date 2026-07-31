@@ -65,8 +65,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         RuntimeArtifact current = RuntimeArtifact.Capture(
             g,
-            bridge,
-            ArtifactOrigin.ClipAssembly);
+            bridge);
         RuntimeArtifact result = Apply(current, config, bridge);
         if (!ReferenceEquals(result, current))
         {

@@ -43,8 +43,7 @@ internal sealed class RootRuntimeSession
         using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         RuntimeArtifact hostRoot = RuntimeArtifact.Capture(
             generator,
-            bridge,
-            ArtifactOrigin.HostRoot);
+            bridge);
         OutputRegistry outputs = OutputRegistry.Capture(bridge, hostRoot);
         HashSet<string> componentSeeds = [];
         AddArtifactNodeIds(componentSeeds, hostRoot);

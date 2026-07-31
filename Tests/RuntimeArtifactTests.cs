@@ -34,14 +34,12 @@ public class RuntimeArtifactTests
 
         RuntimeArtifact artifact = RuntimeArtifact.Capture(
             generator,
-            bridge,
-            ArtifactOrigin.SourceVideo);
+            bridge);
         generator.CurrentMedia = null;
         generator.CurrentVae = null;
 
         artifact.PublishTo(generator);
 
-        Assert.Equal(ArtifactOrigin.SourceVideo, artifact.Origin);
         Assert.True(artifact.HasMedia);
         Assert.Equal("10", $"{generator.CurrentMedia.Path[0]}");
         Assert.Equal("11", $"{generator.CurrentMedia.AttachedAudio.Path[0]}");
@@ -62,8 +60,7 @@ public class RuntimeArtifactTests
 
         RuntimeArtifact artifact = RuntimeArtifact.Capture(
             generator,
-            bridge,
-            ArtifactOrigin.HostRoot);
+            bridge);
 
         Assert.False(artifact.HasMedia);
         Assert.Null(artifact.Media);
@@ -82,8 +79,7 @@ public class RuntimeArtifactTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         RuntimeArtifact artifact = RuntimeArtifact.Capture(
             generator,
-            bridge,
-            ArtifactOrigin.HostRoot);
+            bridge);
         UnknownNode vae = bridge.AddStub("UnitTestVae", "40").WithOutputs(WGNodeData.DT_VAE);
         generator.CurrentVae = Data(generator, "40", WGNodeData.DT_VAE);
 
@@ -113,8 +109,7 @@ public class RuntimeArtifactTests
                 Frames = 25,
                 FPS = 24,
             },
-            Vae: null,
-            Origin: ArtifactOrigin.StageOutput);
+            Vae: null);
 
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
             () => DecodedClipArtifact.FromRuntime(artifact, Clip()));
@@ -149,8 +144,7 @@ public class RuntimeArtifactTests
                     DataType = WGNodeData.DT_LATENT_AUDIO,
                 },
             },
-            Vae: null,
-            Origin: ArtifactOrigin.StageOutput);
+            Vae: null);
 
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
             () => DecodedClipArtifact.FromRuntime(artifact, Clip()));

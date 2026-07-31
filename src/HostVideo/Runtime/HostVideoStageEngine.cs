@@ -78,8 +78,7 @@ internal sealed class HostVideoStageEngine : IDisposable
         return DecodedClipArtifact.FromRuntime(
             RuntimeArtifact.Capture(
                 _generator,
-                bridge,
-                ArtifactOrigin.StageOutput),
+                bridge),
             clip);
     }
 

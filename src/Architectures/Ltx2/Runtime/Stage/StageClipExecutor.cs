@@ -61,7 +61,7 @@ internal sealed class StageClipExecutor(
         PrepareClipAudio(context, clipContext, sourcedMedia, boundaryAudioCarry);
         if (plannedClip.Stages.Count == 0)
         {
-            return CaptureStageInputArtifact(ArtifactOrigin.SourceVideo);
+            return CaptureStageInputArtifact();
         }
 
         RuntimeArtifact clipArtifact = null;
@@ -173,10 +173,7 @@ internal sealed class StageClipExecutor(
             plannedStage,
             clipContext.Dimensions.Width,
             clipContext.Dimensions.Height);
-        RuntimeArtifact inputArtifact = priorArtifact ?? CaptureStageInputArtifact(
-            context.Runtime.Clip.IsSourced
-                ? ArtifactOrigin.SourceVideo
-                : ArtifactOrigin.HostRoot);
+        RuntimeArtifact inputArtifact = priorArtifact ?? CaptureStageInputArtifact();
         context.HostScope.PublishStageInput(inputArtifact);
         RuntimeArtifact output = singleStageRunner.RunStage(
             plannedStage,
@@ -191,9 +188,9 @@ internal sealed class StageClipExecutor(
         return output;
     }
 
-    private RuntimeArtifact CaptureStageInputArtifact(ArtifactOrigin origin)
+    private RuntimeArtifact CaptureStageInputArtifact()
     {
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        return RuntimeArtifact.Capture(g, bridge, origin);
+        return RuntimeArtifact.Capture(g, bridge);
     }
 }
