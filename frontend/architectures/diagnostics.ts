@@ -253,13 +253,7 @@ export const deriveArchitectureDiagnostics = (
         catalog.entries.map((entry) => [entry.value, entry]),
     );
     const executableClipIndexSet = new Set(executableClipIndexes(clips));
-    const resolver =
-        capabilityViews ??
-        createCapabilityViewResolver(catalog, {
-            timelineClips: [...executableClipIndexSet].map(
-                (clipIdx) => clips[clipIdx],
-            ),
-        });
+    const resolver = capabilityViews ?? createCapabilityViewResolver(catalog);
 
     clips.forEach((clip, clipIdx) => {
         const temporalGrid = resolver.forClip(clip).frameGridResolution;

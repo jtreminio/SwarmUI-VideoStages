@@ -223,7 +223,6 @@ internal static class ArchitectureCatalogSerializer
 
     private static string SerializeRuleScope(RuleScope scope) => scope switch
     {
-        RuleScope.Architecture => "architecture",
         RuleScope.Clip => "clip",
         RuleScope.Stage => "stage",
         RuleScope.Boundary => "boundary",

@@ -74,7 +74,7 @@ const isRuleDecision = (
         !isTrimmedNonEmpty(value.code) ||
         !isTrimmedNonEmpty(value.reason) ||
         typeof value.scope !== "string" ||
-        !["architecture", "clip", "stage", "boundary"].includes(value.scope) ||
+        !["clip", "stage", "boundary"].includes(value.scope) ||
         (value.constraints !== null && !isRecord(value.constraints))
     ) {
         return false;
@@ -286,7 +286,7 @@ export const parseVideoArchitectureCatalog = (
             !isTrimmedNonEmpty(raw.label) ||
             !isCapabilities(raw.capabilities) ||
             !hasCompleteBoundaryRules(raw.boundaryRules) ||
-            !isRuleArray(raw.rules, ["architecture", "clip", "stage"])
+            !isRuleArray(raw.rules, ["clip", "stage"])
         ) {
             return null;
         }

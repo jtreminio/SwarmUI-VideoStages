@@ -974,7 +974,7 @@
       "reason",
       "scope",
       "constraints"
-    ]) || typeof value.support !== "string" || !["supported", "unsupported", "conditional"].includes(value.support) || !isTrimmedNonEmpty(value.code) || !isTrimmedNonEmpty(value.reason) || typeof value.scope !== "string" || !["architecture", "clip", "stage", "boundary"].includes(value.scope) || value.constraints !== null && !isRecord2(value.constraints)) {
+    ]) || typeof value.support !== "string" || !["supported", "unsupported", "conditional"].includes(value.support) || !isTrimmedNonEmpty(value.code) || !isTrimmedNonEmpty(value.reason) || typeof value.scope !== "string" || !["clip", "stage", "boundary"].includes(value.scope) || value.constraints !== null && !isRecord2(value.constraints)) {
       return false;
     }
     const scope = value.scope;
@@ -1094,7 +1094,7 @@
         "capabilities",
         "boundaryRules",
         "rules"
-      ]) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isCapabilities(raw.capabilities) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["architecture", "clip", "stage"])) {
+      ]) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isCapabilities(raw.capabilities) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["clip", "stage"])) {
         return null;
       }
       const executableRuleCodes = [
@@ -1552,21 +1552,18 @@
       CONDITIONAL_RULE_CODES.retakeExcludesReferences
     ]
   };
-  var conditionalRuleFor = (clip, feature, descriptor, scope) => {
+  var conditionalRuleFor = (clip, feature, descriptor) => {
     const codes = FEATURE_RULE_CODES[feature];
     if (!codes) return void 0;
     for (const code of codes) {
       const rule = conditionalRule(descriptor.rules, code);
-      if (rule && evaluateConditionalRule(rule, {
-        clip,
-        timelineClips: scope.timelineClips
-      })) {
+      if (rule && evaluateConditionalRule(rule, { clip })) {
         return rule;
       }
     }
     return void 0;
   };
-  var createClipStageCapabilityViews = (architectureById, modelByName, scope = {}) => {
+  var createClipStageCapabilityViews = (architectureById, modelByName) => {
     const clipViews = /* @__PURE__ */ new WeakMap();
     const stageViews = /* @__PURE__ */ new WeakMap();
     const effectiveClipIdentity = (clip) => {
@@ -1602,8 +1599,7 @@
         const conditionalRule2 = conditionalRuleFor(
           clip,
           feature,
-          descriptor,
-          scope
+          descriptor
         );
         const supported = architectureFeatureSupport(feature, {
           capabilities
@@ -1707,7 +1703,7 @@
   };
 
   // frontend/architectures/policy.ts
-  var createCapabilityViewResolver = (catalog, scope = {}) => {
+  var createCapabilityViewResolver = (catalog) => {
     const architectureById = new Map(
       catalog.architectures.map((entry) => [entry.id, entry])
     );
@@ -1716,8 +1712,7 @@
     );
     const clipStage = createClipStageCapabilityViews(
       architectureById,
-      modelByName,
-      scope
+      modelByName
     );
     const boundaries = createBoundaryCapabilityViews(
       architectureById,
@@ -6322,11 +6317,7 @@
       catalog.entries.map((entry) => [entry.value, entry])
     );
     const executableClipIndexSet = new Set(executableClipIndexes(clips));
-    const resolver = capabilityViews ?? createCapabilityViewResolver(catalog, {
-      timelineClips: [...executableClipIndexSet].map(
-        (clipIdx) => clips[clipIdx]
-      )
-    });
+    const resolver = capabilityViews ?? createCapabilityViewResolver(catalog);
     clips.forEach((clip, clipIdx) => {
       const temporalGrid = resolver.forClip(clip).frameGridResolution;
       if (executableClipIndexSet.has(clipIdx) && temporalGrid.status === "conflict") {
@@ -6493,9 +6484,7 @@
       clip: clips[clipIdx],
       clipIdx
     }));
-    const capabilityViews = context.catalog ? createCapabilityViewResolver(context.catalog, {
-      timelineClips: executable.map(({ clip }) => clip)
-    }) : null;
+    const capabilityViews = context.catalog ? createCapabilityViewResolver(context.catalog) : null;
     if (context.catalog && capabilityViews) {
       diagnostics.push(
         ...deriveArchitectureDiagnostics(

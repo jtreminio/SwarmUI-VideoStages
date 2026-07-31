@@ -158,9 +158,7 @@ internal static class VideoExecutionPlanCompiler
                     .Select(clip => clip.Id)
             ];
             diagnostics.AddRange(validator.ValidatePlan(
-                [.. clips.Where(clip => architectureClipIds.Contains(clip.ClipId))],
-                clips,
-                root));
+                [.. clips.Where(clip => architectureClipIds.Contains(clip.ClipId))]));
         }
 
         VideoExecutionPlan plan = new(

@@ -122,9 +122,7 @@ internal sealed class Ltx2ArchitectureModule :
     }
 
     public IReadOnlyList<PlanDiagnostic> ValidatePlan(
-        IReadOnlyList<ClipPlan> architectureClips,
-        IReadOnlyList<ClipPlan> timelineClips,
-        RootPlan root) =>
+        IReadOnlyList<ClipPlan> architectureClips) =>
         Ltx2ConditionalRulePolicySource.Validate(architectureClips);
 
 }

@@ -48,7 +48,8 @@ internal sealed class OutputPublisher(
     OutputRegistry outputs,
     string fallbackSaveId)
 {
-    public OutputPublicationResult Publish(RuntimeArtifact artifact, bool publishAudio)
+    /// <summary>Connects the artifact to the final output; false means it could not be wired.</summary>
+    public bool Publish(RuntimeArtifact artifact, bool publishAudio)
     {
         if (generator.UserInput.Get(T2IParamTypes.DoNotSave, false))
         {
@@ -60,13 +61,13 @@ internal sealed class OutputPublisher(
                     VideoGraphHelpers.RemoveNode(generator, suppressionBridge, saveId);
                 }
             }
-            return OutputPublicationResult.Suppressed;
+            return true;
         }
 
         WGNodeData media = artifact.Media?.ToWGNodeData(generator);
         if (media?.Path is not JArray { Count: 2 } mediaPath)
         {
-            return OutputPublicationResult.Failed;
+            return false;
         }
 
         // Parallel multi-clip execution publishes merged audio from a dedicated branch. A retained
@@ -76,7 +77,7 @@ internal sealed class OutputPublisher(
         INodeOutput videoOutput = bridge.ResolvePath(mediaPath);
         if (videoOutput is null)
         {
-            return OutputPublicationResult.Failed;
+            return false;
         }
 
         INodeOutput audioOutput = audio?.Path is JArray { Count: 2 } audioPath
@@ -90,7 +91,7 @@ internal sealed class OutputPublisher(
         {
             WGNodeData vae = artifact.Vae?.ToWGNodeData(generator) ?? generator.CurrentVae;
             media.SaveOutput(vae, generator.CurrentAudioVae, fallbackSaveId);
-            return OutputPublicationResult.Published;
+            return true;
         }
 
         HashSet<string> staleAudioNodeIds = [];
@@ -124,7 +125,7 @@ internal sealed class OutputPublisher(
                 protectedNodeIds,
                 generator.NodeHelpers);
         }
-        return OutputPublicationResult.Published;
+        return true;
     }
 
     private WGNodeData ResolvePublishedAudio(WGNodeData attachedAudio)
@@ -138,11 +139,4 @@ internal sealed class OutputPublisher(
     }
 }
 
-internal enum OutputPublicationResult
-{
-    NotRequired,
-    Published,
-    Suppressed,
-    Failed,
-}
 

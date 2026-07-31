@@ -61,12 +61,12 @@ internal sealed class RootRuntimeSession
             planContext.Plan.Clips.Count > 1);
     }
 
-    public OutputPublicationResult PublishTimeline(RuntimeArtifact timeline)
+    public void PublishTimeline(RuntimeArtifact timeline)
     {
         ArgumentNullException.ThrowIfNull(timeline);
         if (_rootPlan.OutputDisposition != TimelineOutputDisposition.PublishTimelineOutput)
         {
-            return OutputPublicationResult.NotRequired;
+            return;
         }
         if (!timeline.HasMedia)
         {
@@ -80,10 +80,9 @@ internal sealed class RootRuntimeSession
             _generator,
             _outputs,
             StableNodeIds.Id(_generator, StableNodeIds.FinalSave));
-        OutputPublicationResult publication = publisher.Publish(
+        if (!publisher.Publish(
             timeline,
-            publishAudio: rootIsDisplaced || _requiresDedicatedAudioPublication);
-        if (publication == OutputPublicationResult.Failed)
+            publishAudio: rootIsDisplaced || _requiresDedicatedAudioPublication))
         {
             throw new SwarmUserErrorException(
                 "VideoStages: the completed timeline could not be connected to the final output.");
@@ -93,7 +92,6 @@ internal sealed class RootRuntimeSession
         {
             CleanupDisplacedRoot(timeline);
         }
-        return publication;
     }
 
     private void CleanupDisplacedRoot(RuntimeArtifact timeline)

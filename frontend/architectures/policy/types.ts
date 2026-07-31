@@ -9,15 +9,6 @@ import type {
 
 export type AuthoringFeature = CatalogAuthoringFeature;
 
-/**
- * Context a conditional capability rule needs beyond the clip itself. Omitted
- * fields simply leave the dependent rules inert.
- */
-export interface CapabilityRuleScopeContext {
-    /** Executable timeline clips, for timeline-uniformity rules. */
-    timelineClips?: readonly Clip[];
-}
-
 export interface CapabilityDecision {
     supported: boolean;
     reason: string;

@@ -98,7 +98,6 @@ internal enum RuleSupport
 
 internal enum RuleScope
 {
-    Architecture,
     Clip,
     Stage,
     Boundary,
@@ -549,12 +548,14 @@ internal sealed record ArchitectureClipCompileContext(
     ArchitectureEntryMode EntryMode = ArchitectureEntryMode.ImageToVideo,
     bool HasPreviousClipOutput = false);
 
+/// <summary>
+/// Optional architecture validation that runs after common compilation, when every clip carries
+/// its compiled payload and its common audio/entry facts. Per-clip compilation cannot see those,
+/// which is why this hook exists; it is not a timeline-wide pass.
+/// </summary>
 internal interface IArchitecturePlanValidator
 {
-    IReadOnlyList<PlanDiagnostic> ValidatePlan(
-        IReadOnlyList<ClipPlan> architectureClips,
-        IReadOnlyList<ClipPlan> timelineClips,
-        RootPlan root);
+    IReadOnlyList<PlanDiagnostic> ValidatePlan(IReadOnlyList<ClipPlan> architectureClips);
 }
 
 internal interface IVideoArchitectureRegistry

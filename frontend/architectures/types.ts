@@ -6,11 +6,7 @@ import type { GeneratedAuthoringFeature } from "./generatedFeatures";
 export type CatalogAuthoringFeature = GeneratedAuthoringFeature;
 
 export type CapabilitySupport = "supported" | "unsupported" | "conditional";
-export type CapabilityRuleScope =
-    | "architecture"
-    | "clip"
-    | "stage"
-    | "boundary";
+export type CapabilityRuleScope = "clip" | "stage" | "boundary";
 
 export interface CapabilityRuleDecision {
     support: CapabilitySupport;

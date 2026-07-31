@@ -1,10 +1,7 @@
 import { executableClipIndexes } from "../clipSemantics";
 import { createBoundaryCapabilityViews } from "./policy/boundaryPolicy";
 import { createClipStageCapabilityViews } from "./policy/clipStageViews";
-import type {
-    CapabilityRuleScopeContext,
-    CapabilityViewResolver,
-} from "./policy/types";
+import type { CapabilityViewResolver } from "./policy/types";
 import type { ArchitectureModelCatalog } from "./types";
 
 export {
@@ -17,7 +14,6 @@ export type {
     AuthoringState,
     BoundaryCapabilityView,
     CapabilityDecision,
-    CapabilityRuleScopeContext,
     CapabilityViewResolver,
     ClipCapabilityView,
     StageCapabilityView,
@@ -26,7 +22,6 @@ export type {
 /** Composes catalog-backed clip, stage, and boundary policy views. */
 export const createCapabilityViewResolver = (
     catalog: ArchitectureModelCatalog,
-    scope: CapabilityRuleScopeContext = {},
 ): CapabilityViewResolver => {
     const architectureById = new Map(
         catalog.architectures.map((entry) => [entry.id, entry]),
@@ -37,7 +32,6 @@ export const createCapabilityViewResolver = (
     const clipStage = createClipStageCapabilityViews(
         architectureById,
         modelByName,
-        scope,
     );
     const boundaries = createBoundaryCapabilityViews(
         architectureById,

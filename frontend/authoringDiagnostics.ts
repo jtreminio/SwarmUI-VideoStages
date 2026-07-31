@@ -42,9 +42,7 @@ export const deriveAuthoringDiagnostics = (
         clipIdx,
     }));
     const capabilityViews = context.catalog
-        ? createCapabilityViewResolver(context.catalog, {
-              timelineClips: executable.map(({ clip }) => clip),
-          })
+        ? createCapabilityViewResolver(context.catalog)
         : null;
     if (context.catalog && capabilityViews) {
         diagnostics.push(

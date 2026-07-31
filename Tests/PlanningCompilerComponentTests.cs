@@ -778,7 +778,7 @@ public class PlanningCompilerComponentTests
         }
         RootPlan root = RootPlanCompiler.Compile(environment, clips);
         diagnostics.AddRange(
-            Ltx2ArchitectureModule.Instance.ValidatePlan(plans, plans, root));
+            Ltx2ArchitectureModule.Instance.ValidatePlan(plans));
 
         VideoExecutionPlan plan = new(
             spec.Width,

@@ -25,7 +25,6 @@ import {
 import type {
     AuthoringFeature,
     CapabilityDecision,
-    CapabilityRuleScopeContext,
     ClipCapabilityView,
     StageCapabilityView,
 } from "./types";
@@ -60,19 +59,12 @@ const conditionalRuleFor = (
     clip: Clip,
     feature: AuthoringFeature,
     descriptor: ArchitectureCatalogEntryDto,
-    scope: CapabilityRuleScopeContext,
 ): CapabilityRuleDecision | undefined => {
     const codes = FEATURE_RULE_CODES[feature];
     if (!codes) return undefined;
     for (const code of codes) {
         const rule = conditionalRule(descriptor.rules, code);
-        if (
-            rule &&
-            evaluateConditionalRule(rule, {
-                clip,
-                timelineClips: scope.timelineClips,
-            })
-        ) {
+        if (rule && evaluateConditionalRule(rule, { clip })) {
             return rule;
         }
     }
@@ -82,7 +74,6 @@ const conditionalRuleFor = (
 export const createClipStageCapabilityViews = (
     architectureById: ArchitectureLookup,
     modelByName: ModelLookup,
-    scope: CapabilityRuleScopeContext = {},
 ): {
     forClip(clip: Clip): ClipCapabilityView;
     forStage(clip: Clip, stage: Stage): StageCapabilityView;
@@ -134,7 +125,6 @@ export const createClipStageCapabilityViews = (
                 clip,
                 feature,
                 descriptor,
-                scope,
             );
             const supported =
                 architectureFeatureSupport(feature, {

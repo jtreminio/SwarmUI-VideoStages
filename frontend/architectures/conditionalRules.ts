@@ -21,7 +21,6 @@ export const isKnownConditionalRuleCode = (
 export interface ConditionalRuleContext {
     clip?: Clip;
     stage?: Stage;
-    timelineClips?: readonly Clip[];
 }
 
 export const conditionalRule = (
