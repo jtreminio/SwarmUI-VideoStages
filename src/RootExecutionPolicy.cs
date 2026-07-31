@@ -45,9 +45,8 @@ internal sealed class RootExecutionPolicy
     public bool DropsTextToVideoRootDonor => Plan.HostKind == HostRootKind.TextToVideoRoot
         && HasSourcedLeadWithGeneratedClips;
 
-    public bool ConformsSurvivingRootMedia => !HasInstalledRefineSource
-        && !DropsTextToVideoRootDonor
-        && HasSourcedLeadWithGeneratedClips;
+    public bool ConformsSurvivingRootMedia =>
+        Plan.Use == RootUse.GeneratedClipDonor;
 
     /// <summary>
     /// Only the first generated stage of a normal text-to-video timeline replaces the host text

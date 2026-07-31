@@ -194,17 +194,8 @@ internal static class EffectiveVideoRequestProjector
             clips,
             clip => clip.Authored.SourceVideo is null
                 && clip.Authored.Stages is { Count: > 0 });
-        RootPlan root = RootPlanCompiler.Compile(
-            rootEnvironment,
-            clips
-                .Select(clip => clip.Authored)
-                .Where(clip =>
-                    clip.SourceVideo is not null
-                    || clip.Stages is { Count: > 0 })
-                .ToArray());
         bool rootCanForceTextToVideoGeneration =
-            root.HostKind == HostRootKind.TextToVideoRoot
-            && root.Use == RootUse.Discard
+            rootEnvironment.HostKind == HostRootKind.TextToVideoRoot
             && !rootEnvironment.HasGlobalRefineSource;
         foreach (ModuleProjectionBatch batch in BuildProjectionBatches(
             clips))

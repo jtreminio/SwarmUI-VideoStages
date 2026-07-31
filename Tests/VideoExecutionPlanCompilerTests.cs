@@ -505,6 +505,32 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
+    public void Compile_DuplicateClipIds_RootPlanUsesSurvivingOccurrence()
+    {
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(
+            Spec(
+                false,
+                SourcedClip(4),
+                GeneratedClip(4, Stage(10))),
+            new RootEnvironment(
+                HostRootKind.ImageToVideo,
+                CanHandoffHostCore: true));
+
+        ClipPlan surviving = Assert.Single(plan.Clips);
+        Assert.True(surviving.IsSourced);
+        Assert.Equal(RootUse.Discard, plan.Root.Use);
+        Assert.Equal(
+            HostCoreDisposition.Drop,
+            plan.Root.CoreDisposition);
+        Assert.Equal(
+            NativeAudioDisposition.DiscardWithRoot,
+            plan.Root.NativeAudioDisposition);
+        Assert.Contains(plan.Diagnostics, diagnostic =>
+            diagnostic.Code == "duplicate-clip-id"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void Compile_ContinueIntoSourcedClip_PreservesAuthoredBoundaryAndWarnsWhileUsingCut()
     {
         ClipSpec first = GeneratedClip(0, Stage(10)) with
