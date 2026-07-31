@@ -92,7 +92,7 @@ internal enum StageCapability
     LatentModelUpscale = 1 << 5,
     Lora = 1 << 6,
     IcLora = 1 << 7,
-    FrameReferences = 1 << 9,
+    FrameReferences = 1 << 8,
 }
 
 internal sealed record ArchitectureCapabilityDescriptor(
