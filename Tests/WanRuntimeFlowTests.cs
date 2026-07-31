@@ -1198,12 +1198,12 @@ public class WanRuntimeFlowTests
         InvalidOperationException hostFailure = new("unit-test host failure");
 
         Exception whileHostFailed = Record.Exception(
-            () => StockHostVideoGenerationSession.RunWanPostHostCleanup(
+            () => WanStockHostVideoBehavior.RunPostHostCleanup(
                 () => throw cleanupFailure,
                 hostFailure));
         InvalidOperationException afterHostSucceeded =
             Assert.Throws<InvalidOperationException>(
-                () => StockHostVideoGenerationSession.RunWanPostHostCleanup(
+                () => WanStockHostVideoBehavior.RunPostHostCleanup(
                     () => throw cleanupFailure,
                     hostConstructionError: null));
 

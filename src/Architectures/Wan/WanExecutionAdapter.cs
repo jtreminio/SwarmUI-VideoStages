@@ -103,7 +103,8 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
         new StockHostVideoGenerationSessionFactory(
             generator,
             ArchitectureId,
-            "Wan");
+            "Wan",
+            plan => new WanStockHostVideoBehavior(generator, plan));
 
     private static PlanDiagnostic Refuse(
         string message,

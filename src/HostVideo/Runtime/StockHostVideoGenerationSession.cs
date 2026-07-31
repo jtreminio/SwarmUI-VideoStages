@@ -4,7 +4,6 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan;
-using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -21,19 +20,18 @@ internal sealed class StockHostVideoGenerationSession(
     HostVideoRootSources rootSources,
     HostVideoStageEngine stageEngine,
     ArchitectureId architectureId,
-    string architectureLabel) : IVideoGenerationSession
+    string architectureLabel,
+    WanStockHostVideoBehavior wanBehavior = null) : IVideoGenerationSession
 {
     private readonly PlannedStagePromptResolver _prompts = new(g);
     private readonly SourcedClipInstaller _sourcedClipInstaller = new(g);
-    private readonly WanFrameReferenceResolver _frameReferences = new(g);
+    private readonly WanStockHostVideoBehavior _wanBehavior = wanBehavior;
 
     /// <summary>The timeline resolution on the shared VideoStages pixel grid.</summary>
     private readonly (int Width, int Height) _dimensions =
         DimensionSnap.Snap(plan.Width, plan.Height);
 
     public ArchitectureId ArchitectureId => architectureId;
-
-    private bool IsWan => ArchitectureId == WanArchitectureModule.ArchitectureId;
 
     public DecodedClipArtifact Execute(ArchitectureClipRuntimeContext context)
     {
@@ -62,10 +60,8 @@ internal sealed class StockHostVideoGenerationSession(
         }
         else
         {
-            WGNodeData authoredFirst = IsWan
-                ? _frameReferences.ResolveFirst(
-                    clip.RequireWanPayload().FirstFrameReference)
-                : null;
+            WGNodeData authoredFirst =
+                _wanBehavior?.ResolveFirstFrame(clip);
             if (authoredFirst is not null)
             {
                 g.CurrentMedia = authoredFirst;
@@ -98,7 +94,9 @@ internal sealed class StockHostVideoGenerationSession(
 
         return stageEngine.Execute(
             clip,
-            IsWan ? ResolveWanPassthroughFrames : ResolveGenericFrames,
+            _wanBehavior is not null
+                ? _wanBehavior.ResolvePassthroughFrames
+                : ResolveGenericFrames,
             ExecuteGeneratingStage);
     }
 
@@ -119,13 +117,13 @@ internal sealed class StockHostVideoGenerationSession(
             payload.LoraTargetPolicy))
         using (ParamSnapshot loraScope =
             LoraParams.ApplyNormalLoras(g.UserInput, core.Loras))
-        using (ParamSnapshot ignoredAudioReference = IsWan
+        using (ParamSnapshot ignoredAudioReference = _wanBehavior is not null
             ? null
             : ParamSnapshot.Of(
                 g.UserInput,
                 T2IParamTypes.VideoAudioReference.Type))
         {
-            if (!IsWan)
+            if (_wanBehavior is null)
             {
                 // LTX v2's stock branch reads this request-global enhancement directly. The
                 // generic fallback does not advertise it, so retain it only in request metadata.
@@ -148,7 +146,7 @@ internal sealed class StockHostVideoGenerationSession(
                     stage,
                     sectionId);
                 bool materializedFirstFrame =
-                    IsWan
+                    _wanBehavior is not null
                     && stage.Input == StageInputKind.EmptyLatent
                     && g.CurrentMedia is not null;
                 if (stage.Input == StageInputKind.EmptyLatent
@@ -170,18 +168,8 @@ internal sealed class StockHostVideoGenerationSession(
                 // SwarmUI's generic builder creates latent audio whenever CurrentAudioVae is
                 // set. Stock-host stages advertise video-only output, so isolate every pass.
                 WGNodeData ambientAudioVae = g.CurrentAudioVae;
-                HashSet<string> preHostNodeIds = null;
-                if (IsWan
-                    && string.Equals(
-                        payload.ModelClassId,
-                        WanArchitectureModule.Ti2v5bModelClassId,
-                        StringComparison.OrdinalIgnoreCase)
-                    && genInfo.StartStep > 0)
-                {
-                    preHostNodeIds = [
-                        .. g.Workflow.Properties().Select(property => property.Name),
-                    ];
-                }
+                ISet<string> preHostNodeIds =
+                    _wanBehavior?.CapturePreHostNodeIds(payload, genInfo);
                 Exception hostConstructionError = null;
                 try
                 {
@@ -196,12 +184,9 @@ internal sealed class StockHostVideoGenerationSession(
                 finally
                 {
                     g.CurrentAudioVae = ambientAudioVae;
-                    if (preHostNodeIds is not null)
-                    {
-                        RunWanPostHostCleanup(
-                            () => PruneUnusedWan22Latents(preHostNodeIds),
-                            hostConstructionError);
-                    }
+                    _wanBehavior?.RunPostHostCleanup(
+                        preHostNodeIds,
+                        hostConstructionError);
                 }
                 stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
             }
@@ -237,7 +222,7 @@ internal sealed class StockHostVideoGenerationSession(
         bool ambientImageToVideo = g.IsImageToVideo;
         try
         {
-            if (IsWan)
+            if (_wanBehavior is not null)
             {
                 g.CurrentAudioVae = null;
             }
@@ -246,18 +231,20 @@ internal sealed class StockHostVideoGenerationSession(
                 ?? throw new InvalidOperationException(
                     $"Clip {clip.ClipId} stage {stage.StageId} has no "
                         + $"{architectureLabel} text-video frame count.");
-            using ParamSnapshot genericFrameScope = IsWan
+            using ParamSnapshot genericFrameScope = _wanBehavior is not null
                 ? null
                 : ParamSnapshot.Of(
                     g.UserInput,
                     T2IParamTypes.Text2VideoFrames.Type,
                     T2IParamTypes.VideoFPS.Type);
-            if (IsWan)
+            if (_wanBehavior is not null)
             {
                 genInfo.PrepModelAndCond(g);
                 if (genInfo.VideoEndFrame is not null)
                 {
-                    BuildNativeLastFrameConditioning(genInfo, frames);
+                    _wanBehavior.BuildNativeLastFrameConditioning(
+                        genInfo,
+                        frames);
                 }
                 else
                 {
@@ -276,7 +263,7 @@ internal sealed class StockHostVideoGenerationSession(
                 BuildEmptyTextLatent(clip, stage, genInfo, frames);
             }
             g.CurrentMedia.FPS = plan.FramesPerSecond;
-            if (!IsWan)
+            if (_wanBehavior is null)
             {
                 g.CurrentMedia = g.CurrentMedia.AsSamplingLatent(
                     genInfo.Vae,
@@ -340,85 +327,6 @@ internal sealed class StockHostVideoGenerationSession(
         }
     }
 
-    private void BuildNativeLastFrameConditioning(
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        int frames)
-    {
-        WGNodeData endFrame = g.LoadImage(
-            genInfo.VideoEndFrame,
-            "${videostageswanlastframe}",
-            false);
-        string scaled = g.CreateNode("ImageScale", new Newtonsoft.Json.Linq.JObject
-        {
-            ["image"] = endFrame.Path,
-            ["width"] = genInfo.Width,
-            ["height"] = genInfo.Height,
-            ["upscale_method"] = "lanczos",
-            ["crop"] = "disabled",
-        });
-        Newtonsoft.Json.Linq.JArray scaledEnd = [scaled, 0];
-        Newtonsoft.Json.Linq.JToken clipVisionEnd = null;
-        string compatibilityId = genInfo.VideoModel.ModelClass?.CompatClass?.ID;
-        bool exactWan22ImageModel = StringUtils.Equals(
-            genInfo.VideoModel.ModelClass?.ID,
-            WanArchitectureModule.ImageToVideoModelClassId);
-        if (!exactWan22ImageModel
-            && (compatibilityId == T2IModelClassSorter.CompatWan21_14b.ID
-                || compatibilityId == T2IModelClassSorter.CompatWan21_1_3b.ID))
-        {
-            string targetName = g.RequireVisionModel(
-                "clip_vision_h.safetensors",
-                "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/"
-                    + "split_files/clip_vision/clip_vision_h.safetensors",
-                "64a7ef761bfccbadbaa3da77366aac4185a6c58fa5de5f589b42a65bcc21f161",
-                T2IParamTypes.ClipVisionModel);
-            string clipLoader = g.CreateNode(
-                "CLIPVisionLoader",
-                new Newtonsoft.Json.Linq.JObject
-                {
-                    ["clip_name"] = targetName,
-                });
-            string encodedEnd = g.CreateNode(
-                "CLIPVisionEncode",
-                new Newtonsoft.Json.Linq.JObject
-                {
-                    ["clip_vision"] = new Newtonsoft.Json.Linq.JArray(clipLoader, 0),
-                    ["image"] = scaledEnd,
-                    ["crop"] = "center",
-                });
-            clipVisionEnd = new Newtonsoft.Json.Linq.JArray(encodedEnd, 0);
-        }
-        string conditioning = g.CreateNode(
-            "WanFirstLastFrameToVideo",
-            new Newtonsoft.Json.Linq.JObject
-            {
-                ["width"] = genInfo.Width,
-                ["height"] = genInfo.Height,
-                ["length"] = frames,
-                ["positive"] = genInfo.PosCond,
-                ["negative"] = genInfo.NegCond,
-                ["vae"] = genInfo.Vae.Path,
-                ["start_image"] = null,
-                ["end_image"] = scaledEnd,
-                ["clip_vision_start_image"] = null,
-                ["clip_vision_end_image"] = clipVisionEnd,
-                ["batch_size"] = 1,
-            });
-        genInfo.PosCond = [conditioning, 0];
-        genInfo.NegCond = [conditioning, 1];
-        g.CurrentMedia = new(
-            [conditioning, 2],
-            g,
-            WGNodeData.DT_LATENT_VIDEO,
-            genInfo.Model.Compat)
-        {
-            Width = (int)genInfo.Width,
-            Height = (int)genInfo.Height,
-            Frames = frames,
-            FPS = plan.FramesPerSecond,
-        };
-    }
-
     private void ValidateTextLatent(
         ClipPlan clip,
         StagePlan stage,
@@ -445,56 +353,6 @@ internal sealed class StockHostVideoGenerationSession(
         }
     }
 
-    /// <summary>
-    /// Cleanup failures are authoritative after successful host construction. While a host
-    /// exception is already unwinding, cleanup is best-effort so it cannot replace that failure.
-    /// </summary>
-    internal static void RunWanPostHostCleanup(
-        Action cleanup,
-        Exception hostConstructionError)
-    {
-        ArgumentNullException.ThrowIfNull(cleanup);
-        try
-        {
-            cleanup();
-        }
-        catch (Exception cleanupError) when (hostConstructionError is not null)
-        {
-            Logs.Warning(
-                "VideoStages: failed to prune an unused Wan 5B latent while "
-                + $"preserving the original host construction failure: "
-                + $"{cleanupError.Message}");
-        }
-    }
-
-    /// <summary>
-    /// The host's 5B preparation always emits its native latent, then intentionally replaces that
-    /// latent with a VAE encoding when partial refinement starts after step zero. Remove only
-    /// consumerless nodes created by this pass. The complete pre-host graph is protected so the
-    /// recursive upstream walk cannot cross from a newly removed consumer into the stage's input
-    /// media, an earlier stage, or any other pre-existing branch.
-    /// </summary>
-    private void PruneUnusedWan22Latents(ISet<string> preHostNodeIds)
-    {
-        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        string[] unused = [
-            .. bridge.Graph.Nodes.Values
-                .Where(node =>
-                    node.ClassTypeName == "Wan22ImageToVideoLatent"
-                    && !preHostNodeIds.Contains(node.Id)
-                    && !bridge.Graph.FindInputsConnectedTo(node.FindOutput(0)).Any())
-                .Select(node => node.Id),
-        ];
-        foreach (string nodeId in unused)
-        {
-            WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(
-                bridge,
-                nodeId,
-                protectedNodeIds: preHostNodeIds,
-                nodeHelpers: g.NodeHelpers);
-        }
-    }
-
     private WorkflowGenerator.ImageToVideoGenInfo BuildGenInfo(
         ClipPlan clip,
         StagePlan stage,
@@ -518,8 +376,11 @@ internal sealed class StockHostVideoGenerationSession(
             // request-global legacy swap pass to one.
             VideoSwapModel = null,
             VideoSwapPercent = 0.5,
-            Frames = IsWan
-                ? ResolveWanFrames(clip, stage, sectionId)
+            Frames = _wanBehavior is not null
+                ? _wanBehavior.ResolveGeneratedFrames(
+                    clip,
+                    stage,
+                    sectionId)
                 : ResolveGenericFrames(clip, stage),
             VideoCFG = core.CfgScale,
             VideoFPS = plan.FramesPerSecond,
@@ -530,92 +391,9 @@ internal sealed class StockHostVideoGenerationSession(
             Steps = core.Steps,
             Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.StageId,
             ContextID = sectionId,
-            VideoEndFrame = IsWan ? ResolveWanEndFrame(clip, stage) : null,
+            VideoEndFrame = _wanBehavior?.ResolveEndFrame(clip, stage),
         };
     }
-
-    private Image ResolveWanEndFrame(ClipPlan clip, StagePlan stage)
-    {
-        bool terminalGenerating = ReferenceEquals(
-            stage,
-            clip.Stages.LastOrDefault(candidate => !candidate.IsPassthrough));
-        if (!terminalGenerating)
-        {
-            return null;
-        }
-        WanFrameReferencePlan authored = clip.RequireWanPayload().LastFrameReference;
-        if (authored is not null)
-        {
-            return _frameReferences.ResolveLast(authored);
-        }
-        return WanVideoEndFramePolicy.ShouldApply(plan, clip, stage)
-            ? g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
-            : null;
-    }
-
-    /// <summary>
-    /// An authored clip duration wins; otherwise a stage inherits the applicable host video length.
-    /// Passthrough stages consume this structural count directly; only generating stages project it
-    /// onto the resolved model handler's temporal grid.
-    /// </summary>
-    private int? ResolveRequestedFrames(
-        ClipPlan clip,
-        StagePlan stage,
-        int? sectionId)
-    {
-        if (clip.Frames is int authored && authored > 0)
-        {
-            return authored;
-        }
-        if (clip.EntryMode == ArchitectureEntryMode.TextToVideo)
-        {
-            return stage.Input == StageInputKind.EmptyLatent
-                ? g.UserInput.Get(T2IParamTypes.Text2VideoFrames, 81)
-                : g.CurrentMedia?.Frames;
-        }
-        if (sectionId is int scopedSection)
-        {
-            return g.UserInput.TryGet(
-                T2IParamTypes.VideoFrames,
-                out int scopedFrames,
-                sectionId: scopedSection)
-                    ? scopedFrames
-                    : null;
-        }
-        return g.UserInput.TryGet(
-            T2IParamTypes.VideoFrames,
-            out int hostFrames)
-                ? hostFrames
-                : null;
-    }
-
-    private int? ResolveWanFrames(ClipPlan clip, StagePlan stage, int? sectionId)
-    {
-        int? requested = ResolveRequestedFrames(clip, stage, sectionId);
-        if (requested is not int frames)
-        {
-            return null;
-        }
-        WanStaticGeneratedFrameResolution resolution =
-            WanStaticGeneratedFrameResolver.Resolve(
-                frames,
-                clip.ClipId,
-                stage.StageId,
-                stage.ResolvedModel);
-        int snapped = resolution.Frames;
-        if (snapped != frames)
-        {
-            Logs.Info(
-                $"VideoStages: clip {clip.ClipId} stage {stage.StageId} length {frames} snapped to "
-                + $"{snapped} — Wan generates in steps of {resolution.FrameGrid} frames.");
-        }
-        return snapped;
-    }
-
-    private int? ResolveWanPassthroughFrames(ClipPlan clip, StagePlan stage) =>
-        stage.Input == StageInputKind.PreviousStage
-            ? g.CurrentMedia?.Frames
-            : ResolveRequestedFrames(clip, stage, sectionId: null);
 
     private int? ResolveGenericFrames(ClipPlan clip, StagePlan stage)
     {
@@ -666,7 +444,8 @@ internal sealed class StockHostVideoGenerationSession(
 internal sealed class StockHostVideoGenerationSessionFactory(
     WorkflowGenerator generator,
     ArchitectureId architectureId,
-    string architectureLabel) :
+    string architectureLabel,
+    Func<VideoExecutionPlan, WanStockHostVideoBehavior> wanBehaviorFactory = null) :
     IArchitectureGenerationSessionFactory
 {
     private HostVideoRootSources _rootSources;
@@ -701,7 +480,8 @@ internal sealed class StockHostVideoGenerationSessionFactory(
                 context.Plan,
                 architectureLabel),
             ArchitectureId,
-            architectureLabel);
+            architectureLabel,
+            wanBehaviorFactory?.Invoke(context.Plan));
     }
 
     public void FinalizeTimeline(
