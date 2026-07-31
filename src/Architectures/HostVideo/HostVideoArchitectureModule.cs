@@ -374,24 +374,8 @@ internal sealed record HostVideoClipPayload(
     public (int Width, int Height) ProjectFinalDimensions(
         IReadOnlyList<StagePlan> stages,
         int width,
-        int height)
-    {
-        foreach (StagePlan stage in stages ?? [])
-        {
-            StageUpscalePlan upscale = stage.RequireHostVideoPayload().Upscale;
-            if (upscale?.Mode != StageUpscaleMode.Pixel
-                || stage.Input is not (
-                    StageInputKind.SourceVideo
-                    or StageInputKind.PreviousStage))
-            {
-                continue;
-            }
-            (width, height) = DimensionSnap.Snap(
-                width * upscale.Factor,
-                height * upscale.Factor);
-        }
-        return (width, height);
-    }
+        int height) =>
+        HostVideoStageGeometry.ProjectFinalDimensions(stages, width, height);
 }
 
 internal static class HostVideoPlanExtensions

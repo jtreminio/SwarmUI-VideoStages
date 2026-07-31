@@ -36,6 +36,35 @@ internal static class HostVideoStageSchedulePolicy
         control < 1 && StartStep(steps, control) == 0;
 }
 
+internal static class HostVideoStageGeometry
+{
+    internal static (int Width, int Height) ProjectFinalDimensions(
+        IReadOnlyList<StagePlan> stages,
+        int width,
+        int height)
+    {
+        foreach (StagePlan stage in stages ?? [])
+        {
+            IHostVideoStageSettings settings = stage.ArchitecturePayload
+                as IHostVideoStageSettings
+                ?? throw new InvalidOperationException(
+                    $"Stage {stage.StageId} has no stock host-video settings.");
+            StageUpscalePlan upscale = settings.Upscale;
+            if (upscale?.Mode != StageUpscaleMode.Pixel
+                || stage.Input is not (
+                    StageInputKind.SourceVideo
+                    or StageInputKind.PreviousStage))
+            {
+                continue;
+            }
+            (width, height) = DimensionSnap.Snap(
+                width * upscale.Factor,
+                height * upscale.Factor);
+        }
+        return (width, height);
+    }
+}
+
 /// <summary>
 /// Conditional authoring rules shared by architectures that execute decoded stages through
 /// SwarmUI's stock host-video path.
