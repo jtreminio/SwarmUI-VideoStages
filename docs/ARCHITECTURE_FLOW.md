@@ -27,7 +27,7 @@ graph branches have been verified.
 | Capabilities and rules | Backend architecture module | `Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`, `HostVideoArchitectureModule.Descriptor`, `NoneArchitecture.Descriptor` |
 | Catalog transport | Common backend + SwarmUI authorization | `VideoStagesApi.VideoStagesGetArchitectureCatalog`, `AuthorizedArchitectureRegistry`, `ArchitectureCatalogSerializer.Serialize` |
 | Catalog loading and feature policy | Common frontend | `getArchitectureCatalogSnapshot`, `loadAuthoritativeArchitectureCatalog`, `refreshAuthoritativeArchitectureCatalog`, `parseVideoArchitectureCatalog`, `createCapabilityViewResolver` |
-| Architecture-specific authoring behavior | Frontend local behavior maps | `architectureBehavior`, `ltx2Behavior`, `authoringPanels.ts`, architecture ID identity modules |
+| Architecture-specific authoring behavior | Frontend architecture-gated helpers | `behaviorRegistry.ts`, `authoringPanels.ts`, architecture ID identity modules |
 | Curated IC-LoRA download route | LTX backend adapter + SwarmUI core | `Ltx2ApiRoutes`, `ModelsAPI.DoModelDownloadWS` |
 | Document parsing and product planning | Common backend | `VideoStagesSpecParser`, `ArchitecturePlanResolver`, `VideoExecutionPlanCompiler` |
 | Model-family planning and execution | Selected backend module | `IVideoArchitectureModule.ValidateAndCompileClip`, `IVideoGenerationSession` |
@@ -256,7 +256,7 @@ controls.
 | Architecture descriptor capabilities | Backend architecture catalog record | Family overview and default policy |
 | Effective model capabilities, grid, entry abilities, reference positions | Backend resolved-model catalog record | Model picker, sidebar/timeline feature gates, conversion |
 | Persisted `architectureHint` / profile hints | Authoring document | Unresolved-model display and repair only |
-| Local architecture behavior/panel map | Frontend implementation | How an already-authorized bespoke control renders/edits |
+| Local architecture behavior/panel gates | Frontend implementation | How an already-authorized bespoke control renders/edits |
 
 The transaction's `CapabilityViewResolver` creates catalog-backed
 `ClipCapabilityView`, `StageCapabilityView`, and boundary views. Timeline
@@ -265,14 +265,14 @@ tracks and detail panels ask
 visibility, enablement, reason text, and repair behavior. Unsupported persisted
 data stays visible for removal rather than disappearing during normalization.
 
-Architecture-specific *how* behavior dispatches separately by architecture ID
-through the local `ArchitectureBehavior` map. Only the `ltx2` ID selects
-`ltx2Behavior` today, and the interface is mostly IC-LoRA-shaped. LTX DOM
-rendering is keyed directly by the same ID in `authoringPanels.ts`. These maps
-own implementation behavior only; labels, resolved model identities,
-capabilities, and rules remain backend DTO data. WAN needs no custom frontend
-behavior, so reassess this abstraction only when another architecture presents
-a concrete bespoke-UI need.
+Architecture-specific *how* behavior is gated separately by architecture ID.
+Only `ltx2` has bespoke frontend behavior today, so the common helpers use an
+explicit LTX branch instead of imposing an IC-LoRA-shaped polymorphic contract
+on hypothetical future architectures. LTX DOM rendering is keyed directly by
+the same ID in `authoringPanels.ts`. These gates own implementation behavior
+only; labels, resolved model identities, capabilities, and rules remain backend
+DTO data. A real second bespoke frontend can add a branch; extract a common
+contract only after two implementations reveal one.
 
 ### Flow A failures
 

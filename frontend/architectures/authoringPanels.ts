@@ -6,26 +6,6 @@ import type { Clip, RootDefaults } from "../types";
 import { buildIcLorasSection as buildLtx2IcLorasSection } from "./ltx2/icLoraPanel";
 import { LTX2_ARCHITECTURE_ID } from "./ltx2/identity";
 
-/** DOM-only architecture authoring panel slots used by the detail strip. */
-interface ArchitectureAuthoringPanel {
-    buildIcLorasSection(
-        context: DetailStripContext,
-        clip: Clip,
-        clipIdx: number,
-        defaults: RootDefaults,
-        selectedEntryIdx?: number | null,
-        open?: boolean,
-    ): HTMLElement;
-}
-
-/**
- * Architecture catalog data remains backend-owned. This map only selects the
- * local DOM implementation for architecture-specific authoring behavior.
- */
-const panels = new Map<string, ArchitectureAuthoringPanel>([
-    [LTX2_ARCHITECTURE_ID, { buildIcLorasSection: buildLtx2IcLorasSection }],
-]);
-
 const persistedIcLoraRemovalPanel = (
     context: DetailStripContext,
     clip: Clip,
@@ -124,23 +104,20 @@ export const buildArchitectureIcLorasSection = (
     const architectureId = context
         .authoring()
         .capabilities.forClip(clip).architectureId;
-    return (
-        panels
-            .get(architectureId)
-            ?.buildIcLorasSection(
-                context,
-                clip,
-                clipIdx,
-                defaults,
-                selectedEntryIdx,
-                open,
-            ) ??
-        persistedIcLoraRemovalPanel(
-            context,
-            clip,
-            clipIdx,
-            selectedEntryIdx,
-            open,
-        )
-    );
+    return architectureId === LTX2_ARCHITECTURE_ID
+        ? buildLtx2IcLorasSection(
+              context,
+              clip,
+              clipIdx,
+              defaults,
+              selectedEntryIdx,
+              open,
+          )
+        : persistedIcLoraRemovalPanel(
+              context,
+              clip,
+              clipIdx,
+              selectedEntryIdx,
+              open,
+          );
 };

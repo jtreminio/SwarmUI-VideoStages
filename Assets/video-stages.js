@@ -2165,27 +2165,13 @@
   var isHdrFeature = (entry) => entry.hdr === true;
   var hasSlotSourcedIcLora = (icLoras) => icLoras.some((entry) => controlNetSourceIndex(entry.driveSource) !== null);
 
-  // frontend/architectures/ltx2/behavior.ts
-  var ltx2Behavior = {
-    dimensionMultiple: ltx2DimensionMultiple,
-    normalizeIcLoras,
-    canonicalizeIcLoraFields,
-    reconcileIncomingIcLoraDrives,
-    hasSlotSourcedIcLora,
-    isHdrFeature,
-    icLoraDisplayName
-  };
-
   // frontend/architectures/ltx2/identity.ts
   var LTX2_ARCHITECTURE_ID = "ltx2";
 
   // frontend/architectures/behaviorRegistry.ts
-  var behaviors = /* @__PURE__ */ new Map([
-    [LTX2_ARCHITECTURE_ID, ltx2Behavior]
-  ]);
-  var architectureBehavior = (architectureId) => behaviors.get(architectureId) ?? null;
+  var isLtx2 = (architectureId) => architectureId === LTX2_ARCHITECTURE_ID;
   var architectureDimensionMultiple = (clip, architectureId) => {
-    const requested = architectureBehavior(architectureId)?.dimensionMultiple(clip) ?? ROOT_DIMENSION_STEP;
+    const requested = isLtx2(architectureId) ? ltx2DimensionMultiple(clip) : ROOT_DIMENSION_STEP;
     if (!Number.isFinite(requested)) {
       return ROOT_DIMENSION_STEP;
     }
@@ -2195,20 +2181,25 @@
     );
   };
   var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, sourcedClip, options = {}) => {
-    const behavior = architectureBehavior(architectureId);
-    if (behavior) {
-      return behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip);
+    if (isLtx2(architectureId)) {
+      return normalizeIcLoras(
+        rawClip,
+        stageCount,
+        sourcedClip
+      );
     }
-    return options.preserveDormantLtx === true && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? ltx2Behavior.normalizeIcLoras(rawClip, stageCount, sourcedClip) : [];
+    return options.preserveDormantLtx === true && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? normalizeIcLoras(rawClip, stageCount, sourcedClip) : [];
   };
   var canonicalizeArchitectureIcLoraFields = (architectureId, entry) => {
-    architectureBehavior(architectureId)?.canonicalizeIcLoraFields(entry);
+    if (isLtx2(architectureId)) {
+      canonicalizeIcLoraFields(entry);
+    }
   };
   var reconcileArchitectureIncomingIcLoraDrives = (clips, generatedEntryMode, catalog) => {
     let changed = false;
     clips.forEach((clip, clipIdx) => {
       const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
-      changed = architectureBehavior(architectureId)?.reconcileIncomingIcLoraDrives(
+      changed = isLtx2(architectureId) && reconcileIncomingIcLoraDrives(
         clips,
         clipIdx,
         generatedEntryMode
@@ -2220,15 +2211,11 @@
     const clip = clips[clipIdx];
     if (!clip) return false;
     const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
-    return architectureBehavior(architectureId)?.reconcileIncomingIcLoraDrives(
-      clips,
-      clipIdx,
-      generatedEntryMode
-    ) ?? false;
+    return isLtx2(architectureId) && reconcileIncomingIcLoraDrives(clips, clipIdx, generatedEntryMode);
   };
-  var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => architectureBehavior(architectureId)?.hasSlotSourcedIcLora(entries) ?? false;
-  var isArchitectureHdrFeature = (architectureId, entry) => architectureBehavior(architectureId)?.isHdrFeature(entry) ?? false;
-  var architectureIcLoraDisplayName = (architectureId, entry) => architectureBehavior(architectureId)?.icLoraDisplayName(entry) ?? entry.lora;
+  var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => isLtx2(architectureId) && hasSlotSourcedIcLora(entries);
+  var isArchitectureHdrFeature = (architectureId, entry) => isLtx2(architectureId) && isHdrFeature(entry);
+  var architectureIcLoraDisplayName = (architectureId, entry) => isLtx2(architectureId) ? icLoraDisplayName(entry) : entry.lora;
   var clipHasActiveHdrForArchitecture = (clip, architectureId) => clip.icLoras.some(
     (entry) => isArchitectureHdrFeature(architectureId, entry) && clip.stages.slice(0, activeStageCount(clip)).some(
       (_stage, rawStageIdx) => entry.stage < 0 || entry.stage === rawStageIdx
@@ -11048,9 +11035,6 @@
   };
 
   // frontend/architectures/authoringPanels.ts
-  var panels = /* @__PURE__ */ new Map([
-    [LTX2_ARCHITECTURE_ID, { buildIcLorasSection }]
-  ]);
   var persistedIcLoraRemovalPanel = (context, clip, clipIdx, selectedEntryIdx, open) => {
     const entryIdx = clip.icLoras.length === 0 ? null : Math.max(
       0,
@@ -11124,14 +11108,14 @@
   };
   var buildArchitectureIcLorasSection = (context, clip, clipIdx, defaults, selectedEntryIdx = null, open = selectedEntryIdx !== null) => {
     const architectureId = context.authoring().capabilities.forClip(clip).architectureId;
-    return panels.get(architectureId)?.buildIcLorasSection(
+    return architectureId === LTX2_ARCHITECTURE_ID ? buildIcLorasSection(
       context,
       clip,
       clipIdx,
       defaults,
       selectedEntryIdx,
       open
-    ) ?? persistedIcLoraRemovalPanel(
+    ) : persistedIcLoraRemovalPanel(
       context,
       clip,
       clipIdx,

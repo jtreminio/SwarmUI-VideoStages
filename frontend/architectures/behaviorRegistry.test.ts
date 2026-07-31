@@ -2,7 +2,6 @@ import { describe, expect, it } from "@jest/globals";
 import { testArchitectureCatalog } from "../__test_helpers__/architectureFixtures";
 import type { Clip, IcLora } from "../types";
 import {
-    architectureBehavior,
     hasArchitectureSlotSourcedIcLora,
     isArchitectureHdrFeature,
     normalizeArchitectureIcLoras,
@@ -23,10 +22,8 @@ const hdrEntry: IcLora = {
     driveMedia: null,
 };
 
-describe("architecture behavior registry", () => {
+describe("architecture-owned LTX behavior", () => {
     it("keeps LTX feature recognition behind the LTX adapter", () => {
-        expect(architectureBehavior("ltx2")).not.toBeNull();
-        expect(architectureBehavior("future-video")).toBeNull();
         expect(isArchitectureHdrFeature("ltx2", hdrEntry)).toBe(true);
         expect(isArchitectureHdrFeature("future-video", hdrEntry)).toBe(false);
     });
