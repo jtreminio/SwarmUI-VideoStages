@@ -16,8 +16,7 @@ internal sealed record Ltx2StagePayload(
     PromptRelayPlan PromptRelay,
     ImmutableArray<ImageReferencePlan> FrameReferences,
     StageAudioAction AudioAction) :
-    IArchitectureStagePayload,
-    IStageCorePlanPayload
+    IArchitectureStagePayload
 {
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
 }

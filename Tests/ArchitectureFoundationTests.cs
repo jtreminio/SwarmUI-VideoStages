@@ -2068,7 +2068,10 @@ public class ArchitectureFoundationTests
         ArchitectureId ArchitectureId) : IArchitectureClipPayload;
 
     private sealed record FakeStagePayload(
-        ArchitectureId ArchitectureId) : IArchitectureStagePayload;
+        ArchitectureId ArchitectureId) : IArchitectureStagePayload
+    {
+        public StageCorePlan Core => TestPlanCompiler.DefaultStageCore;
+    }
 
     private sealed class RecordingSession(
         ArchitectureId architectureId,

@@ -12,8 +12,7 @@ internal sealed record StockHostVideoStagePayload(
     string CompatibilityClassId,
     NormalLoraTargetPolicy LoraTargetPolicy,
     StageCorePlan Core) :
-    IArchitectureStagePayload,
-    IStageCorePlanPayload;
+    IArchitectureStagePayload;
 
 internal static class StockHostVideoStagePayloadExtensions
 {

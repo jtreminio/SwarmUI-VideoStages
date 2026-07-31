@@ -1,6 +1,5 @@
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Architectures.Ltx2;
 using VideoStages.Planning;
 
 namespace VideoStages.Tests;
@@ -8,6 +7,15 @@ namespace VideoStages.Tests;
 /// <summary>Explicit test fixture for pure plan tests that do not install host model metadata.</summary>
 internal static class TestPlanCompiler
 {
+    internal static StageCorePlan DefaultStageCore { get; } = new(
+        1,
+        1,
+        1,
+        "",
+        "",
+        new(StageUpscaleMode.None, 1, "", ""),
+        []);
+
     internal static VideoExecutionPlan Compile(VideoStagesSpec spec) =>
         Compile(spec, RootEnvironment.FromSpec(spec));
 

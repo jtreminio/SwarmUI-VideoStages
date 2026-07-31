@@ -139,7 +139,7 @@ internal sealed record StagePlan(
     public ResolvedVideoModel ResolvedModel { get; init; }
 
     public StageCorePlan Core =>
-        (ArchitecturePayload as IStageCorePlanPayload)?.Core
+        ArchitecturePayload?.Core
         ?? throw new InvalidOperationException(
             $"Stage {StageId} has no common execution settings.");
 }

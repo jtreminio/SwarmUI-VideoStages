@@ -357,7 +357,10 @@ public class ArchitectureRuntimeOwnershipTests
 
     private sealed record TestPayload(ArchitectureId ArchitectureId) :
         IArchitectureClipPayload,
-        IArchitectureStagePayload;
+        IArchitectureStagePayload
+    {
+        public StageCorePlan Core => TestPlanCompiler.DefaultStageCore;
+    }
 
     private sealed class RecordingProvider(
         ArchitectureId architectureId,
