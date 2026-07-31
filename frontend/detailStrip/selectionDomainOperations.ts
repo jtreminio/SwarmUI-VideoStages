@@ -6,7 +6,6 @@ import { buildArchitectureRetargetPlan } from "../architectures/catalog";
 import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity";
 import { NONE_ARCHITECTURE_ID } from "../architectures/none/identity";
 import { referenceEndpointPolicy } from "../architectures/referenceEndpoints";
-import type { ArchitectureModelCatalog } from "../architectures/types";
 import type { AuthoringTransactionSnapshot } from "../authoringSnapshot";
 import {
     clamp,
@@ -60,72 +59,6 @@ const refStrengthPatches = (
               ]
             : [],
     );
-
-/**
- * Flips a clip's skip flag and reconciles the IC-LoRA drives that depend on
- * which clips still execute. The one clip-skip mutation: the detail strip and
- * the timeline's region button both apply it, they only differ in how they
- * persist the clips array.
- */
-export const applyClipSkip = (
-    clips: Clip[],
-    clipIdx: number,
-    generatedEntryMode: "text-to-video" | "image-to-video",
-    catalog: ArchitectureModelCatalog | null = null,
-): boolean => {
-    const clip = clips[clipIdx];
-    if (!clip || (clipIdx === 0 && clip.skipped !== true)) {
-        return false;
-    }
-    const skipped = !clip.skipped;
-    const start = skipped
-        ? clipIdx
-        : Math.max(
-              0,
-              clips.findIndex((candidate) => candidate.skipped === true),
-          );
-    for (let index = start; index < clips.length; index++) {
-        clips[index].skipped = skipped;
-    }
-    reconcileArchitectureIncomingIcLoraDrives(
-        clips,
-        generatedEntryMode,
-        catalog,
-    );
-    return true;
-};
-
-/** The stage-level counterpart; a skipped stage can change the clip's identity. */
-export const applyStageSkip = (
-    clips: Clip[],
-    clipIdx: number,
-    stageIdx: number,
-    catalog: ArchitectureModelCatalog,
-    generatedEntryMode: "text-to-video" | "image-to-video",
-): boolean => {
-    const clip = clips[clipIdx];
-    const stage = clip?.stages[stageIdx];
-    if (!clip || !stage || (stageIdx === 0 && stage.skipped !== true)) {
-        return false;
-    }
-    const skipped = !stage.skipped;
-    const start = skipped
-        ? stageIdx
-        : Math.max(
-              0,
-              clip.stages.findIndex((candidate) => candidate.skipped === true),
-          );
-    for (let index = start; index < clip.stages.length; index++) {
-        clip.stages[index].skipped = skipped;
-    }
-    reconcileClipArchitectureIdentity(clip, catalog);
-    reconcileArchitectureIncomingIcLoraDrives(
-        clips,
-        generatedEntryMode,
-        catalog,
-    );
-    return true;
-};
 
 export interface DetailSelectionDomainOperations {
     addRefEntry(clipIdx: number): void;
@@ -594,112 +527,32 @@ export const createDetailSelectionDomainOperations = (
         );
     };
 
-    /**
-     * Runs one of the shared skip mutations on a working copy and turns it
-     * into the named skip command plus whatever IC-LoRA drive reconciliation
-     * it forced on the other clips.
-     */
-    const commitSkip = (
-        clips: Clip[],
-        mutate: (clips: Clip[]) => boolean,
-    ): StructuralCommand | null => {
-        const beforeDrives = clips.map((clip) => JSON.stringify(clip.icLoras));
-        const beforeClipSkips = clips.map((clip) => clip.skipped === true);
-        const beforeStageSkips = clips.map((clip) =>
-            clip.stages.map((stage) => stage.skipped === true),
-        );
-        if (!mutate(clips)) {
-            return null;
-        }
-        const skipCommands: DocumentCommand[] = clips.flatMap(
-            (clip, clipIdx) => {
-                const commands: DocumentCommand[] = [];
-                if (
-                    clip.id &&
-                    (clip.skipped === true) !== beforeClipSkips[clipIdx]
-                ) {
-                    commands.push({
-                        type: "clip.patch",
-                        clipId: clip.id,
-                        patch: { skipped: clip.skipped },
-                    });
-                }
-                if (clip.id) {
-                    for (
-                        let stageIdx = 0;
-                        stageIdx < clip.stages.length;
-                        stageIdx++
-                    ) {
-                        const stage = clip.stages[stageIdx];
-                        if (
-                            stage.id &&
-                            (stage.skipped === true) !==
-                                beforeStageSkips[clipIdx]?.[stageIdx]
-                        ) {
-                            commands.push({
-                                type: "stage.patch",
-                                clipId: clip.id,
-                                stageId: stage.id,
-                                patch: { skipped: stage.skipped },
-                            });
-                        }
-                    }
-                }
-                return commands;
-            },
-        );
-        if (skipCommands.length === 0) {
-            return null;
-        }
-        return {
-            command: {
-                type: "batch",
-                commands: [
-                    ...skipCommands,
-                    ...clips.flatMap((clip, index) =>
-                        clip.id &&
-                        JSON.stringify(clip.icLoras) !== beforeDrives[index]
-                            ? [
-                                  {
-                                      type: "clip.patch" as const,
-                                      clipId: clip.id,
-                                      patch: { icLoras: clip.icLoras },
-                                  },
-                              ]
-                            : [],
-                    ),
-                ],
-            },
-            selection: "render",
-        };
-    };
-
     const toggleClipSkip = (clipIdx: number): void => {
         structuralCommit((clips) => {
-            const transaction = captureAuthoringTransaction();
-            return commitSkip(clips, (working) =>
-                applyClipSkip(
-                    working,
-                    clipIdx,
-                    transaction.generatedEntryMode,
-                    transaction.capabilities.catalog,
-                ),
-            );
+            const clipId = clips[clipIdx]?.id;
+            return clipId
+                ? {
+                      command: { type: "clip.toggle-skip", clipId },
+                      selection: "render",
+                  }
+                : null;
         });
     };
 
     const toggleStageSkip = (clipIdx: number, stageIdx: number): void => {
         structuralCommit((clips) => {
-            const transaction = captureAuthoringTransaction();
-            return commitSkip(clips, (working) =>
-                applyStageSkip(
-                    working,
-                    clipIdx,
-                    stageIdx,
-                    transaction.capabilities.catalog,
-                    transaction.generatedEntryMode,
-                ),
-            );
+            const clip = clips[clipIdx];
+            const stageId = clip?.stages[stageIdx]?.id;
+            return clip?.id && stageId
+                ? {
+                      command: {
+                          type: "stage.toggle-skip",
+                          clipId: clip.id,
+                          stageId,
+                      },
+                      selection: "render",
+                  }
+                : null;
         });
     };
 

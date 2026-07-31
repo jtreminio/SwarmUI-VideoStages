@@ -233,11 +233,12 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         expect(body.querySelectorAll(".vst-region-selected")).toHaveLength(0);
     });
 
-    it("the skip button toggles clip.skipped via saveClips without selecting the region", () => {
+    it("the skip button commits one document command without selecting the region", () => {
         clipsSection(durationClips([1, 2]));
         const body = makeBody();
         renderRegions(body, 2);
         const saveSpy = jest.spyOn(persistence, "saveClips");
+        const beforeRevision = persistence.getTimelineStore().revision();
 
         linking = createTimelineLinking();
         router = createGestureRouter();
@@ -248,8 +249,11 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
             .querySelector<HTMLButtonElement>("[data-vst-region-action='skip']")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-        expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[1].skipped).toBe(true);
+        expect(saveSpy).not.toHaveBeenCalled();
+        expect(persistence.getClips()[1].skipped).toBe(true);
+        expect(persistence.getTimelineStore().revision()).toBe(
+            beforeRevision + 1,
+        );
         expect(region(body, 1).classList.contains("vst-region-selected")).toBe(
             false,
         );

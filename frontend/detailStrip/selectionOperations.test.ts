@@ -39,7 +39,6 @@ import { getSelection, setSelection } from "../selection";
 import { createTimelineHistory } from "../timelineHistory";
 import type { Clip, TimelineSelection } from "../types";
 import type { StructuralCommand } from "./draftQueue";
-import { applyClipSkip, applyStageSkip } from "./selectionDomainOperations";
 import { createDetailSelectionOperations } from "./selectionOperations";
 
 type StructuralOutcome =
@@ -76,48 +75,44 @@ describe("detail structural stage operations", () => {
         setVideoStagesHostBridgeForTests(null);
     });
 
-    it("cascades a clip skip marker through every later clip", () => {
-        const clips = [minimalClip(), minimalClip(), minimalClip()];
-
-        expect(applyClipSkip(clips, 1, "text-to-video")).toBe(true);
-        expect(clips.map((clip) => clip.skipped)).toEqual([false, true, true]);
-
-        expect(applyClipSkip(clips, 2, "text-to-video")).toBe(true);
-        expect(clips.map((clip) => clip.skipped)).toEqual([
-            false,
-            false,
-            false,
-        ]);
-    });
-
-    it("cascades a stage skip marker through every later stage", () => {
+    it("emits stable-ID commands for clip and stage skip toggles", () => {
         const clip = minimalClip({
+            id: "clip-a",
             stages: [
-                minimalClip().stages[0],
-                structuredClone(minimalClip().stages[0]),
-                structuredClone(minimalClip().stages[0]),
+                { ...minimalClip().stages[0], id: "stage-a" },
+                { ...minimalClip().stages[0], id: "stage-b" },
             ],
         });
-        const clips = [clip];
-        const catalog = testArchitectureCatalog();
-
-        expect(applyStageSkip(clips, 0, 1, catalog, "text-to-video")).toBe(
-            true,
+        const outcomes: StructuralOutcome[] = [];
+        const structuralCommit = jest.fn(
+            (apply: (value: Clip[]) => StructuralOutcome) => {
+                outcomes.push(apply([clip]));
+            },
         );
-        expect(clip.stages.map((stage) => stage.skipped)).toEqual([
-            false,
-            true,
-            true,
-        ]);
-
-        expect(applyStageSkip(clips, 0, 2, catalog, "text-to-video")).toBe(
-            true,
+        const captureTransaction = jest.fn(() => authoringTransaction());
+        const operations = createDetailSelectionOperations(
+            structuralCommit,
+            captureTransaction,
         );
-        expect(clip.stages.map((stage) => stage.skipped)).toEqual([
-            false,
-            false,
-            false,
+
+        operations.toggleClipSkip(0);
+        operations.toggleStageSkip(0, 1);
+
+        expect(outcomes).toEqual([
+            {
+                command: { type: "clip.toggle-skip", clipId: "clip-a" },
+                selection: "render",
+            },
+            {
+                command: {
+                    type: "stage.toggle-skip",
+                    clipId: "clip-a",
+                    stageId: "stage-b",
+                },
+                selection: "render",
+            },
         ]);
+        expect(captureTransaction).not.toHaveBeenCalled();
     });
 
     it("keeps a newly appended stage behind an existing skip marker", () => {
@@ -146,24 +141,6 @@ describe("detail structural stage operations", () => {
         expect(clip.stages).toHaveLength(3);
         expect(clip.stages[2].skipped).toBe(true);
         expect(captureTransaction).toHaveBeenCalledTimes(1);
-    });
-
-    it("allows legacy skipped first items to be restored, but not skipped again", () => {
-        const clip = minimalClip({ skipped: true });
-        clip.stages[0].skipped = true;
-        const clips = [clip];
-        const catalog = testArchitectureCatalog();
-
-        expect(applyClipSkip(clips, 0, "text-to-video")).toBe(true);
-        expect(clips[0].skipped).toBe(false);
-        expect(applyClipSkip(clips, 0, "text-to-video")).toBe(false);
-        expect(applyStageSkip(clips, 0, 0, catalog, "text-to-video")).toBe(
-            true,
-        );
-        expect(clips[0].stages[0].skipped).toBe(false);
-        expect(applyStageSkip(clips, 0, 0, catalog, "text-to-video")).toBe(
-            false,
-        );
     });
 
     it("does not remove the first stage, even from a sourced clip", () => {

@@ -1,4 +1,7 @@
-import { reconcileClipArchitectureIncomingIcLoraDrives } from "./architectures/behaviorRegistry";
+import {
+    reconcileArchitectureIncomingIcLoraDrives,
+    reconcileClipArchitectureIncomingIcLoraDrives,
+} from "./architectures/behaviorRegistry";
 import {
     modelIdentityFromCatalog,
     reconcileClipArchitectureIdentity,
@@ -107,6 +110,32 @@ export const reduceDocumentCommand = (
         }
         case "clip.remove":
             return list(document, "clip", "remove", command, context);
+        case "clip.toggle-skip": {
+            const clipIndex = document.clips.findIndex(
+                (clip) => clip.id === command.clipId,
+            );
+            const clip = document.clips[clipIndex];
+            if (!clip) {
+                return failure(document, "missing-target");
+            }
+            if (clipIndex === 0 && clip.skipped !== true) {
+                return failure(document, "invalid-operation");
+            }
+            const skipped = !clip.skipped;
+            const firstSkipped = document.clips.findIndex(
+                (candidate) => candidate.skipped === true,
+            );
+            const start = skipped ? clipIndex : Math.max(0, firstSkipped);
+            for (let index = start; index < document.clips.length; index++) {
+                document.clips[index].skipped = skipped;
+            }
+            reconcileArchitectureIncomingIcLoraDrives(
+                document.clips,
+                context.generatedEntryMode ?? "text-to-video",
+                context.architectureCatalog,
+            );
+            return success(document);
+        }
         case "clip.move":
             return list(document, "clip", "move", command, context);
         case "clip.patch": {
@@ -220,6 +249,42 @@ export const reduceDocumentCommand = (
         }
         case "stage.remove":
             return list(document, "stage", "remove", command, context);
+        case "stage.toggle-skip": {
+            const clip = findClip(document, command.clipId);
+            const stageIndex =
+                clip?.stages.findIndex(
+                    (stage) => stage.id === command.stageId,
+                ) ?? -1;
+            const stage = clip?.stages[stageIndex];
+            if (!clip || !stage) {
+                return failure(document, "missing-target");
+            }
+            if (stageIndex === 0 && stage.skipped !== true) {
+                return failure(document, "invalid-operation");
+            }
+            const skipped = !stage.skipped;
+            const firstSkipped = clip.stages.findIndex(
+                (candidate) => candidate.skipped === true,
+            );
+            const start = skipped ? stageIndex : Math.max(0, firstSkipped);
+            for (let index = start; index < clip.stages.length; index++) {
+                clip.stages[index].skipped = skipped;
+            }
+            if (
+                !reconcileClipArchitectureIdentity(
+                    clip,
+                    context.architectureCatalog,
+                )
+            ) {
+                return failure(clone(source), "architecture-invariant");
+            }
+            reconcileArchitectureIncomingIcLoraDrives(
+                document.clips,
+                context.generatedEntryMode ?? "text-to-video",
+                context.architectureCatalog,
+            );
+            return success(document);
+        }
         case "stage.move":
             return list(document, "stage", "move", command, context);
         case "stage.patch":

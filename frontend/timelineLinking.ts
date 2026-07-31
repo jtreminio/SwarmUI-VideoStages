@@ -1,8 +1,13 @@
 import { reconcileArchitectureIncomingIcLoraDrives } from "./architectures/behaviorRegistry";
-import { applyClipSkip } from "./detailStrip/selectionDomainOperations";
 import { documentFps } from "./documentQueries";
 import type { GestureRouter, GestureSession } from "./gestureRouter";
-import { getClips, getState, saveClips } from "./persistence/repository";
+import {
+    dispatchDocumentCommand,
+    getClips,
+    getState,
+    getTimelineStore,
+    saveClips,
+} from "./persistence/repository";
 import { getRootDefaults } from "./rootDefaults";
 import { getSelectedClipIndex, getSelection, setSelection } from "./selection";
 import { getRootGeneratedEntryMode } from "./swarmInputs";
@@ -174,17 +179,18 @@ export const createTimelineLinking = (): TimelineLinking => {
     };
 
     const applySkip = (idx: number): void => {
-        const clips = getClips();
-        if (
-            applyClipSkip(
-                clips,
-                idx,
-                getRootGeneratedEntryMode(),
-                getRootDefaults().modelCatalog,
-            )
-        ) {
-            saveClips(clips, { origin: "linking" });
+        const snapshot = getTimelineStore().getSnapshot();
+        const clip = snapshot.state.clips[idx];
+        if (!clip?.id || (idx === 0 && clip.skipped !== true)) {
+            return;
         }
+        dispatchDocumentCommand(
+            { type: "clip.toggle-skip", clipId: clip.id },
+            {
+                origin: "linking",
+                expectedRevision: snapshot.revision,
+            },
+        );
     };
 
     const applyDelete = (idx: number): void => {

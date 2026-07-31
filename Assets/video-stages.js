@@ -4146,6 +4146,32 @@
       }
       case "clip.remove":
         return list(document2, "clip", "remove", command, context);
+      case "clip.toggle-skip": {
+        const clipIndex = document2.clips.findIndex(
+          (clip2) => clip2.id === command.clipId
+        );
+        const clip = document2.clips[clipIndex];
+        if (!clip) {
+          return failure(document2, "missing-target");
+        }
+        if (clipIndex === 0 && clip.skipped !== true) {
+          return failure(document2, "invalid-operation");
+        }
+        const skipped = !clip.skipped;
+        const firstSkipped = document2.clips.findIndex(
+          (candidate) => candidate.skipped === true
+        );
+        const start = skipped ? clipIndex : Math.max(0, firstSkipped);
+        for (let index = start; index < document2.clips.length; index++) {
+          document2.clips[index].skipped = skipped;
+        }
+        reconcileArchitectureIncomingIcLoraDrives(
+          document2.clips,
+          context.generatedEntryMode ?? "text-to-video",
+          context.architectureCatalog
+        );
+        return success(document2);
+      }
       case "clip.move":
         return list(document2, "clip", "move", command, context);
       case "clip.patch": {
@@ -4249,6 +4275,39 @@
       }
       case "stage.remove":
         return list(document2, "stage", "remove", command, context);
+      case "stage.toggle-skip": {
+        const clip = findClip(document2, command.clipId);
+        const stageIndex = clip?.stages.findIndex(
+          (stage2) => stage2.id === command.stageId
+        ) ?? -1;
+        const stage = clip?.stages[stageIndex];
+        if (!clip || !stage) {
+          return failure(document2, "missing-target");
+        }
+        if (stageIndex === 0 && stage.skipped !== true) {
+          return failure(document2, "invalid-operation");
+        }
+        const skipped = !stage.skipped;
+        const firstSkipped = clip.stages.findIndex(
+          (candidate) => candidate.skipped === true
+        );
+        const start = skipped ? stageIndex : Math.max(0, firstSkipped);
+        for (let index = start; index < clip.stages.length; index++) {
+          clip.stages[index].skipped = skipped;
+        }
+        if (!reconcileClipArchitectureIdentity(
+          clip,
+          context.architectureCatalog
+        )) {
+          return failure(clone2(source), "architecture-invariant");
+        }
+        reconcileArchitectureIncomingIcLoraDrives(
+          document2.clips,
+          context.generatedEntryMode ?? "text-to-video",
+          context.architectureCatalog
+        );
+        return success(document2);
+      }
       case "stage.move":
         return list(document2, "stage", "move", command, context);
       case "stage.patch":
@@ -13579,48 +13638,6 @@ The conversion is one undoable change.`;
       }
     ] : []
   );
-  var applyClipSkip = (clips, clipIdx, generatedEntryMode, catalog = null) => {
-    const clip = clips[clipIdx];
-    if (!clip || clipIdx === 0 && clip.skipped !== true) {
-      return false;
-    }
-    const skipped = !clip.skipped;
-    const start = skipped ? clipIdx : Math.max(
-      0,
-      clips.findIndex((candidate) => candidate.skipped === true)
-    );
-    for (let index = start; index < clips.length; index++) {
-      clips[index].skipped = skipped;
-    }
-    reconcileArchitectureIncomingIcLoraDrives(
-      clips,
-      generatedEntryMode,
-      catalog
-    );
-    return true;
-  };
-  var applyStageSkip = (clips, clipIdx, stageIdx, catalog, generatedEntryMode) => {
-    const clip = clips[clipIdx];
-    const stage = clip?.stages[stageIdx];
-    if (!clip || !stage || stageIdx === 0 && stage.skipped !== true) {
-      return false;
-    }
-    const skipped = !stage.skipped;
-    const start = skipped ? stageIdx : Math.max(
-      0,
-      clip.stages.findIndex((candidate) => candidate.skipped === true)
-    );
-    for (let index = start; index < clip.stages.length; index++) {
-      clip.stages[index].skipped = skipped;
-    }
-    reconcileClipArchitectureIdentity(clip, catalog);
-    reconcileArchitectureIncomingIcLoraDrives(
-      clips,
-      generatedEntryMode,
-      catalog
-    );
-    return true;
-  };
   var createDetailSelectionDomainOperations = (structuralCommit, captureAuthoringTransaction) => {
     const commitRemoval = (build, index, neighbour, fallback) => structuralCommit(
       (clips) => {
@@ -14006,90 +14023,27 @@ The conversion is one undoable change.`;
         { rebuildAfterSelect: true }
       );
     };
-    const commitSkip = (clips, mutate) => {
-      const beforeDrives = clips.map((clip) => JSON.stringify(clip.icLoras));
-      const beforeClipSkips = clips.map((clip) => clip.skipped === true);
-      const beforeStageSkips = clips.map(
-        (clip) => clip.stages.map((stage) => stage.skipped === true)
-      );
-      if (!mutate(clips)) {
-        return null;
-      }
-      const skipCommands = clips.flatMap(
-        (clip, clipIdx) => {
-          const commands = [];
-          if (clip.id && clip.skipped === true !== beforeClipSkips[clipIdx]) {
-            commands.push({
-              type: "clip.patch",
-              clipId: clip.id,
-              patch: { skipped: clip.skipped }
-            });
-          }
-          if (clip.id) {
-            for (let stageIdx = 0; stageIdx < clip.stages.length; stageIdx++) {
-              const stage = clip.stages[stageIdx];
-              if (stage.id && stage.skipped === true !== beforeStageSkips[clipIdx]?.[stageIdx]) {
-                commands.push({
-                  type: "stage.patch",
-                  clipId: clip.id,
-                  stageId: stage.id,
-                  patch: { skipped: stage.skipped }
-                });
-              }
-            }
-          }
-          return commands;
-        }
-      );
-      if (skipCommands.length === 0) {
-        return null;
-      }
-      return {
-        command: {
-          type: "batch",
-          commands: [
-            ...skipCommands,
-            ...clips.flatMap(
-              (clip, index) => clip.id && JSON.stringify(clip.icLoras) !== beforeDrives[index] ? [
-                {
-                  type: "clip.patch",
-                  clipId: clip.id,
-                  patch: { icLoras: clip.icLoras }
-                }
-              ] : []
-            )
-          ]
-        },
-        selection: "render"
-      };
-    };
     const toggleClipSkip = (clipIdx) => {
       structuralCommit((clips) => {
-        const transaction = captureAuthoringTransaction();
-        return commitSkip(
-          clips,
-          (working) => applyClipSkip(
-            working,
-            clipIdx,
-            transaction.generatedEntryMode,
-            transaction.capabilities.catalog
-          )
-        );
+        const clipId = clips[clipIdx]?.id;
+        return clipId ? {
+          command: { type: "clip.toggle-skip", clipId },
+          selection: "render"
+        } : null;
       });
     };
     const toggleStageSkip = (clipIdx, stageIdx) => {
       structuralCommit((clips) => {
-        const transaction = captureAuthoringTransaction();
-        return commitSkip(
-          clips,
-          (working) => applyStageSkip(
-            working,
-            clipIdx,
-            stageIdx,
-            transaction.capabilities.catalog,
-            transaction.generatedEntryMode
-          )
-        );
+        const clip = clips[clipIdx];
+        const stageId = clip?.stages[stageIdx]?.id;
+        return clip?.id && stageId ? {
+          command: {
+            type: "stage.toggle-skip",
+            clipId: clip.id,
+            stageId
+          },
+          selection: "render"
+        } : null;
       });
     };
     return {
@@ -14747,15 +14701,18 @@ The conversion is one undoable change.`;
       dropIndicator.style.left = `${left}px`;
     };
     const applySkip = (idx) => {
-      const clips = getClips();
-      if (applyClipSkip(
-        clips,
-        idx,
-        getRootGeneratedEntryMode(),
-        getRootDefaults().modelCatalog
-      )) {
-        saveClips(clips, { origin: "linking" });
+      const snapshot = getTimelineStore().getSnapshot();
+      const clip = snapshot.state.clips[idx];
+      if (!clip?.id || idx === 0 && clip.skipped !== true) {
+        return;
       }
+      dispatchDocumentCommand(
+        { type: "clip.toggle-skip", clipId: clip.id },
+        {
+          origin: "linking",
+          expectedRevision: snapshot.revision
+        }
+      );
     };
     const applyDelete = (idx) => {
       const clips = getClips();

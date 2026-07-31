@@ -29,6 +29,7 @@ export type CommandFailure =
     | "duplicate-id"
     | "invalid-id"
     | "retake-already-exists"
+    | "invalid-operation"
     | "invalid-architecture-conversion"
     | "architecture-invariant";
 
@@ -47,6 +48,7 @@ export type DocumentCommand =
           beforeClipId?: string | null;
       }
     | { type: "clip.remove"; clipId: string }
+    | { type: "clip.toggle-skip"; clipId: string }
     | {
           type: "clip.move";
           clipId: string;
@@ -74,6 +76,7 @@ export type DocumentCommand =
           >;
       }
     | { type: "stage.remove"; clipId: string; stageId: string }
+    | { type: "stage.toggle-skip"; clipId: string; stageId: string }
     | {
           type: "stage.move";
           clipId: string;

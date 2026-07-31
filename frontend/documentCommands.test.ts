@@ -214,6 +214,181 @@ describe("reduceDocumentCommand", () => {
         ]);
     });
 
+    it("toggles clip skip suffixes atomically without mutating the source", () => {
+        const source = document();
+        source.clips.push(clip("clip-c"));
+        const before = structuredClone(source);
+        const skipped = reduceDocumentCommand(
+            source,
+            { type: "clip.toggle-skip", clipId: "clip-b" },
+            { architectureCatalog: catalogWithFake() },
+        );
+        const restored = reduceDocumentCommand(
+            skipped.document,
+            { type: "clip.toggle-skip", clipId: "clip-c" },
+            { architectureCatalog: catalogWithFake() },
+        );
+
+        expect(skipped.document.clips.map((item) => item.skipped)).toEqual([
+            false,
+            true,
+            true,
+        ]);
+        expect(restored.document.clips.map((item) => item.skipped)).toEqual([
+            false,
+            false,
+            false,
+        ]);
+        expect(source).toEqual(before);
+    });
+
+    it("toggles stage skip suffixes and reconciles sourced clip identity", () => {
+        const source = document();
+        source.clips[0].sourceVideo = {
+            data: "data:video/mp4;base64,AAAA",
+            fileName: "source.mp4",
+            fps: 24,
+            durationSeconds: 4,
+            startSeconds: 0,
+            lengthSeconds: 4,
+        };
+        source.clips[0].stages.push(stage("stage-c"));
+        const skipped = reduceDocumentCommand(
+            source,
+            {
+                type: "stage.toggle-skip",
+                clipId: "clip-a",
+                stageId: "stage-b",
+            },
+            { architectureCatalog: catalogWithFake() },
+        );
+        expect(
+            skipped.document.clips[0].stages.map((item) => item.skipped),
+        ).toEqual([false, true, true]);
+
+        skipped.document.clips[0].stages[0].skipped = true;
+        skipped.document.clips[0].architectureHint = "none";
+        skipped.document.clips[0].modelProfileId = "none";
+        const restored = reduceDocumentCommand(
+            skipped.document,
+            {
+                type: "stage.toggle-skip",
+                clipId: "clip-a",
+                stageId: "stage-a",
+            },
+            { architectureCatalog: catalogWithFake() },
+        );
+
+        expect(
+            restored.document.clips[0].stages.map((item) => item.skipped),
+        ).toEqual([false, false, false]);
+        expect(restored.document.clips[0]).toMatchObject({
+            architectureHint: "ltx2",
+            modelProfileId: "ltx-2.3",
+        });
+    });
+
+    it("rejects active first-item and missing-target skip toggles unchanged", () => {
+        const source = document();
+        const firstClip = reduceDocumentCommand(
+            source,
+            { type: "clip.toggle-skip", clipId: "clip-a" },
+            { architectureCatalog: catalogWithFake() },
+        );
+        const firstStage = reduceDocumentCommand(
+            source,
+            {
+                type: "stage.toggle-skip",
+                clipId: "clip-a",
+                stageId: "stage-a",
+            },
+            { architectureCatalog: catalogWithFake() },
+        );
+        const missing = reduceDocumentCommand(
+            source,
+            { type: "clip.toggle-skip", clipId: "missing" },
+            { architectureCatalog: catalogWithFake() },
+        );
+
+        expect(firstClip).toMatchObject({
+            applied: false,
+            failure: "invalid-operation",
+            document: source,
+        });
+        expect(firstStage).toMatchObject({
+            applied: false,
+            failure: "invalid-operation",
+            document: source,
+        });
+        expect(missing).toMatchObject({
+            applied: false,
+            failure: "missing-target",
+            document: source,
+        });
+        expect(firstClip.document).not.toBe(source);
+    });
+
+    it("allows a legacy skipped first clip to be restored once", () => {
+        const source = document();
+        source.clips.forEach((item) => {
+            item.skipped = true;
+        });
+
+        const restored = reduceDocumentCommand(
+            source,
+            { type: "clip.toggle-skip", clipId: "clip-a" },
+            { architectureCatalog: catalogWithFake() },
+        );
+        const rejected = reduceDocumentCommand(
+            restored.document,
+            { type: "clip.toggle-skip", clipId: "clip-a" },
+            { architectureCatalog: catalogWithFake() },
+        );
+
+        expect(restored.applied).toBe(true);
+        expect(restored.document.clips.map((item) => item.skipped)).toEqual([
+            false,
+            false,
+        ]);
+        expect(rejected).toMatchObject({
+            applied: false,
+            failure: "invalid-operation",
+        });
+    });
+
+    it("repairs graph-relative Incoming IC-LoRA drives in the same skip command", () => {
+        const source = document();
+        source.clips[1].stages = [stage("stage-b0")];
+        source.clips[1].icLoras = [
+            {
+                lora: "guide.safetensors",
+                preset: "custom",
+                driveSource: "Incoming",
+                driveData: "visual",
+                driveMediaKinds: ["video"],
+                stage: 0,
+                strength: 1,
+                attentionStrength: 1,
+                controlType: "none",
+                hdr: false,
+                driveMedia: null,
+            },
+        ];
+
+        const result = reduceDocumentCommand(
+            source,
+            { type: "clip.toggle-skip", clipId: "clip-b" },
+            {
+                architectureCatalog: catalogWithFake(),
+                generatedEntryMode: "text-to-video",
+            },
+        );
+
+        expect(result.applied).toBe(true);
+        expect(result.document.clips[1].skipped).toBe(true);
+        expect(result.document.clips[1].icLoras[0].driveSource).toBe("Upload");
+    });
+
     it.each([
         {
             name: "stage",
