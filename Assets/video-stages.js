@@ -4044,6 +4044,7 @@
     }
   };
   var createBoundaryCapabilityViews = (architectureById, forClip) => {
+    const byTimeline = /* @__PURE__ */ new WeakMap();
     const forBoundary = (left, right, leftClipIdx = -1, rightClipIdx = null) => {
       const leftView = forClip(left);
       const rightView = right === null ? null : forClip(right);
@@ -4092,17 +4093,28 @@
       };
     };
     const forBoundaryIndex = (clips, leftClipIdx) => {
+      let timelineViews = byTimeline.get(clips);
+      if (!timelineViews) {
+        timelineViews = /* @__PURE__ */ new Map();
+        byTimeline.set(clips, timelineViews);
+      }
+      const cached = timelineViews.get(leftClipIdx);
+      if (cached) {
+        return cached;
+      }
       const left = clips[leftClipIdx];
       if (!left) {
         throw new Error(`Missing left clip at index ${leftClipIdx}.`);
       }
       const rightClipIdx = executableBoundaryForLeftClip(clips, leftClipIdx)?.rightIdx ?? null;
-      return forBoundary(
+      const view = forBoundary(
         left,
         rightClipIdx === null ? null : clips[rightClipIdx],
         leftClipIdx,
         rightClipIdx
       );
+      timelineViews.set(leftClipIdx, view);
+      return view;
     };
     return {
       forBoundary,
@@ -4140,6 +4152,8 @@
     return void 0;
   };
   var createClipStageCapabilityViews = (architectureById, modelByName, scope = {}) => {
+    const clipViews = /* @__PURE__ */ new WeakMap();
+    const stageViews = /* @__PURE__ */ new WeakMap();
     const effectiveClipIdentity = (clip) => {
       const sourceOnly = activeStageCount(clip) === 0 && clip.sourceVideo !== null;
       const resolvedModel = sourceOnly ? void 0 : modelByName.get(clip.stages[0]?.model ?? "");
@@ -4150,6 +4164,10 @@
       };
     };
     const forClip = (clip) => {
+      const cached = clipViews.get(clip);
+      if (cached) {
+        return cached;
+      }
       const identity = effectiveClipIdentity(clip);
       const { architectureId, descriptor } = identity;
       const capabilities = descriptor ? effectiveClipCapabilities(
@@ -4187,7 +4205,7 @@
         (model) => modelByName.get(model),
         (architectureId2) => architectureById.get(architectureId2)
       );
-      return {
+      const view = {
         architectureId,
         architectureLabel: label,
         known: descriptor !== void 0,
@@ -4204,8 +4222,19 @@
           };
         }
       };
+      clipViews.set(clip, view);
+      return view;
     };
     const forStage = (clip, stage) => {
+      let viewsForClip = stageViews.get(clip);
+      if (!viewsForClip) {
+        viewsForClip = /* @__PURE__ */ new WeakMap();
+        stageViews.set(clip, viewsForClip);
+      }
+      const cached = viewsForClip.get(stage);
+      if (cached) {
+        return cached;
+      }
       const view = forClip(clip);
       const sourceOnly = view.architectureId === NONE_ARCHITECTURE_ID && activeStageCount(clip) === 0 && clip.sourceVideo !== null;
       const resolvedModel = sourceOnly ? void 0 : modelByName.get(stage.model);
@@ -4245,7 +4274,7 @@
           rule: null
         };
       };
-      return {
+      const stageView = {
         upscaleModes: capabilities?.upscaleModes ?? [],
         decision,
         authoringState: (feature, persisted) => {
@@ -4257,6 +4286,8 @@
           };
         }
       };
+      viewsForClip.set(stage, stageView);
+      return stageView;
     };
     return { forClip, forStage };
   };

@@ -53,6 +53,11 @@ export const createBoundaryCapabilityViews = (
         leftClipIdx: number,
     ): BoundaryCapabilityView;
 } => {
+    const byTimeline = new WeakMap<
+        readonly Clip[],
+        Map<number, BoundaryCapabilityView>
+    >();
+
     const forBoundary = (
         left: Clip,
         right: Clip | null,
@@ -135,18 +140,29 @@ export const createBoundaryCapabilityViews = (
         clips: readonly Clip[],
         leftClipIdx: number,
     ): BoundaryCapabilityView => {
+        let timelineViews = byTimeline.get(clips);
+        if (!timelineViews) {
+            timelineViews = new Map<number, BoundaryCapabilityView>();
+            byTimeline.set(clips, timelineViews);
+        }
+        const cached = timelineViews.get(leftClipIdx);
+        if (cached) {
+            return cached;
+        }
         const left = clips[leftClipIdx];
         if (!left) {
             throw new Error(`Missing left clip at index ${leftClipIdx}.`);
         }
         const rightClipIdx =
             executableBoundaryForLeftClip(clips, leftClipIdx)?.rightIdx ?? null;
-        return forBoundary(
+        const view = forBoundary(
             left,
             rightClipIdx === null ? null : clips[rightClipIdx],
             leftClipIdx,
             rightClipIdx,
         );
+        timelineViews.set(leftClipIdx, view);
+        return view;
     };
 
     return {

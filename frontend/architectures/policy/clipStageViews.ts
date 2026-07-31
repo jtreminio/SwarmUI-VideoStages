@@ -95,6 +95,9 @@ export const createClipStageCapabilityViews = (
     forClip(clip: Clip): ClipCapabilityView;
     forStage(clip: Clip, stage: Stage): StageCapabilityView;
 } => {
+    const clipViews = new WeakMap<Clip, ClipCapabilityView>();
+    const stageViews = new WeakMap<Clip, WeakMap<Stage, StageCapabilityView>>();
+
     const effectiveClipIdentity = (clip: Clip): EffectiveCatalogIdentity => {
         const sourceOnly =
             activeStageCount(clip) === 0 && clip.sourceVideo !== null;
@@ -111,6 +114,10 @@ export const createClipStageCapabilityViews = (
     };
 
     const forClip = (clip: Clip): ClipCapabilityView => {
+        const cached = clipViews.get(clip);
+        if (cached) {
+            return cached;
+        }
         const identity = effectiveClipIdentity(clip);
         const { architectureId, descriptor } = identity;
         const capabilities = descriptor
@@ -156,7 +163,7 @@ export const createClipStageCapabilityViews = (
             (model) => modelByName.get(model),
             (architectureId) => architectureById.get(architectureId),
         );
-        return {
+        const view: ClipCapabilityView = {
             architectureId,
             architectureLabel: label,
             known: descriptor !== undefined,
@@ -176,9 +183,20 @@ export const createClipStageCapabilityViews = (
                 };
             },
         };
+        clipViews.set(clip, view);
+        return view;
     };
 
     const forStage = (clip: Clip, stage: Stage): StageCapabilityView => {
+        let viewsForClip = stageViews.get(clip);
+        if (!viewsForClip) {
+            viewsForClip = new WeakMap<Stage, StageCapabilityView>();
+            stageViews.set(clip, viewsForClip);
+        }
+        const cached = viewsForClip.get(stage);
+        if (cached) {
+            return cached;
+        }
         const view = forClip(clip);
         const sourceOnly =
             view.architectureId === NONE_ARCHITECTURE_ID &&
@@ -252,7 +270,7 @@ export const createClipStageCapabilityViews = (
                 rule: null,
             };
         };
-        return {
+        const stageView: StageCapabilityView = {
             upscaleModes: capabilities?.upscaleModes ?? [],
             decision,
             authoringState: (feature, persisted) => {
@@ -264,6 +282,8 @@ export const createClipStageCapabilityViews = (
                 };
             },
         };
+        viewsForClip.set(stage, stageView);
+        return stageView;
     };
 
     return { forClip, forStage };

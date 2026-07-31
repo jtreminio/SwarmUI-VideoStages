@@ -80,6 +80,24 @@ const fakeClip = () =>
     });
 
 describe("catalog-backed authoring policy", () => {
+    it("reuses clip, stage, and seam views within one resolver snapshot", () => {
+        const resolver = createCapabilityViewResolver(catalog());
+        const left = minimalClip();
+        const clips = [left, minimalClip()];
+
+        expect(resolver.forClip(left)).toBe(resolver.forClip(left));
+        expect(resolver.forStage(left, left.stages[0])).toBe(
+            resolver.forStage(left, left.stages[0]),
+        );
+        expect(resolver.forBoundaryIndex(clips, 0)).toBe(
+            resolver.forBoundaryIndex(clips, 0),
+        );
+
+        expect(createCapabilityViewResolver(catalog()).forClip(left)).not.toBe(
+            resolver.forClip(left),
+        );
+    });
+
     it("requires both halves of the frame-reference contract", () => {
         const capabilities = structuredClone(
             catalog().architectures[0].capabilities,
