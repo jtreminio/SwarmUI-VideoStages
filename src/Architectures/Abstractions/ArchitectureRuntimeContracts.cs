@@ -23,8 +23,9 @@ internal interface IArchitectureClipGeometryProjection
 }
 
 /// <summary>
-/// Opaque architecture-owned stage instruction. Common planning and timeline code only carries
-/// this value to the selected architecture runtime.
+/// Architecture-owned stage instruction. Its architecture-private detail stays opaque to common
+/// planning and timeline code, which carries the value to the selected architecture runtime and
+/// reads only the required <see cref="Core"/> facet.
 /// </summary>
 internal interface IArchitectureStagePayload
 {
@@ -78,6 +79,11 @@ internal interface IVideoGenerationSession : IDisposable
     ArchitectureId ArchitectureId { get; }
 
     DecodedClipArtifact Execute(ArchitectureClipRuntimeContext context);
+
+    /// <summary>Sessions that own no execution scope need no cleanup.</summary>
+    void IDisposable.Dispose()
+    {
+    }
 }
 
 /// <summary>

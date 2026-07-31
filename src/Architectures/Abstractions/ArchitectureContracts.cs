@@ -335,10 +335,11 @@ internal interface IArchitectureControlNetSourcePlan
 }
 
 /// <summary>
-/// Optional authored product features that an effective-request projector can
-/// safely omit while preserving their authored values. Absence means block.
+/// Authored product features an architecture may or may not support. Each entry's vocabulary
+/// binding decides whether an effective-request projector can omit it while preserving the
+/// authored value, or whether an unsupported feature blocks instead.
 /// </summary>
-internal enum UnsupportedAuthoringFeature
+internal enum AuthoringFeature
 {
     MultiStage,
     SourceVideo,

@@ -47,7 +47,7 @@ internal sealed record ConditionalRuleCodeVocabularyEntry(
     string Code);
 
 internal sealed record AuthoringFeatureVocabularyEntry(
-    UnsupportedAuthoringFeature Feature,
+    AuthoringFeature Feature,
     string AuthoringKey,
     string DisplayLabel,
     IReadOnlyList<CapabilityVocabularyEntry> Capabilities,
@@ -101,19 +101,19 @@ internal static class ArchitectureFeatureVocabulary
     { get; } =
     [
         new(
-            UnsupportedAuthoringFeature.MultiStage,
+            AuthoringFeature.MultiStage,
             "multiStage",
             "Multiple stages",
             [Capability(ArchitectureCapability.MultiStage)],
             CanIgnoreWhenUnsupported: false),
         new(
-            UnsupportedAuthoringFeature.SourceVideo,
+            AuthoringFeature.SourceVideo,
             "sourceVideo",
             "Source video",
             [Capability(ClipCapability.SourceVideo)],
             CanIgnoreWhenUnsupported: false),
         new(
-            UnsupportedAuthoringFeature.FrameReferences,
+            AuthoringFeature.FrameReferences,
             "frameReferences",
             "Frame references",
             [
@@ -122,65 +122,65 @@ internal static class ArchitectureFeatureVocabulary
             ],
             ConditionalRuleFeature.FrameReferences),
         new(
-            UnsupportedAuthoringFeature.ReferenceFraming,
+            AuthoringFeature.ReferenceFraming,
             "referenceFraming",
             "Reference framing",
             [Capability(ClipCapability.ReferenceFraming)]),
         new(
-            UnsupportedAuthoringFeature.Retake,
+            AuthoringFeature.Retake,
             "retake",
             "Retakes",
             [Capability(ClipCapability.Retake)],
             ConditionalRuleFeature.Retake),
         new(
-            UnsupportedAuthoringFeature.MajorPrompt,
+            AuthoringFeature.MajorPrompt,
             "majorPrompt",
             "Major prompts",
             [Capability(ClipCapability.Prompts)],
             CanIgnoreWhenUnsupported: false),
         new(
-            UnsupportedAuthoringFeature.PromptRelay,
+            AuthoringFeature.PromptRelay,
             "promptRelay",
             "Relay prompts",
             [Capability(ClipCapability.PromptRelay)]),
         new(
-            UnsupportedAuthoringFeature.ClipAudio,
+            AuthoringFeature.ClipAudio,
             "clipAudio",
             "Clip audio",
             [Capability(ClipCapability.AudioSources)]),
         new(
-            UnsupportedAuthoringFeature.AudioReuse,
+            AuthoringFeature.AudioReuse,
             "audioReuse",
             "Captured stage audio reuse",
             [Capability(ClipCapability.AudioReuse)]),
         new(
-            UnsupportedAuthoringFeature.AudioDerivedDuration,
+            AuthoringFeature.AudioDerivedDuration,
             "audioDerivedDuration",
             "Audio-derived clip duration",
             [Capability(ClipCapability.AudioDerivedDuration)]),
         new(
-            UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
+            AuthoringFeature.ControlSignalDerivedDuration,
             "controlSignalDerivedDuration",
             "Control-signal-derived clip duration",
             [Capability(ClipCapability.ControlSignalDerivedDuration)]),
         new(
-            UnsupportedAuthoringFeature.StageLoras,
+            AuthoringFeature.StageLoras,
             "stageLoras",
             "LoRAs",
             [Capability(StageCapability.Lora)]),
         new(
-            UnsupportedAuthoringFeature.IcLora,
+            AuthoringFeature.IcLora,
             "icLora",
             "IC-LoRA",
             [Capability(StageCapability.IcLora)]),
         new(
-            UnsupportedAuthoringFeature.Hdr,
+            AuthoringFeature.Hdr,
             "hdr",
             "HDR",
             [Capability(StageCapability.Hdr)],
             ConditionalRuleFeature.Hdr),
         new(
-            UnsupportedAuthoringFeature.Upscale,
+            AuthoringFeature.Upscale,
             "upscale",
             "Stage upscaling",
             [
@@ -229,7 +229,7 @@ internal static class ArchitectureFeatureVocabulary
             .Where(entry => entry.Supports(value) && entry.UpscaleModeWireName is not null)
             .Select(entry => entry.UpscaleModeWireName);
 
-    internal static string AuthoringKey(UnsupportedAuthoringFeature feature) =>
+    internal static string AuthoringKey(AuthoringFeature feature) =>
         AuthoringFeatures.Single(entry => entry.Feature == feature).AuthoringKey;
 
     internal static string AuthoringKey(ConditionalRuleFeature feature) =>
@@ -239,7 +239,7 @@ internal static class ArchitectureFeatureVocabulary
 
     internal static bool Supports(
         ArchitectureCapabilityDescriptor capabilities,
-        UnsupportedAuthoringFeature feature)
+        AuthoringFeature feature)
     {
         AuthoringFeatureVocabularyEntry entry =
             AuthoringFeatures.Single(candidate => candidate.Feature == feature);
@@ -259,7 +259,7 @@ internal static class ArchitectureFeatureVocabulary
             : entry.Capabilities.Any(SupportsCapability);
     }
 
-    internal static IReadOnlySet<UnsupportedAuthoringFeature>
+    internal static IReadOnlySet<AuthoringFeature>
         IgnoredWhenUnsupported(
             ArchitectureCapabilityDescriptor capabilities) =>
         AuthoringFeatures

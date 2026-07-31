@@ -39,8 +39,4 @@ internal sealed class SourceOnlyGenerationSession(
             bridge);
         return DecodedClipArtifact.FromRuntime(output, context.Clip);
     }
-
-    public void Dispose()
-    {
-    }
 }

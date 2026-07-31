@@ -39,7 +39,11 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
     {
         ArgumentNullException.ThrowIfNull(context);
         IVideoGenerationSession session = ResolveSession(context.Clip);
-        return Execute(session, context);
+        DecodedClipArtifact output = session.Execute(context)
+            ?? throw new InvalidOperationException(
+                $"Architecture '{session.ArchitectureId}' returned no decoded clip artifact.");
+        ValidateOutput(output, session, context);
+        return output;
     }
 
     private IVideoGenerationSession ResolveSession(ClipPlan clip)
@@ -56,13 +60,16 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
         return session;
     }
 
-    private static DecodedClipArtifact Execute(
+    /// <summary>
+    /// The common enforcement point for what an architecture session may return: the artifact
+    /// must belong to the planned clip, to the session's own architecture, and carry valid
+    /// decoded media.
+    /// </summary>
+    private static void ValidateOutput(
+        DecodedClipArtifact output,
         IVideoGenerationSession session,
         ArchitectureClipRuntimeContext context)
     {
-        DecodedClipArtifact output = session.Execute(context)
-            ?? throw new InvalidOperationException(
-                $"Architecture '{session.ArchitectureId}' returned no decoded clip artifact.");
         if (output.ClipId != context.Clip.ClipId)
         {
             throw new InvalidOperationException(
@@ -79,7 +86,6 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
                 + $"'{plannedArchitectureId}' for clip '{context.Clip.ClipId}'.");
         }
         output.ValidateDecoded();
-        return output;
     }
 
     public void Dispose()

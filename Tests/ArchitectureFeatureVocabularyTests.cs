@@ -35,7 +35,7 @@ public class ArchitectureFeatureVocabularyTests
                 .Select(entry => entry.Stage)
                 .OrderBy(value => value));
         Assert.Equal(
-            Enum.GetValues<UnsupportedAuthoringFeature>().OrderBy(value => value),
+            Enum.GetValues<AuthoringFeature>().OrderBy(value => value),
             ArchitectureFeatureVocabulary.AuthoringFeatures
                 .Select(entry => entry.Feature)
                 .OrderBy(value => value));
@@ -127,13 +127,13 @@ public class ArchitectureFeatureVocabularyTests
 
         Assert.False(ArchitectureFeatureVocabulary.Supports(
             clipOnly,
-            UnsupportedAuthoringFeature.FrameReferences));
+            AuthoringFeature.FrameReferences));
         Assert.False(ArchitectureFeatureVocabulary.Supports(
             stageOnly,
-            UnsupportedAuthoringFeature.FrameReferences));
+            AuthoringFeature.FrameReferences));
         Assert.True(ArchitectureFeatureVocabulary.Supports(
             complete,
-            UnsupportedAuthoringFeature.FrameReferences));
+            AuthoringFeature.FrameReferences));
     }
 
     [Fact]
@@ -154,13 +154,13 @@ public class ArchitectureFeatureVocabularyTests
 
         Assert.True(ArchitectureFeatureVocabulary.Supports(
             pixelOnly,
-            UnsupportedAuthoringFeature.Upscale));
+            AuthoringFeature.Upscale));
         Assert.True(ArchitectureFeatureVocabulary.Supports(
             latentOnly,
-            UnsupportedAuthoringFeature.Upscale));
+            AuthoringFeature.Upscale));
         Assert.False(ArchitectureFeatureVocabulary.Supports(
             none,
-            UnsupportedAuthoringFeature.Upscale));
+            AuthoringFeature.Upscale));
     }
 
     [Fact]
@@ -169,22 +169,22 @@ public class ArchitectureFeatureVocabularyTests
         Assert.True(
             ArchitectureFeatureVocabulary.AuthoringFeatures
                 .Single(entry =>
-                    entry.Feature == UnsupportedAuthoringFeature.FrameReferences)
+                    entry.Feature == AuthoringFeature.FrameReferences)
                 .RequiresEveryCapability);
         Assert.False(
             ArchitectureFeatureVocabulary.AuthoringFeatures
-                .Single(entry => entry.Feature == UnsupportedAuthoringFeature.Upscale)
+                .Single(entry => entry.Feature == AuthoringFeature.Upscale)
                 .RequiresEveryCapability);
     }
 
     [Fact]
     public void Structural_features_are_never_silently_ignored()
     {
-        UnsupportedAuthoringFeature[] structural =
+        AuthoringFeature[] structural =
         [
-            UnsupportedAuthoringFeature.MultiStage,
-            UnsupportedAuthoringFeature.SourceVideo,
-            UnsupportedAuthoringFeature.MajorPrompt,
+            AuthoringFeature.MultiStage,
+            AuthoringFeature.SourceVideo,
+            AuthoringFeature.MajorPrompt,
         ];
 
         Assert.All(

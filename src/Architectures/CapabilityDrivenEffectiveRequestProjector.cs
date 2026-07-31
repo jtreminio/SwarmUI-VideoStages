@@ -23,10 +23,8 @@ internal static class CapabilityDrivenEffectiveRequestProjector
         ArgumentNullException.ThrowIfNull(descriptor);
         ArchitectureCapabilityDescriptor capabilities = descriptor.Capabilities;
         IReadOnlyList<AudioSourceKind> audioSourceKinds = descriptor.AudioSourceKinds;
-        HashSet<UnsupportedAuthoringFeature> ignored =
-            ArchitectureFeatureVocabulary
-                .IgnoredWhenUnsupported(capabilities)
-                .ToHashSet();
+        IReadOnlySet<AuthoringFeature> ignored =
+            ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(capabilities);
 
         List<EffectiveRequestDecision> decisions = [];
         StageSpec[] stages = (authored.Stages ?? []).ToArray();
@@ -34,7 +32,7 @@ internal static class CapabilityDrivenEffectiveRequestProjector
 
         void Ignore(
             bool configured,
-            UnsupportedAuthoringFeature feature,
+            AuthoringFeature feature,
             string description,
             int? stageId = null,
             int? rawStageIndex = null)
@@ -54,12 +52,12 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                 rawStageIndex));
         }
 
-        if (ignored.Contains(UnsupportedAuthoringFeature.FrameReferences))
+        if (ignored.Contains(AuthoringFeature.FrameReferences))
         {
             Ignore(
                 effective.ImageRefs is { Count: > 0 }
                     || stages.Any(stage => stage.ImageRefStrengths is { Count: > 0 }),
-                UnsupportedAuthoringFeature.FrameReferences,
+                AuthoringFeature.FrameReferences,
                 "image/frame references");
             effective = effective with { ImageRefs = [] };
             stages = stages
@@ -67,36 +65,36 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                 .ToArray();
         }
 
-        if (ignored.Contains(UnsupportedAuthoringFeature.PromptRelay))
+        if (ignored.Contains(AuthoringFeature.PromptRelay))
         {
             Ignore(
                 effective.PromptWindows is { Count: > 0 },
-                UnsupportedAuthoringFeature.PromptRelay,
+                AuthoringFeature.PromptRelay,
                 "prompt relay windows");
             effective = effective with { PromptWindows = [] };
         }
 
-        if (ignored.Contains(UnsupportedAuthoringFeature.Retake))
+        if (ignored.Contains(AuthoringFeature.Retake))
         {
             Ignore(
                 stages.Any(stage => stage.RetakeWindow is not null),
-                UnsupportedAuthoringFeature.Retake,
+                AuthoringFeature.Retake,
                 "a retake window");
             stages = stages
                 .Select(stage => stage with { RetakeWindow = null })
                 .ToArray();
         }
 
-        if (ignored.Contains(UnsupportedAuthoringFeature.ReferenceFraming))
+        if (ignored.Contains(AuthoringFeature.ReferenceFraming))
         {
             Ignore(
                 effective.ReferenceFraming != ReferenceFramingMode.Crop,
-                UnsupportedAuthoringFeature.ReferenceFraming,
+                AuthoringFeature.ReferenceFraming,
                 "non-default reference framing");
             effective = effective with { ReferenceFraming = ReferenceFramingMode.Crop };
         }
 
-        if (ignored.Contains(UnsupportedAuthoringFeature.StageLoras))
+        if (ignored.Contains(AuthoringFeature.StageLoras))
         {
             bool configured = effective.Loras is { Count: > 0 }
                 || stages.Any(stage =>
@@ -104,7 +102,7 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                     || stage.LoraWeights is { Count: > 0 });
             Ignore(
                 configured,
-                UnsupportedAuthoringFeature.StageLoras,
+                AuthoringFeature.StageLoras,
                 "stage LoRAs");
             effective = effective with { Loras = [] };
             stages = stages
@@ -112,14 +110,14 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                 .ToArray();
         }
 
-        if (ignored.Contains(UnsupportedAuthoringFeature.IcLora))
+        if (ignored.Contains(AuthoringFeature.IcLora))
         {
             bool configured = effective.IcLoras is { Count: > 0 }
                 || stages.Any(stage =>
                     stage.IcLoraStrengths is { Count: > 0 });
             Ignore(
                 configured,
-                UnsupportedAuthoringFeature.IcLora,
+                AuthoringFeature.IcLora,
                 "IC-LoRA data");
             effective = effective with { IcLoras = [] };
             stages = stages
@@ -130,11 +128,11 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                 })
                 .ToArray();
         }
-        else if (ignored.Contains(UnsupportedAuthoringFeature.Hdr))
+        else if (ignored.Contains(AuthoringFeature.Hdr))
         {
             Ignore(
                 effective.IcLoras?.Any(entry => entry.Hdr) == true,
-                UnsupportedAuthoringFeature.Hdr,
+                AuthoringFeature.Hdr,
                 "HDR IC-LoRA behavior");
             effective = effective with
             {
@@ -144,7 +142,7 @@ internal static class CapabilityDrivenEffectiveRequestProjector
             };
         }
 
-        if (ignored.Contains(UnsupportedAuthoringFeature.ClipAudio))
+        if (ignored.Contains(AuthoringFeature.ClipAudio))
         {
             Ignore(
                 effective.UploadedAudio is not null
@@ -152,7 +150,7 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                         effective.AudioSource,
                         Constants.AudioSourceNative,
                         StringComparison.OrdinalIgnoreCase),
-                UnsupportedAuthoringFeature.ClipAudio,
+                AuthoringFeature.ClipAudio,
                 "a clip audio source");
             effective = effective with
             {
@@ -175,30 +173,30 @@ internal static class CapabilityDrivenEffectiveRequestProjector
             effective = effective with { SaveAudioTrack = false };
         }
 
-        if (ignored.Contains(UnsupportedAuthoringFeature.AudioDerivedDuration))
+        if (ignored.Contains(AuthoringFeature.AudioDerivedDuration))
         {
             Ignore(
                 effective.ClipLengthFromAudio,
-                UnsupportedAuthoringFeature.AudioDerivedDuration,
+                AuthoringFeature.AudioDerivedDuration,
                 "audio-derived clip duration");
             effective = effective with { ClipLengthFromAudio = false };
         }
 
         if (ignored.Contains(
-                UnsupportedAuthoringFeature.ControlSignalDerivedDuration))
+                AuthoringFeature.ControlSignalDerivedDuration))
         {
             Ignore(
                 effective.ClipLengthFromControlNet,
-                UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
+                AuthoringFeature.ControlSignalDerivedDuration,
                 "control-signal-derived clip duration");
             effective = effective with { ClipLengthFromControlNet = false };
         }
 
-        if (ignored.Contains(UnsupportedAuthoringFeature.AudioReuse))
+        if (ignored.Contains(AuthoringFeature.AudioReuse))
         {
             Ignore(
                 effective.ReuseAudio,
-                UnsupportedAuthoringFeature.AudioReuse,
+                AuthoringFeature.AudioReuse,
                 "captured stage audio reuse");
             effective = effective with { ReuseAudio = false };
         }
@@ -275,7 +273,7 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                 {
                     Ignore(
                         configured: true,
-                        UnsupportedAuthoringFeature.Upscale,
+                        AuthoringFeature.Upscale,
                         $"unsupported upscale method '{stage.UpscaleMethod}'",
                         stage.Id,
                         stage.ClipStageRawIndex);
@@ -294,7 +292,7 @@ internal static class CapabilityDrivenEffectiveRequestProjector
             decisions.AsReadOnly());
     }
 
-    private static string DiagnosticKey(UnsupportedAuthoringFeature feature)
+    private static string DiagnosticKey(AuthoringFeature feature)
     {
         string key = ArchitectureFeatureVocabulary.AuthoringKey(feature);
         StringBuilder result = new();

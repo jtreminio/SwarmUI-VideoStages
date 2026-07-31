@@ -683,18 +683,18 @@ public sealed class EffectiveVideoRequestTests
         ClipSpec effective = Assert.Single(request.Spec.Clips);
 
         Assert.True(
-            new HashSet<UnsupportedAuthoringFeature>
+            new HashSet<AuthoringFeature>
             {
-                UnsupportedAuthoringFeature.FrameReferences,
-                UnsupportedAuthoringFeature.ReferenceFraming,
-                UnsupportedAuthoringFeature.Retake,
-                UnsupportedAuthoringFeature.PromptRelay,
-                UnsupportedAuthoringFeature.ClipAudio,
-                UnsupportedAuthoringFeature.AudioReuse,
-                UnsupportedAuthoringFeature.AudioDerivedDuration,
-                UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
-                UnsupportedAuthoringFeature.IcLora,
-                UnsupportedAuthoringFeature.Hdr,
+                AuthoringFeature.FrameReferences,
+                AuthoringFeature.ReferenceFraming,
+                AuthoringFeature.Retake,
+                AuthoringFeature.PromptRelay,
+                AuthoringFeature.ClipAudio,
+                AuthoringFeature.AudioReuse,
+                AuthoringFeature.AudioDerivedDuration,
+                AuthoringFeature.ControlSignalDerivedDuration,
+                AuthoringFeature.IcLora,
+                AuthoringFeature.Hdr,
             }.SetEquals(
                 ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(
                     HostVideoArchitectureModule.Instance.Descriptor.Capabilities)));
@@ -739,17 +739,17 @@ public sealed class EffectiveVideoRequestTests
     public void Wan_absent_capabilities_derive_ignore_dispositions_without_frame_references()
     {
         Assert.True(
-            new HashSet<UnsupportedAuthoringFeature>
+            new HashSet<AuthoringFeature>
             {
-                UnsupportedAuthoringFeature.ReferenceFraming,
-                UnsupportedAuthoringFeature.Retake,
-                UnsupportedAuthoringFeature.PromptRelay,
-                UnsupportedAuthoringFeature.ClipAudio,
-                UnsupportedAuthoringFeature.AudioReuse,
-                UnsupportedAuthoringFeature.AudioDerivedDuration,
-                UnsupportedAuthoringFeature.ControlSignalDerivedDuration,
-                UnsupportedAuthoringFeature.IcLora,
-                UnsupportedAuthoringFeature.Hdr,
+                AuthoringFeature.ReferenceFraming,
+                AuthoringFeature.Retake,
+                AuthoringFeature.PromptRelay,
+                AuthoringFeature.ClipAudio,
+                AuthoringFeature.AudioReuse,
+                AuthoringFeature.AudioDerivedDuration,
+                AuthoringFeature.ControlSignalDerivedDuration,
+                AuthoringFeature.IcLora,
+                AuthoringFeature.Hdr,
             }.SetEquals(
                 ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(
                     WanArchitectureModule.Instance.Descriptor.Capabilities)));

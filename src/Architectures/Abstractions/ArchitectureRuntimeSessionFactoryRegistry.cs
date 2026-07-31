@@ -84,8 +84,9 @@ internal sealed class ArchitectureRuntimeSessionFactoryRegistry
     internal IReadOnlyDictionary<ArchitectureId, IArchitectureBoundaryAssembler>
         BoundaryAssemblers =>
         _activeFactories
-            .Where(factory => factory.BoundaryAssembler is not null)
-            .ToDictionary(factory => factory.ArchitectureId, factory => factory.BoundaryAssembler);
+            .Select(factory => (factory.ArchitectureId, factory.BoundaryAssembler))
+            .Where(pair => pair.BoundaryAssembler is not null)
+            .ToDictionary(pair => pair.ArchitectureId, pair => pair.BoundaryAssembler);
 
     private void RequirePlan(VideoExecutionPlan plan)
     {
