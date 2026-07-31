@@ -76,6 +76,8 @@ public class DecisionOwnerRegressionTests
         Assert.Equal(config.TemporalSize, tiled.TemporalSize.LiteralAsInt());
         Assert.Equal(config.Overlap, tiled.Overlap.LiteralAsInt());
         Assert.Equal(config.TemporalOverlap, tiled.TemporalOverlap.LiteralAsInt());
+        Assert.Equal(vaeId, tiled.Vae.Connection?.Node.Id);
+        Assert.Equal(latentId, tiled.Samples.Connection?.Node.Id);
     }
 
     // ---- 4c: one owner for the node-helper cache -------------------------------------------

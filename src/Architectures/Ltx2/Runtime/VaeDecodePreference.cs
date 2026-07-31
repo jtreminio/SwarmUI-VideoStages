@@ -68,9 +68,14 @@ internal static class VaeDecodePreference
     private static WGNodeData DecodeImageOrVideoLatents(WorkflowGenerator g, WGNodeData media, WGNodeData vae)
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        INodeOutput targetVae = bridge.ResolvePath(vae.Path);
+        INodeOutput latent = bridge.ResolvePath(media.Path);
+        if (targetVae is null || latent is null)
+        {
+            return media;
+        }
         if (bridge.NodeAt(media.Path) is IVaeEncode encode
             && encode.Vae.Connection is INodeOutput encodeVae
-            && bridge.ResolvePath(vae.Path) is INodeOutput targetVae
             && encodeVae.Node.Id == targetVae.Node.Id
             && encode.Pixels.Connection is INodeOutput pixels)
         {
@@ -80,36 +85,14 @@ internal static class VaeDecodePreference
             return media.WithPath(NodeRef.Of(pixels).ToJArray(), rawDataType);
         }
 
-        string decodedId = AddVaeDecode(g, vae.Path, media.Path, LtxDecodeConfig.From(g));
+        ComfyNode decode = LtxPostChainRebuilder.AddDecode(
+            bridge,
+            targetVae,
+            latent,
+            LtxDecodeConfig.From(g));
         string decodedDataType = media.DataType == WGNodeData.DT_LATENT_VIDEO
             ? WGNodeData.DT_VIDEO
             : WGNodeData.DT_IMAGE;
-        return media.WithPath(new JArray(decodedId, 0), decodedDataType, vae.Compat);
-    }
-
-    /// <summary>Tiling geometry comes from <see cref="LtxDecodeConfig"/> so this path and the
-    /// spliced post-chain rebuild always agree.</summary>
-    private static string AddVaeDecode(
-        WorkflowGenerator g,
-        JArray vaePath,
-        JArray latentPath,
-        LtxDecodeConfig config)
-    {
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        if (!config.UseTiledDecode)
-        {
-            VAEDecodeNode plain = bridge.AddNode(new VAEDecodeNode());
-            plain.Vae.ConnectFromPath(bridge, vaePath);
-            plain.Samples.ConnectFromPath(bridge, latentPath);
-            return plain.Id;
-        }
-        VAEDecodeTiledNode decode = bridge.AddNode(new VAEDecodeTiledNode().With(
-            TileSize: config.TileSize,
-            Overlap: config.Overlap,
-            TemporalSize: config.TemporalSize,
-            TemporalOverlap: config.TemporalOverlap));
-        decode.Vae.ConnectFromPath(bridge, vaePath);
-        decode.Samples.ConnectFromPath(bridge, latentPath);
-        return decode.Id;
+        return media.WithPath(decode.Outputs[0], decodedDataType, vae.Compat);
     }
 }
