@@ -12,6 +12,7 @@ import {
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
 import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
+import { defaultIcLora } from "./architectures/ltx2/icLoraNormalization";
 import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import {
@@ -149,6 +150,12 @@ describe("versioned authoring document identity", () => {
                         },
                     ],
                     refs: [{ id: "duplicate", source: "Base", frame: 1 }],
+                    icLoras: [
+                        defaultIcLora({
+                            id: "duplicate",
+                            lora: "guide.safetensors",
+                        }),
+                    ],
                     retake: null,
                 },
             ],
@@ -166,17 +173,20 @@ describe("versioned authoring document identity", () => {
                 id: string;
                 stages: { id: string }[];
                 refs: { id: string }[];
+                icLoras: { id: string }[];
             }[];
         };
         const storedIds = [
             stored.clips[0].id,
             stored.clips[0].stages[0].id,
             stored.clips[0].refs[0].id,
+            stored.clips[0].icLoras[0].id,
         ];
         expect(storedIds).toEqual([
             repaired.clips[0].id,
             repaired.clips[0].stages[0].id,
             repaired.clips[0].refs[0].id,
+            repaired.clips[0].icLoras[0].id,
         ]);
         expect(storedIds.every((id) => id.trim() === id)).toBe(true);
         expect(new Set(storedIds).size).toBe(storedIds.length);
@@ -190,6 +200,12 @@ describe("versioned authoring document identity", () => {
                     id: duplicate,
                     stages: [minimalStage({ id: duplicate })],
                     refs: [minimalRef({ id: duplicate })],
+                    icLoras: [
+                        defaultIcLora({
+                            id: duplicate,
+                            lora: "guide.safetensors",
+                        }),
+                    ],
                     promptWindows: [
                         {
                             id: duplicate,
@@ -230,7 +246,7 @@ describe("versioned authoring document identity", () => {
 
         ensureAuthoringDocumentIdentity(state);
         const ids = collectAuthoringEntityIds(state);
-        expect(ids).toHaveLength(7);
+        expect(ids).toHaveLength(8);
         expect(new Set(ids).size).toBe(ids.length);
         expect(state.clips[0].id).toBe(duplicate);
         expect(state.schemaVersion).toBe(CURRENT_AUTHORING_SCHEMA_VERSION);

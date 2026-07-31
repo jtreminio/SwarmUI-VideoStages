@@ -7,6 +7,7 @@ import {
     mountVideoFps,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
+import { defaultIcLora } from "./architectures/ltx2/icLoraNormalization";
 import {
     __resetPersistenceForTests,
     getClips,
@@ -39,6 +40,11 @@ const mountDocument = (): void => {
                 refs: [
                     minimalRef({ id: "ref-b0", frame: 0 }),
                     minimalRef({ id: "ref-b1", frame: 5 }),
+                ],
+                icLoras: [
+                    defaultIcLora({ id: "ic-a", lora: "A" }),
+                    defaultIcLora({ id: "ic-b", lora: "B" }),
+                    defaultIcLora({ id: "ic-c", lora: "C" }),
                 ],
             }),
         ],
@@ -99,6 +105,52 @@ describe("identity-anchored selection", () => {
                 selection.windowIdx
             ].id,
         ).toBe(windowId);
+    });
+
+    it("keeps an IC-LoRA selection on the same entry after an earlier entry is removed", () => {
+        setSelection({ kind: "ic-lora", clipIdx: 1, entryIdx: 2 });
+
+        const clips = getClips();
+        clips[1].icLoras.splice(0, 1);
+        saveClips(clips, { notifyDomChange: false });
+
+        const selection = getSelection();
+        expect(selection).toEqual({
+            kind: "ic-lora",
+            clipIdx: 1,
+            entryIdx: 1,
+        });
+        if (selection.kind !== "ic-lora") {
+            throw new Error("expected an IC-LoRA selection");
+        }
+        expect(
+            getState().clips[selection.clipIdx].icLoras[selection.entryIdx].id,
+        ).toBe("ic-c");
+    });
+
+    it("degrades a removed IC-LoRA selection to its nearest sibling, then its clip", () => {
+        setSelection({ kind: "ic-lora", clipIdx: 1, entryIdx: 1 });
+
+        const clips = getClips();
+        clips[1].icLoras.splice(1, 1);
+        saveClips(clips, { notifyDomChange: false });
+
+        expect(getSelection()).toEqual({
+            kind: "ic-lora",
+            clipIdx: 1,
+            entryIdx: 1,
+        });
+        expect(getState().clips[1].icLoras[1].id).toBe("ic-c");
+
+        const remaining = getClips();
+        remaining[1].icLoras.splice(0);
+        saveClips(remaining, { notifyDomChange: false });
+
+        expect(getSelection()).toEqual({
+            kind: "clip",
+            clipIdx: 1,
+            stageIdx: 0,
+        });
     });
 
     it("re-points a nested selection at the same entity across an undo/redo cycle", () => {

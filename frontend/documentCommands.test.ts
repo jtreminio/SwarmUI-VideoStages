@@ -361,6 +361,7 @@ describe("reduceDocumentCommand", () => {
         source.clips[1].stages = [stage("stage-b0")];
         source.clips[1].icLoras = [
             {
+                id: "ic-guide",
                 lora: "guide.safetensors",
                 preset: "custom",
                 driveSource: "Incoming",
@@ -786,6 +787,7 @@ describe("reduceDocumentCommand", () => {
         };
         targetClip.icLoras = [
             {
+                id: "ic-hdr",
                 lora: "hdr.safetensors",
                 preset: "hdr",
                 driveSource: "Upload",
@@ -944,6 +946,7 @@ describe("reduceDocumentCommand", () => {
         const targetClip = source.clips[1];
         targetClip.icLoras = [
             {
+                id: "ic-guide",
                 lora: "guide.safetensors",
                 preset: "custom",
                 driveSource: "Incoming",
@@ -1737,6 +1740,7 @@ describe("reduceDocumentCommand", () => {
         });
         targetClip.icLoras = [
             {
+                id: "ic-guide",
                 lora: "guide.safetensors",
                 preset: "custom",
                 driveSource: "Incoming",

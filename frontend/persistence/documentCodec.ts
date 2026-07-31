@@ -94,6 +94,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 name: entry.name,
             })),
             icLoras: clip.icLoras.map((entry) => ({
+                id: entry.id,
                 lora: entry.lora,
                 preset: entry.preset,
                 driveSource: entry.driveSource,

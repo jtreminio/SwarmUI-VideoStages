@@ -1,4 +1,10 @@
-import type { CanonicalRetake, Clip, RefImage, Stage } from "./types";
+import type {
+    CanonicalIcLora,
+    CanonicalRetake,
+    Clip,
+    RefImage,
+    Stage,
+} from "./types";
 
 /**
  * Canonical lists of the fields each stored type persists. Exhaustiveness
@@ -98,9 +104,13 @@ export type StoredStage = RequireEntityId<
 export type StoredClip = RequireEntityId<
     Pick<
         Clip,
-        Exclude<(typeof STORED_CLIP_KEYS)[number], "retake" | "refs" | "stages">
+        Exclude<
+            (typeof STORED_CLIP_KEYS)[number],
+            "icLoras" | "retake" | "refs" | "stages"
+        >
     >
 > & {
+    icLoras: CanonicalIcLora[];
     retake: CanonicalRetake | null;
     refs: StoredRefImage[];
     stages: StoredStage[];

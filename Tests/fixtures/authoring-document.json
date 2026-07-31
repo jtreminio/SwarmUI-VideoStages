@@ -22,6 +22,7 @@
             ],
             "icLoras": [
                 {
+                    "id": "ic-lora-0",
                     "lora": "ic-lora-pose.safetensors",
                     "preset": "pose",
                     "driveSource": "Upload",

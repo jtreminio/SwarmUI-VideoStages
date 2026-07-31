@@ -76,6 +76,8 @@ const clipItemList = (
             return { list: clip.stages, index: selection.stageIdx };
         case "ref":
             return { list: clip.refs, index: selection.refIdx };
+        case "ic-lora":
+            return { list: clip.icLoras, index: selection.entryIdx };
         case "prompt-minor":
             return {
                 list: clip.promptWindows ?? [],
@@ -155,6 +157,8 @@ const withItemIndex = (
             return { kind: "clip", clipIdx, stageIdx: itemIdx };
         case "ref":
             return { kind: "ref", clipIdx, refIdx: itemIdx };
+        case "ic-lora":
+            return { kind: "ic-lora", clipIdx, entryIdx: itemIdx };
         case "prompt-minor":
             return { kind: "prompt-minor", clipIdx, windowIdx: itemIdx };
         default:
@@ -167,7 +171,7 @@ const itemFallback = (
     selection: TimelineSelection,
     clipIdx: number,
 ): TimelineSelection =>
-    selection.kind === "clip"
+    selection.kind === "clip" || selection.kind === "ic-lora"
         ? { kind: "clip", clipIdx, stageIdx: 0 }
         : { kind: "none" };
 

@@ -274,6 +274,7 @@ describe("persistence", () => {
                     loras: [{ name: "detail.safetensors" }],
                     icLoras: [
                         {
+                            id: "ic-guide",
                             lora: "ltx-ic-lora.safetensors",
                             preset: "custom",
                             driveSource: "ControlNet 2",
@@ -316,6 +317,7 @@ describe("persistence", () => {
                     loras: [{ name: "detail.safetensors" }],
                     icLoras: [
                         {
+                            id: "ic-guide",
                             lora: "ltx-ic-lora.safetensors",
                             preset: "custom",
                             driveSource: "ControlNet 2",

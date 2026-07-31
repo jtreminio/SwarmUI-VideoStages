@@ -674,6 +674,7 @@ describe("diffDocuments", () => {
         };
         targetClip.icLoras = [
             {
+                id: "ic-guide",
                 lora: "guide.safetensors",
                 preset: "custom",
                 driveSource: "Incoming",
@@ -867,6 +868,7 @@ describe("diffDocuments", () => {
             mutate: (after: CanonicalVideoStagesConfig) => {
                 after.clips[0].icLoras = [
                     {
+                        id: "ic-guide",
                         lora: "guide",
                         preset: "custom",
                         driveSource: "Upload",

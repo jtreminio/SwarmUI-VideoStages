@@ -178,6 +178,7 @@ export type ReferenceFraming = "crop" | "stretch" | "fit" | "fit-green";
  * (-1 = every stage).
  */
 export interface IcLora {
+    id?: string;
     lora: string;
     preset: string;
     driveSource: string;
@@ -279,6 +280,7 @@ type WithRequiredId<T extends { id?: string }> = Omit<T, "id"> & {
 };
 
 export type CanonicalStage = WithRequiredId<Stage>;
+export type CanonicalIcLora = WithRequiredId<IcLora>;
 export type CanonicalPromptWindow = WithRequiredId<PromptWindow>;
 export type CanonicalRetake = WithRequiredId<Retake>;
 export type CanonicalRefImage = WithRequiredId<RefImage>;
@@ -288,8 +290,9 @@ export type CanonicalAudioTrack = Omit<WithRequiredId<AudioTrack>, "spans"> & {
 };
 export type CanonicalClip = Omit<
     WithRequiredId<Clip>,
-    "promptWindows" | "retake" | "refs" | "stages"
+    "icLoras" | "promptWindows" | "retake" | "refs" | "stages"
 > & {
+    icLoras: CanonicalIcLora[];
     promptWindows: CanonicalPromptWindow[];
     retake: CanonicalRetake | null;
     refs: CanonicalRefImage[];

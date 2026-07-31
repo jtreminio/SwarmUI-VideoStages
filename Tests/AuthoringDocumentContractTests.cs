@@ -21,9 +21,10 @@ public class AuthoringDocumentContractTests
     /// <summary>Keys the frontend emits that the backend deliberately never reads.</summary>
     private static readonly HashSet<string> UnreadByBackend =
     [
-        // Browser-side entity identity; only clip and audio-track ids cross to the backend.
+        // Browser-side entity identity; the backend uses only clip and audio-track ids.
         "clips[].stages[].id",
         "clips[].refs[].id",
+        "clips[].icLoras[].id",
         "clips[].retake.id",
         "clips[].sourceVideo.id",
         // Opaque JSON round-tripped for its owning frontend architecture; nothing parses it yet.

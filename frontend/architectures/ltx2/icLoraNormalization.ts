@@ -12,7 +12,10 @@ import {
     IC_LORA_STRENGTH_STEP,
 } from "../../icLoraAuthoring";
 import { normalizeUploadedMedia } from "../../normalizationMedia";
-import { snapValueToStep } from "../../normalizationShared";
+import {
+    normalizeOptionalEntityId,
+    snapValueToStep,
+} from "../../normalizationShared";
 import type {
     IcLora,
     IcLoraControlType,
@@ -195,6 +198,7 @@ export const normalizeIcLora = (
         driveSource = IC_LORA_SOURCE_UPLOAD;
     }
     return {
+        id: normalizeOptionalEntityId(raw.id),
         lora,
         preset: normalizedPreset,
         driveSource,

@@ -453,6 +453,15 @@ describe("normalization", () => {
         ).toBeNull();
     });
 
+    it("preserves a normalized IC-LoRA identity", () => {
+        expect(
+            normalizeIcLora({
+                id: "  ic-guide  ",
+                lora: "guide.safetensors",
+            })?.id,
+        ).toBe("ic-guide");
+    });
+
     it("repairs legacy Custom + [AUTO] entries to the stable default preset", () => {
         expect(
             normalizeIcLora({

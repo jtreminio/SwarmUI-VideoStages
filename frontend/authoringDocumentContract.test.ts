@@ -70,6 +70,7 @@ const contractState = (): VideoStagesConfig => ({
             loras: [{ name: "style.safetensors" }],
             icLoras: [
                 {
+                    id: "ic-lora-0",
                     lora: "ic-lora-pose.safetensors",
                     preset: "pose",
                     driveSource: "Upload",

@@ -2118,6 +2118,7 @@
       driveSource = IC_LORA_SOURCE_UPLOAD;
     }
     return {
+      id: normalizeOptionalEntityId(raw.id),
       lora,
       preset: normalizedPreset,
       driveSource,
@@ -3874,6 +3875,13 @@
           repairPath: `${clipIndex}_${refIndex}`
         });
       }
+      for (let icLoraIndex = 0; icLoraIndex < clip.icLoras.length; icLoraIndex++) {
+        entries.push({
+          entity: clip.icLoras[icLoraIndex],
+          kind: "ic_lora",
+          repairPath: `${clipIndex}_${icLoraIndex}`
+        });
+      }
       for (let windowIndex = 0; windowIndex < clip.promptWindows.length; windowIndex++) {
         entries.push({
           entity: clip.promptWindows[windowIndex],
@@ -3944,6 +3952,9 @@
       if (clip.id) ids.push(clip.id);
       for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
       for (const ref of clip.refs) if (ref.id) ids.push(ref.id);
+      for (const icLora of clip.icLoras) {
+        if (icLora.id) ids.push(icLora.id);
+      }
       for (const window2 of clip.promptWindows) {
         if (window2.id) ids.push(window2.id);
       }
@@ -5339,6 +5350,7 @@
           name: entry.name
         })),
         icLoras: clip.icLoras.map((entry) => ({
+          id: entry.id,
           lora: entry.lora,
           preset: entry.preset,
           driveSource: entry.driveSource,
@@ -6803,6 +6815,8 @@
         return { list: clip.stages, index: selection.stageIdx };
       case "ref":
         return { list: clip.refs, index: selection.refIdx };
+      case "ic-lora":
+        return { list: clip.icLoras, index: selection.entryIdx };
       case "prompt-minor":
         return {
           list: clip.promptWindows ?? [],
@@ -6859,13 +6873,15 @@
         return { kind: "clip", clipIdx, stageIdx: itemIdx };
       case "ref":
         return { kind: "ref", clipIdx, refIdx: itemIdx };
+      case "ic-lora":
+        return { kind: "ic-lora", clipIdx, entryIdx: itemIdx };
       case "prompt-minor":
         return { kind: "prompt-minor", clipIdx, windowIdx: itemIdx };
       default:
         return withClipIndex(selection, clipIdx);
     }
   };
-  var itemFallback = (selection, clipIdx) => selection.kind === "clip" ? { kind: "clip", clipIdx, stageIdx: 0 } : { kind: "none" };
+  var itemFallback = (selection, clipIdx) => selection.kind === "clip" || selection.kind === "ic-lora" ? { kind: "clip", clipIdx, stageIdx: 0 } : { kind: "none" };
   var resolveSelection = (anchor2, stateOverride) => {
     const selection = anchor2.selection;
     if (anchor2.ownerId === void 0 && anchor2.itemId === void 0) {
