@@ -452,8 +452,6 @@ internal sealed class StockHostVideoGenerationSessionFactory(
 
     public ArchitectureId ArchitectureId => architectureId;
 
-    public IArchitectureBoundaryAssembler BoundaryAssembler => null;
-
     public void PrepareTimeline(ArchitectureTimelinePreparationContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -482,10 +480,5 @@ internal sealed class StockHostVideoGenerationSessionFactory(
             ArchitectureId,
             architectureLabel,
             wanBehaviorFactory?.Invoke(context.Plan));
-    }
-
-    public void FinalizeTimeline(
-        ArchitectureTimelineFinalizationContext context)
-    {
     }
 }

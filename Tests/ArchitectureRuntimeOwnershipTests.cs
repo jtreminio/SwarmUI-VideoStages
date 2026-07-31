@@ -6,7 +6,6 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Execution;
 using VideoStages.Planning;
 using Xunit;
 
@@ -405,8 +404,6 @@ public class ArchitectureRuntimeOwnershipTests
     {
         public ArchitectureId ArchitectureId => architectureId;
 
-        public IArchitectureBoundaryAssembler BoundaryAssembler => null;
-
         internal List<bool> RootOwnership { get; } = [];
 
         public void PrepareTimeline(ArchitectureTimelinePreparationContext context)
@@ -418,10 +415,6 @@ public class ArchitectureRuntimeOwnershipTests
         public IVideoGenerationSession CreateSession(
             ArchitectureTimelineSessionContext context) =>
             throw new NotSupportedException();
-
-        public void FinalizeTimeline(ArchitectureTimelineFinalizationContext context)
-        {
-        }
     }
 
     private sealed class RecordingResizer : IArchitectureRootMediaResizer

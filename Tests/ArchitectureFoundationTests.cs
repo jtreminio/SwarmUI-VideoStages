@@ -2136,19 +2136,9 @@ public class ArchitectureFoundationTests
     {
         public ArchitectureId ArchitectureId => architectureId;
 
-        public IArchitectureBoundaryAssembler BoundaryAssembler => null;
-
-        public void PrepareTimeline(ArchitectureTimelinePreparationContext context)
-        {
-        }
-
         public IVideoGenerationSession CreateSession(
             ArchitectureTimelineSessionContext context) =>
             new RecordingSession(architectureId, calls, contexts);
-
-        public void FinalizeTimeline(ArchitectureTimelineFinalizationContext context)
-        {
-        }
     }
 
     private sealed class RecordingSessionFactoryProvider(
@@ -2169,17 +2159,11 @@ public class ArchitectureFoundationTests
     {
         public ArchitectureId ArchitectureId => architectureId;
 
-        public IArchitectureBoundaryAssembler BoundaryAssembler => null;
-
         public ArchitectureTimelineFinalizerScope FinalizerScope =>
             ArchitectureTimelineFinalizerScope.WholeTimelineExclusive;
 
         public bool HasFinalizationWork(
             ArchitectureTimelineFinalizationContext context) => true;
-
-        public void PrepareTimeline(ArchitectureTimelinePreparationContext context)
-        {
-        }
 
         public IVideoGenerationSession CreateSession(
             ArchitectureTimelineSessionContext context) =>

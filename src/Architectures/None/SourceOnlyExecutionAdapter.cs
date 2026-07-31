@@ -20,19 +20,9 @@ internal sealed class SourceOnlyGenerationSessionFactory(
 {
     public ArchitectureId ArchitectureId => NoneArchitecture.Id;
 
-    public IArchitectureBoundaryAssembler BoundaryAssembler => null;
-
-    public void PrepareTimeline(ArchitectureTimelinePreparationContext context)
-    {
-    }
-
     public IVideoGenerationSession CreateSession(ArchitectureTimelineSessionContext context) =>
         new SourceOnlyGenerationSession(
             generator,
             context.Plan.FramesPerSecond,
             context.AudioSources);
-
-    public void FinalizeTimeline(ArchitectureTimelineFinalizationContext context)
-    {
-    }
 }

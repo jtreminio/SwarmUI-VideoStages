@@ -144,18 +144,22 @@ internal interface IArchitectureGenerationSessionFactory
 {
     ArchitectureId ArchitectureId { get; }
 
-    IArchitectureBoundaryAssembler BoundaryAssembler { get; }
+    IArchitectureBoundaryAssembler BoundaryAssembler => null;
 
     ArchitectureTimelineFinalizerScope FinalizerScope =>
         ArchitectureTimelineFinalizerScope.None;
 
     bool HasFinalizationWork(ArchitectureTimelineFinalizationContext context) => false;
 
-    void PrepareTimeline(ArchitectureTimelinePreparationContext context);
+    void PrepareTimeline(ArchitectureTimelinePreparationContext context)
+    {
+    }
 
     IVideoGenerationSession CreateSession(ArchitectureTimelineSessionContext context);
 
-    void FinalizeTimeline(ArchitectureTimelineFinalizationContext context);
+    void FinalizeTimeline(ArchitectureTimelineFinalizationContext context)
+    {
+    }
 }
 
 /// <summary>
