@@ -792,6 +792,63 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
+    public void Stage_running_architecture_must_advertise_major_prompt_support()
+    {
+        // Stage execution resolves the host's authored prompt, so an architecture that runs
+        // stages without publishing prompt support is rejected instead of silently consuming it.
+        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
+            stage: StageCapability.ImageInput | StageCapability.VideoInput) with
+        {
+            Capabilities = FakeCapabilityDescriptor().Capabilities with
+            {
+                Clip = ClipCapability.References,
+            },
+        };
+        StageSpec stage = Stage(10, "fake-model");
+        ClipSpec clip = GeneratedClip(0, stage);
+        Dictionary<int, ResolvedVideoModel> stageModels = new()
+        {
+            [stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
+                stage.Model,
+                new ModelProfileId("fake-profile"),
+                descriptor),
+        };
+
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                clip,
+                descriptor,
+                ArchitectureEntryMode.ImageToVideo,
+                stageModels);
+
+        Assert.Contains(
+            diagnostics,
+            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
+                && diagnostic.Message.Contains("major prompt"));
+    }
+
+    [Fact]
+    public void Sourced_only_architecture_needs_no_major_prompt_support()
+    {
+        // The sourced-only architecture publishes no prompt capability and runs no stage, so the
+        // prompt gate must not fire for it.
+        VideoArchitectureDescriptor descriptor = NoneArchitecture.Descriptor;
+        ClipSpec clip = SourcedClip(0);
+
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                clip,
+                descriptor,
+                ArchitectureEntryMode.SourceVideo,
+                new Dictionary<int, ResolvedVideoModel>());
+
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
+                && diagnostic.Message.Contains("major prompt"));
+    }
+
+    [Fact]
     public void Common_projection_requires_both_frame_reference_capabilities()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(

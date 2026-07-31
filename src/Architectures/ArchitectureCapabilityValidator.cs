@@ -78,6 +78,14 @@ internal static class ArchitectureCapabilityValidator
             clip.SourceVideo is not null,
             Has(capabilities.Clip, ClipCapability.SourceVideo),
             "source video");
+        // Every stage runner resolves the host's authored prompt for the clip and stage it is
+        // executing, so running a stage is what consumes the major prompt. An architecture that
+        // executes stages must therefore advertise prompt support; a sourced-only clip runs no
+        // stage and consumes no prompt.
+        Require(
+            hasActiveStages,
+            Has(capabilities.Clip, ClipCapability.Prompts),
+            "major prompt");
         Require(
             hasActiveStages && clip.PromptWindows is { Count: > 0 },
             Has(capabilities.Clip, ClipCapability.PromptRelay),
