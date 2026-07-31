@@ -2078,7 +2078,7 @@
   var requestGeneration = 0;
   var activeRequest = null;
   var pendingRefresh = null;
-  var onRequestStarted = null;
+  var subscribers = /* @__PURE__ */ new Set();
   var cloneCatalog = (catalog) => structuredClone(catalog);
   var errorMessage = (error) => error instanceof Error ? error.message : `${error}`;
   var getArchitectureCatalogSnapshot = () => ({
@@ -2086,8 +2086,16 @@
     catalog: authoritativeCatalog ? cloneCatalog(authoritativeCatalog) : null,
     error: snapshotError
   });
-  var setArchitectureCatalogRequestListener = (listener) => {
-    onRequestStarted = listener;
+  var notifySubscribers = () => {
+    for (const subscriber of subscribers) {
+      subscriber(getArchitectureCatalogSnapshot());
+    }
+  };
+  var subscribeArchitectureCatalog = (subscriber) => {
+    subscribers.add(subscriber);
+    return () => {
+      subscribers.delete(subscriber);
+    };
   };
   var requestAuthoritativeCatalog = () => {
     if (activeRequest) {
@@ -2112,6 +2120,7 @@
       authoritativeCatalog = parsed;
       snapshotStatus = "ready";
       snapshotError = null;
+      notifySubscribers();
       return cloneCatalog(parsed);
     }).catch((error) => {
       if (!owned()) {
@@ -2119,6 +2128,7 @@
       }
       snapshotStatus = authoritativeCatalog ? "stale" : "unavailable";
       snapshotError = errorMessage(error);
+      notifySubscribers();
       console.warn(
         "VideoStages: authoritative architecture catalog unavailable",
         error
@@ -2130,7 +2140,7 @@
       }
     });
     activeRequest = request;
-    onRequestStarted?.();
+    notifySubscribers();
     return request;
   };
   var loadAuthoritativeArchitectureCatalog = () => {
@@ -5397,7 +5407,7 @@
     let syncedToken = null;
     let lastGoodSerialized = "";
     let documentRevision = 0;
-    const subscribers = /* @__PURE__ */ new Set();
+    const subscribers2 = /* @__PURE__ */ new Set();
     const parseCurrent = () => {
       const serialized = deps.readDataParam() || lastGoodSerialized;
       if (!serialized) {
@@ -5435,7 +5445,7 @@
         return;
       }
       const snapshot = structuredClone(state);
-      for (const cb of [...subscribers]) {
+      for (const cb of [...subscribers2]) {
         try {
           cb(snapshot, meta);
         } catch (error) {
@@ -5544,9 +5554,9 @@
       dispatch,
       syncFromCarrier,
       subscribe: (cb) => {
-        subscribers.add(cb);
+        subscribers2.add(cb);
         return () => {
-          subscribers.delete(cb);
+          subscribers2.delete(cb);
         };
       },
       invalidate: () => {
@@ -5558,7 +5568,7 @@
         syncedToken = null;
         lastGoodSerialized = "";
         documentRevision = 0;
-        subscribers.clear();
+        subscribers2.clear();
       }
     };
   };
@@ -16203,6 +16213,7 @@ The conversion is one undoable change.`;
   var videoStagesTimeline = () => {
     let storeUnsub = null;
     let selectionUnsub = null;
+    let catalogUnsub = null;
     const timelineBody = () => document.getElementById(TIMELINE_BODY_ID);
     const scrollEl = () => timelineBody()?.querySelector(".vst-scroll") ?? null;
     const capabilities = () => captureAuthoringTransactionSnapshot().capabilities;
@@ -16230,8 +16241,6 @@ The conversion is one undoable change.`;
     const boundaryTrack = createTimelineBoundaryTrack();
     const referencesTrack = createTimelineReferencesTrack(capabilities);
     let addClipInFlight = false;
-    const catalogAdoptions = /* @__PURE__ */ new WeakMap();
-    let disposed = false;
     let historyNeedsRebase = true;
     const hasAuthoritativeCatalog = () => getArchitectureCatalogSnapshot().catalog !== null;
     const openSettings = () => {
@@ -16448,28 +16457,10 @@ The conversion is one undoable change.`;
         return Promise.resolve();
       }
       const request = forceRefresh ? refreshAuthoritativeArchitectureCatalog() : loadAuthoritativeArchitectureCatalog();
-      const existingAdoption = catalogAdoptions.get(request);
-      if (existingAdoption) {
-        return existingAdoption;
-      }
-      const adoption = request.then((catalog) => {
-        if (disposed) {
-          return;
-        }
-        if (catalog) {
-          getTimelineStore().invalidate();
-          historyNeedsRebase = true;
-          rebaseHistoryIfReady();
-        }
-        renderAll();
-      }).finally(() => {
-        catalogAdoptions.delete(request);
+      return request.then(() => {
       });
-      catalogAdoptions.set(request, adoption);
-      return adoption;
     };
     const init = () => {
-      disposed = false;
       historyNeedsRebase = true;
       viewport.load();
       injectTimelineTab();
@@ -16503,16 +16494,20 @@ The conversion is one undoable change.`;
       });
       rebaseHistoryIfReady();
       hostLifecycle.bind();
-      setArchitectureCatalogRequestListener(() => {
-        if (!disposed) {
-          renderAll();
+      catalogUnsub?.();
+      catalogUnsub = subscribeArchitectureCatalog((snapshot) => {
+        if (snapshot.status === "ready" && snapshot.catalog) {
+          getTimelineStore().invalidate();
+          historyNeedsRebase = true;
+          rebaseHistoryIfReady();
         }
+        renderAll();
       });
       void adoptArchitectureCatalog();
     };
     const dispose = () => {
-      disposed = true;
-      setArchitectureCatalogRequestListener(null);
+      catalogUnsub?.();
+      catalogUnsub = null;
       hostLifecycle.dispose();
       retakeTrack.dispose();
       audioSegmentTrack.dispose();

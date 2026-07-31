@@ -18,7 +18,7 @@ let requestGeneration = 0;
 let activeRequest: CatalogRequest | null = null;
 /** The single request coalescing every forced refresh raised during `activeRequest`. */
 let pendingRefresh: CatalogRequest | null = null;
-let onRequestStarted: (() => void) | null = null;
+const subscribers = new Set<(snapshot: ArchitectureCatalogSnapshot) => void>();
 
 const cloneCatalog = (
     catalog: VideoArchitectureCatalogDto,
@@ -36,15 +36,20 @@ export const getArchitectureCatalogSnapshot =
         error: snapshotError,
     });
 
-/**
- * Notified the moment a request starts and moves the snapshot to
- * `loading`/`refreshing`, including a queued refresh starting later. Views paint
- * the transition they are showing instead of guessing when one will happen.
- */
-export const setArchitectureCatalogRequestListener = (
-    listener: (() => void) | null,
-): void => {
-    onRequestStarted = listener;
+const notifySubscribers = (): void => {
+    for (const subscriber of subscribers) {
+        subscriber(getArchitectureCatalogSnapshot());
+    }
+};
+
+/** Observes every catalog state transition, including request start and settle. */
+export const subscribeArchitectureCatalog = (
+    subscriber: (snapshot: ArchitectureCatalogSnapshot) => void,
+): (() => void) => {
+    subscribers.add(subscriber);
+    return () => {
+        subscribers.delete(subscriber);
+    };
 };
 
 const requestAuthoritativeCatalog = (): CatalogRequest => {
@@ -74,6 +79,7 @@ const requestAuthoritativeCatalog = (): CatalogRequest => {
             authoritativeCatalog = parsed;
             snapshotStatus = "ready";
             snapshotError = null;
+            notifySubscribers();
             return cloneCatalog(parsed);
         })
         .catch((error: unknown) => {
@@ -82,6 +88,7 @@ const requestAuthoritativeCatalog = (): CatalogRequest => {
             }
             snapshotStatus = authoritativeCatalog ? "stale" : "unavailable";
             snapshotError = errorMessage(error);
+            notifySubscribers();
             console.warn(
                 "VideoStages: authoritative architecture catalog unavailable",
                 error,
@@ -94,7 +101,7 @@ const requestAuthoritativeCatalog = (): CatalogRequest => {
             }
         });
     activeRequest = request;
-    onRequestStarted?.();
+    notifySubscribers();
     return request;
 };
 
@@ -149,7 +156,7 @@ export const resetArchitectureCatalogForTests = (): void => {
     authoritativeCatalog = null;
     snapshotStatus = "loading";
     snapshotError = null;
-    onRequestStarted = null;
+    subscribers.clear();
 };
 
 export const buildArchitectureModelCatalog = (

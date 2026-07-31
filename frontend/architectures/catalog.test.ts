@@ -15,6 +15,7 @@ import {
     loadAuthoritativeArchitectureCatalog,
     parseVideoArchitectureCatalog,
     refreshAuthoritativeArchitectureCatalog,
+    subscribeArchitectureCatalog,
 } from "./catalog";
 import { evaluateConditionalRule } from "./conditionalRules";
 import { createCapabilityViewResolver } from "./policy";
@@ -388,6 +389,28 @@ describe("architecture catalog wire contract", () => {
 });
 
 describe("authoritative catalog repository", () => {
+    it("notifies subscribers for request and settled state transitions", async () => {
+        const response = deferred<unknown>();
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: () => response.promise,
+        });
+        const statuses: string[] = [];
+        const unsubscribe = subscribeArchitectureCatalog((snapshot) => {
+            statuses.push(snapshot.status);
+        });
+
+        const request = loadAuthoritativeArchitectureCatalog();
+        expect(statuses).toEqual(["loading"]);
+        response.resolve(dto);
+        await request;
+        expect(statuses).toEqual(["loading", "ready"]);
+
+        unsubscribe();
+        await refreshAuthoritativeArchitectureCatalog();
+        expect(statuses).toEqual(["loading", "ready"]);
+    });
+
     it("moves loading to unavailable, then retry to ready without inferred identity", async () => {
         const first = deferred<unknown>();
         const second = deferred<unknown>();

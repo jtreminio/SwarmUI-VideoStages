@@ -7,7 +7,7 @@ import {
     getArchitectureCatalogSnapshot,
     loadAuthoritativeArchitectureCatalog,
     refreshAuthoritativeArchitectureCatalog,
-    setArchitectureCatalogRequestListener,
+    subscribeArchitectureCatalog,
 } from "./architectures/catalog";
 import { deriveAuthoringDiagnostics } from "./authoringDiagnostics";
 import { captureAuthoringTransactionSnapshot } from "./authoringSnapshot";
@@ -62,6 +62,7 @@ export interface VideoStagesTimeline {
 export const videoStagesTimeline = (): VideoStagesTimeline => {
     let storeUnsub: (() => void) | null = null;
     let selectionUnsub: (() => void) | null = null;
+    let catalogUnsub: (() => void) | null = null;
     const timelineBody = (): HTMLElement | null =>
         document.getElementById(TIMELINE_BODY_ID);
     const scrollEl = (): HTMLElement | null =>
@@ -92,8 +93,6 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const boundaryTrack = createTimelineBoundaryTrack();
     const referencesTrack = createTimelineReferencesTrack(capabilities);
     let addClipInFlight = false;
-    const catalogAdoptions = new WeakMap<Promise<unknown>, Promise<void>>();
-    let disposed = false;
     let historyNeedsRebase = true;
     const hasAuthoritativeCatalog = (): boolean =>
         getArchitectureCatalogSnapshot().catalog !== null;
@@ -358,33 +357,12 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         const request = forceRefresh
             ? refreshAuthoritativeArchitectureCatalog()
             : loadAuthoritativeArchitectureCatalog();
-        const existingAdoption = catalogAdoptions.get(request);
-        if (existingAdoption) {
-            return existingAdoption;
-        }
-        // The loading/refreshing paint belongs to the request-started listener,
-        // which also fires for a refresh that only starts once this one settles.
-        const adoption = request
-            .then((catalog) => {
-                if (disposed) {
-                    return;
-                }
-                if (catalog) {
-                    getTimelineStore().invalidate();
-                    historyNeedsRebase = true;
-                    rebaseHistoryIfReady();
-                }
-                renderAll();
-            })
-            .finally(() => {
-                catalogAdoptions.delete(request);
-            });
-        catalogAdoptions.set(request, adoption);
-        return adoption;
+        // Repository subscribers own both request-start and settled paints.
+        // The returned promise only lets lifecycle callers await completion.
+        return request.then(() => {});
     };
 
     const init = (): void => {
-        disposed = false;
         historyNeedsRebase = true;
         viewport.load();
         injectTimelineTab();
@@ -433,17 +411,21 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         });
         rebaseHistoryIfReady();
         hostLifecycle.bind();
-        setArchitectureCatalogRequestListener(() => {
-            if (!disposed) {
-                renderAll();
+        catalogUnsub?.();
+        catalogUnsub = subscribeArchitectureCatalog((snapshot) => {
+            if (snapshot.status === "ready" && snapshot.catalog) {
+                getTimelineStore().invalidate();
+                historyNeedsRebase = true;
+                rebaseHistoryIfReady();
             }
+            renderAll();
         });
         void adoptArchitectureCatalog();
     };
 
     const dispose = (): void => {
-        disposed = true;
-        setArchitectureCatalogRequestListener(null);
+        catalogUnsub?.();
+        catalogUnsub = null;
         hostLifecycle.dispose();
         retakeTrack.dispose();
         audioSegmentTrack.dispose();
