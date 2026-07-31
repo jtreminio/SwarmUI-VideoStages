@@ -37,10 +37,10 @@ internal static class Ltx2ConditionalRulePolicySource
         RuleDecision.Conditional(
             ArchitectureFeatureVocabulary.RuleCode(
                 ConditionalRuleCodeId.RetakeRequiresSource),
-            "Retake requires a sourced clip or a global Refine Video source.",
+            "Retake requires a sourced clip.",
             RuleScope.Clip,
             new RequiredEntryModesRuleConstraints(
-                [ArchitectureEntryMode.SourceVideo, ArchitectureEntryMode.RefineVideo]));
+                [ArchitectureEntryMode.SourceVideo]));
 
     /// <summary>
     /// Every threshold below is read back out of the published rule, so the catalog value and the

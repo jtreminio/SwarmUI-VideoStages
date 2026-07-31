@@ -74,8 +74,7 @@ internal sealed class RootRuntimeSession
                 "VideoStages: the completed timeline did not produce a publishable video artifact.");
         }
 
-        bool rootIsDisplaced = _rootPlan.Use is RootUse.Discard
-            or RootUse.GlobalRefineReplacement;
+        bool rootIsDisplaced = _rootPlan.Use is RootUse.Discard;
         OutputPublisher publisher = new(
             _generator,
             _outputs,

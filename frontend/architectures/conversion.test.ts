@@ -104,14 +104,6 @@ describe("architecture conversion policy", () => {
                 "text-to-video",
             ),
         ).toBe(true);
-        expect(
-            modelSupportsStageEntry(
-                { entryModes: ["refine-video"] },
-                source,
-                0,
-                "text-to-video",
-            ),
-        ).toBe(true);
         const guidedText = minimalClip({ refs: [minimalRef({ frame: 1 })] });
         expect(
             modelSupportsStageEntry(

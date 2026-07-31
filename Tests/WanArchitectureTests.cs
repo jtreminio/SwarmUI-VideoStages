@@ -261,7 +261,6 @@ public class WanArchitectureTests
             ArchitectureCapability.SourcedEntry));
         Assert.True(descriptor.Capabilities.Clip.HasFlag(ClipCapability.SourceVideo));
         Assert.Contains(ArchitectureEntryMode.SourceVideo, descriptor.EntryModes);
-        Assert.DoesNotContain(ArchitectureEntryMode.RefineVideo, descriptor.EntryModes);
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.ImageInput));
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.VideoInput));
         Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.PixelUpscale));

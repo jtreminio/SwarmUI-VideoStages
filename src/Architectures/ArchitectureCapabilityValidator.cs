@@ -64,8 +64,7 @@ internal static class ArchitectureCapabilityValidator
             "image stage input");
         Require(
             clip.Stages is { Count: > 0 }
-                && entryMode is ArchitectureEntryMode.SourceVideo
-                    or ArchitectureEntryMode.RefineVideo,
+                && entryMode == ArchitectureEntryMode.SourceVideo,
             Has(capabilities.Stage, StageCapability.VideoInput),
             "video stage input");
         Require(

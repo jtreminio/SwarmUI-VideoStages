@@ -31,8 +31,8 @@ it supports:
 - host image or user init image to video;
 - source video followed by zero, one, or several generation stages;
 - source-video-only clips; and
-- the separate global Refine Video action, which may also skip the first N
-  authored stages.
+- the Refine Video media button, which authors an existing video onto clip 0 as
+  its source and passes through the stages that already produced it.
 
 Single-clip/multi-clip and single-stage/multi-stage combinations use the same
 coordinator. Options decorate a clip or stage; they do not create parallel
@@ -64,8 +64,7 @@ state transitions, object lifetimes, stage loops, and failure behavior.
 ### Document carrier
 
 The authoring document rides one hidden `Video Stages` string param, gated by a
-hidden `Video Stages Enabled` toggle, alongside a global `Video Stages Refine
-Source Video` image and a `Video Stages Refine Skip Stages` count. Per-clip and
+hidden `Video Stages Enabled` toggle. Per-clip and
 per-stage prompt overrides ride in the prompt itself as
 `<videoclip[clip,stage]>` sections through a registered `PromptRegion` custom
 prefix. Saved metadata
@@ -187,8 +186,8 @@ clip whose selected SwarmUI path supports a final image. The compiled plan
 assigns it structurally to the last non-passthrough stage; earlier generating
 stages receive no end-frame and a trailing passthrough does not take ownership.
 Other request shapes warn and continue without the last image. VACE, transition
-expansion, arbitrary middle-frame references, audio, and refine-source remain
-outside the WAN contract.
+expansion, arbitrary middle-frame references, and audio remain outside the WAN
+contract.
 
 ## Capability catalog
 
@@ -230,8 +229,7 @@ crossfade budgeting, IC-LoRA presets, and the IC-LoRA drive contract.
 Capabilities say what is allowed; these are what they mean.
 
 - Retake regenerates only a frame window of the base video. It requires a
-  sourced clip or a global Refine Video source and is mutually exclusive with
-  frame references.
+  sourced clip and is mutually exclusive with frame references.
 - Prompt relay tiles a window list across the clip and requires a fixed frame
   count, so it cannot combine with audio-owned or ControlNet-owned length.
 - Upscale has four modes selected by the authored method-name prefix: `pixel-`,
@@ -346,9 +344,8 @@ is nothing clip-scoped to validate.
 - Every clip returns a decoded video artifact with positive literal metadata.
 - Multi-clip assembly receives exactly one valid artifact per planned clip.
 - Source installation, execution, assembly, and publication fail closed. A
-  plan committed to refine semantics without its source, a trim that cannot be
-  applied, and an upload blob the sanitizer cannot strip are all errors, not
-  warnings.
+  trim that cannot be applied and an upload blob the sanitizer cannot strip are
+  errors, not warnings.
 - At most one architecture owns the host root.
 - `OutputPublisher` is the only writer of the captured host save set. Nothing
   else may re-target it.

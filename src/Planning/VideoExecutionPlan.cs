@@ -40,7 +40,6 @@ internal enum HostRootKind
 {
     ImageToVideo,
     TextToVideoRoot,
-    GlobalRefineSource,
 }
 
 /// <summary>Who consumes the host root media, independently from what happens to host core nodes.</summary>
@@ -49,7 +48,6 @@ internal enum RootUse
     None,
     ClipZeroSeed,
     GeneratedClipDonor,
-    GlobalRefineReplacement,
     Discard,
 }
 
@@ -71,7 +69,6 @@ internal enum NativeAudioDisposition
 {
     KeepHostAudio,
     MakeAvailableToTimeline,
-    UseGlobalRefineAudio,
     DiscardWithRoot,
 }
 
@@ -81,8 +78,7 @@ internal enum NativeAudioDisposition
 /// </summary>
 internal sealed record RootEnvironment(
     HostRootKind HostKind,
-    bool CanHandoffHostCore = false,
-    bool HasGlobalRefineSource = false)
+    bool CanHandoffHostCore = false)
 {
     public static RootEnvironment FromSpec(VideoStagesSpec spec) => new(
         spec.IsTextToVideo ? HostRootKind.TextToVideoRoot : HostRootKind.ImageToVideo);

@@ -146,39 +146,6 @@ public class BackendConsolidationTests
     // --- 5b: fail closed where the docs promise it -------------------------------------------
 
     [Fact]
-    public void Refine_source_install_fails_closed_against_a_plan_committed_to_refine()
-    {
-        RootPlan refinePlan = new(
-            HostRootKind.GlobalRefineSource,
-            RootUse.GlobalRefineReplacement,
-            HostCoreDisposition.Drop,
-            TimelineOutputDisposition.PublishTimelineOutput,
-            NativeAudioDisposition.UseGlobalRefineAudio);
-
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => RefineSourceInstallPolicy.RequiresInstall(refinePlan, hasVideoRefineSource: false));
-
-        Assert.Contains("global refine", error.Message);
-        Assert.True(RefineSourceInstallPolicy.RequiresInstall(refinePlan, hasVideoRefineSource: true));
-    }
-
-    [Fact]
-    public void Refine_source_install_is_skipped_when_the_plan_never_committed_to_refine()
-    {
-        RootPlan normalPlan = new(
-            HostRootKind.ImageToVideo,
-            RootUse.ClipZeroSeed,
-            HostCoreDisposition.Handoff,
-            TimelineOutputDisposition.PublishTimelineOutput,
-            NativeAudioDisposition.MakeAvailableToTimeline);
-
-        Assert.False(
-            RefineSourceInstallPolicy.RequiresInstall(normalPlan, hasVideoRefineSource: false));
-        Assert.False(
-            RefineSourceInstallPolicy.RequiresInstall(normalPlan, hasVideoRefineSource: true));
-    }
-
-    [Fact]
     public void Global_frame_trim_fails_closed_instead_of_dropping_a_requested_trim()
     {
         using SwarmUiTestContext _ = new();
@@ -334,7 +301,7 @@ public class BackendConsolidationTests
                 .Require<MinimumActiveStagesRuleConstraints>().MinimumActiveStages,
             Ltx2ConditionalRulePolicySource.AudioReuseMinimumActiveStages);
         Assert.Equal(
-            [ArchitectureEntryMode.SourceVideo, ArchitectureEntryMode.RefineVideo],
+            [ArchitectureEntryMode.SourceVideo],
             Ltx2ConditionalRulePolicySource.RetakeEntryModes);
     }
 

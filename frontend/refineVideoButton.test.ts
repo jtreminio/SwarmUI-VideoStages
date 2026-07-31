@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 import { minimalClip, minimalStage } from "./__test_helpers__/clipFixtures";
 import {
+    applyRefineToClipZero,
     countActiveStagesInMetadataClip0,
     hasRefinementWorkToDo,
 } from "./refineVideoButton";
@@ -161,5 +162,61 @@ describe("countActiveStagesInMetadataClip0", () => {
             clips: [{ stages: [{}, {}, {}] }],
         });
         expect(countActiveStagesInMetadataClip0(json)).toBe(3);
+    });
+});
+
+describe("applyRefineToClipZero", () => {
+    it("installs the probed video as the clip source", () => {
+        const clip = minimalClip({ stages: [minimalStage(), minimalStage()] });
+        applyRefineToClipZero(
+            clip,
+            "data:video/mp4;base64,AA==",
+            { durationSeconds: 3.5, fps: 24 },
+            1,
+        );
+        expect(clip.sourceVideo).toEqual({
+            data: "data:video/mp4;base64,AA==",
+            fileName: "refine-source",
+            fps: 24,
+            durationSeconds: 3.5,
+            startSeconds: 0,
+            lengthSeconds: 3.5,
+        });
+    });
+
+    it("falls back to the authored clip duration when the probe reports none", () => {
+        const clip = minimalClip({ duration: 7, stages: [minimalStage()] });
+        applyRefineToClipZero(clip, "data:video/mp4;base64,AA==", null, 1);
+        expect(clip.sourceVideo?.lengthSeconds).toBe(7);
+    });
+
+    it("passes through exactly the already-generated stage prefix", () => {
+        const clip = minimalClip({
+            stages: [minimalStage(), minimalStage(), minimalStage()],
+        });
+        applyRefineToClipZero(
+            clip,
+            "data:video/mp4;base64,AA==",
+            { durationSeconds: 2, fps: 24 },
+            2,
+        );
+        expect(clip.stages.map((stage) => stage.control)).toEqual([0, 0, 1]);
+    });
+
+    it("stops at the first skipped stage rather than counting past it", () => {
+        const clip = minimalClip({
+            stages: [
+                minimalStage(),
+                minimalStage({ skipped: true }),
+                minimalStage(),
+            ],
+        });
+        applyRefineToClipZero(
+            clip,
+            "data:video/mp4;base64,AA==",
+            { durationSeconds: 2, fps: 24 },
+            3,
+        );
+        expect(clip.stages.map((stage) => stage.control)).toEqual([0, 1, 1]);
     });
 });

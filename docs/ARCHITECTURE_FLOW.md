@@ -138,9 +138,8 @@ Sourced stage 0 uses its conformed source at finite control in `[0, 1]`; each
 later stage uses `PreviousStage` with the same bound. Exact control `0` is a
 samplerless decoded-video passthrough for those two decoded inputs, while
 positive partial control still must quantize to a nonzero start step.
-Refine-video and audio capabilities remain absent. A request-global refine
-source cannot coexist with a clip-local sourced WAN timeline. The same typed
-boundary/rule objects feed backend validation and frontend publication.
+Audio capabilities remain absent. The same typed boundary/rule objects feed
+backend validation and frontend publication.
 
 The generic descriptor supports source entry through the same neutral
 conformance path used by WAN. Model-level
@@ -584,8 +583,8 @@ weights remain round-trippable host parameter data but do not make a model-zero
 WAN row effectful. VideoStages does not claim to solve core's automatic
 5B-LoRA classifier TODO.
 
-VACE, transition expansion, arbitrary middle-frame references, audio, and
-refine-source remain outside the WAN contract. Ordinary WAN 2.1/2.2 video
+VACE, transition expansion, arbitrary middle-frame references, and audio remain
+outside the WAN contract. Ordinary WAN 2.1/2.2 video
 models are accepted from host facts and can use text, first-image, or source
 entry as request inputs. Legacy swap controls are warned and ignored; two noise
 models are two authored stages.

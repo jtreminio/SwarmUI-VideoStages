@@ -1,10 +1,17 @@
+import { reconcileClipArchitectureIdentity } from "./architectures/clipIdentity";
+import { captureAuthoringTransactionSnapshot } from "./authoringSnapshot";
 import { activeStageCount } from "./clipSemantics";
 import { getVideoStagesHostBridge } from "./host";
 import { readProp } from "./normalizationShared";
+import { serializeStateForStorage } from "./persistence/documentCodec";
 import { getState } from "./persistence/repository";
+import type { SourceVideoProbe } from "./sourceVideoProbe";
+import { probeSourceVideo, sourceVideoFromProbe } from "./sourceVideoProbe";
 import { isVideoStagesEnabled } from "./swarmInputs";
-import type { VideoStagesConfig } from "./types";
+import type { Clip, VideoStagesConfig } from "./types";
 import { isRecord, safeJsonParse } from "./utils";
+
+const REFINE_SOURCE_FILE_NAME = "refine-source";
 
 export const refineNeedsExtraStageMessage = (skipCount: number): string =>
     `Refine Video needs Clip 0 to have at least one active stage after Stage ${skipCount - 1} ` +
@@ -48,6 +55,35 @@ export const hasRefinementWorkToDo = (
         return false;
     }
     return activeStageCount(clip0) > skipCount;
+};
+
+/**
+ * Refine authoring is ordinary authoring: the picked video becomes Clip 0's source and the
+ * stages it already produced become passthroughs. Skipping them outright is not an option,
+ * because an authored skip truncates every later stage in the clip.
+ */
+export const applyRefineToClipZero = (
+    clip: Clip,
+    data: string,
+    probe: SourceVideoProbe | null,
+    skipCount: number,
+): void => {
+    clip.sourceVideo = sourceVideoFromProbe(
+        probe,
+        data,
+        REFINE_SOURCE_FILE_NAME,
+        clip.duration,
+    );
+    let activeIndex = 0;
+    for (const stage of clip.stages) {
+        if (stage.skipped) {
+            break;
+        }
+        if (activeIndex < skipCount) {
+            stage.control = 0;
+        }
+        activeIndex++;
+    }
 };
 
 export const refineVideoButton = (): void => {
@@ -98,9 +134,28 @@ export const refineVideoButton = (): void => {
                 }
 
                 const videoDataUrl = await host.toDataUrl(src);
+                const probe = await probeSourceVideo(videoDataUrl);
+                // Re-read after the awaits: probing is slow enough that the
+                // author can have edited the timeline while it ran.
+                const state = getState();
+                const clipZero = state.clips[0];
+                if (!clipZero) {
+                    host.showError(refineNeedsExtraStageMessage(skipCount));
+                    return;
+                }
+                // Only clip 0 is rewritten, so the untouched clips stay shared
+                // by reference rather than deep-copying their upload blobs.
+                const clips = [...state.clips];
+                clips[0] = structuredClone(clipZero);
+                applyRefineToClipZero(clips[0], videoDataUrl, probe, skipCount);
+                // Becoming sourced can change which architecture identity is
+                // valid, exactly as the detail-strip picker reconciles.
+                reconcileClipArchitectureIdentity(
+                    clips[0],
+                    captureAuthoringTransactionSnapshot().capabilities.catalog,
+                );
                 const inputOverrides: Record<string, unknown> = {
-                    videostagesrefinesourcevideo: videoDataUrl,
-                    videostagesrefineskipstages: skipCount,
+                    videostages: serializeStateForStorage({ ...state, clips }),
                     images: 1,
                 };
 

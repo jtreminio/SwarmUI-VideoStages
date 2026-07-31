@@ -1868,8 +1868,7 @@ public class ArchitectureFoundationTests
                         : VideoModelEntryAbility.None)
                     | (entryModes.Any(mode => mode is
                             ArchitectureEntryMode.ImageToVideo
-                            or ArchitectureEntryMode.SourceVideo
-                            or ArchitectureEntryMode.RefineVideo)
+                            or ArchitectureEntryMode.SourceVideo)
                         ? VideoModelEntryAbility.ImageToVideo
                         : VideoModelEntryAbility.None)));
         }

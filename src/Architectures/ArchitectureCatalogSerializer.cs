@@ -169,7 +169,6 @@ internal static class ArchitectureCatalogSerializer
         ArchitectureEntryMode.TextToVideo => "text-to-video",
         ArchitectureEntryMode.ImageToVideo => "image-to-video",
         ArchitectureEntryMode.SourceVideo => "source-video",
-        ArchitectureEntryMode.RefineVideo => "refine-video",
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
 

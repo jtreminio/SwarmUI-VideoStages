@@ -35,12 +35,7 @@ export const testArchitectureCapabilities = (
         "pixel-upscale",
     ],
     upscaleModes: ["pixel"],
-    entryModes: [
-        "text-to-video",
-        "image-to-video",
-        "source-video",
-        "refine-video",
-    ],
+    entryModes: ["text-to-video", "image-to-video", "source-video"],
     audioSourceKinds: ["Native", "Upload"],
     ...overrides,
 });
@@ -129,7 +124,7 @@ export const testArchitectureCatalog = (
                     reason: "Retake requires source footage.",
                     scope: "clip",
                     constraints: {
-                        requiresAnyEntryMode: ["source-video", "refine-video"],
+                        requiresAnyEntryMode: ["source-video"],
                     },
                 },
             ],
@@ -145,12 +140,7 @@ export const testArchitectureCatalog = (
             compatibilityClassId: "ltx-video",
             frameGrid: 8,
             enhancements: { referencePositions: ["any"] },
-            entryModes: [
-                "text-to-video",
-                "image-to-video",
-                "source-video",
-                "refine-video",
-            ],
+            entryModes: ["text-to-video", "image-to-video", "source-video"],
         },
         {
             value: "ltx",
@@ -161,12 +151,7 @@ export const testArchitectureCatalog = (
             compatibilityClassId: "ltx-video",
             frameGrid: 8,
             enhancements: { referencePositions: ["any"] },
-            entryModes: [
-                "text-to-video",
-                "image-to-video",
-                "source-video",
-                "refine-video",
-            ],
+            entryModes: ["text-to-video", "image-to-video", "source-video"],
         },
     ],
     ...overrides,
@@ -210,7 +195,6 @@ export const testArchitectureCatalogDto = (
                                         [
                                             "image-to-video",
                                             "source-video",
-                                            "refine-video",
                                         ].includes(mode),
                                     )
                                         ? ["image"]
@@ -313,12 +297,7 @@ export const fakeArchitectureCatalog = (
             modelClassId: "test-video",
             compatibilityClassId: "test-video",
             frameGrid: 1,
-            entryModes: [
-                "text-to-video",
-                "image-to-video",
-                "source-video",
-                "refine-video",
-            ],
+            entryModes: ["text-to-video", "image-to-video", "source-video"],
         },
     ],
 });

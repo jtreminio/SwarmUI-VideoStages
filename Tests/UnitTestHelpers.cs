@@ -119,18 +119,19 @@ internal static class UnitTestStubs
             ));
         }
 
-        if (ComfyUIBackendExtension.FinalUpscaleMethod is null)
+        // Core queries this param inline at the end of the last stage. Unregistered it
+        // dereferences null; registered-but-unset it simply reports "off".
+        if (ComfyUIBackendExtension.SeedVRModel is null)
         {
-            ComfyUIBackendExtension.FinalUpscaleMethod = T2IParamTypes.Register<string>(
-                new T2IParamType(
-                    Name: "Final Upscale Method (UnitTest Stub)",
-                    Description: "Stub final upscale method used by VideoStages unit tests.",
-                    Default: "pixel-lanczos",
-                    FeatureFlag: "comfyui",
-                    Group: T2IParamTypes.GroupRefiners,
-                    Toggleable: true,
-                    GetValues: (_) => ["pixel-lanczos", "model-unit-test-upscaler"]
-                ));
+            ComfyUIBackendExtension.SeedVRModel = T2IParamTypes.Register<T2IModel>(new T2IParamType(
+                Name: "SeedVR Model (UnitTest Stub)",
+                Description: "Stub SeedVR2 restoration model used by VideoStages unit tests.",
+                Default: "",
+                FeatureFlag: "seedvr2",
+                Subtype: "Stable-Diffusion",
+                Toggleable: true,
+                GetValues: (_) => []
+            ));
         }
     }
 

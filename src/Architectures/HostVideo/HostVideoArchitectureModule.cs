@@ -194,13 +194,6 @@ internal sealed class HostVideoArchitectureModule :
         ArgumentNullException.ThrowIfNull(context);
 
         List<PlanDiagnostic> diagnostics = [];
-        if (context.EntryMode == ArchitectureEntryMode.RefineVideo)
-        {
-            diagnostics.Add(Error(
-                clip,
-                "host-video.option.unsupported",
-                "Generic VideoStages does not support request-global refine-video entry."));
-        }
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
         // Model facts are registry-owned, clip compatibility is resolver-owned, and entry-role
         // admission is capability-validator-owned. This compiler consumes that vetted assignment;

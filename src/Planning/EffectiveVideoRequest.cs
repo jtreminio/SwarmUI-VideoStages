@@ -179,8 +179,7 @@ internal static class EffectiveVideoRequestProjector
             clip => clip.Authored.SourceVideo is null
                 && clip.Authored.Stages is { Count: > 0 });
         bool rootCanForceTextToVideoGeneration =
-            rootEnvironment.HostKind == HostRootKind.TextToVideoRoot
-            && !rootEnvironment.HasGlobalRefineSource;
+            rootEnvironment.HostKind == HostRootKind.TextToVideoRoot;
         foreach (ModuleProjectionBatch batch in BuildProjectionBatches(
             clips))
         {

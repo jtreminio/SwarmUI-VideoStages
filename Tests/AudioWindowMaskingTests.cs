@@ -47,7 +47,6 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         input.Set(T2IParamTypes.VideoFrames, 97);
-        EnableRefineMode(input);
 
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,

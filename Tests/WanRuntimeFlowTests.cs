@@ -3358,23 +3358,6 @@ public class WanRuntimeFlowTests
         AssertEndFrameWarningAndIgnored(input);
     }
 
-    [Fact]
-    public void Wan5b_native_text_with_global_refine_source_is_refused_as_refine_entry_before_mutation()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
-        T2IParamInput input = BuildTextToVideoInput(
-            models.VideoModel,
-            JsonSingleClipStages(
-                MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 10)));
-        input.Set(
-            VideoStagesExtension.RefineSourceVideo,
-            new Image([0x08, 0x09], MediaType.VideoMp4));
-        input.Set(VideoStagesExtension.RefineSkipStages, 0);
-
-        AssertPreflightRefusalBeforeMutation(input, "request-global refine-video entry");
-    }
-
     [Theory]
     [InlineData(1, null)]
     [InlineData(0.5, null)]
@@ -3499,20 +3482,6 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Refine_video_entry_is_refused_before_mutation_for_Wan()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        T2IParamInput input = WanInput(models, steps: 10);
-        input.Set(
-            VideoStagesExtension.RefineSourceVideo,
-            new Image([0x01, 0x02], MediaType.VideoMp4));
-        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x03], MediaType.ImagePng));
-
-        AssertPreflightRefusalBeforeMutation(input, "request-global refine-video entry");
-    }
-
-    [Fact]
     public void Wan14b_text_entry_warns_and_does_not_use_global_end_image()
     {
         using SwarmUiTestContext context = new();
@@ -3524,28 +3493,6 @@ public class WanRuntimeFlowTests
         input.Set(T2IParamTypes.VideoEndFrame, new Image([0x04], MediaType.ImagePng));
 
         AssertEndFrameWarningAndIgnored(input);
-    }
-
-    [Fact]
-    public void Global_refine_source_is_refused_before_mutation_for_clip_local_sourced_Wan()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            MakeDocument(MakeWanSourcedClip(
-                models.VideoModel.Name,
-                control: 1,
-                steps: 10)).ToString());
-        input.Set(
-            VideoStagesExtension.RefineSourceVideo,
-            new Image([0x01, 0x02], MediaType.VideoMp4));
-        input.Set(VideoStagesExtension.RefineSkipStages, 0);
-
-        AssertPreflightRefusalBeforeMutation(
-            input,
-            "cannot coexist with a clip-local sourced WAN timeline");
     }
 
     [Theory]

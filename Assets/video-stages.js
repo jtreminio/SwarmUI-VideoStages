@@ -335,135 +335,6 @@
     (boundary) => boundary.leftIdx === leftClipIdx
   ) ?? null;
 
-  // frontend/constants.ts
-  var REF_FRAME_MIN = 1;
-  var DEFAULT_CLIP_DURATION_SECONDS = 5;
-  var CLIP_DURATION_MIN = 1;
-  var CLIP_DURATION_MAX = 9999;
-  var PROMPT_WINDOW_MIN_DURATION = 0.25;
-  var PROMPT_WINDOW_DEFAULT_DURATION = 3;
-  var RETAKE_MIN_DURATION = 0.1;
-  var RETAKE_DEFAULT_DURATION = 3;
-  var RETAKE_DURATION_STEP = 0.1;
-  var RETAKE_STRENGTH_MIN = 0;
-  var RETAKE_STRENGTH_MAX = 1;
-  var RETAKE_STRENGTH_STEP = 0.05;
-  var RETAKE_STRENGTH_DEFAULT = 1;
-  var AUDIO_SEGMENT_MIN_LENGTH = 0.1;
-  var AUDIO_SEGMENT_DEFAULT_LENGTH = 2;
-  var AUDIO_SEGMENT_STEP = 0.1;
-  var AUDIO_SEGMENT_VOLUME_MIN = 1e-5;
-  var AUDIO_SEGMENT_VOLUME_MAX = 1e5;
-  var AUDIO_SEGMENT_VOLUME_SLIDER_MIN = 0.1;
-  var AUDIO_SEGMENT_VOLUME_SLIDER_MAX = 4;
-  var AUDIO_SEGMENT_VOLUME_SLIDER_STEP = 0.1;
-  var AUDIO_SEGMENT_VOLUME_DEFAULT = 1;
-  var ROOT_DIMENSION_MIN = 256;
-  var ROOT_DIMENSION_MAX = 4096;
-  var ROOT_DIMENSION_STEP = 32;
-  var ROOT_FPS_MIN = 1;
-  var ROOT_FPS_MAX = 120;
-  var STAGE_REF_STRENGTH_MIN = 0;
-  var STAGE_REF_STRENGTH_MAX = 1;
-  var STAGE_REF_STRENGTH_STEP = 0.1;
-  var STAGE_REF_STRENGTH_DEFAULT = 0.8;
-  var IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
-  var parseBase2EditStageIndex = (value) => {
-    const match = `${value || ""}`.trim().replace(/\s+/g, "").match(/^edit(\d+)$/i);
-    if (!match) {
-      return null;
-    }
-    return parseInt(match[1], 10);
-  };
-  var normalizeUploadFileName = (value) => {
-    const raw = `${value ?? ""}`.trim();
-    if (!raw) {
-      return null;
-    }
-    const slashIndex = Math.max(raw.lastIndexOf("/"), raw.lastIndexOf("\\"));
-    return slashIndex >= 0 ? raw.slice(slashIndex + 1) : raw;
-  };
-  var clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-  var mediaPreviewSrc = (value) => {
-    if (`${value ?? ""}`.startsWith("data:")) {
-      return value;
-    }
-    const prefix = getVideoStagesHostBridge().getMediaOutputPrefix();
-    return `${prefix}/${value}`;
-  };
-
-  // frontend/utils.ts
-  var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-  var toNumber = (value, fallback) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-  var roundToTenth = (seconds) => Math.round(seconds * 10) / 10;
-  var gridCeil = (seconds) => Math.ceil(seconds * 10) / 10;
-  var gridFloor = (seconds) => Math.floor(seconds * 10) / 10;
-  var safeJsonParse = (raw, fallback) => {
-    if (raw == null) {
-      return fallback;
-    }
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return fallback;
-    }
-  };
-
-  // frontend/normalizationShared.ts
-  var text = (value, fallback = "") => `${value ?? fallback}`;
-  var trimmedText = (value, fallback = "") => text(value, fallback).trim();
-  var textOr = (value, fallback) => text(value, fallback) || fallback;
-  var numberOr = (value, fallback) => toNumber(text(value, fallback), fallback);
-  var clampedNumber = (value, fallback, min, max) => clamp(numberOr(value, fallback), min, max);
-  var nonNegativeNumber = (value) => Math.max(0, numberOr(value, 0));
-  var optionalNonNegativeNumber = (value) => {
-    if (value == null || trimmedText(value) === "") {
-      return null;
-    }
-    const number = toNumber(text(value), Number.NaN);
-    return Number.isFinite(number) && number >= 0 ? number : null;
-  };
-  var optionalPositiveNumber = (value) => {
-    const number = optionalNonNegativeNumber(value);
-    return number !== null && number > 0 ? number : null;
-  };
-  var readProp = (raw, ...keys) => {
-    for (const key of keys) {
-      if (Object.hasOwn(raw, key)) {
-        return raw[key];
-      }
-    }
-    return void 0;
-  };
-  var normalizeOptionalEntityId = (value) => typeof value === "string" ? value.trim() || void 0 : void 0;
-  var snapToStep = (value, step) => step > 0 ? Math.round(value / step) * step : value;
-  var clampWindowInDuration = (startRaw, lengthRaw, clipDuration, minLength) => {
-    if (!(lengthRaw > 0)) {
-      return null;
-    }
-    const maxStart = Math.max(0, clipDuration - minLength);
-    const startSeconds = clamp(startRaw, 0, maxStart);
-    const lengthSeconds = clamp(
-      lengthRaw,
-      minLength,
-      Math.max(minLength, clipDuration - startSeconds)
-    );
-    if (!(lengthSeconds > 0)) {
-      return null;
-    }
-    return { startSeconds, lengthSeconds };
-  };
-  var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find(
-    (value) => value.trim().toLowerCase().startsWith("latentmodel-")
-  ) ?? upscaleMethodValues[0] ?? "";
-  var snapValueToStep = (value, fallback, min, max, step) => {
-    const unitScale = 1 / step;
-    return Math.round(clampedNumber(value, fallback, min, max) * unitScale) / unitScale;
-  };
-
   // frontend/architectures/catalogQueries.ts
   var architectureDescriptor = (catalog, architectureId) => (architectureId ? catalog?.architectures.find((entry) => entry.id === architectureId) : null) ?? null;
   var modelCatalogEntry = (catalog, model) => (model ? catalog?.entries.find((entry) => entry.value === model) : null) ?? null;
@@ -488,6 +359,86 @@
       ...entry.entryAbilities === void 0 ? {} : { entryAbilities: [...entry.entryAbilities] },
       entryModes: [...entry.entryModes]
     } : null;
+  };
+
+  // frontend/architectures/none/identity.ts
+  var NONE_ARCHITECTURE_ID = "none";
+
+  // frontend/architectures/clipIdentity.ts
+  var modelIdentityFromCatalog = (catalog, model) => {
+    if (!catalog) return null;
+    const entry = modelCatalogEntry(catalog, model);
+    if (!entry?.architectureId || !entry.modelProfileId || !entry.compatibilityClassId) {
+      return null;
+    }
+    return {
+      architectureId: entry.architectureId,
+      modelProfileId: entry.modelProfileId,
+      compatibilityClassId: entry.compatibilityClassId
+    };
+  };
+  var resolvedClipArchitectureId = (clip, catalog) => {
+    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
+      return NONE_ARCHITECTURE_ID;
+    }
+    const stageZeroModel = clip.stages[0]?.model;
+    return stageZeroModel ? modelIdentityFromCatalog(catalog, stageZeroModel)?.architectureId ?? null : null;
+  };
+  var deriveClipArchitectureIdentity = (clip, catalog) => {
+    if (!catalog) return null;
+    const identities = clip.stages.map((stage) => ({
+      stage,
+      identity: modelIdentityFromCatalog(catalog, stage.model)
+    }));
+    if (identities.some(({ identity }) => !identity)) {
+      return null;
+    }
+    const authored = identities[0]?.identity ?? null;
+    if (authored && identities.some(
+      ({ identity }) => identity?.architectureId !== authored.architectureId || identity.compatibilityClassId !== authored.compatibilityClassId
+    )) {
+      return null;
+    }
+    const authoredIdentity = {
+      authoredArchitectureId: authored?.architectureId ?? null,
+      authoredModelProfileId: authored?.modelProfileId ?? null
+    };
+    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
+      return {
+        architectureId: NONE_ARCHITECTURE_ID,
+        modelProfileId: NONE_ARCHITECTURE_ID,
+        ...authoredIdentity
+      };
+    }
+    if (authored) {
+      return {
+        architectureId: authored.architectureId,
+        modelProfileId: authored.modelProfileId,
+        ...authoredIdentity
+      };
+    }
+    if (clip.architectureHint === NONE_ARCHITECTURE_ID && clip.modelProfileId === NONE_ARCHITECTURE_ID) {
+      return {
+        architectureId: NONE_ARCHITECTURE_ID,
+        modelProfileId: NONE_ARCHITECTURE_ID,
+        ...authoredIdentity
+      };
+    }
+    const validEmptyIdentity = catalog.architectures.some(
+      (architecture) => architecture.id === clip.architectureHint
+    );
+    return validEmptyIdentity ? {
+      architectureId: clip.architectureHint,
+      modelProfileId: clip.modelProfileId,
+      ...authoredIdentity
+    } : null;
+  };
+  var reconcileClipArchitectureIdentity = (clip, catalog) => {
+    const identity = deriveClipArchitectureIdentity(clip, catalog);
+    if (!identity) return false;
+    clip.architectureHint = identity.architectureId;
+    clip.modelProfileId = identity.modelProfileId;
+    return true;
   };
 
   // frontend/architectures/generatedFeatures.ts
@@ -946,12 +897,11 @@
   var ENTRY_MODES = [
     "text-to-video",
     "image-to-video",
-    "source-video",
-    "refine-video"
+    "source-video"
   ];
   var ENTRY_ABILITIES = ["text", "image"];
   var REFERENCE_POSITIONS = ["first", "last", "any"];
-  var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var isTrimmedNonEmpty = (value) => typeof value === "string" && value.length > 0 && value === value.trim();
   var isUniqueStringArray = (value) => Array.isArray(value) && value.every((entry) => isTrimmedNonEmpty(entry)) && new Set(value).size === value.length;
   var isEntryModeArray = (value) => isUniqueStringArray(value) && value.every((entry) => ENTRY_MODES.includes(entry));
@@ -963,13 +913,13 @@
   );
   var hasExactKeys = (value, expected) => Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
   var isRuleDecision = (value, allowedScopes) => {
-    if (!isRecord2(value) || !hasExactKeys(value, [
+    if (!isRecord(value) || !hasExactKeys(value, [
       "support",
       "code",
       "reason",
       "scope",
       "constraints"
-    ]) || typeof value.support !== "string" || !["supported", "unsupported", "conditional"].includes(value.support) || !isTrimmedNonEmpty(value.code) || !isTrimmedNonEmpty(value.reason) || typeof value.scope !== "string" || !["clip", "stage", "boundary"].includes(value.scope) || value.constraints !== null && !isRecord2(value.constraints)) {
+    ]) || typeof value.support !== "string" || !["supported", "unsupported", "conditional"].includes(value.support) || !isTrimmedNonEmpty(value.code) || !isTrimmedNonEmpty(value.reason) || typeof value.scope !== "string" || !["clip", "stage", "boundary"].includes(value.scope) || value.constraints !== null && !isRecord(value.constraints)) {
       return false;
     }
     const scope = value.scope;
@@ -988,7 +938,7 @@
     if (value.code === CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength) {
       return value.scope === "clip" && value.constraints === null;
     }
-    if (!isRecord2(value.constraints)) {
+    if (!isRecord(value.constraints)) {
       return false;
     }
     const constraints = value.constraints;
@@ -1002,7 +952,7 @@
       case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
         return value.scope === "stage" && hasExactKeys(constraints, ["mutuallyExclusive"]) && isUniqueStringArray(constraints.mutuallyExclusive) && constraints.mutuallyExclusive.length === 2 && constraints.mutuallyExclusive.includes("retake") && constraints.mutuallyExclusive.includes("frameReferences");
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-        return value.scope === "clip" && hasExactKeys(constraints, ["requiresAnyEntryMode"]) && isEntryModeArray(constraints.requiresAnyEntryMode) && constraints.requiresAnyEntryMode.length === 2 && constraints.requiresAnyEntryMode.includes("source-video") && constraints.requiresAnyEntryMode.includes("refine-video");
+        return value.scope === "clip" && hasExactKeys(constraints, ["requiresAnyEntryMode"]) && isEntryModeArray(constraints.requiresAnyEntryMode) && constraints.requiresAnyEntryMode.length === 1 && constraints.requiresAnyEntryMode.includes("source-video");
     }
     return false;
   };
@@ -1013,7 +963,7 @@
     if (value.support !== "conditional") {
       return value.constraints === null;
     }
-    if (!isRecord2(value.constraints)) {
+    if (!isRecord(value.constraints)) {
       return false;
     }
     const constraints = value.constraints;
@@ -1048,7 +998,7 @@
     (rule) => isRuleDecision(rule, allowedScopes) && isKnownConditionalRuleCode(rule.code) && isKnownExecutableRule(rule)
   ) && new Set(value.map((rule) => rule.code)).size === value.length;
   var isCapabilities = (value) => {
-    if (!isRecord2(value) || !hasExactKeys(value, [
+    if (!isRecord(value) || !hasExactKeys(value, [
       "architecture",
       "clip",
       "stage",
@@ -1067,20 +1017,20 @@
     ].every(isUniqueStringArray) && isEntryModeArray(value.entryModes);
   };
   var hasCompleteBoundaryRules = (value) => {
-    if (!isRecord2(value)) {
+    if (!isRecord(value)) {
       return false;
     }
     const keys = Object.keys(value);
     return keys.length === BOUNDARY_MODES.length && BOUNDARY_MODES.every((mode) => isBoundaryRule(value[mode]));
   };
   var parseVideoArchitectureCatalog = (value) => {
-    if (!isRecord2(value) || !hasExactKeys(value, ["schemaVersion", "architectures", "models"]) || value.schemaVersion !== 2 || !Array.isArray(value.architectures) || !Array.isArray(value.models)) {
+    if (!isRecord(value) || !hasExactKeys(value, ["schemaVersion", "architectures", "models"]) || value.schemaVersion !== 2 || !Array.isArray(value.architectures) || !Array.isArray(value.models)) {
       return null;
     }
     const architectures = [];
     const architectureIds = /* @__PURE__ */ new Set();
     for (const raw of value.architectures) {
-      if (!isRecord2(raw) || !hasExactKeys(raw, [
+      if (!isRecord(raw) || !hasExactKeys(raw, [
         "id",
         "label",
         "capabilities",
@@ -1111,7 +1061,7 @@
     const modelNames = /* @__PURE__ */ new Set();
     const models = [];
     for (const raw of value.models) {
-      if (!isRecord2(raw) || !hasExactKeys(raw, [
+      if (!isRecord(raw) || !hasExactKeys(raw, [
         "modelName",
         "architectureId",
         "modelProfileId",
@@ -1121,7 +1071,7 @@
         "entryAbilities",
         "capabilities",
         "enhancements"
-      ]) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !isCapabilities(raw.capabilities) || !isEntryAbilityArray(raw.entryAbilities) || raw.entryAbilities.length === 0 || !isRecord2(raw.enhancements) || !hasExactKeys(raw.enhancements, ["referencePositions"]) || !isReferencePositionArray(raw.enhancements.referencePositions)) {
+      ]) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !isCapabilities(raw.capabilities) || !isEntryAbilityArray(raw.entryAbilities) || raw.entryAbilities.length === 0 || !isRecord(raw.enhancements) || !hasExactKeys(raw.enhancements, ["referencePositions"]) || !isReferencePositionArray(raw.enhancements.referencePositions)) {
         return null;
       }
       if (modelNames.has(raw.modelName)) {
@@ -1361,86 +1311,6 @@
       if (choices.length >= 100) break;
     }
     return choices;
-  };
-
-  // frontend/architectures/none/identity.ts
-  var NONE_ARCHITECTURE_ID = "none";
-
-  // frontend/architectures/clipIdentity.ts
-  var modelIdentityFromCatalog = (catalog, model) => {
-    if (!catalog) return null;
-    const entry = modelCatalogEntry(catalog, model);
-    if (!entry?.architectureId || !entry.modelProfileId || !entry.compatibilityClassId) {
-      return null;
-    }
-    return {
-      architectureId: entry.architectureId,
-      modelProfileId: entry.modelProfileId,
-      compatibilityClassId: entry.compatibilityClassId
-    };
-  };
-  var resolvedClipArchitectureId = (clip, catalog) => {
-    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
-      return NONE_ARCHITECTURE_ID;
-    }
-    const stageZeroModel = clip.stages[0]?.model;
-    return stageZeroModel ? modelIdentityFromCatalog(catalog, stageZeroModel)?.architectureId ?? null : null;
-  };
-  var deriveClipArchitectureIdentity = (clip, catalog) => {
-    if (!catalog) return null;
-    const identities = clip.stages.map((stage) => ({
-      stage,
-      identity: modelIdentityFromCatalog(catalog, stage.model)
-    }));
-    if (identities.some(({ identity }) => !identity)) {
-      return null;
-    }
-    const authored = identities[0]?.identity ?? null;
-    if (authored && identities.some(
-      ({ identity }) => identity?.architectureId !== authored.architectureId || identity.compatibilityClassId !== authored.compatibilityClassId
-    )) {
-      return null;
-    }
-    const authoredIdentity = {
-      authoredArchitectureId: authored?.architectureId ?? null,
-      authoredModelProfileId: authored?.modelProfileId ?? null
-    };
-    if (clip.sourceVideo !== null && activeStageCount(clip) === 0) {
-      return {
-        architectureId: NONE_ARCHITECTURE_ID,
-        modelProfileId: NONE_ARCHITECTURE_ID,
-        ...authoredIdentity
-      };
-    }
-    if (authored) {
-      return {
-        architectureId: authored.architectureId,
-        modelProfileId: authored.modelProfileId,
-        ...authoredIdentity
-      };
-    }
-    if (clip.architectureHint === NONE_ARCHITECTURE_ID && clip.modelProfileId === NONE_ARCHITECTURE_ID) {
-      return {
-        architectureId: NONE_ARCHITECTURE_ID,
-        modelProfileId: NONE_ARCHITECTURE_ID,
-        ...authoredIdentity
-      };
-    }
-    const validEmptyIdentity = catalog.architectures.some(
-      (architecture) => architecture.id === clip.architectureHint
-    );
-    return validEmptyIdentity ? {
-      architectureId: clip.architectureHint,
-      modelProfileId: clip.modelProfileId,
-      ...authoredIdentity
-    } : null;
-  };
-  var reconcileClipArchitectureIdentity = (clip, catalog) => {
-    const identity = deriveClipArchitectureIdentity(clip, catalog);
-    if (!identity) return false;
-    clip.architectureHint = identity.architectureId;
-    clip.modelProfileId = identity.modelProfileId;
-    return true;
   };
 
   // frontend/architectures/policy/boundaryPolicy.ts
@@ -1716,6 +1586,63 @@
       ...boundaries,
       executableClipIndexes
     };
+  };
+
+  // frontend/constants.ts
+  var REF_FRAME_MIN = 1;
+  var DEFAULT_CLIP_DURATION_SECONDS = 5;
+  var CLIP_DURATION_MIN = 1;
+  var CLIP_DURATION_MAX = 9999;
+  var PROMPT_WINDOW_MIN_DURATION = 0.25;
+  var PROMPT_WINDOW_DEFAULT_DURATION = 3;
+  var RETAKE_MIN_DURATION = 0.1;
+  var RETAKE_DEFAULT_DURATION = 3;
+  var RETAKE_DURATION_STEP = 0.1;
+  var RETAKE_STRENGTH_MIN = 0;
+  var RETAKE_STRENGTH_MAX = 1;
+  var RETAKE_STRENGTH_STEP = 0.05;
+  var RETAKE_STRENGTH_DEFAULT = 1;
+  var AUDIO_SEGMENT_MIN_LENGTH = 0.1;
+  var AUDIO_SEGMENT_DEFAULT_LENGTH = 2;
+  var AUDIO_SEGMENT_STEP = 0.1;
+  var AUDIO_SEGMENT_VOLUME_MIN = 1e-5;
+  var AUDIO_SEGMENT_VOLUME_MAX = 1e5;
+  var AUDIO_SEGMENT_VOLUME_SLIDER_MIN = 0.1;
+  var AUDIO_SEGMENT_VOLUME_SLIDER_MAX = 4;
+  var AUDIO_SEGMENT_VOLUME_SLIDER_STEP = 0.1;
+  var AUDIO_SEGMENT_VOLUME_DEFAULT = 1;
+  var ROOT_DIMENSION_MIN = 256;
+  var ROOT_DIMENSION_MAX = 4096;
+  var ROOT_DIMENSION_STEP = 32;
+  var ROOT_FPS_MIN = 1;
+  var ROOT_FPS_MAX = 120;
+  var STAGE_REF_STRENGTH_MIN = 0;
+  var STAGE_REF_STRENGTH_MAX = 1;
+  var STAGE_REF_STRENGTH_STEP = 0.1;
+  var STAGE_REF_STRENGTH_DEFAULT = 0.8;
+  var IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
+  var parseBase2EditStageIndex = (value) => {
+    const match = `${value || ""}`.trim().replace(/\s+/g, "").match(/^edit(\d+)$/i);
+    if (!match) {
+      return null;
+    }
+    return parseInt(match[1], 10);
+  };
+  var normalizeUploadFileName = (value) => {
+    const raw = `${value ?? ""}`.trim();
+    if (!raw) {
+      return null;
+    }
+    const slashIndex = Math.max(raw.lastIndexOf("/"), raw.lastIndexOf("\\"));
+    return slashIndex >= 0 ? raw.slice(slashIndex + 1) : raw;
+  };
+  var clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+  var mediaPreviewSrc = (value) => {
+    if (`${value ?? ""}`.startsWith("data:")) {
+      return value;
+    }
+    const prefix = getVideoStagesHostBridge().getMediaOutputPrefix();
+    return `${prefix}/${value}`;
   };
 
   // frontend/dimensionSnap.ts
@@ -2163,6 +2090,26 @@
     getVideoStagesHostBridge().notifyChanged(toggler);
   };
 
+  // frontend/utils.ts
+  var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var toNumber = (value, fallback) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  var roundToTenth = (seconds) => Math.round(seconds * 10) / 10;
+  var gridCeil = (seconds) => Math.ceil(seconds * 10) / 10;
+  var gridFloor = (seconds) => Math.floor(seconds * 10) / 10;
+  var safeJsonParse = (raw, fallback) => {
+    if (raw == null) {
+      return fallback;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return fallback;
+    }
+  };
+
   // frontend/rootDefaults.ts
   var trimDomValue = (el) => `${el?.value ?? ""}`.trim();
   var WIDTH_INPUT_IDS = ["input_width", "input_aspectratiowidth"];
@@ -2338,79 +2285,391 @@
     };
   };
 
-  // frontend/clipColor.ts
-  var HUE_MIN = 0;
-  var HUE_MAX = 359;
-  var HUE_RANGE = 360;
-  var BASE_HUE = 210;
-  var UNASSIGNED_HUE = -1;
-  var HUE_SATURATION = 65;
-  var HUE_LIGHTNESS = 55;
-  var isAssignedHue = (value) => typeof value === "number" && Number.isInteger(value) && value >= HUE_MIN && value <= HUE_MAX;
-  var normalizeStoredHue = (value) => {
-    if (value == null || value === "") {
-      return UNASSIGNED_HUE;
+  // frontend/normalizationShared.ts
+  var text = (value, fallback = "") => `${value ?? fallback}`;
+  var trimmedText = (value, fallback = "") => text(value, fallback).trim();
+  var textOr = (value, fallback) => text(value, fallback) || fallback;
+  var numberOr = (value, fallback) => toNumber(text(value, fallback), fallback);
+  var clampedNumber = (value, fallback, min, max) => clamp(numberOr(value, fallback), min, max);
+  var nonNegativeNumber = (value) => Math.max(0, numberOr(value, 0));
+  var optionalNonNegativeNumber = (value) => {
+    if (value == null || trimmedText(value) === "") {
+      return null;
     }
-    const num = typeof value === "number" ? value : Number(value);
-    if (!Number.isFinite(num)) {
-      return UNASSIGNED_HUE;
-    }
-    return (Math.round(num) % HUE_RANGE + HUE_RANGE) % HUE_RANGE;
+    const number = toNumber(text(value), Number.NaN);
+    return Number.isFinite(number) && number >= 0 ? number : null;
   };
-  var hueDistance = (a, b) => {
-    const d = Math.abs(a - b) % HUE_RANGE;
-    return d > 180 ? HUE_RANGE - d : d;
+  var optionalPositiveNumber = (value) => {
+    const number = optionalNonNegativeNumber(value);
+    return number !== null && number > 0 ? number : null;
   };
-  var pickDistinctHue = (existing) => {
-    const inUse = existing.filter(isAssignedHue);
-    if (inUse.length === 0) {
-      return BASE_HUE;
-    }
-    let best = 0;
-    let bestScore = -1;
-    for (let hue = HUE_MIN; hue <= HUE_MAX; hue++) {
-      let minDist = 180;
-      for (const used of inUse) {
-        const d = hueDistance(hue, used);
-        if (d < minDist) {
-          minDist = d;
-        }
-      }
-      if (minDist > bestScore) {
-        bestScore = minDist;
-        best = hue;
+  var readProp = (raw, ...keys) => {
+    for (const key of keys) {
+      if (Object.hasOwn(raw, key)) {
+        return raw[key];
       }
     }
-    return best;
+    return void 0;
   };
-  var assignMissingHues = (clips) => {
-    const assigned = [];
-    for (const clip of clips) {
-      if (isAssignedHue(clip.hue)) {
-        assigned.push(clip.hue);
-      }
+  var normalizeOptionalEntityId = (value) => typeof value === "string" ? value.trim() || void 0 : void 0;
+  var snapToStep = (value, step) => step > 0 ? Math.round(value / step) * step : value;
+  var clampWindowInDuration = (startRaw, lengthRaw, clipDuration, minLength) => {
+    if (!(lengthRaw > 0)) {
+      return null;
     }
-    for (const clip of clips) {
-      if (isAssignedHue(clip.hue)) {
-        continue;
-      }
-      const hue = pickDistinctHue(assigned);
-      clip.hue = hue;
-      assigned.push(hue);
+    const maxStart = Math.max(0, clipDuration - minLength);
+    const startSeconds = clamp(startRaw, 0, maxStart);
+    const lengthSeconds = clamp(
+      lengthRaw,
+      minLength,
+      Math.max(minLength, clipDuration - startSeconds)
+    );
+    if (!(lengthSeconds > 0)) {
+      return null;
     }
+    return { startSeconds, lengthSeconds };
   };
-  var clipHueCss = (hue) => {
-    const resolved = isAssignedHue(hue) ? hue : BASE_HUE;
-    return `hsl(${resolved} ${HUE_SATURATION}% ${HUE_LIGHTNESS}%)`;
+  var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find(
+    (value) => value.trim().toLowerCase().startsWith("latentmodel-")
+  ) ?? upscaleMethodValues[0] ?? "";
+  var snapValueToStep = (value, fallback, min, max, step) => {
+    const unitScale = 1 / step;
+    return Math.round(clampedNumber(value, fallback, min, max) * unitScale) / unitScale;
   };
 
-  // frontend/debugLog.ts
-  var videoStagesDebugEnabled = () => typeof window !== "undefined" && !!window.__VIDEO_STAGES_DEBUG__;
-  var videoStagesDebugLog = (area, message, ...details) => {
-    if (!videoStagesDebugEnabled()) {
-      return;
+  // frontend/types.ts
+  var CURRENT_AUTHORING_SCHEMA_VERSION = 6;
+  var REF_SOURCE_BASE = "Base";
+  var REF_SOURCE_REFINER = "Refiner";
+  var REF_SOURCE_UPLOAD = "Upload";
+
+  // frontend/identity.ts
+  var fallbackSequence = 0;
+  var normalizedExistingId = (value) => {
+    if (typeof value !== "string") {
+      return null;
     }
-    console.debug(`[VideoStages debug ${area}]`, message, ...details);
+    const id = value.trim();
+    return id.length > 0 ? id : null;
+  };
+  var createEntityId = (kind) => {
+    const randomUuid = globalThis.crypto?.randomUUID?.();
+    if (randomUuid) {
+      return `${kind}_${randomUuid}`;
+    }
+    fallbackSequence += 1;
+    return `${kind}_${Date.now().toString(36)}_${fallbackSequence.toString(36)}`;
+  };
+  var assignUniqueId = (entry, reserved, used) => {
+    const reservedId = reserved.get(entry.entity);
+    if (reservedId) {
+      entry.entity.id = reservedId;
+      return reservedId;
+    }
+    const base = `${entry.kind}_legacy_${entry.repairPath}`;
+    let id = base;
+    let collision = 1;
+    while (used.has(id)) {
+      collision += 1;
+      id = `${base}_${collision}`;
+    }
+    entry.entity.id = id;
+    used.add(id);
+    return id;
+  };
+  var clipIdentityEntries = (clips) => {
+    const entries = [];
+    for (let clipIndex = 0; clipIndex < clips.length; clipIndex++) {
+      const clip = clips[clipIndex];
+      entries.push({
+        entity: clip,
+        kind: "clip",
+        repairPath: `${clipIndex}`
+      });
+      for (let stageIndex = 0; stageIndex < clip.stages.length; stageIndex++) {
+        entries.push({
+          entity: clip.stages[stageIndex],
+          kind: "stage",
+          repairPath: `${clipIndex}_${stageIndex}`
+        });
+      }
+      for (let refIndex = 0; refIndex < clip.refs.length; refIndex++) {
+        entries.push({
+          entity: clip.refs[refIndex],
+          kind: "ref",
+          repairPath: `${clipIndex}_${refIndex}`
+        });
+      }
+      for (let icLoraIndex = 0; icLoraIndex < clip.icLoras.length; icLoraIndex++) {
+        entries.push({
+          entity: clip.icLoras[icLoraIndex],
+          kind: "ic_lora",
+          repairPath: `${clipIndex}_${icLoraIndex}`
+        });
+      }
+      for (let windowIndex = 0; windowIndex < clip.promptWindows.length; windowIndex++) {
+        entries.push({
+          entity: clip.promptWindows[windowIndex],
+          kind: "prompt_window",
+          repairPath: `${clipIndex}_${windowIndex}`
+        });
+      }
+      if (clip.retake) {
+        entries.push({
+          entity: clip.retake,
+          kind: "retake",
+          repairPath: `${clipIndex}`
+        });
+      }
+    }
+    return entries;
+  };
+  var audioTrackIdentityEntries = (tracks) => {
+    const entries = [];
+    for (let trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
+      const track = tracks[trackIndex];
+      entries.push({
+        entity: track,
+        kind: "audio_track",
+        repairPath: `${trackIndex}`
+      });
+      for (let spanIndex = 0; spanIndex < track.spans.length; spanIndex++) {
+        entries.push({
+          entity: track.spans[spanIndex],
+          kind: "audio_span",
+          repairPath: `${trackIndex}_${spanIndex}`
+        });
+      }
+    }
+    return entries;
+  };
+  var assignEntryIdentities = (entries, used) => {
+    const reserved = /* @__PURE__ */ new Map();
+    for (const { entity } of entries) {
+      const existing = normalizedExistingId(entity.id);
+      if (existing && !used.has(existing)) {
+        reserved.set(entity, existing);
+        used.add(existing);
+      }
+    }
+    for (const entry of entries) {
+      assignUniqueId(entry, reserved, used);
+    }
+  };
+  var ensureClipEntityIdentities = (clips, seen = /* @__PURE__ */ new Set()) => {
+    assignEntryIdentities(clipIdentityEntries(clips), seen);
+    return seen;
+  };
+  function ensureAuthoringDocumentIdentity(state) {
+    state.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    state.audioTracks ??= [];
+    assignEntryIdentities(
+      [
+        ...clipIdentityEntries(state.clips),
+        ...audioTrackIdentityEntries(state.audioTracks)
+      ],
+      /* @__PURE__ */ new Set()
+    );
+  }
+  var collectAuthoringEntityIds = (state) => {
+    const ids = [];
+    for (const clip of state.clips) {
+      if (clip.id) ids.push(clip.id);
+      for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
+      for (const ref of clip.refs) if (ref.id) ids.push(ref.id);
+      for (const icLora of clip.icLoras) {
+        if (icLora.id) ids.push(icLora.id);
+      }
+      for (const window2 of clip.promptWindows) {
+        if (window2.id) ids.push(window2.id);
+      }
+      if (clip.retake?.id) ids.push(clip.retake.id);
+    }
+    for (const track of state.audioTracks ?? []) {
+      if (track.id) ids.push(track.id);
+      for (const span of track.spans) if (span.id) ids.push(span.id);
+    }
+    return ids;
+  };
+
+  // frontend/normalizationMedia.ts
+  var normalizePromptWindow = (raw) => {
+    const duration = numberOr(raw.duration, 0);
+    if (!(duration > 0)) {
+      return null;
+    }
+    const start = nonNegativeNumber(raw.start);
+    return {
+      id: normalizeOptionalEntityId(raw.id),
+      prompt: text(raw.prompt),
+      start,
+      duration
+    };
+  };
+  var normalizePromptWindows = (rawClip) => {
+    const rawList = rawClip.promptWindows;
+    if (!Array.isArray(rawList)) {
+      return [];
+    }
+    return rawList.map((entry) => normalizePromptWindow(isRecord2(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
+  };
+  var normalizeRetake = (value, clipDuration) => {
+    if (!isRecord2(value)) {
+      return null;
+    }
+    const startRaw = nonNegativeNumber(value.startSeconds);
+    const lengthRaw = numberOr(value.lengthSeconds, 0);
+    const window2 = clampWindowInDuration(
+      startRaw,
+      lengthRaw,
+      clipDuration,
+      RETAKE_MIN_DURATION
+    );
+    if (!window2) {
+      return null;
+    }
+    const strengthRaw = value.strength;
+    const strength = strengthRaw == null ? RETAKE_STRENGTH_DEFAULT : clampedNumber(
+      strengthRaw,
+      RETAKE_STRENGTH_DEFAULT,
+      RETAKE_STRENGTH_MIN,
+      RETAKE_STRENGTH_MAX
+    );
+    return {
+      id: normalizeOptionalEntityId(value.id),
+      startSeconds: roundToTenth(window2.startSeconds),
+      lengthSeconds: roundToTenth(window2.lengthSeconds),
+      strength
+    };
+  };
+  var normalizeSourceVideo = (value) => {
+    if (!isRecord2(value)) {
+      return null;
+    }
+    const data = trimmedText(value.data);
+    if (!data) {
+      return null;
+    }
+    const durationSeconds = nonNegativeNumber(value.durationSeconds);
+    let startSeconds = nonNegativeNumber(value.startSeconds);
+    let lengthSeconds = nonNegativeNumber(value.lengthSeconds);
+    if (durationSeconds > 0) {
+      startSeconds = Math.min(
+        startSeconds,
+        Math.max(0, durationSeconds - CLIP_DURATION_MIN)
+      );
+      if (!(lengthSeconds > 0)) {
+        lengthSeconds = durationSeconds - startSeconds;
+      }
+      lengthSeconds = Math.min(lengthSeconds, durationSeconds - startSeconds);
+    }
+    if (!(lengthSeconds > 0)) {
+      return null;
+    }
+    return {
+      data,
+      fileName: normalizeUploadFileName(
+        value.fileName == null ? null : text(value.fileName)
+      ),
+      fps: nonNegativeNumber(value.fps),
+      durationSeconds: roundToTenth(durationSeconds),
+      startSeconds: roundToTenth(startSeconds),
+      lengthSeconds: roundToTenth(lengthSeconds)
+    };
+  };
+  var normalizeUploadedMedia = (value) => {
+    if (!isRecord2(value)) {
+      return null;
+    }
+    const data = trimmedText(value.data);
+    if (!data) {
+      return null;
+    }
+    return {
+      data,
+      fileName: normalizeUploadFileName(
+        value.fileName == null ? null : text(value.fileName)
+      )
+    };
+  };
+
+  // frontend/normalizationAudio.ts
+  var normalizeAudioTrackSourceKind = (value) => {
+    const compact = trimmedText(value).toLowerCase();
+    switch (compact) {
+      case "upload":
+        return "Upload";
+      case "acestepfun":
+        return "AceStepFun";
+      case "native":
+        return "Native";
+      case "controlnet":
+        return "ControlNet";
+      default:
+        return "External";
+    }
+  };
+  var normalizeAudioTrackSpan = (value) => {
+    if (!isRecord2(value)) {
+      return null;
+    }
+    const sourceStart = optionalNonNegativeNumber(value.sourceStartSeconds) ?? 0;
+    return {
+      id: normalizeOptionalEntityId(value.id),
+      timelineStartSeconds: optionalNonNegativeNumber(
+        value.timelineStartSeconds
+      ),
+      timelineLengthSeconds: optionalPositiveNumber(
+        value.timelineLengthSeconds
+      ),
+      sourceStartSeconds: sourceStart
+    };
+  };
+  var splitSpansIntoLanes = (track) => {
+    if (track.spans.length <= 1) {
+      return [track];
+    }
+    return track.spans.map((span, spanIndex) => ({
+      ...track,
+      id: track.id === void 0 ? void 0 : `${track.id}:${spanIndex}`,
+      source: { ...track.source },
+      spans: [span]
+    }));
+  };
+  var normalizeAudioTracks = (value) => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const tracks = [];
+    for (const rawTrack of value) {
+      if (!isRecord2(rawTrack)) {
+        continue;
+      }
+      const rawSource = rawTrack.source;
+      const source = isRecord2(rawSource) ? rawSource : {};
+      const rawSpans = rawTrack.spans;
+      const volume = rawTrack.volume === void 0 ? void 0 : clampedNumber(
+        rawTrack.volume,
+        AUDIO_SEGMENT_VOLUME_DEFAULT,
+        AUDIO_SEGMENT_VOLUME_MIN,
+        AUDIO_SEGMENT_VOLUME_MAX
+      );
+      tracks.push(
+        ...splitSpansIntoLanes({
+          id: normalizeOptionalEntityId(rawTrack.id),
+          source: {
+            kind: normalizeAudioTrackSourceKind(source.kind),
+            reference: trimmedText(source.reference),
+            uploadedAudio: normalizeUploadedMedia(source.uploadedAudio)
+          },
+          spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter(
+            (span) => span !== null
+          ) : [],
+          ...volume === void 0 ? {} : { volume }
+        })
+      );
+    }
+    return tracks;
   };
 
   // frontend/architectures/ltx2/icLoraPresets.ts
@@ -2730,107 +2989,6 @@
     return changed;
   };
 
-  // frontend/normalizationMedia.ts
-  var normalizePromptWindow = (raw) => {
-    const duration = numberOr(raw.duration, 0);
-    if (!(duration > 0)) {
-      return null;
-    }
-    const start = nonNegativeNumber(raw.start);
-    return {
-      id: normalizeOptionalEntityId(raw.id),
-      prompt: text(raw.prompt),
-      start,
-      duration
-    };
-  };
-  var normalizePromptWindows = (rawClip) => {
-    const rawList = rawClip.promptWindows;
-    if (!Array.isArray(rawList)) {
-      return [];
-    }
-    return rawList.map((entry) => normalizePromptWindow(isRecord(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
-  };
-  var normalizeRetake = (value, clipDuration) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const startRaw = nonNegativeNumber(value.startSeconds);
-    const lengthRaw = numberOr(value.lengthSeconds, 0);
-    const window2 = clampWindowInDuration(
-      startRaw,
-      lengthRaw,
-      clipDuration,
-      RETAKE_MIN_DURATION
-    );
-    if (!window2) {
-      return null;
-    }
-    const strengthRaw = value.strength;
-    const strength = strengthRaw == null ? RETAKE_STRENGTH_DEFAULT : clampedNumber(
-      strengthRaw,
-      RETAKE_STRENGTH_DEFAULT,
-      RETAKE_STRENGTH_MIN,
-      RETAKE_STRENGTH_MAX
-    );
-    return {
-      id: normalizeOptionalEntityId(value.id),
-      startSeconds: roundToTenth(window2.startSeconds),
-      lengthSeconds: roundToTenth(window2.lengthSeconds),
-      strength
-    };
-  };
-  var normalizeSourceVideo = (value) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const data = trimmedText(value.data);
-    if (!data) {
-      return null;
-    }
-    const durationSeconds = nonNegativeNumber(value.durationSeconds);
-    let startSeconds = nonNegativeNumber(value.startSeconds);
-    let lengthSeconds = nonNegativeNumber(value.lengthSeconds);
-    if (durationSeconds > 0) {
-      startSeconds = Math.min(
-        startSeconds,
-        Math.max(0, durationSeconds - CLIP_DURATION_MIN)
-      );
-      if (!(lengthSeconds > 0)) {
-        lengthSeconds = durationSeconds - startSeconds;
-      }
-      lengthSeconds = Math.min(lengthSeconds, durationSeconds - startSeconds);
-    }
-    if (!(lengthSeconds > 0)) {
-      return null;
-    }
-    return {
-      data,
-      fileName: normalizeUploadFileName(
-        value.fileName == null ? null : text(value.fileName)
-      ),
-      fps: nonNegativeNumber(value.fps),
-      durationSeconds: roundToTenth(durationSeconds),
-      startSeconds: roundToTenth(startSeconds),
-      lengthSeconds: roundToTenth(lengthSeconds)
-    };
-  };
-  var normalizeUploadedMedia = (value) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const data = trimmedText(value.data);
-    if (!data) {
-      return null;
-    }
-    return {
-      data,
-      fileName: normalizeUploadFileName(
-        value.fileName == null ? null : text(value.fileName)
-      )
-    };
-  };
-
   // frontend/architectures/ltx2/icLoraNormalization.ts
   var CONTROLNET_SOURCE_OPTIONS = [
     "ControlNet 1",
@@ -2922,7 +3080,7 @@
     return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
   };
   var normalizeIcLora = (raw, stageCount = 0, _sourcedClip = false) => {
-    if (!isRecord(raw)) {
+    if (!isRecord2(raw)) {
       return null;
     }
     const lora = normalizeControlNetLora(raw.lora);
@@ -3042,6 +3200,1079 @@
   var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => isLtx2(architectureId) && hasSlotSourcedIcLora(entries);
   var architectureIcLoraDisplayName = (architectureId, entry) => isLtx2(architectureId) ? icLoraDisplayName(entry) : entry.lora;
 
+  // frontend/architectures/identity.ts
+  var normalizeClipArchitecture = (rawArchitecture, stageZeroModel, catalog) => {
+    const persisted = `${rawArchitecture ?? ""}`.trim();
+    if (persisted) {
+      return persisted;
+    }
+    const fromCatalog = catalog && stageZeroModel ? architectureForModel(catalog, stageZeroModel) : null;
+    if (fromCatalog) {
+      return fromCatalog;
+    }
+    return "unsupported";
+  };
+
+  // frontend/clipColor.ts
+  var HUE_MIN = 0;
+  var HUE_MAX = 359;
+  var HUE_RANGE = 360;
+  var BASE_HUE = 210;
+  var UNASSIGNED_HUE = -1;
+  var HUE_SATURATION = 65;
+  var HUE_LIGHTNESS = 55;
+  var isAssignedHue = (value) => typeof value === "number" && Number.isInteger(value) && value >= HUE_MIN && value <= HUE_MAX;
+  var normalizeStoredHue = (value) => {
+    if (value == null || value === "") {
+      return UNASSIGNED_HUE;
+    }
+    const num = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(num)) {
+      return UNASSIGNED_HUE;
+    }
+    return (Math.round(num) % HUE_RANGE + HUE_RANGE) % HUE_RANGE;
+  };
+  var hueDistance = (a, b) => {
+    const d = Math.abs(a - b) % HUE_RANGE;
+    return d > 180 ? HUE_RANGE - d : d;
+  };
+  var pickDistinctHue = (existing) => {
+    const inUse = existing.filter(isAssignedHue);
+    if (inUse.length === 0) {
+      return BASE_HUE;
+    }
+    let best = 0;
+    let bestScore = -1;
+    for (let hue = HUE_MIN; hue <= HUE_MAX; hue++) {
+      let minDist = 180;
+      for (const used of inUse) {
+        const d = hueDistance(hue, used);
+        if (d < minDist) {
+          minDist = d;
+        }
+      }
+      if (minDist > bestScore) {
+        bestScore = minDist;
+        best = hue;
+      }
+    }
+    return best;
+  };
+  var assignMissingHues = (clips) => {
+    const assigned = [];
+    for (const clip of clips) {
+      if (isAssignedHue(clip.hue)) {
+        assigned.push(clip.hue);
+      }
+    }
+    for (const clip of clips) {
+      if (isAssignedHue(clip.hue)) {
+        continue;
+      }
+      const hue = pickDistinctHue(assigned);
+      clip.hue = hue;
+      assigned.push(hue);
+    }
+  };
+  var clipHueCss = (hue) => {
+    const resolved = isAssignedHue(hue) ? hue : BASE_HUE;
+    return `hsl(${resolved} ${HUE_SATURATION}% ${HUE_LIGHTNESS}%)`;
+  };
+
+  // frontend/loraAuthoring.ts
+  var LORA_WEIGHT_DEFAULT = 1;
+  var LORA_WEIGHT_STEP = 0.05;
+  var defaultLoraWeight = (defaults, modelName) => {
+    const index = defaults.loraValues.indexOf(modelName);
+    const value = index >= 0 ? defaults.loraDefaultWeights[index] : null;
+    return typeof value === "number" && Number.isFinite(value) ? value : LORA_WEIGHT_DEFAULT;
+  };
+  var appendLoraToClip = (clip, name, initialWeight) => {
+    clip.loras.push({ name });
+    for (const stage of clip.stages) {
+      stage.loraWeights.push(initialWeight);
+    }
+  };
+  var replaceLoraModelAt = (clip, index, name, initialWeight) => {
+    const entry = clip.loras[index];
+    if (!entry) {
+      return false;
+    }
+    entry.name = name;
+    for (const stage of clip.stages) {
+      stage.loraWeights[index] = initialWeight;
+    }
+    return true;
+  };
+  var removeLoraAt = (clip, index) => {
+    if (index < 0 || index >= clip.loras.length) {
+      return false;
+    }
+    clip.loras.splice(index, 1);
+    for (const stage of clip.stages) {
+      if (index < stage.loraWeights.length) {
+        stage.loraWeights.splice(index, 1);
+      }
+    }
+    return true;
+  };
+
+  // frontend/renderUtils.ts
+  var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  var framesForClip = (durationSeconds, fps, rawFrameGrid) => {
+    const frameGrid = Number.isInteger(rawFrameGrid) && rawFrameGrid > 0 ? rawFrameGrid : 1;
+    return Math.max(
+      1,
+      Math.ceil(
+        Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) / frameGrid
+      ) * frameGrid + 1
+    );
+  };
+  var snapDurationToFps = (seconds, fps) => {
+    if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
+      return seconds;
+    }
+    const frames = Math.max(1, Math.ceil(seconds * fps));
+    const aligned = frames / fps;
+    return Math.max(0.1, Math.floor(aligned * 10) / 10);
+  };
+
+  // frontend/normalizationStage.ts
+  var normalizeStageRefStrengthValue = (value) => snapValueToStep(
+    value,
+    STAGE_REF_STRENGTH_DEFAULT,
+    STAGE_REF_STRENGTH_MIN,
+    STAGE_REF_STRENGTH_MAX,
+    STAGE_REF_STRENGTH_STEP
+  );
+  var normalizeStageControlNetStrengthValue = (value) => snapValueToStep(
+    value,
+    STAGE_CONTROLNET_STRENGTH_DEFAULT,
+    STAGE_CONTROLNET_STRENGTH_MIN,
+    STAGE_CONTROLNET_STRENGTH_MAX,
+    STAGE_CONTROLNET_STRENGTH_STEP
+  );
+  var normalizeStageIcLoraStrengths = (rawStrengths, icLoraCount, fallbackStrength = 1, perLoraFallbacks = []) => {
+    const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
+    return Array.from(
+      { length: icLoraCount },
+      (_, index) => normalizeStageControlNetStrengthValue(
+        rawValues[index] ?? perLoraFallbacks[index] ?? fallbackStrength
+      )
+    );
+  };
+  var buildDefaultStageRefStrengths = (refCount, defaultStrength = STAGE_REF_STRENGTH_DEFAULT) => Array.from({ length: refCount }, () => defaultStrength);
+  var normalizeStageRefStrengths = (rawStrengths, refCount) => {
+    const strengths = [];
+    const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
+    for (let i = 0; i < refCount; i++) {
+      strengths.push(normalizeStageRefStrengthValue(rawValues[i]));
+    }
+    return strengths;
+  };
+  var readRawStageProp = (raw, key) => readProp(raw, key);
+  var readRawStageString = (raw, key) => {
+    const value = readRawStageProp(raw, key);
+    if (value == null) {
+      return void 0;
+    }
+    return trimmedText(value) || void 0;
+  };
+  var normalizeStageLoras = (raw) => {
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+    const out = [];
+    for (const entry of raw) {
+      if (!isRecord2(entry)) {
+        continue;
+      }
+      const name = trimmedText(readRawStageProp(entry, "name"));
+      if (!name) {
+        continue;
+      }
+      out.push({
+        name,
+        weight: numberOr(readRawStageProp(entry, "weight"), 1)
+      });
+    }
+    return out;
+  };
+  var buildDefaultStage = (getRootDefaults2, getDefaultStageModel2, previousStage, refCount, initialLoraWeights = [], initialIcLoraStrengths = []) => {
+    const defaults = getRootDefaults2();
+    const model = previousStage ? previousStage.model : getDefaultStageModel2(defaults.modelValues);
+    return {
+      skipped: false,
+      control: previousStage ? previousStage.control : defaults.control,
+      controlNetStrength: previousStage ? previousStage.controlNetStrength : STAGE_CONTROLNET_STRENGTH_DEFAULT,
+      icLoraStrengths: previousStage ? [...previousStage.icLoraStrengths] : initialIcLoraStrengths.map(normalizeStageControlNetStrengthValue),
+      loraWeights: previousStage ? [...previousStage.loraWeights] : [...initialLoraWeights],
+      refStrengths: buildDefaultStageRefStrengths(refCount),
+      upscale: previousStage ? previousStage.upscale : defaults.upscale,
+      upscaleMethod: previousStage ? previousStage.upscaleMethod : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
+      model,
+      modelProfileId: previousStage?.modelProfileId ?? modelProfileForModel(defaults.modelCatalog, model) ?? "unsupported",
+      steps: previousStage ? previousStage.steps : defaults.steps,
+      cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
+      sampler: previousStage ? previousStage.sampler : defaults.samplerValues[0] ?? "euler",
+      scheduler: previousStage ? previousStage.scheduler : defaults.schedulerValues[0] ?? "normal"
+    };
+  };
+  var buildDefaultRef = (source = REF_SOURCE_REFINER) => ({
+    source,
+    uploadFileName: null,
+    uploadedImage: null,
+    frame: REF_FRAME_MIN,
+    fromEnd: false
+  });
+  var appendRefToClip = (clip, ref) => {
+    clip.refs.push(ref);
+    for (const stage of clip.stages) {
+      stage.refStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
+    }
+  };
+  var removeRefAt = (clip, refIdx) => {
+    if (refIdx < 0 || refIdx >= clip.refs.length) {
+      return false;
+    }
+    clip.refs.splice(refIdx, 1);
+    for (const stage of clip.stages) {
+      if (refIdx < stage.refStrengths.length) {
+        stage.refStrengths.splice(refIdx, 1);
+      }
+    }
+    return true;
+  };
+  var appendIcLoraStrengthToClip = (clip, initialStrength = 1) => {
+    for (const stage of clip.stages) {
+      stage.icLoraStrengths.push(
+        normalizeStageControlNetStrengthValue(initialStrength)
+      );
+    }
+  };
+  var removeIcLoraStrengthAt = (clip, entryIdx) => {
+    for (const stage of clip.stages) {
+      if (entryIdx < stage.icLoraStrengths.length) {
+        stage.icLoraStrengths.splice(entryIdx, 1);
+      }
+    }
+  };
+  var getReferenceFrameMax = (getRootDefaults2, clip, effectiveFps) => {
+    const defaults = getRootDefaults2();
+    const fps = typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps;
+    if (clip) {
+      const frameGrid = clip.stages ? resolvedClipFrameGrid(
+        { ...clip, stages: clip.stages },
+        defaults.modelCatalog
+      ) : 1;
+      return Math.max(
+        REF_FRAME_MIN,
+        framesForClip(clip.duration, fps, frameGrid)
+      );
+    }
+    return Math.max(REF_FRAME_MIN, defaults.frames);
+  };
+  var getKnownReferenceFrameMax = (getRootDefaults2, clip, effectiveFps) => {
+    const defaults = getRootDefaults2();
+    const resolution = resolveClipFrameGrid(clip, defaults.modelCatalog);
+    if (resolution.status !== "resolved") {
+      return null;
+    }
+    const fps = typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps;
+    return Math.max(
+      REF_FRAME_MIN,
+      framesForClip(clip.duration, fps, resolution.frameGrid)
+    );
+  };
+  var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, sourcedClip = false, clipLoras = [], clipLoraDefaultWeights = []) => {
+    const defaults = getRootDefaults2();
+    const fallback = buildDefaultStage(
+      getRootDefaults2,
+      getDefaultStageModel2,
+      previousStage,
+      refCount,
+      clipLoraDefaultWeights
+    );
+    const forcedFirstStage = stageIndexInClip === 0 && !sourcedClip;
+    let firstStageUpscale;
+    let control;
+    if (forcedFirstStage) {
+      firstStageUpscale = {
+        upscale: defaults.upscale,
+        upscaleMethod: resolveRootPreferredUpscaleMethod(
+          defaults.upscaleMethodValues
+        )
+      };
+      control = clamp(
+        defaults.control,
+        defaults.controlMin,
+        defaults.controlMax
+      );
+    } else {
+      firstStageUpscale = {
+        upscale: snapToStep(
+          clampedNumber(
+            readRawStageProp(rawStage, "upscale"),
+            fallback.upscale,
+            defaults.upscaleMin,
+            defaults.upscaleMax
+          ),
+          defaults.upscaleStep
+        ),
+        upscaleMethod: textOr(
+          readRawStageString(rawStage, "upscaleMethod"),
+          fallback.upscaleMethod
+        )
+      };
+      control = clampedNumber(
+        readRawStageProp(rawStage, "control"),
+        fallback.control,
+        defaults.controlMin,
+        defaults.controlMax
+      );
+    }
+    const rawLoraWeights = readRawStageProp(rawStage, "loraWeights");
+    const legacyLoras = normalizeStageLoras(
+      readRawStageProp(rawStage, "loras")
+    );
+    const legacyWeights = new Map(
+      legacyLoras.map((entry) => [entry.name, entry.weight])
+    );
+    const hasLegacyLoras = Array.isArray(readRawStageProp(rawStage, "loras"));
+    const loraWeights = clipLoras.map((entry, index) => {
+      if (Array.isArray(rawLoraWeights)) {
+        return numberOr(
+          rawLoraWeights[index],
+          clipLoraDefaultWeights[index] ?? 1
+        );
+      }
+      const legacyWeight = legacyWeights.get(entry.name);
+      if (legacyWeight !== void 0) {
+        return legacyWeight;
+      }
+      if (hasLegacyLoras) {
+        return clipLoraDefaultWeights[index] ?? 0;
+      }
+      return fallback.loraWeights[index] ?? clipLoraDefaultWeights[index] ?? 1;
+    });
+    const stage = {
+      id: normalizeOptionalEntityId(rawStage.id),
+      skipped: !!rawStage.skipped,
+      control,
+      controlNetStrength: normalizeStageControlNetStrengthValue(
+        readRawStageProp(rawStage, "controlNetStrength") ?? fallback.controlNetStrength
+      ),
+      icLoraStrengths: Array.isArray(rawStage.icLoraStrengths) ? rawStage.icLoraStrengths.map(
+        normalizeStageControlNetStrengthValue
+      ) : [...fallback.icLoraStrengths],
+      loraWeights,
+      refStrengths: normalizeStageRefStrengths(
+        rawStage.refStrengths,
+        refCount
+      ),
+      upscale: firstStageUpscale.upscale,
+      upscaleMethod: firstStageUpscale.upscaleMethod,
+      model: textOr(rawStage.model, fallback.model),
+      modelProfileId: "unsupported",
+      steps: Math.max(
+        1,
+        Math.round(
+          clampedNumber(
+            rawStage.steps,
+            fallback.steps,
+            defaults.stepsMin,
+            defaults.stepsMax
+          )
+        )
+      ),
+      cfgScale: clampedNumber(
+        rawStage.cfgScale,
+        fallback.cfgScale,
+        defaults.cfgScaleMin,
+        defaults.cfgScaleMax
+      ),
+      sampler: textOr(rawStage.sampler, fallback.sampler),
+      scheduler: textOr(rawStage.scheduler, fallback.scheduler)
+    };
+    stage.modelProfileId = trimmedText(readRawStageProp(rawStage, "modelProfileId")) || modelProfileForModel(defaults.modelCatalog, stage.model) || fallback.modelProfileId;
+    if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
+      stage.upscaleMethod = forcedFirstStage ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
+    }
+    return stage;
+  };
+  var normalizeRef = (rawRef, frameMax) => {
+    const fallback = buildDefaultRef();
+    const source = textOr(rawRef.source, fallback.source);
+    const authoredFrame = Math.max(
+      REF_FRAME_MIN,
+      Math.round(numberOr(rawRef.frame, fallback.frame))
+    );
+    return {
+      id: normalizeOptionalEntityId(rawRef.id),
+      source,
+      uploadFileName: textOr(rawRef.uploadFileName, "") || null,
+      uploadedImage: normalizeUploadedMedia(rawRef.uploadedImage),
+      frame: frameMax === null ? authoredFrame : clamp(authoredFrame, REF_FRAME_MIN, frameMax),
+      fromEnd: !!rawRef.fromEnd
+    };
+  };
+
+  // frontend/normalizationClip.ts
+  var normalizeBoundaryOut = (value) => {
+    const raw = trimmedText(value).toLowerCase();
+    return raw === "continue" || raw === "crossfade" ? raw : "cut";
+  };
+  var normalizeContinueOverlap = (value, constraints = boundaryOverlapConstraints(null)) => {
+    const numeric = Math.trunc(Number(value));
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : normalizeBoundaryOverlap(value, constraints);
+  };
+  var normalizeReferenceFraming = (value) => value === "stretch" || value === "fit" || value === "fit-green" ? value : "crop";
+  var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
+    const defaults = getRootDefaults2();
+    const refs = includeDefaultRef ? [buildDefaultRef()] : [];
+    const loras = previousClip?.loras.map((entry) => ({ ...entry })) ?? [];
+    const initialLoraWeights = loras.map(
+      (entry, index) => previousClip?.stages[0]?.loraWeights[index] ?? defaults.loraDefaultWeights[defaults.loraValues.indexOf(entry.name)] ?? 1
+    );
+    const firstStage = {
+      ...buildDefaultStage(
+        getRootDefaults2,
+        getDefaultStageModel2,
+        previousClip?.stages[0] ?? null,
+        refs.length,
+        initialLoraWeights
+      ),
+      refStrengths: buildDefaultStageRefStrengths(
+        refs.length,
+        includeDefaultRef ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH : STAGE_REF_STRENGTH_DEFAULT
+      )
+    };
+    const architecture = (previousClip?.architectureHint !== NONE_ARCHITECTURE_ID ? previousClip?.architectureHint : null) ?? architectureForModel(defaults.modelCatalog, firstStage.model) ?? "unsupported";
+    const continueRule = architectureDescriptor(
+      defaults.modelCatalog,
+      architecture
+    )?.boundaryRules.continue;
+    return {
+      architectureHint: architecture,
+      modelProfileId: (previousClip?.architectureHint !== NONE_ARCHITECTURE_ID ? previousClip?.modelProfileId : null) ?? modelProfileForModel(defaults.modelCatalog, firstStage.model) ?? firstStage.modelProfileId,
+      skipped: previousClip?.skipped === true,
+      hue: UNASSIGNED_HUE,
+      boundaryOut: "cut",
+      boundaryOutCarryAudio: false,
+      boundaryOutOverlap: boundaryOverlapConstraints(continueRule).defaultFrames,
+      duration: previousClip ? previousClip.duration : snapDurationToFps(
+        Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
+        defaults.fps
+      ),
+      refFraming: "crop",
+      audioSource: AUDIO_SOURCE_NATIVE,
+      loras,
+      icLoras: [],
+      saveAudioTrack: false,
+      clipLengthFromAudio: false,
+      clipLengthFromControlNet: false,
+      reuseAudio: false,
+      uploadedAudio: null,
+      prompt: "",
+      promptWindows: [],
+      retake: null,
+      sourceVideo: null,
+      refs,
+      stages: [firstStage]
+    };
+  };
+  var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2, effectiveFps) => {
+    const defaults = getRootDefaults2();
+    const rawAudioSource = text(rawClip.audioSource, AUDIO_SOURCE_NATIVE);
+    const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
+    const sourceVideo = normalizeSourceVideo(rawClip.sourceVideo);
+    const fps = Math.max(
+      1,
+      typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps
+    );
+    const rawDuration = sourceVideo?.lengthSeconds ?? numberOr(rawClip.duration, defaults.frames / fps);
+    const duration = snapDurationToFps(
+      Math.max(CLIP_DURATION_MIN, rawDuration),
+      fps
+    );
+    const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
+    const clipScopedLoras = normalizeStageLoras(rawClip.loras);
+    const loraNames = [];
+    const loraDefaultWeightByName = /* @__PURE__ */ new Map();
+    const appendLoraName = (name, defaultWeight) => {
+      if (loraDefaultWeightByName.has(name)) {
+        return;
+      }
+      loraNames.push(name);
+      loraDefaultWeightByName.set(name, defaultWeight);
+    };
+    for (const entry of clipScopedLoras) {
+      appendLoraName(entry.name, entry.weight);
+    }
+    for (const rawStage of stagesRaw) {
+      if (!isRecord2(rawStage)) {
+        continue;
+      }
+      for (const entry of normalizeStageLoras(rawStage.loras)) {
+        appendLoraName(entry.name, 0);
+      }
+    }
+    const loras = loraNames.map((name) => ({ name }));
+    const loraDefaultWeights = loraNames.map(
+      (name) => loraDefaultWeightByName.get(name) ?? 1
+    );
+    const stages = [];
+    for (let i = 0; i < stagesRaw.length; i++) {
+      const previousStage = i > 0 ? stages[i - 1] : null;
+      stages.push(
+        normalizeStage(
+          getRootDefaults2,
+          getDefaultStageModel2,
+          isRecord2(stagesRaw[i]) ? stagesRaw[i] : {},
+          previousStage,
+          refsRaw.length,
+          i,
+          sourceVideo !== null,
+          loras,
+          loraDefaultWeights
+        )
+      );
+    }
+    const firstSkippedStage = stages.findIndex(
+      (stage) => stage.skipped === true
+    );
+    if (firstSkippedStage >= 0) {
+      for (let index = firstSkippedStage; index < stages.length; index++) {
+        stages[index].skipped = true;
+      }
+    }
+    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
+    const clipLengthFromAudio = !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
+    const retake = normalizeRetake(rawClip.retake, duration);
+    const refFrameMax = getKnownReferenceFrameMax(
+      getRootDefaults2,
+      {
+        duration,
+        stages,
+        sourceVideo,
+        retake,
+        clipLengthFromAudio,
+        clipLengthFromControlNet
+      },
+      fps
+    );
+    const refs = refsRaw.map(
+      (rawRef) => normalizeRef(isRecord2(rawRef) ? rawRef : {}, refFrameMax)
+    );
+    const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
+    const stageZero = stages[0] ?? null;
+    const persistedArchitecture = trimmedText(rawClip.architectureHint);
+    const persistedProfile = trimmedText(rawClip.modelProfileId);
+    const isSourceOnly = sourceVideo !== null && stages.every((stage) => stage.skipped);
+    const architecture = isSourceOnly ? persistedArchitecture || "none" : normalizeClipArchitecture(
+      persistedArchitecture,
+      stageZero?.model ?? null,
+      defaults.modelCatalog
+    );
+    const resolvedArchitecture = isSourceOnly ? NONE_ARCHITECTURE_ID : architectureForModel(
+      defaults.modelCatalog,
+      stageZero?.model ?? ""
+    ) ?? "unsupported";
+    const modelProfileId = isSourceOnly ? persistedProfile || (architecture === NONE_ARCHITECTURE_ID ? NONE_ARCHITECTURE_ID : "unsupported") : persistedProfile || stageZero?.modelProfileId || "unsupported";
+    const icLoras = normalizeArchitectureIcLoras(
+      resolvedArchitecture,
+      rawClip,
+      stagesRaw.length,
+      sourceVideo !== null,
+      { preserveDormantLtx: true }
+    );
+    const icLoraDefaultStrengths = icLoras.map(
+      (entry) => defaultLoraWeight(defaults, entry.lora)
+    );
+    for (let index = 0; index < stages.length; index++) {
+      const stage = stages[index];
+      const rawStage = isRecord2(stagesRaw[index]) ? stagesRaw[index] : {};
+      const hasLegacyControlNetStrength = Object.hasOwn(
+        rawStage,
+        "controlNetStrength"
+      );
+      const legacyFallback = hasLegacyControlNetStrength ? stage.controlNetStrength : 1;
+      stage.icLoraStrengths = normalizeStageIcLoraStrengths(
+        rawStage.icLoraStrengths,
+        icLoras.length,
+        legacyFallback,
+        hasLegacyControlNetStrength ? [] : stages[index - 1]?.icLoraStrengths ?? icLoraDefaultStrengths
+      );
+    }
+    const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
+    const boundaryRule = architectureDescriptor(
+      defaults.modelCatalog,
+      resolvedArchitecture
+    )?.boundaryRules[boundaryOut];
+    return {
+      id: normalizeOptionalEntityId(rawClip.id),
+      architectureHint: architecture,
+      modelProfileId,
+      skipped: !!rawClip.skipped,
+      hue: normalizeStoredHue(rawClip.hue),
+      boundaryOut,
+      boundaryOutCarryAudio: !!rawClip.boundaryOutCarryAudio,
+      boundaryOutOverlap: normalizeContinueOverlap(
+        rawClip.boundaryOutOverlap,
+        boundaryOverlapConstraints(boundaryRule)
+      ),
+      duration,
+      refFraming: normalizeReferenceFraming(rawClip.refFraming),
+      audioSource,
+      loras,
+      icLoras,
+      saveAudioTrack: !!rawClip.saveAudioTrack,
+      clipLengthFromAudio,
+      clipLengthFromControlNet,
+      reuseAudio: !!rawClip.reuseAudio,
+      uploadedAudio: normalizeUploadedMedia(rawClip.uploadedAudio),
+      prompt: text(rawClip.prompt),
+      promptWindows: normalizePromptWindows(rawClip),
+      retake,
+      sourceVideo,
+      refs,
+      stages
+    };
+  };
+
+  // frontend/persistence/documentCodec.ts
+  var toIntOrNull = (value) => {
+    const num = optionalNonNegativeNumber(value);
+    return num === null ? null : Math.round(num);
+  };
+  var resolveRootDims = (inherited, stored) => {
+    const width = toIntOrNull(stored.width);
+    const height = toIntOrNull(stored.height);
+    const dimsExplicit = width !== null && width >= ROOT_DIMENSION_MIN && height !== null && height >= ROOT_DIMENSION_MIN;
+    return {
+      width: dimsExplicit ? width : inherited.width,
+      height: dimsExplicit ? height : inherited.height,
+      // fps is never stored: the timeline always follows the core Video FPS
+      // param (the backend falls back to it too when the JSON has no fps).
+      fps: inherited.fps,
+      dimsExplicit
+    };
+  };
+  var createRootConfig = (dims, clips, audioTracks = []) => {
+    const config = {
+      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
+      ...dims,
+      clips,
+      audioTracks
+    };
+    ensureAuthoringDocumentIdentity(config);
+    return config;
+  };
+  var serializeClipsForStorage = (clips) => {
+    ensureClipEntityIdentities(clips);
+    return clips.map(
+      (clip) => ({
+        id: clip.id,
+        architectureHint: clip.architectureHint,
+        modelProfileId: clip.modelProfileId,
+        skipped: clip.skipped,
+        boundaryOut: clip.boundaryOut,
+        boundaryOutCarryAudio: clip.boundaryOutCarryAudio,
+        boundaryOutOverlap: clip.boundaryOutOverlap,
+        duration: clip.duration,
+        refFraming: clip.refFraming,
+        audioSource: clip.audioSource,
+        loras: clip.loras.map((entry) => ({
+          name: entry.name
+        })),
+        icLoras: clip.icLoras.map((entry) => ({
+          id: entry.id,
+          lora: entry.lora,
+          preset: entry.preset,
+          driveSource: entry.driveSource,
+          driveData: entry.driveData,
+          driveMediaKinds: entry.driveMediaKinds,
+          stage: entry.stage,
+          strength: entry.strength,
+          attentionStrength: entry.attentionStrength,
+          controlType: entry.controlType,
+          driveMedia: entry.driveMedia
+        })),
+        saveAudioTrack: clip.saveAudioTrack,
+        clipLengthFromAudio: clip.clipLengthFromAudio,
+        clipLengthFromControlNet: clip.clipLengthFromControlNet,
+        reuseAudio: clip.reuseAudio,
+        uploadedAudio: clip.uploadedAudio,
+        sourceVideo: clip.sourceVideo ? {
+          data: clip.sourceVideo.data,
+          fileName: clip.sourceVideo.fileName,
+          fps: clip.sourceVideo.fps,
+          durationSeconds: clip.sourceVideo.durationSeconds,
+          startSeconds: clip.sourceVideo.startSeconds,
+          lengthSeconds: clip.sourceVideo.lengthSeconds
+        } : null,
+        retake: clip.retake ? {
+          id: clip.retake.id,
+          startSeconds: clip.retake.startSeconds,
+          lengthSeconds: clip.retake.lengthSeconds,
+          strength: clip.retake.strength
+        } : null,
+        refs: clip.refs.map((ref) => ({
+          id: ref.id,
+          source: ref.source,
+          uploadFileName: ref.uploadFileName,
+          uploadedImage: ref.uploadedImage,
+          frame: ref.frame,
+          fromEnd: ref.fromEnd
+        })),
+        stages: clip.stages.map((stage) => ({
+          id: stage.id,
+          skipped: stage.skipped,
+          control: stage.control,
+          controlNetStrength: stage.controlNetStrength,
+          icLoraStrengths: stage.icLoraStrengths,
+          loraWeights: stage.loraWeights,
+          refStrengths: stage.refStrengths,
+          upscale: stage.upscale,
+          upscaleMethod: stage.upscaleMethod,
+          model: stage.model,
+          modelProfileId: stage.modelProfileId,
+          steps: stage.steps,
+          cfgScale: stage.cfgScale,
+          sampler: stage.sampler,
+          scheduler: stage.scheduler
+        }))
+      })
+    );
+  };
+  var timelinePointProjection = (clips, seconds, edge) => {
+    if (!Number.isFinite(seconds) || seconds < 0 || clips.length === 0) {
+      return null;
+    }
+    let cursor = 0;
+    for (let index = 0; index < clips.length; index++) {
+      const clip = clips[index];
+      const duration = Math.max(0, clip.duration || 0);
+      const clipEnd = cursor + duration;
+      const isLast = index === clips.length - 1;
+      const ownsPoint = edge === "start" ? seconds < clipEnd || isLast : seconds <= clipEnd || isLast;
+      if (ownsPoint) {
+        return {
+          clipId: clip.id,
+          offsetSeconds: Math.max(
+            0,
+            Math.min(duration, seconds - cursor)
+          )
+        };
+      }
+      cursor = clipEnd;
+    }
+    return null;
+  };
+  var timelineSpanProjection = (clips, span) => {
+    if (span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
+      return null;
+    }
+    const start = timelinePointProjection(
+      clips,
+      span.timelineStartSeconds,
+      "start"
+    );
+    const end = timelinePointProjection(
+      clips,
+      span.timelineStartSeconds + span.timelineLengthSeconds,
+      "end"
+    );
+    return start && end ? {
+      firstClipId: start.clipId,
+      lastClipId: end.clipId,
+      clipStartOffsetSeconds: start.offsetSeconds,
+      clipEndOffsetSeconds: end.offsetSeconds
+    } : null;
+  };
+  var serializeStateForStorage = (state) => {
+    ensureAuthoringDocumentIdentity(state);
+    const canonical = state;
+    const out = {
+      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION
+    };
+    if (state.dimsExplicit) {
+      out.width = Math.round(state.width);
+      out.height = Math.round(state.height);
+    }
+    out.clips = serializeClipsForStorage(state.clips);
+    out.audioTracks = canonical.audioTracks.map((track) => ({
+      id: track.id,
+      ...track.volume === void 0 ? {} : { volume: track.volume },
+      source: {
+        kind: track.source.kind,
+        reference: track.source.reference,
+        uploadedAudio: track.source.uploadedAudio
+      },
+      spans: track.spans.map((span) => ({
+        id: span.id,
+        timelineStartSeconds: span.timelineStartSeconds,
+        timelineLengthSeconds: span.timelineLengthSeconds,
+        sourceStartSeconds: span.sourceStartSeconds,
+        projection: timelineSpanProjection(canonical.clips, span)
+      }))
+    }));
+    return JSON.stringify(out);
+  };
+  var isTransientBrowserMedia = (media) => {
+    const data = media?.data.trim().toLowerCase() ?? "";
+    return data.startsWith("data:") || data.startsWith("blob:");
+  };
+  var serializeStateForDurableStorage = (state) => {
+    ensureAuthoringDocumentIdentity(state);
+    const durable = structuredClone(state);
+    for (const clip of durable.clips) {
+      if (isTransientBrowserMedia(clip.uploadedAudio)) {
+        clip.uploadedAudio = null;
+      }
+      if (clip.sourceVideo && isTransientBrowserMedia({ data: clip.sourceVideo.data })) {
+        clip.sourceVideo = null;
+      }
+      for (const ref of clip.refs) {
+        if (isTransientBrowserMedia(ref.uploadedImage)) {
+          ref.uploadedImage = null;
+        }
+      }
+      for (const icLora of clip.icLoras) {
+        if (isTransientBrowserMedia(icLora.driveMedia)) {
+          icLora.driveMedia = null;
+        }
+      }
+    }
+    for (const track of durable.audioTracks ?? []) {
+      if (isTransientBrowserMedia(track.source.uploadedAudio)) {
+        track.source.uploadedAudio = null;
+      }
+    }
+    return serializeStateForStorage(durable);
+  };
+  var hasArrayOfRecords = (owner, key) => {
+    if (!Object.hasOwn(owner, key)) {
+      return true;
+    }
+    const value = owner[key];
+    return Array.isArray(value) && value.every(isRecord2);
+  };
+  var hasValidStoredCollections = (parsed) => {
+    if (!Array.isArray(parsed.clips) || !parsed.clips.every(isRecord2)) {
+      return false;
+    }
+    if (!hasArrayOfRecords(parsed, "audioTracks") || !hasArrayOfRecords(parsed, "clips")) {
+      return false;
+    }
+    for (const clip of parsed.clips) {
+      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "refs") || !hasArrayOfRecords(clip, "icLoras") || Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras")) {
+        return false;
+      }
+      const stages = Array.isArray(clip.stages) ? clip.stages : [];
+      for (const stage of stages) {
+        if (Object.hasOwn(stage, "loras") && !hasArrayOfRecords(stage, "loras") || Object.hasOwn(stage, "loraWeights") && (!Array.isArray(stage.loraWeights) || !stage.loraWeights.every(
+          (weight) => typeof weight === "number" && Number.isFinite(weight)
+        )) || Object.hasOwn(stage, "icLoraStrengths") && (!Array.isArray(stage.icLoraStrengths) || !stage.icLoraStrengths.every(
+          (strength) => typeof strength === "number" && Number.isFinite(strength)
+        )) || Object.hasOwn(stage, "refStrengths") && (!Array.isArray(stage.refStrengths) || !stage.refStrengths.every(
+          (strength) => typeof strength === "number" && Number.isFinite(strength)
+        ))) {
+          return false;
+        }
+      }
+    }
+    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
+    return tracks.every(
+      (track) => hasArrayOfRecords(track, "spans") && (!Object.hasOwn(track, "source") || isRecord2(track.source))
+    );
+  };
+  var OUTDATED_SCHEMA_NOTICE = "VideoStages: the saved timeline was created by an older version and could not be loaded.";
+  var noticedOutdatedDocument = null;
+  var noticeOutdatedSchema = (serialized) => {
+    if (noticedOutdatedDocument === serialized) {
+      return;
+    }
+    noticedOutdatedDocument = serialized;
+    getVideoStagesHostBridge().showError(OUTDATED_SCHEMA_NOTICE);
+  };
+  var DIVERGENT_PROJECTION_NOTICE = "VideoStages: the saved timeline has audio spans whose clip anchors disagree with their timeline seconds. The seconds were used and the anchors will be rewritten on the next save — re-check those segments.";
+  var noticedDivergentProjection = null;
+  var SPAN_PROJECTION_TOLERANCE = 1e-6;
+  var numberAt = (owner, key) => typeof owner[key] === "number" && Number.isFinite(owner[key]) ? owner[key] : null;
+  var storedSpanProjection = (span) => {
+    const raw = span.projection;
+    if (!isRecord2(raw)) {
+      return null;
+    }
+    const first = raw.firstClipId;
+    const last = raw.lastClipId;
+    const startOffset = numberAt(raw, "clipStartOffsetSeconds");
+    const endOffset = numberAt(raw, "clipEndOffsetSeconds");
+    return typeof first === "string" && typeof last === "string" && startOffset !== null && endOffset !== null ? {
+      firstClipId: first,
+      lastClipId: last,
+      clipStartOffsetSeconds: startOffset,
+      clipEndOffsetSeconds: endOffset
+    } : null;
+  };
+  var hasDivergentSpanProjection = (parsed) => {
+    const clips = parsed.clips.map((clip) => ({
+      id: typeof clip.id === "string" ? clip.id : "",
+      duration: numberAt(clip, "duration") ?? 0
+    }));
+    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
+    for (const track of tracks) {
+      const spans = isRecord2(track) && Array.isArray(track.spans) ? track.spans : [];
+      for (const span of spans) {
+        if (!isRecord2(span)) {
+          continue;
+        }
+        const stored = storedSpanProjection(span);
+        if (!stored) {
+          continue;
+        }
+        const expected = timelineSpanProjection(clips, {
+          timelineStartSeconds: numberAt(span, "timelineStartSeconds"),
+          timelineLengthSeconds: numberAt(span, "timelineLengthSeconds")
+        });
+        if (!expected || expected.firstClipId !== stored.firstClipId || expected.lastClipId !== stored.lastClipId || Math.abs(
+          expected.clipStartOffsetSeconds - stored.clipStartOffsetSeconds
+        ) > SPAN_PROJECTION_TOLERANCE || Math.abs(
+          expected.clipEndOffsetSeconds - stored.clipEndOffsetSeconds
+        ) > SPAN_PROJECTION_TOLERANCE) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+  var noticeDivergentProjection = (serialized) => {
+    if (noticedDivergentProjection === serialized) {
+      return;
+    }
+    noticedDivergentProjection = serialized;
+    getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
+  };
+  var ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION = 5;
+  var migrateStoredDocument = (parsed) => {
+    if (parsed.schemaVersion === CURRENT_AUTHORING_SCHEMA_VERSION) {
+      return parsed;
+    }
+    if (parsed.schemaVersion !== ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION || !Array.isArray(parsed.clips)) {
+      return null;
+    }
+    const migrated = structuredClone(parsed);
+    migrated.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    for (const rawClip of migrated.clips) {
+      if (!isRecord2(rawClip)) {
+        continue;
+      }
+      if (rawClip.architectureHint === void 0) {
+        rawClip.architectureHint = rawClip.architecture;
+      }
+      delete rawClip.architecture;
+    }
+    return migrated;
+  };
+  var decodeStoredDocument = (serialized, inherited, environment) => {
+    try {
+      const parsed = JSON.parse(serialized);
+      if (!isRecord2(parsed)) {
+        return null;
+      }
+      const current = migrateStoredDocument(parsed);
+      if (!current) {
+        noticeOutdatedSchema(serialized);
+        return null;
+      }
+      if (!hasValidStoredCollections(current)) {
+        return null;
+      }
+      if (hasDivergentSpanProjection(current)) {
+        noticeDivergentProjection(serialized);
+      }
+      const dims = resolveRootDims(inherited, {
+        width: current.width,
+        height: current.height
+      });
+      const capturedDefaults = () => environment.defaults;
+      const capturedDefaultStageModel = () => environment.defaultStageModel;
+      const clips = current.clips.map(
+        (entry) => normalizeClip(
+          entry,
+          capturedDefaults,
+          capturedDefaultStageModel,
+          dims.fps
+        )
+      );
+      const firstSkippedClip = clips.findIndex(
+        (clip) => clip.skipped === true
+      );
+      if (firstSkippedClip >= 0) {
+        for (let index = firstSkippedClip; index < clips.length; index++) {
+          clips[index].skipped = true;
+        }
+      }
+      return {
+        dims,
+        clips,
+        audioTracks: normalizeAudioTracks(current.audioTracks)
+      };
+    } catch {
+      return null;
+    }
+  };
+  var hasCanonicalStoredId = (value, seen) => {
+    if (!isRecord2(value) || typeof value.id !== "string" || value.id.length === 0 || value.id.trim() !== value.id || seen.has(value.id)) {
+      return false;
+    }
+    seen.add(value.id);
+    return true;
+  };
+  var storedDocumentNeedsCanonicalIdRepair = (serialized) => {
+    try {
+      const parsed = JSON.parse(serialized);
+      if (!isRecord2(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION || !Array.isArray(parsed.clips) || !Array.isArray(parsed.audioTracks)) {
+        return true;
+      }
+      const seenIds = /* @__PURE__ */ new Set();
+      for (const rawClip of parsed.clips) {
+        if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
+        for (const key of ["stages", "refs"]) {
+          const children = rawClip[key];
+          if (!Array.isArray(children) || children.some(
+            (child) => !hasCanonicalStoredId(child, seenIds)
+          )) {
+            return true;
+          }
+        }
+        if (rawClip.retake !== null && !hasCanonicalStoredId(rawClip.retake, seenIds)) {
+          return true;
+        }
+      }
+      for (const rawTrack of parsed.audioTracks) {
+        if (!hasCanonicalStoredId(rawTrack, seenIds) || !Array.isArray(rawTrack.spans) || rawTrack.spans.some(
+          (span) => !hasCanonicalStoredId(span, seenIds)
+        )) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return true;
+    }
+  };
+
+  // frontend/debugLog.ts
+  var videoStagesDebugEnabled = () => typeof window !== "undefined" && !!window.__VIDEO_STAGES_DEBUG__;
+  var videoStagesDebugLog = (area, message, ...details) => {
+    if (!videoStagesDebugEnabled()) {
+      return;
+    }
+    console.debug(`[VideoStages debug ${area}]`, message, ...details);
+  };
+
   // frontend/architectures/conversion/entryModePolicy.ts
   var firstActiveStageIndex = (clip) => {
     const index = clip.stages.findIndex((stage) => !stage.skipped);
@@ -3058,7 +4289,7 @@
     if (clip.sourceVideo === null) {
       return generatedEntryMode === "text-to-video" ? supportsText : supportsImage;
     }
-    return supportsImage || model.entryModes.includes("source-video") || model.entryModes.includes("refine-video");
+    return supportsImage || model.entryModes.includes("source-video");
   };
   var modelSupportsAllActiveStageEntries = (model, clip, generatedEntryMode) => clip.stages.every(
     (stage, stageIdx) => stage.skipped || modelSupportsStageEntry(model, clip, stageIdx, generatedEntryMode)
@@ -3710,161 +4941,6 @@
     return { changed, before, after, multiple };
   };
 
-  // frontend/types.ts
-  var CURRENT_AUTHORING_SCHEMA_VERSION = 6;
-  var REF_SOURCE_BASE = "Base";
-  var REF_SOURCE_REFINER = "Refiner";
-  var REF_SOURCE_UPLOAD = "Upload";
-
-  // frontend/identity.ts
-  var fallbackSequence = 0;
-  var normalizedExistingId = (value) => {
-    if (typeof value !== "string") {
-      return null;
-    }
-    const id = value.trim();
-    return id.length > 0 ? id : null;
-  };
-  var createEntityId = (kind) => {
-    const randomUuid = globalThis.crypto?.randomUUID?.();
-    if (randomUuid) {
-      return `${kind}_${randomUuid}`;
-    }
-    fallbackSequence += 1;
-    return `${kind}_${Date.now().toString(36)}_${fallbackSequence.toString(36)}`;
-  };
-  var assignUniqueId = (entry, reserved, used) => {
-    const reservedId = reserved.get(entry.entity);
-    if (reservedId) {
-      entry.entity.id = reservedId;
-      return reservedId;
-    }
-    const base = `${entry.kind}_legacy_${entry.repairPath}`;
-    let id = base;
-    let collision = 1;
-    while (used.has(id)) {
-      collision += 1;
-      id = `${base}_${collision}`;
-    }
-    entry.entity.id = id;
-    used.add(id);
-    return id;
-  };
-  var clipIdentityEntries = (clips) => {
-    const entries = [];
-    for (let clipIndex = 0; clipIndex < clips.length; clipIndex++) {
-      const clip = clips[clipIndex];
-      entries.push({
-        entity: clip,
-        kind: "clip",
-        repairPath: `${clipIndex}`
-      });
-      for (let stageIndex = 0; stageIndex < clip.stages.length; stageIndex++) {
-        entries.push({
-          entity: clip.stages[stageIndex],
-          kind: "stage",
-          repairPath: `${clipIndex}_${stageIndex}`
-        });
-      }
-      for (let refIndex = 0; refIndex < clip.refs.length; refIndex++) {
-        entries.push({
-          entity: clip.refs[refIndex],
-          kind: "ref",
-          repairPath: `${clipIndex}_${refIndex}`
-        });
-      }
-      for (let icLoraIndex = 0; icLoraIndex < clip.icLoras.length; icLoraIndex++) {
-        entries.push({
-          entity: clip.icLoras[icLoraIndex],
-          kind: "ic_lora",
-          repairPath: `${clipIndex}_${icLoraIndex}`
-        });
-      }
-      for (let windowIndex = 0; windowIndex < clip.promptWindows.length; windowIndex++) {
-        entries.push({
-          entity: clip.promptWindows[windowIndex],
-          kind: "prompt_window",
-          repairPath: `${clipIndex}_${windowIndex}`
-        });
-      }
-      if (clip.retake) {
-        entries.push({
-          entity: clip.retake,
-          kind: "retake",
-          repairPath: `${clipIndex}`
-        });
-      }
-    }
-    return entries;
-  };
-  var audioTrackIdentityEntries = (tracks) => {
-    const entries = [];
-    for (let trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
-      const track = tracks[trackIndex];
-      entries.push({
-        entity: track,
-        kind: "audio_track",
-        repairPath: `${trackIndex}`
-      });
-      for (let spanIndex = 0; spanIndex < track.spans.length; spanIndex++) {
-        entries.push({
-          entity: track.spans[spanIndex],
-          kind: "audio_span",
-          repairPath: `${trackIndex}_${spanIndex}`
-        });
-      }
-    }
-    return entries;
-  };
-  var assignEntryIdentities = (entries, used) => {
-    const reserved = /* @__PURE__ */ new Map();
-    for (const { entity } of entries) {
-      const existing = normalizedExistingId(entity.id);
-      if (existing && !used.has(existing)) {
-        reserved.set(entity, existing);
-        used.add(existing);
-      }
-    }
-    for (const entry of entries) {
-      assignUniqueId(entry, reserved, used);
-    }
-  };
-  var ensureClipEntityIdentities = (clips, seen = /* @__PURE__ */ new Set()) => {
-    assignEntryIdentities(clipIdentityEntries(clips), seen);
-    return seen;
-  };
-  function ensureAuthoringDocumentIdentity(state) {
-    state.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
-    state.audioTracks ??= [];
-    assignEntryIdentities(
-      [
-        ...clipIdentityEntries(state.clips),
-        ...audioTrackIdentityEntries(state.audioTracks)
-      ],
-      /* @__PURE__ */ new Set()
-    );
-  }
-  var collectAuthoringEntityIds = (state) => {
-    const ids = [];
-    for (const clip of state.clips) {
-      if (clip.id) ids.push(clip.id);
-      for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
-      for (const ref of clip.refs) if (ref.id) ids.push(ref.id);
-      for (const icLora of clip.icLoras) {
-        if (icLora.id) ids.push(icLora.id);
-      }
-      for (const window2 of clip.promptWindows) {
-        if (window2.id) ids.push(window2.id);
-      }
-      if (clip.retake?.id) ids.push(clip.retake.id);
-    }
-    for (const track of state.audioTracks ?? []) {
-      if (track.id) ids.push(track.id);
-      for (const span of track.spans) if (span.id) ids.push(span.id);
-    }
-    return ids;
-  };
-
   // frontend/documentCommands/helpers.ts
   var clone2 = (value) => structuredClone(value);
   var findClip = (document2, clipId) => document2.clips.find((clip) => clip.id === clipId) ?? null;
@@ -4485,7 +5561,7 @@
     const rawWindows = Array.isArray(stored.promptWindows) ? stored.promptWindows : [];
     const idsByWindow = /* @__PURE__ */ new Map();
     for (const rawWindow of rawWindows) {
-      if (!isRecord(rawWindow) || typeof rawWindow.id !== "string" || !rawWindow.id.trim() || typeof rawWindow.prompt !== "string" || typeof rawWindow.start !== "number" || typeof rawWindow.duration !== "number") {
+      if (!isRecord2(rawWindow) || typeof rawWindow.id !== "string" || !rawWindow.id.trim() || typeof rawWindow.prompt !== "string" || typeof rawWindow.start !== "number" || typeof rawWindow.duration !== "number") {
         continue;
       }
       const key = promptWindowKey({
@@ -4510,18 +5586,18 @@
       return;
     }
     const parsed = safeJsonParse(raw, null);
-    const storedClips = isRecord(parsed) && Array.isArray(parsed.clips) ? parsed.clips : [];
+    const storedClips = isRecord2(parsed) && Array.isArray(parsed.clips) ? parsed.clips : [];
     const storedById = /* @__PURE__ */ new Map();
     for (const stored of storedClips) {
-      if (isRecord(stored) && typeof stored.id === "string" && stored.id.trim()) {
+      if (isRecord2(stored) && typeof stored.id === "string" && stored.id.trim()) {
         storedById.set(stored.id.trim(), stored);
       }
     }
     for (let i = 0; i < clips.length; i++) {
       const clipId = clips[i].id;
       const positional = storedClips[i];
-      const stored = (clipId ? storedById.get(clipId) : void 0) ?? (isRecord(positional) && !positional.id ? positional : void 0);
-      if (!isRecord(stored)) {
+      const stored = (clipId ? storedById.get(clipId) : void 0) ?? (isRecord2(positional) && !positional.id ? positional : void 0);
+      if (!isRecord2(stored)) {
         continue;
       }
       if (typeof stored.hue === "number" && Number.isFinite(stored.hue)) {
@@ -4543,1089 +5619,12 @@
     }
   };
 
-  // frontend/normalizationAudio.ts
-  var normalizeAudioTrackSourceKind = (value) => {
-    const compact = trimmedText(value).toLowerCase();
-    switch (compact) {
-      case "upload":
-        return "Upload";
-      case "acestepfun":
-        return "AceStepFun";
-      case "native":
-        return "Native";
-      case "controlnet":
-        return "ControlNet";
-      default:
-        return "External";
-    }
-  };
-  var normalizeAudioTrackSpan = (value) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const sourceStart = optionalNonNegativeNumber(value.sourceStartSeconds) ?? 0;
-    return {
-      id: normalizeOptionalEntityId(value.id),
-      timelineStartSeconds: optionalNonNegativeNumber(
-        value.timelineStartSeconds
-      ),
-      timelineLengthSeconds: optionalPositiveNumber(
-        value.timelineLengthSeconds
-      ),
-      sourceStartSeconds: sourceStart
-    };
-  };
-  var splitSpansIntoLanes = (track) => {
-    if (track.spans.length <= 1) {
-      return [track];
-    }
-    return track.spans.map((span, spanIndex) => ({
-      ...track,
-      id: track.id === void 0 ? void 0 : `${track.id}:${spanIndex}`,
-      source: { ...track.source },
-      spans: [span]
-    }));
-  };
-  var normalizeAudioTracks = (value) => {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    const tracks = [];
-    for (const rawTrack of value) {
-      if (!isRecord(rawTrack)) {
-        continue;
-      }
-      const rawSource = rawTrack.source;
-      const source = isRecord(rawSource) ? rawSource : {};
-      const rawSpans = rawTrack.spans;
-      const volume = rawTrack.volume === void 0 ? void 0 : clampedNumber(
-        rawTrack.volume,
-        AUDIO_SEGMENT_VOLUME_DEFAULT,
-        AUDIO_SEGMENT_VOLUME_MIN,
-        AUDIO_SEGMENT_VOLUME_MAX
-      );
-      tracks.push(
-        ...splitSpansIntoLanes({
-          id: normalizeOptionalEntityId(rawTrack.id),
-          source: {
-            kind: normalizeAudioTrackSourceKind(source.kind),
-            reference: trimmedText(source.reference),
-            uploadedAudio: normalizeUploadedMedia(source.uploadedAudio)
-          },
-          spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter(
-            (span) => span !== null
-          ) : [],
-          ...volume === void 0 ? {} : { volume }
-        })
-      );
-    }
-    return tracks;
-  };
-
-  // frontend/architectures/identity.ts
-  var normalizeClipArchitecture = (rawArchitecture, stageZeroModel, catalog) => {
-    const persisted = `${rawArchitecture ?? ""}`.trim();
-    if (persisted) {
-      return persisted;
-    }
-    const fromCatalog = catalog && stageZeroModel ? architectureForModel(catalog, stageZeroModel) : null;
-    if (fromCatalog) {
-      return fromCatalog;
-    }
-    return "unsupported";
-  };
-
-  // frontend/loraAuthoring.ts
-  var LORA_WEIGHT_DEFAULT = 1;
-  var LORA_WEIGHT_STEP = 0.05;
-  var defaultLoraWeight = (defaults, modelName) => {
-    const index = defaults.loraValues.indexOf(modelName);
-    const value = index >= 0 ? defaults.loraDefaultWeights[index] : null;
-    return typeof value === "number" && Number.isFinite(value) ? value : LORA_WEIGHT_DEFAULT;
-  };
-  var appendLoraToClip = (clip, name, initialWeight) => {
-    clip.loras.push({ name });
-    for (const stage of clip.stages) {
-      stage.loraWeights.push(initialWeight);
-    }
-  };
-  var replaceLoraModelAt = (clip, index, name, initialWeight) => {
-    const entry = clip.loras[index];
-    if (!entry) {
-      return false;
-    }
-    entry.name = name;
-    for (const stage of clip.stages) {
-      stage.loraWeights[index] = initialWeight;
-    }
-    return true;
-  };
-  var removeLoraAt = (clip, index) => {
-    if (index < 0 || index >= clip.loras.length) {
-      return false;
-    }
-    clip.loras.splice(index, 1);
-    for (const stage of clip.stages) {
-      if (index < stage.loraWeights.length) {
-        stage.loraWeights.splice(index, 1);
-      }
-    }
-    return true;
-  };
-
-  // frontend/renderUtils.ts
-  var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  var framesForClip = (durationSeconds, fps, rawFrameGrid) => {
-    const frameGrid = Number.isInteger(rawFrameGrid) && rawFrameGrid > 0 ? rawFrameGrid : 1;
-    return Math.max(
-      1,
-      Math.ceil(
-        Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) / frameGrid
-      ) * frameGrid + 1
-    );
-  };
-  var snapDurationToFps = (seconds, fps) => {
-    if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
-      return seconds;
-    }
-    const frames = Math.max(1, Math.ceil(seconds * fps));
-    const aligned = frames / fps;
-    return Math.max(0.1, Math.floor(aligned * 10) / 10);
-  };
-
-  // frontend/normalizationStage.ts
-  var normalizeStageRefStrengthValue = (value) => snapValueToStep(
-    value,
-    STAGE_REF_STRENGTH_DEFAULT,
-    STAGE_REF_STRENGTH_MIN,
-    STAGE_REF_STRENGTH_MAX,
-    STAGE_REF_STRENGTH_STEP
-  );
-  var normalizeStageControlNetStrengthValue = (value) => snapValueToStep(
-    value,
-    STAGE_CONTROLNET_STRENGTH_DEFAULT,
-    STAGE_CONTROLNET_STRENGTH_MIN,
-    STAGE_CONTROLNET_STRENGTH_MAX,
-    STAGE_CONTROLNET_STRENGTH_STEP
-  );
-  var normalizeStageIcLoraStrengths = (rawStrengths, icLoraCount, fallbackStrength = 1, perLoraFallbacks = []) => {
-    const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
-    return Array.from(
-      { length: icLoraCount },
-      (_, index) => normalizeStageControlNetStrengthValue(
-        rawValues[index] ?? perLoraFallbacks[index] ?? fallbackStrength
-      )
-    );
-  };
-  var buildDefaultStageRefStrengths = (refCount, defaultStrength = STAGE_REF_STRENGTH_DEFAULT) => Array.from({ length: refCount }, () => defaultStrength);
-  var normalizeStageRefStrengths = (rawStrengths, refCount) => {
-    const strengths = [];
-    const rawValues = Array.isArray(rawStrengths) ? rawStrengths : [];
-    for (let i = 0; i < refCount; i++) {
-      strengths.push(normalizeStageRefStrengthValue(rawValues[i]));
-    }
-    return strengths;
-  };
-  var readRawStageProp = (raw, key) => readProp(raw, key);
-  var readRawStageString = (raw, key) => {
-    const value = readRawStageProp(raw, key);
-    if (value == null) {
-      return void 0;
-    }
-    return trimmedText(value) || void 0;
-  };
-  var normalizeStageLoras = (raw) => {
-    if (!Array.isArray(raw)) {
-      return [];
-    }
-    const out = [];
-    for (const entry of raw) {
-      if (!isRecord(entry)) {
-        continue;
-      }
-      const name = trimmedText(readRawStageProp(entry, "name"));
-      if (!name) {
-        continue;
-      }
-      out.push({
-        name,
-        weight: numberOr(readRawStageProp(entry, "weight"), 1)
-      });
-    }
-    return out;
-  };
-  var buildDefaultStage = (getRootDefaults2, getDefaultStageModel2, previousStage, refCount, initialLoraWeights = [], initialIcLoraStrengths = []) => {
-    const defaults = getRootDefaults2();
-    const model = previousStage ? previousStage.model : getDefaultStageModel2(defaults.modelValues);
-    return {
-      skipped: false,
-      control: previousStage ? previousStage.control : defaults.control,
-      controlNetStrength: previousStage ? previousStage.controlNetStrength : STAGE_CONTROLNET_STRENGTH_DEFAULT,
-      icLoraStrengths: previousStage ? [...previousStage.icLoraStrengths] : initialIcLoraStrengths.map(normalizeStageControlNetStrengthValue),
-      loraWeights: previousStage ? [...previousStage.loraWeights] : [...initialLoraWeights],
-      refStrengths: buildDefaultStageRefStrengths(refCount),
-      upscale: previousStage ? previousStage.upscale : defaults.upscale,
-      upscaleMethod: previousStage ? previousStage.upscaleMethod : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
-      model,
-      modelProfileId: previousStage?.modelProfileId ?? modelProfileForModel(defaults.modelCatalog, model) ?? "unsupported",
-      steps: previousStage ? previousStage.steps : defaults.steps,
-      cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
-      sampler: previousStage ? previousStage.sampler : defaults.samplerValues[0] ?? "euler",
-      scheduler: previousStage ? previousStage.scheduler : defaults.schedulerValues[0] ?? "normal"
-    };
-  };
-  var buildDefaultRef = (source = REF_SOURCE_REFINER) => ({
-    source,
-    uploadFileName: null,
-    uploadedImage: null,
-    frame: REF_FRAME_MIN,
-    fromEnd: false
-  });
-  var appendRefToClip = (clip, ref) => {
-    clip.refs.push(ref);
-    for (const stage of clip.stages) {
-      stage.refStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
-    }
-  };
-  var removeRefAt = (clip, refIdx) => {
-    if (refIdx < 0 || refIdx >= clip.refs.length) {
-      return false;
-    }
-    clip.refs.splice(refIdx, 1);
-    for (const stage of clip.stages) {
-      if (refIdx < stage.refStrengths.length) {
-        stage.refStrengths.splice(refIdx, 1);
-      }
-    }
-    return true;
-  };
-  var appendIcLoraStrengthToClip = (clip, initialStrength = 1) => {
-    for (const stage of clip.stages) {
-      stage.icLoraStrengths.push(
-        normalizeStageControlNetStrengthValue(initialStrength)
-      );
-    }
-  };
-  var removeIcLoraStrengthAt = (clip, entryIdx) => {
-    for (const stage of clip.stages) {
-      if (entryIdx < stage.icLoraStrengths.length) {
-        stage.icLoraStrengths.splice(entryIdx, 1);
-      }
-    }
-  };
-  var getReferenceFrameMax = (getRootDefaults2, clip, effectiveFps) => {
-    const defaults = getRootDefaults2();
-    const fps = typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps;
-    if (clip) {
-      const frameGrid = clip.stages ? resolvedClipFrameGrid(
-        { ...clip, stages: clip.stages },
-        defaults.modelCatalog
-      ) : 1;
-      return Math.max(
-        REF_FRAME_MIN,
-        framesForClip(clip.duration, fps, frameGrid)
-      );
-    }
-    return Math.max(REF_FRAME_MIN, defaults.frames);
-  };
-  var getKnownReferenceFrameMax = (getRootDefaults2, clip, effectiveFps) => {
-    const defaults = getRootDefaults2();
-    const resolution = resolveClipFrameGrid(clip, defaults.modelCatalog);
-    if (resolution.status !== "resolved") {
-      return null;
-    }
-    const fps = typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps;
-    return Math.max(
-      REF_FRAME_MIN,
-      framesForClip(clip.duration, fps, resolution.frameGrid)
-    );
-  };
-  var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, sourcedClip = false, clipLoras = [], clipLoraDefaultWeights = []) => {
-    const defaults = getRootDefaults2();
-    const fallback = buildDefaultStage(
-      getRootDefaults2,
-      getDefaultStageModel2,
-      previousStage,
-      refCount,
-      clipLoraDefaultWeights
-    );
-    const forcedFirstStage = stageIndexInClip === 0 && !sourcedClip;
-    let firstStageUpscale;
-    let control;
-    if (forcedFirstStage) {
-      firstStageUpscale = {
-        upscale: defaults.upscale,
-        upscaleMethod: resolveRootPreferredUpscaleMethod(
-          defaults.upscaleMethodValues
-        )
-      };
-      control = clamp(
-        defaults.control,
-        defaults.controlMin,
-        defaults.controlMax
-      );
-    } else {
-      firstStageUpscale = {
-        upscale: snapToStep(
-          clampedNumber(
-            readRawStageProp(rawStage, "upscale"),
-            fallback.upscale,
-            defaults.upscaleMin,
-            defaults.upscaleMax
-          ),
-          defaults.upscaleStep
-        ),
-        upscaleMethod: textOr(
-          readRawStageString(rawStage, "upscaleMethod"),
-          fallback.upscaleMethod
-        )
-      };
-      control = clampedNumber(
-        readRawStageProp(rawStage, "control"),
-        fallback.control,
-        defaults.controlMin,
-        defaults.controlMax
-      );
-    }
-    const rawLoraWeights = readRawStageProp(rawStage, "loraWeights");
-    const legacyLoras = normalizeStageLoras(
-      readRawStageProp(rawStage, "loras")
-    );
-    const legacyWeights = new Map(
-      legacyLoras.map((entry) => [entry.name, entry.weight])
-    );
-    const hasLegacyLoras = Array.isArray(readRawStageProp(rawStage, "loras"));
-    const loraWeights = clipLoras.map((entry, index) => {
-      if (Array.isArray(rawLoraWeights)) {
-        return numberOr(
-          rawLoraWeights[index],
-          clipLoraDefaultWeights[index] ?? 1
-        );
-      }
-      const legacyWeight = legacyWeights.get(entry.name);
-      if (legacyWeight !== void 0) {
-        return legacyWeight;
-      }
-      if (hasLegacyLoras) {
-        return clipLoraDefaultWeights[index] ?? 0;
-      }
-      return fallback.loraWeights[index] ?? clipLoraDefaultWeights[index] ?? 1;
-    });
-    const stage = {
-      id: normalizeOptionalEntityId(rawStage.id),
-      skipped: !!rawStage.skipped,
-      control,
-      controlNetStrength: normalizeStageControlNetStrengthValue(
-        readRawStageProp(rawStage, "controlNetStrength") ?? fallback.controlNetStrength
-      ),
-      icLoraStrengths: Array.isArray(rawStage.icLoraStrengths) ? rawStage.icLoraStrengths.map(
-        normalizeStageControlNetStrengthValue
-      ) : [...fallback.icLoraStrengths],
-      loraWeights,
-      refStrengths: normalizeStageRefStrengths(
-        rawStage.refStrengths,
-        refCount
-      ),
-      upscale: firstStageUpscale.upscale,
-      upscaleMethod: firstStageUpscale.upscaleMethod,
-      model: textOr(rawStage.model, fallback.model),
-      modelProfileId: "unsupported",
-      steps: Math.max(
-        1,
-        Math.round(
-          clampedNumber(
-            rawStage.steps,
-            fallback.steps,
-            defaults.stepsMin,
-            defaults.stepsMax
-          )
-        )
-      ),
-      cfgScale: clampedNumber(
-        rawStage.cfgScale,
-        fallback.cfgScale,
-        defaults.cfgScaleMin,
-        defaults.cfgScaleMax
-      ),
-      sampler: textOr(rawStage.sampler, fallback.sampler),
-      scheduler: textOr(rawStage.scheduler, fallback.scheduler)
-    };
-    stage.modelProfileId = trimmedText(readRawStageProp(rawStage, "modelProfileId")) || modelProfileForModel(defaults.modelCatalog, stage.model) || fallback.modelProfileId;
-    if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
-      stage.upscaleMethod = forcedFirstStage ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
-    }
-    return stage;
-  };
-  var normalizeRef = (rawRef, frameMax) => {
-    const fallback = buildDefaultRef();
-    const source = textOr(rawRef.source, fallback.source);
-    const authoredFrame = Math.max(
-      REF_FRAME_MIN,
-      Math.round(numberOr(rawRef.frame, fallback.frame))
-    );
-    return {
-      id: normalizeOptionalEntityId(rawRef.id),
-      source,
-      uploadFileName: textOr(rawRef.uploadFileName, "") || null,
-      uploadedImage: normalizeUploadedMedia(rawRef.uploadedImage),
-      frame: frameMax === null ? authoredFrame : clamp(authoredFrame, REF_FRAME_MIN, frameMax),
-      fromEnd: !!rawRef.fromEnd
-    };
-  };
-
-  // frontend/normalizationClip.ts
-  var normalizeBoundaryOut = (value) => {
-    const raw = trimmedText(value).toLowerCase();
-    return raw === "continue" || raw === "crossfade" ? raw : "cut";
-  };
-  var normalizeContinueOverlap = (value, constraints = boundaryOverlapConstraints(null)) => {
-    const numeric = Math.trunc(Number(value));
-    return Number.isFinite(numeric) && numeric > 0 ? numeric : normalizeBoundaryOverlap(value, constraints);
-  };
-  var normalizeReferenceFraming = (value) => value === "stretch" || value === "fit" || value === "fit-green" ? value : "crop";
-  var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
-    const defaults = getRootDefaults2();
-    const refs = includeDefaultRef ? [buildDefaultRef()] : [];
-    const loras = previousClip?.loras.map((entry) => ({ ...entry })) ?? [];
-    const initialLoraWeights = loras.map(
-      (entry, index) => previousClip?.stages[0]?.loraWeights[index] ?? defaults.loraDefaultWeights[defaults.loraValues.indexOf(entry.name)] ?? 1
-    );
-    const firstStage = {
-      ...buildDefaultStage(
-        getRootDefaults2,
-        getDefaultStageModel2,
-        previousClip?.stages[0] ?? null,
-        refs.length,
-        initialLoraWeights
-      ),
-      refStrengths: buildDefaultStageRefStrengths(
-        refs.length,
-        includeDefaultRef ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH : STAGE_REF_STRENGTH_DEFAULT
-      )
-    };
-    const architecture = (previousClip?.architectureHint !== NONE_ARCHITECTURE_ID ? previousClip?.architectureHint : null) ?? architectureForModel(defaults.modelCatalog, firstStage.model) ?? "unsupported";
-    const continueRule = architectureDescriptor(
-      defaults.modelCatalog,
-      architecture
-    )?.boundaryRules.continue;
-    return {
-      architectureHint: architecture,
-      modelProfileId: (previousClip?.architectureHint !== NONE_ARCHITECTURE_ID ? previousClip?.modelProfileId : null) ?? modelProfileForModel(defaults.modelCatalog, firstStage.model) ?? firstStage.modelProfileId,
-      skipped: previousClip?.skipped === true,
-      hue: UNASSIGNED_HUE,
-      boundaryOut: "cut",
-      boundaryOutCarryAudio: false,
-      boundaryOutOverlap: boundaryOverlapConstraints(continueRule).defaultFrames,
-      duration: previousClip ? previousClip.duration : snapDurationToFps(
-        Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
-        defaults.fps
-      ),
-      refFraming: "crop",
-      audioSource: AUDIO_SOURCE_NATIVE,
-      loras,
-      icLoras: [],
-      saveAudioTrack: false,
-      clipLengthFromAudio: false,
-      clipLengthFromControlNet: false,
-      reuseAudio: false,
-      uploadedAudio: null,
-      prompt: "",
-      promptWindows: [],
-      retake: null,
-      sourceVideo: null,
-      refs,
-      stages: [firstStage]
-    };
-  };
-  var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2, effectiveFps) => {
-    const defaults = getRootDefaults2();
-    const rawAudioSource = text(rawClip.audioSource, AUDIO_SOURCE_NATIVE);
-    const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
-    const sourceVideo = normalizeSourceVideo(rawClip.sourceVideo);
-    const fps = Math.max(
-      1,
-      typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps
-    );
-    const rawDuration = sourceVideo?.lengthSeconds ?? numberOr(rawClip.duration, defaults.frames / fps);
-    const duration = snapDurationToFps(
-      Math.max(CLIP_DURATION_MIN, rawDuration),
-      fps
-    );
-    const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
-    const clipScopedLoras = normalizeStageLoras(rawClip.loras);
-    const loraNames = [];
-    const loraDefaultWeightByName = /* @__PURE__ */ new Map();
-    const appendLoraName = (name, defaultWeight) => {
-      if (loraDefaultWeightByName.has(name)) {
-        return;
-      }
-      loraNames.push(name);
-      loraDefaultWeightByName.set(name, defaultWeight);
-    };
-    for (const entry of clipScopedLoras) {
-      appendLoraName(entry.name, entry.weight);
-    }
-    for (const rawStage of stagesRaw) {
-      if (!isRecord(rawStage)) {
-        continue;
-      }
-      for (const entry of normalizeStageLoras(rawStage.loras)) {
-        appendLoraName(entry.name, 0);
-      }
-    }
-    const loras = loraNames.map((name) => ({ name }));
-    const loraDefaultWeights = loraNames.map(
-      (name) => loraDefaultWeightByName.get(name) ?? 1
-    );
-    const stages = [];
-    for (let i = 0; i < stagesRaw.length; i++) {
-      const previousStage = i > 0 ? stages[i - 1] : null;
-      stages.push(
-        normalizeStage(
-          getRootDefaults2,
-          getDefaultStageModel2,
-          isRecord(stagesRaw[i]) ? stagesRaw[i] : {},
-          previousStage,
-          refsRaw.length,
-          i,
-          sourceVideo !== null,
-          loras,
-          loraDefaultWeights
-        )
-      );
-    }
-    const firstSkippedStage = stages.findIndex(
-      (stage) => stage.skipped === true
-    );
-    if (firstSkippedStage >= 0) {
-      for (let index = firstSkippedStage; index < stages.length; index++) {
-        stages[index].skipped = true;
-      }
-    }
-    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
-    const clipLengthFromAudio = !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
-    const retake = normalizeRetake(rawClip.retake, duration);
-    const refFrameMax = getKnownReferenceFrameMax(
-      getRootDefaults2,
-      {
-        duration,
-        stages,
-        sourceVideo,
-        retake,
-        clipLengthFromAudio,
-        clipLengthFromControlNet
-      },
-      fps
-    );
-    const refs = refsRaw.map(
-      (rawRef) => normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax)
-    );
-    const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
-    const stageZero = stages[0] ?? null;
-    const persistedArchitecture = trimmedText(rawClip.architectureHint);
-    const persistedProfile = trimmedText(rawClip.modelProfileId);
-    const isSourceOnly = sourceVideo !== null && stages.every((stage) => stage.skipped);
-    const architecture = isSourceOnly ? persistedArchitecture || "none" : normalizeClipArchitecture(
-      persistedArchitecture,
-      stageZero?.model ?? null,
-      defaults.modelCatalog
-    );
-    const resolvedArchitecture = isSourceOnly ? NONE_ARCHITECTURE_ID : architectureForModel(
-      defaults.modelCatalog,
-      stageZero?.model ?? ""
-    ) ?? "unsupported";
-    const modelProfileId = isSourceOnly ? persistedProfile || (architecture === NONE_ARCHITECTURE_ID ? NONE_ARCHITECTURE_ID : "unsupported") : persistedProfile || stageZero?.modelProfileId || "unsupported";
-    const icLoras = normalizeArchitectureIcLoras(
-      resolvedArchitecture,
-      rawClip,
-      stagesRaw.length,
-      sourceVideo !== null,
-      { preserveDormantLtx: true }
-    );
-    const icLoraDefaultStrengths = icLoras.map(
-      (entry) => defaultLoraWeight(defaults, entry.lora)
-    );
-    for (let index = 0; index < stages.length; index++) {
-      const stage = stages[index];
-      const rawStage = isRecord(stagesRaw[index]) ? stagesRaw[index] : {};
-      const hasLegacyControlNetStrength = Object.hasOwn(
-        rawStage,
-        "controlNetStrength"
-      );
-      const legacyFallback = hasLegacyControlNetStrength ? stage.controlNetStrength : 1;
-      stage.icLoraStrengths = normalizeStageIcLoraStrengths(
-        rawStage.icLoraStrengths,
-        icLoras.length,
-        legacyFallback,
-        hasLegacyControlNetStrength ? [] : stages[index - 1]?.icLoraStrengths ?? icLoraDefaultStrengths
-      );
-    }
-    const boundaryOut = normalizeBoundaryOut(rawClip.boundaryOut);
-    const boundaryRule = architectureDescriptor(
-      defaults.modelCatalog,
-      resolvedArchitecture
-    )?.boundaryRules[boundaryOut];
-    return {
-      id: normalizeOptionalEntityId(rawClip.id),
-      architectureHint: architecture,
-      modelProfileId,
-      skipped: !!rawClip.skipped,
-      hue: normalizeStoredHue(rawClip.hue),
-      boundaryOut,
-      boundaryOutCarryAudio: !!rawClip.boundaryOutCarryAudio,
-      boundaryOutOverlap: normalizeContinueOverlap(
-        rawClip.boundaryOutOverlap,
-        boundaryOverlapConstraints(boundaryRule)
-      ),
-      duration,
-      refFraming: normalizeReferenceFraming(rawClip.refFraming),
-      audioSource,
-      loras,
-      icLoras,
-      saveAudioTrack: !!rawClip.saveAudioTrack,
-      clipLengthFromAudio,
-      clipLengthFromControlNet,
-      reuseAudio: !!rawClip.reuseAudio,
-      uploadedAudio: normalizeUploadedMedia(rawClip.uploadedAudio),
-      prompt: text(rawClip.prompt),
-      promptWindows: normalizePromptWindows(rawClip),
-      retake,
-      sourceVideo,
-      refs,
-      stages
-    };
-  };
-
-  // frontend/persistence/documentCodec.ts
-  var toIntOrNull = (value) => {
-    const num = optionalNonNegativeNumber(value);
-    return num === null ? null : Math.round(num);
-  };
-  var resolveRootDims = (inherited, stored) => {
-    const width = toIntOrNull(stored.width);
-    const height = toIntOrNull(stored.height);
-    const dimsExplicit = width !== null && width >= ROOT_DIMENSION_MIN && height !== null && height >= ROOT_DIMENSION_MIN;
-    return {
-      width: dimsExplicit ? width : inherited.width,
-      height: dimsExplicit ? height : inherited.height,
-      // fps is never stored: the timeline always follows the core Video FPS
-      // param (the backend falls back to it too when the JSON has no fps).
-      fps: inherited.fps,
-      dimsExplicit
-    };
-  };
-  var createRootConfig = (dims, clips, audioTracks = []) => {
-    const config = {
-      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
-      ...dims,
-      clips,
-      audioTracks
-    };
-    ensureAuthoringDocumentIdentity(config);
-    return config;
-  };
-  var serializeClipsForStorage = (clips) => {
-    ensureClipEntityIdentities(clips);
-    return clips.map(
-      (clip) => ({
-        id: clip.id,
-        architectureHint: clip.architectureHint,
-        modelProfileId: clip.modelProfileId,
-        skipped: clip.skipped,
-        boundaryOut: clip.boundaryOut,
-        boundaryOutCarryAudio: clip.boundaryOutCarryAudio,
-        boundaryOutOverlap: clip.boundaryOutOverlap,
-        duration: clip.duration,
-        refFraming: clip.refFraming,
-        audioSource: clip.audioSource,
-        loras: clip.loras.map((entry) => ({
-          name: entry.name
-        })),
-        icLoras: clip.icLoras.map((entry) => ({
-          id: entry.id,
-          lora: entry.lora,
-          preset: entry.preset,
-          driveSource: entry.driveSource,
-          driveData: entry.driveData,
-          driveMediaKinds: entry.driveMediaKinds,
-          stage: entry.stage,
-          strength: entry.strength,
-          attentionStrength: entry.attentionStrength,
-          controlType: entry.controlType,
-          driveMedia: entry.driveMedia
-        })),
-        saveAudioTrack: clip.saveAudioTrack,
-        clipLengthFromAudio: clip.clipLengthFromAudio,
-        clipLengthFromControlNet: clip.clipLengthFromControlNet,
-        reuseAudio: clip.reuseAudio,
-        uploadedAudio: clip.uploadedAudio,
-        sourceVideo: clip.sourceVideo ? {
-          data: clip.sourceVideo.data,
-          fileName: clip.sourceVideo.fileName,
-          fps: clip.sourceVideo.fps,
-          durationSeconds: clip.sourceVideo.durationSeconds,
-          startSeconds: clip.sourceVideo.startSeconds,
-          lengthSeconds: clip.sourceVideo.lengthSeconds
-        } : null,
-        retake: clip.retake ? {
-          id: clip.retake.id,
-          startSeconds: clip.retake.startSeconds,
-          lengthSeconds: clip.retake.lengthSeconds,
-          strength: clip.retake.strength
-        } : null,
-        refs: clip.refs.map((ref) => ({
-          id: ref.id,
-          source: ref.source,
-          uploadFileName: ref.uploadFileName,
-          uploadedImage: ref.uploadedImage,
-          frame: ref.frame,
-          fromEnd: ref.fromEnd
-        })),
-        stages: clip.stages.map((stage) => ({
-          id: stage.id,
-          skipped: stage.skipped,
-          control: stage.control,
-          controlNetStrength: stage.controlNetStrength,
-          icLoraStrengths: stage.icLoraStrengths,
-          loraWeights: stage.loraWeights,
-          refStrengths: stage.refStrengths,
-          upscale: stage.upscale,
-          upscaleMethod: stage.upscaleMethod,
-          model: stage.model,
-          modelProfileId: stage.modelProfileId,
-          steps: stage.steps,
-          cfgScale: stage.cfgScale,
-          sampler: stage.sampler,
-          scheduler: stage.scheduler
-        }))
-      })
-    );
-  };
-  var timelinePointProjection = (clips, seconds, edge) => {
-    if (!Number.isFinite(seconds) || seconds < 0 || clips.length === 0) {
-      return null;
-    }
-    let cursor = 0;
-    for (let index = 0; index < clips.length; index++) {
-      const clip = clips[index];
-      const duration = Math.max(0, clip.duration || 0);
-      const clipEnd = cursor + duration;
-      const isLast = index === clips.length - 1;
-      const ownsPoint = edge === "start" ? seconds < clipEnd || isLast : seconds <= clipEnd || isLast;
-      if (ownsPoint) {
-        return {
-          clipId: clip.id,
-          offsetSeconds: Math.max(
-            0,
-            Math.min(duration, seconds - cursor)
-          )
-        };
-      }
-      cursor = clipEnd;
-    }
-    return null;
-  };
-  var timelineSpanProjection = (clips, span) => {
-    if (span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
-      return null;
-    }
-    const start = timelinePointProjection(
-      clips,
-      span.timelineStartSeconds,
-      "start"
-    );
-    const end = timelinePointProjection(
-      clips,
-      span.timelineStartSeconds + span.timelineLengthSeconds,
-      "end"
-    );
-    return start && end ? {
-      firstClipId: start.clipId,
-      lastClipId: end.clipId,
-      clipStartOffsetSeconds: start.offsetSeconds,
-      clipEndOffsetSeconds: end.offsetSeconds
-    } : null;
-  };
-  var serializeStateForStorage = (state) => {
-    ensureAuthoringDocumentIdentity(state);
-    const canonical = state;
-    const out = {
-      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION
-    };
-    if (state.dimsExplicit) {
-      out.width = Math.round(state.width);
-      out.height = Math.round(state.height);
-    }
-    out.clips = serializeClipsForStorage(state.clips);
-    out.audioTracks = canonical.audioTracks.map((track) => ({
-      id: track.id,
-      ...track.volume === void 0 ? {} : { volume: track.volume },
-      source: {
-        kind: track.source.kind,
-        reference: track.source.reference,
-        uploadedAudio: track.source.uploadedAudio
-      },
-      spans: track.spans.map((span) => ({
-        id: span.id,
-        timelineStartSeconds: span.timelineStartSeconds,
-        timelineLengthSeconds: span.timelineLengthSeconds,
-        sourceStartSeconds: span.sourceStartSeconds,
-        projection: timelineSpanProjection(canonical.clips, span)
-      }))
-    }));
-    return JSON.stringify(out);
-  };
-  var isTransientBrowserMedia = (media) => {
-    const data = media?.data.trim().toLowerCase() ?? "";
-    return data.startsWith("data:") || data.startsWith("blob:");
-  };
-  var serializeStateForDurableStorage = (state) => {
-    ensureAuthoringDocumentIdentity(state);
-    const durable = structuredClone(state);
-    for (const clip of durable.clips) {
-      if (isTransientBrowserMedia(clip.uploadedAudio)) {
-        clip.uploadedAudio = null;
-      }
-      if (clip.sourceVideo && isTransientBrowserMedia({ data: clip.sourceVideo.data })) {
-        clip.sourceVideo = null;
-      }
-      for (const ref of clip.refs) {
-        if (isTransientBrowserMedia(ref.uploadedImage)) {
-          ref.uploadedImage = null;
-        }
-      }
-      for (const icLora of clip.icLoras) {
-        if (isTransientBrowserMedia(icLora.driveMedia)) {
-          icLora.driveMedia = null;
-        }
-      }
-    }
-    for (const track of durable.audioTracks ?? []) {
-      if (isTransientBrowserMedia(track.source.uploadedAudio)) {
-        track.source.uploadedAudio = null;
-      }
-    }
-    return serializeStateForStorage(durable);
-  };
-  var hasArrayOfRecords = (owner, key) => {
-    if (!Object.hasOwn(owner, key)) {
-      return true;
-    }
-    const value = owner[key];
-    return Array.isArray(value) && value.every(isRecord);
-  };
-  var hasValidStoredCollections = (parsed) => {
-    if (!Array.isArray(parsed.clips) || !parsed.clips.every(isRecord)) {
-      return false;
-    }
-    if (!hasArrayOfRecords(parsed, "audioTracks") || !hasArrayOfRecords(parsed, "clips")) {
-      return false;
-    }
-    for (const clip of parsed.clips) {
-      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "refs") || !hasArrayOfRecords(clip, "icLoras") || Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras")) {
-        return false;
-      }
-      const stages = Array.isArray(clip.stages) ? clip.stages : [];
-      for (const stage of stages) {
-        if (Object.hasOwn(stage, "loras") && !hasArrayOfRecords(stage, "loras") || Object.hasOwn(stage, "loraWeights") && (!Array.isArray(stage.loraWeights) || !stage.loraWeights.every(
-          (weight) => typeof weight === "number" && Number.isFinite(weight)
-        )) || Object.hasOwn(stage, "icLoraStrengths") && (!Array.isArray(stage.icLoraStrengths) || !stage.icLoraStrengths.every(
-          (strength) => typeof strength === "number" && Number.isFinite(strength)
-        )) || Object.hasOwn(stage, "refStrengths") && (!Array.isArray(stage.refStrengths) || !stage.refStrengths.every(
-          (strength) => typeof strength === "number" && Number.isFinite(strength)
-        ))) {
-          return false;
-        }
-      }
-    }
-    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
-    return tracks.every(
-      (track) => hasArrayOfRecords(track, "spans") && (!Object.hasOwn(track, "source") || isRecord(track.source))
-    );
-  };
-  var OUTDATED_SCHEMA_NOTICE = "VideoStages: the saved timeline was created by an older version and could not be loaded.";
-  var noticedOutdatedDocument = null;
-  var noticeOutdatedSchema = (serialized) => {
-    if (noticedOutdatedDocument === serialized) {
-      return;
-    }
-    noticedOutdatedDocument = serialized;
-    getVideoStagesHostBridge().showError(OUTDATED_SCHEMA_NOTICE);
-  };
-  var DIVERGENT_PROJECTION_NOTICE = "VideoStages: the saved timeline has audio spans whose clip anchors disagree with their timeline seconds. The seconds were used and the anchors will be rewritten on the next save — re-check those segments.";
-  var noticedDivergentProjection = null;
-  var SPAN_PROJECTION_TOLERANCE = 1e-6;
-  var numberAt = (owner, key) => typeof owner[key] === "number" && Number.isFinite(owner[key]) ? owner[key] : null;
-  var storedSpanProjection = (span) => {
-    const raw = span.projection;
-    if (!isRecord(raw)) {
-      return null;
-    }
-    const first = raw.firstClipId;
-    const last = raw.lastClipId;
-    const startOffset = numberAt(raw, "clipStartOffsetSeconds");
-    const endOffset = numberAt(raw, "clipEndOffsetSeconds");
-    return typeof first === "string" && typeof last === "string" && startOffset !== null && endOffset !== null ? {
-      firstClipId: first,
-      lastClipId: last,
-      clipStartOffsetSeconds: startOffset,
-      clipEndOffsetSeconds: endOffset
-    } : null;
-  };
-  var hasDivergentSpanProjection = (parsed) => {
-    const clips = parsed.clips.map((clip) => ({
-      id: typeof clip.id === "string" ? clip.id : "",
-      duration: numberAt(clip, "duration") ?? 0
-    }));
-    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
-    for (const track of tracks) {
-      const spans = isRecord(track) && Array.isArray(track.spans) ? track.spans : [];
-      for (const span of spans) {
-        if (!isRecord(span)) {
-          continue;
-        }
-        const stored = storedSpanProjection(span);
-        if (!stored) {
-          continue;
-        }
-        const expected = timelineSpanProjection(clips, {
-          timelineStartSeconds: numberAt(span, "timelineStartSeconds"),
-          timelineLengthSeconds: numberAt(span, "timelineLengthSeconds")
-        });
-        if (!expected || expected.firstClipId !== stored.firstClipId || expected.lastClipId !== stored.lastClipId || Math.abs(
-          expected.clipStartOffsetSeconds - stored.clipStartOffsetSeconds
-        ) > SPAN_PROJECTION_TOLERANCE || Math.abs(
-          expected.clipEndOffsetSeconds - stored.clipEndOffsetSeconds
-        ) > SPAN_PROJECTION_TOLERANCE) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-  var noticeDivergentProjection = (serialized) => {
-    if (noticedDivergentProjection === serialized) {
-      return;
-    }
-    noticedDivergentProjection = serialized;
-    getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
-  };
-  var ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION = 5;
-  var migrateStoredDocument = (parsed) => {
-    if (parsed.schemaVersion === CURRENT_AUTHORING_SCHEMA_VERSION) {
-      return parsed;
-    }
-    if (parsed.schemaVersion !== ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION || !Array.isArray(parsed.clips)) {
-      return null;
-    }
-    const migrated = structuredClone(parsed);
-    migrated.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
-    for (const rawClip of migrated.clips) {
-      if (!isRecord(rawClip)) {
-        continue;
-      }
-      if (rawClip.architectureHint === void 0) {
-        rawClip.architectureHint = rawClip.architecture;
-      }
-      delete rawClip.architecture;
-    }
-    return migrated;
-  };
-  var decodeStoredDocument = (serialized, inherited, environment) => {
-    try {
-      const parsed = JSON.parse(serialized);
-      if (!isRecord(parsed)) {
-        return null;
-      }
-      const current = migrateStoredDocument(parsed);
-      if (!current) {
-        noticeOutdatedSchema(serialized);
-        return null;
-      }
-      if (!hasValidStoredCollections(current)) {
-        return null;
-      }
-      if (hasDivergentSpanProjection(current)) {
-        noticeDivergentProjection(serialized);
-      }
-      const dims = resolveRootDims(inherited, {
-        width: current.width,
-        height: current.height
-      });
-      const capturedDefaults = () => environment.defaults;
-      const capturedDefaultStageModel = () => environment.defaultStageModel;
-      const clips = current.clips.map(
-        (entry) => normalizeClip(
-          entry,
-          capturedDefaults,
-          capturedDefaultStageModel,
-          dims.fps
-        )
-      );
-      const firstSkippedClip = clips.findIndex(
-        (clip) => clip.skipped === true
-      );
-      if (firstSkippedClip >= 0) {
-        for (let index = firstSkippedClip; index < clips.length; index++) {
-          clips[index].skipped = true;
-        }
-      }
-      return {
-        dims,
-        clips,
-        audioTracks: normalizeAudioTracks(current.audioTracks)
-      };
-    } catch {
-      return null;
-    }
-  };
-  var hasCanonicalStoredId = (value, seen) => {
-    if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || value.id.trim() !== value.id || seen.has(value.id)) {
-      return false;
-    }
-    seen.add(value.id);
-    return true;
-  };
-  var storedDocumentNeedsCanonicalIdRepair = (serialized) => {
-    try {
-      const parsed = JSON.parse(serialized);
-      if (!isRecord(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION || !Array.isArray(parsed.clips) || !Array.isArray(parsed.audioTracks)) {
-        return true;
-      }
-      const seenIds = /* @__PURE__ */ new Set();
-      for (const rawClip of parsed.clips) {
-        if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
-        for (const key of ["stages", "refs"]) {
-          const children = rawClip[key];
-          if (!Array.isArray(children) || children.some(
-            (child) => !hasCanonicalStoredId(child, seenIds)
-          )) {
-            return true;
-          }
-        }
-        if (rawClip.retake !== null && !hasCanonicalStoredId(rawClip.retake, seenIds)) {
-          return true;
-        }
-      }
-      for (const rawTrack of parsed.audioTracks) {
-        if (!hasCanonicalStoredId(rawTrack, seenIds) || !Array.isArray(rawTrack.spans) || rawTrack.spans.some(
-          (span) => !hasCanonicalStoredId(span, seenIds)
-        )) {
-          return true;
-        }
-      }
-      return false;
-    } catch {
-      return true;
-    }
-  };
-
   // frontend/persistence/durableAuthoringState.ts
   var DURABLE_AUTHORING_KEY = "videostages_authoring_state_v1";
   var DURABLE_AUTHORING_VERSION = 1;
   var isFiniteNumber = (value) => typeof value === "number" && Number.isFinite(value);
   var readPrompt = (value) => {
-    if (!isRecord(value) || typeof value.prompt !== "string") {
+    if (!isRecord2(value) || typeof value.prompt !== "string") {
       return null;
     }
     if (!Array.isArray(value.windows)) {
@@ -5633,7 +5632,7 @@
     }
     const windows = [];
     for (const window2 of value.windows) {
-      if (!isRecord(window2) || typeof window2.prompt !== "string" || !isFiniteNumber(window2.start) || !isFiniteNumber(window2.duration)) {
+      if (!isRecord2(window2) || typeof window2.prompt !== "string" || !isFiniteNumber(window2.start) || !isFiniteNumber(window2.duration)) {
         return null;
       }
       windows.push({
@@ -5651,7 +5650,7 @@
         return null;
       }
       const parsed = JSON.parse(raw);
-      if (!isRecord(parsed) || parsed.version !== DURABLE_AUTHORING_VERSION || typeof parsed.document !== "string" || !Array.isArray(parsed.prompts)) {
+      if (!isRecord2(parsed) || parsed.version !== DURABLE_AUTHORING_VERSION || typeof parsed.document !== "string" || !Array.isArray(parsed.prompts)) {
         return null;
       }
       const prompts = [];
@@ -5999,11 +5998,90 @@
     saveRequestedState(state, { ...options, notifyDomChange }, snapshot);
   };
 
+  // frontend/sourceVideoProbe.ts
+  var sourceVideoFromProbe = (probe, data, fileName, clipDuration) => {
+    const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
+    return {
+      data,
+      fileName,
+      fps: probe?.fps ?? 0,
+      durationSeconds,
+      startSeconds: 0,
+      lengthSeconds: durationSeconds > 0 ? durationSeconds : clipDuration
+    };
+  };
+  var FPS_SAMPLE_FRAMES = 12;
+  var MIN_FRAME_DELTA_SECONDS = 5e-4;
+  var MAX_PLAUSIBLE_FPS = 240;
+  var estimateFpsFromMediaTimes = (mediaTimes) => {
+    const deltas = [];
+    for (let i = 1; i < mediaTimes.length; i++) {
+      const delta = mediaTimes[i] - mediaTimes[i - 1];
+      if (delta > MIN_FRAME_DELTA_SECONDS) {
+        deltas.push(delta);
+      }
+    }
+    if (deltas.length < 4) {
+      return null;
+    }
+    deltas.sort((a, b) => a - b);
+    const median = deltas[Math.floor(deltas.length / 2)];
+    const fps = Math.round(1 / median);
+    return fps >= 1 && fps <= MAX_PLAUSIBLE_FPS ? fps : null;
+  };
+  var probeSourceVideo = (src, timeoutMs = 8e3) => new Promise((resolve) => {
+    const video = getVideoStagesHostBridge().createSourceVideoElement();
+    video.muted = true;
+    video.preload = "auto";
+    let settled = false;
+    const finish2 = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      resolve(result);
+    };
+    const timer = setTimeout(() => finish2(null), timeoutMs);
+    video.addEventListener("error", () => finish2(null));
+    video.addEventListener("loadedmetadata", () => {
+      const durationSeconds = Number.isFinite(video.duration) ? video.duration : 0;
+      if (!(durationSeconds > 0)) {
+        finish2(null);
+        return;
+      }
+      const requestFrame = video.requestVideoFrameCallback?.bind(video);
+      if (!requestFrame) {
+        finish2({ durationSeconds, fps: null });
+        return;
+      }
+      const mediaTimes = [];
+      const step = (_now, metadata) => {
+        mediaTimes.push(metadata.mediaTime);
+        if (mediaTimes.length >= FPS_SAMPLE_FRAMES || metadata.mediaTime >= durationSeconds) {
+          finish2({
+            durationSeconds,
+            fps: estimateFpsFromMediaTimes(mediaTimes)
+          });
+          return;
+        }
+        requestFrame(step);
+      };
+      requestFrame(step);
+      video.play()?.catch(() => finish2({ durationSeconds, fps: null }));
+    });
+    video.src = src;
+  });
+
   // frontend/refineVideoButton.ts
+  var REFINE_SOURCE_FILE_NAME = "refine-source";
   var refineNeedsExtraStageMessage = (skipCount) => `Refine Video needs Clip 0 to have at least one active stage after Stage ${skipCount - 1} (for example, an upscale or refine stage). Add a stage in the VideoStages panel, then click Refine Video again.`;
   var countActiveStagesInMetadataClip0 = (videostagesJson) => {
     const parsed = safeJsonParse(videostagesJson, null);
-    if (!isRecord(parsed)) {
+    if (!isRecord2(parsed)) {
       return 0;
     }
     const clips = readProp(parsed, "clips");
@@ -6011,7 +6089,7 @@
       return 0;
     }
     const clip0 = clips[0];
-    if (!isRecord(clip0) || readProp(clip0, "skipped") === true) {
+    if (!isRecord2(clip0) || readProp(clip0, "skipped") === true) {
       return 0;
     }
     const stages = readProp(clip0, "stages");
@@ -6019,7 +6097,7 @@
       return 0;
     }
     const firstSkipped = stages.findIndex(
-      (stage) => isRecord(stage) && readProp(stage, "skipped") === true
+      (stage) => isRecord2(stage) && readProp(stage, "skipped") === true
     );
     return firstSkipped < 0 ? stages.length : firstSkipped;
   };
@@ -6032,6 +6110,24 @@
       return false;
     }
     return activeStageCount(clip0) > skipCount;
+  };
+  var applyRefineToClipZero = (clip, data, probe, skipCount) => {
+    clip.sourceVideo = sourceVideoFromProbe(
+      probe,
+      data,
+      REFINE_SOURCE_FILE_NAME,
+      clip.duration
+    );
+    let activeIndex = 0;
+    for (const stage of clip.stages) {
+      if (stage.skipped) {
+        break;
+      }
+      if (activeIndex < skipCount) {
+        stage.control = 0;
+      }
+      activeIndex++;
+    }
   };
   var refineVideoButton = () => {
     const description = "Re-runs VideoStages using this video as the source for Clip 0 (skips the first N stage samplers, where N is read from the source video's metadata). Requires an extra stage beyond those.";
@@ -6052,8 +6148,8 @@
               );
             }
           }
-          const params = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_image_params") : null;
-          const sourceVideostages = isRecord(params) ? readProp(params, "videostages") : void 0;
+          const params = isRecord2(parsedMetadata) ? readProp(parsedMetadata, "sui_image_params") : null;
+          const sourceVideostages = isRecord2(params) ? readProp(params, "videostages") : void 0;
           const skipCount = Math.max(
             1,
             typeof sourceVideostages === "string" ? countActiveStagesInMetadataClip0(sourceVideostages) : 0
@@ -6067,12 +6163,25 @@
             return;
           }
           const videoDataUrl = await host.toDataUrl(src);
+          const probe = await probeSourceVideo(videoDataUrl);
+          const state = getState();
+          const clipZero = state.clips[0];
+          if (!clipZero) {
+            host.showError(refineNeedsExtraStageMessage(skipCount));
+            return;
+          }
+          const clips = [...state.clips];
+          clips[0] = structuredClone(clipZero);
+          applyRefineToClipZero(clips[0], videoDataUrl, probe, skipCount);
+          reconcileClipArchitectureIdentity(
+            clips[0],
+            captureAuthoringTransactionSnapshot().capabilities.catalog
+          );
           const inputOverrides = {
-            videostagesrefinesourcevideo: videoDataUrl,
-            videostagesrefineskipstages: skipCount,
+            videostages: serializeStateForStorage({ ...state, clips }),
             images: 1
           };
-          const seed = isRecord(params) ? readProp(params, "seed") : void 0;
+          const seed = isRecord2(params) ? readProp(params, "seed") : void 0;
           if (typeof seed === "number") {
             inputOverrides.seed = seed;
           }
@@ -11659,73 +11768,6 @@
     return buildSection();
   };
 
-  // frontend/sourceVideoProbe.ts
-  var FPS_SAMPLE_FRAMES = 12;
-  var MIN_FRAME_DELTA_SECONDS = 5e-4;
-  var MAX_PLAUSIBLE_FPS = 240;
-  var estimateFpsFromMediaTimes = (mediaTimes) => {
-    const deltas = [];
-    for (let i = 1; i < mediaTimes.length; i++) {
-      const delta = mediaTimes[i] - mediaTimes[i - 1];
-      if (delta > MIN_FRAME_DELTA_SECONDS) {
-        deltas.push(delta);
-      }
-    }
-    if (deltas.length < 4) {
-      return null;
-    }
-    deltas.sort((a, b) => a - b);
-    const median = deltas[Math.floor(deltas.length / 2)];
-    const fps = Math.round(1 / median);
-    return fps >= 1 && fps <= MAX_PLAUSIBLE_FPS ? fps : null;
-  };
-  var probeSourceVideo = (src, timeoutMs = 8e3) => new Promise((resolve) => {
-    const video = getVideoStagesHostBridge().createSourceVideoElement();
-    video.muted = true;
-    video.preload = "auto";
-    let settled = false;
-    const finish2 = (result) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
-      resolve(result);
-    };
-    const timer = setTimeout(() => finish2(null), timeoutMs);
-    video.addEventListener("error", () => finish2(null));
-    video.addEventListener("loadedmetadata", () => {
-      const durationSeconds = Number.isFinite(video.duration) ? video.duration : 0;
-      if (!(durationSeconds > 0)) {
-        finish2(null);
-        return;
-      }
-      const requestFrame = video.requestVideoFrameCallback?.bind(video);
-      if (!requestFrame) {
-        finish2({ durationSeconds, fps: null });
-        return;
-      }
-      const mediaTimes = [];
-      const step = (_now, metadata) => {
-        mediaTimes.push(metadata.mediaTime);
-        if (mediaTimes.length >= FPS_SAMPLE_FRAMES || metadata.mediaTime >= durationSeconds) {
-          finish2({
-            durationSeconds,
-            fps: estimateFpsFromMediaTimes(mediaTimes)
-          });
-          return;
-        }
-        requestFrame(step);
-      };
-      requestFrame(step);
-      video.play()?.catch(() => finish2({ durationSeconds, fps: null }));
-    });
-    video.src = src;
-  });
-
   // frontend/sourceVideoProbeGuard.ts
   var nextOperationId = 0;
   var currentOperations = /* @__PURE__ */ new Map();
@@ -11766,16 +11808,13 @@
       if (!target || !capabilities.forClip(target).decision("sourceVideo").supported) {
         return;
       }
-      const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
-      const lengthSeconds = durationSeconds > 0 ? durationSeconds : target.duration;
-      target.sourceVideo = {
+      target.sourceVideo = sourceVideoFromProbe(
+        probe,
         data,
         fileName,
-        fps: probe?.fps ?? 0,
-        durationSeconds,
-        startSeconds: 0,
-        lengthSeconds
-      };
+        target.duration
+      );
+      const lengthSeconds = target.sourceVideo.lengthSeconds;
       reconcileClipArchitectureIdentity(target, capabilities.catalog);
       applyClipDurationResize(
         target,

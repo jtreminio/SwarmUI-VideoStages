@@ -25,18 +25,6 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     {
         ArgumentNullException.ThrowIfNull(context);
         List<PlanDiagnostic> diagnostics = [];
-        if (context.Plan.Root.HostKind == HostRootKind.GlobalRefineSource
-            && context.Plan.Clips.Any(
-                clip => clip.Architecture?.Id == ArchitectureId
-                    && clip.EntryMode == ArchitectureEntryMode.SourceVideo
-                    && clip.Input == ClipInputKind.SourceVideo
-                    && clip.IsSourced
-                    && clip.SourceVideo is not null))
-        {
-            diagnostics.Add(Refuse(
-                "'Refine Source Video' is a request-global donor and cannot coexist with a "
-                + "clip-local sourced WAN timeline."));
-        }
         if (generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null) is not null)
         {
             if (!WanVideoEndFramePolicy.TryResolveTarget(

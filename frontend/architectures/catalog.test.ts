@@ -217,7 +217,7 @@ describe("architecture catalog wire contract", () => {
         const missingOverviewMode = structuredClone(dto);
         missingOverviewMode.architectures[0].capabilities.entryModes =
             missingOverviewMode.architectures[0].capabilities.entryModes.filter(
-                (mode) => mode !== "refine-video",
+                (mode) => mode !== "source-video",
             );
         expect(
             parseVideoArchitectureCatalog(missingOverviewMode),

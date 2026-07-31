@@ -92,8 +92,7 @@ internal static class VideoStagesContext
         bool canInterceptHostCore = RootHostWorkflowFacts.CanInterceptHostCore(g, spec);
         RootEnvironment rootEnvironment = new(
             spec.IsTextToVideo ? HostRootKind.TextToVideoRoot : HostRootKind.ImageToVideo,
-            CanHandoffHostCore: canInterceptHostCore,
-            HasGlobalRefineSource: HasVideoRefineSource(g));
+            CanHandoffHostCore: canInterceptHostCore);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
             rootEnvironment,
@@ -104,26 +103,6 @@ internal static class VideoStagesContext
         return new PlanCacheEntry(new VideoExecutionPlanContext(
             plan,
             context => new VideoArchitectureExecutionHost(g, context)));
-    }
-
-    private static bool HasVideoRefineSource(WorkflowGenerator g)
-    {
-        if (!g.UserInput.TryGet(VideoStagesExtension.RefineSourceVideo, out Image source)
-            || source is null)
-        {
-            return false;
-        }
-        if (source.Type?.MetaType == SwarmUI.Media.MediaMetaType.Video)
-        {
-            return true;
-        }
-        // Planning declines global-refine semantics here, so this is the only point at which the
-        // user can be told why their configured refine source did nothing.
-        PlanDiagnosticReporter.TrackRequestWarning(
-            g.UserInput,
-            "VideoStages: 'Refine Source Video' was set but its media type is not video. "
-            + "Ignoring and falling back to the normal pipeline.");
-        return false;
     }
 
     private sealed record PlanCacheEntry(VideoExecutionPlanContext? Context);

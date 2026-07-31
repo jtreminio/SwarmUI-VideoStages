@@ -17,7 +17,6 @@ const ENTRY_MODES = [
     "text-to-video",
     "image-to-video",
     "source-video",
-    "refine-video",
 ] as const;
 const ENTRY_ABILITIES = ["text", "image"] as const;
 const REFERENCE_POSITIONS = ["first", "last", "any"] as const;
@@ -133,9 +132,8 @@ const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
                 value.scope === "clip" &&
                 hasExactKeys(constraints, ["requiresAnyEntryMode"]) &&
                 isEntryModeArray(constraints.requiresAnyEntryMode) &&
-                constraints.requiresAnyEntryMode.length === 2 &&
-                constraints.requiresAnyEntryMode.includes("source-video") &&
-                constraints.requiresAnyEntryMode.includes("refine-video")
+                constraints.requiresAnyEntryMode.length === 1 &&
+                constraints.requiresAnyEntryMode.includes("source-video")
             );
     }
     return false;

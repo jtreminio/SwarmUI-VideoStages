@@ -13,20 +13,10 @@ internal static class RootPlanCompiler
 
         bool hasGeneratedClip = clips.Any(clip => clip.SourceVideo is null);
         bool sourcedLeadWithGeneratedClips = clips[0].SourceVideo is not null && hasGeneratedClip;
-        if (environment.HasGlobalRefineSource)
-        {
-            return new RootPlan(
-                HostRootKind.GlobalRefineSource,
-                RootUse.GlobalRefineReplacement,
-                environment.CanHandoffHostCore ? HostCoreDisposition.Handoff : HostCoreDisposition.Drop,
-                TimelineOutputDisposition.PublishTimelineOutput,
-                NativeAudioDisposition.UseGlobalRefineAudio);
-        }
         return new RootPlan(
             environment.HostKind,
-            environment.HostKind == HostRootKind.TextToVideoRoot
+            environment.HostKind == HostRootKind.TextToVideoRoot || !hasGeneratedClip
                 ? RootUse.Discard
-                : !hasGeneratedClip ? RootUse.Discard
                 : sourcedLeadWithGeneratedClips ? RootUse.GeneratedClipDonor : RootUse.ClipZeroSeed,
             environment.HostKind == HostRootKind.TextToVideoRoot || !hasGeneratedClip
                 ? HostCoreDisposition.Drop

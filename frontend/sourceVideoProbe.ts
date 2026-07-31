@@ -8,11 +8,35 @@
  */
 
 import { getVideoStagesHostBridge } from "./host";
+import type { SourceVideo } from "./types";
+import { roundToTenth } from "./utils";
 
 export interface SourceVideoProbe {
     durationSeconds: number;
     fps: number | null;
 }
+
+/**
+ * A probe is best-effort, so both callers fall back to the authored clip length
+ * when it reports no duration. Kept here so the two authoring paths — the detail
+ * strip picker and the Refine Video button — cannot drift on that fallback.
+ */
+export const sourceVideoFromProbe = (
+    probe: SourceVideoProbe | null,
+    data: string,
+    fileName: string | null,
+    clipDuration: number,
+): SourceVideo => {
+    const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
+    return {
+        data,
+        fileName,
+        fps: probe?.fps ?? 0,
+        durationSeconds,
+        startSeconds: 0,
+        lengthSeconds: durationSeconds > 0 ? durationSeconds : clipDuration,
+    };
+};
 
 interface VideoFrameMetadataLike {
     mediaTime: number;

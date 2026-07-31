@@ -9,14 +9,13 @@ import {
     clampStartLength,
 } from "../detailWidgets";
 import { getTimelineStore, saveClips } from "../persistence/repository";
-import { probeSourceVideo } from "../sourceVideoProbe";
+import { probeSourceVideo, sourceVideoFromProbe } from "../sourceVideoProbe";
 import {
     beginSourceVideoProbeOperation,
     findClipByStableId,
 } from "../sourceVideoProbeGuard";
 import { applyClipDurationResize } from "../timelineEdit";
 import type { Clip } from "../types";
-import { roundToTenth } from "../utils";
 import type { DetailStripContext } from "./context";
 
 const DURATION_STEP = 0.1;
@@ -49,17 +48,13 @@ const applyPickedSourceVideo = (
         ) {
             return;
         }
-        const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
-        const lengthSeconds =
-            durationSeconds > 0 ? durationSeconds : target.duration;
-        target.sourceVideo = {
+        target.sourceVideo = sourceVideoFromProbe(
+            probe,
             data,
             fileName,
-            fps: probe?.fps ?? 0,
-            durationSeconds,
-            startSeconds: 0,
-            lengthSeconds,
-        };
+            target.duration,
+        );
+        const lengthSeconds = target.sourceVideo.lengthSeconds;
         reconcileClipArchitectureIdentity(target, capabilities.catalog);
         applyClipDurationResize(
             target,

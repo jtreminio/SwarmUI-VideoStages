@@ -95,7 +95,7 @@ public class ArchitectureRuntimeOwnershipTests
             new("future-arch"),
             calls,
             preflightError: "future runtime unavailable");
-        WorkflowGenerator generator = Generator(withRefineSource: true);
+        WorkflowGenerator generator = Generator();
         JObject before = (JObject)generator.Workflow.DeepClone();
         WGNodeData beforeMedia = generator.CurrentMedia;
         VideoArchitectureExecutionHost host = new(generator, plan, [sourced, future]);
@@ -303,15 +303,9 @@ public class ArchitectureRuntimeOwnershipTests
                 new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>()));
     }
 
-    private static WorkflowGenerator Generator(bool withRefineSource = false)
+    private static WorkflowGenerator Generator()
     {
         T2IParamInput input = new(null);
-        if (withRefineSource)
-        {
-            input.Set(
-                VideoStagesExtension.RefineSourceVideo,
-                new Image([0x01, 0x02, 0x03], MediaType.VideoMp4));
-        }
         JObject workflow = [];
         using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
         {

@@ -9,19 +9,6 @@ namespace VideoStages.Tests;
 public class PlanningCompilerComponentTests
 {
     [Fact]
-    public void RootPlanCompiler_PlansGlobalRefineOwnershipWithoutClipExecutionState()
-    {
-        RootPlan plan = RootPlanCompiler.Compile(
-            new RootEnvironment(HostRootKind.ImageToVideo, CanHandoffHostCore: true, HasGlobalRefineSource: true),
-            [GeneratedClip(0, Stage(10))]);
-
-        Assert.Equal(HostRootKind.GlobalRefineSource, plan.HostKind);
-        Assert.Equal(RootUse.GlobalRefineReplacement, plan.Use);
-        Assert.Equal(HostCoreDisposition.Handoff, plan.CoreDisposition);
-        Assert.Equal(NativeAudioDisposition.UseGlobalRefineAudio, plan.NativeAudioDisposition);
-    }
-
-    [Fact]
     public void BoundaryPlanCompiler_ReportsContinueFallbackAsImmutableResult()
     {
         VideoStagesSpec spec = new(640, 360, 24, false,

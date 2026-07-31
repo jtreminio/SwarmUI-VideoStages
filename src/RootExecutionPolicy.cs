@@ -22,12 +22,6 @@ internal sealed class RootExecutionPolicy
 
     public RootPlan Plan { get; }
 
-    /// <summary>
-    /// A global refine source is installed exactly when the root plan committed to it; the
-    /// coordinator fails the generation rather than executing a refine plan without its source.
-    /// </summary>
-    public bool HasInstalledRefineSource => Plan.HostKind == HostRootKind.GlobalRefineSource;
-
     public bool FirstClipIsSourced { get; }
 
     public bool HasSourcedLeadWithGeneratedClips { get; }
@@ -39,7 +33,6 @@ internal sealed class RootExecutionPolicy
     /// supplied refine source and sourced first clip both provide their own stage input instead.
     /// </summary>
     public bool UsesStageHandoff => InterceptsHostCore
-        && !HasInstalledRefineSource
         && !FirstClipIsSourced;
 
     public bool DropsTextToVideoRootDonor => Plan.HostKind == HostRootKind.TextToVideoRoot
@@ -56,7 +49,6 @@ internal sealed class RootExecutionPolicy
     public bool ReplacesTextToVideoRootStage(StagePlan stage, ClipPlan clip) =>
         Plan.HostKind == HostRootKind.TextToVideoRoot
         && Plan.Use == RootUse.Discard
-        && !HasInstalledRefineSource
         && clip?.Input == ClipInputKind.EmptyLatent
         && stage?.Input == StageInputKind.EmptyLatent
         && stage.ClipStageIndex == 0;

@@ -118,30 +118,6 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Fact]
-    public void Global_refine_root_does_not_force_passthrough_model_execution()
-    {
-        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
-        {
-            Control = 0,
-        };
-        ClipSpec clip = Clip(stage) with { Frames = 27 };
-        VideoStagesSpec authored = Spec(clip) with { IsTextToVideo = true };
-        VideoArchitectureDescriptor descriptor =
-            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
-        RecordingProjectionModule module = new(descriptor, IdentityProjection);
-
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
-            authored,
-            new(
-                HostRootKind.TextToVideoRoot,
-                CanHandoffHostCore: true,
-                HasGlobalRefineSource: true),
-            Resolve(authored, _ => module, _ => descriptor));
-
-        Assert.Equal(27, request.Spec.Clips[0].Frames);
-    }
-
-    [Fact]
     public void Temporal_grid_runs_after_architecture_effective_value_projection()
     {
         StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");

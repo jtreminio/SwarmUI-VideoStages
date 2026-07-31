@@ -45,8 +45,6 @@ internal static class VideoStageSpecParser
         StageParserDefaults defaults,
         int clipRefCount,
         bool isTextToVideoRootWorkflow,
-        bool refineMode,
-        int refineSkipStages,
         bool sourcedClip,
         Action<string> warn = null)
     {
@@ -66,18 +64,10 @@ internal static class VideoStageSpecParser
         string upscaleMethod = VideoStagesJsonReader.GetOptionalString(
             stage, "upscaleMethod", defaults.UpscaleMethod, location, allowEmpty: false, warn);
 
-        bool isRefineSkipped = refineMode && clipIndex == 0 && stageIndex < refineSkipStages;
         bool isGenerationFirstStage = stageIndex == 0 && !sourcedClip;
-        if (isGenerationFirstStage || isRefineSkipped)
+        if (isGenerationFirstStage)
         {
-            if (isGenerationFirstStage && ShouldWarnFirstStageUpscaleIgnored(stage, upscale))
-            {
-                VideoStagesJsonReader.Warn(
-                    warn,
-                    "VideoStages: The first stage in each clip (stage index 0) includes 'upscale' / 'upscaleMethod', "
-                    + "which are ignored for that stage only.");
-            }
-            control = isRefineSkipped ? 0.0 : FirstStageControl;
+            control = FirstStageControl;
             upscale = DefaultUpscale;
             upscaleMethod = DefaultUpscaleMethod;
         }
@@ -265,16 +255,6 @@ internal static class VideoStageSpecParser
         throw new SwarmUserErrorException(
             $"VideoStages: Clip {clipIndex} stage {stageIndex} has invalid ImageReference '{rawValue}'. "
             + "Valid forms are: Generated, Base, Refiner, PreviousStage, Stage<N>, edit<N>.");
-    }
-
-    private static bool ShouldWarnFirstStageUpscaleIgnored(JObject stage, double upscale)
-    {
-        if (!VideoStagesJsonReader.HasProperty(stage, "upscale")
-            && !VideoStagesJsonReader.HasProperty(stage, "upscaleMethod"))
-        {
-            return false;
-        }
-        return NormalizeUpscale(upscale) != 1;
     }
 
     private static double ClampUnitOrDefault(double value, double fallback) =>

@@ -13,8 +13,6 @@ public class VideoStagesExtension : Extension
     public static int SectionIdForClip(int clipIndex) => Constants.SectionID_VideoClip + 1 + clipIndex;
     public static T2IRegisteredParam<bool> Enabled;
     public static T2IRegisteredParam<string> Data;
-    public static T2IRegisteredParam<Image> RefineSourceVideo;
-    public static T2IRegisteredParam<int> RefineSkipStages;
     public static WorkflowGenerator.WorkflowGenStep CoreImageToVideoStep;
 
     public override void OnPreInit()
@@ -109,29 +107,6 @@ public class VideoStagesExtension : Extension
             MetadataFormat: MetadataSanitizer.StripUploadDataFromJsonParameter
         ));
 
-        RefineSourceVideo = T2IParamTypes.Register<Image>(new T2IParamType(
-            Name: "Video Stages Refine Source Video",
-            Description: "",
-            Default: null,
-            VisibleNormally: false,
-            DoNotPreview: true,
-            HideFromMetadata: true,
-            Group: VideoStagesGroup,
-            FeatureFlag: Constants.ComfyUIFeatureFlag
-        ));
-
-        RefineSkipStages = T2IParamTypes.Register<int>(new T2IParamType(
-            Name: "Video Stages Refine Skip Stages",
-            Description: "",
-            Default: "0",
-            Min: 0,
-            Max: 99,
-            VisibleNormally: false,
-            DoNotPreview: true,
-            HideFromMetadata: true,
-            Group: VideoStagesGroup,
-            FeatureFlag: Constants.ComfyUIFeatureFlag
-        ));
     }
 
     /// <summary>Metadata stores the PROCESSED prompt, where videoclip tags have been rewritten into internal

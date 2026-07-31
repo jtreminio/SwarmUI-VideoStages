@@ -30,8 +30,6 @@ internal static class VideoStagesSpecParser
         int height = ResolveHeight(g, rawHeight);
         int fps = ResolveFps(g, rawFps);
         bool isTextToVideo = RootHostWorkflowFacts.IsTextToVideoRootWorkflow(g);
-        bool refineMode = VideoStagesGate.IsRefineSourceVideoMode(g);
-        int refineSkipStages = VideoStagesGate.ResolveRefineSkipStages(g, refineMode);
         bool hasConfiguredResolution = rawWidth is > 0 && rawHeight is > 0;
         if (document.Entries.Count == 0)
         {
@@ -53,8 +51,6 @@ internal static class VideoStagesSpecParser
             defaults,
             isTextToVideo,
             fps,
-            refineMode,
-            refineSkipStages,
             tags,
             warn);
 

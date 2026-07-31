@@ -7,8 +7,6 @@ internal sealed record VideoClipParseContext(
     StageParserDefaults StageDefaults,
     bool IsTextToVideoRootWorkflow,
     int Fps,
-    bool RefineMode,
-    int RefineSkipStages,
     PromptParser.VideoStageTagData Tags,
     Action<string> Warn = null);
 
@@ -157,8 +155,6 @@ internal static class VideoClipSpecParser
                 context.StageDefaults,
                 referenceCount,
                 context.IsTextToVideoRootWorkflow,
-                context.RefineMode,
-                context.RefineSkipStages,
                 sourcedClip,
                 context.Warn));
         }
@@ -173,7 +169,7 @@ internal static class VideoClipSpecParser
         bool hasSourceVideo,
         VideoClipParseContext context)
     {
-        if ((!context.RefineMode && !hasSourceVideo) || stages.Count == 0)
+        if (!hasSourceVideo || stages.Count == 0)
         {
             return;
         }

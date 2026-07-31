@@ -41,8 +41,7 @@
       "entryModes": [
         "text-to-video",
         "image-to-video",
-        "source-video",
-        "refine-video"
+        "source-video"
       ],
       "audioSourceKinds": [
         "Native",
@@ -126,12 +125,11 @@
       {
         "support": "conditional",
         "code": "retake-source-required",
-        "reason": "Retake requires a sourced clip or a global Refine Video source.",
+        "reason": "Retake requires a sourced clip.",
         "scope": "clip",
         "constraints": {
           "requiresAnyEntryMode": [
-            "source-video",
-            "refine-video"
+            "source-video"
           ]
         }
       }

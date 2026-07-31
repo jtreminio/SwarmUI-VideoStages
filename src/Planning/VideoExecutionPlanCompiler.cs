@@ -74,7 +74,7 @@ internal static class VideoExecutionPlanCompiler
                     && diagnostic.ClipId == activeClips[i].Id);
             ClipArchitectureAssignment assignment =
                 architecturePlanning.Clips.GetValueOrDefault(activeClips[i].Id);
-            ArchitectureEntryMode entryMode = ResolveEntryMode(spec, rootEnvironment, activeClips[i]);
+            ArchitectureEntryMode entryMode = ResolveEntryMode(spec, activeClips[i]);
             ArchitectureClipCompilation acceptedArchitectureCompilation = null;
             if (assignment is not null
                 && !effectiveRequestBlocked
@@ -245,16 +245,11 @@ internal static class VideoExecutionPlanCompiler
 
     private static ArchitectureEntryMode ResolveEntryMode(
         VideoStagesSpec spec,
-        RootEnvironment rootEnvironment,
         ClipSpec clip) =>
         clip.SourceVideo is not null
             ? ArchitectureEntryMode.SourceVideo
-            // The environment always reports the host kind; global refine arrives as its own flag
-            // and only RootPlanCompiler promotes it to a root kind.
-            : rootEnvironment.HasGlobalRefineSource
-                ? ArchitectureEntryMode.RefineVideo
-                : spec.IsTextToVideo
-                    ? ArchitectureEntryMode.TextToVideo
-                    : ArchitectureEntryMode.ImageToVideo;
+            : spec.IsTextToVideo
+                ? ArchitectureEntryMode.TextToVideo
+                : ArchitectureEntryMode.ImageToVideo;
 
 }

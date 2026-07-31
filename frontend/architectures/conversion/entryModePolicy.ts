@@ -44,11 +44,7 @@ export const modelSupportsStageEntry = (
             ? supportsText
             : supportsImage;
     }
-    return (
-        supportsImage ||
-        model.entryModes.includes("source-video") ||
-        model.entryModes.includes("refine-video")
-    );
+    return supportsImage || model.entryModes.includes("source-video");
 };
 
 /** Whether one model can perform every active role after a whole-clip retarget. */

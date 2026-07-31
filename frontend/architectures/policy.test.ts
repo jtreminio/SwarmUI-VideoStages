@@ -58,7 +58,7 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
         modelProfileId: "wan22-i2v-14b",
         modelClassId: "wan-i2v",
         compatibilityClassId: "wan-video",
-        entryModes: ["image-to-video", "source-video", "refine-video"],
+        entryModes: ["image-to-video", "source-video"],
     });
     return models;
 };

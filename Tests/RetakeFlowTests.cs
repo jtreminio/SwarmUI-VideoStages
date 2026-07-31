@@ -19,12 +19,28 @@ public partial class StageFlowTests
     private static readonly string[] RetakeFeatures =
         [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
 
-    // Retake now lives in the per-clip JSON (seconds-based); refine mode is the enable gate. At fps 24,
-    // start/length of 1.0s each resolve to frame windows [24, 24), matching the old param-based tests.
-    private static string JsonSingleClipStagesWithRetake(
+    // Retake now lives in the per-clip JSON (seconds-based); a clip source video is the enable gate.
+    // At fps 24, start/length of 1.0s each resolve to frame windows [24, 24), matching the old
+    // param-based tests.
+    internal static JObject RetakeSourceVideo() => new()
+    {
+        ["data"] = "data:video/mp4;base64," + Convert.ToBase64String([0xDE, 0xAD, 0xBE, 0xEF]),
+        ["fileName"] = "refine.mp4",
+        ["startSeconds"] = 0.0
+    };
+
+    internal static string JsonSingleClipStagesWithRetake(
         double startSeconds,
         double lengthSeconds,
         double? strength,
+        params JObject[] stages) =>
+        JsonSingleClipStagesWithRetake(startSeconds, lengthSeconds, strength, true, stages);
+
+    internal static string JsonSingleClipStagesWithRetake(
+        double startSeconds,
+        double lengthSeconds,
+        double? strength,
+        bool sourced,
         params JObject[] stages)
     {
         JObject clip = MakeClip(stages);
@@ -38,15 +54,15 @@ public partial class StageFlowTests
             retake["strength"] = strength.Value;
         }
         clip["retake"] = retake;
+        if (sourced)
+        {
+            // A source video is only honoured on a clip with a usable duration; 4.0s @ 24fps aligns
+            // up to the 97 frames these tests request through VideoFrames.
+            ((JObject)((JArray)clip["stages"])[0]).Remove("imageReference");
+            clip["duration"] = 4.0;
+            clip["sourceVideo"] = RetakeSourceVideo();
+        }
         return new JArray(clip).ToString();
-    }
-
-    private static void EnableRefineMode(T2IParamInput input, int skipStages = 0)
-    {
-        input.Set(
-            VideoStagesExtension.RefineSourceVideo,
-            new Image([0xDE, 0xAD, 0xBE, 0xEF], MediaType.VideoMp4));
-        input.Set(VideoStagesExtension.RefineSkipStages, skipStages);
     }
 
     [Fact]
@@ -61,7 +77,6 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         input.Set(T2IParamTypes.VideoFrames, 97);
-        EnableRefineMode(input);
 
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
@@ -104,7 +119,6 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         input.Set(T2IParamTypes.VideoFrames, pixelFrames);
-        EnableRefineMode(input);
 
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
@@ -175,11 +189,11 @@ public partial class StageFlowTests
             ["lengthSeconds"] = 2.0,
             ["strength"] = 0.9
         };
+        clip["sourceVideo"] = RetakeSourceVideo();
         string stagesJson = new JArray(clip).ToString();
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         input.Set(T2IParamTypes.VideoFrames, 97);
-        EnableRefineMode(input);
 
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
@@ -216,7 +230,6 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         input.Set(T2IParamTypes.VideoFrames, 97);
-        EnableRefineMode(input);
 
         (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
@@ -231,14 +244,14 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Retake_ignored_when_not_refine_mode()
+    public void Retake_ignored_when_clip_is_not_sourced()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        // Retake window present in the clip JSON but no refine-source video => retake never activates.
+        // Retake window present in the clip JSON but no clip source video => retake never activates.
         string stagesJson = JsonSingleClipStagesWithRetake(
-            startSeconds: 1.0, lengthSeconds: 1.0, strength: 0.8,
+            startSeconds: 1.0, lengthSeconds: 1.0, strength: 0.8, sourced: false,
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);

@@ -43,9 +43,6 @@ internal static class WanClipPlanCompiler
         Dictionary<int, StockHostVideoStagePayload> stages = [];
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
         bool sourcedEntry = clip.SourceVideo is not null;
-        Refuse(
-            context.EntryMode == ArchitectureEntryMode.RefineVideo,
-            "request-global refine-video entry");
         // The registry owns model-fact validity, the resolver owns same-architecture and
         // same-compatibility admission, and the common capability validator owns stage entry roles.
         // Reaching this compiler means those contracts passed; the indexer is intentionally an

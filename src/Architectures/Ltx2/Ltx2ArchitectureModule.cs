@@ -38,7 +38,6 @@ internal sealed class Ltx2ArchitectureModule :
             ArchitectureEntryMode.TextToVideo,
             ArchitectureEntryMode.ImageToVideo,
             ArchitectureEntryMode.SourceVideo,
-            ArchitectureEntryMode.RefineVideo,
         ],
         new(
             ArchitectureCapability.GeneratedEntry

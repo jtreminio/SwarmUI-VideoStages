@@ -42,7 +42,6 @@ internal enum ArchitectureEntryMode
     TextToVideo,
     ImageToVideo,
     SourceVideo,
-    RefineVideo,
 }
 
 [Flags]

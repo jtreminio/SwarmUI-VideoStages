@@ -1219,67 +1219,6 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseStage_Clip0Stage0_RefineSourceVideoMode_ForcesControlToZero()
-    {
-        string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")])));
-        T2IParamInput input = BuildInputWithJson(json);
-        input.Set(
-            VideoStagesExtension.RefineSourceVideo,
-            new Image([0x00], MediaType.VideoMp4));
-        WorkflowGenerator parser = new() { UserInput = input };
-
-        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
-
-        Assert.Equal(0.0, spec.Clips[0].Stages[0].Control);
-        Assert.Equal(1.0, spec.Clips[0].Stages[1].Control);
-    }
-
-    [Fact]
-    public void ParseStage_NonZeroClip_RefineSourceVideoMode_KeepsHardcodedFirstStageControl()
-    {
-        string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip(stages: [MakeStage("model-a")]),
-            MakeClip(stages: [MakeStage("model-b")])));
-        T2IParamInput input = BuildInputWithJson(json);
-        input.Set(
-            VideoStagesExtension.RefineSourceVideo,
-            new Image([0x00], MediaType.VideoMp4));
-        WorkflowGenerator parser = new() { UserInput = input };
-
-        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
-
-        Assert.Equal(0.0, spec.Clips[0].Stages[0].Control);
-        Assert.Equal(1.0, spec.Clips[1].Stages[0].Control);
-    }
-
-    [Fact]
-    public void ParseStage_RefineSkipStagesTwo_ZeroesFirstTwoStagesOfClipZero()
-    {
-        JObject stage1 = MakeStage("model-b");
-        stage1["control"] = 0.4;
-        stage1["upscale"] = 1.5;
-        JObject stage2 = MakeStage("model-c");
-        stage2["control"] = 0.6;
-
-        string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip(stages: [MakeStage("model-a"), stage1, stage2])));
-        T2IParamInput input = BuildInputWithJson(json);
-        input.Set(
-            VideoStagesExtension.RefineSourceVideo,
-            new Image([0x00], MediaType.VideoMp4));
-        input.Set(VideoStagesExtension.RefineSkipStages, 2);
-        WorkflowGenerator parser = new() { UserInput = input };
-
-        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
-
-        Assert.Equal(0.0, spec.Clips[0].Stages[0].Control);
-        Assert.Equal(0.0, spec.Clips[0].Stages[1].Control);
-        Assert.Equal(1.0, spec.Clips[0].Stages[1].Upscale);
-        Assert.Equal(0.6, spec.Clips[0].Stages[2].Control);
-    }
-
-    [Fact]
     public void ParseStage_Upscale_SnapsToQuarterSteps()
     {
         JObject stage1 = MakeStage("model-b");
@@ -1298,38 +1237,6 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal(1.25, spec.Clips[0].Stages[1].Upscale);
         Assert.Equal(1.0, spec.Clips[0].Stages[2].Upscale);
         Assert.Equal(0.25, spec.Clips[0].Stages[3].Upscale);
-    }
-
-    [Fact]
-    public void ParseStage_RefineSkipStages_DefaultsToOneWhenParamUnset()
-    {
-        string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")])));
-        T2IParamInput input = BuildInputWithJson(json);
-        input.Set(
-            VideoStagesExtension.RefineSourceVideo,
-            new Image([0x00], MediaType.VideoMp4));
-        WorkflowGenerator parser = new() { UserInput = input };
-
-        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
-
-        Assert.Equal(0.0, spec.Clips[0].Stages[0].Control);
-        Assert.Equal(1.0, spec.Clips[0].Stages[1].Control);
-    }
-
-    [Fact]
-    public void ParseStage_RefineSkipStages_IgnoredWhenRefineModeOff()
-    {
-        string json = JsonConvert.SerializeObject(new JArray(
-            MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")])));
-        T2IParamInput input = BuildInputWithJson(json);
-        input.Set(VideoStagesExtension.RefineSkipStages, 5);
-        WorkflowGenerator parser = new() { UserInput = input };
-
-        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
-
-        Assert.Equal(1.0, spec.Clips[0].Stages[0].Control);
-        Assert.Equal(1.0, spec.Clips[0].Stages[1].Control);
     }
 
     [Theory]
@@ -1380,13 +1287,20 @@ public class VideoStagesSpecParserClipsTests
     }
 
     // No VideoFPS param and no top-level JSON FPS => the parser falls back to 24 fps, so seconds map to
-    // frames at 24×.
-    private static WorkflowGenerator BuildRefineParser(string json)
+    // frames at 24×. Retake only activates on a sourced clip, so every clip gets a source video.
+    private static WorkflowGenerator BuildSourcedParser(string json)
     {
-        T2IParamInput input = BuildInputWithJson(json);
-        input.Set(VideoStagesExtension.RefineSourceVideo, new Image([0xDE, 0xAD, 0xBE, 0xEF], MediaType.VideoMp4));
-        input.Set(VideoStagesExtension.RefineSkipStages, 0);
-        return new() { UserInput = input };
+        JArray clips = JArray.Parse(json);
+        foreach (JObject clip in clips.Cast<JObject>())
+        {
+            clip["sourceVideo"] = new JObject
+            {
+                ["data"] = "data:video/mp4;base64,QUJD",
+                ["fileName"] = "footage.mp4",
+                ["startSeconds"] = 0.0,
+            };
+        }
+        return BuildParser(JsonConvert.SerializeObject(clips));
     }
 
     private static JObject MakeRetake(double startSeconds, double lengthSeconds, double? strength = null)
@@ -1411,7 +1325,7 @@ public class VideoStagesSpecParserClipsTests
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => VideoStagesSpecParser.Parse(BuildRefineParser(json)));
+            () => VideoStagesSpecParser.Parse(BuildSourcedParser(json)));
 
         Assert.Contains("duration at 24 fps exceeds", error.Message);
     }
@@ -1424,7 +1338,7 @@ public class VideoStagesSpecParserClipsTests
         clip["retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 1.5, strength: 0.6);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
-        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildSourcedParser(json)).Clips);
 
         Assert.Null(parsed.Stages[0].RetakeWindow);
         RetakeWindowSpec retake = parsed.Stages[^1].RetakeWindow;
@@ -1444,7 +1358,7 @@ public class VideoStagesSpecParserClipsTests
         clip["retake"] = MakeRetake(startSeconds: 0.5, lengthSeconds: 0.55);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
-        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildSourcedParser(json)).Clips);
 
         RetakeWindowSpec retake = parsed.Stages[^1].RetakeWindow;
         Assert.NotNull(retake);
@@ -1460,7 +1374,7 @@ public class VideoStagesSpecParserClipsTests
         clip["retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 1.0);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
-        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildSourcedParser(json)).Clips);
 
         RetakeWindowSpec retake = parsed.Stages[^1].RetakeWindow;
         Assert.NotNull(retake);
@@ -1476,19 +1390,19 @@ public class VideoStagesSpecParserClipsTests
         clip["retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 1.0, strength: 5.0);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
-        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildSourcedParser(json)).Clips);
 
         Assert.Equal(1.0, parsed.Stages[^1].RetakeWindow.Strength, 6);
     }
 
     [Fact]
-    public void ParseClips_Retake_NullWhenNotRefineMode()
+    public void ParseClips_Retake_NullWhenClipIsNotSourced()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         clip["retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 2.0);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
-        // BuildParser does NOT set a refine-source video, so retake never activates.
+        // BuildParser leaves the clip unsourced, so retake never activates.
         ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json)).Clips);
 
         Assert.All(parsed.Stages, stage => Assert.Null(stage.RetakeWindow));
@@ -1504,7 +1418,7 @@ public class VideoStagesSpecParserClipsTests
         clip["retake"] = MakeRetake(startSeconds, lengthSeconds);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
-        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildSourcedParser(json)).Clips);
 
         Assert.All(parsed.Stages, stage => Assert.Null(stage.RetakeWindow));
     }
@@ -1517,7 +1431,7 @@ public class VideoStagesSpecParserClipsTests
         clip["retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 0.01);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
-        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildSourcedParser(json)).Clips);
 
         Assert.Null(parsed.Stages[^1].RetakeWindow);
     }
@@ -1528,7 +1442,7 @@ public class VideoStagesSpecParserClipsTests
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
-        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildRefineParser(json)).Clips);
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildSourcedParser(json)).Clips);
 
         Assert.Null(parsed.Stages[^1].RetakeWindow);
     }

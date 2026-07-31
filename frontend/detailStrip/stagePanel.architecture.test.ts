@@ -135,7 +135,7 @@ describe("stage architecture model filtering", () => {
                 modelClassId: "wan-i2v-14b",
                 compatibilityClassId: "wan-video",
                 entryAbilities: ["text", "image"],
-                entryModes: ["image-to-video", "source-video", "refine-video"],
+                entryModes: ["image-to-video", "source-video"],
             },
             {
                 value: "wan-5b.safetensors",

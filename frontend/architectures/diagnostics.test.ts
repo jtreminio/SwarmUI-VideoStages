@@ -56,7 +56,7 @@ const wanCatalog = (): ArchitectureModelCatalog => {
         modelClassId: "wan-i2v-14b",
         compatibilityClassId: "wan-video",
         entryAbilities: ["text", "image"],
-        entryModes: ["image-to-video", "source-video", "refine-video"],
+        entryModes: ["image-to-video", "source-video"],
     });
     return models;
 };
@@ -965,7 +965,7 @@ describe("architecture diagnostics", () => {
                 modelClassId: "wan-i2v-14b",
                 compatibilityClassId: "wan-video",
                 entryAbilities: ["text", "image"],
-                entryModes: ["image-to-video", "source-video", "refine-video"],
+                entryModes: ["image-to-video", "source-video"],
             },
             {
                 value: "wan-5b.safetensors",

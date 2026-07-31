@@ -6,26 +6,6 @@ namespace VideoStages.Tests;
 public class RootExecutionPolicyTests
 {
     [Fact]
-    public void Global_refine_text_to_video_keeps_native_audio_available_to_the_stage()
-    {
-        VideoExecutionPlan plan = Compile(
-            isTextToVideo: true,
-            new RootEnvironment(
-                HostRootKind.TextToVideoRoot,
-                CanHandoffHostCore: true,
-                HasGlobalRefineSource: true),
-            GeneratedClip(0));
-        RootExecutionPolicy policy = For(plan);
-        ClipPlan clip = Assert.Single(plan.Clips);
-        StagePlan stage = Assert.Single(clip.Stages);
-
-        Assert.Equal(RootUse.GlobalRefineReplacement, plan.Root.Use);
-        Assert.False(policy.UsesStageHandoff);
-        Assert.False(policy.ReplacesTextToVideoRootStage(stage, clip));
-        Assert.False(policy.SuppressesNativeAudioForStage(stage, clip));
-    }
-
-    [Fact]
     public void Ordinary_text_to_video_handoff_replaces_root_and_suppresses_its_native_audio()
     {
         VideoExecutionPlan plan = Compile(

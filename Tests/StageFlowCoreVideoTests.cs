@@ -1604,4 +1604,10 @@ public partial class StageFlowTests
             generator.CurrentMedia.Path));
     }
 
+    private static WorkflowGenerator.WorkflowGenStep SeedAceStepFunAudioTrackStep(int trackIndex) =>
+        new(g =>
+        {
+            using var bridge = BridgeSync.For(g);
+            bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(trackIndex));
+        }, 11.05);
 }
