@@ -3186,17 +3186,9 @@
       stage.model = target.model;
       stage.modelProfileId = target.modelProfileId;
     }
-    const payloadOwner = modelIdentityFromCatalog(
-      catalog,
-      source.stages[0]?.model ?? ""
-    )?.architectureId;
-    const dropsForeignPayload = (payloadOwner === void 0 || payloadOwner !== target.architectureId) && clip.architecturePayload !== null;
-    if (dropsForeignPayload) {
-      clip.architecturePayload = null;
-    }
     return {
       clip,
-      removals: dropsForeignPayload ? ["architecture-specific payload"] : [],
+      removals: [],
       removedEntityIds: [],
       selectionAffected: false
     };
@@ -3233,7 +3225,6 @@
       "duration",
       "refFraming",
       "audioSource",
-      "architecturePayload",
       "loras",
       "icLoras",
       "saveAudioTrack",
@@ -3601,15 +3592,6 @@
       entryModes: clone(targetEntry.entryModes)
     };
     const conversionSource = clone(previous);
-    const dropsUnownedPayload = previous.architecturePayload !== null && previousStageZeroIdentity?.architectureId !== target.architectureId;
-    if (dropsUnownedPayload) {
-      phases.preConversions.push({
-        type: "clip.patch",
-        clipId: next.id,
-        patch: { architecturePayload: null }
-      });
-      conversionSource.architecturePayload = null;
-    }
     if (!deepEqual(previous.sourceVideo, next.sourceVideo)) {
       phases.preConversions.push({
         type: "clip.patch",
@@ -3663,7 +3645,6 @@
       throw new DocumentDiffError("architecture-invariant");
     }
     const cleanedRequested = clone(next);
-    cleanedRequested.architecturePayload = baselinePlan.clip.architecturePayload;
     if (!reconcileClipArchitectureIdentity(cleanedRequested, catalog) || !deepEqual(cleanedRequested, next)) {
       throw new DocumentDiffError("architecture-invariant");
     }
@@ -5085,7 +5066,6 @@
     return Number.isFinite(numeric) && numeric > 0 ? numeric : normalizeBoundaryOverlap(value, constraints);
   };
   var normalizeReferenceFraming = (value) => value === "stretch" || value === "fit" || value === "fit-green" ? value : "crop";
-  var preserveArchitecturePayload = (value) => isRecord(value) ? structuredClone(value) : null;
   var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
     const defaults = getRootDefaults2();
     const refs = includeDefaultRef ? [buildDefaultRef()] : [];
@@ -5114,7 +5094,6 @@
     return {
       architectureHint: architecture,
       modelProfileId: (previousClip?.architectureHint !== NONE_ARCHITECTURE_ID ? previousClip?.modelProfileId : null) ?? modelProfileForModel(defaults.modelCatalog, firstStage.model) ?? firstStage.modelProfileId,
-      architecturePayload: null,
       skipped: previousClip?.skipped === true,
       hue: UNASSIGNED_HUE,
       boundaryOut: "cut",
@@ -5273,9 +5252,6 @@
       id: normalizeOptionalEntityId(rawClip.id),
       architectureHint: architecture,
       modelProfileId,
-      architecturePayload: preserveArchitecturePayload(
-        rawClip.architecturePayload
-      ),
       skipped: !!rawClip.skipped,
       hue: normalizeStoredHue(rawClip.hue),
       boundaryOut,
@@ -5338,7 +5314,6 @@
         id: clip.id,
         architectureHint: clip.architectureHint,
         modelProfileId: clip.modelProfileId,
-        architecturePayload: clip.architecturePayload,
         skipped: clip.skipped,
         boundaryOut: clip.boundaryOut,
         boundaryOutCarryAudio: clip.boundaryOutCarryAudio,

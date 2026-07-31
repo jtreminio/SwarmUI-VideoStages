@@ -71,24 +71,4 @@ describe("nondestructive architecture conversion", () => {
         });
         expect(clip).toEqual(before);
     });
-
-    it("still drops an unowned opaque payload on an architecture change", () => {
-        const catalog = fakeArchitectureCatalog();
-        const conversion = planArchitectureConversion(
-            minimalClip({
-                architecturePayload: { ltx2: { private: true } },
-            }),
-            {
-                architectureId: "test-video",
-                modelProfileId: "test-profile",
-                model: "test-video.safetensors",
-                capabilities: catalog.architectures[0].capabilities,
-                entryModes: ["text-to-video", "image-to-video"],
-            },
-            catalog,
-        );
-
-        expect(conversion?.clip.architecturePayload).toBeNull();
-        expect(conversion?.removals).toEqual(["architecture-specific payload"]);
-    });
 });

@@ -58,7 +58,6 @@ const contractState = (): VideoStagesConfig => ({
             id: "clip-0",
             architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
-            architecturePayload: null,
             skipped: false,
             hue: 210,
             boundaryOut: "continue",
@@ -167,7 +166,6 @@ const contractState = (): VideoStagesConfig => ({
             id: "clip-1",
             architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
-            architecturePayload: null,
             skipped: false,
             hue: 40,
             boundaryOut: "cut",
@@ -271,131 +269,5 @@ describe("authoring document contract fixture", () => {
             createRootConfig(decoded.dims, decoded.clips, decoded.audioTracks),
         );
         expect(JSON.parse(reencoded)).toEqual(fixture());
-    });
-
-    it("round-trips opaque nested payload for an unknown architecture", () => {
-        const unknown = fixture();
-        const clips = unknown.clips as Record<string, unknown>[];
-        const populatedClip = clips[0];
-        const opaquePayload = {
-            futureConditioning: {
-                layers: [
-                    {
-                        kind: "motion-vector-field",
-                        options: {
-                            temporalScale: 1.25,
-                            preserveOcclusion: true,
-                        },
-                    },
-                ],
-            },
-            futureStagePayloads: {
-                "stage-0": {
-                    schedule: [0, 0.25, 1],
-                    vendorExtension: "leave-this-verbatim",
-                },
-            },
-        };
-        populatedClip.architectureHint = "future-video";
-        populatedClip.modelProfileId = "future-video-v1";
-        populatedClip.architecturePayload = opaquePayload;
-        for (const [index, stage] of (
-            populatedClip.stages as Record<string, unknown>[]
-        ).entries()) {
-            stage.model = `removed-video-stage-${index}.safetensors`;
-            stage.modelProfileId = `removed-video-profile-${index}`;
-        }
-
-        const decoded = decodeStoredDocument(
-            JSON.stringify(unknown),
-            {
-                width: 1024,
-                height: 1024,
-                fps: 24,
-            },
-            normalizationEnvironment(),
-        );
-        expect(decoded).not.toBeNull();
-        if (!decoded) {
-            return;
-        }
-        expect(decoded.clips[0].architecturePayload).toEqual(opaquePayload);
-        const serialized = serializeStateForStorage(
-            createRootConfig(decoded.dims, decoded.clips, decoded.audioTracks),
-        );
-        const decodedAgain = decodeStoredDocument(
-            serialized,
-            {
-                width: 1024,
-                height: 1024,
-                fps: 24,
-            },
-            normalizationEnvironment(),
-        );
-        expect(decodedAgain).not.toBeNull();
-        if (!decodedAgain) {
-            return;
-        }
-        expect(decodedAgain.clips[0].architecturePayload).toEqual(
-            opaquePayload,
-        );
-        const serializedAgain = serializeStateForStorage(
-            createRootConfig(
-                decodedAgain.dims,
-                decodedAgain.clips,
-                decodedAgain.audioTracks,
-            ),
-        );
-
-        expect(serializedAgain).toBe(serialized);
-        const roundTripped = JSON.parse(serialized) as {
-            clips: {
-                architectureHint: string;
-                modelProfileId: string;
-                architecturePayload: Record<string, unknown> | null;
-                stages: {
-                    model: string;
-                    modelProfileId: string;
-                    icLoraStrengths: number[];
-                }[];
-                icLoras: {
-                    driveSource: string;
-                    driveData: string;
-                    driveMediaKinds: string[];
-                    controlType: string;
-                    hdr: boolean;
-                    driveMedia: { data: string; fileName: string } | null;
-                }[];
-            }[];
-        };
-        expect(roundTripped.clips[0]).toMatchObject({
-            architectureHint: "future-video",
-            modelProfileId: "future-video-v1",
-            architecturePayload: opaquePayload,
-            stages: [
-                {
-                    model: "removed-video-stage-0.safetensors",
-                    modelProfileId: "removed-video-profile-0",
-                },
-                {
-                    model: "removed-video-stage-1.safetensors",
-                    modelProfileId: "removed-video-profile-1",
-                },
-            ],
-        });
-        expect(roundTripped.clips[0].icLoras[0]).toEqual(
-            expect.objectContaining({
-                driveSource: "Upload",
-                driveData: "visual",
-                driveMediaKinds: ["video"],
-                controlType: "canny",
-                hdr: true,
-                driveMedia: {
-                    data: "data:video/mp4;base64,QUJD",
-                    fileName: "drive.mp4",
-                },
-            }),
-        );
-        expect(roundTripped.clips[0].stages[0].icLoraStrengths).toEqual([0.8]);
     });
 });

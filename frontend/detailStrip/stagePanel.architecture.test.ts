@@ -911,7 +911,6 @@ describe("stage architecture model filtering", () => {
         const clip = minimalClip({
             architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
-            architecturePayload: { wan22: { tuning: "private" } },
             stages: [
                 minimalStage({
                     model: "wan-current.safetensors",

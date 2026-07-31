@@ -72,8 +72,6 @@ export interface ClipLora {
  * nested fields. Nothing parses it today: it exists so a document written by a
  * future architecture survives a round trip through this one.
  */
-export type ArchitecturePayload = Record<string, unknown>;
-
 export interface Stage {
     id?: string;
     skipped: boolean;
@@ -201,7 +199,6 @@ export interface Clip {
     /** Cached authoring label/repair hint. Resolved stage-0 model identity owns behavior. */
     architectureHint: VideoArchitectureId;
     modelProfileId: ModelProfileId;
-    architecturePayload: ArchitecturePayload | null;
     skipped: boolean;
     hue: number;
     boundaryOut: BoundaryOut;

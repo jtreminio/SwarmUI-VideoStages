@@ -306,7 +306,6 @@ describe("persistence", () => {
                     id: clips[0].id as string,
                     architectureHint: "ltx2",
                     modelProfileId: "ltx-2.3",
-                    architecturePayload: null,
                     skipped: false,
                     boundaryOut: "cut",
                     boundaryOutCarryAudio: false,

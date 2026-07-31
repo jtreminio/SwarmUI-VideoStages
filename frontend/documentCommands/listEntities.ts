@@ -118,7 +118,6 @@ const CLIP_ENTITY = defineList<CanonicalVideoStagesConfig, CanonicalClip>()({
         "duration",
         "refFraming",
         "audioSource",
-        "architecturePayload",
         "loras",
         "icLoras",
         "saveAudioTrack",

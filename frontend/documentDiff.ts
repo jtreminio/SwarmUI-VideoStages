@@ -457,19 +457,6 @@ const clipDiffBase = (
     // can enter the clip. Apply those non-identity edits before conversion so
     // the reducer validates the same role that the final atomic document uses.
     const conversionSource = clone(previous);
-    const dropsUnownedPayload =
-        previous.architecturePayload !== null &&
-        previousStageZeroIdentity?.architectureId !== target.architectureId;
-    if (dropsUnownedPayload) {
-        // Decide opaque payload ownership before a Stage-0 removal can promote
-        // another model and accidentally claim the old envelope.
-        phases.preConversions.push({
-            type: "clip.patch",
-            clipId: next.id,
-            patch: { architecturePayload: null },
-        });
-        conversionSource.architecturePayload = null;
-    }
     if (!deepEqual(previous.sourceVideo, next.sourceVideo)) {
         phases.preConversions.push({
             type: "clip.patch",
@@ -529,8 +516,6 @@ const clipDiffBase = (
     // cleanup derived from the previous payload owner. The requested state
     // already carries its final models and other dormant authored values.
     const cleanedRequested = clone(next);
-    cleanedRequested.architecturePayload =
-        baselinePlan.clip.architecturePayload;
     if (
         !reconcileClipArchitectureIdentity(cleanedRequested, catalog) ||
         !deepEqual(cleanedRequested, next)

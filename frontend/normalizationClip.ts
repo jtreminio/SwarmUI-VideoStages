@@ -44,7 +44,6 @@ import {
 } from "./normalizationStage";
 import { snapDurationToFps } from "./renderUtils";
 import type {
-    ArchitecturePayload,
     BoundaryOut,
     Clip,
     ReferenceFraming,
@@ -77,11 +76,6 @@ const normalizeReferenceFraming = (value: unknown): ReferenceFraming =>
     value === "stretch" || value === "fit" || value === "fit-green"
         ? value
         : "crop";
-
-const preserveArchitecturePayload = (
-    value: unknown,
-): ArchitecturePayload | null =>
-    isRecord(value) ? structuredClone(value) : null;
 
 export const buildDefaultClip = (
     getRootDefaults: () => RootDefaults,
@@ -133,7 +127,6 @@ export const buildDefaultClip = (
                 : null) ??
             modelProfileForModel(defaults.modelCatalog, firstStage.model) ??
             firstStage.modelProfileId,
-        architecturePayload: null,
         skipped: previousClip?.skipped === true,
         hue: UNASSIGNED_HUE,
         boundaryOut: "cut",
@@ -331,9 +324,6 @@ export const normalizeClip = (
         id: normalizeOptionalEntityId(rawClip.id),
         architectureHint: architecture,
         modelProfileId,
-        architecturePayload: preserveArchitecturePayload(
-            rawClip.architecturePayload,
-        ),
         skipped: !!rawClip.skipped,
         hue: normalizeStoredHue(rawClip.hue),
         boundaryOut,

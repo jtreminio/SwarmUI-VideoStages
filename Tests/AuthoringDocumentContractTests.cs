@@ -27,8 +27,6 @@ public class AuthoringDocumentContractTests
         "clips[].icLoras[].id",
         "clips[].retake.id",
         "clips[].sourceVideo.id",
-        // Opaque JSON round-tripped for its owning frontend architecture; nothing parses it yet.
-        "clips[].architecturePayload",
         "audioTracks[].spans[].id",
         // Display-only probed metadata: the backend conforms the picked range itself.
         "clips[].sourceVideo.fps",

@@ -67,7 +67,6 @@ const clip = (id: string): CanonicalClip => ({
     id,
     architectureHint: "ltx2",
     modelProfileId: "ltx-2.3",
-    architecturePayload: null,
     skipped: false,
     hue: 20,
     boundaryOut: "cut",
@@ -420,53 +419,12 @@ describe("diffDocuments", () => {
         expect(result.document).toEqual(after);
     });
 
-    it("saves the conversion that drops an opaque payload and refuses one that keeps it", () => {
-        const before = document();
-        before.clips[0].architecturePayload = { ltx2: { tuning: "private" } };
-        const { catalog, target } = crossArchitectureCatalog();
-        const planned = planArchitectureConversion(
-            before.clips[0],
-            target,
-            catalog,
-        );
-        if (!planned) throw new Error("expected valid conversion plan");
-        const after = structuredClone(before);
-        after.clips[0] = planned.clip as CanonicalClip;
-        expect(after.clips[0].architecturePayload).toBeNull();
-
-        const command = diffDocuments(before, after, {
-            architectureCatalog: catalog,
-        });
-        const result = reduceDocumentCommand(before, command, {
-            architectureCatalog: catalog,
-        });
-
-        expect(result.applied).toBe(true);
-        expect(result.document).toEqual(after);
-        expect(result.document.clips[0].architecturePayload).toBeNull();
-
-        // A requested state that changes owner while keeping the envelope is the
-        // exact attribution the conversion prevents, so the save path fails closed.
-        const keptPayload = structuredClone(after);
-        keptPayload.clips[0].architecturePayload =
-            before.clips[0].architecturePayload;
-        expect(() =>
-            diffDocuments(before, keptPayload, {
-                architectureCatalog: catalog,
-            }),
-        ).toThrow(DocumentDiffError);
-    });
-
     it("repairs an unresolved Stage-0 owner through a conversion even when its cached hint already matches", () => {
         const before = document();
         before.clips[0].stages = [stage("stage-a")];
         before.clips[0].stages[0].model = "removed-ltx-model";
-        before.clips[0].architecturePayload = {
-            ltx2: { unowned: "must-drop" },
-        };
         const after = structuredClone(before);
         after.clips[0].stages[0].model = "ltx";
-        after.clips[0].architecturePayload = null;
         const catalog = testArchitectureCatalog();
 
         const command = diffDocuments(before, after, {
@@ -484,7 +442,6 @@ describe("diffDocuments", () => {
         });
         expect(result.applied).toBe(true);
         expect(result.document).toEqual(after);
-        expect(result.document.clips[0].architecturePayload).toBeNull();
     });
 
     it("rejects an atomic sourced-to-generated conversion whose target cannot enter the final root role", () => {
@@ -595,59 +552,6 @@ describe("diffDocuments", () => {
         const result = reduceDocumentCommand(before, command, context);
         expect(result.applied).toBe(true);
         expect(result.document).toEqual(after);
-    });
-
-    it("drops an unowned payload before removing an unresolved Stage 0", () => {
-        const before = document();
-        before.clips[0].stages = [
-            {
-                ...stage("stage-unknown"),
-                model: "removed-model.safetensors",
-                modelProfileId: "removed-profile",
-            },
-            stage("stage-promoted"),
-        ];
-        before.clips[0].architecturePayload = {
-            unowned: { mustDrop: true },
-        };
-        const after = structuredClone(before);
-        after.clips[0].stages = [after.clips[0].stages[1]];
-        after.clips[0].architecturePayload = null;
-        const catalog = testArchitectureCatalog();
-
-        const command = diffDocuments(before, after, {
-            architectureCatalog: catalog,
-        });
-        expect(command.commands.slice(0, 3)).toEqual([
-            {
-                type: "clip.patch",
-                clipId: "clip-a",
-                patch: { architecturePayload: null },
-            },
-            {
-                type: "stage.remove",
-                clipId: "clip-a",
-                stageId: "stage-unknown",
-            },
-            expect.objectContaining({
-                type: "clip.convert-architecture",
-                clipId: "clip-a",
-            }),
-        ]);
-        const result = reduceDocumentCommand(before, command, {
-            architectureCatalog: catalog,
-        });
-        expect(result.applied).toBe(true);
-        expect(result.document).toEqual(after);
-
-        const retained = structuredClone(after);
-        retained.clips[0].architecturePayload =
-            before.clips[0].architecturePayload;
-        expect(() =>
-            diffDocuments(before, retained, {
-                architectureCatalog: catalog,
-            }),
-        ).toThrow(new DocumentDiffError("architecture-invariant"));
     });
 
     it("reasserts validated Incoming media after conversion-time graph reconciliation", () => {

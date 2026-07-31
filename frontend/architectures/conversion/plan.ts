@@ -1,6 +1,5 @@
 import type { Clip } from "../../types";
 import { architectureDescriptor, modelCatalogEntry } from "../catalogQueries";
-import { modelIdentityFromCatalog } from "../clipIdentity";
 import type {
     ArchitectureModelCatalog,
     ArchitectureRetargetPlan,
@@ -93,26 +92,9 @@ export const planArchitectureConversion = (
         stage.model = target.model;
         stage.modelProfileId = target.modelProfileId;
     }
-    // Until architecturePayload has an owner envelope, only a resolved
-    // authored Stage-0 model can prove ownership. Persisted architecture is a
-    // repair hint and must not preserve potentially foreign opaque data.
-    const payloadOwner = modelIdentityFromCatalog(
-        catalog,
-        source.stages[0]?.model ?? "",
-    )?.architectureId;
-    const dropsForeignPayload =
-        (payloadOwner === undefined ||
-            payloadOwner !== target.architectureId) &&
-        clip.architecturePayload !== null;
-    if (dropsForeignPayload) {
-        // Opaque payloads are the one exception to dormant preservation: without an owner
-        // envelope a different adapter could interpret foreign schema as its own.
-        clip.architecturePayload = null;
-    }
-
     return {
         clip,
-        removals: dropsForeignPayload ? ["architecture-specific payload"] : [],
+        removals: [],
         removedEntityIds: [],
         selectionAffected: false,
     };
