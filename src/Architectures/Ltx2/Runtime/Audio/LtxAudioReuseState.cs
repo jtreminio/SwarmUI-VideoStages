@@ -80,3 +80,18 @@ internal static class LtxAudioReuseState
         audioReuse.Remember(PathUtils.Clone(captured.AudioLatentPath));
     }
 }
+
+internal sealed class Ltx2ClipAudioReuseState
+{
+    public JArray ReusedAudioPath { get; private set; }
+
+    public bool TryGetPath(out JArray path)
+    {
+        path = ReusedAudioPath;
+        return path is not null;
+    }
+
+    public void Remember(JArray path) => ReusedAudioPath = path;
+
+    public void Clear() => ReusedAudioPath = null;
+}
