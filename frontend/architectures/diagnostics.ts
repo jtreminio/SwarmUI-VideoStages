@@ -77,12 +77,6 @@ const persistedCapabilityIssues = (
         }
     };
     unsupported(
-        !supports("multiStage") && activeStageCount(clip) > 1,
-        "multiStage",
-        "multi-stage",
-        "Multiple active stages",
-    );
-    unsupported(
         !supports("frameReferences") && clip.refs.length > 0,
         "frameReferences",
         "frame-references",

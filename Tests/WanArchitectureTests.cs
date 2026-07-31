@@ -258,8 +258,6 @@ public class WanArchitectureTests
         VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
 
         Assert.True(descriptor.Capabilities.Architecture.HasFlag(
-            ArchitectureCapability.MultiStage));
-        Assert.True(descriptor.Capabilities.Architecture.HasFlag(
             ArchitectureCapability.SourcedEntry));
         Assert.True(descriptor.Capabilities.Clip.HasFlag(ClipCapability.SourceVideo));
         Assert.Contains(ArchitectureEntryMode.SourceVideo, descriptor.EntryModes);

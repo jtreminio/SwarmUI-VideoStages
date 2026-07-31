@@ -43,7 +43,6 @@ internal sealed class Ltx2ArchitectureModule :
         new(
             ArchitectureCapability.GeneratedEntry
                 | ArchitectureCapability.SourcedEntry
-                | ArchitectureCapability.MultiStage
                 | ArchitectureCapability.NativeAudio,
             ClipCapability.SourceVideo
                 | ClipCapability.Prompts

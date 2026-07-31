@@ -6,7 +6,6 @@
       "architecture": [
         "generated-entry",
         "sourced-entry",
-        "multi-stage",
         "native-audio"
       ],
       "clip": [

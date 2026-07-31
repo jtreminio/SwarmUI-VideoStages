@@ -8,7 +8,6 @@ import {
 } from "@jest/globals";
 import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectureCatalog";
 import {
-    fakeArchitectureCatalog,
     testArchitectureCatalog,
     testArchitectureCatalogDto,
     testRootDefaults,
@@ -172,33 +171,6 @@ describe("detail structural stage operations", () => {
             modelProfileId: "ltx-2.3",
         });
         expect(selection).toBeNull();
-    });
-
-    it("does not add a later stage when the architecture lacks multi-stage support", () => {
-        const clips = [
-            minimalClip({
-                architectureHint: "test-video",
-                modelProfileId: "test-profile",
-            }),
-        ];
-        const models = fakeArchitectureCatalog();
-        models.architectures[0].capabilities.architecture =
-            models.architectures[0].capabilities.architecture.filter(
-                (feature) => feature !== "multi-stage",
-            );
-        const structuralCommit = jest.fn(
-            (apply: (value: Clip[]) => StructuralOutcome) => {
-                apply(clips);
-            },
-        );
-        const operations = createDetailSelectionOperations(
-            structuralCommit,
-            () => authoringTransaction(models),
-        );
-
-        operations.addStage(0);
-
-        expect(clips[0].stages).toHaveLength(1);
     });
 
     it("derives an empty generated clip identity through the shared reconciler when adding its first stage", () => {

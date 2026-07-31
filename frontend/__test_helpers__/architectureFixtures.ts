@@ -12,7 +12,7 @@ import type { RootDefaults } from "../types";
 export const testArchitectureCapabilities = (
     overrides: Partial<ArchitectureCapabilities> = {},
 ): ArchitectureCapabilities => ({
-    architecture: ["generated-entry", "sourced-entry", "multi-stage"],
+    architecture: ["generated-entry", "sourced-entry"],
     clip: [
         "source-video",
         "prompts",

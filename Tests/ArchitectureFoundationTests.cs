@@ -479,36 +479,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Capability_validation_rejects_multiple_active_stages_before_fake_module()
-    {
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor();
-        FakeRegistry registry = new(fakeDescriptor: descriptor);
-        ClipSpec clip = GeneratedClip(
-            0,
-            Stage(10, "fake-model") with { ClipStageRawIndex = 0 },
-            Stage(11, "fake-model") with
-            {
-                ClipStageIndex = 1,
-                ClipStageRawIndex = 1,
-            }) with
-        {
-            AuthoredStages =
-            [
-                new(0, "fake-model", "fake-profile", false),
-                new(1, "fake-model", "fake-profile", false),
-            ],
-        };
-        VideoExecutionPlan plan = Compile(clip, registry);
-
-        Assert.Contains(
-            plan.Diagnostics,
-            item => item.Code == "architecture-capability-unsupported"
-                && item.Message.Contains("multiple active stages"));
-        Assert.Equal(0, registry.CompileCounts[new("fake")]);
-    }
-
-    [Fact]
-    public void Capability_validation_does_not_count_skipped_dormant_stage_as_multistage()
+    public void Capability_validation_does_not_count_skipped_dormant_stage_as_active()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor();
         FakeRegistry registry = new(fakeDescriptor: descriptor);
@@ -524,7 +495,7 @@ public class ArchitectureFoundationTests
 
         Assert.DoesNotContain(
             plan.Diagnostics,
-            item => item.Message.Contains("multiple active stages"));
+            item => item.Code == "architecture-capability-unsupported");
         Assert.Equal(1, registry.CompileCounts[new("fake")]);
     }
 
@@ -761,8 +732,7 @@ public class ArchitectureFoundationTests
     public void Capability_validation_requires_video_input_for_every_later_stage()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
-            architecture: ArchitectureCapability.GeneratedEntry
-                | ArchitectureCapability.MultiStage,
+            architecture: ArchitectureCapability.GeneratedEntry,
             stage: StageCapability.ImageInput);
         FakeRegistry registry = new(fakeDescriptor: descriptor);
         ClipSpec clip = GeneratedClip(
@@ -984,8 +954,7 @@ public class ArchitectureFoundationTests
     public void Capability_validation_requires_every_mixed_stage_model_to_allow_the_entry()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
-            architecture: ArchitectureCapability.GeneratedEntry
-                | ArchitectureCapability.MultiStage,
+            architecture: ArchitectureCapability.GeneratedEntry,
             entryModes:
             [
                 ArchitectureEntryMode.ImageToVideo,
@@ -1622,7 +1591,6 @@ public class ArchitectureFoundationTests
             [
                 "generated-entry",
                 "sourced-entry",
-                "multi-stage",
                 "native-audio",
             ],
             capabilities["architecture"].Values<string>());

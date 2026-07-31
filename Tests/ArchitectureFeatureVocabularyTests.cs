@@ -182,7 +182,6 @@ public class ArchitectureFeatureVocabularyTests
     {
         AuthoringFeature[] structural =
         [
-            AuthoringFeature.MultiStage,
             AuthoringFeature.SourceVideo,
             AuthoringFeature.MajorPrompt,
         ];

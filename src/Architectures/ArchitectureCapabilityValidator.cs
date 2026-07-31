@@ -51,12 +51,6 @@ internal static class ArchitectureCapabilityValidator
                 ArchitectureCapability.SourcedEntry),
             "sourced entry");
         Require(
-            clip.Stages is { Count: > 1 },
-            Has(
-                capabilities.Architecture,
-                ArchitectureCapability.MultiStage),
-            "multiple active stages");
-        Require(
             clip.SaveAudioTrack,
             Has(
                 capabilities.Architecture,

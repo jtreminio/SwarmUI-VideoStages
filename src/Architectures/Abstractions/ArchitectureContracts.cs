@@ -59,8 +59,7 @@ internal enum ArchitectureCapability
     None = 0,
     GeneratedEntry = 1 << 0,
     SourcedEntry = 1 << 1,
-    MultiStage = 1 << 2,
-    NativeAudio = 1 << 3,
+    NativeAudio = 1 << 2,
 }
 
 [Flags]
@@ -107,7 +106,6 @@ internal sealed record ArchitectureCapabilityDescriptor(
 /// </summary>
 internal enum AuthoringFeature
 {
-    MultiStage,
     SourceVideo,
     FrameReferences,
     ReferenceFraming,

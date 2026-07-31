@@ -4,7 +4,6 @@ export const CAPABILITY_WIRE_NAMES = {
     architecture: {
         generatedEntry: "generated-entry",
         sourcedEntry: "sourced-entry",
-        multiStage: "multi-stage",
         nativeAudio: "native-audio",
     },
     clip: {
@@ -42,7 +41,6 @@ export type GeneratedAuthoringFeatureCapability = readonly [
 ];
 
 export const AUTHORING_FEATURES = [
-    "multiStage",
     "sourceVideo",
     "frameReferences",
     "referenceFraming",
@@ -94,7 +92,6 @@ export const AUTHORING_FEATURE_LABELS: Record<
     GeneratedAuthoringFeature,
     string
 > = {
-    multiStage: "Multiple stages",
     sourceVideo: "Source video",
     frameReferences: "Frame references",
     referenceFraming: "Reference framing",
@@ -114,9 +111,6 @@ export const AUTHORING_FEATURE_CAPABILITIES: Record<
     GeneratedAuthoringFeature,
     readonly GeneratedAuthoringFeatureCapability[]
 > = {
-    multiStage: [
-        ["architecture", CAPABILITY_WIRE_NAMES.architecture.multiStage, null],
-    ],
     sourceVideo: [["clip", CAPABILITY_WIRE_NAMES.clip.sourceVideo, null]],
     frameReferences: [
         ["clip", CAPABILITY_WIRE_NAMES.clip.references, null],

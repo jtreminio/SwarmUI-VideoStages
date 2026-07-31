@@ -576,10 +576,6 @@ describe("stage architecture model filtering", () => {
         if (!target || !architecture) {
             throw new Error("missing test video model");
         }
-        architecture.capabilities.architecture =
-            architecture.capabilities.architecture.filter(
-                (capability) => capability !== "multi-stage",
-            );
         target.entryModes = ["text-to-video"];
         const clip = minimalClip({
             stages: [minimalStage(), minimalStage()],

@@ -66,7 +66,6 @@ internal static class ArchitectureFeatureVocabulary
     [
         For(ArchitectureCapability.GeneratedEntry, "generated-entry"),
         For(ArchitectureCapability.SourcedEntry, "sourced-entry"),
-        For(ArchitectureCapability.MultiStage, "multi-stage"),
         For(ArchitectureCapability.NativeAudio, "native-audio"),
         For(ClipCapability.SourceVideo, "source-video"),
         For(ClipCapability.Prompts, "prompts"),
@@ -99,12 +98,6 @@ internal static class ArchitectureFeatureVocabulary
         AuthoringFeatures
     { get; } =
     [
-        new(
-            AuthoringFeature.MultiStage,
-            "multiStage",
-            "Multiple stages",
-            [Capability(ArchitectureCapability.MultiStage)],
-            CanIgnoreWhenUnsupported: false),
         new(
             AuthoringFeature.SourceVideo,
             "sourceVideo",
@@ -433,10 +426,6 @@ internal static class ArchitectureFeatureVocabulary
             capability,
             wireName,
             upscaleModeWireName);
-
-    private static CapabilityVocabularyEntry Capability(
-        ArchitectureCapability capability) =>
-        Capabilities.Single(entry => entry.Architecture == capability);
 
     private static CapabilityVocabularyEntry Capability(ClipCapability capability) =>
         Capabilities.Single(entry => entry.Clip == capability);

@@ -129,7 +129,7 @@ selected model facts, which may narrow those defaults. Every accepted WAN model
 publishes text, image, and source entry. Those entry modes describe the current
 request's input, not different user-facing WAN model categories.
 
-WAN publishes same-compatibility-family multi-stage chaining, video-only output, a
+WAN publishes same-compatibility-family stage chaining, video-only output, a
 four-frame profile grid, and cut-only boundaries. Every WAN compatibility alias
 publishes ordinary persisted clip/stage and prompt-section LoRAs.
 Image-generated stage 0 uses the host root at full control. WAN text entry uses
@@ -147,7 +147,7 @@ conformance path used by WAN. Model-level
 facts still say whether a checkpoint can enter from text, image, or both, so a
 text-only model such as Mochi cannot occupy a decoded later-stage role. The
 baseline advertises prompts, ordinary LoRAs, source video, pixel resize, decoded output, and
-hard-cut multi-stage execution where selected models have image entry. It does
+hard-cut stage chaining where selected models have image entry. It does
 not advertise arbitrary authored references, audio, IC-LoRA,
 advanced upscalers, end-frame conditioning, or swap.
 

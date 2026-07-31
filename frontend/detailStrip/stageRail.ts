@@ -12,16 +12,10 @@ export const buildStageRail = (
     editorForStage?: (stageIdx: number) => HTMLElement | undefined,
     open = true,
 ): HTMLElement => {
-    const multiStage = context
-        .authoring()
-        .capabilities.forClip(clip)
-        .decision("multiStage");
-    const canAdd = clip.stages.length === 0 || multiStage.supported;
-    const addTitle = canAdd
-        ? clip.stages.length === 0
+    const addTitle =
+        clip.stages.length === 0
             ? "Add the first stage and choose its architecture"
-            : "Add a refine stage"
-        : multiStage.reason;
+            : "Add a refine stage";
     return buildRepeatingEditor({
         key: "stages",
         label: "Stages",
@@ -62,7 +56,6 @@ export const buildStageRail = (
             title: addTitle,
             label: "+ Add Video Stage",
             className: "vst-detail-add-stage",
-            disabled: !canAdd,
             onClick: () => context.addStage(clipIdx),
         },
         remove: {

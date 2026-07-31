@@ -289,16 +289,13 @@ describe("architecture diagnostics", () => {
             (entry) => entry.id === "host-video",
         );
         if (!host) throw new Error("missing host fixture");
-        host.capabilities.architecture = host.capabilities.architecture.filter(
-            (capability) => capability !== "multi-stage",
+        host.capabilities.clip = host.capabilities.clip.filter(
+            (capability) => capability !== "source-video",
         );
         const clip = minimalClip({
             architectureHint: host.id,
+            sourceVideo: sourceVideoFixture(),
             stages: [
-                minimalStage({
-                    model: "host-video.safetensors",
-                    modelProfileId: "host-video",
-                }),
                 minimalStage({
                     model: "host-video.safetensors",
                     modelProfileId: "host-video",
@@ -308,7 +305,7 @@ describe("architecture diagnostics", () => {
 
         expect(
             deriveArchitectureDiagnostics([clip], models).find(
-                ({ code }) => code === "architecture.unsupported.multi-stage",
+                ({ code }) => code === "architecture.unsupported.source-video",
             )?.severity,
         ).toBe("error");
     });
@@ -792,37 +789,6 @@ describe("architecture diagnostics", () => {
                 ({ code }) => code,
             ),
         ).toEqual(["architecture.mixed-stage"]);
-    });
-
-    it("diagnoses multiple active stages when the architecture lacks that capability", () => {
-        const models = combinedCatalog();
-        const fake = models.architectures.find(
-            (entry) => entry.id === "test-video",
-        );
-        if (!fake) throw new Error("missing fake architecture");
-        fake.capabilities.architecture = fake.capabilities.architecture.filter(
-            (capability) => capability !== "multi-stage",
-        );
-        const clip = minimalClip({
-            architectureHint: "test-video",
-            modelProfileId: "test-profile",
-            stages: [
-                minimalStage({
-                    model: "test-video.safetensors",
-                    modelProfileId: "test-profile",
-                }),
-                minimalStage({
-                    model: "test-video.safetensors",
-                    modelProfileId: "test-profile",
-                }),
-            ],
-        });
-
-        expect(
-            deriveArchitectureDiagnostics([clip], models).map(
-                ({ code }) => code,
-            ),
-        ).toContain("architecture.unsupported.multi-stage");
     });
 
     it("does not diagnose a disabled clip LoRA from legacy profile metadata", () => {

@@ -70,12 +70,8 @@ describe("clip architecture identity", () => {
         });
     });
 
-    it("derives identity from the active prefix when a single-stage architecture retains a dormant stage", () => {
+    it("derives identity from the active prefix when a clip retains a dormant stage", () => {
         const catalog = testArchitectureCatalog();
-        catalog.architectures[0].capabilities.architecture =
-            catalog.architectures[0].capabilities.architecture.filter(
-                (feature) => feature !== "multi-stage",
-            );
         const clip = minimalClip({
             architectureHint: "stale-hint",
             modelProfileId: "stale-profile",

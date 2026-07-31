@@ -395,12 +395,6 @@ export const createDetailSelectionDomainOperations = (
                 }
                 const { capabilities, defaults } =
                     captureAuthoringTransaction();
-                if (
-                    clip.stages.length > 0 &&
-                    !capabilities.forClip(clip).decision("multiStage").supported
-                ) {
-                    return null;
-                }
                 const last = clip.stages[clip.stages.length - 1] ?? null;
                 const clipArchitectureId =
                     capabilities.forClip(clip).architectureId;

@@ -495,7 +495,6 @@
     architecture: {
       generatedEntry: "generated-entry",
       sourcedEntry: "sourced-entry",
-      multiStage: "multi-stage",
       nativeAudio: "native-audio"
     },
     clip: {
@@ -542,7 +541,6 @@
   var doesAuthoringFeatureRequireEveryCapability = (feature) => AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY.includes(feature);
   var isIgnoredWhenUnsupportedFeature = (feature) => IGNORED_WHEN_UNSUPPORTED_FEATURES.includes(feature);
   var AUTHORING_FEATURE_LABELS = {
-    multiStage: "Multiple stages",
     sourceVideo: "Source video",
     frameReferences: "Frame references",
     referenceFraming: "Reference framing",
@@ -558,9 +556,6 @@
     upscale: "Stage upscaling"
   };
   var AUTHORING_FEATURE_CAPABILITIES = {
-    multiStage: [
-      ["architecture", CAPABILITY_WIRE_NAMES.architecture.multiStage, null]
-    ],
     sourceVideo: [["clip", CAPABILITY_WIRE_NAMES.clip.sourceVideo, null]],
     frameReferences: [
       ["clip", CAPABILITY_WIRE_NAMES.clip.references, null],
@@ -6171,12 +6166,6 @@
         );
       }
     };
-    unsupported(
-      !supports("multiStage") && activeStageCount(clip) > 1,
-      "multiStage",
-      "multi-stage",
-      "Multiple active stages"
-    );
     unsupported(
       !supports("frameReferences") && clip.refs.length > 0,
       "frameReferences",
@@ -12520,9 +12509,7 @@ The conversion is one undoable change.`;
 
   // frontend/detailStrip/stageRail.ts
   var buildStageRail = (context, clip, clipIdx, stageIdx, editorForStage, open = true) => {
-    const multiStage = context.authoring().capabilities.forClip(clip).decision("multiStage");
-    const canAdd = clip.stages.length === 0 || multiStage.supported;
-    const addTitle = canAdd ? clip.stages.length === 0 ? "Add the first stage and choose its architecture" : "Add a refine stage" : multiStage.reason;
+    const addTitle = clip.stages.length === 0 ? "Add the first stage and choose its architecture" : "Add a refine stage";
     return buildRepeatingEditor({
       key: "stages",
       label: "Stages",
@@ -12556,7 +12543,6 @@ The conversion is one undoable change.`;
         title: addTitle,
         label: "+ Add Video Stage",
         className: "vst-detail-add-stage",
-        disabled: !canAdd,
         onClick: () => context.addStage(clipIdx)
       },
       remove: {
@@ -13789,9 +13775,6 @@ The conversion is one undoable change.`;
             return null;
           }
           const { capabilities, defaults } = captureAuthoringTransaction();
-          if (clip.stages.length > 0 && !capabilities.forClip(clip).decision("multiStage").supported) {
-            return null;
-          }
           const last = clip.stages[clip.stages.length - 1] ?? null;
           const clipArchitectureId = capabilities.forClip(clip).architectureId;
           const lockedArchitecture = clipArchitectureId === NONE_ARCHITECTURE_ID || clipArchitectureId === "unsupported" ? void 0 : clipArchitectureId;

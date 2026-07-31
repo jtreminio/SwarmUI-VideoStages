@@ -19,10 +19,6 @@ import {
 describe("architecture conversion policy", () => {
     it("preserves architecture-owned settings as dormant data", () => {
         const fake = fakeArchitectureCatalog();
-        fake.architectures[0].capabilities.architecture =
-            fake.architectures[0].capabilities.architecture.filter(
-                (feature) => feature !== "multi-stage",
-            );
         const target = {
             architectureId: "test-video",
             modelProfileId: "test-profile",
@@ -201,10 +197,6 @@ describe("architecture conversion policy", () => {
 
     it("rejects a target that cannot perform a preserved later stage", () => {
         const catalog = fakeArchitectureCatalog();
-        catalog.architectures[0].capabilities.architecture =
-            catalog.architectures[0].capabilities.architecture.filter(
-                (capability) => capability !== "multi-stage",
-            );
         catalog.entries[0].entryModes = ["text-to-video"];
         const source = minimalClip({
             stages: [minimalStage(), minimalStage()],
