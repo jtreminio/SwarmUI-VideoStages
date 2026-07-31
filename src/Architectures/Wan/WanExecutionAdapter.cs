@@ -100,7 +100,10 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     }
 
     public IArchitectureGenerationSessionFactory CreateFactory() =>
-        new WanGenerationSessionFactory(generator);
+        new StockHostVideoGenerationSessionFactory(
+            generator,
+            ArchitectureId,
+            "Wan");
 
     private static PlanDiagnostic Refuse(
         string message,

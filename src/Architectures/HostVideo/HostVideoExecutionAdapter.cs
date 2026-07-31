@@ -76,7 +76,10 @@ internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
     }
 
     public IArchitectureGenerationSessionFactory CreateFactory() =>
-        new HostVideoGenerationSessionFactory(generator);
+        new StockHostVideoGenerationSessionFactory(
+            generator,
+            ArchitectureId,
+            "generic host");
 
     private static PlanDiagnostic Ignored(string code, string message) =>
         new(PlanDiagnosticSeverity.Warning, code, message);
@@ -136,48 +139,5 @@ internal static class HostVideoCorePassIsolation
             genInfo.NegCond = generator.FinalNegativePrompt;
             genInfo.HasMatchedModelData = true;
         });
-    }
-}
-
-internal sealed class HostVideoGenerationSessionFactory(WorkflowGenerator generator) :
-    IArchitectureGenerationSessionFactory
-{
-    private HostVideoRootSources _rootSources;
-
-    public ArchitectureId ArchitectureId =>
-        HostVideoArchitectureModule.ArchitectureId;
-
-    public IArchitectureBoundaryAssembler BoundaryAssembler => null;
-
-    public void PrepareTimeline(ArchitectureTimelinePreparationContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        _rootSources = new(
-            generator.CurrentMedia?.Duplicate(),
-            generator.CurrentVae?.Duplicate());
-    }
-
-    public IVideoGenerationSession CreateSession(
-        ArchitectureTimelineSessionContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        if (_rootSources is null)
-        {
-            throw new InvalidOperationException(
-                "The generic host-video runtime was not prepared before session creation.");
-        }
-        return new HostVideoGenerationSession(
-            generator,
-            context.Plan,
-            _rootSources,
-            new HostVideoStageEngine(
-                generator,
-                context.Plan,
-                "generic host"));
-    }
-
-    public void FinalizeTimeline(
-        ArchitectureTimelineFinalizationContext context)
-    {
     }
 }

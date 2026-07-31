@@ -41,6 +41,24 @@ internal sealed record StockHostVideoStagePayload(
     IArchitectureStagePayload,
     IHostVideoStageSettings;
 
+internal static class StockHostVideoStagePayloadExtensions
+{
+    internal static StockHostVideoStagePayload RequireStockHostVideoPayload(
+        this StagePlan stage,
+        ArchitectureId architectureId,
+        string architectureLabel)
+    {
+        ArgumentNullException.ThrowIfNull(stage);
+        if (stage.ArchitecturePayload is not StockHostVideoStagePayload payload
+            || payload.ArchitectureId != architectureId)
+        {
+            throw new InvalidOperationException(
+                $"Stage {stage.StageId} has no {architectureLabel} stock host-video payload.");
+        }
+        return payload;
+    }
+}
+
 /// <summary>
 /// Shared sampler-step arithmetic for stock-host decoded-video refinement.
 /// </summary>

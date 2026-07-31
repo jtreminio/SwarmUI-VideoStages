@@ -12,6 +12,7 @@ using VideoStages.Architectures.Wan;
 using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Generated;
 using VideoStages.HostVideo;
+using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -1197,12 +1198,12 @@ public class WanRuntimeFlowTests
         InvalidOperationException hostFailure = new("unit-test host failure");
 
         Exception whileHostFailed = Record.Exception(
-            () => WanGenerationSession.RunPostHostCleanup(
+            () => StockHostVideoGenerationSession.RunWanPostHostCleanup(
                 () => throw cleanupFailure,
                 hostFailure));
         InvalidOperationException afterHostSucceeded =
             Assert.Throws<InvalidOperationException>(
-                () => WanGenerationSession.RunPostHostCleanup(
+                () => StockHostVideoGenerationSession.RunWanPostHostCleanup(
                     () => throw cleanupFailure,
                     hostConstructionError: null));
 
