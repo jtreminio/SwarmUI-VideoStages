@@ -50,16 +50,16 @@ public class AudioPlanCompilerComponentTests
     }
 
     [Fact]
-    public void Reuse_component_and_facade_preserve_ineligible_plan()
+    public void Ltx_facade_preserves_ineligible_reuse_plan()
     {
         ClipSpec clip = Clip(reuse: true, stages: [Stage(0), Stage(1)]);
 
-        AudioPlanComponentResult<AudioReusePlan> component = AudioReusePlanCompiler.Compile(clip);
-        Ltx2AudioPlan facade = Ltx2AudioPlanCompiler.Compile(clip);
+        AudioReusePlan reuse = Ltx2AudioPlanCompiler.Compile(clip).Reuse;
 
-        Assert.Equal(component.Plan, facade.Reuse);
-        Assert.False(component.Plan.IsEligible);
-        Assert.Empty(component.Diagnostics);
+        Assert.True(reuse.IsRequested);
+        Assert.False(reuse.IsEligible);
+        Assert.Equal(1, reuse.CaptureStageIndex);
+        Assert.Equal(2, reuse.ReuseFromStageIndex);
     }
 
     [Fact]

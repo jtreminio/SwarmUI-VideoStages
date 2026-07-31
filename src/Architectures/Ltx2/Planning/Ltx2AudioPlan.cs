@@ -34,13 +34,11 @@ internal static class Ltx2AudioPlanCompiler
         Ltx2AudioInjectionPlan injection = new(
             external ? clip.ClipLengthFromAudio : true,
             external && clip.ClipLengthFromAudio);
-        AudioPlanComponentResult<AudioReusePlan> reuse =
-            AudioReusePlanCompiler.Compile(clip);
+        AudioReusePlan reuse = CompileReuse(clip);
         int? controlNetSourceIndex =
             IcLoraPlanCompiler.ResolvePrimaryControlNetSourceIndex(clip);
         ImmutableArray<PlanDiagnostic>.Builder diagnostics =
             ImmutableArray.CreateBuilder<PlanDiagnostic>();
-        diagnostics.AddRange(reuse.Diagnostics);
         if (clip.ClipLengthFromControlNet && controlNetSourceIndex is null)
         {
             diagnostics.Add(new(
@@ -49,9 +47,21 @@ internal static class Ltx2AudioPlanCompiler
                 "ControlNet owns clip length, but no valid LTX ControlNet 1-3 drive source is configured."));
         }
         return new(
-            reuse.Plan,
+            reuse,
             injection,
             controlNetSourceIndex,
             diagnostics.ToImmutable());
+    }
+
+    private static AudioReusePlan CompileReuse(ClipSpec clip)
+    {
+        int stageCount = clip.Stages?.Count ?? 0;
+        bool eligible = clip.ReuseAudio
+            && stageCount >= Ltx2ConditionalRulePolicySource.AudioReuseMinimumActiveStages;
+        return new(
+            clip.ReuseAudio,
+            eligible,
+            CaptureStageIndex: 1,
+            ReuseFromStageIndex: 2);
     }
 }
