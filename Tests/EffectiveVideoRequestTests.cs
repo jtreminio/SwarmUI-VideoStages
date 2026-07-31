@@ -4,6 +4,7 @@ using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.HostVideo;
+using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.Wan;
 using VideoStages.Architectures.Wan.Planning;
 using VideoStages.HostVideo;
@@ -1262,7 +1263,11 @@ public sealed class EffectiveVideoRequestTests
         {
             IVideoArchitectureModule module = moduleFor(clip);
             VideoArchitectureDescriptor descriptor = descriptorFor(clip);
-            ModelProfileId profileId = descriptor.DefaultProfileId;
+            ModelProfileId profileId = descriptor.Id == Ltx2ArchitectureModule.ArchitectureId
+                ? Ltx2ArchitectureModule.ProfileId
+                : descriptor.Id == WanArchitectureModule.ArchitectureId
+                    ? WanArchitectureModule.ImageToVideoProfileId
+                    : HostVideoArchitectureModule.ProfileId;
             Dictionary<int, ResolvedVideoModel> stages = clip.Stages.ToDictionary(
                 stage => stage.ClipStageRawIndex,
                 stage => new ResolvedVideoModel(

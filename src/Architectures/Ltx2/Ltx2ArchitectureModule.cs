@@ -12,6 +12,7 @@ internal sealed class Ltx2ArchitectureModule :
     internal static ArchitectureId ArchitectureId { get; } = new("ltx2");
 
     internal const int FrameGrid = 8;
+    internal static ModelProfileId ProfileId { get; } = new("ltx-2.3");
 
     /// <summary>
     /// LTX's pixel→latent temporal mapping: the first pixel frame owns a latent frame of its own and
@@ -27,7 +28,6 @@ internal sealed class Ltx2ArchitectureModule :
     public VideoArchitectureDescriptor Descriptor { get; } = new(
         ArchitectureId,
         "LTX Video 2.3",
-        new("ltx-2.3"),
         [
             AudioSourceKind.Native,
             AudioSourceKind.Upload,
@@ -35,7 +35,10 @@ internal sealed class Ltx2ArchitectureModule :
             AudioSourceKind.AceStepFun,
         ],
         [
-            Profile("ltx-2.3", "LTX Video 2.3"),
+            ArchitectureEntryMode.TextToVideo,
+            ArchitectureEntryMode.ImageToVideo,
+            ArchitectureEntryMode.SourceVideo,
+            ArchitectureEntryMode.RefineVideo,
         ],
         new(
             ArchitectureCapability.GeneratedEntry
@@ -91,7 +94,7 @@ internal sealed class Ltx2ArchitectureModule :
         resolved = new(
             model.Name,
             ArchitectureId,
-            new("ltx-2.3"),
+            ProfileId,
             Descriptor)
         {
             ModelClassId = model.ModelClass.ID,
@@ -131,16 +134,6 @@ internal sealed class Ltx2ArchitectureModule :
         RootPlan root) =>
         Ltx2ConditionalRulePolicySource.Validate(architectureClips, timelineClips, root);
 
-    private static VideoModelProfileDescriptor Profile(string id, string displayName) =>
-        new(
-            new(id),
-            displayName,
-            [
-                ArchitectureEntryMode.TextToVideo,
-                ArchitectureEntryMode.ImageToVideo,
-                ArchitectureEntryMode.SourceVideo,
-                ArchitectureEntryMode.RefineVideo,
-            ]);
 }
 
 internal sealed record Ltx2ClipPayload(

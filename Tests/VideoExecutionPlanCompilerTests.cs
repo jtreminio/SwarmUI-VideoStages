@@ -705,7 +705,7 @@ public class VideoExecutionPlanCompilerTests
                     stage => new ResolvedVideoModel(
                         stage.Model,
                         descriptor.Id,
-                        descriptor.DefaultProfileId,
+                        new($"{descriptor.Id.Value}-test-profile"),
                         descriptor)
                     {
                         HostFactsAuthoritative = true,

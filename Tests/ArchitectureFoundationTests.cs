@@ -656,7 +656,7 @@ public class ArchitectureFoundationTests
             [stage.ClipStageRawIndex] = new(
                 stage.Model,
                 descriptor.Id,
-                descriptor.DefaultProfileId,
+                Ltx2ArchitectureModule.ProfileId,
                 descriptor)
             {
                 ModelClassId = "ltx-test",
@@ -694,7 +694,7 @@ public class ArchitectureFoundationTests
             [stage.ClipStageRawIndex] = new(
                 stage.Model,
                 descriptor.Id,
-                descriptor.DefaultProfileId,
+                Ltx2ArchitectureModule.ProfileId,
                 descriptor),
         };
 
@@ -732,7 +732,7 @@ public class ArchitectureFoundationTests
             [stage.ClipStageRawIndex] = new(
                 stage.Model,
                 descriptor.Id,
-                descriptor.DefaultProfileId,
+                Ltx2ArchitectureModule.ProfileId,
                 descriptor),
         };
 
@@ -938,21 +938,12 @@ public class ArchitectureFoundationTests
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
             architecture: ArchitectureCapability.GeneratedEntry
                 | ArchitectureCapability.MultiStage
-                | ArchitectureCapability.DecodedOutput) with
-        {
-            Profiles =
+                | ArchitectureCapability.DecodedOutput,
+            entryModes:
             [
-                new(
-                    new("allows-image"),
-                    "allows-image",
-                    [ArchitectureEntryMode.ImageToVideo]),
-                new(
-                    new("text-only"),
-                    "text-only",
-                    [ArchitectureEntryMode.TextToVideo]),
-            ],
-            DefaultProfileId = new("allows-image"),
-        };
+                ArchitectureEntryMode.ImageToVideo,
+                ArchitectureEntryMode.TextToVideo,
+            ]);
         StageSpec first = Stage(10, "first") with { ClipStageRawIndex = 0 };
         StageSpec second = Stage(11, "second") with
         {
@@ -1487,7 +1478,7 @@ public class ArchitectureFoundationTests
     [InlineData(-1)]
     public void Registry_rejects_a_nonpositive_architecture_frame_grid(int frameGrid)
     {
-        VideoArchitectureDescriptor descriptor = Descriptor("fake", "profile") with
+        VideoArchitectureDescriptor descriptor = Descriptor("fake") with
         {
             FrameGrid = frameGrid,
         };
@@ -1499,65 +1490,47 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Registry_accepts_a_stale_default_profile_alias()
+    public void Registry_rejects_duplicate_entry_modes()
     {
-        VideoArchitectureDescriptor descriptor = Descriptor("fake", "declared") with
+        VideoArchitectureDescriptor invalid = Descriptor("fake") with
         {
-            DefaultProfileId = new("removed-default"),
-        };
-
-        VideoArchitectureRegistry registry =
-            new([new MatchingModule(descriptor)]);
-
-        Assert.Equal("removed-default", Assert.Single(registry.Catalog).DefaultProfileId.Value);
-    }
-
-    [Fact]
-    public void Registry_rejects_duplicate_legacy_profile_ids()
-    {
-        VideoModelProfileDescriptor profile =
-            Descriptor("fake", "profile").Profiles[0];
-        VideoArchitectureDescriptor invalid = Descriptor("fake", "profile") with
-        {
-            Profiles = [profile, profile],
-        };
-
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            new VideoArchitectureRegistry([new MatchingModule(invalid)]));
-
-        Assert.Contains("duplicate legacy profile ids", error.Message);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Registry_rejects_missing_or_invalid_entry_mode_aliases(
-        bool invalidEnum)
-    {
-        IReadOnlyList<ArchitectureEntryMode> entryModes = invalidEnum
-            ? [(ArchitectureEntryMode)int.MaxValue]
-            : [];
-        VideoArchitectureDescriptor invalid = Descriptor("fake", "profile") with
-        {
-            Profiles =
+            EntryModes =
             [
-                new(
-                    new("profile"),
-                    "profile",
-                    entryModes),
+                ArchitectureEntryMode.ImageToVideo,
+                ArchitectureEntryMode.ImageToVideo,
             ],
         };
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
             new VideoArchitectureRegistry([new MatchingModule(invalid)]));
 
-        Assert.Contains("entry-mode aliases", error.Message);
+        Assert.Contains("missing, duplicate, or invalid entry modes", error.Message);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Registry_rejects_missing_or_invalid_entry_modes(
+        bool invalidEnum)
+    {
+        IReadOnlyList<ArchitectureEntryMode> entryModes = invalidEnum
+            ? [(ArchitectureEntryMode)int.MaxValue]
+            : [];
+        VideoArchitectureDescriptor invalid = Descriptor("fake") with
+        {
+            EntryModes = entryModes,
+        };
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            new VideoArchitectureRegistry([new MatchingModule(invalid)]));
+
+        Assert.Contains("missing, duplicate, or invalid entry modes", error.Message);
     }
 
     [Fact]
     public void Registry_rejects_incomplete_boundary_rule_catalog()
     {
-        VideoArchitectureDescriptor invalid = Descriptor("fake", "profile") with
+        VideoArchitectureDescriptor invalid = Descriptor("fake") with
         {
             BoundaryPolicy = new ArchitectureBoundaryPolicy(
                 new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
@@ -1584,8 +1557,8 @@ public class ArchitectureFoundationTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         VideoArchitectureRegistry registry = new(
         [
-            new MatchingModule(Descriptor("one", "one-profile")),
-            new MatchingModule(Descriptor("two", "two-profile")),
+            new MatchingModule(Descriptor("one")),
+            new MatchingModule(Descriptor("two")),
         ]);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
@@ -1598,7 +1571,7 @@ public class ArchitectureFoundationTests
     {
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        VideoArchitectureDescriptor registered = Descriptor("fake", "profile");
+        VideoArchitectureDescriptor registered = Descriptor("fake");
         VideoArchitectureDescriptor divergent = registered with
         {
             DisplayName = "divergent same-id descriptor",
@@ -1811,16 +1784,10 @@ public class ArchitectureFoundationTests
         StageCapability stage =
             StageCapability.ImageInput | StageCapability.VideoInput,
         IReadOnlyList<ArchitectureEntryMode> entryModes = null) =>
-        Descriptor("fake", "fake-profile") with
+        Descriptor("fake") with
         {
             AudioSourceKinds = [AudioSourceKind.Native],
-            Profiles =
-            [
-                new(
-                    new("fake-profile"),
-                    "fake-profile",
-                    entryModes ?? [ArchitectureEntryMode.ImageToVideo]),
-            ],
+            EntryModes = entryModes ?? [ArchitectureEntryMode.ImageToVideo],
             Capabilities = new(
                 architecture,
                 ClipCapability.Prompts,
@@ -1884,28 +1851,16 @@ public class ArchitectureFoundationTests
             bool undeclaredFakeProfile = false,
             VideoArchitectureDescriptor fakeDescriptor = null)
         {
-            VideoArchitectureDescriptor ltx = Descriptor("ltx2", "ltx-profile") with
+            VideoArchitectureDescriptor ltx = Descriptor("ltx2") with
             {
-                Profiles =
+                EntryModes =
                 [
-                    new(
-                        new("ltx-profile"),
-                        "ltx-profile",
-                        [
-                            ArchitectureEntryMode.TextToVideo,
-                            ArchitectureEntryMode.ImageToVideo,
-                        ]),
-                    new(
-                        new("ltx-2.3-profile"),
-                        "ltx-2.3-profile",
-                        [
-                            ArchitectureEntryMode.TextToVideo,
-                            ArchitectureEntryMode.ImageToVideo,
-                        ]),
+                    ArchitectureEntryMode.TextToVideo,
+                    ArchitectureEntryMode.ImageToVideo,
                 ],
             };
             VideoArchitectureDescriptor fake =
-                fakeDescriptor ?? Descriptor("fake", "fake-profile");
+                fakeDescriptor ?? Descriptor("fake");
             Catalog = [ltx, fake];
             _models = new(StringComparer.OrdinalIgnoreCase)
             {
@@ -1950,9 +1905,7 @@ public class ArchitectureFoundationTests
             string profile)
         {
             ModelProfileId profileId = new(profile);
-            IReadOnlyList<ArchitectureEntryMode> entryModes = architecture.Profiles
-                .SingleOrDefault(candidate => candidate.Id == profileId)
-                ?.EntryModes ?? [];
+            IReadOnlyList<ArchitectureEntryMode> entryModes = architecture.EntryModes;
             return new(name, architecture.Id, profileId, architecture)
             {
                 ModelClassId = $"{architecture.Id}-test-model",
@@ -2001,19 +1954,15 @@ public class ArchitectureFoundationTests
             ArchitectureId ArchitectureId) : IArchitectureClipPayload;
     }
 
-    private static VideoArchitectureDescriptor Descriptor(string id, string profile) =>
+    private static VideoArchitectureDescriptor Descriptor(string id) =>
         new(
             new(id),
             id,
-            new(profile),
             [AudioSourceKind.Native],
-            [new(
-                new(profile),
-                profile,
-                [
-                    ArchitectureEntryMode.TextToVideo,
-                    ArchitectureEntryMode.ImageToVideo,
-                ])],
+            [
+                ArchitectureEntryMode.TextToVideo,
+                ArchitectureEntryMode.ImageToVideo,
+            ],
             new(
                 ArchitectureCapability.GeneratedEntry | ArchitectureCapability.DecodedOutput,
                 ClipCapability.Prompts,
@@ -2064,7 +2013,7 @@ public class ArchitectureFoundationTests
             resolved = new(
                 model.Name,
                 descriptor.Id,
-                descriptor.Profiles[0].Id,
+                new($"{descriptor.Id.Value}-test-profile"),
                 resolvedDescriptor ?? descriptor)
             {
                 ModelClassId = model.ModelClass.ID,

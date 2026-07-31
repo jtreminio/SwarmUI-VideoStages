@@ -95,17 +95,11 @@ internal sealed class HostVideoArchitectureModule :
     public VideoArchitectureDescriptor Descriptor { get; } = new(
         ArchitectureId,
         "Host Video",
-        ProfileId,
         [AudioSourceKind.Disabled],
         [
-            new(
-                ProfileId,
-                "Video",
-                [
-                    ArchitectureEntryMode.TextToVideo,
-                    ArchitectureEntryMode.ImageToVideo,
-                    ArchitectureEntryMode.SourceVideo,
-                ])
+            ArchitectureEntryMode.TextToVideo,
+            ArchitectureEntryMode.ImageToVideo,
+            ArchitectureEntryMode.SourceVideo,
         ],
         new(
             ArchitectureCapability.GeneratedEntry

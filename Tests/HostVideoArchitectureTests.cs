@@ -296,7 +296,7 @@ public class HostVideoArchitectureTests
             resolved = new(
                 model.Name,
                 Descriptor.Id,
-                Descriptor.DefaultProfileId,
+                new("video"),
                 Descriptor)
             {
                 ModelClassId = model.ModelClass.ID,
@@ -317,7 +317,6 @@ public class HostVideoArchitectureTests
     private static VideoArchitectureDescriptor DescriptorFor(string id)
     {
         ArchitectureId architectureId = new(id);
-        ModelProfileId profileId = new("video");
         ArchitectureBoundaryModePolicy boundary = new(
             RuleSupport.Supported,
             $"{id}.cut",
@@ -333,12 +332,8 @@ public class HostVideoArchitectureTests
         return new(
             architectureId,
             id,
-            profileId,
             [AudioSourceKind.Disabled],
-            [new(
-                profileId,
-                "Video",
-                [ArchitectureEntryMode.TextToVideo])],
+            [ArchitectureEntryMode.TextToVideo],
             new(
                 ArchitectureCapability.GeneratedEntry,
                 ClipCapability.Prompts,

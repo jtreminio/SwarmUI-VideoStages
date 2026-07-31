@@ -20,17 +20,11 @@ internal static class NoneArchitecture
     internal static VideoArchitectureDescriptor Descriptor { get; } = new(
         Id,
         "Decoded source only",
-        ProfileId,
         [
             AudioSourceKind.Disabled,
             AudioSourceKind.Upload,
         ],
-        [
-            new(
-                ProfileId,
-                "Decoded source only",
-                [ArchitectureEntryMode.SourceVideo])
-        ],
+        [ArchitectureEntryMode.SourceVideo],
         new(
             ArchitectureCapability.SourcedEntry | ArchitectureCapability.DecodedOutput,
             ClipCapability.SourceVideo

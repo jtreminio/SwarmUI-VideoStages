@@ -59,33 +59,11 @@ internal sealed class WanArchitectureModule :
     public VideoArchitectureDescriptor Descriptor { get; } = new(
         ArchitectureId,
         "WAN Video",
-        ImageToVideoProfileId,
         [AudioSourceKind.Disabled],
         [
-            Profile(
-                ImageToVideoProfileId,
-                "WAN Video",
-                [
-                    ArchitectureEntryMode.TextToVideo,
-                    ArchitectureEntryMode.ImageToVideo,
-                    ArchitectureEntryMode.SourceVideo,
-                ]),
-            Profile(
-                Ti2v5bProfileId,
-                "WAN Video",
-                [
-                    ArchitectureEntryMode.TextToVideo,
-                    ArchitectureEntryMode.ImageToVideo,
-                    ArchitectureEntryMode.SourceVideo,
-                ]),
-            Profile(
-                OrdinaryImageToVideoProfileId,
-                "WAN Video",
-                [
-                    ArchitectureEntryMode.TextToVideo,
-                    ArchitectureEntryMode.ImageToVideo,
-                    ArchitectureEntryMode.SourceVideo,
-                ]),
+            ArchitectureEntryMode.TextToVideo,
+            ArchitectureEntryMode.ImageToVideo,
+            ArchitectureEntryMode.SourceVideo,
         ],
         new(
             ArchitectureCapability.GeneratedEntry
@@ -253,12 +231,4 @@ internal sealed class WanArchitectureModule :
             compilation.Diagnostics);
     }
 
-    private static VideoModelProfileDescriptor Profile(
-        ModelProfileId id,
-        string displayName,
-        IReadOnlyList<ArchitectureEntryMode> entryModes) =>
-        new(
-            id,
-            displayName,
-            entryModes);
 }

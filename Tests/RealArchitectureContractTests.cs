@@ -84,9 +84,6 @@ public class RealArchitectureContractTests
             out ResolvedVideoModel resolved));
         Assert.Equal(fixture.Descriptor.Id, resolved.ArchitectureId);
         Assert.Equal(fixture.ModelProfileId, resolved.ModelProfileId);
-        Assert.Contains(
-            fixture.Descriptor.Profiles,
-            profile => profile.Id == resolved.ModelProfileId);
         Assert.Same(fixture.Descriptor, resolved.Architecture);
         Assert.Equal(fixture.Model.Name, resolved.ModelName);
 
@@ -121,9 +118,8 @@ public class RealArchitectureContractTests
         using SwarmUiTestContext context = new();
         VideoArchitectureDescriptor descriptor = CreateFixture(family).Descriptor;
 
-        Assert.Contains(
-            descriptor.Profiles,
-            profile => profile.Id == descriptor.DefaultProfileId);
+        Assert.NotEmpty(descriptor.EntryModes);
+        Assert.All(descriptor.EntryModes, mode => Assert.True(Enum.IsDefined(mode)));
         Assert.True(descriptor.FrameGrid > 0);
         Assert.All(
             Enum.GetValues<BoundaryExecutionMode>(),

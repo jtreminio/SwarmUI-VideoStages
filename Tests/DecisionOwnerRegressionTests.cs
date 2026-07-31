@@ -582,16 +582,11 @@ public class DecisionOwnerRegressionTests
     private static VideoArchitectureDescriptor ForeignArchitecture()
     {
         ArchitectureId id = new("unit-test-foreign");
-        ModelProfileId profileId = new("unit-test-foreign-profile");
         return new(
             id,
             "Unit Test Foreign",
-            profileId,
             [AudioSourceKind.Native],
-            [new(
-                profileId,
-                profileId.Value,
-                [ArchitectureEntryMode.ImageToVideo])],
+            [ArchitectureEntryMode.ImageToVideo],
             new(
                 ArchitectureCapability.GeneratedEntry,
                 ClipCapability.None,

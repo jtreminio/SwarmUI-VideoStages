@@ -338,11 +338,6 @@ internal interface IArchitectureControlNetSourcePlan
     int? ControlNetSourceIndex { get; }
 }
 
-internal sealed record VideoModelProfileDescriptor(
-    ModelProfileId Id,
-    string DisplayName,
-    IReadOnlyList<ArchitectureEntryMode> EntryModes);
-
 /// <summary>
 /// Optional authored product features that an effective-request projector can
 /// safely omit while preserving their authored values. Absence means block.
@@ -369,9 +364,8 @@ internal enum UnsupportedAuthoringFeature
 internal sealed record VideoArchitectureDescriptor(
     ArchitectureId Id,
     string DisplayName,
-    ModelProfileId DefaultProfileId,
     IReadOnlyList<AudioSourceKind> AudioSourceKinds,
-    IReadOnlyList<VideoModelProfileDescriptor> Profiles,
+    IReadOnlyList<ArchitectureEntryMode> EntryModes,
     ArchitectureCapabilityDescriptor Capabilities,
     IArchitectureBoundaryPolicy BoundaryPolicy)
 {
@@ -391,16 +385,6 @@ internal sealed record VideoArchitectureDescriptor(
     /// <summary>The catalog projection of <see cref="BoundaryPolicy"/>; never a separate source.</summary>
     public IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> BoundaryRules =>
         BoundaryPolicy.PublishedRules;
-
-    /// <summary>
-    /// Overview/backward catalog projection only. Entry authorization belongs exclusively to the
-    /// resolved model facts and must never consult this union.
-    /// </summary>
-    public IReadOnlyList<ArchitectureEntryMode> EntryModes =>
-        Array.AsReadOnly(Profiles
-            .SelectMany(profile => profile.EntryModes)
-            .Distinct()
-            .ToArray());
 
     public IReadOnlyList<RuleDecision> Rules { get; init; } = [];
 

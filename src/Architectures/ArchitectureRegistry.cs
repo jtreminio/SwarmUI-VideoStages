@@ -32,34 +32,20 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                     $"Video architecture '{descriptor.Id}' has invalid frame grid "
                         + $"{descriptor.FrameGrid}; grids must be positive.");
             }
-            ModelProfileId[] duplicateProfiles = [
-                .. descriptor.Profiles
-                    .GroupBy(profile => profile.Id)
+            IReadOnlyList<ArchitectureEntryMode> entryModes = descriptor.EntryModes ?? [];
+            ArchitectureEntryMode[] duplicateEntryModes = [
+                .. entryModes
+                    .GroupBy(mode => mode)
                     .Where(group => group.Count() > 1)
                     .Select(group => group.Key)
             ];
-            if (duplicateProfiles.Length > 0)
+            if (entryModes.Count == 0
+                || duplicateEntryModes.Length > 0
+                || entryModes.Any(mode => !Enum.IsDefined(mode)))
             {
                 throw new InvalidOperationException(
-                    $"Video architecture '{descriptor.Id}' has duplicate legacy profile ids: "
-                    + string.Join(", ", duplicateProfiles.Select(id => $"'{id}'")));
-            }
-            foreach (VideoModelProfileDescriptor profile in descriptor.Profiles)
-            {
-                ArchitectureEntryMode[] duplicateEntryModes = [
-                    .. profile.EntryModes
-                        .GroupBy(mode => mode)
-                        .Where(group => group.Count() > 1)
-                        .Select(group => group.Key)
-                ];
-                if (profile.EntryModes is not { Count: > 0 }
-                    || duplicateEntryModes.Length > 0
-                    || profile.EntryModes.Any(mode => !Enum.IsDefined(mode)))
-                {
-                    throw new InvalidOperationException(
-                        $"Video architecture '{descriptor.Id}' legacy profile '{profile.Id}' "
-                            + "has missing, duplicate, or invalid entry-mode aliases.");
-                }
+                    $"Video architecture '{descriptor.Id}' has missing, duplicate, or invalid "
+                        + "entry modes.");
             }
             BoundaryExecutionMode[] missingBoundaryModes = [
                 .. Enum.GetValues<BoundaryExecutionMode>()

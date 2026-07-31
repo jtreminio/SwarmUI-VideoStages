@@ -292,16 +292,11 @@ public class ArchitectureRuntimeOwnershipTests
     private static VideoArchitectureDescriptor Descriptor(string id)
     {
         ArchitectureId architectureId = new(id);
-        ModelProfileId profileId = new($"{id}-profile");
         return new(
             architectureId,
             id,
-            profileId,
             [AudioSourceKind.Native],
-            [new(
-                profileId,
-                profileId.Value,
-                [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo])],
+            [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo],
             new(
                 ArchitectureCapability.GeneratedEntry | ArchitectureCapability.SourcedEntry,
                 ClipCapability.SourceVideo,
