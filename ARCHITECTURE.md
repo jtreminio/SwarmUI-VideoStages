@@ -127,7 +127,8 @@ Common code knows:
   method names, audio sources, and timeline audio tracks;
 - generic clip ordering, timing, source, and boundary plans;
 - capability and rule decisions;
-- opaque architecture-owned clip and stage payloads;
+- architecture-owned clip and stage payloads; common code reads the required
+  stage execution core while graph-specific additions remain opaque;
 - runtime-session, boundary-assembler, host-phase, and timeline-lifecycle
   contracts;
 - resolved audio runtime sources, root execution policy, and the timeline
@@ -156,12 +157,13 @@ must not instantiate their managers, inspect their compatibility IDs, or create
 their nodes.
 
 `VideoArchitectureManifest` is the production composition root. Each
-registration supplies its module, runtime factory, host integration, API
-routes, and dependency registration together. The backend maintains no parallel
-architecture list, and the frontend consumes the serialized backend catalog
-without a capability-definition mirror. Frontend architecture IDs may select
-local behavior or DOM panels, but those maps do not recognize models or declare
-profiles, labels, capabilities, or rules.
+registration supplies its module, request-scoped runtime provider, host
+integration, API routes, and dependency registration together. The backend
+maintains no parallel architecture list, and the frontend consumes the
+serialized backend catalog without a capability-definition mirror. Explicit
+local architecture-ID guards may select concrete behavior or DOM panels, but
+they do not recognize models or declare profiles, labels, capabilities, or
+rules.
 
 WAN recognizes ordinary WAN 2.1 and 2.2 video models from SwarmUI's
 authoritative class, compatibility, and entry facts. VACE, LoRA, and VAE
@@ -394,13 +396,13 @@ Adding another family should require:
    capabilities for every claimed model;
 3. descriptor capabilities and rules, including a rule for every boundary
    mode — the registry rejects an incomplete catalog at construction;
-4. an architecture-owned clip compiler and opaque payload;
+4. an architecture-owned clip compiler and typed payload whose stage payload
+   exposes the required common execution core;
 5. a runtime provider that answers request preflight for its dependencies, and a
    runtime-session factory owning preparation and optional exclusive finalization;
 6. same-architecture boundary assembly as soon as any non-cut join is declared
    supported or conditional;
-7. an optional frontend-local behavior and/or authoring-panel mapping keyed by
-   the backend architecture ID, only when the family has concrete custom UI
+7. an explicit frontend owner guard only when the family has concrete custom UI
    behavior; architectures with no custom frontend behavior need no frontend
    registration; and
 8. contract tests using the common dispatcher, strict catalog parser, and

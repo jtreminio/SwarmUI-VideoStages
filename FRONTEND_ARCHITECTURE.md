@@ -411,17 +411,21 @@ the backend document, and tints regions, audio cells, and chips.
 ## Architecture-owned authoring
 
 LTX IC-LoRA normalization, HDR recognition, presets, drive availability, weight
-download, and the IC-LoRA editor section live behind the LTX adapter, reached
-through ID-keyed local maps in `architectures/authoringPanels.ts` and
-`architectures/behaviorRegistry.ts`. HDR is a typed
+download, and the IC-LoRA editor section remain LTX-local.
+`architectures/behaviorRegistry.ts` is a centralized set of explicit LTX
+ownership guards, not a polymorphic registry.
+`architectures/authoringPanels.ts` directly selects either the LTX editor or
+the generic persisted-value removal panel. HDR is a typed
 `hdr` flag on the persisted entry end to end — presets seed it, the preset
 filter reads it, and no name-matching predicate survives on either side.
 
 Architecture policy separates identity, feature values, clip/stage views, and
-boundary policy. These behavior/panel maps are optional implementation slots,
-not architecture definitions: add an entry only when an architecture has
-concrete custom frontend behavior or DOM. Labels, resolved model identities,
-capabilities, rules, and model recognition always come from the backend DTO.
+boundary policy. Backend catalog/model facts authorize feature visibility;
+local LTX code only implements already-authorized behavior and DOM. A second
+bespoke frontend should add an explicit owner branch first and extract a common
+contract only if two implementations reveal one. Labels, resolved model
+identities, capabilities, rules, and model recognition always come from the
+backend DTO.
 
 ## Completion rules
 

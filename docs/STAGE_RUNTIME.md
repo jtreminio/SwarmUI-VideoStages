@@ -14,8 +14,8 @@ contracts, see [`ARCHITECTURE.md`](../ARCHITECTURE.md).
 ```text
 hidden authoring document + host request
     → VideoStagesSpecParser
-    → architecture-owned effective-request projection
     → ArchitecturePlanResolver
+    → resolved-fact effective-request projection
     → VideoExecutionPlanCompiler
     → cached VideoExecutionPlanContext
     → graph-free request preparation
@@ -32,7 +32,7 @@ hidden authoring document + host request
 There is one common orchestration path. LTX, WAN, generic host video, and the
 source-only `none` path do not receive separate top-level runners.
 
-## 1. Parse, project, resolve, compile
+## 1. Parse, resolve, project, compile
 
 `VideoStagesContext.GetVideoExecutionPlanContext` is the entry to graph-free
 planning. Two `ConditionalWeakTable` caches are keyed by the current
@@ -45,17 +45,21 @@ The stages before runtime are:
    migration that renames the old `architecture` key to `architectureHint`.
 2. `VideoStagesSpecParser` parses common document data and prompt-section
    overrides.
-3. effective-request projection keeps authored data intact while producing the
-   values that this generation can execute. Common capability omission handles
-   optional unsupported values; an architecture hook handles only its unique
-   graph-free policy.
-4. `ArchitecturePlanResolver` resolves every authored stage model—including
+3. `ArchitecturePlanResolver` resolves every authored stage model—including
    skipped stages—through the session-authorized backend registry. Resolved
    stage models own architecture, profile, entry abilities, and feature
    support. Persisted architecture/profile values are diagnostic hints.
+4. `EffectiveVideoRequestProjector`, called inside
+   `VideoExecutionPlanCompiler`, keeps authored data intact while producing the
+   values that this generation can execute from those resolved facts. Common
+   capability omission handles optional unsupported values; an architecture
+   hook handles only its unique graph-free policy. Projection preserves clip
+   and stage IDs, raw stage indexes, model names, source identity, and topology,
+   so the original resolved assignments remain authoritative.
 5. `VideoExecutionPlanCompiler` compiles common root, geometry, timing,
-   boundary, and audio plans and asks the selected module to compile opaque
-   clip/stage payloads.
+   boundary, and audio plans and asks the selected module to compile typed
+   clip/stage payloads. Every stage payload exposes the common execution core;
+   its graph-specific additions remain architecture-owned.
 6. nonblocking diagnostics are reported once. Blocking diagnostics remain on
    the plan and stop preparation.
 
@@ -165,7 +169,9 @@ that narrow seam for an all-LTX HDR timeline.
 `PreviousClipOutput` only across a same-architecture non-cut boundary.
 `PreviousTimelineClipOutput` remains available as contextual decoded media
 across cuts. The dispatcher selects a session solely by the planned
-`ArchitectureId` and verifies the returned clip identity and decoded shape.
+`ArchitectureId`, verifies that the returned architecture matches both the
+selected session and planned clip, then verifies clip identity and decoded
+shape.
 
 Every architecture returns `DecodedClipArtifact`: decoded video, optional
 decoded audio, literal dimensions/FPS/frame count, architecture ID, and clip
@@ -186,12 +192,13 @@ this common boundary.
 - terminal global trim; and
 - capture of the final neutral artifact.
 
-The architecture session supplies three narrow callbacks: resolve its opaque
-stage settings, resolve passthrough frame count, and execute one generating
-stage. WAN retains first/final-frame behavior, 5B latent cleanup, WAN
-conditioning, and model-only LoRA targeting. Generic host video retains its
-conservative stock-path composition and audio/end-frame/swap isolation. Those
-differences are not engine hooks.
+`StockHostVideoGenerationSession` owns the common stock-host execution path and
+uses `HostVideoStageEngine` for stage iteration. Generic host video uses that
+session directly. WAN supplies one optional concrete
+`WanStockHostVideoBehavior` collaborator for first/final-frame materialization,
+temporal snapping, native final-frame conditioning, and 5B cleanup. This is not
+a generic callback or policy interface: it is the bounded WAN addition to the
+otherwise shared stock path.
 
 Both paths delegate supported graph construction to SwarmUI's stock video
 primitives. VideoStages validates its own document topology and added
@@ -203,7 +210,7 @@ LTX does not use `HostVideoStageEngine`. Its runtime has different latent,
 conditioning, audio, IC-LoRA, guide, retake, and post-video-chain semantics:
 
 ```text
-Ltx2GenerationSession
+LTX private generation session
     → StageClipExecutor
     → StageRunner
     → LtxStageExecutor
@@ -211,8 +218,10 @@ Ltx2GenerationSession
     → DecodedClipArtifact
 ```
 
-Common orchestration carries `Ltx2ClipPayload`/`Ltx2StagePayload` opaquely.
-LTX code interprets them under `src/Architectures/Ltx2`.
+Common orchestration reads only the required architecture-neutral stage core
+and otherwise carries `Ltx2ClipPayload`/`Ltx2StagePayload` without interpreting
+their graph instructions. LTX code interprets those additions under
+`src/Architectures/Ltx2`.
 
 ### Source-only
 
@@ -307,7 +316,8 @@ When adding an architecture using the existing vocabulary:
 1. register its module and runtime provider in `VideoArchitectureManifest`;
 2. publish typed capabilities, entry abilities, frame grid, and reference
    positions from resolved model facts;
-3. implement graph-free projection/compilation and opaque payloads;
+3. implement graph-free projection/compilation and typed architecture payloads
+   whose stage payloads expose the required common core;
 4. implement provider → factory → session lifetimes;
 5. add a boundary assembler before declaring non-cut support;
 6. return a valid neutral decoded artifact;

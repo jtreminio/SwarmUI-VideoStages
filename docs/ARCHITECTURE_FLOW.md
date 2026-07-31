@@ -194,9 +194,10 @@ refresh behind it: forced refreshes raised during a request share that single
 pending one, which starts when the request settles, so a model-install signal
 cannot be consumed by an older response. A monotonic request generation lets
 only the current request publish state.
-`setArchitectureCatalogRequestListener` reports the moment a request starts, so
-the timeline paints the `loading`/`refreshing` transition it is actually in —
-including the pending refresh's later start — instead of painting ahead of it.
+`subscribeArchitectureCatalog` reports every request-start and settled
+snapshot, so the timeline paints the `loading`/`refreshing` transition it is
+actually in — including the pending refresh's later start — instead of painting
+ahead of the repository.
 
 Every response is validated all-or-nothing by
 `parseVideoArchitectureCatalog`. Initial failure or malformed data enters
@@ -304,7 +305,8 @@ builds and caches one plan per `WorkflowGenerator` through
 ```text
 VideoStagesJsonReader / VideoStagesSpecParser
     → ArchitecturePlanResolver
-    → VideoExecutionPlanCompiler
+    → EffectiveVideoRequestProjector (first step inside VideoExecutionPlanCompiler)
+    → common + architecture plan compilation
     → VideoExecutionPlanContext
 ```
 
@@ -314,7 +316,7 @@ bounded migration: a version-5 clip's `architecture` field becomes
 clips, authored stages, source media, dimensions, FPS, and timeline audio into
 `VideoStagesSpec`.
 
-### B2. Select `ArchitectureId` and compile opaque payloads
+### B2. Select `ArchitectureId`, project, and compile typed payloads
 
 `ArchitecturePlanResolver.ResolveAuthoredStages` resolves every authored stage
 model, including skipped stages, through the same session-authorized backend
@@ -326,22 +328,27 @@ clip, the first authored stage selects the module and `ArchitectureId`;
 architecture. A source-only executable clip receives
 `NoneArchitectureModule`.
 
-`VideoExecutionPlanCompiler.Compile` is pure and graph-independent. For each
-clip it:
+`VideoExecutionPlanCompiler.Compile` is pure and graph-independent. It first
+projects a non-mutating effective request from the resolved assignments.
+Projection preserves clip/stage IDs, raw stage indexes, model names, source
+identity, and topology, so the original assignments remain authoritative. For
+each clip it then:
 
 1. resolves `ArchitectureEntryMode`;
 2. runs `ArchitectureCapabilityValidator.Validate`;
 3. calls the selected
    `IVideoArchitectureModule.ValidateAndCompileClip`;
-4. attaches the returned opaque `IArchitectureClipPayload` and stage payloads
-   to common `ClipPlan` / `StagePlan`;
+4. attaches the returned `IArchitectureClipPayload` and typed stage payloads to
+   common `ClipPlan` / `StagePlan`; every stage payload exposes its required
+   common core while its graph instructions remain architecture-owned;
 5. compiles common root, geometry, boundary, and audio plans;
 6. runs architecture whole-plan validators.
 
 For LTX, `Ltx2ClipPlanCompiler.Compile` produces `Ltx2ClipPayload` and
 `Ltx2StagePayload` instructions for LTX audio, prompt relay, guides, upscale,
 LoRA, IC-LoRA, retake, frame references, and stage audio actions. Common
-orchestration carries these values; it must not interpret their graph meaning.
+orchestration reads the required stage core and otherwise carries these values;
+it must not interpret their graph meaning.
 `NormalLoraPlanCompiler` is common graph-free planning shared by LTX, WAN, and
 generic host video:
 it resolves each stage's effective clip rows, keeps clip-before-stage ordering,
@@ -357,9 +364,9 @@ architecture-specific references, prompt relay, retakes, audio options,
 ControlNet strength, IC-LoRA, and advanced upscalers. Ordinary root-image
 entry, source video, decoded stages, pixel resize, and normal LoRA remain.
 For WAN, `WanClipPlanCompiler.Compile` produces the smaller `WanClipPayload`
-and `WanStagePayload`; both preserve resolved host identity. It requires one
-host compatibility class throughout a clip. A hard cut starts a new clip and
-may select another family. The
+and the shared `StockHostVideoStagePayload`; both preserve resolved host
+identity. It requires one host compatibility class throughout a clip. A hard
+cut starts a new clip and may select another family. The
 compiler also enforces the generated-root / source-video / previous-stage
 chain, refuses an effective LoRA plan on a samplerless passthrough, and refuses
 unsupported or empty integer schedules that the common capability validator
@@ -456,8 +463,9 @@ output as contextual media across cuts and architecture changes.
 
 `ArchitectureRuntimeDispatcher.ResolveSession` selects a session solely from
 `clip.Architecture.Id`, passes the narrow per-clip context directly to that
-session, and validates the returned artifact's architecture identity, clip
-identity, and decoded-media shape. It does not repeat model-name checks.
+session, and validates that the returned architecture matches both the selected
+session and planned clip before validating clip identity and decoded-media
+shape. It does not repeat model-name checks.
 
 Timeline state such as the plan, prepared audio, assembly session, and root
 policy is captured when each architecture session is created. LTX composes the
@@ -467,14 +475,14 @@ and audio sources.
 
 ### B6a. LTX graph execution
 
-`Ltx2ExecutionAdapter.CreateFactory` builds the LTX runtime collaborators.
-`Ltx2GenerationSessionFactory` prepares LTX root state when LTX owns it and
-creates `Ltx2GenerationSession`.
+`Ltx2ExecutionAdapter.CreateFactory` builds a private LTX timeline factory and
+session. The factory prepares LTX root state when LTX owns it; common
+orchestration depends only on the factory/session contracts.
 
 The LTX path is:
 
 ```text
-Ltx2GenerationSession.Execute
+LTX private generation session
     → StageClipExecutor.Execute
     → StageRunner.RunStage
     → LtxStageExecutor.RunStage
@@ -494,14 +502,17 @@ splitting, IC-LoRA, and post-video-chain behavior remain under
 The `none` path uses `SourceOnlyGenerationSession` and
 `SourcedClipInstaller`; it builds no generation latent, VAE, or stage runtime.
 
-### B6b. WAN direct runtime execution
+### B6b. WAN on the shared stock-host runtime
 
-`WanGenerationSessionFactory` snapshots the host root media and VAE.
-`WanGenerationSession` prepares each hard-cut clip independently, then delegates
-common iteration, scope restoration, pixel-upscale ordering, passthrough
-handling, intermediate publication, terminal trim, and artifact capture to
-`HostVideoStageEngine`. WAN supplies only its opaque stage settings,
-passthrough frame-count resolver, and generating-stage callback. Generated stage
+`WanExecutionAdapter` creates `StockHostVideoGenerationSessionFactory`, which
+snapshots the host root media and VAE.
+`StockHostVideoGenerationSession` prepares each hard-cut clip independently and
+uses `HostVideoStageEngine` for common iteration, scope restoration,
+pixel-upscale ordering, passthrough handling, intermediate publication,
+terminal trim, and artifact capture. Its optional concrete
+`WanStockHostVideoBehavior` collaborator owns only WAN first/final-frame
+materialization, temporal snapping, native final-frame conditioning, and 5B
+cleanup. Generated stage
 0 resets to the captured root and delegates that first-image input to SwarmUI's
 `WorkflowGenerator.CreateImageToVideo`. A text-input stage 0 prepares the
 authored model and prompt conditioning through the host loader and creates an
@@ -522,9 +533,10 @@ Eligible passthrough intermediates are still published. Full control
 conditions from source frame 0 without VAE-encoding the source batch; positive
 partial control conditions from frame 0 and VAE-encodes a distinct full
 conformed-batch selector. Each later stage uses the same passthrough/full/
-partial rules over the preceding decoded batch. The session validates the
-immutable clip, entry, source, stage input, payload, and canonical per-clip
-profile contract before graph mutation. For the one permitted request-global
+partial rules over the preceding decoded batch. Graph-free planning validates
+the immutable entry, source, stage-input, payload, and per-clip compatibility
+contract before the session mutates the graph; runtime still requires the
+concrete WAN-owned payload at use. For the one permitted request-global
 end-frame path, `BuildGenInfo` exposes the frame only while executing the stage
 whose immutable WAN payload owns it; every earlier generating stage receives
 `null`. A 14B pass uses the host's `WanImageToVideo`; a 5B pass uses
@@ -588,25 +600,25 @@ family assembler crosses the architecture boundary.
 
 ### B6c. Generic host-video runtime execution
 
-`HostVideoGenerationSession` calls the same proven stock
-`WorkflowGenerator.CreateImageToVideo` branch that SwarmUI uses for an
-image-entry model. A later stage receives the immediately previous decoded
-video, optionally pixel-resizes it, and lets the host encode and refine it with
-the stage's model, prompt, ordinary LoRAs, steps, CFG, sampler, scheduler, and
-Control start step. This root image is the ordinary host image-to-video entry;
-it is not a claim that the generic profile supports clip-authored frame
-references.
+The same `StockHostVideoGenerationSession`, without the WAN collaborator, calls
+the proven stock `WorkflowGenerator.CreateImageToVideo` branch that SwarmUI uses
+for an image-entry model. A later stage receives the immediately previous
+decoded video, optionally pixel-resizes it, and lets the host encode and refine
+it with the stage's model, prompt, ordinary LoRAs, steps, CFG, sampler,
+scheduler, and Control start step. This root image is the ordinary host
+image-to-video entry; it is not a claim that the generic profile supports
+clip-authored frame references.
 
 Text entry prepares the selected host model and conditioning, then calls the
 host's family-specific `EmptyImage` video-latent primitive before sampling and
 decoding. `HostVideoRootMediaHandoff`, `HostVideoDecodedStageInput`, and
 `HostVideoStageEngine` contain the root restoration, decoded-media boundary,
-and stage-loop mechanics shared with WAN. Generic host video retains its own
-stock-path scheduling callback. Generic passes clear ambient audio, native
-audio-reference input, swap, and end-frame values inside reversible scopes. A
-core-pass pre-handler also neutralizes request-global swap, end-frame, and
-creativity-derived start-step state on the discarded host pass only; authored
-stage sections are not intercepted.
+and stage-loop mechanics shared with WAN. Generic host video retains direct
+stock-path scheduling and request isolation. Generic passes clear ambient
+audio, native audio-reference input, swap, and end-frame values inside
+reversible scopes. A core-pass pre-handler also neutralizes request-global swap,
+end-frame, and creativity-derived start-step state on the discarded host pass
+only; authored stage sections are not intercepted.
 
 ### B7. Return neutral artifacts and publish
 
@@ -652,21 +664,21 @@ exclusive finalization only for an all-LTX HDR timeline.
 2. The frontend receives capabilities; it does not infer execution
    architecture from model names.
 3. The persisted schema remains typed and versioned.
-4. Unknown/future architecture data follows an explicit round-trip policy and
-   is never silently discarded.
-5. Planning, validation, and request preflight happen before VideoStages graph
+4. Planning, validation, and request preflight happen before VideoStages graph
    mutation.
-6. Common orchestration never interprets architecture graph instructions.
-7. Runtime dispatch uses `ArchitectureId`, not scattered model-name tests.
-8. Common cross-stage/clip handoffs use neutral artifacts, not architecture
+5. Common orchestration never interprets architecture graph instructions.
+6. Runtime dispatch uses `ArchitectureId`, not scattered model-name tests.
+7. Common cross-stage/clip handoffs use neutral artifacts, not architecture
    payloads.
-9. Mixed-architecture boundaries are explicit; hard cut is the safe initial
+8. Mixed-architecture boundaries are explicit; hard cut is the safe initial
    policy.
-10. Dispatch identity assertions and decoded-output validation remain enabled
+9. Dispatch identity assertions and decoded-output validation remain enabled
     in production.
-11. Timeline edits remain commands/diffs with undo semantics.
-12. Source-only and generated execution follow the same ownership rules.
+10. Timeline edits remain commands/diffs with undo semantics.
+11. Source-only and generated execution follow the same ownership rules.
 
-The main current transition seam is the IC-LoRA-shaped local behavior
-interface. The frontend ID maps are behavior dispatch only, not a second
-catalog authority. Do not copy that remaining seam into a new architecture.
+The frontend has no generic architecture behavior registry. Explicit
+architecture-ID guards select LTX-local behavior and its editor only after
+catalog-backed capability views authorize the feature. Add another explicit
+branch for a second concrete bespoke UI; extract a common contract only when
+two implementations demonstrate one.
