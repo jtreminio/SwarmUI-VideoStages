@@ -1,4 +1,7 @@
+using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 
@@ -9,9 +12,9 @@ namespace VideoStages.Architectures.Ltx2;
 /// </summary>
 internal sealed class AudioTimelineExecutor
 {
+    private readonly WorkflowGenerator _generator;
     private readonly LtxAudioInjector _audioInjector;
     private readonly ClipAudioPreparer _clipAudio;
-    private readonly ControlNetClipLengthApplicator _controlNetLength;
 
     public AudioTimelineExecutor(
         WorkflowGenerator generator,
@@ -19,8 +22,8 @@ internal sealed class AudioTimelineExecutor
     {
         ArgumentNullException.ThrowIfNull(generator);
         ArgumentNullException.ThrowIfNull(audioInjector);
+        _generator = generator;
         _audioInjector = audioInjector;
-        _controlNetLength = new ControlNetClipLengthApplicator(generator);
         _clipAudio = new ClipAudioPreparer(generator, audioInjector);
     }
 
@@ -43,7 +46,7 @@ internal sealed class AudioTimelineExecutor
         }
 
         ClipPlan first = plan.Clips[0];
-        _controlNetLength.Apply(first);
+        ApplyControlNetClipLength(first);
         if (!first.Audio.Segments.Items.IsDefaultOrEmpty)
         {
             return;
@@ -64,6 +67,37 @@ internal sealed class AudioTimelineExecutor
         LtxBoundaryAudioCarry boundaryAudioCarry = null) =>
         _clipAudio.Prepare(context, clipContext, boundaryAudioCarry);
 
-    public void ApplyControlNetClipLength(ClipPlan plannedClip) =>
-        _controlNetLength.Apply(plannedClip);
+    public void ApplyControlNetClipLength(ClipPlan plannedClip)
+    {
+        ArgumentNullException.ThrowIfNull(plannedClip);
+        if (plannedClip.Audio.Length.Owner != AudioLengthOwner.ControlNet
+            || plannedClip.Stages.Count == 0)
+        {
+            return;
+        }
+
+        int sourceIndex = (plannedClip.ArchitecturePayload as IArchitectureControlNetSourcePlan)
+            ?.ControlNetSourceIndex
+            ?? throw new SwarmUserErrorException(
+                "VideoStages: ControlNet owns clip length, but the compiled plan has no valid "
+                + "ControlNet 1-3 source.");
+        if (!TryApplyControlNetFrameCount(sourceIndex))
+        {
+            throw new SwarmUserErrorException(
+                $"VideoStages: ControlNet {sourceIndex + 1} owns clip {plannedClip.ClipId} length, "
+                + "but its captured video frame count is unavailable.");
+        }
+    }
+
+    private bool TryApplyControlNetFrameCount(int controlNetSourceIndex)
+    {
+        if (!new LtxControlNetMediaNormalizer(_generator).TryCreateFrameCount(
+                controlNetSourceIndex,
+                out JArray framesConnection))
+        {
+            return false;
+        }
+        LtxFrameCountConnector.ApplyToExistingSources(_generator, framesConnection);
+        return true;
+    }
 }
