@@ -1,6 +1,5 @@
 using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Text2Image;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -19,7 +18,7 @@ internal sealed class HostVideoStageEngine : IDisposable
     private readonly GlobalVideoFrameTrimmer _trimmer;
     private readonly StagePixelScaleGraphBuilder _pixelScaler;
     private readonly HostVideoDecodedStageInput _decodedInput;
-    private readonly HostVideoStageScope _stageScope;
+    private readonly StageHostExecutionScope _stageScope;
     private readonly string _architectureDisplayLabel;
 
     internal HostVideoStageEngine(
@@ -44,20 +43,16 @@ internal sealed class HostVideoStageEngine : IDisposable
 
     internal DecodedClipArtifact Execute(
         ClipPlan clip,
-        Func<StagePlan, StageCorePlan> resolveSettings,
         Func<ClipPlan, StagePlan, int?> resolvePassthroughFrames,
         Action<ClipPlan, StagePlan, HostVideoDecodedStageInput, int> executeGeneratingStage)
     {
         ArgumentNullException.ThrowIfNull(clip);
-        ArgumentNullException.ThrowIfNull(resolveSettings);
         ArgumentNullException.ThrowIfNull(resolvePassthroughFrames);
         ArgumentNullException.ThrowIfNull(executeGeneratingStage);
 
         foreach (StagePlan stage in clip.Stages)
         {
-            StageCorePlan settings = resolveSettings(stage)
-                ?? throw new InvalidOperationException(
-                    $"Stage {stage.StageId} has no {_architectureDisplayLabel} host settings.");
+            StageCorePlan settings = stage.Core;
             ApplyPixelUpscale(stage, settings.Upscale);
             if (stage.IsPassthrough)
             {
@@ -68,7 +63,7 @@ internal sealed class HostVideoStageEngine : IDisposable
             }
             else
             {
-                int sectionId = _stageScope.ApplyStageOverrides(clip, stage, settings);
+                int sectionId = _stageScope.ApplyStageOverrides(clip, stage);
                 executeGeneratingStage(clip, stage, _decodedInput, sectionId);
             }
             _stageScope.PublishIntermediate(stage);
@@ -121,90 +116,5 @@ internal sealed class HostVideoStageEngine : IDisposable
             targetWidth,
             targetHeight,
             upscale.MethodName);
-    }
-}
-
-/// <summary>
-/// Pushes a compiled stock-host stage into its host parameter section. Disposal removes every
-/// section opened by the timeline, including after an exceptional exit.
-/// </summary>
-internal sealed class HostVideoStageScope(
-    WorkflowGenerator generator,
-    VideoExecutionPlan plan) : IDisposable
-{
-    private readonly HashSet<int> _sectionIds = [];
-    private readonly bool _publishIntermediateStages =
-        plan.Clips.Sum(clip => clip.Stages.Count) > 1
-        && generator.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false)
-        && !generator.UserInput.Get(T2IParamTypes.DoNotSave, false);
-    private bool _disposed;
-
-    internal int ApplyStageOverrides(
-        ClipPlan clip,
-        StagePlan stage,
-        StageCorePlan settings)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(clip);
-        ArgumentNullException.ThrowIfNull(stage);
-        ArgumentNullException.ThrowIfNull(settings);
-
-        int sectionId = VideoStagesExtension.SectionIdForStage(stage.StageId);
-        _sectionIds.Add(sectionId);
-        generator.UserInput.SectionParamOverrides.Remove(sectionId);
-        generator.UserInput.Set(
-            T2IParamTypes.VideoModel.Type,
-            stage.ResolvedModel.ModelName,
-            sectionId);
-        generator.UserInput.Set(T2IParamTypes.VideoSteps, settings.Steps, sectionId);
-        generator.UserInput.Set(T2IParamTypes.Steps, settings.Steps, sectionId);
-        generator.UserInput.Set(T2IParamTypes.VideoCFG, settings.CfgScale, sectionId);
-        generator.UserInput.Set(T2IParamTypes.CFGScale, settings.CfgScale, sectionId);
-        generator.UserInput.Set(
-            ComfyUIBackendExtension.SamplerParam.Type,
-            settings.Sampler,
-            sectionId);
-        generator.UserInput.Set(
-            ComfyUIBackendExtension.SchedulerParam.Type,
-            settings.Scheduler,
-            sectionId);
-        if (clip.Frames is int frames && frames > 0)
-        {
-            generator.UserInput.Set(T2IParamTypes.VideoFrames, frames, sectionId);
-        }
-        generator.UserInput.Set(T2IParamTypes.VideoFPS, plan.FramesPerSecond, sectionId);
-        return sectionId;
-    }
-
-    internal void PublishIntermediate(StagePlan stage)
-    {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(stage);
-        if (!_publishIntermediateStages
-            || stage.Output.IntermediatePolicy
-                != IntermediateOutputPolicy.ControlledByHostSetting)
-        {
-            return;
-        }
-        generator.CurrentMedia.SaveOutput(
-            generator.CurrentVae,
-            generator.CurrentAudioVae,
-            StableNodeIds.Id(
-                generator,
-                StableNodeIds.IntermediateStageSave,
-                stage.StageId));
-    }
-
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-        foreach (int sectionId in _sectionIds)
-        {
-            generator.UserInput.SectionParamOverrides.Remove(sectionId);
-        }
-        _disposed = true;
     }
 }

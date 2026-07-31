@@ -21,6 +21,7 @@ internal sealed record StageClipExecutionContext(
     StageSequenceRootSources RootSources,
     TimelineAssemblySession Assembly,
     StageHostExecutionScope HostScope,
+    StageExecutionOptions ExecutionOptions,
     RootExecutionPolicy RootPolicy);
 
 /// <summary>Executes one planned clip and returns its terminal runtime artifact.</summary>
@@ -168,9 +169,10 @@ internal sealed class StageClipExecutor(
         }
 
         int sectionId = context.HostScope.ApplyStageOverrides(
-            clipContext,
             context.Runtime.Clip,
-            plannedStage);
+            plannedStage,
+            clipContext.Dimensions.Width,
+            clipContext.Dimensions.Height);
         RuntimeArtifact inputArtifact = priorArtifact ?? CaptureStageInputArtifact(
             context.Runtime.Clip.IsSourced
                 ? ArtifactOrigin.SourceVideo
@@ -182,7 +184,7 @@ internal sealed class StageClipExecutor(
             guideRef,
             store,
             clipContext,
-            context.HostScope.ExecutionOptions,
+            context.ExecutionOptions,
             context.RootPolicy);
         guideReferences.CaptureStageOutput(plannedStage);
         context.HostScope.PublishIntermediate(plannedStage);

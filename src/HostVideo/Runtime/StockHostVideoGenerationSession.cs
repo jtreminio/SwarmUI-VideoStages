@@ -98,7 +98,6 @@ internal sealed class StockHostVideoGenerationSession(
 
         return stageEngine.Execute(
             clip,
-            stage => stage.Core,
             IsWan ? ResolveWanPassthroughFrames : ResolveGenericFrames,
             ExecuteGeneratingStage);
     }

@@ -4,6 +4,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2;
+using VideoStages.Execution;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -41,11 +42,14 @@ public class StageSequenceCollaboratorTests
         {
             using StageHostExecutionScope scope = new(
                 generator,
-                plan,
-                parallelMultiClip: false);
+                plan);
             Assert.Equal(
                 sectionId,
-                scope.ApplyStageOverrides(clipContext, plannedClip, plannedStage));
+                scope.ApplyStageOverrides(
+                    plannedClip,
+                    plannedStage,
+                    clipContext.Dimensions.Width,
+                    clipContext.Dimensions.Height));
             Assert.True(generator.UserInput.SectionParamOverrides.ContainsKey(sectionId));
             throw new InvalidOperationException("simulated stage failure");
         }));

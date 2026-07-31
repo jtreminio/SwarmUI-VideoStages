@@ -187,8 +187,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
                 _rootSources,
                 new StageHostExecutionScope(
                     generator,
-                    context.Plan,
-                    context.Plan.Clips.Count > 1),
+                    context.Plan),
                 context.Plan,
                 context.Assembly,
                 context.RootPolicy);
@@ -236,6 +235,9 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
                 rootSources,
                 assembly,
                 hostScope,
+                new StageExecutionOptions(
+                    plan.Clips.Count > 1,
+                    hostScope.PublishesIntermediateStages),
                 rootPolicy);
             RuntimeArtifact output = executor.Execute(stageContext);
             return DecodedClipArtifact.FromRuntime(output, context.Clip);

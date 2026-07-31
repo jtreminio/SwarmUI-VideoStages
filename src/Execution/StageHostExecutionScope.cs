@@ -1,9 +1,8 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using VideoStages.Execution;
 using VideoStages.Planning;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Execution;
 
 /// <summary>
 /// Owns temporary host section overrides and host-facing stage publication for one sequence run.
@@ -19,8 +18,7 @@ internal sealed class StageHostExecutionScope : IDisposable
 
     public StageHostExecutionScope(
         WorkflowGenerator generator,
-        VideoExecutionPlan plan,
-        bool parallelMultiClip)
+        VideoExecutionPlan plan)
     {
         _generator = generator ?? throw new ArgumentNullException(nameof(generator));
         _plan = plan ?? throw new ArgumentNullException(nameof(plan));
@@ -29,20 +27,17 @@ internal sealed class StageHostExecutionScope : IDisposable
             totalStageCount > 1
             && generator.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false)
             && !generator.UserInput.Get(T2IParamTypes.DoNotSave, false);
-        ExecutionOptions = new StageExecutionOptions(
-            parallelMultiClip,
-            _publishIntermediateStages);
     }
 
-    public StageExecutionOptions ExecutionOptions { get; }
+    public bool PublishesIntermediateStages => _publishIntermediateStages;
 
     public int ApplyStageOverrides(
-        ClipContext clipContext,
         ClipPlan plannedClip,
-        StagePlan plannedStage)
+        StagePlan plannedStage,
+        int? width = null,
+        int? height = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        ArgumentNullException.ThrowIfNull(clipContext);
         ArgumentNullException.ThrowIfNull(plannedClip);
         ArgumentNullException.ThrowIfNull(plannedStage);
         StageCorePlan core = plannedStage.Core;
@@ -74,13 +69,13 @@ internal sealed class StageHostExecutionScope : IDisposable
         {
             _generator.UserInput.Set(T2IParamTypes.VideoFPS, _plan.FramesPerSecond, sectionId);
         }
-        if (clipContext.Dimensions.Width > 0)
+        if (width > 0)
         {
-            _generator.UserInput.Set(T2IParamTypes.Width, clipContext.Dimensions.Width, sectionId);
+            _generator.UserInput.Set(T2IParamTypes.Width, width.Value, sectionId);
         }
-        if (clipContext.Dimensions.Height > 0)
+        if (height > 0)
         {
-            _generator.UserInput.Set(T2IParamTypes.Height, clipContext.Dimensions.Height, sectionId);
+            _generator.UserInput.Set(T2IParamTypes.Height, height.Value, sectionId);
         }
         return sectionId;
     }
