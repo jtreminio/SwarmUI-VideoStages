@@ -10,24 +10,19 @@ import {
     isArchitectureHdrFeature,
 } from "./behaviorRegistry";
 import { resolvedClipArchitectureId } from "./clipIdentity";
-import {
-    CONDITIONAL_RULE_CODES,
-    conditionalRule,
-    evaluateConditionalRule,
-} from "./conditionalRules";
+import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
 import {
     CAPABILITY_WIRE_NAMES,
     isIgnoredWhenUnsupportedFeature,
 } from "./generatedFeatures";
 import { effectiveClipCapabilities } from "./modelCapabilities";
 import { NONE_ARCHITECTURE_ID } from "./none/identity";
-import { createBoundaryCapabilityViews } from "./policy/boundaryPolicy";
-import { createClipStageCapabilityViews } from "./policy/clipStageViews";
+import { createCapabilityViewResolver } from "./policy";
 import {
     architectureFeatureSupport,
     upscaleModeForMethod,
 } from "./policy/featureValues";
-import type { AuthoringFeature } from "./policy/types";
+import type { AuthoringFeature, CapabilityViewResolver } from "./policy/types";
 import type {
     ArchitectureCapabilities,
     ArchitectureModelCatalog,
@@ -260,6 +255,7 @@ export const effectiveArchitectureIdForClip = (
 export const deriveArchitectureDiagnostics = (
     clips: readonly Clip[],
     catalog: ArchitectureModelCatalog,
+    capabilityViews?: CapabilityViewResolver,
 ): ArchitectureDiagnostic[] => {
     const diagnostics: ArchitectureDiagnostic[] = [];
     const architectureById = new Map(
@@ -268,18 +264,17 @@ export const deriveArchitectureDiagnostics = (
     const modelByName = new Map(
         catalog.entries.map((entry) => [entry.value, entry]),
     );
-    const clipStageViews = createClipStageCapabilityViews(
-        architectureById,
-        modelByName,
-    );
-    const boundaries = createBoundaryCapabilityViews(
-        architectureById,
-        clipStageViews.forClip,
-    );
     const executableClipIndexSet = new Set(executableClipIndexes(clips));
+    const resolver =
+        capabilityViews ??
+        createCapabilityViewResolver(catalog, {
+            timelineClips: [...executableClipIndexSet].map(
+                (clipIdx) => clips[clipIdx],
+            ),
+        });
 
     clips.forEach((clip, clipIdx) => {
-        const temporalGrid = clipStageViews.forClip(clip).frameGridResolution;
+        const temporalGrid = resolver.forClip(clip).frameGridResolution;
         if (
             executableClipIndexSet.has(clipIdx) &&
             temporalGrid.status === "conflict"
@@ -428,16 +423,15 @@ export const deriveArchitectureDiagnostics = (
             const hasEffectiveNormalLora = clip.loras.some(
                 (_, index) => (stage.loraWeights[index] ?? 1) !== 0,
             );
-            const samplingStageRule = conditionalRule(
-                architectureById.get(resolved.architectureId)?.rules ?? [],
-                CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
-            );
+            const samplingStageRule = resolver
+                .forStage(clip, stage)
+                .decision("stageLoras").rule;
             if (
                 executableClipIndexSet.has(clipIdx) &&
                 stageIdx < activeStageCount(clip) &&
                 hasEffectiveNormalLora &&
-                samplingStageRule &&
-                evaluateConditionalRule(samplingStageRule, { clip, stage })
+                samplingStageRule?.code ===
+                    CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
             ) {
                 diagnostics.push(
                     issue(
@@ -468,7 +462,7 @@ export const deriveArchitectureDiagnostics = (
             );
             continue;
         }
-        const boundary = boundaries.forBoundary(
+        const boundary = resolver.forBoundary(
             left.clip,
             right.clip,
             left.clipIdx,

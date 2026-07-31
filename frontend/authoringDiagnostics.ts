@@ -1,14 +1,6 @@
-import { clipHasActiveHdrForArchitecture } from "./architectures/behaviorRegistry";
-import { architectureDescriptor } from "./architectures/catalog";
-import {
-    CONDITIONAL_RULE_CODES,
-    conditionalRule,
-    evaluateConditionalRule,
-} from "./architectures/conditionalRules";
-import {
-    deriveArchitectureDiagnostics,
-    effectiveArchitectureIdForClip,
-} from "./architectures/diagnostics";
+import { CONDITIONAL_RULE_CODES } from "./architectures/conditionalRules";
+import { deriveArchitectureDiagnostics } from "./architectures/diagnostics";
+import { createCapabilityViewResolver } from "./architectures/policy";
 import type { ArchitectureModelCatalog } from "./architectures/types";
 import { executableClipIndexes } from "./clipSemantics";
 import type { Clip } from "./types";
@@ -48,117 +40,60 @@ export const deriveAuthoringDiagnostics = (
     const firstSkippedClip = clips.findIndex((clip) => clip.skipped === true);
     const authoredPrefix =
         firstSkippedClip < 0 ? clips : clips.slice(0, firstSkippedClip);
-    if (context.catalog) {
-        diagnostics.push(
-            ...deriveArchitectureDiagnostics(authoredPrefix, context.catalog),
-        );
-    }
     const executable = executableClipIndexes(clips).map((clipIdx) => ({
         clip: clips[clipIdx],
         clipIdx,
     }));
-    const effectiveArchitectureId = (clip: Clip): string =>
-        context.catalog
-            ? effectiveArchitectureIdForClip(clip, context.catalog)
-            : "unsupported";
+    const capabilityViews = context.catalog
+        ? createCapabilityViewResolver(context.catalog, {
+              timelineClips: executable.map(({ clip }) => clip),
+          })
+        : null;
+    if (context.catalog && capabilityViews) {
+        diagnostics.push(
+            ...deriveArchitectureDiagnostics(
+                authoredPrefix,
+                context.catalog,
+                capabilityViews,
+            ),
+        );
+    }
 
     for (const { clip, clipIdx } of executable) {
-        const descriptor = architectureDescriptor(
-            context.catalog,
-            effectiveArchitectureId(clip),
-        );
-        const rule = (code: Parameters<typeof conditionalRule>[1]) =>
-            descriptor ? conditionalRule(descriptor.rules, code) : null;
-        const reuseRule = rule(CONDITIONAL_RULE_CODES.audioReuseRequiresStages);
-        if (
-            reuseRule &&
-            clip.reuseAudio &&
-            evaluateConditionalRule(reuseRule, { clip })
-        ) {
-            diagnostics.push(
-                diagnostic(
-                    "warning",
-                    reuseRule.code,
-                    reuseRule.reason,
-                    clipIdx,
-                ),
-            );
-        }
-
-        const relayRule = rule(
-            CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength,
-        );
-        if (
-            relayRule &&
-            clip.promptWindows.length > 0 &&
-            evaluateConditionalRule(relayRule, { clip })
-        ) {
-            diagnostics.push(
-                diagnostic("error", relayRule.code, relayRule.reason, clipIdx),
-            );
-        }
-
-        const retakeReferenceRule = rule(
-            CONDITIONAL_RULE_CODES.retakeExcludesReferences,
-        );
-        const retakeSourceRule = rule(
-            CONDITIONAL_RULE_CODES.retakeRequiresSource,
-        );
-        if (
-            retakeSourceRule &&
-            clip.retake &&
-            evaluateConditionalRule(retakeSourceRule, {
-                clip,
-            })
-        ) {
-            diagnostics.push(
-                diagnostic(
-                    "error",
-                    retakeSourceRule.code,
-                    retakeSourceRule.reason,
-                    clipIdx,
-                ),
-            );
-        }
-        if (
-            retakeReferenceRule &&
-            clip.retake &&
-            evaluateConditionalRule(retakeReferenceRule, {
-                clip,
-            })
-        ) {
-            diagnostics.push(
-                diagnostic(
-                    "error",
-                    retakeReferenceRule.code,
-                    retakeReferenceRule.reason,
-                    clipIdx,
-                ),
-            );
+        const view = capabilityViews?.forClip(clip);
+        const conditionalFeatures = [
+            {
+                feature: "audioReuse",
+                persisted: clip.reuseAudio,
+                severity: "warning",
+            },
+            {
+                feature: "promptRelay",
+                persisted: clip.promptWindows.length > 0,
+                severity: "error",
+            },
+            {
+                feature: "retake",
+                persisted: clip.retake !== null,
+                severity: "error",
+            },
+        ] as const;
+        for (const check of conditionalFeatures) {
+            const rule = view?.decision(check.feature).rule;
+            if (check.persisted && rule) {
+                diagnostics.push(
+                    diagnostic(check.severity, rule.code, rule.reason, clipIdx),
+                );
+            }
         }
     }
 
     const hdrRule = executable
-        .map(({ clip }) =>
-            context.catalog?.architectures
-                .find((entry) => entry.id === effectiveArchitectureId(clip))
-                ?.rules.find(
-                    (rule) =>
-                        rule.code === CONDITIONAL_RULE_CODES.uniformTimelineHdr,
-                ),
-        )
-        .find((rule) => rule !== undefined);
-    if (
-        hdrRule &&
-        evaluateConditionalRule(hdrRule, {
-            timelineClips: executable.map(({ clip }) => clip),
-            hasActiveHdr: (clip) =>
-                clipHasActiveHdrForArchitecture(
-                    clip,
-                    effectiveArchitectureId(clip),
-                ),
-        })
-    ) {
+        .map(({ clip }) => capabilityViews?.forClip(clip).decision("hdr").rule)
+        .find(
+            (rule) => rule?.code === CONDITIONAL_RULE_CODES.uniformTimelineHdr,
+        );
+    if (hdrRule) {
         diagnostics.push(diagnostic("error", hdrRule.code, hdrRule.reason));
     }
 

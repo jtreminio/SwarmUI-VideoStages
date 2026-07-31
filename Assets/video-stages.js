@@ -6326,7 +6326,7 @@
     return diagnostics;
   };
   var effectiveArchitectureIdForClip = (clip, catalog) => resolvedClipArchitectureId(clip, catalog) ?? "unsupported";
-  var deriveArchitectureDiagnostics = (clips, catalog) => {
+  var deriveArchitectureDiagnostics = (clips, catalog, capabilityViews) => {
     const diagnostics = [];
     const architectureById = new Map(
       catalog.architectures.map((entry) => [entry.id, entry])
@@ -6334,17 +6334,14 @@
     const modelByName = new Map(
       catalog.entries.map((entry) => [entry.value, entry])
     );
-    const clipStageViews = createClipStageCapabilityViews(
-      architectureById,
-      modelByName
-    );
-    const boundaries = createBoundaryCapabilityViews(
-      architectureById,
-      clipStageViews.forClip
-    );
     const executableClipIndexSet = new Set(executableClipIndexes(clips));
+    const resolver = capabilityViews ?? createCapabilityViewResolver(catalog, {
+      timelineClips: [...executableClipIndexSet].map(
+        (clipIdx) => clips[clipIdx]
+      )
+    });
     clips.forEach((clip, clipIdx) => {
-      const temporalGrid = clipStageViews.forClip(clip).frameGridResolution;
+      const temporalGrid = resolver.forClip(clip).frameGridResolution;
       if (executableClipIndexSet.has(clipIdx) && temporalGrid.status === "conflict") {
         diagnostics.push(
           issue(
@@ -6452,11 +6449,8 @@
         const hasEffectiveNormalLora = clip.loras.some(
           (_, index) => (stage.loraWeights[index] ?? 1) !== 0
         );
-        const samplingStageRule = conditionalRule(
-          architectureById.get(resolved.architectureId)?.rules ?? [],
-          CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
-        );
-        if (executableClipIndexSet.has(clipIdx) && stageIdx < activeStageCount(clip) && hasEffectiveNormalLora && samplingStageRule && evaluateConditionalRule(samplingStageRule, { clip, stage })) {
+        const samplingStageRule = resolver.forStage(clip, stage).decision("stageLoras").rule;
+        if (executableClipIndexSet.has(clipIdx) && stageIdx < activeStageCount(clip) && hasEffectiveNormalLora && samplingStageRule?.code === CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage) {
           diagnostics.push(
             issue(
               samplingStageRule.code,
@@ -6481,7 +6475,7 @@
         );
         continue;
       }
-      const boundary = boundaries.forBoundary(
+      const boundary = resolver.forBoundary(
         left.clip,
         right.clip,
         left.clipIdx,
@@ -6508,84 +6502,54 @@
     const diagnostics = [];
     const firstSkippedClip = clips.findIndex((clip) => clip.skipped === true);
     const authoredPrefix = firstSkippedClip < 0 ? clips : clips.slice(0, firstSkippedClip);
-    if (context.catalog) {
-      diagnostics.push(
-        ...deriveArchitectureDiagnostics(authoredPrefix, context.catalog)
-      );
-    }
     const executable = executableClipIndexes(clips).map((clipIdx) => ({
       clip: clips[clipIdx],
       clipIdx
     }));
-    const effectiveArchitectureId = (clip) => context.catalog ? effectiveArchitectureIdForClip(clip, context.catalog) : "unsupported";
+    const capabilityViews = context.catalog ? createCapabilityViewResolver(context.catalog, {
+      timelineClips: executable.map(({ clip }) => clip)
+    }) : null;
+    if (context.catalog && capabilityViews) {
+      diagnostics.push(
+        ...deriveArchitectureDiagnostics(
+          authoredPrefix,
+          context.catalog,
+          capabilityViews
+        )
+      );
+    }
     for (const { clip, clipIdx } of executable) {
-      const descriptor = architectureDescriptor(
-        context.catalog,
-        effectiveArchitectureId(clip)
-      );
-      const rule = (code) => descriptor ? conditionalRule(descriptor.rules, code) : null;
-      const reuseRule = rule(CONDITIONAL_RULE_CODES.audioReuseRequiresStages);
-      if (reuseRule && clip.reuseAudio && evaluateConditionalRule(reuseRule, { clip })) {
-        diagnostics.push(
-          diagnostic(
-            "warning",
-            reuseRule.code,
-            reuseRule.reason,
-            clipIdx
-          )
-        );
-      }
-      const relayRule = rule(
-        CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength
-      );
-      if (relayRule && clip.promptWindows.length > 0 && evaluateConditionalRule(relayRule, { clip })) {
-        diagnostics.push(
-          diagnostic("error", relayRule.code, relayRule.reason, clipIdx)
-        );
-      }
-      const retakeReferenceRule = rule(
-        CONDITIONAL_RULE_CODES.retakeExcludesReferences
-      );
-      const retakeSourceRule = rule(
-        CONDITIONAL_RULE_CODES.retakeRequiresSource
-      );
-      if (retakeSourceRule && clip.retake && evaluateConditionalRule(retakeSourceRule, {
-        clip
-      })) {
-        diagnostics.push(
-          diagnostic(
-            "error",
-            retakeSourceRule.code,
-            retakeSourceRule.reason,
-            clipIdx
-          )
-        );
-      }
-      if (retakeReferenceRule && clip.retake && evaluateConditionalRule(retakeReferenceRule, {
-        clip
-      })) {
-        diagnostics.push(
-          diagnostic(
-            "error",
-            retakeReferenceRule.code,
-            retakeReferenceRule.reason,
-            clipIdx
-          )
-        );
+      const view = capabilityViews?.forClip(clip);
+      const conditionalFeatures = [
+        {
+          feature: "audioReuse",
+          persisted: clip.reuseAudio,
+          severity: "warning"
+        },
+        {
+          feature: "promptRelay",
+          persisted: clip.promptWindows.length > 0,
+          severity: "error"
+        },
+        {
+          feature: "retake",
+          persisted: clip.retake !== null,
+          severity: "error"
+        }
+      ];
+      for (const check of conditionalFeatures) {
+        const rule = view?.decision(check.feature).rule;
+        if (check.persisted && rule) {
+          diagnostics.push(
+            diagnostic(check.severity, rule.code, rule.reason, clipIdx)
+          );
+        }
       }
     }
-    const hdrRule = executable.map(
-      ({ clip }) => context.catalog?.architectures.find((entry) => entry.id === effectiveArchitectureId(clip))?.rules.find(
-        (rule) => rule.code === CONDITIONAL_RULE_CODES.uniformTimelineHdr
-      )
-    ).find((rule) => rule !== void 0);
-    if (hdrRule && evaluateConditionalRule(hdrRule, {
-      timelineClips: executable.map(({ clip }) => clip),
-      hasActiveHdr: (clip) => clipHasActiveHdrForArchitecture(
-        clip,
-        effectiveArchitectureId(clip)
-      )
-    })) {
+    const hdrRule = executable.map(({ clip }) => capabilityViews?.forClip(clip).decision("hdr").rule).find(
+      (rule) => rule?.code === CONDITIONAL_RULE_CODES.uniformTimelineHdr
+    );
+    if (hdrRule) {
       diagnostics.push(diagnostic("error", hdrRule.code, hdrRule.reason));
     }
     return diagnostics;
