@@ -98,22 +98,14 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
             if (module.TryResolveModel(model, out ResolvedVideoModel match))
             {
                 if (match is null
-                    || match.ArchitectureId != module.Descriptor.Id
                     || match.Architecture?.Id != module.Descriptor.Id
-                    || string.IsNullOrWhiteSpace(match.ModelClassId)
-                    || string.IsNullOrWhiteSpace(match.CompatibilityClassId)
-                    || match.EntryAbilities == VideoModelEntryAbility.None
-                    || match.FrameGrid < 1
-                    || !match.HostFactsAuthoritative)
+                    || match.FrameGrid < 1)
                 {
                     throw new InvalidOperationException(
                         $"Video architecture module '{module.Descriptor.Id}' returned an invalid "
                         + $"model resolution for '{model?.Name}'.");
                 }
-                matches.Add(match with
-                {
-                    Architecture = module.Descriptor,
-                });
+                matches.Add(match.WithArchitecture(module.Descriptor));
             }
         }
         if (matches.Count > 0)

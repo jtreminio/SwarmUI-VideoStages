@@ -293,17 +293,13 @@ public class HostVideoArchitectureTests
 
         public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
         {
-            resolved = new(
+            resolved = TestResolvedVideoModel.Create(
                 model.Name,
-                Descriptor.Id,
                 new("video"),
-                Descriptor)
-            {
-                ModelClassId = model.ModelClass.ID,
-                CompatibilityClassId = model.ModelClass.CompatClass.ID,
-                EntryAbilities = VideoModelEntryAbility.TextToVideo,
-                HostFactsAuthoritative = true,
-            };
+                Descriptor,
+                model.ModelClass.ID,
+                model.ModelClass.CompatClass.ID,
+                VideoModelEntryAbility.TextToVideo);
             return true;
         }
 

@@ -93,24 +93,19 @@ internal sealed class Ltx2ArchitectureModule :
         }
         resolved = new(
             model.Name,
-            ArchitectureId,
             ProfileId,
-            Descriptor)
-        {
-            ModelClassId = model.ModelClass.ID,
-            CompatibilityClassId = model.ModelClass.CompatClass.ID,
-            EntryAbilities =
+            Descriptor,
+            model.ModelClass.ID,
+            model.ModelClass.CompatClass.ID,
+            (
                 (model.ModelClass.CompatClass.IsText2Video
                     ? VideoModelEntryAbility.TextToVideo
                     : VideoModelEntryAbility.None)
                 | (model.ModelClass.CompatClass.IsImage2Video
                     ? VideoModelEntryAbility.ImageToVideo
-                    : VideoModelEntryAbility.None),
-            ReferencePositions = ["any"],
-            LorasTargetTextEncoder =
-                model.ModelClass.CompatClass.LorasTargetTextEnc,
-            HostFactsAuthoritative = true,
-        };
+                    : VideoModelEntryAbility.None)),
+            ["any"],
+            model.ModelClass.CompatClass.LorasTargetTextEnc);
         return true;
     }
 

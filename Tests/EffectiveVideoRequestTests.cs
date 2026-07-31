@@ -1270,9 +1270,8 @@ public sealed class EffectiveVideoRequestTests
                     : HostVideoArchitectureModule.ProfileId;
             Dictionary<int, ResolvedVideoModel> stages = clip.Stages.ToDictionary(
                 stage => stage.ClipStageRawIndex,
-                stage => new ResolvedVideoModel(
+                stage => TestResolvedVideoModel.Create(
                     stage.Model,
-                    descriptor.Id,
                     profileId,
                     descriptor));
             assignments[clip.Id] = new(

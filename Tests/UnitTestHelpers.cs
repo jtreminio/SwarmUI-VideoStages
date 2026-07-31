@@ -4,9 +4,33 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using SwarmUI.WebAPI;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan;
 
 namespace VideoStages.Tests;
+
+internal static class TestResolvedVideoModel
+{
+    internal static ResolvedVideoModel Create(
+        string modelName,
+        ModelProfileId modelProfileId,
+        VideoArchitectureDescriptor architecture,
+        string modelClassId = null,
+        string compatibilityClassId = null,
+        VideoModelEntryAbility entryAbilities =
+            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo,
+        IReadOnlyList<string> referencePositions = null,
+        bool lorasTargetTextEncoder = true) =>
+        new(
+            modelName,
+            modelProfileId,
+            architecture,
+            modelClassId ?? modelName,
+            compatibilityClassId ?? architecture.Id.Value,
+            entryAbilities,
+            referencePositions ?? [],
+            lorasTargetTextEncoder);
+}
 
 internal static class UnitTestStubs
 {

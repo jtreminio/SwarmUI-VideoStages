@@ -390,62 +390,102 @@ internal sealed record VideoArchitectureDescriptor(
 
 }
 
-internal sealed record ResolvedVideoModel(
-    string ModelName,
-    ArchitectureId ArchitectureId,
-    ModelProfileId ModelProfileId,
-    VideoArchitectureDescriptor Architecture)
+internal sealed record ResolvedVideoModel
 {
-    public int FrameGrid => Architecture?.FrameGrid ?? 1;
+    internal ResolvedVideoModel(
+        string modelName,
+        ModelProfileId modelProfileId,
+        VideoArchitectureDescriptor architecture,
+        string modelClassId,
+        string compatibilityClassId,
+        VideoModelEntryAbility entryAbilities,
+        IReadOnlyList<string> referencePositions,
+        bool lorasTargetTextEncoder)
+    {
+        ModelName = RequireText(modelName, nameof(modelName));
+        if (string.IsNullOrWhiteSpace(modelProfileId.Value))
+        {
+            throw new ArgumentException(
+                "Model profile id cannot be empty.",
+                nameof(modelProfileId));
+        }
+        ModelProfileId = modelProfileId;
+        Architecture = architecture
+            ?? throw new ArgumentNullException(nameof(architecture));
+        ModelClassId = RequireText(modelClassId, nameof(modelClassId));
+        CompatibilityClassId = RequireText(
+            compatibilityClassId,
+            nameof(compatibilityClassId));
+        VideoModelEntryAbility knownAbilities =
+            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo;
+        if (entryAbilities == VideoModelEntryAbility.None
+            || (entryAbilities & ~knownAbilities) != 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(entryAbilities),
+                entryAbilities,
+                "A resolved video model must declare at least one known entry ability.");
+        }
+        EntryAbilities = entryAbilities;
+        ReferencePositions = Array.AsReadOnly(
+            (referencePositions
+                ?? throw new ArgumentNullException(nameof(referencePositions))).ToArray());
+        LorasTargetTextEncoder = lorasTargetTextEncoder;
+    }
 
-    /// <summary>
-    /// Test and compatibility adapters receive a deterministic synthetic identity. Production
-    /// registry resolutions must replace it and set <see cref="HostFactsAuthoritative"/>.
-    /// </summary>
-    public string ModelClassId { get; init; } = ModelName;
+    public string ModelName { get; }
 
-    public string CompatibilityClassId { get; init; } = ArchitectureId.Value;
+    public ArchitectureId ArchitectureId => Architecture.Id;
 
-    public VideoModelEntryAbility EntryAbilities { get; init; } =
-        VideoModelEntryPolicy.FromArchitectureLegacyAlias(Architecture);
+    public ModelProfileId ModelProfileId { get; }
+
+    public VideoArchitectureDescriptor Architecture { get; }
+
+    public int FrameGrid => Architecture.FrameGrid;
+
+    public string ModelClassId { get; }
+
+    public string CompatibilityClassId { get; }
+
+    public VideoModelEntryAbility EntryAbilities { get; }
 
     /// <summary>
     /// Frame positions accepted by this model's native image-conditioning path. Values are
     /// stable wire names such as <c>first</c>, <c>last</c>, and <c>any</c>.
     /// </summary>
-    public IReadOnlyList<string> ReferencePositions { get; init; } = [];
+    public IReadOnlyList<string> ReferencePositions { get; }
 
     /// <summary>
     /// Core-owned LoRA targeting fact from the resolved model compatibility.
     /// False means normal LoRAs must not become effective solely through their
     /// text-encoder weight.
     /// </summary>
-    public bool LorasTargetTextEncoder { get; init; } = true;
+    public bool LorasTargetTextEncoder { get; }
 
-    public bool HostFactsAuthoritative { get; init; }
+    internal ResolvedVideoModel WithArchitecture(
+        VideoArchitectureDescriptor architecture) =>
+        new(
+            ModelName,
+            ModelProfileId,
+            architecture,
+            ModelClassId,
+            CompatibilityClassId,
+            EntryAbilities,
+            ReferencePositions,
+            LorasTargetTextEncoder);
+
+    private static string RequireText(string value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException("Value cannot be empty.", parameterName);
+        }
+        return value;
+    }
 }
 
 internal static class VideoModelEntryPolicy
 {
-    /// <summary>
-    /// Compatibility fallback for synthetic/test adapters that predate host model facts. Production
-    /// registry resolutions must publish explicit abilities and authoritative host facts.
-    /// </summary>
-    internal static VideoModelEntryAbility FromArchitectureLegacyAlias(
-        VideoArchitectureDescriptor architecture)
-    {
-        IReadOnlyList<ArchitectureEntryMode> entryModes = architecture?.EntryModes ?? [];
-        return (entryModes.Contains(ArchitectureEntryMode.TextToVideo)
-                ? VideoModelEntryAbility.TextToVideo
-                : VideoModelEntryAbility.None)
-            | (entryModes.Any(mode => mode is
-                    ArchitectureEntryMode.ImageToVideo
-                    or ArchitectureEntryMode.SourceVideo
-                    or ArchitectureEntryMode.RefineVideo)
-                ? VideoModelEntryAbility.ImageToVideo
-                : VideoModelEntryAbility.None);
-    }
-
     internal static bool SupportsStageRole(
         ResolvedVideoModel model,
         int activeStageIndex,

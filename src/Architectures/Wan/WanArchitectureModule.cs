@@ -112,21 +112,16 @@ internal sealed class WanArchitectureModule :
             legacyMatch?.ProfileId ?? OrdinaryImageToVideoProfileId;
         resolved = new(
             model.Name,
-            ArchitectureId,
             profileId,
-            Descriptor)
-        {
-            ModelClassId = modelClassId,
-            CompatibilityClassId = compatClassId,
-            EntryAbilities = VideoModelEntryAbility.TextToVideo
+            Descriptor,
+            modelClassId,
+            compatClassId,
+            VideoModelEntryAbility.TextToVideo
                 | VideoModelEntryAbility.ImageToVideo,
-            ReferencePositions = SupportsHostEndFrame(compatClassId)
+            SupportsHostEndFrame(compatClassId)
                 ? ["first", "last"]
                 : ["first"],
-            LorasTargetTextEncoder =
-                model.ModelClass.CompatClass.LorasTargetTextEnc,
-            HostFactsAuthoritative = true,
-        };
+            model.ModelClass.CompatClass.LorasTargetTextEnc);
         return true;
     }
 

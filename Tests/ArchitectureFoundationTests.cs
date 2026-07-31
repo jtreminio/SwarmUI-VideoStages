@@ -653,18 +653,15 @@ public class ArchitectureFoundationTests
         };
         Dictionary<int, ResolvedVideoModel> stageModels = new()
         {
-            [stage.ClipStageRawIndex] = new(
+            [stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
                 stage.Model,
-                descriptor.Id,
                 Ltx2ArchitectureModule.ProfileId,
-                descriptor)
-            {
-                ModelClassId = "ltx-test",
-                CompatibilityClassId = T2IModelClassSorter.CompatLtxv2.ID,
-                EntryAbilities =
+                descriptor,
+                "ltx-test",
+                T2IModelClassSorter.CompatLtxv2.ID,
+                entryAbilities:
                     VideoModelEntryAbility.TextToVideo
-                    | VideoModelEntryAbility.ImageToVideo,
-            },
+                    | VideoModelEntryAbility.ImageToVideo),
         };
 
         IReadOnlyList<PlanDiagnostic> diagnostics =
@@ -691,9 +688,8 @@ public class ArchitectureFoundationTests
         };
         Dictionary<int, ResolvedVideoModel> stageModels = new()
         {
-            [stage.ClipStageRawIndex] = new(
+            [stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
                 stage.Model,
-                descriptor.Id,
                 Ltx2ArchitectureModule.ProfileId,
                 descriptor),
         };
@@ -729,9 +725,8 @@ public class ArchitectureFoundationTests
         };
         Dictionary<int, ResolvedVideoModel> stageModels = new()
         {
-            [stage.ClipStageRawIndex] = new(
+            [stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
                 stage.Model,
-                descriptor.Id,
                 Ltx2ArchitectureModule.ProfileId,
                 descriptor),
         };
@@ -908,16 +903,13 @@ public class ArchitectureFoundationTests
         ClipSpec clip = GeneratedClip(0, stage);
         Dictionary<int, ResolvedVideoModel> stageModels = new()
         {
-            [stage.ClipStageRawIndex] = new(
+            [stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
                 stage.Model,
-                descriptor.Id,
                 new("ghost-profile"),
-                descriptor)
-            {
-                ModelClassId = "fake-model",
-                CompatibilityClassId = "fake-compat",
-                EntryAbilities = VideoModelEntryAbility.ImageToVideo,
-            },
+                descriptor,
+                "fake-model",
+                "fake-compat",
+                VideoModelEntryAbility.ImageToVideo),
         };
 
         IReadOnlyList<PlanDiagnostic> diagnostics =
@@ -953,18 +945,20 @@ public class ArchitectureFoundationTests
         ClipSpec clip = GeneratedClip(0, first, second);
         Dictionary<int, ResolvedVideoModel> stageModels = new()
         {
-            [0] = new(first.Model, descriptor.Id, new("allows-image"), descriptor)
-            {
-                ModelClassId = "fake-image",
-                CompatibilityClassId = "fake-compat",
-                EntryAbilities = VideoModelEntryAbility.ImageToVideo,
-            },
-            [1] = new(second.Model, descriptor.Id, new("text-only"), descriptor)
-            {
-                ModelClassId = "fake-text",
-                CompatibilityClassId = "fake-compat",
-                EntryAbilities = VideoModelEntryAbility.TextToVideo,
-            },
+            [0] = TestResolvedVideoModel.Create(
+                first.Model,
+                new("allows-image"),
+                descriptor,
+                "fake-image",
+                "fake-compat",
+                VideoModelEntryAbility.ImageToVideo),
+            [1] = TestResolvedVideoModel.Create(
+                second.Model,
+                new("text-only"),
+                descriptor,
+                "fake-text",
+                "fake-compat",
+                VideoModelEntryAbility.TextToVideo),
         };
 
         IReadOnlyList<PlanDiagnostic> diagnostics =
@@ -1906,11 +1900,13 @@ public class ArchitectureFoundationTests
         {
             ModelProfileId profileId = new(profile);
             IReadOnlyList<ArchitectureEntryMode> entryModes = architecture.EntryModes;
-            return new(name, architecture.Id, profileId, architecture)
-            {
-                ModelClassId = $"{architecture.Id}-test-model",
-                CompatibilityClassId = $"{architecture.Id}-test-compat",
-                EntryAbilities =
+            return TestResolvedVideoModel.Create(
+                name,
+                profileId,
+                architecture,
+                $"{architecture.Id}-test-model",
+                $"{architecture.Id}-test-compat",
+                (
                     (entryModes.Contains(ArchitectureEntryMode.TextToVideo)
                         ? VideoModelEntryAbility.TextToVideo
                         : VideoModelEntryAbility.None)
@@ -1919,8 +1915,7 @@ public class ArchitectureFoundationTests
                             or ArchitectureEntryMode.SourceVideo
                             or ArchitectureEntryMode.RefineVideo)
                         ? VideoModelEntryAbility.ImageToVideo
-                        : VideoModelEntryAbility.None),
-            };
+                        : VideoModelEntryAbility.None)));
         }
 
         private sealed class FakeModule(
@@ -2010,19 +2005,15 @@ public class ArchitectureFoundationTests
 
         public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
         {
-            resolved = new(
+            resolved = TestResolvedVideoModel.Create(
                 model.Name,
-                descriptor.Id,
                 new($"{descriptor.Id.Value}-test-profile"),
-                resolvedDescriptor ?? descriptor)
-            {
-                ModelClassId = model.ModelClass.ID,
-                CompatibilityClassId = model.ModelClass.CompatClass.ID,
-                EntryAbilities =
+                resolvedDescriptor ?? descriptor,
+                model.ModelClass.ID,
+                model.ModelClass.CompatClass.ID,
+                entryAbilities:
                     VideoModelEntryAbility.TextToVideo
-                    | VideoModelEntryAbility.ImageToVideo,
-                HostFactsAuthoritative = true,
-            };
+                    | VideoModelEntryAbility.ImageToVideo);
             return true;
         }
 

@@ -702,14 +702,10 @@ public class VideoExecutionPlanCompilerTests
                 descriptor,
                 clip.Stages.ToDictionary(
                     stage => stage.ClipStageRawIndex,
-                    stage => new ResolvedVideoModel(
+                    stage => TestResolvedVideoModel.Create(
                         stage.Model,
-                        descriptor.Id,
                         new($"{descriptor.Id.Value}-test-profile"),
-                        descriptor)
-                    {
-                        HostFactsAuthoritative = true,
-                    }));
+                        descriptor)));
         }
         ArchitecturePlanningResult architectures = new(
             new Dictionary<int, ClipArchitectureAssignment>

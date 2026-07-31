@@ -147,14 +147,15 @@ internal sealed class HostVideoArchitectureModule :
             return false;
         }
 
-        resolved = new(model.Name, ArchitectureId, ProfileId, Descriptor)
-        {
-            ModelClassId = modelClass.ID,
-            CompatibilityClassId = compatibility.ID,
-            EntryAbilities = path.EntryAbilities,
-            LorasTargetTextEncoder = compatibility.LorasTargetTextEnc,
-            HostFactsAuthoritative = true,
-        };
+        resolved = new(
+            model.Name,
+            ProfileId,
+            Descriptor,
+            modelClass.ID,
+            compatibility.ID,
+            path.EntryAbilities,
+            [],
+            compatibility.LorasTargetTextEnc);
         return true;
     }
 

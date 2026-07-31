@@ -217,17 +217,13 @@ public class WanArchitectureTests
     {
         VideoArchitectureDescriptor descriptor =
             WanArchitectureModule.Instance.Descriptor;
-        ResolvedVideoModel resolved = new(
+        ResolvedVideoModel resolved = TestResolvedVideoModel.Create(
             "wan-stale-profile.safetensors",
-            descriptor.Id,
             new("removed-profile-alias"),
-            descriptor)
-        {
-            EntryAbilities =
+            descriptor,
+            entryAbilities:
                 VideoModelEntryAbility.TextToVideo
-                | VideoModelEntryAbility.ImageToVideo,
-            HostFactsAuthoritative = true,
-        };
+                | VideoModelEntryAbility.ImageToVideo);
 
         JObject catalog = ArchitectureCatalogSerializer.Serialize(
             new WanCatalogRegistry(resolved));
@@ -1018,16 +1014,13 @@ public class WanArchitectureTests
     {
         StageSpec stage = Stage(10, "wan-model-alias");
         VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
-        ResolvedVideoModel resolved = new(
+        ResolvedVideoModel resolved = TestResolvedVideoModel.Create(
             "canonical-wan-model.safetensors",
-            descriptor.Id,
             WanArchitectureModule.ImageToVideoProfileId,
-            descriptor)
-        {
-            ModelClassId = WanArchitectureModule.ImageToVideoModelClassId,
-            CompatibilityClassId = T2IModelClassSorter.CompatWan21_14b.ID,
-            EntryAbilities = VideoModelEntryAbility.ImageToVideo,
-        };
+            descriptor,
+            WanArchitectureModule.ImageToVideoModelClassId,
+            T2IModelClassSorter.CompatWan21_14b.ID,
+            VideoModelEntryAbility.ImageToVideo);
 
         WanClipPlanCompilation compilation = WanClipPlanCompiler.Compile(
             GeneratedClip(0, stage),
@@ -1178,9 +1171,8 @@ public class WanArchitectureTests
         Assert.Equal(4, WanArchitectureModule.FrameGrid);
         VideoArchitectureDescriptor descriptor =
             WanArchitectureModule.Instance.Descriptor;
-        ResolvedVideoModel resolved = new(
+        ResolvedVideoModel resolved = TestResolvedVideoModel.Create(
             "synthetic-wan",
-            descriptor.Id,
             new("stale-profile-alias"),
             descriptor);
 
@@ -1289,28 +1281,18 @@ public class WanArchitectureTests
         ModelProfileId alternateId = new("synthetic-wan-alternate");
         Dictionary<int, ResolvedVideoModel> stageModels = new()
         {
-            [0] = new(
+            [0] = TestResolvedVideoModel.Create(
                 first.Model,
-                canonical.Id,
                 new("forged-first"),
-                canonical)
-            {
-                ModelClassId = WanArchitectureModule.ImageToVideoModelClassId,
-                CompatibilityClassId = T2IModelClassSorter.CompatWan21_14b.ID,
-                EntryAbilities = VideoModelEntryAbility.TextToVideo
-                    | VideoModelEntryAbility.ImageToVideo,
-            },
-            [1] = new(
+                canonical,
+                WanArchitectureModule.ImageToVideoModelClassId,
+                T2IModelClassSorter.CompatWan21_14b.ID),
+            [1] = TestResolvedVideoModel.Create(
                 second.Model,
-                canonical.Id,
                 alternateId,
-                canonical)
-            {
-                ModelClassId = WanArchitectureModule.ImageToVideoModelClassId,
-                CompatibilityClassId = T2IModelClassSorter.CompatWan21_14b.ID,
-                EntryAbilities = VideoModelEntryAbility.TextToVideo
-                    | VideoModelEntryAbility.ImageToVideo,
-            },
+                canonical,
+                WanArchitectureModule.ImageToVideoModelClassId,
+                T2IModelClassSorter.CompatWan21_14b.ID),
         };
 
         ArchitectureClipCompilation compilation =
@@ -1424,19 +1406,18 @@ public class WanArchitectureTests
             Dictionary<int, ResolvedVideoModel> stageModels = [];
             foreach (StageSpec stage in clip.Stages ?? [])
             {
+                IReadOnlyList<string> referencePositions = null;
+                referencePositionsByModel?.TryGetValue(
+                    stage.Model,
+                    out referencePositions);
                 ResolvedVideoModel resolved = ResolvedWan(
                     stage.Model,
                     profilesByModel is not null
                         && profilesByModel.TryGetValue(stage.Model, out ModelProfileId profileId)
                             ? profileId
                             : WanArchitectureModule.ImageToVideoProfileId,
-                    descriptor);
-                if (referencePositionsByModel?.TryGetValue(
-                        stage.Model,
-                        out IReadOnlyList<string> referencePositions) == true)
-                {
-                    resolved = resolved with { ReferencePositions = referencePositions };
-                }
+                    descriptor,
+                    referencePositions);
                 stageModels[stage.ClipStageRawIndex] = resolved;
             }
             clips.TryAdd(clip.Id, new(
@@ -1451,24 +1432,26 @@ public class WanArchitectureTests
     private static ResolvedVideoModel ResolvedWan(
         string model,
         ModelProfileId profile,
-        VideoArchitectureDescriptor descriptor)
+        VideoArchitectureDescriptor descriptor,
+        IReadOnlyList<string> referencePositions = null)
     {
         bool five = profile == WanArchitectureModule.Ti2v5bProfileId;
         bool ordinary = profile == WanArchitectureModule.OrdinaryImageToVideoProfileId;
-        return new(model, descriptor.Id, profile, descriptor)
-        {
-            ModelClassId = five
+        return TestResolvedVideoModel.Create(
+            model,
+            profile,
+            descriptor,
+            five
                 ? WanArchitectureModule.Ti2v5bModelClassId
                 : ordinary
                     ? "wan-2_1-image2video-14b"
                     : WanArchitectureModule.ImageToVideoModelClassId,
-            CompatibilityClassId = five
+            five
                 ? T2IModelClassSorter.CompatWan22_5b.ID
                 : T2IModelClassSorter.CompatWan21_14b.ID,
-            EntryAbilities = VideoModelEntryAbility.TextToVideo
+            VideoModelEntryAbility.TextToVideo
                 | VideoModelEntryAbility.ImageToVideo,
-            ReferencePositions = five ? ["first"] : ["first", "last"],
-        };
+            referencePositions ?? (five ? ["first"] : ["first", "last"]));
     }
 
     private static T2IModel AddWanModel(

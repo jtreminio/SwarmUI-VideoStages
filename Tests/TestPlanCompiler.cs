@@ -46,9 +46,8 @@ internal static class TestPlanCompiler
             Dictionary<int, ResolvedVideoModel> stages = [];
             foreach (StageSpec stage in clip.Stages)
             {
-                stages[stage.ClipStageRawIndex] = new(
+                stages[stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
                     stage.Model,
-                    descriptor.Id,
                     new("ltx-2.3"),
                     descriptor);
             }
