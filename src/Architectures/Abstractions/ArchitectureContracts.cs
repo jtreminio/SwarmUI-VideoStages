@@ -291,6 +291,44 @@ internal sealed class ArchitectureBoundaryPolicy : IArchitectureBoundaryPolicy
     public IReadOnlyDictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy> Modes { get; }
 
     public IReadOnlyDictionary<BoundaryExecutionMode, RuleDecision> PublishedRules { get; }
+
+    internal static ArchitectureBoundaryPolicy CutOnly(
+        string codePrefix,
+        string cutReason,
+        string continueReason,
+        string crossfadeReason) =>
+        new(new Dictionary<BoundaryExecutionMode, ArchitectureBoundaryModePolicy>
+        {
+            [BoundaryExecutionMode.Cut] = Mode(
+                RuleSupport.Supported,
+                $"{codePrefix}.boundary.cut",
+                cutReason),
+            [BoundaryExecutionMode.Continue] = Mode(
+                RuleSupport.Unsupported,
+                $"{codePrefix}.boundary.continue.unsupported",
+                continueReason),
+            [BoundaryExecutionMode.Crossfade] = Mode(
+                RuleSupport.Unsupported,
+                $"{codePrefix}.boundary.crossfade.unsupported",
+                crossfadeReason),
+        });
+
+    private static ArchitectureBoundaryModePolicy Mode(
+        RuleSupport support,
+        string code,
+        string reason) =>
+        new(
+            support,
+            code,
+            reason,
+            FrameStep: 1,
+            MinFrames: 0,
+            MaxFrames: 0,
+            DefaultFrames: 0,
+            ContinuityExtraFrames: 0,
+            TargetRequiresGeneratedEntry: false,
+            TargetRequiresStage: false,
+            TargetDisallowsInitialReference: false);
 }
 
 /// <summary>

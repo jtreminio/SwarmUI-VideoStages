@@ -118,7 +118,11 @@ internal sealed class HostVideoArchitectureModule :
                 | StageCapability.VideoInput
                 | StageCapability.PixelUpscale
                 | StageCapability.Lora),
-        CreateBoundaryPolicy())
+        ArchitectureBoundaryPolicy.CutOnly(
+            "host-video",
+            "Decoded host videos can be joined with a hard cut.",
+            "The generic host-video fallback has no continuity path.",
+            "The generic host-video fallback has no transition path."))
     {
         // Unknown video families do not share one trustworthy temporal grid.
         FrameGrid = 1,
@@ -306,42 +310,6 @@ internal sealed class HostVideoArchitectureModule :
             clip.Id,
             stageId,
             rawStageIndex);
-
-    private static IArchitectureBoundaryPolicy CreateBoundaryPolicy() =>
-        new ArchitectureBoundaryPolicy(new Dictionary<
-            BoundaryExecutionMode,
-            ArchitectureBoundaryModePolicy>
-        {
-            [BoundaryExecutionMode.Cut] = Boundary(
-                RuleSupport.Supported,
-                "host-video.boundary.cut",
-                "Decoded host videos can be joined with a hard cut."),
-            [BoundaryExecutionMode.Continue] = Boundary(
-                RuleSupport.Unsupported,
-                "host-video.boundary.continue.unsupported",
-                "The generic host-video fallback has no continuity path."),
-            [BoundaryExecutionMode.Crossfade] = Boundary(
-                RuleSupport.Unsupported,
-                "host-video.boundary.crossfade.unsupported",
-                "The generic host-video fallback has no transition path."),
-        });
-
-    private static ArchitectureBoundaryModePolicy Boundary(
-        RuleSupport support,
-        string code,
-        string reason) =>
-        new(
-            support,
-            code,
-            reason,
-            FrameStep: 1,
-            MinFrames: 0,
-            MaxFrames: 0,
-            DefaultFrames: 0,
-            ContinuityExtraFrames: 0,
-            TargetRequiresGeneratedEntry: false,
-            TargetRequiresStage: false,
-            TargetDisallowsInitialReference: false);
 }
 
 internal sealed record HostVideoClipPayload(

@@ -100,7 +100,11 @@ internal sealed class WanArchitectureModule :
                 | StageCapability.PixelUpscale
                 | StageCapability.Lora
                 | StageCapability.FrameReferences),
-        WanBoundaryPolicy.Instance)
+        ArchitectureBoundaryPolicy.CutOnly(
+            "wan22",
+            "Decoded Wan clips can be joined with a hard cut.",
+            "Wan has no generation-time continuity path yet.",
+            "Wan has no decoded transition path yet."))
     {
         FrameGrid = FrameGrid,
         StageGuideReferences = new(
