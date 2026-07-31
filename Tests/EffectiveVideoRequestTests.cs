@@ -45,44 +45,6 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Fact]
-    public void Active_stage_grids_resolve_to_their_least_common_grid()
-    {
-        StageSpec first = Stage(0, rawIndex: 0, model: "six-grid-model");
-        StageSpec second = Stage(1, rawIndex: 1, model: "eight-grid-model");
-        ClipSpec clip = Clip(first, second) with { Frames = 27 };
-        VideoStagesSpec authored = Spec(clip);
-        VideoArchitectureDescriptor descriptor =
-            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 1 };
-        RecordingProjectionModule module = new(descriptor, IdentityProjection);
-        Dictionary<int, ResolvedVideoModel> stageModels = new()
-        {
-            [0] = new(first.Model, descriptor.Id, descriptor.DefaultProfileId, descriptor)
-            {
-                HandlerFrameGridOverride = 6,
-            },
-            [1] = new(second.Model, descriptor.Id, descriptor.DefaultProfileId, descriptor)
-            {
-                HandlerFrameGridOverride = 8,
-            },
-        };
-        ArchitecturePlanningResult architectures = new(
-            new Dictionary<int, ClipArchitectureAssignment>
-            {
-                [clip.Id] = new(clip.Id, module, descriptor, stageModels),
-            },
-            []);
-
-        EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(authored, architectures);
-
-        Assert.Equal(49, request.Spec.Clips[0].Frames);
-        Assert.Contains(
-            request.Decisions,
-            decision => decision.Code == "effective-request.temporal-grid"
-                && decision.Message.Contains("24-frame temporal grid"));
-    }
-
-    [Fact]
     public void Full_length_retake_tracks_the_resolved_effective_frame_count()
     {
         StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
@@ -500,45 +462,6 @@ public sealed class EffectiveVideoRequestTests
         Assert.DoesNotContain(
             request.Decisions,
             decision => decision.Code == "effective-request.temporal-grid");
-    }
-
-    [Fact]
-    public void Unrepresentable_active_stage_grid_combination_blocks_instead_of_guessing()
-    {
-        StageSpec first = Stage(0, rawIndex: 0, model: "grid-a");
-        StageSpec second = Stage(1, rawIndex: 1, model: "grid-b");
-        ClipSpec clip = Clip(first, second) with { Frames = 27 };
-        VideoStagesSpec authored = Spec(clip);
-        VideoArchitectureDescriptor descriptor =
-            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 1 };
-        RecordingProjectionModule module = new(descriptor, IdentityProjection);
-        Dictionary<int, ResolvedVideoModel> stageModels = new()
-        {
-            [0] = new(first.Model, descriptor.Id, descriptor.DefaultProfileId, descriptor)
-            {
-                HandlerFrameGridOverride = 50_000,
-            },
-            [1] = new(second.Model, descriptor.Id, descriptor.DefaultProfileId, descriptor)
-            {
-                HandlerFrameGridOverride = 50_001,
-            },
-        };
-        ArchitecturePlanningResult architectures = new(
-            new Dictionary<int, ClipArchitectureAssignment>
-            {
-                [clip.Id] = new(clip.Id, module, descriptor, stageModels),
-            },
-            []);
-
-        EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(authored, architectures);
-
-        Assert.Contains(clip.Id, request.BlockedClipIds);
-        Assert.Contains(
-            request.Decisions,
-            decision => decision.Code
-                    == "effective-request.temporal-grid-conflict"
-                && decision.Disposition == EffectiveRequestDisposition.Block);
     }
 
     [Fact]

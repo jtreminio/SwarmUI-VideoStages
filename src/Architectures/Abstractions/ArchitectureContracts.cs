@@ -415,15 +415,7 @@ internal sealed record ResolvedVideoModel(
     ModelProfileId ModelProfileId,
     VideoArchitectureDescriptor Architecture)
 {
-    /// <summary>
-    /// Temporal requirement of the resolved model handler. It currently defaults to the
-    /// architecture contract, while remaining model-scoped so a future handler can narrow it
-    /// without reintroducing global timeline policy.
-    /// </summary>
-    public int? HandlerFrameGridOverride { get; init; }
-
-    public int FrameGrid =>
-        HandlerFrameGridOverride ?? Architecture?.FrameGrid ?? 1;
+    public int FrameGrid => Architecture?.FrameGrid ?? 1;
 
     /// <summary>
     /// Test and compatibility adapters receive a deterministic synthetic identity. Production
@@ -436,24 +428,11 @@ internal sealed record ResolvedVideoModel(
     public VideoModelEntryAbility EntryAbilities { get; init; } =
         VideoModelEntryPolicy.FromArchitectureLegacyAlias(Architecture);
 
-    /// <summary>
-    /// Optional complete capability set for this resolved handler/model path. Null inherits the
-    /// architecture contract. A non-null value may only narrow that contract; the registry rejects
-    /// model resolutions that attempt to add capabilities the owning architecture did not declare.
-    /// </summary>
-    public ArchitectureCapabilityDescriptor CapabilityNarrowing { get; init; }
-
     public ArchitectureCapabilityDescriptor EffectiveCapabilities =>
-        CapabilityNarrowing ?? Architecture.Capabilities;
-
-    /// <summary>
-    /// Optional complete audio-source set for this resolved handler/model path. Like capability
-    /// narrowing, null inherits and a non-null value may only remove architecture-declared kinds.
-    /// </summary>
-    public IReadOnlyList<AudioSourceKind> AudioSourceKindNarrowing { get; init; }
+        Architecture.Capabilities;
 
     public IReadOnlyList<AudioSourceKind> EffectiveAudioSourceKinds =>
-        AudioSourceKindNarrowing ?? Architecture.AudioSourceKinds;
+        Architecture.AudioSourceKinds;
 
     /// <summary>
     /// Frame positions accepted by this model's native image-conditioning path. Values are

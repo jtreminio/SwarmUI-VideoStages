@@ -1476,21 +1476,6 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Registry_rejects_a_nonpositive_resolved_model_frame_grid()
-    {
-        using SwarmUiTestContext testContext = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        VideoArchitectureDescriptor descriptor = Descriptor("fake", "profile");
-        VideoArchitectureRegistry registry =
-            new([new MatchingModule(descriptor, resolvedFrameGrid: 0)]);
-
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => registry.TryResolveModel(models.VideoModel, out _));
-
-        Assert.Contains("invalid model resolution", error.Message);
-    }
-
-    [Fact]
     public void Registry_accepts_a_stale_default_profile_alias()
     {
         VideoArchitectureDescriptor descriptor = Descriptor("fake", "declared") with
@@ -1605,90 +1590,6 @@ public class ArchitectureFoundationTests
 
         Assert.Same(registered, resolved.Architecture);
         Assert.NotSame(divergent, resolved.Architecture);
-    }
-
-    [Fact]
-    public void Registry_rejects_model_capabilities_outside_the_architecture_contract()
-    {
-        using SwarmUiTestContext testContext = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        VideoArchitectureDescriptor descriptor = Descriptor("fake", "profile");
-        ArchitectureCapabilityDescriptor invalid = descriptor.Capabilities with
-        {
-            Clip = descriptor.Capabilities.Clip | ClipCapability.References,
-        };
-        VideoArchitectureRegistry registry = new(
-            [new MatchingModule(descriptor, capabilityNarrowing: invalid)]);
-
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => registry.TryResolveModel(models.VideoModel, out _));
-
-        Assert.Contains("outside its architecture contract", exception.Message);
-    }
-
-    [Fact]
-    public void Model_capability_narrowing_drives_projection_and_validation()
-    {
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
-            architecture: ArchitectureCapability.GeneratedEntry
-                | ArchitectureCapability.MultiStage
-                | ArchitectureCapability.DecodedOutput) with
-        {
-            Capabilities = FakeCapabilityDescriptor().Capabilities with
-            {
-                Architecture = ArchitectureCapability.GeneratedEntry
-                    | ArchitectureCapability.MultiStage
-                    | ArchitectureCapability.DecodedOutput,
-                Clip = ClipCapability.Prompts | ClipCapability.PromptRelay,
-            },
-        };
-        StageSpec first = Stage(10, "first") with { ClipStageRawIndex = 0 };
-        StageSpec second = Stage(11, "second") with
-        {
-            ClipStageIndex = 1,
-            ClipStageRawIndex = 1,
-        };
-        ClipSpec clip = GeneratedClip(0, first, second) with
-        {
-            PromptWindows = [new("dormant relay", 0, 1)],
-        };
-        Dictionary<int, ResolvedVideoModel> stageModels = new()
-        {
-            [0] = new(first.Model, descriptor.Id, descriptor.DefaultProfileId, descriptor)
-            {
-                EntryAbilities = VideoModelEntryAbility.ImageToVideo,
-            },
-            [1] = new(second.Model, descriptor.Id, descriptor.DefaultProfileId, descriptor)
-            {
-                EntryAbilities = VideoModelEntryAbility.ImageToVideo,
-                CapabilityNarrowing = descriptor.Capabilities with
-                {
-                    Clip = ClipCapability.Prompts,
-                },
-            },
-        };
-
-        EffectiveClipProjection projection =
-            CapabilityDrivenEffectiveRequestProjector.ProjectUnsupportedFeatures(
-                clip,
-                descriptor,
-                stageModels);
-        IReadOnlyList<PlanDiagnostic> validation =
-            ArchitectureCapabilityValidator.Validate(
-                clip,
-                descriptor,
-                ArchitectureEntryMode.ImageToVideo,
-                stageModels);
-
-        Assert.Empty(projection.Clip.PromptWindows);
-        Assert.Contains(
-            projection.Decisions,
-            decision => decision.Code
-                == "effective-request.unsupported-prompt-relay-ignored");
-        Assert.Contains(
-            validation,
-            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
-                && diagnostic.Message.Contains("prompt relay"));
     }
 
     [Fact]
@@ -2135,9 +2036,7 @@ public class ArchitectureFoundationTests
 
     private sealed class MatchingModule(
         VideoArchitectureDescriptor descriptor,
-        VideoArchitectureDescriptor resolvedDescriptor = null,
-        int? resolvedFrameGrid = null,
-        ArchitectureCapabilityDescriptor capabilityNarrowing = null)
+        VideoArchitectureDescriptor resolvedDescriptor = null)
         : IVideoArchitectureModule
     {
         public VideoArchitectureDescriptor Descriptor => descriptor;
@@ -2155,8 +2054,6 @@ public class ArchitectureFoundationTests
                 EntryAbilities =
                     VideoModelEntryAbility.TextToVideo
                     | VideoModelEntryAbility.ImageToVideo,
-                HandlerFrameGridOverride = resolvedFrameGrid,
-                CapabilityNarrowing = capabilityNarrowing,
                 HostFactsAuthoritative = true,
             };
             return true;

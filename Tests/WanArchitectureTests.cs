@@ -1173,7 +1173,7 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Static_generated_frames_use_the_resolved_model_handler_grid()
+    public void Static_generated_frames_use_the_architecture_grid()
     {
         Assert.Equal(4, WanArchitectureModule.FrameGrid);
         VideoArchitectureDescriptor descriptor =
@@ -1182,15 +1182,12 @@ public class WanArchitectureTests
             "synthetic-wan",
             descriptor.Id,
             new("stale-profile-alias"),
-            descriptor)
-        {
-            HandlerFrameGridOverride = 6,
-        };
+            descriptor);
 
         WanStaticGeneratedFrameResolution resolution =
             WanStaticGeneratedFrameResolver.Resolve(16, 2, 10, resolved);
 
-        Assert.Equal(6, resolution.FrameGrid);
+        Assert.Equal(4, resolution.FrameGrid);
         Assert.Equal(13, resolution.Frames);
     }
 

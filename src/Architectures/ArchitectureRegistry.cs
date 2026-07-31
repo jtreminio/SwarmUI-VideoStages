@@ -124,7 +124,6 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                         $"Video architecture module '{module.Descriptor.Id}' returned an invalid "
                         + $"model resolution for '{model?.Name}'.");
                 }
-                ValidateModelCapabilityNarrowing(module.Descriptor, match, model?.Name);
                 matches.Add(match with
                 {
                     Architecture = module.Descriptor,
@@ -151,38 +150,4 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
         return resolved is not null;
     }
 
-    private static void ValidateModelCapabilityNarrowing(
-        VideoArchitectureDescriptor architecture,
-        ResolvedVideoModel model,
-        string modelName)
-    {
-        ArchitectureCapabilityDescriptor effective = model.EffectiveCapabilities;
-        if (!IsSubset(effective.Architecture, architecture.Capabilities.Architecture)
-            || !IsSubset(effective.Clip, architecture.Capabilities.Clip)
-            || !IsSubset(effective.Stage, architecture.Capabilities.Stage))
-        {
-            throw new InvalidOperationException(
-                $"Video architecture module '{architecture.Id}' returned model resolution "
-                    + $"'{modelName}' with capabilities outside its architecture contract.");
-        }
-        IReadOnlyList<AudioSourceKind> audioKinds = model.EffectiveAudioSourceKinds;
-        if (audioKinds is null
-            || audioKinds.Count != audioKinds.Distinct().Count()
-            || audioKinds.Any(kind =>
-                !Enum.IsDefined(kind)
-                || !architecture.AudioSourceKinds.Contains(kind)))
-        {
-            throw new InvalidOperationException(
-                $"Video architecture module '{architecture.Id}' returned model resolution "
-                    + $"'{modelName}' with invalid audio-source capability narrowing.");
-        }
-    }
-
-    private static bool IsSubset<T>(T candidate, T available)
-        where T : struct, Enum
-    {
-        long candidateBits = Convert.ToInt64(candidate);
-        long availableBits = Convert.ToInt64(available);
-        return (candidateBits & ~availableBits) == 0;
-    }
 }
