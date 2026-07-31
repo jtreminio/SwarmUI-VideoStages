@@ -1,3 +1,4 @@
+using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
 using VideoStages.Execution;
@@ -75,7 +76,7 @@ internal sealed class TimelineAssemblySession
     internal void ReportWarning(string warning) =>
         PlanDiagnosticReporter.TrackRequestWarning(_generator.UserInput, warning);
 
-    public void Assemble(IReadOnlyList<DecodedClipArtifact> clipOutputs)
+    public RuntimeArtifact Assemble(IReadOnlyList<DecodedClipArtifact> clipOutputs)
     {
         ArgumentNullException.ThrowIfNull(clipOutputs);
         if (clipOutputs.Count != _plan.Clips.Count)
@@ -91,21 +92,22 @@ internal sealed class TimelineAssemblySession
         }
         if (clipOutputs.Count < 2)
         {
-            return;
+            throw new InvalidOperationException(
+                "Multi-clip timeline assembly requires at least two clip outputs.");
         }
 
-        BoundaryBudgetResolution resolution = _merger.Apply(clipOutputs, _effectiveBoundaries);
+        TimelineMergeResult result = _merger.Merge(clipOutputs, _effectiveBoundaries);
         _effectiveBoundaries.Clear();
-        _effectiveBoundaries.AddRange(resolution.Boundaries);
-        _outputTrimmer.Apply();
+        _effectiveBoundaries.AddRange(result.Boundaries.Boundaries);
+        return _outputTrimmer.Apply(result.Artifact);
     }
 
     /// <summary>
-    /// Installs the one clip's decoded artifact as the timeline output, so publication reads what
+    /// Returns the one clip's decoded artifact as the timeline output, so publication reads what
     /// the clip actually returned rather than whatever ambient media survived execution. A
     /// sourced-only clip additionally has no stage finalizer, so assembly owns its terminal trim.
     /// </summary>
-    public void FinalizeSingleClip(DecodedClipArtifact clipOutput)
+    public RuntimeArtifact FinalizeSingleClip(DecodedClipArtifact clipOutput)
     {
         ArgumentNullException.ThrowIfNull(clipOutput);
         if (_plan.Clips.Count != 1)
@@ -118,11 +120,17 @@ internal sealed class TimelineAssemblySession
             throw new SwarmUserErrorException(
                 "VideoStages: timeline assembly received an invalid clip video artifact.");
         }
-        _generator.CurrentMedia = clipOutput.ToHostMedia(_generator);
+        using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+        RuntimeArtifact artifact = RuntimeArtifact.FromDecoded(
+            _generator,
+            bridge,
+            clipOutput,
+            ArtifactOrigin.ClipAssembly);
         if (_plan.Clips[0].Stages.Count == 0)
         {
-            _outputTrimmer.Apply();
+            artifact = _outputTrimmer.Apply(artifact);
         }
+        return artifact;
     }
 
     private int BoundaryIndex(int fromClipId) =>

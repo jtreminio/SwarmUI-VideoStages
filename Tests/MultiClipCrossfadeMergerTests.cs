@@ -127,6 +127,22 @@ public class MultiClipCrossfadeMergerTests
     }
 
     [Fact]
+    public void ExplicitMergeReturnsArtifactWithoutPublishingHostMedia()
+    {
+        (WorkflowGenerator g, List<WGNodeData> clips) =
+            BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2);
+
+        TimelineMergeResult result =
+            Merger(g).Merge(Artifacts(clips), PlansFor(clips, ["cut"]));
+
+        Assert.NotNull(result.Artifact);
+        Assert.True(result.Artifact.HasMedia);
+        Assert.Equal(34, result.Artifact.Media.Frames);
+        Assert.NotNull(result.Artifact.Media.AttachedAudio);
+        Assert.Null(g.CurrentMedia);
+    }
+
+    [Fact]
     public void Cut_MultiClip_ProducesExactlyTodaysGraphShape_NoCrossfadeNodes()
     {
         // Two independent runs on identical inputs: one with no boundaryOuts (the pre-Stage-D signature),

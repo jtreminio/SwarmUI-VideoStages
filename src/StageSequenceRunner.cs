@@ -13,7 +13,7 @@ internal sealed class StageSequenceRunner(
     MultiClipParallelMerger merger,
     ArchitectureRuntimeSessionFactoryRegistry runtimeFactories)
 {
-    public void Run(
+    public RuntimeArtifact Run(
         VideoExecutionPlan plan,
         AudioRuntimeSources preparedAudioSources,
         RootExecutionPolicy rootPolicy)
@@ -54,11 +54,8 @@ internal sealed class StageSequenceRunner(
 
         if (parallelMultiClip)
         {
-            assembly.Assemble(clipOutputs);
+            return assembly.Assemble(clipOutputs);
         }
-        else
-        {
-            assembly.FinalizeSingleClip(clipOutputs[0]);
-        }
+        return assembly.FinalizeSingleClip(clipOutputs[0]);
     }
 }

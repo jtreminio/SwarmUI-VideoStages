@@ -1,4 +1,3 @@
-using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Utils;
@@ -37,27 +36,24 @@ internal sealed class VideoStagesCoordinator(
             preparedAudioSources,
             rootPolicy));
 
-        stageSequenceRunner.Run(
+        RuntimeArtifact finalArtifact = stageSequenceRunner.Run(
             planContext.Plan,
             preparedAudioSources,
             rootPolicy);
-        new TimelineFrameInterpolator(g).Apply();
+        finalArtifact = new TimelineFrameInterpolator(g).Apply(finalArtifact);
         // Publication metadata describes decoded timeline media, not the model family that
         // happened to produce one clip. VAE ownership remains on RuntimeArtifact for the host save
         // adapter and never enters DecodedClipArtifact or cross-clip assembly.
-        if (g.CurrentMedia is not null)
+        if (finalArtifact.Media is not null)
         {
-            g.CurrentMedia.Compat = null;
-            if (g.CurrentMedia.AttachedAudio is not null)
+            finalArtifact.Media.Compat = null;
+            if (finalArtifact.Media.AttachedAudio is not null)
             {
-                g.CurrentMedia.AttachedAudio.Compat = null;
+                finalArtifact.Media.AttachedAudio.Compat = null;
             }
         }
-        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        RuntimeArtifact finalArtifact = RuntimeArtifact.Capture(
-            g,
-            bridge,
-            ArtifactOrigin.ClipAssembly);
+        // This is the common pipeline's only post-clip write to the host compatibility surface.
+        finalArtifact.PublishTo(g);
         OutputPublication publication = rootSession.PublishTimeline(finalArtifact);
         runtimeFactories.FinalizeTimeline(new(
             planContext.Plan,

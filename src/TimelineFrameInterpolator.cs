@@ -1,8 +1,10 @@
 using ComfyTyped.Core;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Execution;
 using VideoStages.Planning;
 
 namespace VideoStages;
@@ -60,27 +62,59 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
             }
             throw new SwarmUserErrorException($"VideoStages: {error}");
         }
-
-        WGNodeData media = g.CurrentMedia;
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        RuntimeArtifact current = RuntimeArtifact.Capture(
+            g,
+            bridge,
+            ArtifactOrigin.ClipAssembly);
+        RuntimeArtifact result = Apply(current, config, bridge);
+        if (!ReferenceEquals(result, current))
+        {
+            WGNodeData attachedAudio = g.CurrentMedia?.AttachedAudio;
+            result.PublishTo(g);
+            g.CurrentMedia.AttachedAudio = attachedAudio;
+        }
+    }
+
+    internal RuntimeArtifact Apply(RuntimeArtifact artifact)
+    {
+        ArgumentNullException.ThrowIfNull(artifact);
+        if (!TryResolveConfiguration(out Configuration config, out string error))
+        {
+            return error is null
+                ? artifact
+                : throw new SwarmUserErrorException($"VideoStages: {error}");
+        }
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        return Apply(artifact, config, bridge);
+    }
+
+    private RuntimeArtifact Apply(
+        RuntimeArtifact artifact,
+        Configuration config,
+        WorkflowBridge bridge)
+    {
+        MediaRef media = artifact.Media;
         if (media?.DataType != WGNodeData.DT_VIDEO
-            || media.Path is not JArray { Count: 2 } path
-            || bridge.ResolvePath(path) is null)
+            || media.Output is not INodeOutput videoOutput)
         {
             throw new SwarmUserErrorException(
                 "VideoStages: frame interpolation requires a resolvable decoded final video.");
         }
-        if (media.Frames is not int frames || frames <= 0
-            || media.GetRawFPS() is not int fps || fps <= 0)
+        if (media.Frames is not int frames
+            || frames <= 0
+            || media.FPS?.Type != JTokenType.Integer
+            || media.FPS.Value<int>() <= 0)
         {
             throw new SwarmUserErrorException(
                 "VideoStages: frame interpolation requires literal positive final frame-count "
                 + "and frame-rate metadata.");
         }
+        int fps = media.FPS.Value<int>();
         // A single frame has no interval to interpolate. Preserve its path and metadata exactly.
         if (frames == 1)
         {
-            return;
+            return artifact;
         }
 
         int interpolatedFrames;
@@ -99,15 +133,33 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         if (g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false)
             && !g.UserInput.Get(T2IParamTypes.DoNotSave, false))
         {
-            media.SaveOutput(
-                g.CurrentVae,
+            media.ToWGNodeData(g).SaveOutput(
+                artifact.Vae?.ToWGNodeData(g) ?? g.CurrentVae,
                 g.CurrentAudioVae,
                 StableNodeIds.Id(g, StableNodeIds.PreInterpolationSave));
         }
-        JArray interpolated = g.DoInterpolation(path, config.Method, config.Multiplier);
-        g.CurrentMedia = media.WithPath(interpolated, WGNodeData.DT_VIDEO);
-        g.CurrentMedia.Frames = interpolatedFrames;
-        g.CurrentMedia.FPS = interpolatedFps;
+        JArray interpolated = g.DoInterpolation(
+            WorkflowBridge.ToPath(videoOutput),
+            config.Method,
+            config.Multiplier);
+        using WorkflowBridge outputBridge = BridgeSync.For(g);
+        INodeOutput interpolatedOutput = outputBridge.ResolvePath(interpolated)
+            ?? throw new SwarmUserErrorException(
+                "VideoStages: frame interpolation did not produce a resolvable video.");
+        return artifact with
+        {
+            Media = new MediaRef
+            {
+                Output = interpolatedOutput,
+                DataType = WGNodeData.DT_VIDEO,
+                Compat = media.Compat,
+                Width = media.Width,
+                Height = media.Height,
+                Frames = interpolatedFrames,
+                FPS = interpolatedFps,
+                AttachedAudio = media.AttachedAudio,
+            },
+        };
     }
 
     private bool TryResolveConfiguration(

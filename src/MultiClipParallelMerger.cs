@@ -9,9 +9,14 @@ using VideoStages.Planning;
 
 namespace VideoStages;
 
+internal sealed record TimelineMergeResult(
+    BoundaryBudgetResolution Boundaries,
+    RuntimeArtifact Artifact);
+
 /// <summary>
 /// Orchestrates graph resolution and media ownership for a multi-clip timeline. Boundary planning and
-/// graph construction live in dedicated collaborators so this class remains the runner-facing facade.
+/// graph construction live in dedicated collaborators; the public adapter publishes to legacy host
+/// state while the timeline runner consumes the explicit artifact returned by <see cref="Merge"/>.
 /// </summary>
 internal sealed class MultiClipParallelMerger(
     WorkflowGenerator g,
@@ -27,9 +32,30 @@ internal sealed class MultiClipParallelMerger(
         IReadOnlyList<DecodedClipArtifact> clipArtifacts,
         IReadOnlyList<BoundaryPlan> boundaries)
     {
+        TimelineMergeResult result = Merge(clipArtifacts, boundaries);
+        result.Artifact?.PublishTo(g);
+        return result.Boundaries;
+    }
+
+    internal TimelineMergeResult Merge(
+        IReadOnlyList<DecodedClipArtifact> clipArtifacts,
+        IReadOnlyList<BoundaryPlan> boundaries)
+    {
         if (clipArtifacts is null || clipArtifacts.Count < 2)
         {
-            return new(boundaries ?? [], Degraded: false, Reason: null);
+            RuntimeArtifact artifact = null;
+            if (clipArtifacts?.Count == 1)
+            {
+                using WorkflowBridge singleBridge = BridgeSync.For(g);
+                artifact = RuntimeArtifact.FromDecoded(
+                    g,
+                    singleBridge,
+                    clipArtifacts[0],
+                    ArtifactOrigin.ClipAssembly);
+            }
+            return new(
+                new(boundaries ?? [], Degraded: false, Reason: null),
+                artifact);
         }
         for (int i = 0; i < clipArtifacts.Count; i++)
         {
@@ -115,8 +141,10 @@ internal sealed class MultiClipParallelMerger(
             : null;
 
         DecodedClipArtifact template = clips[0];
-        g.CurrentMedia = new WGNodeData(WorkflowBridge.ToPath(mergedVideo), g, WGNodeData.DT_VIDEO, null)
+        MediaRef mergedMedia = new()
         {
+            Output = mergedVideo,
+            DataType = WGNodeData.DT_VIDEO,
             Width = template.Width,
             Height = template.Height,
             Frames = sumFrames - (overlapPlan?.RemovedFrames ?? 0),
@@ -124,13 +152,18 @@ internal sealed class MultiClipParallelMerger(
         };
         if (mergedAudio is not null)
         {
-            g.CurrentMedia.AttachedAudio = new WGNodeData(
-                WorkflowBridge.ToPath(mergedAudio),
-                g,
-                WGNodeData.DT_AUDIO,
-                null);
+            mergedMedia.AttachedAudio = new MediaRef
+            {
+                Output = mergedAudio,
+                DataType = WGNodeData.DT_AUDIO,
+            };
         }
-        return runtimeBoundaries;
+        return new(
+            runtimeBoundaries,
+            new(
+                mergedMedia,
+                MediaRef.FromWGNodeData(g.CurrentVae, bridge),
+                ArtifactOrigin.ClipAssembly));
     }
 
     private static INodeOutput MergeArchitectureRuns(

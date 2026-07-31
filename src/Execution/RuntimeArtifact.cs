@@ -41,6 +41,21 @@ internal sealed record RuntimeArtifact(
             origin);
     }
 
+    public static RuntimeArtifact FromDecoded(
+        WorkflowGenerator generator,
+        WorkflowBridge bridge,
+        DecodedClipArtifact decoded,
+        ArtifactOrigin origin)
+    {
+        ArgumentNullException.ThrowIfNull(generator);
+        ArgumentNullException.ThrowIfNull(bridge);
+        ArgumentNullException.ThrowIfNull(decoded);
+        return new(
+            MediaRef.FromWGNodeData(decoded.ToHostMedia(generator), bridge),
+            MediaRef.FromWGNodeData(generator.CurrentVae, bridge),
+            origin);
+    }
+
     /// <summary>
     /// Publishes the artifact back to the host compatibility surface. Internal orchestration should
     /// pass <see cref="RuntimeArtifact"/> values and call this only at explicit adapter boundaries.
