@@ -90,12 +90,13 @@ internal sealed record ArchitectureEffectiveRequestProjection(
     IReadOnlyList<EffectiveRequestDecision> RequestDecisions);
 
 /// <summary>
-/// The only request projection common planning is allowed to consume. The separately cached
-/// authored specification remains unchanged for authoring and prompt-tag concerns.
+/// The only projected request values common planning is allowed to consume. Resolved architecture
+/// assignments remain the caller-owned input because projection preserves model and topology keys.
+/// The separately cached authored specification remains unchanged for authoring and prompt-tag
+/// concerns.
 /// </summary>
 internal sealed record EffectiveVideoRequest(
     VideoStagesSpec Spec,
-    ArchitecturePlanningResult ArchitecturePlanning,
     IReadOnlyList<EffectiveRequestDecision> Decisions,
     IReadOnlyDictionary<int, BoundaryExecutionMode> AuthoredBoundaryModes,
     IReadOnlyDictionary<int, BoundaryFallback> ProjectedBoundaryFallbacks)
@@ -249,7 +250,6 @@ internal static class EffectiveVideoRequestProjector
             {
                 Clips = Array.AsReadOnly(clips.Select(clip => clip.Effective).ToArray()),
             },
-            architecturePlanning,
             decisions.AsReadOnly(),
             authoredBoundaryModes,
             projectedBoundaryFallbacks);

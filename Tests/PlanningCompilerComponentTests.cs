@@ -688,7 +688,6 @@ public class PlanningCompilerComponentTests
         EffectiveVideoRequest request =
             EffectiveVideoRequestProjector.Project(spec, environment, architecture);
         spec = request.Spec;
-        architecture = request.ArchitecturePlanning;
         List<PlanDiagnostic> diagnostics =
         [
             .. architecture.Diagnostics,

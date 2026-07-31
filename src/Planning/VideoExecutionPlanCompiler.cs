@@ -31,7 +31,6 @@ internal static class VideoExecutionPlanCompiler
                 rootEnvironment,
                 architecturePlanning);
         spec = request.Spec;
-        architecturePlanning = request.ArchitecturePlanning;
         List<PlanDiagnostic> diagnostics =
         [
             .. architecturePlanning.Diagnostics,
