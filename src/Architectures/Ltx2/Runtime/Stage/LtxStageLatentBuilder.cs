@@ -15,7 +15,7 @@ internal sealed class LtxStageLatentBuilder
     private readonly LtxStageRuntimeSettings runtimeSettings;
     private readonly LtxStageLatentAudioFactory latentAudioFactory;
     private readonly LtxReusableLatentResolver reusableLatentResolver;
-    private readonly LtxRetakeMaskApplicator retakeMaskApplicator;
+    private readonly LtxVideoRetakeMasker retakeMasker;
 
     internal LtxStageLatentBuilder(
         WorkflowGenerator g,
@@ -25,7 +25,7 @@ internal sealed class LtxStageLatentBuilder
         this.runtimeSettings = runtimeSettings;
         latentAudioFactory = new LtxStageLatentAudioFactory(g, runtimeSettings);
         reusableLatentResolver = new LtxReusableLatentResolver(g);
-        retakeMaskApplicator = new LtxRetakeMaskApplicator(g);
+        retakeMasker = new LtxVideoRetakeMasker(g);
     }
 
     internal WGNodeData Build(
@@ -99,7 +99,7 @@ internal sealed class LtxStageLatentBuilder
             reusedLatent.Frames = matchAudioLength || !genInfo.Frames.HasValue
                 ? null
                 : Math.Min(genInfo.Frames.Value, reusedLatent.Frames ?? int.MaxValue);
-            reusedLatent = retakeMaskApplicator.ApplyIfActive(
+            reusedLatent = retakeMasker.ApplyIfActive(
                 reusedLatent,
                 genInfo,
                 payload.Retake,
@@ -150,7 +150,7 @@ internal sealed class LtxStageLatentBuilder
                 : null;
         }
         WGNodeData encodedLatent = stageVideoInput.AsLatentImage(genInfo.Vae);
-        encodedLatent = retakeMaskApplicator.ApplyIfActive(
+        encodedLatent = retakeMasker.ApplyIfActive(
             encodedLatent,
             genInfo,
             payload.Retake,

@@ -62,15 +62,17 @@ internal sealed class LtxVideoRetakeMasker(WorkflowGenerator g)
 
     /// <summary>
     /// Wraps <paramref name="encodedLatent"/> with the windowed noise mask and returns the masked latent.
-    /// Returns it unchanged when the window is empty or it isn't a plain video latent (audio-video is out
-    /// of v1 scope).
+    /// Returns it unchanged when retake is inactive, the window is empty, or it isn't a plain video
+    /// latent (audio-video is out of v1 scope).
     /// </summary>
-    public WGNodeData Apply(
+    internal WGNodeData ApplyIfActive(
         WGNodeData encodedLatent,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        RetakePlan window)
+        RetakePlan window,
+        bool active)
     {
-        if (encodedLatent?.Path is not JArray latentPath
+        if (!active
+            || encodedLatent?.Path is not JArray latentPath
             || window is null
             || encodedLatent.DataType != WGNodeData.DT_LATENT_VIDEO)
         {

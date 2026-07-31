@@ -112,7 +112,7 @@ public class TypedStageExecutionTests
     [Fact]
     public void Ltx_latent_collaborators_keep_typed_plan_boundaries()
     {
-        System.Reflection.MethodInfo retake = typeof(LtxRetakeMaskApplicator).GetMethod(
+        System.Reflection.MethodInfo retake = typeof(LtxVideoRetakeMasker).GetMethod(
             "ApplyIfActive",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         System.Reflection.MethodInfo audioLength = typeof(LtxStageLatentAudioFactory).GetMethod(
@@ -129,7 +129,7 @@ public class TypedStageExecutionTests
                 typeof(LtxStageLatentBuilder),
                 typeof(LtxStageLatentAudioFactory),
                 typeof(LtxReusableLatentResolver),
-                typeof(LtxRetakeMaskApplicator),
+                typeof(LtxVideoRetakeMasker),
             }.SelectMany(type => type.GetMethods(
                 System.Reflection.BindingFlags.Instance
                 | System.Reflection.BindingFlags.Public
