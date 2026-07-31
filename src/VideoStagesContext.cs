@@ -42,6 +42,23 @@ internal static class VideoStagesContext
         return context;
     }
 
+    internal static bool TryGetActiveCoreVideoContext(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        out WorkflowGenerator generator,
+        out VideoExecutionPlanContext context)
+    {
+        generator = genInfo?.Generator;
+        context = null;
+        if (generator is null
+            || genInfo.ContextID != T2IParamInput.SectionID_Video
+            || !VideoStagesPromptSection.IsActive(generator))
+        {
+            return false;
+        }
+        context = generator.GetVideoExecutionPlanContext();
+        return context is not null;
+    }
+
     private static VideoExecutionPlanContext RequireExistingContext(WorkflowGenerator g) =>
         g.GetVideoExecutionPlanContext()
         ?? throw new SwarmUserErrorException(

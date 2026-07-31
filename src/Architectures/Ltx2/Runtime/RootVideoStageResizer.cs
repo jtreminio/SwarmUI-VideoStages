@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
@@ -69,15 +68,10 @@ internal sealed class RootVideoStageResizer(
         out VideoExecutionPlanContext context)
     {
         context = null;
-        if (genInfo?.Generator is not WorkflowGenerator generator
-            || genInfo.ContextID != T2IParamInput.SectionID_Video
-            || !VideoStagesPromptSection.IsActive(generator))
-        {
-            return false;
-        }
-
-        context = generator.GetVideoExecutionPlanContext();
-        if (context is null)
+        if (!VideoStagesContext.TryGetActiveCoreVideoContext(
+                genInfo,
+                out _,
+                out context))
         {
             return false;
         }

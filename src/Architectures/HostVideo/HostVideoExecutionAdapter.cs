@@ -101,15 +101,10 @@ internal static class HostVideoCorePassIsolation
 
     internal static void Isolate(WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        WorkflowGenerator generator = genInfo?.Generator;
-        if (generator is null
-            || genInfo.ContextID != T2IParamInput.SectionID_Video
-            || !VideoStagesPromptSection.IsActive(generator))
-        {
-            return;
-        }
-        VideoExecutionPlanContext context = generator.GetVideoExecutionPlanContext();
-        if (context is null)
+        if (!VideoStagesContext.TryGetActiveCoreVideoContext(
+                genInfo,
+                out WorkflowGenerator generator,
+                out VideoExecutionPlanContext context))
         {
             return;
         }

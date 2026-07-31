@@ -216,7 +216,7 @@ public class WanRuntimeFlowTests
             VideoSwapModel = legacySwapModel,
             VideoSwapPercent = 0.42,
         };
-        WanLegacySwapIsolation.IgnoreLegacySwap(authoredStageInfo);
+        WanHostHandlers.IsolateCoreSettings(authoredStageInfo);
         Assert.Same(legacySwapModel, authoredStageInfo.VideoSwapModel);
         Assert.Equal(0.42, authoredStageInfo.VideoSwapPercent);
 
@@ -227,7 +227,7 @@ public class WanRuntimeFlowTests
             VideoSwapModel = legacySwapModel,
             VideoSwapPercent = 0.31,
         };
-        WanLegacySwapIsolation.IgnoreLegacySwap(customInfo);
+        WanHostHandlers.IsolateCoreSettings(customInfo);
         Assert.Same(legacySwapModel, customInfo.VideoSwapModel);
         Assert.Equal(0.31, customInfo.VideoSwapPercent);
 
@@ -240,7 +240,7 @@ public class WanRuntimeFlowTests
             VideoEndFrame = endFrame,
         };
         InvalidOperationException completedError = Assert.Throws<InvalidOperationException>(
-            () => WanVideoEndFrameIsolation.IgnoreCoreEndFrame(coreInfo));
+            () => WanHostHandlers.IsolateCoreSettings(coreInfo));
         Assert.Contains("Completed", completedError.Message);
         Assert.Same(endFrame, coreInfo.VideoEndFrame);
         Assert.Same(endFrame, input.Get(T2IParamTypes.VideoEndFrame, null));
@@ -251,7 +251,7 @@ public class WanRuntimeFlowTests
             ContextID = VideoStagesExtension.SectionIdForStage(0),
             VideoEndFrame = endFrame,
         };
-        WanVideoEndFrameIsolation.IgnoreCoreEndFrame(authoredEndFrameInfo);
+        WanHostHandlers.IsolateCoreSettings(authoredEndFrameInfo);
         Assert.Same(endFrame, authoredEndFrameInfo.VideoEndFrame);
 
         AssertNoDanglingNodeRefs(workflow);
@@ -264,11 +264,11 @@ public class WanRuntimeFlowTests
         using SwarmUiTestContext context = new();
         MixedVideoModelBundle models =
             TestModelFactory.CreateBaseLtxv2AndWan22ImageToVideoModels();
-        WanLegacySwapIsolation.RegisterHandlers();
-        WanLegacySwapIsolation.RegisterHandlers();
+        WanHostHandlers.Register();
+        WanHostHandlers.Register();
         Assert.Single(
             WorkflowGenerator.AltImageToVideoPreHandlers,
-            handler => handler == WanLegacySwapIsolation.IgnoreLegacySwap);
+            handler => handler == WanHostHandlers.IsolateCoreSettings);
 
         WorkflowGenerator inactive = new()
         {
@@ -282,7 +282,7 @@ public class WanRuntimeFlowTests
             VideoSwapModel = models.WanVideoModel,
             VideoSwapPercent = 0.73,
         };
-        WanLegacySwapIsolation.IgnoreLegacySwap(inactiveInfo);
+        WanHostHandlers.IsolateCoreSettings(inactiveInfo);
         Assert.Same(models.WanVideoModel, inactiveInfo.VideoSwapModel);
         Assert.Equal(0.73, inactiveInfo.VideoSwapPercent);
 
@@ -303,7 +303,7 @@ public class WanRuntimeFlowTests
             VideoSwapModel = models.WanVideoModel,
             VideoSwapPercent = 0.61,
         };
-        WanLegacySwapIsolation.IgnoreLegacySwap(ltxInfo);
+        WanHostHandlers.IsolateCoreSettings(ltxInfo);
         Assert.Same(models.WanVideoModel, ltxInfo.VideoSwapModel);
         Assert.Equal(0.61, ltxInfo.VideoSwapPercent);
     }
