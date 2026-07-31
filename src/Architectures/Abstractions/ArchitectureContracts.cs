@@ -3,6 +3,9 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Abstractions;
 
+
+// --- Identity: normalized value types used as keys everywhere below ---
+
 internal readonly record struct ArchitectureId
 {
     public ArchitectureId(string value)
@@ -30,6 +33,9 @@ internal readonly record struct ModelProfileId
 
     public override string ToString() => Value;
 }
+
+// --- Capability vocabulary: what an architecture can ever do. Published to the frontend as
+// wire-name lists; see ArchitectureFeatureVocabulary for the spellings. ---
 
 internal enum ArchitectureEntryMode
 {
@@ -88,6 +94,37 @@ internal enum StageCapability
     IcLora = 1 << 7,
     FrameReferences = 1 << 9,
 }
+
+internal sealed record ArchitectureCapabilityDescriptor(
+    ArchitectureCapability Architecture,
+    ClipCapability Clip,
+    StageCapability Stage);
+
+/// <summary>
+/// Authored product features an architecture may or may not support. Each entry's vocabulary
+/// binding decides whether an effective-request projector can omit it while preserving the
+/// authored value, or whether an unsupported feature blocks instead.
+/// </summary>
+internal enum AuthoringFeature
+{
+    MultiStage,
+    SourceVideo,
+    FrameReferences,
+    ReferenceFraming,
+    Retake,
+    MajorPrompt,
+    PromptRelay,
+    ClipAudio,
+    AudioReuse,
+    AudioDerivedDuration,
+    ControlSignalDerivedDuration,
+    StageLoras,
+    IcLora,
+    Upscale,
+}
+
+// --- Rules: what an architecture allows in a given configuration, where a capability flag is
+// too coarse. Published with typed constraints so both sides evaluate the same thresholds. ---
 
 internal enum RuleSupport
 {
@@ -182,10 +219,8 @@ internal sealed record RuleDecision(
             $"Rule '{Code}' does not publish {typeof(TConstraints).Name}.");
 }
 
-internal sealed record ArchitectureCapabilityDescriptor(
-    ArchitectureCapability Architecture,
-    ClipCapability Clip,
-    StageCapability Stage);
+// --- Boundary policy: the one rule family the backend also executes, not just publishes.
+// The executable mode projects to the published rule so the two cannot drift. ---
 
 /// <summary>
 /// One typed boundary rule used for both catalog publication and backend planning.
@@ -302,37 +337,7 @@ internal sealed class ArchitectureBoundaryPolicy
         });
 }
 
-/// <summary>
-/// Optional architecture-owned interpretation of a host ControlNet source. Common audio planning
-/// carries only the authored duration owner; it never infers IC-LoRA source semantics.
-/// </summary>
-internal interface IArchitectureControlNetSourcePlan
-{
-    int? ControlNetSourceIndex { get; }
-}
-
-/// <summary>
-/// Authored product features an architecture may or may not support. Each entry's vocabulary
-/// binding decides whether an effective-request projector can omit it while preserving the
-/// authored value, or whether an unsupported feature blocks instead.
-/// </summary>
-internal enum AuthoringFeature
-{
-    MultiStage,
-    SourceVideo,
-    FrameReferences,
-    ReferenceFraming,
-    Retake,
-    MajorPrompt,
-    PromptRelay,
-    ClipAudio,
-    AudioReuse,
-    AudioDerivedDuration,
-    ControlSignalDerivedDuration,
-    StageLoras,
-    IcLora,
-    Upscale,
-}
+// --- The catalog entry. Everything above is a part of it; everything below consumes it. ---
 
 internal sealed record VideoArchitectureDescriptor(
     ArchitectureId Id,
@@ -362,6 +367,8 @@ internal sealed record VideoArchitectureDescriptor(
     public IReadOnlyList<RuleDecision> Rules { get; init; } = [];
 
 }
+
+// --- A host model bound to the architecture that claimed it ---
 
 internal sealed record ResolvedVideoModel
 {
@@ -477,6 +484,8 @@ internal static class VideoModelEntryPolicy
     }
 }
 
+// --- Behavior contracts: backend-only, never serialized ---
+
 /// <summary>
 /// Specialized modules win model resolution over the generic host-video fallback. Ambiguity
 /// remains an error within the winning tier so registration order never silently changes policy.
@@ -486,6 +495,13 @@ internal enum ArchitectureResolutionTier
     Specialized,
     Fallback,
 }
+
+internal sealed record ArchitectureClipCompileContext(
+    int Width,
+    int Height,
+    int FramesPerSecond,
+    ArchitectureEntryMode EntryMode = ArchitectureEntryMode.ImageToVideo,
+    bool HasPreviousClipOutput = false);
 
 internal interface IVideoArchitectureModule
 {
@@ -526,13 +542,6 @@ internal interface IArchitectureEffectiveRequestProjector
         ArchitectureEffectiveRequestProjectionContext context);
 }
 
-internal sealed record ArchitectureClipCompileContext(
-    int Width,
-    int Height,
-    int FramesPerSecond,
-    ArchitectureEntryMode EntryMode = ArchitectureEntryMode.ImageToVideo,
-    bool HasPreviousClipOutput = false);
-
 /// <summary>
 /// Optional architecture validation that runs after common compilation, when every clip carries
 /// its compiled payload and its common audio/entry facts. Per-clip compilation cannot see those,
@@ -541,6 +550,15 @@ internal sealed record ArchitectureClipCompileContext(
 internal interface IArchitecturePlanValidator
 {
     IReadOnlyList<PlanDiagnostic> ValidatePlan(IReadOnlyList<ClipPlan> architectureClips);
+}
+
+/// <summary>
+/// Optional architecture-owned interpretation of a host ControlNet source. Common audio planning
+/// carries only the authored duration owner; it never infers IC-LoRA source semantics.
+/// </summary>
+internal interface IArchitectureControlNetSourcePlan
+{
+    int? ControlNetSourceIndex { get; }
 }
 
 internal interface IVideoArchitectureRegistry
