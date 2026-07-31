@@ -260,6 +260,5 @@ internal sealed class WanArchitectureModule :
         new(
             id,
             displayName,
-            entryModes,
-            []);
+            entryModes);
 }

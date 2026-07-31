@@ -105,8 +105,7 @@ internal sealed class HostVideoArchitectureModule :
                     ArchitectureEntryMode.TextToVideo,
                     ArchitectureEntryMode.ImageToVideo,
                     ArchitectureEntryMode.SourceVideo,
-                ],
-                [])
+                ])
         ],
         new(
             ArchitectureCapability.GeneratedEntry

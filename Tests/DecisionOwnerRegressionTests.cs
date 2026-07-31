@@ -589,8 +589,7 @@ public class DecisionOwnerRegressionTests
             [new(
                 profileId,
                 profileId.Value,
-                [ArchitectureEntryMode.ImageToVideo],
-                [])],
+                [ArchitectureEntryMode.ImageToVideo])],
             new(
                 ArchitectureCapability.GeneratedEntry,
                 ClipCapability.None,

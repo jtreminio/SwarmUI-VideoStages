@@ -29,8 +29,7 @@ internal static class NoneArchitecture
             new(
                 ProfileId,
                 "Decoded source only",
-                [ArchitectureEntryMode.SourceVideo],
-                [])
+                [ArchitectureEntryMode.SourceVideo])
         ],
         new(
             ArchitectureCapability.SourcedEntry | ArchitectureCapability.DecodedOutput,

@@ -231,11 +231,9 @@ internal static class ArchitectureCatalogSerializer
     private static string SerializeRuleScope(RuleScope scope) => scope switch
     {
         RuleScope.Architecture => "architecture",
-        RuleScope.ModelProfile => "model-profile",
         RuleScope.Clip => "clip",
         RuleScope.Stage => "stage",
         RuleScope.Boundary => "boundary",
-        RuleScope.Output => "output",
         _ => throw new ArgumentOutOfRangeException(nameof(scope)),
     };
 

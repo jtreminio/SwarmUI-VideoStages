@@ -338,8 +338,7 @@ public class HostVideoArchitectureTests
             [new(
                 profileId,
                 "Video",
-                [ArchitectureEntryMode.TextToVideo],
-                [])],
+                [ArchitectureEntryMode.TextToVideo])],
             new(
                 ArchitectureCapability.GeneratedEntry,
                 ClipCapability.Prompts,

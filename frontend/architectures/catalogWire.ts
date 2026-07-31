@@ -75,14 +75,7 @@ const isRuleDecision = (
         !isTrimmedNonEmpty(value.code) ||
         !isTrimmedNonEmpty(value.reason) ||
         typeof value.scope !== "string" ||
-        ![
-            "architecture",
-            "model-profile",
-            "clip",
-            "stage",
-            "boundary",
-            "output",
-        ].includes(value.scope) ||
+        !["architecture", "clip", "stage", "boundary"].includes(value.scope) ||
         (value.entityId !== null && !isTrimmedNonEmpty(value.entityId)) ||
         (value.constraints !== null && !isRecord(value.constraints))
     ) {
@@ -310,7 +303,7 @@ export const parseVideoArchitectureCatalog = (
             !isTrimmedNonEmpty(raw.label) ||
             !isCapabilities(raw.capabilities) ||
             !hasCompleteBoundaryRules(raw.boundaryRules) ||
-            !isRuleArray(raw.rules, ["architecture", "clip", "stage", "output"])
+            !isRuleArray(raw.rules, ["architecture", "clip", "stage"])
         ) {
             return null;
         }

@@ -101,11 +101,9 @@ internal enum RuleSupport
 internal enum RuleScope
 {
     Architecture,
-    ModelProfile,
     Clip,
     Stage,
     Boundary,
-    Output,
 }
 
 internal abstract record RuleConstraints;
@@ -343,8 +341,7 @@ internal interface IArchitectureControlNetSourcePlan
 internal sealed record VideoModelProfileDescriptor(
     ModelProfileId Id,
     string DisplayName,
-    IReadOnlyList<ArchitectureEntryMode> EntryModes,
-    IReadOnlyList<RuleDecision> Rules);
+    IReadOnlyList<ArchitectureEntryMode> EntryModes);
 
 /// <summary>
 /// Optional authored product features that an effective-request projector can

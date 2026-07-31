@@ -945,13 +945,11 @@ public class ArchitectureFoundationTests
                 new(
                     new("allows-image"),
                     "allows-image",
-                    [ArchitectureEntryMode.ImageToVideo],
-                    []),
+                    [ArchitectureEntryMode.ImageToVideo]),
                 new(
                     new("text-only"),
                     "text-only",
-                    [ArchitectureEntryMode.TextToVideo],
-                    []),
+                    [ArchitectureEntryMode.TextToVideo]),
             ],
             DefaultProfileId = new("allows-image"),
         };
@@ -1521,8 +1519,7 @@ public class ArchitectureFoundationTests
                 new(
                     new("profile"),
                     "profile",
-                    entryModes,
-                    []),
+                    entryModes),
             ],
         };
 
@@ -1797,8 +1794,7 @@ public class ArchitectureFoundationTests
                 new(
                     new("fake-profile"),
                     "fake-profile",
-                    entryModes ?? [ArchitectureEntryMode.ImageToVideo],
-                    []),
+                    entryModes ?? [ArchitectureEntryMode.ImageToVideo]),
             ],
             Capabilities = new(
                 architecture,
@@ -1873,16 +1869,14 @@ public class ArchitectureFoundationTests
                         [
                             ArchitectureEntryMode.TextToVideo,
                             ArchitectureEntryMode.ImageToVideo,
-                        ],
-                        []),
+                        ]),
                     new(
                         new("ltx-2.3-profile"),
                         "ltx-2.3-profile",
                         [
                             ArchitectureEntryMode.TextToVideo,
                             ArchitectureEntryMode.ImageToVideo,
-                        ],
-                        []),
+                        ]),
                 ],
             };
             VideoArchitectureDescriptor fake =
@@ -1994,8 +1988,7 @@ public class ArchitectureFoundationTests
                 [
                     ArchitectureEntryMode.TextToVideo,
                     ArchitectureEntryMode.ImageToVideo,
-                ],
-                [])],
+                ])],
             new(
                 ArchitectureCapability.GeneratedEntry | ArchitectureCapability.DecodedOutput,
                 ClipCapability.Prompts,

@@ -8,11 +8,9 @@ export type CatalogAuthoringFeature = GeneratedAuthoringFeature;
 export type CapabilitySupport = "supported" | "unsupported" | "conditional";
 export type CapabilityRuleScope =
     | "architecture"
-    | "model-profile"
     | "clip"
     | "stage"
-    | "boundary"
-    | "output";
+    | "boundary";
 
 export interface CapabilityRuleDecision {
     support: CapabilitySupport;

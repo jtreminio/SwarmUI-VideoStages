@@ -140,8 +140,7 @@ internal sealed class Ltx2ArchitectureModule :
                 ArchitectureEntryMode.ImageToVideo,
                 ArchitectureEntryMode.SourceVideo,
                 ArchitectureEntryMode.RefineVideo,
-            ],
-            []);
+            ]);
 }
 
 internal sealed record Ltx2ClipPayload(

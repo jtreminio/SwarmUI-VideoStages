@@ -302,8 +302,7 @@ public class ArchitectureRuntimeOwnershipTests
             [new(
                 profileId,
                 profileId.Value,
-                [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo],
-                [])],
+                [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.SourceVideo])],
             new(
                 ArchitectureCapability.GeneratedEntry | ArchitectureCapability.SourcedEntry,
                 ClipCapability.SourceVideo,
