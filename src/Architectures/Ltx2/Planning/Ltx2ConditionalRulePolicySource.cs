@@ -127,8 +127,10 @@ internal static class Ltx2ConditionalRulePolicySource
         if (timelineClips.Count >= HdrMinimumTimelineClips)
         {
             bool[] hdrClips = [.. timelineClips.Select(clip =>
-                clip.Architecture.Id == Ltx2ArchitectureModule.ArchitectureId
-                && HdrIcLoraPolicy.IsActive(clip))];
+                clip.ArchitecturePayload is Ltx2ClipPayload
+                {
+                    RequiresHdrFinalization: true,
+                })];
             if (hdrClips.Any(value => value) && hdrClips.Any(value => !value))
             {
                 diagnostics.Add(Error(HdrRequiresUniformTimeline));

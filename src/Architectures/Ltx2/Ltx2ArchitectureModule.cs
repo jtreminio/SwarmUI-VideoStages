@@ -149,7 +149,8 @@ internal sealed record Ltx2ClipPayload(
     AudioReusePlan AudioReuse,
     Ltx2AudioInjectionPlan AudioInjection,
     int? ControlNetSourceIndex,
-    ReferenceFramingMode ReferenceFraming) :
+    ReferenceFramingMode ReferenceFraming,
+    bool RequiresHdrFinalization) :
     IArchitectureClipPayload,
     IArchitectureControlNetSourcePlan,
     IArchitectureClipGeometryProjection

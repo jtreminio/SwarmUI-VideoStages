@@ -2,9 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Generated;
-using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
@@ -17,13 +15,10 @@ internal class HdrPostprocessApplicator(WorkflowGenerator g)
     /// SwarmSaveHDRAnimationWS node (PQ-encodes to Rec.2020 and writes a 10-bit HDR10 mp4).
     /// </summary>
     public void ApplyHdrPostprocessToFinalSaves(
-        VideoExecutionPlan plan,
         IReadOnlySet<string> finalSaveNodeIds)
     {
-        if (plan is null
-            || finalSaveNodeIds is null
-            || finalSaveNodeIds.Count == 0
-            || !plan.Clips.Any(HdrIcLoraPolicy.IsActive))
+        if (finalSaveNodeIds is null
+            || finalSaveNodeIds.Count == 0)
         {
             return;
         }

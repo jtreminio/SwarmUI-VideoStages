@@ -1,6 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -149,7 +148,11 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         public bool HasFinalizationWork(
             ArchitectureTimelineFinalizationContext context) =>
             context.Plan.Clips.All(clip => clip.Architecture.Id == ArchitectureId)
-            && context.Plan.Clips.Any(HdrIcLoraPolicy.IsActive);
+            && context.Plan.Clips.Any(clip =>
+                clip.ArchitecturePayload is Ltx2ClipPayload
+                {
+                    RequiresHdrFinalization: true,
+                });
 
         public void PrepareTimeline(
             ArchitectureTimelinePreparationContext context)
@@ -200,7 +203,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             }
             new HdrPostprocessApplicator(generator)
                 .ApplyHdrPostprocessToFinalSaves(
-                    context.Plan,
                     context.Publication.SaveNodeIds);
         }
     }
