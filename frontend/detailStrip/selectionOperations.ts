@@ -1,4 +1,4 @@
-import type { CapabilityViewResolver } from "../architectures/policy";
+import type { AuthoringTransactionSnapshot } from "../authoringSnapshot";
 import { setSelection } from "../selection";
 import { parseIntAttr } from "../trackDomUtils";
 import {
@@ -21,14 +21,11 @@ export interface DetailSelectionOperations
 
 export const createDetailSelectionOperations = (
     structuralCommit: StructuralCommit,
-    getCapabilities: () => CapabilityViewResolver,
-    getGeneratedEntryMode: () => "text-to-video" | "image-to-video" = () =>
-        "text-to-video",
+    captureAuthoringTransaction: () => AuthoringTransactionSnapshot,
 ): DetailSelectionOperations => {
     const domain = createDetailSelectionDomainOperations(
         structuralCommit,
-        getCapabilities,
-        getGeneratedEntryMode,
+        captureAuthoringTransaction,
     );
     const handleActivation = (target: Element, shiftKey: boolean): void => {
         const stageChip = target.closest(STAGE_SELECTOR);

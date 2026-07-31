@@ -1519,9 +1519,9 @@
       case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
         return clip !== void 0 && (clip.clipLengthFromAudio || clip.clipLengthFromControlNet);
       case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
-        return clip !== void 0 && clip.refs.length > 0 && (clip.sourceVideo !== null || context.globalRefineMode === true);
+        return clip !== void 0 && clip.refs.length > 0 && clip.sourceVideo !== null;
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-        return clip !== void 0 && clip.sourceVideo === null && context.globalRefineMode !== true;
+        return clip !== void 0 && clip.sourceVideo === null;
       case CONDITIONAL_RULE_CODES.uniformTimelineHdr: {
         const clips = context.timelineClips;
         const hasActiveHdr = context.hasActiveHdr;
@@ -1759,7 +1759,7 @@
     const grids = models.map(frameGridForModel);
     return grids.some((grid) => grid === null) ? { status: "unknown" } : resolveCompatibleFrameGrid(grids);
   };
-  var effectiveGridModels = (clip, modelForName, architectureForId, scope) => {
+  var effectiveGridModels = (clip, modelForName, architectureForId) => {
     const stages = clip.stages.slice(0, activeStageCount(clip));
     if (stages.length === 0) {
       return [];
@@ -1767,11 +1767,11 @@
     const firstModel = modelForName(stages[0].model);
     const clipDescriptor = firstModel?.architectureId ? architectureForId(firstModel.architectureId) : void 0;
     const clipCapabilities = clipDescriptor ? effectiveClipCapabilities(clip, clipDescriptor, modelForName) : null;
-    const retakeCanExecute = clip.retake !== null && clip.retake !== void 0 && (clip.sourceVideo != null || scope.globalRefineMode === true) && (!clipDescriptor || !clipCapabilities || architectureFeatureSupport("retake", {
+    const retakeCanExecute = clip.retake !== null && clip.retake !== void 0 && clip.sourceVideo != null && (!clipDescriptor || !clipCapabilities || architectureFeatureSupport("retake", {
       capabilities: clipCapabilities
     }));
     return stages.filter((stage, stageIndex) => {
-      if (stageIndex === 0 && clip.sourceVideo == null && scope.globalRefineMode !== true) {
+      if (stageIndex === 0 && clip.sourceVideo == null) {
         return true;
       }
       if (stage.control > 0 || stageIndex === stages.length - 1 && retakeCanExecute) {
@@ -1789,7 +1789,7 @@
       });
     }).map((stage) => stage.model);
   };
-  var resolveClipFrameGridForLookup = (clip, modelForName, architectureForId, scope = {}) => {
+  var resolveClipFrameGridForLookup = (clip, modelForName, architectureForId) => {
     const activeStages = clip.stages.slice(0, activeStageCount(clip));
     if (activeStages.length === 0) {
       return { status: "not-applicable" };
@@ -1826,18 +1826,13 @@
     )) {
       return { status: "not-applicable" };
     }
-    const models = effectiveGridModels(
-      clip,
-      modelForName,
-      architectureForId,
-      scope
-    );
+    const models = effectiveGridModels(clip, modelForName, architectureForId);
     return resolveFrameGridForModelLookup(
       models,
       (model) => modelForName(model)?.frameGrid ?? null
     );
   };
-  var resolveClipFrameGrid = (clip, catalog, scope = {}) => {
+  var resolveClipFrameGrid = (clip, catalog) => {
     if (!catalog) {
       const activeCount = activeStageCount(clip);
       return activeCount === 0 ? { status: "not-applicable" } : { status: "unknown" };
@@ -1845,12 +1840,11 @@
     return resolveClipFrameGridForLookup(
       clip,
       (model) => modelCatalogEntry(catalog, model) ?? void 0,
-      (architectureId) => architectureDescriptor(catalog, architectureId) ?? void 0,
-      scope
+      (architectureId) => architectureDescriptor(catalog, architectureId) ?? void 0
     );
   };
-  var resolvedClipFrameGrid = (clip, catalog, scope = {}) => {
-    const resolution = resolveClipFrameGrid(clip, catalog, scope);
+  var resolvedClipFrameGrid = (clip, catalog) => {
+    const resolution = resolveClipFrameGrid(clip, catalog);
     return resolution.status === "resolved" ? resolution.frameGrid : 1;
   };
 
@@ -4134,7 +4128,6 @@
       const rule = conditionalRule(descriptor.rules, code);
       if (rule && evaluateConditionalRule(rule, {
         clip,
-        globalRefineMode: scope.globalRefineMode,
         timelineClips: scope.timelineClips,
         hasActiveHdr: (target) => clipHasActiveHdrForArchitecture(
           target,
@@ -4192,8 +4185,7 @@
       const frameGridResolution = resolveClipFrameGridForLookup(
         clip,
         (model) => modelByName.get(model),
-        (architectureId2) => architectureById.get(architectureId2),
-        { globalRefineMode: scope.globalRefineMode }
+        (architectureId2) => architectureById.get(architectureId2)
       );
       return {
         architectureId,
@@ -6517,8 +6509,7 @@
         CONDITIONAL_RULE_CODES.retakeRequiresSource
       );
       if (retakeSourceRule && clip.retake && evaluateConditionalRule(retakeSourceRule, {
-        clip,
-        globalRefineMode: context.globalRefineMode
+        clip
       })) {
         diagnostics.push(
           diagnostic(
@@ -6530,8 +6521,7 @@
         );
       }
       if (retakeReferenceRule && clip.retake && evaluateConditionalRule(retakeReferenceRule, {
-        clip,
-        globalRefineMode: context.globalRefineMode
+        clip
       })) {
         diagnostics.push(
           diagnostic(
@@ -10591,7 +10581,7 @@
     );
     const diagnostics = renderDiagnosticPanel(options?.diagnostics);
     if (clips.length === 0) {
-      body.innerHTML = `${header}${diagnostics}<div class="vst-empty"><div class="vst-empty-icon" aria-hidden="true">🎬</div><div class="vst-empty-title">No clips yet.</div><div class="vst-empty-hint">Add one here — or in the VideoStages panel on the left — to start building your sequence.</div><button type="button" class="basic-button btn-primary vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button></div>`;
+      body.innerHTML = `${header}${diagnostics}<div class="vst-empty"><div class="vst-empty-icon" aria-hidden="true">🎬</div><div class="vst-empty-title">No clips yet.</div><div class="vst-empty-hint">Use the button below to start building your sequence.</div><button type="button" class="basic-button btn-primary vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button></div>`;
       wireTimelineToolbar(body, options);
       return;
     }
@@ -11874,6 +11864,7 @@
     if (firstPositions.includes("any")) {
       return {
         positions: ["any"],
+        available: true,
         bounded: false,
         supportsFirst: true,
         supportsLast: true
@@ -11887,12 +11878,16 @@
     ];
     return {
       positions,
+      available: positions.length > 0,
       bounded: positions.length > 0,
       supportsFirst,
       supportsLast
     };
   };
   var boundedReferencePositionHelp = (policy) => {
+    if (!policy.available) {
+      return "This clip does not accept frame-reference endpoints.";
+    }
     if (!policy.bounded) {
       return void 0;
     }
@@ -11905,6 +11900,9 @@
     return "This clip accepts an image only at the final frame.";
   };
   var boundedReferenceToggleHelp = (policy) => {
+    if (!policy.available) {
+      return "This clip does not publish a supported frame-reference endpoint.";
+    }
     if (!policy.bounded) {
       return void 0;
     }
@@ -11944,6 +11942,11 @@
   var buildRefSection = (ctx, clipIdx, selectedRefIdx, clips, open = selectedRefIdx !== null) => {
     const clip = clips[clipIdx];
     const decision = ctx.capabilities().forClip(clip).decision("frameReferences");
+    const endpointPolicy = referenceEndpointPolicy(
+      clip,
+      ctx.rootDefaults().modelCatalog
+    );
+    const hasSupportedEndpoint = endpointPolicy.available;
     const activeRefIdx = clip.refs.length === 0 ? null : clamp(selectedRefIdx ?? 0, 0, clip.refs.length - 1);
     const buildSection = (editorForItem) => buildRepeatingEditor({
       key: "references",
@@ -11960,10 +11963,10 @@
         onShiftDelete: () => ctx.deleteRefEntry(clipIdx, refIdx)
       })),
       add: {
-        title: decision.supported ? "Add a reference image" : decision.reason,
+        title: !decision.supported ? decision.reason : hasSupportedEndpoint ? "Add a reference image" : "The selected models do not publish a supported frame-reference endpoint.",
         label: "+ Add Reference Image",
         className: "vst-detail-add-ref",
-        disabled: !decision.supported,
+        disabled: !decision.supported || !hasSupportedEndpoint,
         onClick: () => ctx.addRefEntry(clipIdx)
       },
       remove: {
@@ -12028,10 +12031,6 @@
         clip,
         getState().fps
       );
-      const endpointPolicy = referenceEndpointPolicy(
-        clip,
-        defaults.modelCatalog
-      );
       const boundedPositions = endpointPolicy.bounded;
       const supportsFirst = endpointPolicy.supportsFirst;
       const supportsLast = endpointPolicy.supportsLast;
@@ -12059,6 +12058,7 @@
         "data-vst-focus-key",
         `ref-${editorRefIdx}-frame`
       );
+      frameInput.disabled = !hasSupportedEndpoint;
       fields.appendChild(
         buildField(
           "Attach at Frame",
@@ -12080,7 +12080,7 @@
             });
           },
           {
-            disabled: boundedPositions && currentPositionSupported && !(supportsFirst && supportsLast),
+            disabled: !hasSupportedEndpoint || boundedPositions && currentPositionSupported && !(supportsFirst && supportsLast),
             help: boundedReferenceToggleHelp(endpointPolicy) ?? (boundedPositions ? "Choose the supported clip endpoint." : "Count the attach frame backwards from the last frame instead of forward from the first — so it stays anchored to the end even if the clip length changes.")
           }
         )
@@ -12114,9 +12114,6 @@
             }
           )
         );
-      }
-      if (!decision.supported) {
-        applyPersistedCapabilityRepair(fields, decision);
       }
       return fields;
     };
@@ -14084,7 +14081,7 @@ The conversion is one undoable change.`;
     return null;
   };
   var nextAllowedReferencePosition = (refs, rawFrameMax, allowed) => {
-    if (allowed.includes("any") || allowed.length === 0) {
+    if (allowed.includes("any")) {
       const frame = nextAvailableReferenceFrame(refs, rawFrameMax);
       return frame === null ? null : { frame, fromEnd: false };
     }
@@ -14150,7 +14147,7 @@ The conversion is one undoable change.`;
     );
     return true;
   };
-  var createDetailSelectionDomainOperations = (structuralCommit, getCapabilities, getGeneratedEntryMode = () => "text-to-video") => {
+  var createDetailSelectionDomainOperations = (structuralCommit, captureAuthoringTransaction) => {
     const commitRemoval = (build, index, neighbour, fallback) => structuralCommit(
       (clips) => {
         const removal = build(clips);
@@ -14206,8 +14203,8 @@ The conversion is one undoable change.`;
     const addRefEntry = (clipIdx) => {
       structuralCommit((clips) => {
         const clip = clips[clipIdx];
-        const defaults = getRootDefaults();
-        if (!clip?.id || !getCapabilities().forClip(clip).decision("frameReferences").supported) {
+        const { capabilities, defaults } = captureAuthoringTransaction();
+        if (!clip?.id || !capabilities.forClip(clip).decision("frameReferences").supported) {
           return null;
         }
         const position = nextAllowedReferencePosition(
@@ -14250,7 +14247,8 @@ The conversion is one undoable change.`;
       structuralCommit(
         (clips) => {
           const clip = clips[clipIdx];
-          if (!clip?.id || !getCapabilities().forClip(clip).decision("promptRelay").supported) {
+          const { capabilities } = captureAuthoringTransaction();
+          if (!clip?.id || !capabilities.forClip(clip).decision("promptRelay").supported) {
             return null;
           }
           const clipDuration = Math.max(0, clip.duration || 0);
@@ -14340,7 +14338,8 @@ The conversion is one undoable change.`;
       structuralCommit(
         (clips) => {
           const clip = clips[clipIdx];
-          if (!clip?.id || clip.retake || !getCapabilities().forClip(clip).decision("retake").supported) {
+          const { capabilities } = captureAuthoringTransaction();
+          if (!clip?.id || clip.retake || !capabilities.forClip(clip).decision("retake").supported) {
             return null;
           }
           const clipDuration = Math.max(0, clip.duration || 0);
@@ -14374,7 +14373,7 @@ The conversion is one undoable change.`;
           if (!clip?.id || !clip.retake?.id) {
             return null;
           }
-          const keepRetakeSelected = getCapabilities().forClip(clip).decision("retake").supported;
+          const keepRetakeSelected = captureAuthoringTransaction().capabilities.forClip(clip).decision("retake").supported;
           return {
             command: {
               type: "retake.remove",
@@ -14396,11 +14395,12 @@ The conversion is one undoable change.`;
           if (clipIdx <= 0 || clipIdx >= clips.length) {
             return null;
           }
+          const transaction = captureAuthoringTransaction();
           clips.splice(clipIdx, 1);
           reconcileArchitectureIncomingIcLoraDrives(
             clips,
-            getGeneratedEntryMode(),
-            getCapabilities().catalog
+            transaction.generatedEntryMode,
+            transaction.capabilities.catalog
           );
           return selectionAfterRemoval(
             clipIdx,
@@ -14423,16 +14423,20 @@ The conversion is one undoable change.`;
           if (!clip) {
             return null;
           }
-          if (clip.stages.length > 0 && !getCapabilities().forClip(clip).decision("multiStage").supported) {
+          const { capabilities, defaults } = captureAuthoringTransaction();
+          if (clip.stages.length > 0 && !capabilities.forClip(clip).decision("multiStage").supported) {
             return null;
           }
           const last = clip.stages[clip.stages.length - 1] ?? null;
-          const defaults = getRootDefaults();
-          const clipArchitectureId = getCapabilities().forClip(clip).architectureId;
+          const clipArchitectureId = capabilities.forClip(clip).architectureId;
           const lockedArchitecture = clipArchitectureId === NONE_ARCHITECTURE_ID || clipArchitectureId === "unsupported" ? void 0 : clipArchitectureId;
           const stage = buildDefaultStage(
             () => defaults,
-            (values) => getDefaultStageModel(values, lockedArchitecture),
+            (values) => getDefaultStageModel(
+              values,
+              lockedArchitecture,
+              defaults.modelCatalog
+            ),
             last,
             clip.refs.length,
             clip.loras.map(
@@ -14497,6 +14501,7 @@ The conversion is one undoable change.`;
           if (!clip || clip.stages.length === 0 || stageIdx <= 0 || stageIdx >= clip.stages.length) {
             return null;
           }
+          const transaction = captureAuthoringTransaction();
           clip.stages.splice(stageIdx, 1);
           for (const entry of clip.icLoras) {
             if (entry.stage === stageIdx) {
@@ -14505,18 +14510,18 @@ The conversion is one undoable change.`;
               entry.stage -= 1;
             }
             canonicalizeArchitectureIcLoraFields(
-              getCapabilities().forClip(clip).architectureId,
+              transaction.capabilities.forClip(clip).architectureId,
               entry
             );
           }
           reconcileClipArchitectureIdentity(
             clip,
-            getCapabilities().catalog
+            transaction.capabilities.catalog
           );
           reconcileArchitectureIncomingIcLoraDrives(
             clips,
-            getGeneratedEntryMode(),
-            getCapabilities().catalog
+            transaction.generatedEntryMode,
+            transaction.capabilities.catalog
           );
           return {
             kind: "clip",
@@ -14585,31 +14590,33 @@ The conversion is one undoable change.`;
       };
     };
     const toggleClipSkip = (clipIdx) => {
-      structuralCommit(
-        (clips) => commitSkip(
+      structuralCommit((clips) => {
+        const transaction = captureAuthoringTransaction();
+        return commitSkip(
           clips,
           (working) => applyClipSkip(
             working,
             clipIdx,
-            getGeneratedEntryMode(),
-            getCapabilities().catalog
+            transaction.generatedEntryMode,
+            transaction.capabilities.catalog
           )
-        )
-      );
+        );
+      });
     };
     const toggleStageSkip = (clipIdx, stageIdx) => {
-      structuralCommit(
-        (clips) => commitSkip(
+      structuralCommit((clips) => {
+        const transaction = captureAuthoringTransaction();
+        return commitSkip(
           clips,
           (working) => applyStageSkip(
             working,
             clipIdx,
             stageIdx,
-            getCapabilities().catalog,
-            getGeneratedEntryMode()
+            transaction.capabilities.catalog,
+            transaction.generatedEntryMode
           )
-        )
-      );
+        );
+      });
     };
     return {
       addRefEntry,
@@ -14631,11 +14638,10 @@ The conversion is one undoable change.`;
   var STAGE_SELECTOR = "[data-vst-stage]";
   var MODEL_SELECTOR = "[data-vst-model]";
   var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
-  var createDetailSelectionOperations = (structuralCommit, getCapabilities, getGeneratedEntryMode = () => "text-to-video") => {
+  var createDetailSelectionOperations = (structuralCommit, captureAuthoringTransaction) => {
     const domain = createDetailSelectionDomainOperations(
       structuralCommit,
-      getCapabilities,
-      getGeneratedEntryMode
+      captureAuthoringTransaction
     );
     const handleActivation = (target, shiftKey) => {
       const stageChip = target.closest(STAGE_SELECTOR);
@@ -14752,8 +14758,7 @@ The conversion is one undoable change.`;
     });
     const selectionOperations = createDetailSelectionOperations(
       draftQueue.structuralCommit,
-      () => captureAuthoringTransactionSnapshot().capabilities,
-      () => captureAuthoringTransactionSnapshot().generatedEntryMode
+      captureAuthoringTransactionSnapshot
     );
     const context = {
       commit: draftQueue.commit,
@@ -15640,7 +15645,10 @@ The conversion is one undoable change.`;
     let boundBody = null;
     let unregister = null;
     const canEditReferences = (clip) => getCapabilities?.().forClip(clip).decision("frameReferences").supported ?? true;
-    const referencePositions = (clip, modelCatalog = getRootDefaults().modelCatalog) => referenceEndpointPolicy(clip, modelCatalog).positions;
+    const referencePositions = (clip, modelCatalog = getRootDefaults().modelCatalog) => referenceEndpointPolicy(
+      clip,
+      getCapabilities?.().catalog ?? modelCatalog
+    ).positions;
     const findArrow = (clipIdx, refIdx) => boundBody?.querySelector(
       `.vst-region[data-clip-idx="${clipIdx}"] .vst-key[data-ref-idx="${refIdx}"]`
     ) ?? null;
@@ -15674,7 +15682,7 @@ The conversion is one undoable change.`;
           );
           const allowed = referencePositions(clip, defaults.modelCatalog);
           const ref = buildDefaultRef();
-          if (allowed.length === 0 || allowed.includes("any")) {
+          if (allowed.includes("any")) {
             ref.frame = clamp(
               Math.round(frame),
               REF_FRAME_MIN,
@@ -15829,6 +15837,14 @@ The conversion is one undoable change.`;
       const fps = documentFps(getState());
       const defaults = getRootDefaults();
       const frameMax = getReferenceFrameMax(() => defaults, clip, fps);
+      const allowedPositions = referencePositions(
+        clip,
+        defaults.modelCatalog
+      );
+      if (allowedPositions.length === 0) {
+        me.preventDefault();
+        return claimOnly();
+      }
       me.preventDefault();
       return dragSession(body, {
         clipIdx,
@@ -15844,7 +15860,7 @@ The conversion is one undoable change.`;
         fps,
         frameGrid: resolvedClipFrameGrid(clip, defaults.modelCatalog),
         frameMax,
-        allowedPositions: referencePositions(clip, defaults.modelCatalog),
+        allowedPositions,
         fromEnd: ref.fromEnd === true,
         sourceRevision: currentRevision()
       });

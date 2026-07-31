@@ -5,9 +5,9 @@ import {
 import { buildArchitectureRetargetPlan } from "../architectures/catalog";
 import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity";
 import { NONE_ARCHITECTURE_ID } from "../architectures/none/identity";
-import type { CapabilityViewResolver } from "../architectures/policy";
 import { referenceEndpointPolicy } from "../architectures/referenceEndpoints";
 import type { ArchitectureModelCatalog } from "../architectures/types";
+import type { AuthoringTransactionSnapshot } from "../authoringSnapshot";
 import {
     clamp,
     PROMPT_WINDOW_DEFAULT_DURATION,
@@ -27,7 +27,7 @@ import {
     getReferenceFrameMax,
 } from "../normalization";
 import { nextAllowedReferencePosition } from "../referenceAuthoring";
-import { getDefaultStageModel, getRootDefaults } from "../rootDefaults";
+import { getDefaultStageModel } from "../rootDefaults";
 import { selectionAfterRemoval, setSelection } from "../selection";
 import type { Clip, TimelineSelection } from "../types";
 import { roundToTenth } from "../utils";
@@ -144,9 +144,7 @@ export interface DetailSelectionDomainOperations {
 
 export const createDetailSelectionDomainOperations = (
     structuralCommit: StructuralCommit,
-    getCapabilities: () => CapabilityViewResolver,
-    getGeneratedEntryMode: () => "text-to-video" | "image-to-video" = () =>
-        "text-to-video",
+    captureAuthoringTransaction: () => AuthoringTransactionSnapshot,
 ): DetailSelectionDomainOperations => {
     const commitRemoval = (
         build: (clips: Clip[]) => {
@@ -215,10 +213,10 @@ export const createDetailSelectionDomainOperations = (
     const addRefEntry = (clipIdx: number): void => {
         structuralCommit((clips) => {
             const clip = clips[clipIdx];
-            const defaults = getRootDefaults();
+            const { capabilities, defaults } = captureAuthoringTransaction();
             if (
                 !clip?.id ||
-                !getCapabilities().forClip(clip).decision("frameReferences")
+                !capabilities.forClip(clip).decision("frameReferences")
                     .supported
             ) {
                 return null;
@@ -264,9 +262,10 @@ export const createDetailSelectionDomainOperations = (
         structuralCommit(
             (clips) => {
                 const clip = clips[clipIdx];
+                const { capabilities } = captureAuthoringTransaction();
                 if (
                     !clip?.id ||
-                    !getCapabilities().forClip(clip).decision("promptRelay")
+                    !capabilities.forClip(clip).decision("promptRelay")
                         .supported
                 ) {
                     return null;
@@ -364,11 +363,11 @@ export const createDetailSelectionDomainOperations = (
         structuralCommit(
             (clips) => {
                 const clip = clips[clipIdx];
+                const { capabilities } = captureAuthoringTransaction();
                 if (
                     !clip?.id ||
                     clip.retake ||
-                    !getCapabilities().forClip(clip).decision("retake")
-                        .supported
+                    !capabilities.forClip(clip).decision("retake").supported
                 ) {
                     return null;
                 }
@@ -404,8 +403,8 @@ export const createDetailSelectionDomainOperations = (
                 if (!clip?.id || !clip.retake?.id) {
                     return null;
                 }
-                const keepRetakeSelected = getCapabilities()
-                    .forClip(clip)
+                const keepRetakeSelected = captureAuthoringTransaction()
+                    .capabilities.forClip(clip)
                     .decision("retake").supported;
                 return {
                     command: {
@@ -432,11 +431,12 @@ export const createDetailSelectionDomainOperations = (
                 if (clipIdx <= 0 || clipIdx >= clips.length) {
                     return null;
                 }
+                const transaction = captureAuthoringTransaction();
                 clips.splice(clipIdx, 1);
                 reconcileArchitectureIncomingIcLoraDrives(
                     clips,
-                    getGeneratedEntryMode(),
-                    getCapabilities().catalog,
+                    transaction.generatedEntryMode,
+                    transaction.capabilities.catalog,
                 );
                 return selectionAfterRemoval(
                     clipIdx,
@@ -460,17 +460,17 @@ export const createDetailSelectionDomainOperations = (
                 if (!clip) {
                     return null;
                 }
+                const { capabilities, defaults } =
+                    captureAuthoringTransaction();
                 if (
                     clip.stages.length > 0 &&
-                    !getCapabilities().forClip(clip).decision("multiStage")
-                        .supported
+                    !capabilities.forClip(clip).decision("multiStage").supported
                 ) {
                     return null;
                 }
                 const last = clip.stages[clip.stages.length - 1] ?? null;
-                const defaults = getRootDefaults();
                 const clipArchitectureId =
-                    getCapabilities().forClip(clip).architectureId;
+                    capabilities.forClip(clip).architectureId;
                 const lockedArchitecture =
                     clipArchitectureId === NONE_ARCHITECTURE_ID ||
                     clipArchitectureId === "unsupported"
@@ -479,7 +479,11 @@ export const createDetailSelectionDomainOperations = (
                 const stage = buildDefaultStage(
                     () => defaults,
                     (values) =>
-                        getDefaultStageModel(values, lockedArchitecture),
+                        getDefaultStageModel(
+                            values,
+                            lockedArchitecture,
+                            defaults.modelCatalog,
+                        ),
                     last,
                     clip.refs.length,
                     clip.loras.map((entry) =>
@@ -555,6 +559,7 @@ export const createDetailSelectionDomainOperations = (
                 ) {
                     return null;
                 }
+                const transaction = captureAuthoringTransaction();
                 clip.stages.splice(stageIdx, 1);
                 for (const entry of clip.icLoras) {
                     if (entry.stage === stageIdx) {
@@ -563,18 +568,18 @@ export const createDetailSelectionDomainOperations = (
                         entry.stage -= 1;
                     }
                     canonicalizeArchitectureIcLoraFields(
-                        getCapabilities().forClip(clip).architectureId,
+                        transaction.capabilities.forClip(clip).architectureId,
                         entry,
                     );
                 }
                 reconcileClipArchitectureIdentity(
                     clip,
-                    getCapabilities().catalog,
+                    transaction.capabilities.catalog,
                 );
                 reconcileArchitectureIncomingIcLoraDrives(
                     clips,
-                    getGeneratedEntryMode(),
-                    getCapabilities().catalog,
+                    transaction.generatedEntryMode,
+                    transaction.capabilities.catalog,
                 );
                 return {
                     kind: "clip",
@@ -670,30 +675,32 @@ export const createDetailSelectionDomainOperations = (
     };
 
     const toggleClipSkip = (clipIdx: number): void => {
-        structuralCommit((clips) =>
-            commitSkip(clips, (working) =>
+        structuralCommit((clips) => {
+            const transaction = captureAuthoringTransaction();
+            return commitSkip(clips, (working) =>
                 applyClipSkip(
                     working,
                     clipIdx,
-                    getGeneratedEntryMode(),
-                    getCapabilities().catalog,
+                    transaction.generatedEntryMode,
+                    transaction.capabilities.catalog,
                 ),
-            ),
-        );
+            );
+        });
     };
 
     const toggleStageSkip = (clipIdx: number, stageIdx: number): void => {
-        structuralCommit((clips) =>
-            commitSkip(clips, (working) =>
+        structuralCommit((clips) => {
+            const transaction = captureAuthoringTransaction();
+            return commitSkip(clips, (working) =>
                 applyStageSkip(
                     working,
                     clipIdx,
                     stageIdx,
-                    getCapabilities().catalog,
-                    getGeneratedEntryMode(),
+                    transaction.capabilities.catalog,
+                    transaction.generatedEntryMode,
                 ),
-            ),
-        );
+            );
+        });
     };
 
     return {

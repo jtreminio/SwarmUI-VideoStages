@@ -121,8 +121,7 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
     });
     const selectionOperations = createDetailSelectionOperations(
         draftQueue.structuralCommit,
-        () => captureAuthoringTransactionSnapshot().capabilities,
-        () => captureAuthoringTransactionSnapshot().generatedEntryMode,
+        captureAuthoringTransactionSnapshot,
     );
 
     const context: DetailStripContext = {

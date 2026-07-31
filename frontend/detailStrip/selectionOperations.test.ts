@@ -11,6 +11,7 @@ import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
     testArchitectureCatalogDto,
+    testRootDefaults,
 } from "../__test_helpers__/architectureFixtures";
 import {
     hdrIcLoraFixture,
@@ -23,6 +24,8 @@ import {
 } from "../__test_helpers__/dom";
 import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
 import { createCapabilityViewResolver } from "../architectures/policy";
+import type { ArchitectureModelCatalog } from "../architectures/types";
+import type { AuthoringTransactionSnapshot } from "../authoringSnapshot";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
 import {
@@ -44,6 +47,19 @@ type StructuralOutcome =
     | "render"
     | null
     | StructuralCommand;
+
+const authoringTransaction = (
+    catalog: ArchitectureModelCatalog = testArchitectureCatalog(),
+): AuthoringTransactionSnapshot => ({
+    catalogStatus: {
+        status: "ready",
+        catalog: testArchitectureCatalogDto(),
+        error: null,
+    },
+    defaults: testRootDefaults(catalog),
+    capabilities: createCapabilityViewResolver(catalog),
+    generatedEntryMode: "text-to-video",
+});
 
 describe("detail structural stage operations", () => {
     beforeEach(async () => {
@@ -119,15 +135,17 @@ describe("detail structural stage operations", () => {
                 apply([clip]);
             },
         );
+        const captureTransaction = jest.fn(() => authoringTransaction());
         const operations = createDetailSelectionOperations(
             structuralCommit,
-            () => createCapabilityViewResolver(testArchitectureCatalog()),
+            captureTransaction,
         );
 
         operations.addStage(0);
 
         expect(clip.stages).toHaveLength(3);
         expect(clip.stages[2].skipped).toBe(true);
+        expect(captureTransaction).toHaveBeenCalledTimes(1);
     });
 
     it("allows legacy skipped first items to be restored, but not skipped again", () => {
@@ -169,7 +187,7 @@ describe("detail structural stage operations", () => {
         );
         const operations = createDetailSelectionOperations(
             structuralCommit,
-            () => createCapabilityViewResolver(testArchitectureCatalog()),
+            () => authoringTransaction(),
         );
 
         operations.deleteStage(0, 0);
@@ -201,7 +219,7 @@ describe("detail structural stage operations", () => {
         );
         const operations = createDetailSelectionOperations(
             structuralCommit,
-            () => createCapabilityViewResolver(models),
+            () => authoringTransaction(models),
         );
 
         operations.addStage(0);
@@ -232,7 +250,7 @@ describe("detail structural stage operations", () => {
         );
         const operations = createDetailSelectionOperations(
             structuralCommit,
-            () => createCapabilityViewResolver(testArchitectureCatalog()),
+            () => authoringTransaction(),
         );
 
         operations.addStage(0);
@@ -321,7 +339,7 @@ describe("detail structural stage operations", () => {
         };
         const operations = createDetailSelectionOperations(
             structuralCommit,
-            () => createCapabilityViewResolver(testArchitectureCatalog()),
+            () => authoringTransaction(),
         );
 
         operations.addStage(0);

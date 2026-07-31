@@ -6,7 +6,7 @@ import {
     it,
     jest,
 } from "@jest/globals";
-import type { CapabilityViewResolver } from "./architectures/policy";
+import { captureAuthoringTransactionSnapshot } from "./authoringSnapshot";
 import { createDetailSelectionOperations } from "./detailStrip/selectionOperations";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import {
@@ -79,7 +79,7 @@ describe("applySelectionHighlight owns the clip highlight", () => {
         // the linking click handler never sees them.
         const operations = createDetailSelectionOperations(
             jest.fn(),
-            () => ({}) as CapabilityViewResolver,
+            captureAuthoringTransactionSnapshot,
         );
         body.addEventListener(
             "click",
