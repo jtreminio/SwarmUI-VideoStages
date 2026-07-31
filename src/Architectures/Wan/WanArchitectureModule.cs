@@ -68,8 +68,7 @@ internal sealed class WanArchitectureModule :
         new(
             ArchitectureCapability.GeneratedEntry
                 | ArchitectureCapability.SourcedEntry
-                | ArchitectureCapability.MultiStage
-                | ArchitectureCapability.DecodedOutput,
+                | ArchitectureCapability.MultiStage,
             ClipCapability.Prompts
                 | ClipCapability.SourceVideo
                 | ClipCapability.References,

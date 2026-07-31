@@ -6,7 +6,6 @@ export const CAPABILITY_WIRE_NAMES = {
         sourcedEntry: "sourced-entry",
         multiStage: "multi-stage",
         nativeAudio: "native-audio",
-        decodedOutput: "decoded-output",
     },
     clip: {
         sourceVideo: "source-video",

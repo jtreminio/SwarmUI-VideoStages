@@ -68,7 +68,6 @@ internal static class ArchitectureFeatureVocabulary
         For(ArchitectureCapability.SourcedEntry, "sourced-entry"),
         For(ArchitectureCapability.MultiStage, "multi-stage"),
         For(ArchitectureCapability.NativeAudio, "native-audio"),
-        For(ArchitectureCapability.DecodedOutput, "decoded-output"),
         For(ClipCapability.SourceVideo, "source-video"),
         For(ClipCapability.Prompts, "prompts"),
         For(ClipCapability.PromptRelay, "prompt-relay"),

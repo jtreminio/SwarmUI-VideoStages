@@ -320,7 +320,6 @@ describe("architecture catalog wire contract", () => {
                     code: "future-rule",
                     reason: "Unknown behavior",
                     scope: "clip",
-                    entityId: null,
                     constraints: {},
                 },
                 {},

@@ -44,8 +44,7 @@ internal sealed class Ltx2ArchitectureModule :
             ArchitectureCapability.GeneratedEntry
                 | ArchitectureCapability.SourcedEntry
                 | ArchitectureCapability.MultiStage
-                | ArchitectureCapability.NativeAudio
-                | ArchitectureCapability.DecodedOutput,
+                | ArchitectureCapability.NativeAudio,
             ClipCapability.SourceVideo
                 | ClipCapability.Prompts
                 | ClipCapability.PromptRelay

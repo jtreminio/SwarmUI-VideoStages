@@ -127,11 +127,6 @@ public class RealArchitectureContractTests
         Assert.True(
             descriptor.Capabilities.Architecture.HasFlag(
                 ArchitectureCapability.GeneratedEntry));
-        Assert.True(
-            descriptor.Capabilities.Architecture.HasFlag(
-                ArchitectureCapability.DecodedOutput));
-        Assert.True(descriptor.Capabilities.Architecture.HasFlag(
-            ArchitectureCapability.DecodedOutput));
     }
 
     [Fact]

@@ -122,7 +122,7 @@ internal sealed class VideoArchitectureExecutionHost
         foreach (IArchitectureHostPhaseParticipant participant in providers
             .OfType<IArchitectureHostPhaseParticipant>())
         {
-            participant.ExecuteHostPhase(new(phase, scope, _plan, _rootOwner));
+            participant.ExecuteHostPhase(new(phase, _plan, _rootOwner));
         }
     }
 

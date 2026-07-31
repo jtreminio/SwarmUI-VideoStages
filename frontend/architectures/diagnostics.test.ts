@@ -664,7 +664,6 @@ describe("architecture diagnostics", () => {
             code: "wan22.boundary.continue.unsupported",
             reason: "WAN 2.2 only supports cut boundaries.",
             scope: "boundary",
-            entityId: null,
             constraints: null,
         };
         const staleWanClip = (boundaryOut: Clip["boundaryOut"]) =>
@@ -880,7 +879,6 @@ describe("architecture diagnostics", () => {
                 code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
                 reason: "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.",
                 scope: "stage",
-                entityId: null,
                 constraints: { exclusiveMinimumControl: 0 },
             },
         ];

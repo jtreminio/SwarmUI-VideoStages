@@ -19,7 +19,6 @@ const rule = (
     code,
     reason: code,
     scope: "clip",
-    entityId: null,
     constraints,
 });
 

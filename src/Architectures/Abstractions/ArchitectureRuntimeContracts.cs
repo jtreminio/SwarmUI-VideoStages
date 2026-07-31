@@ -180,6 +180,10 @@ internal enum ArchitectureHostPhase
     ApplyRootAudioMaskDimensions,
 }
 
+/// <summary>
+/// Who receives a host phase. The execution host routes on this before it builds the phase
+/// context; participants are selected by scope rather than told their own scope.
+/// </summary>
 internal enum ArchitectureHostPhaseScope
 {
     RootOwnerOnly,
@@ -204,7 +208,6 @@ internal static class ArchitectureHostPhasePolicy
 
 internal sealed record ArchitectureHostPhaseContext(
     ArchitectureHostPhase Phase,
-    ArchitectureHostPhaseScope Scope,
     VideoExecutionPlan Plan,
     ArchitectureId? RootOwnerArchitectureId);
 

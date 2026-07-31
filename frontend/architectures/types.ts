@@ -17,7 +17,6 @@ export interface CapabilityRuleDecision {
     code: string;
     reason: string;
     scope: CapabilityRuleScope;
-    entityId: string | null;
     constraints: Record<string, unknown> | null;
 }
 

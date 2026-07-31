@@ -268,7 +268,6 @@ describe("catalog-backed authoring policy", () => {
                 code: "audio.reuse.requires_three_stages",
                 reason: "Three active stages are required.",
                 scope: "clip",
-                entityId: null,
                 constraints: { minimumActiveStages: 3 },
             },
             {
@@ -276,7 +275,6 @@ describe("catalog-backed authoring policy", () => {
                 code: "prompt-relay-dynamic-length-unsupported",
                 reason: "A fixed frame count is required.",
                 scope: "clip",
-                entityId: null,
                 constraints: { requiresFixedFrameCount: true },
             },
         ];
@@ -574,7 +572,6 @@ describe("catalog-backed authoring policy", () => {
                 code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
                 reason: "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.",
                 scope: "stage",
-                entityId: null,
                 constraints: { exclusiveMinimumControl: 0 },
             },
         ];

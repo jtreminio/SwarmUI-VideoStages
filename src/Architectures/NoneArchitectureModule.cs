@@ -26,7 +26,7 @@ internal static class NoneArchitecture
         ],
         [ArchitectureEntryMode.SourceVideo],
         new(
-            ArchitectureCapability.SourcedEntry | ArchitectureCapability.DecodedOutput,
+            ArchitectureCapability.SourcedEntry,
             ClipCapability.SourceVideo
                 | ClipCapability.AudioSources
                 | ClipCapability.AudioSegments,

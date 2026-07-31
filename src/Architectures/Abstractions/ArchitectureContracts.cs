@@ -55,7 +55,6 @@ internal enum ArchitectureCapability
     SourcedEntry = 1 << 1,
     MultiStage = 1 << 2,
     NativeAudio = 1 << 3,
-    DecodedOutput = 1 << 4,
 }
 
 [Flags]
@@ -176,7 +175,6 @@ internal sealed record RuleDecision(
     string Code,
     string Reason,
     RuleScope Scope,
-    string EntityId = null,
     RuleConstraints Constraints = null)
 {
     public static RuleDecision Supported(
@@ -184,7 +182,7 @@ internal sealed record RuleDecision(
         string reason,
         RuleScope scope,
         RuleConstraints constraints = null) =>
-        new(RuleSupport.Supported, code, reason, scope, Constraints: constraints);
+        new(RuleSupport.Supported, code, reason, scope, constraints);
 
     public static RuleDecision Unsupported(string code, string reason, RuleScope scope) =>
         new(RuleSupport.Unsupported, code, reason, scope);
@@ -194,7 +192,7 @@ internal sealed record RuleDecision(
         string reason,
         RuleScope scope,
         RuleConstraints constraints = null) =>
-        new(RuleSupport.Conditional, code, reason, scope, Constraints: constraints);
+        new(RuleSupport.Conditional, code, reason, scope, constraints);
 
     /// <summary>
     /// The published constraints, typed. Evaluators read their thresholds from here so a rule's

@@ -496,8 +496,7 @@
       generatedEntry: "generated-entry",
       sourcedEntry: "sourced-entry",
       multiStage: "multi-stage",
-      nativeAudio: "native-audio",
-      decodedOutput: "decoded-output"
+      nativeAudio: "native-audio"
     },
     clip: {
       sourceVideo: "source-video",
@@ -989,9 +988,8 @@
       "code",
       "reason",
       "scope",
-      "entityId",
       "constraints"
-    ]) || typeof value.support !== "string" || !["supported", "unsupported", "conditional"].includes(value.support) || !isTrimmedNonEmpty(value.code) || !isTrimmedNonEmpty(value.reason) || typeof value.scope !== "string" || !["architecture", "clip", "stage", "boundary"].includes(value.scope) || value.entityId !== null && !isTrimmedNonEmpty(value.entityId) || value.constraints !== null && !isRecord2(value.constraints)) {
+    ]) || typeof value.support !== "string" || !["supported", "unsupported", "conditional"].includes(value.support) || !isTrimmedNonEmpty(value.code) || !isTrimmedNonEmpty(value.reason) || typeof value.scope !== "string" || !["architecture", "clip", "stage", "boundary"].includes(value.scope) || value.constraints !== null && !isRecord2(value.constraints)) {
       return false;
     }
     const scope = value.scope;
@@ -1007,7 +1005,7 @@
     return true;
   };
   var isKnownExecutableRule = (value) => {
-    if (value.support !== "conditional" || value.entityId !== null || !isRecord2(value.constraints)) {
+    if (value.support !== "conditional" || !isRecord2(value.constraints)) {
       return false;
     }
     const constraints = value.constraints;
@@ -1037,7 +1035,7 @@
     return false;
   };
   var isBoundaryRule = (value) => {
-    if (!isRuleDecision(value, ["boundary"]) || value.entityId !== null) {
+    if (!isRuleDecision(value, ["boundary"])) {
       return false;
     }
     if (value.support !== "conditional") {

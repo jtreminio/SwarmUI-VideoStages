@@ -315,7 +315,6 @@ describe("stage architecture model filtering", () => {
                 code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
                 reason,
                 scope: "stage",
-                entityId: null,
                 constraints: { exclusiveMinimumControl: 0 },
             },
         ];

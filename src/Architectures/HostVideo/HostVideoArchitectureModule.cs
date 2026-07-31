@@ -104,8 +104,7 @@ internal sealed class HostVideoArchitectureModule :
         new(
             ArchitectureCapability.GeneratedEntry
                 | ArchitectureCapability.SourcedEntry
-                | ArchitectureCapability.MultiStage
-                | ArchitectureCapability.DecodedOutput,
+                | ArchitectureCapability.MultiStage,
             ClipCapability.Prompts | ClipCapability.SourceVideo,
             StageCapability.ImageInput
                 | StageCapability.VideoInput

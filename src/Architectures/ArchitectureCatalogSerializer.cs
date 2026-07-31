@@ -50,7 +50,6 @@ internal static class ArchitectureCatalogSerializer
         ["code"] = decision.Code,
         ["reason"] = decision.Reason,
         ["scope"] = SerializeRuleScope(decision.Scope),
-        ["entityId"] = decision.EntityId,
         ["constraints"] = decision.Constraints is null
             ? null
             : SerializeRuleConstraints(decision.Constraints),

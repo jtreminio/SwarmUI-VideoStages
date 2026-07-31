@@ -12,12 +12,7 @@ import type { RootDefaults } from "../types";
 export const testArchitectureCapabilities = (
     overrides: Partial<ArchitectureCapabilities> = {},
 ): ArchitectureCapabilities => ({
-    architecture: [
-        "generated-entry",
-        "sourced-entry",
-        "multi-stage",
-        "decoded-output",
-    ],
+    architecture: ["generated-entry", "sourced-entry", "multi-stage"],
     clip: [
         "source-video",
         "prompts",
@@ -66,7 +61,6 @@ export const testArchitectureCatalog = (
                     code: "ltx2.boundary.cut",
                     reason: "Cut is supported.",
                     scope: "boundary",
-                    entityId: null,
                     constraints: null,
                 },
                 continue: {
@@ -74,7 +68,6 @@ export const testArchitectureCatalog = (
                     code: "ltx2.boundary.continue",
                     reason: "Continue requires matching architectures.",
                     scope: "boundary",
-                    entityId: null,
                     constraints: {
                         sameArchitecture: true,
                         targetRequiresGeneratedEntry: true,
@@ -92,7 +85,6 @@ export const testArchitectureCatalog = (
                     code: "ltx2.boundary.crossfade",
                     reason: "Crossfade requires matching architectures.",
                     scope: "boundary",
-                    entityId: null,
                     constraints: {
                         sameArchitecture: true,
                         targetRequiresGeneratedEntry: false,
@@ -112,7 +104,6 @@ export const testArchitectureCatalog = (
                     code: "audio.reuse.requires_three_stages",
                     reason: "Audio reuse needs at least three active stages: generate, capture, then reuse.",
                     scope: "clip",
-                    entityId: null,
                     constraints: {
                         minimumActiveStages: 3,
                         failureSeverity: "warning",
@@ -124,7 +115,6 @@ export const testArchitectureCatalog = (
                     code: "prompt-relay-dynamic-length-unsupported",
                     reason: "Prompt relay requires a fixed frame count.",
                     scope: "clip",
-                    entityId: null,
                     constraints: { requiresFixedFrameCount: true },
                 },
                 {
@@ -132,7 +122,6 @@ export const testArchitectureCatalog = (
                     code: "retake-frame-references-unsupported",
                     reason: "Retake and frame references are mutually exclusive.",
                     scope: "stage",
-                    entityId: null,
                     constraints: {
                         mutuallyExclusive: ["retake", "frameReferences"],
                     },
@@ -142,7 +131,6 @@ export const testArchitectureCatalog = (
                     code: "retake-source-required",
                     reason: "Retake requires source footage.",
                     scope: "clip",
-                    entityId: null,
                     constraints: {
                         requiresAnyEntryMode: ["source-video", "refine-video"],
                     },
@@ -152,7 +140,6 @@ export const testArchitectureCatalog = (
                     code: "mixed-hdr-timeline-unsupported",
                     reason: "HDR must be uniform across the timeline.",
                     scope: "architecture",
-                    entityId: null,
                     constraints: {
                         uniformTimelineFeature: "hdr",
                         minimumTimelineClips: 2,
@@ -256,7 +243,7 @@ export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
     id: "none",
     label: "Decoded source only",
     capabilities: testArchitectureCapabilities({
-        architecture: ["sourced-entry", "decoded-output"],
+        architecture: ["sourced-entry"],
         clip: ["source-video", "audio-sources", "audio-segments"],
         stage: [],
         upscaleModes: [],
@@ -269,7 +256,6 @@ export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
             code: "none.boundary.cut",
             reason: "Decoded sourced clips can be joined with a hard cut.",
             scope: "boundary",
-            entityId: null,
             constraints: null,
         },
         continue: {
@@ -277,7 +263,6 @@ export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
             code: "none.boundary.continue.unsupported",
             reason: "Sourced-only clips do not support continuation.",
             scope: "boundary",
-            entityId: null,
             constraints: null,
         },
         crossfade: {
@@ -285,7 +270,6 @@ export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
             code: "none.boundary.crossfade.unsupported",
             reason: "Sourced-only clips do not support crossfade.",
             scope: "boundary",
-            entityId: null,
             constraints: null,
         },
     },
@@ -313,7 +297,6 @@ export const fakeArchitectureCatalog = (
                     code: "test.boundary.cut",
                     reason: "Only cuts are supported.",
                     scope: "boundary",
-                    entityId: null,
                     constraints: null,
                 },
                 continue: {
@@ -321,7 +304,6 @@ export const fakeArchitectureCatalog = (
                     code: "test.boundary.continue.unsupported",
                     reason: "Continue is unsupported.",
                     scope: "boundary",
-                    entityId: null,
                     constraints: null,
                 },
                 crossfade: {
@@ -329,7 +311,6 @@ export const fakeArchitectureCatalog = (
                     code: "test.boundary.crossfade.unsupported",
                     reason: "Crossfade is unsupported.",
                     scope: "boundary",
-                    entityId: null,
                     constraints: null,
                 },
             },

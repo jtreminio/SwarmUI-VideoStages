@@ -762,8 +762,7 @@ public class ArchitectureFoundationTests
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
             architecture: ArchitectureCapability.GeneratedEntry
-                | ArchitectureCapability.MultiStage
-                | ArchitectureCapability.DecodedOutput,
+                | ArchitectureCapability.MultiStage,
             stage: StageCapability.ImageInput);
         FakeRegistry registry = new(fakeDescriptor: descriptor);
         ClipSpec clip = GeneratedClip(
@@ -929,8 +928,7 @@ public class ArchitectureFoundationTests
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
             architecture: ArchitectureCapability.GeneratedEntry
-                | ArchitectureCapability.MultiStage
-                | ArchitectureCapability.DecodedOutput,
+                | ArchitectureCapability.MultiStage,
             entryModes:
             [
                 ArchitectureEntryMode.ImageToVideo,
@@ -1600,7 +1598,7 @@ public class ArchitectureFoundationTests
         Assert.Null(none["profiles"]);
         Assert.Null(none["extras"]);
         Assert.Equal(
-            ["sourced-entry", "decoded-output"],
+            ["sourced-entry"],
             none["capabilities"]["architecture"].Values<string>());
         Assert.Equal(
             ["source-video", "audio-sources", "audio-segments"],
@@ -1628,7 +1626,6 @@ public class ArchitectureFoundationTests
                 "sourced-entry",
                 "multi-stage",
                 "native-audio",
-                "decoded-output",
             ],
             capabilities["architecture"].Values<string>());
         Assert.Equal(
@@ -1655,7 +1652,7 @@ public class ArchitectureFoundationTests
         Assert.Equal("boundary", crossfadeRule["scope"]);
         Assert.Equal("conditional", crossfadeRule["support"]);
         Assert.Equal("ltx2.boundary.crossfade", crossfadeRule["code"]);
-        Assert.Null(crossfadeRule["entityId"].Value<string>());
+        Assert.Null(crossfadeRule["entityId"]);
         Assert.True(crossfadeRule["constraints"]["sameArchitecture"].Value<bool>());
         Assert.Equal(8, crossfadeRule["constraints"]["frameStep"]);
         Assert.Equal(8, crossfadeRule["constraints"]["minFrames"]);
@@ -1773,7 +1770,7 @@ public class ArchitectureFoundationTests
 
     private static VideoArchitectureDescriptor FakeCapabilityDescriptor(
         ArchitectureCapability architecture =
-            ArchitectureCapability.GeneratedEntry | ArchitectureCapability.DecodedOutput,
+            ArchitectureCapability.GeneratedEntry,
         StageCapability stage =
             StageCapability.ImageInput | StageCapability.VideoInput,
         IReadOnlyList<ArchitectureEntryMode> entryModes = null) =>
@@ -1958,7 +1955,7 @@ public class ArchitectureFoundationTests
                 ArchitectureEntryMode.ImageToVideo,
             ],
             new(
-                ArchitectureCapability.GeneratedEntry | ArchitectureCapability.DecodedOutput,
+                ArchitectureCapability.GeneratedEntry,
                 ClipCapability.Prompts,
                 StageCapability.ImageInput | StageCapability.VideoInput),
             new ArchitectureBoundaryPolicy(

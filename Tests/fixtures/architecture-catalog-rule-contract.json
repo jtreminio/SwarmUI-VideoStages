@@ -7,8 +7,7 @@
         "generated-entry",
         "sourced-entry",
         "multi-stage",
-        "native-audio",
-        "decoded-output"
+        "native-audio"
       ],
       "clip": [
         "source-video",
@@ -60,7 +59,6 @@
         "code": "ltx2.boundary.cut",
         "reason": "Decoded LTX clips can be joined with a hard cut.",
         "scope": "boundary",
-        "entityId": null,
         "constraints": null
       },
       "continue": {
@@ -68,7 +66,6 @@
         "code": "ltx2.boundary.continue",
         "reason": "Continue requires adjacent LTX clips and a compatible generated target.",
         "scope": "boundary",
-        "entityId": null,
         "constraints": {
           "sameArchitecture": true,
           "frameStep": 8,
@@ -86,7 +83,6 @@
         "code": "ltx2.boundary.crossfade",
         "reason": "Crossfade currently uses the LTX-owned decoded transition path.",
         "scope": "boundary",
-        "entityId": null,
         "constraints": {
           "sameArchitecture": true,
           "frameStep": 8,
@@ -106,7 +102,6 @@
         "code": "audio.reuse.requires_three_stages",
         "reason": "Audio reuse needs at least three active stages: generate, capture, then reuse.",
         "scope": "clip",
-        "entityId": null,
         "constraints": {
           "minimumActiveStages": 3,
           "failureSeverity": "warning",
@@ -118,7 +113,6 @@
         "code": "prompt-relay-dynamic-length-unsupported",
         "reason": "Prompt relay requires a fixed frame count and cannot be combined with audio-owned or ControlNet-owned clip length.",
         "scope": "clip",
-        "entityId": null,
         "constraints": {
           "requiresFixedFrameCount": true
         }
@@ -128,7 +122,6 @@
         "code": "retake-frame-references-unsupported",
         "reason": "Retake and frame references are mutually exclusive because guide merging would overwrite the retake mask.",
         "scope": "stage",
-        "entityId": null,
         "constraints": {
           "mutuallyExclusive": [
             "retake",
@@ -141,7 +134,6 @@
         "code": "retake-source-required",
         "reason": "Retake requires a sourced clip or a global Refine Video source.",
         "scope": "clip",
-        "entityId": null,
         "constraints": {
           "requiresAnyEntryMode": [
             "source-video",
@@ -154,7 +146,6 @@
         "code": "mixed-hdr-timeline-unsupported",
         "reason": "HDR IC-LoRA activation must be uniform across the complete timeline.",
         "scope": "architecture",
-        "entityId": null,
         "constraints": {
           "uniformTimelineFeature": "hdr",
           "minimumTimelineClips": 2

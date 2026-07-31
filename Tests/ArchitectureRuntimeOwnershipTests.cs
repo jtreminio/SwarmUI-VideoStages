@@ -43,7 +43,6 @@ public class ArchitectureRuntimeOwnershipTests
 
         Assert.Empty(sourced.HostPhases);
         ArchitectureHostPhaseContext rootPhase = Assert.Single(future.HostPhases);
-        Assert.Equal(ArchitectureHostPhaseScope.RootOwnerOnly, rootPhase.Scope);
         Assert.Equal(new ArchitectureId("future-arch"), rootPhase.RootOwnerArchitectureId);
         Assert.Same(future.Resizer, host.GetRootMediaResizer());
     }
@@ -64,7 +63,6 @@ public class ArchitectureRuntimeOwnershipTests
 
         ArchitectureHostPhaseContext sourcedPhase = Assert.Single(sourced.HostPhases);
         ArchitectureHostPhaseContext futurePhase = Assert.Single(future.HostPhases);
-        Assert.Equal(ArchitectureHostPhaseScope.AllActiveArchitectures, sourcedPhase.Scope);
         Assert.Equal(new ArchitectureId("future-arch"), sourcedPhase.RootOwnerArchitectureId);
         Assert.Equal(sourcedPhase, futurePhase);
     }

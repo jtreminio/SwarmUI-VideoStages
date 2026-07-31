@@ -2134,7 +2134,6 @@ describe("createTimelineDetailStrip", () => {
                 code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
                 reason: "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.",
                 scope: "stage",
-                entityId: null,
                 constraints: { exclusiveMinimumControl: 0 },
             },
         ];
@@ -2200,7 +2199,6 @@ describe("createTimelineDetailStrip", () => {
                 code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
                 reason,
                 scope: "stage",
-                entityId: null,
                 constraints: { exclusiveMinimumControl: 0 },
             },
         ];
