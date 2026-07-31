@@ -1262,8 +1262,8 @@ public class ArchitectureFoundationTests
         List<string> calls = [];
         ArchitectureRuntimeSessionFactoryRegistry runtimes = new(
         [
-            new ExclusiveFinalizerFactory(new("ltx2"), calls),
-            new ExclusiveFinalizerFactory(new("fake"), calls),
+            new RecordingFinalizerFactory(new("ltx2"), calls),
+            new RecordingFinalizerFactory(new("fake"), calls),
         ],
         new VideoExecutionPlanContext(plan));
 
@@ -1272,6 +1272,31 @@ public class ArchitectureFoundationTests
 
         Assert.Contains("Multiple architectures", error.Message);
         Assert.Empty(calls);
+    }
+
+    [Fact]
+    public void Runtime_registry_evaluates_finalization_ownership_once()
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10, "fake-model")) with
+        {
+            AuthoredArchitectureHint = "fake",
+            AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
+        };
+        VideoStagesSpec spec = Spec(clip);
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            ArchitecturePlanResolver.Resolve(spec, new FakeRegistry()));
+        List<string> calls = [];
+        RecordingFinalizerFactory finalizer = new(new("fake"), calls);
+        ArchitectureRuntimeSessionFactoryRegistry runtimes = new(
+            [finalizer],
+            new VideoExecutionPlanContext(plan));
+
+        runtimes.FinalizeTimeline(new(plan, Publication: null));
+
+        Assert.Equal(1, finalizer.WorkChecks);
+        Assert.Equal(["fake"], calls);
     }
 
     [Fact]
@@ -2156,17 +2181,20 @@ public class ArchitectureFoundationTests
             new RecordingSessionFactory(architectureId, calls, contexts);
     }
 
-    private sealed class ExclusiveFinalizerFactory(
+    private sealed class RecordingFinalizerFactory(
         ArchitectureId architectureId,
         ICollection<string> calls) : IArchitectureGenerationSessionFactory
     {
         public ArchitectureId ArchitectureId => architectureId;
 
-        public ArchitectureTimelineFinalizerScope FinalizerScope =>
-            ArchitectureTimelineFinalizerScope.WholeTimelineExclusive;
+        internal int WorkChecks { get; private set; }
 
         public bool HasFinalizationWork(
-            ArchitectureTimelineFinalizationContext context) => true;
+            ArchitectureTimelineFinalizationContext context)
+        {
+            WorkChecks++;
+            return true;
+        }
 
         public IVideoGenerationSession CreateSession(
             ArchitectureTimelineSessionContext context) =>

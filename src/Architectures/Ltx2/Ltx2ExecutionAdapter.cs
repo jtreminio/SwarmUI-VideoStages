@@ -142,9 +142,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         public IArchitectureBoundaryAssembler BoundaryAssembler { get; } =
             new Ltx2BoundaryAssembler();
 
-        public ArchitectureTimelineFinalizerScope FinalizerScope =>
-            ArchitectureTimelineFinalizerScope.WholeTimelineExclusive;
-
         public bool HasFinalizationWork(
             ArchitectureTimelineFinalizationContext context) =>
             context.Plan.Clips.All(clip => clip.Architecture.Id == ArchitectureId)
@@ -196,10 +193,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         public void FinalizeTimeline(
             ArchitectureTimelineFinalizationContext context)
         {
-            if (!HasFinalizationWork(context))
-            {
-                return;
-            }
             new HdrPostprocessApplicator(generator)
                 .ApplyHdrPostprocessToFinalSaves(
                     context.Publication.SaveNodeIds);

@@ -129,21 +129,12 @@ internal sealed record ArchitectureTimelineFinalizationContext(
     VideoExecutionPlan Plan,
     OutputPublication Publication);
 
-internal enum ArchitectureTimelineFinalizerScope
-{
-    None,
-    WholeTimelineExclusive,
-}
-
 /// <summary>Creates one timeline-scoped session for one architecture.</summary>
 internal interface IArchitectureGenerationSessionFactory
 {
     ArchitectureId ArchitectureId { get; }
 
     IArchitectureBoundaryAssembler BoundaryAssembler => null;
-
-    ArchitectureTimelineFinalizerScope FinalizerScope =>
-        ArchitectureTimelineFinalizerScope.None;
 
     bool HasFinalizationWork(ArchitectureTimelineFinalizationContext context) => false;
 
