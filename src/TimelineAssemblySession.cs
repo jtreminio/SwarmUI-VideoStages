@@ -10,13 +10,6 @@ namespace VideoStages;
 /// sequence can explicitly downgrade a boundary when a required runtime artifact is unavailable.
 /// Graph construction remains in <see cref="MultiClipParallelMerger"/>.
 /// </summary>
-internal sealed class TimelineAssembler(
-    WorkflowGenerator g,
-    MultiClipParallelMerger merger)
-{
-    internal TimelineAssemblySession Begin(VideoExecutionPlan plan) => new(g, merger, plan);
-}
-
 internal sealed class TimelineAssemblySession
 {
     private readonly WorkflowGenerator _generator;

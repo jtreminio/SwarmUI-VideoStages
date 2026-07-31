@@ -1,3 +1,4 @@
+using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
 using VideoStages.Planning;
@@ -8,7 +9,8 @@ namespace VideoStages;
 /// Owns the timeline loop while focused collaborators execute root setup and individual clips.
 /// </summary>
 internal sealed class StageSequenceRunner(
-    TimelineAssembler timelineAssembler,
+    WorkflowGenerator generator,
+    MultiClipParallelMerger merger,
     ArchitectureRuntimeSessionFactoryRegistry runtimeFactories)
 {
     public void Run(
@@ -21,7 +23,7 @@ internal sealed class StageSequenceRunner(
         IReadOnlyList<ClipPlan> plannedClips = plan.Clips;
         bool parallelMultiClip = plannedClips.Count > 1;
 
-        TimelineAssemblySession assembly = timelineAssembler.Begin(plan);
+        TimelineAssemblySession assembly = new(generator, merger, plan);
         using ArchitectureRuntimeDispatcher runtimeDispatcher =
             runtimeFactories.CreateDispatcher(new(
                 plan,

@@ -165,7 +165,8 @@ internal sealed class VideoArchitectureExecutionHost
             _generator,
             runtimeFactories.BoundaryAssemblers);
         StageSequenceRunner sequence = new(
-            new TimelineAssembler(_generator, merger),
+            _generator,
+            merger,
             runtimeFactories);
         new VideoStagesCoordinator(
             _generator,
