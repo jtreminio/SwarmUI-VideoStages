@@ -24,8 +24,7 @@ import {
 import { snapDimensions } from "../dimensionSnap";
 import { activeDocumentDimensionMultiple } from "../documentDimensionSnap";
 import { getVideoStagesHostBridge } from "../host";
-import { getState } from "../persistence";
-import type { TimelineSelection } from "../types";
+import type { TimelineSelection, VideoStagesConfig } from "../types";
 import type { DetailStripContext } from "./context";
 
 const SETTINGS_INHERIT = "inherit";
@@ -85,12 +84,12 @@ const scheduleCoreFpsWrite = (value: number): void => {
 
 export const buildSettingsBody = (
     ctx: DetailStripContext,
+    state: VideoStagesConfig,
     _selection: Extract<TimelineSelection, { kind: "none" | "audio-track" }> = {
         kind: "none",
     },
 ): HTMLElement => {
-    const state = getState();
-    const defaults = ctx.rootDefaults();
+    const defaults = ctx.authoring().defaults;
     const core = {
         width: defaults.width,
         height: defaults.height,

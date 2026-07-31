@@ -1,6 +1,6 @@
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
 import { buildStaticSection } from "../detailWidgets";
-import type { Clip, TimelineSelection } from "../types";
+import type { TimelineSelection, VideoStagesConfig } from "../types";
 import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import { buildClipColumn, buildClipSkipAction } from "./clipBasics";
 import { buildClipLorasSection } from "./clipLorasPanel";
@@ -21,16 +21,17 @@ export const buildClipBody = (
         TimelineSelection,
         { kind: "clip" | "ref" | "ic-lora" | "retake" }
     >,
-    clips: Clip[],
+    state: VideoStagesConfig,
 ): HTMLElement => {
+    const clips = state.clips;
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-clip-body";
     const { clipIdx } = selection;
     const stageIdx = selection.kind === "clip" ? selection.stageIdx : 0;
     const clip = clips[clipIdx];
     body.classList.toggle("vst-detail-clip-skipped", clip.skipped === true);
-    const defaults = context.rootDefaults();
-    const capabilityView = context.capabilities().forClip(clip);
+    const { capabilities, defaults } = context.authoring();
+    const capabilityView = capabilities.forClip(clip);
     const referenceFramingState = capabilityView.authoringState(
         "referenceFraming",
         clip.refFraming !== "crop",
@@ -120,6 +121,7 @@ export const buildClipBody = (
             clipIdx,
             selection.kind === "ref" ? selection.refIdx : null,
             clips,
+            state.fps,
             selection.kind === "ref",
         ),
     );

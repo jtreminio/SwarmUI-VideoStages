@@ -18,8 +18,7 @@ import {
     audioTrackIndicesForClipWindow,
     clipTimelineWindow,
 } from "../documentQueries";
-import { getState } from "../persistence";
-import type { Clip, TimelineSelection } from "../types";
+import type { Clip, TimelineSelection, VideoStagesConfig } from "../types";
 import { buildAudioTracksPanel } from "./audioTracksPanel";
 import {
     applyPersistedCapabilityRepair,
@@ -32,11 +31,12 @@ import type { DetailStripContext } from "./context";
 export const buildAudioBody = (
     ctx: DetailStripContext,
     sel: Extract<TimelineSelection, { kind: "audio" }>,
-    clips: Clip[],
+    state: VideoStagesConfig,
 ): HTMLElement => {
+    const clips = state.clips;
     const { clipIdx } = sel;
     const clip = clips[clipIdx];
-    const capabilityView = ctx.capabilities().forClip(clip);
+    const capabilityView = ctx.authoring().capabilities.forClip(clip);
     const audioCapabilityDecision = capabilityView.decision("clipAudio");
     const reuseDecision = capabilityView.decision("audioReuse");
     const durationDecision = capabilityView.decision("audioDerivedDuration");
@@ -325,7 +325,6 @@ export const buildAudioBody = (
         }).section,
     );
 
-    const state = getState();
     body.appendChild(
         buildAudioTracksPanel(
             ctx,

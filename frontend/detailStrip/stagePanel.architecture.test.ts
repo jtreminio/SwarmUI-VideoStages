@@ -3,6 +3,7 @@ import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectu
 import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
+    testAuthoringTransactionSnapshot,
     testRootDefaults,
 } from "../__test_helpers__/architectureFixtures";
 import {
@@ -18,7 +19,6 @@ import {
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
 import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
 import { CONDITIONAL_RULE_CODES } from "../architectures/conditionalRules";
-import { createCapabilityViewResolver } from "../architectures/policy";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
@@ -98,9 +98,8 @@ const context = (
     getDockEl: () => null,
     getSettingsMode: () => null,
     setSettingsMode: jest.fn(),
-    capabilities: () => createCapabilityViewResolver(models),
-    rootDefaults: () => testRootDefaults(models),
-    generatedEntryMode: () => generatedEntryMode,
+    authoring: () =>
+        testAuthoringTransactionSnapshot(models, generatedEntryMode),
 });
 
 const modelOptions = (column: HTMLElement): HTMLOptionElement[] => {

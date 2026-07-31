@@ -1,3 +1,4 @@
+import { createCapabilityViewResolver } from "../architectures/policy";
 import type {
     ArchitectureCapabilities,
     ArchitectureCatalogEntryDto,
@@ -5,6 +6,7 @@ import type {
     VideoArchitectureCatalogDto,
     VideoArchitectureId,
 } from "../architectures/types";
+import type { AuthoringTransactionSnapshot } from "../authoringSnapshot";
 import type { RootDefaults } from "../types";
 
 export const testArchitectureCapabilities = (
@@ -388,4 +390,18 @@ export const testRootDefaults = (
     cfgScaleMin: 0,
     cfgScaleMax: 10,
     cfgScaleStep: 0.5,
+});
+
+export const testAuthoringTransactionSnapshot = (
+    modelCatalog: ArchitectureModelCatalog = testArchitectureCatalog(),
+    generatedEntryMode: "text-to-video" | "image-to-video" = "text-to-video",
+): AuthoringTransactionSnapshot => ({
+    catalogStatus: {
+        status: "ready",
+        catalog: testArchitectureCatalogDto(modelCatalog),
+        error: null,
+    },
+    defaults: testRootDefaults(modelCatalog),
+    capabilities: createCapabilityViewResolver(modelCatalog),
+    generatedEntryMode,
 });

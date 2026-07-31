@@ -15,7 +15,6 @@ import {
     buildStaticSection,
     type OptionSpec,
 } from "../detailWidgets";
-import { getState } from "../persistence";
 import {
     formatOverlapSeconds,
     formatSecondsTenth,
@@ -26,15 +25,20 @@ import {
     resolveTimelineTiming,
 } from "../timelineTiming";
 import { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "../timelineView";
-import type { BoundaryOut, Clip, TimelineSelection } from "../types";
+import type {
+    BoundaryOut,
+    TimelineSelection,
+    VideoStagesConfig,
+} from "../types";
 import { buildCapabilityNotice } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
 export const buildBoundaryBody = (
     ctx: DetailStripContext,
     sel: Extract<TimelineSelection, { kind: "boundary" }>,
-    clips: Clip[],
+    state: VideoStagesConfig,
 ): HTMLElement => {
+    const clips = state.clips;
     const { leftClipIdx } = sel;
     const body = document.createElement("div");
     body.className = "vst-detail-body";
@@ -42,9 +46,9 @@ export const buildBoundaryBody = (
     fields.className = "vst-detail-form-body vst-detail-boundary";
     const clip = clips[leftClipIdx];
     const value: BoundaryOut = clip?.boundaryOut ?? "cut";
-    const capability = ctx.capabilities().forBoundaryIndex(clips, leftClipIdx);
+    const capabilities = ctx.authoring().capabilities;
+    const capability = capabilities.forBoundaryIndex(clips, leftClipIdx);
     const seam = executableBoundaryForLeftClip(clips, leftClipIdx);
-    const state = getState();
     const fps = Math.round(safeFps(state.fps));
     const carryTargetHasStage =
         capability.rightClipIdx !== null &&
@@ -174,11 +178,10 @@ export const buildBoundaryBody = (
             executable.map((clipIdx) => clips[clipIdx]),
             fps,
             (_left, position, mode) =>
-                ctx
-                    .capabilities()
+                capabilities
                     .forBoundaryIndex(clips, executable[position])
                     .overlapConstraints(mode),
-            (target) => ctx.capabilities().forClip(target).frameGrid,
+            (target) => capabilities.forClip(target).frameGrid,
         );
         return plan.fallback ? 0 : (plan.overlaps[seam.position] ?? 0);
     };
@@ -242,7 +245,7 @@ export const buildBoundaryBody = (
     fields.appendChild(info);
 
     if (seam !== null) {
-        const timing = resolveTimelineTiming(clips, fps, ctx.capabilities());
+        const timing = resolveTimelineTiming(clips, fps, capabilities);
         const impact = boundaryImpactForLeftClip(timing, leftClipIdx);
         if (impact) {
             const leftFrames = timing.clipFrames[impact.leftIdx] ?? 0;

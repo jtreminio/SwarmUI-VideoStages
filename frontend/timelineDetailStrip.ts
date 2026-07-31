@@ -15,7 +15,7 @@ import {
 import { renderDetailShell } from "./detailStrip/renderShell";
 import { createDetailSelectionOperations } from "./detailStrip/selectionOperations";
 import { closeTimelineAuthoringSettingsModal } from "./detailStrip/settingsModal";
-import { getClips } from "./persistence";
+import { getState } from "./persistence";
 import {
     getSelection,
     isSameSelection,
@@ -75,7 +75,7 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         if (!selection || !dockEl || !renderedSelection) {
             return;
         }
-        const clips = getClips();
+        const clips = getState().clips;
         const renderedStageParams = dockEl.querySelector<HTMLElement>(
             "[data-vst-stage-loras-supported]",
         );
@@ -132,15 +132,8 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         buildClampedNumber: draftQueue.buildClampedNumber,
         structuralCommit: draftQueue.structuralCommit,
         render,
-        capabilities: () =>
-            activeSnapshot?.capabilities ??
-            captureAuthoringTransactionSnapshot().capabilities,
-        rootDefaults: () =>
-            activeSnapshot?.defaults ??
-            captureAuthoringTransactionSnapshot().defaults,
-        generatedEntryMode: () =>
-            activeSnapshot?.generatedEntryMode ??
-            captureAuthoringTransactionSnapshot().generatedEntryMode,
+        authoring: () =>
+            activeSnapshot ?? captureAuthoringTransactionSnapshot(),
         addRefEntry: selectionOperations.addRefEntry,
         deleteRefEntry: selectionOperations.deleteRefEntry,
         addPromptWindow: selectionOperations.addPromptWindow,
@@ -194,9 +187,14 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
             rendering = true;
             draftQueue.markCurrentSource();
             const detail = ensureDetail();
-            const clips = getClips();
+            const state = getState();
+            const clips = state.clips;
             const rawSelection = getSelection();
-            const selection = clampDetailSelection(rawSelection, clips);
+            const selection = clampDetailSelection(
+                rawSelection,
+                clips,
+                state.audioTracks,
+            );
             if (!isSameSelection(rawSelection, selection)) {
                 setSelection(selection);
                 return;
@@ -208,7 +206,7 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
                 detail,
                 context,
                 focus,
-                clips,
+                state,
                 selection,
                 revealSelection,
             });

@@ -55,7 +55,10 @@ const buildMajorPromptSection = (
         flattenContent: true,
         className: "vst-detail-prompt-major",
     });
-    const decision = ctx.capabilities().forClip(clip).decision("majorPrompt");
+    const decision = ctx
+        .authoring()
+        .capabilities.forClip(clip)
+        .decision("majorPrompt");
     if (!decision.supported) {
         applyPersistedCapabilityRepair(built.section, decision);
         if (clip.prompt.trim()) {
@@ -87,7 +90,10 @@ const buildRelayPromptSection = (
     open: boolean,
 ): HTMLElement => {
     const windows = clip.promptWindows ?? [];
-    const decision = ctx.capabilities().forClip(clip).decision("promptRelay");
+    const decision = ctx
+        .authoring()
+        .capabilities.forClip(clip)
+        .decision("promptRelay");
     const activeWindowIdx =
         windows.length === 0
             ? null

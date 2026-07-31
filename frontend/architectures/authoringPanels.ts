@@ -121,7 +121,9 @@ export const buildArchitectureIcLorasSection = (
     selectedEntryIdx: number | null = null,
     open = selectedEntryIdx !== null,
 ): HTMLElement => {
-    const architectureId = context.capabilities().forClip(clip).architectureId;
+    const architectureId = context
+        .authoring()
+        .capabilities.forClip(clip).architectureId;
     return (
         panels
             .get(architectureId)

@@ -9575,10 +9575,11 @@
   };
 
   // frontend/detailStrip/audioPanel.ts
-  var buildAudioBody = (ctx, sel, clips) => {
+  var buildAudioBody = (ctx, sel, state) => {
+    const clips = state.clips;
     const { clipIdx } = sel;
     const clip = clips[clipIdx];
-    const capabilityView = ctx.capabilities().forClip(clip);
+    const capabilityView = ctx.authoring().capabilities.forClip(clip);
     const audioCapabilityDecision = capabilityView.decision("clipAudio");
     const reuseDecision = capabilityView.decision("audioReuse");
     const durationDecision = capabilityView.decision("audioDerivedDuration");
@@ -9820,7 +9821,6 @@
         flattenContent: true
       }).section
     );
-    const state = getState();
     body.appendChild(
       buildAudioTracksPanel(
         ctx,
@@ -10526,7 +10526,8 @@
   };
 
   // frontend/detailStrip/boundaryPanel.ts
-  var buildBoundaryBody = (ctx, sel, clips) => {
+  var buildBoundaryBody = (ctx, sel, state) => {
+    const clips = state.clips;
     const { leftClipIdx } = sel;
     const body = document.createElement("div");
     body.className = "vst-detail-body";
@@ -10534,9 +10535,9 @@
     fields.className = "vst-detail-form-body vst-detail-boundary";
     const clip = clips[leftClipIdx];
     const value = clip?.boundaryOut ?? "cut";
-    const capability = ctx.capabilities().forBoundaryIndex(clips, leftClipIdx);
+    const capabilities = ctx.authoring().capabilities;
+    const capability = capabilities.forBoundaryIndex(clips, leftClipIdx);
     const seam = executableBoundaryForLeftClip(clips, leftClipIdx);
-    const state = getState();
     const fps = Math.round(safeFps(state.fps));
     const carryTargetHasStage = capability.rightClipIdx !== null && activeStageCount(clips[capability.rightClipIdx]) > 0;
     const carryAudioActive = clip?.boundaryOutCarryAudio === true && carryTargetHasStage;
@@ -10645,8 +10646,8 @@
       const plan = crossfadePlanForClips(
         executable.map((clipIdx) => clips[clipIdx]),
         fps,
-        (_left, position, mode) => ctx.capabilities().forBoundaryIndex(clips, executable[position]).overlapConstraints(mode),
-        (target) => ctx.capabilities().forClip(target).frameGrid
+        (_left, position, mode) => capabilities.forBoundaryIndex(clips, executable[position]).overlapConstraints(mode),
+        (target) => capabilities.forClip(target).frameGrid
       );
       return plan.fallback ? 0 : plan.overlaps[seam.position] ?? 0;
     };
@@ -10693,7 +10694,7 @@
     }
     fields.appendChild(info);
     if (seam !== null) {
-      const timing = resolveTimelineTiming(clips, fps, ctx.capabilities());
+      const timing = resolveTimelineTiming(clips, fps, capabilities);
       const impact = boundaryImpactForLeftClip(timing, leftClipIdx);
       if (impact) {
         const leftFrames = timing.clipFrames[impact.leftIdx] ?? 0;
@@ -10850,7 +10851,8 @@
 
   // frontend/architectures/ltx2/icLoraPanel.ts
   var buildIcLorasSection = (context, clip, clipIdx, defaults, selectedEntryIdx = null, open = selectedEntryIdx !== null) => {
-    const clipCapabilities = context.capabilities().forClip(clip);
+    const authoring = context.authoring();
+    const clipCapabilities = authoring.capabilities.forClip(clip);
     const icLoraDecision = clipCapabilities.decision("icLora");
     const entryIdx = clip.icLoras.length === 0 ? null : Math.max(
       0,
@@ -10906,7 +10908,7 @@
               const defaultPreset = findIcLoraPreset(
                 IC_LORA_DEFAULT_PRESET_ID
               );
-              if (!target || !defaultPreset || !context.capabilities().forClip(target).decision("icLora").supported) {
+              if (!target || !defaultPreset || !authoring.capabilities.forClip(target).decision("icLora").supported) {
                 return null;
               }
               const defaultContract = icLoraDriveMediaContract(defaultPreset);
@@ -11045,7 +11047,7 @@
                 targetClip,
                 clipIdx,
                 clips,
-                context.generatedEntryMode()
+                authoring.generatedEntryMode
               )) {
                 target.driveSource = IC_LORA_SOURCE_UPLOAD;
               }
@@ -11215,7 +11217,7 @@
                 targetClip,
                 clipIdx,
                 clips,
-                context.generatedEntryMode()
+                authoring.generatedEntryMode
               )) {
                 target.driveSource = IC_LORA_SOURCE_UPLOAD;
               }
@@ -11271,7 +11273,7 @@
                   targetClip,
                   clipIdx,
                   clips,
-                  context.generatedEntryMode()
+                  authoring.generatedEntryMode
                 )) {
                   target.driveSource = IC_LORA_SOURCE_UPLOAD;
                 }
@@ -11295,7 +11297,7 @@
             clip,
             clipIdx,
             currentClips,
-            context.generatedEntryMode()
+            authoring.generatedEntryMode
           );
           const sourceSelect = buildOptionSelect(
             [
@@ -11491,7 +11493,7 @@
     }).section;
   };
   var buildArchitectureIcLorasSection = (context, clip, clipIdx, defaults, selectedEntryIdx = null, open = selectedEntryIdx !== null) => {
-    const architectureId = context.capabilities().forClip(clip).architectureId;
+    const architectureId = context.authoring().capabilities.forClip(clip).architectureId;
     return panels.get(architectureId)?.buildIcLorasSection(
       context,
       clip,
@@ -11567,7 +11569,7 @@
         context.debouncedCommit("duration", (clips) => {
           const target = clips[clipIdx];
           if (target && !lengthDerived2) {
-            const defaults = context.rootDefaults();
+            const defaults = context.authoring().defaults;
             applyClipDurationResize(target, value, () => defaults);
           }
         });
@@ -11644,7 +11646,7 @@
       (value) => !selectedNames.has(value)
     );
     const applySupportedStageWeights = (target, loraIdx, supportedWeight) => {
-      const capabilities = context.capabilities();
+      const capabilities = context.authoring().capabilities;
       for (const stage of target.stages) {
         if (!capabilities.forStage(target, stage).decision("stageLoras").supported) {
           stage.loraWeights[loraIdx] = 0;
@@ -11841,13 +11843,11 @@
   var resolveImageSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, REF_SOURCE_REFINER);
 
   // frontend/detailStrip/refPanel.ts
-  var buildRefSection = (ctx, clipIdx, selectedRefIdx, clips, open = selectedRefIdx !== null) => {
+  var buildRefSection = (ctx, clipIdx, selectedRefIdx, clips, fps, open = selectedRefIdx !== null) => {
     const clip = clips[clipIdx];
-    const decision = ctx.capabilities().forClip(clip).decision("frameReferences");
-    const endpointPolicy = referenceEndpointPolicy(
-      clip,
-      ctx.rootDefaults().modelCatalog
-    );
+    const { capabilities, defaults } = ctx.authoring();
+    const decision = capabilities.forClip(clip).decision("frameReferences");
+    const endpointPolicy = referenceEndpointPolicy(clip, defaults.modelCatalog);
     const hasSupportedEndpoint = endpointPolicy.available;
     const activeRefIdx = clip.refs.length === 0 ? null : clamp(selectedRefIdx ?? 0, 0, clip.refs.length - 1);
     const buildSection = (editorForItem) => buildRepeatingEditor({
@@ -11927,12 +11927,7 @@
         }
         fields.appendChild(preview);
       }
-      const defaults = ctx.rootDefaults();
-      const frameMax = getReferenceFrameMax(
-        () => defaults,
-        clip,
-        getState().fps
-      );
+      const frameMax = getReferenceFrameMax(() => defaults, clip, fps);
       const boundedPositions = endpointPolicy.bounded;
       const supportsFirst = endpointPolicy.supportsFirst;
       const supportsLast = endpointPolicy.supportsLast;
@@ -12025,7 +12020,7 @@
   // frontend/detailStrip/retakePanel.ts
   var buildRetakeSection = (context, clip, clipIdx, open = false) => {
     const retake = clip.retake;
-    const decision = context.capabilities().forClip(clip).decision("retake");
+    const decision = context.authoring().capabilities.forClip(clip).decision("retake");
     const col = document.createElement("div");
     col.className = "vst-detail-col vst-detail-retake-col";
     const buildSection = () => {
@@ -12265,7 +12260,7 @@
       const state = store2.getState();
       const clips = state.clips;
       const target = findClipByStableId(clips, operation.clipId);
-      const capabilities = context.capabilities();
+      const { capabilities, defaults } = context.authoring();
       if (!target || !capabilities.forClip(target).decision("sourceVideo").supported) {
         return;
       }
@@ -12280,7 +12275,6 @@
         lengthSeconds
       };
       reconcileClipArchitectureIdentity(target, capabilities.catalog);
-      const defaults = context.rootDefaults();
       applyClipDurationResize(
         target,
         Math.max(CLIP_DURATION_MIN, lengthSeconds),
@@ -12316,15 +12310,16 @@
         if (!target?.sourceVideo) {
           return null;
         }
+        const transaction = context.authoring();
         target.sourceVideo = null;
         reconcileClipArchitectureIdentity(
           target,
-          context.capabilities().catalog
+          transaction.capabilities.catalog
         );
         reconcileArchitectureIncomingIcLoraDrives(
           clips,
-          context.generatedEntryMode(),
-          context.capabilities().catalog
+          transaction.generatedEntryMode,
+          transaction.capabilities.catalog
         );
         return "render";
       });
@@ -12356,7 +12351,7 @@
     col.appendChild(info);
     const fileLimit = source.durationSeconds > 0 ? source.durationSeconds : source.startSeconds + source.lengthSeconds;
     const syncClipDuration = (target) => {
-      const defaults = context.rootDefaults();
+      const defaults = context.authoring().defaults;
       applyClipDurationResize(
         target,
         Math.max(
@@ -12489,12 +12484,12 @@ The conversion is one undoable change.`;
           clip,
           target,
           defaults.modelCatalog,
-          context.generatedEntryMode()
+          context.authoring().generatedEntryMode
         ) !== null : modelSupportsStageEntry(
           model,
           clip,
           stageIdx,
-          context.generatedEntryMode()
+          context.authoring().generatedEntryMode
         );
         return preservesClipLock && supportsRetargetedRoles ? [{ value: entry.value, label: entry.label }] : [];
       }
@@ -12527,7 +12522,7 @@ The conversion is one undoable change.`;
             clip,
             plan,
             defaults.modelCatalog,
-            context.generatedEntryMode()
+            context.authoring().generatedEntryMode
           );
           if (!conversion) {
             modelSelect.value = stage.model;
@@ -12623,7 +12618,7 @@ The conversion is one undoable change.`;
     debouncedCommit
   }) => {
     if (clip.refs.length > 0) {
-      const refDecision = context.capabilities().forClip(clip).decision("frameReferences");
+      const refDecision = context.authoring().capabilities.forClip(clip).decision("frameReferences");
       appendSectionHeader(fields, "Reference Strengths");
       const setRefHover = (refIdx, on) => {
         context.getBoundBody()?.querySelector(
@@ -12716,7 +12711,7 @@ The conversion is one undoable change.`;
     const applicableIcLoras = clip.icLoras.map((entry, entryIdx) => ({ entry, entryIdx })).filter(({ entry }) => entry.stage < 0 || entry.stage === stageIdx);
     if (applicableIcLoras.length === 0) return;
     appendSectionHeader(fields, "IC-LoRA Guide Strengths");
-    const capabilityView = context.capabilities().forClip(clip);
+    const capabilityView = context.authoring().capabilities.forClip(clip);
     const icDecision = capabilityView.decision("icLora");
     const icGroup = document.createDocumentFragment();
     applicableIcLoras.forEach(({ entry, entryIdx }) => {
@@ -12947,7 +12942,7 @@ The conversion is one undoable change.`;
     column.className = "vst-detail-fields vst-detail-params";
     const sourcedStage0 = stageIdx === 0 && !!clip.sourceVideo && stage.skipped !== true;
     const isRefine = stageIdx >= 1 || sourcedStage0;
-    const stageCapabilities = context.capabilities().forStage(clip, stage);
+    const stageCapabilities = context.authoring().capabilities.forStage(clip, stage);
     if (clip.loras.length > 0) {
       column.dataset.vstStageLorasSupported = `${stageCapabilities.decision("stageLoras").supported}`;
     }
@@ -13012,8 +13007,9 @@ The conversion is one undoable change.`;
 
   // frontend/detailStrip/stageRail.ts
   var buildStageRail = (context, clip, clipIdx, stageIdx, editorForStage, open = true) => {
-    const canAdd = clip.stages.length === 0 || context.capabilities().forClip(clip).decision("multiStage").supported;
-    const addTitle = canAdd ? clip.stages.length === 0 ? "Add the first stage and choose its architecture" : "Add a refine stage" : context.capabilities().forClip(clip).decision("multiStage").reason;
+    const multiStage = context.authoring().capabilities.forClip(clip).decision("multiStage");
+    const canAdd = clip.stages.length === 0 || multiStage.supported;
+    const addTitle = canAdd ? clip.stages.length === 0 ? "Add the first stage and choose its architecture" : "Add a refine stage" : multiStage.reason;
     return buildRepeatingEditor({
       key: "stages",
       label: "Stages",
@@ -13058,15 +13054,16 @@ The conversion is one undoable change.`;
   };
 
   // frontend/detailStrip/clipPanel.ts
-  var buildClipBody = (context, selection, clips) => {
+  var buildClipBody = (context, selection, state) => {
+    const clips = state.clips;
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-clip-body";
     const { clipIdx } = selection;
     const stageIdx = selection.kind === "clip" ? selection.stageIdx : 0;
     const clip = clips[clipIdx];
     body.classList.toggle("vst-detail-clip-skipped", clip.skipped === true);
-    const defaults = context.rootDefaults();
-    const capabilityView = context.capabilities().forClip(clip);
+    const { capabilities, defaults } = context.authoring();
+    const capabilityView = capabilities.forClip(clip);
     const referenceFramingState = capabilityView.authoringState(
       "referenceFraming",
       clip.refFraming !== "crop"
@@ -13121,13 +13118,13 @@ The conversion is one undoable change.`;
     }
     body.appendChild(stages);
     const appendCapabilitySection = (feature, persisted, content) => {
-      const state = capabilityView.authoringState(feature, persisted);
-      if (!state.visible) {
+      const state2 = capabilityView.authoringState(feature, persisted);
+      if (!state2.visible) {
         return;
       }
       const section = content();
-      if (!state.enabled) {
-        applyPersistedCapabilityRepair(section, state);
+      if (!state2.enabled) {
+        applyPersistedCapabilityRepair(section, state2);
       }
       body.appendChild(section);
     };
@@ -13139,6 +13136,7 @@ The conversion is one undoable change.`;
         clipIdx,
         selection.kind === "ref" ? selection.refIdx : null,
         clips,
+        state.fps,
         selection.kind === "ref"
       )
     );
@@ -13267,7 +13265,7 @@ The conversion is one undoable change.`;
       flattenContent: true,
       className: "vst-detail-prompt-major"
     });
-    const decision = ctx.capabilities().forClip(clip).decision("majorPrompt");
+    const decision = ctx.authoring().capabilities.forClip(clip).decision("majorPrompt");
     if (!decision.supported) {
       applyPersistedCapabilityRepair(built.section, decision);
       if (clip.prompt.trim()) {
@@ -13292,7 +13290,7 @@ The conversion is one undoable change.`;
   };
   var buildRelayPromptSection = (ctx, clip, clipIdx, selectedWindowIdx, open) => {
     const windows = clip.promptWindows ?? [];
-    const decision = ctx.capabilities().forClip(clip).decision("promptRelay");
+    const decision = ctx.authoring().capabilities.forClip(clip).decision("promptRelay");
     const activeWindowIdx = windows.length === 0 ? null : clamp(selectedWindowIdx ?? 0, 0, windows.length - 1);
     const buildSection = (editorForItem) => buildRepeatingEditor({
       key: "relay-prompts",
@@ -13579,11 +13577,10 @@ The conversion is one undoable change.`;
       bridge2.notifyChanged(core);
     }, FPS_WRITE_DEBOUNCE_MS);
   };
-  var buildSettingsBody = (ctx, _selection = {
+  var buildSettingsBody = (ctx, state, _selection = {
     kind: "none"
   }) => {
-    const state = getState();
-    const defaults = ctx.rootDefaults();
+    const defaults = ctx.authoring().defaults;
     const core = {
       width: defaults.width,
       height: defaults.height,
@@ -13769,7 +13766,7 @@ The conversion is one undoable change.`;
   };
 
   // frontend/detailStrip/panelRouter.ts
-  var clampDetailSelection = (selection, clips) => {
+  var clampDetailSelection = (selection, clips, audioTracks = []) => {
     if (selection.kind === "none") {
       return selection;
     }
@@ -13777,8 +13774,7 @@ The conversion is one undoable change.`;
       return selection.leftClipIdx >= 0 && selection.leftClipIdx <= clips.length - 2 ? selection : { kind: "none" };
     }
     if (selection.kind === "audio-track") {
-      const tracks = getState().audioTracks ?? [];
-      return tracks[selection.trackIdx] ? selection : { kind: "none" };
+      return audioTracks[selection.trackIdx] ? selection : { kind: "none" };
     }
     if (selection.clipIdx < 0 || selection.clipIdx >= clips.length) {
       return { kind: "none" };
@@ -13867,32 +13863,29 @@ The conversion is one undoable change.`;
     header.append(breadcrumb, settings);
     return header;
   };
-  var buildDetailPanelBody = (context, selection, clips) => {
+  var buildDetailPanelBody = (context, selection, state) => {
+    const clips = state.clips;
     switch (selection.kind) {
       case "clip":
-        return buildClipBody(context, selection, clips);
+        return buildClipBody(context, selection, state);
       case "ref":
-        return buildClipBody(context, selection, clips);
+        return buildClipBody(context, selection, state);
       case "ic-lora":
-        return buildClipBody(context, selection, clips);
+        return buildClipBody(context, selection, state);
       case "audio":
-        return buildAudioBody(context, selection, clips);
+        return buildAudioBody(context, selection, state);
       case "audio-track":
-        return buildTimelineAudioSegmentsBody(
-          context,
-          getState(),
-          selection
-        );
+        return buildTimelineAudioSegmentsBody(context, state, selection);
       case "prompt-major":
         return buildPromptMajorBody(context, selection, clips);
       case "prompt-minor":
         return buildPromptMinorBody(context, selection, clips);
       case "retake":
-        return buildClipBody(context, selection, clips);
+        return buildClipBody(context, selection, state);
       case "boundary":
-        return buildBoundaryBody(context, selection, clips);
+        return buildBoundaryBody(context, selection, state);
       default:
-        return buildSettingsBody(context, { kind: "none" });
+        return buildSettingsBody(context, state, { kind: "none" });
     }
   };
 
@@ -13913,18 +13906,17 @@ The conversion is one undoable change.`;
     }
   };
   var renderDetailShell = (options) => {
+    const clips = options.state.clips;
     const previousBody = options.detail.querySelector(".vst-detail-body");
     const savedScroll = previousBody?.scrollTop ?? 0;
     options.focus.capture();
     options.detail.className = DETAIL_CLASS;
     options.detail.innerHTML = "";
-    options.detail.appendChild(
-      buildDetailHeader(options.selection, options.clips)
-    );
+    options.detail.appendChild(buildDetailHeader(options.selection, clips));
     const body = buildDetailPanelBody(
       options.context,
       options.selection,
-      options.clips
+      options.state
     );
     options.detail.appendChild(body);
     getVideoStagesHostBridge().enableSliders(body);
@@ -14627,7 +14619,7 @@ The conversion is one undoable change.`;
       if (!selection || !dockEl || !renderedSelection) {
         return;
       }
-      const clips = getClips();
+      const clips = getState().clips;
       const renderedStageParams = dockEl.querySelector(
         "[data-vst-stage-loras-supported]"
       );
@@ -14670,9 +14662,7 @@ The conversion is one undoable change.`;
       buildClampedNumber: draftQueue.buildClampedNumber,
       structuralCommit: draftQueue.structuralCommit,
       render,
-      capabilities: () => activeSnapshot?.capabilities ?? captureAuthoringTransactionSnapshot().capabilities,
-      rootDefaults: () => activeSnapshot?.defaults ?? captureAuthoringTransactionSnapshot().defaults,
-      generatedEntryMode: () => activeSnapshot?.generatedEntryMode ?? captureAuthoringTransactionSnapshot().generatedEntryMode,
+      authoring: () => activeSnapshot ?? captureAuthoringTransactionSnapshot(),
       addRefEntry: selectionOperations.addRefEntry,
       deleteRefEntry: selectionOperations.deleteRefEntry,
       addPromptWindow: selectionOperations.addPromptWindow,
@@ -14713,9 +14703,14 @@ The conversion is one undoable change.`;
         rendering = true;
         draftQueue.markCurrentSource();
         const detail = ensureDetail();
-        const clips = getClips();
+        const state = getState();
+        const clips = state.clips;
         const rawSelection = getSelection();
-        const selection = clampDetailSelection(rawSelection, clips);
+        const selection = clampDetailSelection(
+          rawSelection,
+          clips,
+          state.audioTracks
+        );
         if (!isSameSelection(rawSelection, selection)) {
           setSelection(selection);
           return;
@@ -14726,7 +14721,7 @@ The conversion is one undoable change.`;
           detail,
           context,
           focus,
-          clips,
+          state,
           selection,
           revealSelection
         });

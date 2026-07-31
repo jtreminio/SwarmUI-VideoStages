@@ -17,9 +17,13 @@ import {
     resolveImageSourceValue,
 } from "../imageSource";
 import { getReferenceFrameMax } from "../normalization";
-import { getState } from "../persistence";
 import { setSelection } from "../selection";
-import { type Clip, REF_SOURCE_UPLOAD, type TimelineSelection } from "../types";
+import {
+    type Clip,
+    REF_SOURCE_UPLOAD,
+    type TimelineSelection,
+    type VideoStagesConfig,
+} from "../types";
 import type { DetailStripContext } from "./context";
 
 /**
@@ -31,17 +35,13 @@ export const buildRefSection = (
     clipIdx: number,
     selectedRefIdx: number | null,
     clips: Clip[],
+    fps: number,
     open = selectedRefIdx !== null,
 ): HTMLElement => {
     const clip = clips[clipIdx];
-    const decision = ctx
-        .capabilities()
-        .forClip(clip)
-        .decision("frameReferences");
-    const endpointPolicy = referenceEndpointPolicy(
-        clip,
-        ctx.rootDefaults().modelCatalog,
-    );
+    const { capabilities, defaults } = ctx.authoring();
+    const decision = capabilities.forClip(clip).decision("frameReferences");
+    const endpointPolicy = referenceEndpointPolicy(clip, defaults.modelCatalog);
     const hasSupportedEndpoint = endpointPolicy.available;
     const activeRefIdx =
         clip.refs.length === 0
@@ -141,12 +141,7 @@ export const buildRefSection = (
             fields.appendChild(preview);
         }
 
-        const defaults = ctx.rootDefaults();
-        const frameMax = getReferenceFrameMax(
-            () => defaults,
-            clip,
-            getState().fps,
-        );
+        const frameMax = getReferenceFrameMax(() => defaults, clip, fps);
         const boundedPositions = endpointPolicy.bounded;
         const supportsFirst = endpointPolicy.supportsFirst;
         const supportsLast = endpointPolicy.supportsLast;
@@ -258,10 +253,12 @@ export const buildRefSection = (
 export const buildRefBody = (
     ctx: DetailStripContext,
     sel: Extract<TimelineSelection, { kind: "ref" }>,
-    clips: Clip[],
+    state: VideoStagesConfig,
 ): HTMLElement => {
     const body = document.createElement("div");
     body.className = "vst-detail-body";
-    body.appendChild(buildRefSection(ctx, sel.clipIdx, sel.refIdx, clips));
+    body.appendChild(
+        buildRefSection(ctx, sel.clipIdx, sel.refIdx, state.clips, state.fps),
+    );
     return body;
 };

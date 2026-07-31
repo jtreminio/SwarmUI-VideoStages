@@ -3,7 +3,7 @@ import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectu
 import {
     testArchitectureCatalog,
     testArchitectureCatalogDto,
-    testRootDefaults,
+    testAuthoringTransactionSnapshot,
 } from "../__test_helpers__/architectureFixtures";
 import {
     mountPromptBox,
@@ -12,10 +12,9 @@ import {
     mountVideoStagesData,
 } from "../__test_helpers__/dom";
 import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
-import { createCapabilityViewResolver } from "../architectures/policy";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
-import { __resetPersistenceForTests, getClips } from "../persistence";
+import { __resetPersistenceForTests, getClips, getState } from "../persistence";
 import type { DetailStripContext } from "./context";
 import { buildRefBody } from "./refPanel";
 
@@ -50,12 +49,11 @@ describe("buildRefBody", () => {
         };
         const body = buildRefBody(
             {
-                capabilities: () => createCapabilityViewResolver(catalog),
-                rootDefaults: () => testRootDefaults(catalog),
+                authoring: () => testAuthoringTransactionSnapshot(catalog),
                 buildClampedNumber: () => document.createElement("input"),
             } as unknown as DetailStripContext,
             { kind: "ref", clipIdx: 0, refIdx: 0 },
-            getClips(),
+            { ...getState(), clips: getClips() },
         );
         const field = Array.from(
             body.querySelectorAll<HTMLElement>(".vst-detail-field"),
@@ -101,12 +99,11 @@ describe("buildRefBody", () => {
 
         const body = buildRefBody(
             {
-                capabilities: () => createCapabilityViewResolver(catalog),
-                rootDefaults: () => testRootDefaults(catalog),
+                authoring: () => testAuthoringTransactionSnapshot(catalog),
                 buildClampedNumber: () => document.createElement("input"),
             } as unknown as DetailStripContext,
             { kind: "ref", clipIdx: 0, refIdx: 0 },
-            getClips(),
+            { ...getState(), clips: getClips() },
         );
         const frame = body.querySelector<HTMLInputElement>(
             '[data-vst-focus-key="ref-0-frame"]',
@@ -154,12 +151,11 @@ describe("buildRefBody", () => {
 
         const body = buildRefBody(
             {
-                capabilities: () => createCapabilityViewResolver(catalog),
-                rootDefaults: () => testRootDefaults(catalog),
+                authoring: () => testAuthoringTransactionSnapshot(catalog),
                 buildClampedNumber: () => document.createElement("input"),
             } as unknown as DetailStripContext,
             { kind: "ref", clipIdx: 0, refIdx: 0 },
-            getClips(),
+            { ...getState(), clips: getClips() },
         );
         const fromEnd = Array.from(
             body.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),

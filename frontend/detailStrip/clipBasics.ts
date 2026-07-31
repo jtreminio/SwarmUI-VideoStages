@@ -38,7 +38,7 @@ export const buildClipColumn = (
             context.debouncedCommit("duration", (clips) => {
                 const target = clips[clipIdx];
                 if (target && !lengthDerived) {
-                    const defaults = context.rootDefaults();
+                    const defaults = context.authoring().defaults;
                     applyClipDurationResize(target, value, () => defaults);
                 }
             });

@@ -76,13 +76,13 @@ export const appendStageModelSection = ({
                       clip,
                       target,
                       defaults.modelCatalog,
-                      context.generatedEntryMode(),
+                      context.authoring().generatedEntryMode,
                   ) !== null
                 : modelSupportsStageEntry(
                       model,
                       clip,
                       stageIdx,
-                      context.generatedEntryMode(),
+                      context.authoring().generatedEntryMode,
                   );
             return preservesClipLock && supportsRetargetedRoles
                 ? [{ value: entry.value, label: entry.label }]
@@ -124,7 +124,7 @@ export const appendStageModelSection = ({
                     clip,
                     plan,
                     defaults.modelCatalog,
-                    context.generatedEntryMode(),
+                    context.authoring().generatedEntryMode,
                 );
                 if (!conversion) {
                     modelSelect.value = stage.model;

@@ -23,7 +23,10 @@ export const buildRetakeSection = (
     open = false,
 ): HTMLElement => {
     const retake = clip.retake;
-    const decision = context.capabilities().forClip(clip).decision("retake");
+    const decision = context
+        .authoring()
+        .capabilities.forClip(clip)
+        .decision("retake");
     const col = document.createElement("div");
     col.className = "vst-detail-col vst-detail-retake-col";
     const buildSection = (): HTMLElement => {

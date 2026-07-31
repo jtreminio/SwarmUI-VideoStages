@@ -42,7 +42,7 @@ const applyPickedSourceVideo = (
         const state = store.getState();
         const clips = state.clips;
         const target = findClipByStableId(clips, operation.clipId);
-        const capabilities = context.capabilities();
+        const { capabilities, defaults } = context.authoring();
         if (
             !target ||
             !capabilities.forClip(target).decision("sourceVideo").supported
@@ -61,7 +61,6 @@ const applyPickedSourceVideo = (
             lengthSeconds,
         };
         reconcileClipArchitectureIdentity(target, capabilities.catalog);
-        const defaults = context.rootDefaults();
         applyClipDurationResize(
             target,
             Math.max(CLIP_DURATION_MIN, lengthSeconds),
@@ -105,15 +104,16 @@ export const buildSourceVideoSection = (
             if (!target?.sourceVideo) {
                 return null;
             }
+            const transaction = context.authoring();
             target.sourceVideo = null;
             reconcileClipArchitectureIdentity(
                 target,
-                context.capabilities().catalog,
+                transaction.capabilities.catalog,
             );
             reconcileArchitectureIncomingIcLoraDrives(
                 clips,
-                context.generatedEntryMode(),
-                context.capabilities().catalog,
+                transaction.generatedEntryMode,
+                transaction.capabilities.catalog,
             );
             return "render";
         });
@@ -158,7 +158,7 @@ export const buildSourceVideoSection = (
             ? source.durationSeconds
             : source.startSeconds + source.lengthSeconds;
     const syncClipDuration = (target: Clip): void => {
-        const defaults = context.rootDefaults();
+        const defaults = context.authoring().defaults;
         applyClipDurationResize(
             target,
             Math.max(

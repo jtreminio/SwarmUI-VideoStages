@@ -65,7 +65,8 @@ export const buildIcLorasSection = (
     selectedEntryIdx: number | null = null,
     open = selectedEntryIdx !== null,
 ): HTMLElement => {
-    const clipCapabilities = context.capabilities().forClip(clip);
+    const authoring = context.authoring();
+    const clipCapabilities = authoring.capabilities.forClip(clip);
     const icLoraDecision = clipCapabilities.decision("icLora");
     const entryIdx =
         clip.icLoras.length === 0
@@ -134,8 +135,7 @@ export const buildIcLorasSection = (
                         if (
                             !target ||
                             !defaultPreset ||
-                            !context
-                                .capabilities()
+                            !authoring.capabilities
                                 .forClip(target)
                                 .decision("icLora").supported
                         ) {
@@ -299,7 +299,7 @@ export const buildIcLorasSection = (
                                 targetClip,
                                 clipIdx,
                                 clips,
-                                context.generatedEntryMode(),
+                                authoring.generatedEntryMode,
                             )
                         ) {
                             target.driveSource = IC_LORA_SOURCE_UPLOAD;
@@ -498,7 +498,7 @@ export const buildIcLorasSection = (
                                 targetClip,
                                 clipIdx,
                                 clips,
-                                context.generatedEntryMode(),
+                                authoring.generatedEntryMode,
                             )
                         ) {
                             target.driveSource = IC_LORA_SOURCE_UPLOAD;
@@ -564,7 +564,7 @@ export const buildIcLorasSection = (
                                     targetClip,
                                     clipIdx,
                                     clips,
-                                    context.generatedEntryMode(),
+                                    authoring.generatedEntryMode,
                                 )
                             ) {
                                 target.driveSource = IC_LORA_SOURCE_UPLOAD;
@@ -593,7 +593,7 @@ export const buildIcLorasSection = (
                     clip,
                     clipIdx,
                     currentClips,
-                    context.generatedEntryMode(),
+                    authoring.generatedEntryMode,
                 );
                 const sourceSelect = buildOptionSelect(
                     [

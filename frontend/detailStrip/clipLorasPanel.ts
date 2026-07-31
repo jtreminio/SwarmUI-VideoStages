@@ -31,7 +31,7 @@ export const buildClipLorasSection = (
         loraIdx: number,
         supportedWeight: number,
     ): void => {
-        const capabilities = context.capabilities();
+        const capabilities = context.authoring().capabilities;
         for (const stage of target.stages) {
             if (
                 !capabilities.forStage(target, stage).decision("stageLoras")

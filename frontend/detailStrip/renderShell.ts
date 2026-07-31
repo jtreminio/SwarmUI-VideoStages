@@ -1,5 +1,5 @@
 import { getVideoStagesHostBridge } from "../host";
-import type { Clip, TimelineSelection } from "../types";
+import type { TimelineSelection, VideoStagesConfig } from "../types";
 import type { DetailStripContext } from "./context";
 import type { DetailFocusSession } from "./focusSession";
 import { buildDetailHeader, buildDetailPanelBody } from "./panelRouter";
@@ -32,23 +32,22 @@ export const renderDetailShell = (options: {
     detail: HTMLElement;
     context: DetailStripContext;
     focus: DetailFocusSession;
-    clips: Clip[];
+    state: VideoStagesConfig;
     selection: TimelineSelection;
     revealSelection: boolean;
 }): void => {
+    const clips = options.state.clips;
     const previousBody =
         options.detail.querySelector<HTMLElement>(".vst-detail-body");
     const savedScroll = previousBody?.scrollTop ?? 0;
     options.focus.capture();
     options.detail.className = DETAIL_CLASS;
     options.detail.innerHTML = "";
-    options.detail.appendChild(
-        buildDetailHeader(options.selection, options.clips),
-    );
+    options.detail.appendChild(buildDetailHeader(options.selection, clips));
     const body = buildDetailPanelBody(
         options.context,
         options.selection,
-        options.clips,
+        options.state,
     );
     options.detail.appendChild(body);
     // SwarmUI renders the paired number/range controls but wires their

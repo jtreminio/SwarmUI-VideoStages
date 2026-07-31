@@ -1,8 +1,12 @@
 import { executableBoundaryForLeftClip } from "../clipSemantics";
 import { clamp } from "../constants";
-import { getState } from "../persistence";
 import { stageChipLabel } from "../timelineDetail";
-import type { Clip, TimelineSelection } from "../types";
+import type {
+    AudioTrack,
+    Clip,
+    TimelineSelection,
+    VideoStagesConfig,
+} from "../types";
 import { roundToTenth } from "../utils";
 import { buildAudioBody } from "./audioPanel";
 import { buildTimelineAudioSegmentsBody } from "./audioTracksPanel";
@@ -16,6 +20,7 @@ import { buildSettingsBody } from "./settingsPanel";
 export const clampDetailSelection = (
     selection: TimelineSelection,
     clips: Clip[],
+    audioTracks: AudioTrack[] = [],
 ): TimelineSelection => {
     if (selection.kind === "none") {
         return selection;
@@ -27,8 +32,7 @@ export const clampDetailSelection = (
             : { kind: "none" };
     }
     if (selection.kind === "audio-track") {
-        const tracks = getState().audioTracks ?? [];
-        return tracks[selection.trackIdx] ? selection : { kind: "none" };
+        return audioTracks[selection.trackIdx] ? selection : { kind: "none" };
     }
     if (selection.clipIdx < 0 || selection.clipIdx >= clips.length) {
         return { kind: "none" };
@@ -145,32 +149,29 @@ export const buildDetailHeader = (
 export const buildDetailPanelBody = (
     context: DetailStripContext,
     selection: TimelineSelection,
-    clips: Clip[],
+    state: VideoStagesConfig,
 ): HTMLElement => {
+    const clips = state.clips;
     switch (selection.kind) {
         case "clip":
-            return buildClipBody(context, selection, clips);
+            return buildClipBody(context, selection, state);
         case "ref":
-            return buildClipBody(context, selection, clips);
+            return buildClipBody(context, selection, state);
         case "ic-lora":
-            return buildClipBody(context, selection, clips);
+            return buildClipBody(context, selection, state);
         case "audio":
-            return buildAudioBody(context, selection, clips);
+            return buildAudioBody(context, selection, state);
         case "audio-track":
-            return buildTimelineAudioSegmentsBody(
-                context,
-                getState(),
-                selection,
-            );
+            return buildTimelineAudioSegmentsBody(context, state, selection);
         case "prompt-major":
             return buildPromptMajorBody(context, selection, clips);
         case "prompt-minor":
             return buildPromptMinorBody(context, selection, clips);
         case "retake":
-            return buildClipBody(context, selection, clips);
+            return buildClipBody(context, selection, state);
         case "boundary":
-            return buildBoundaryBody(context, selection, clips);
+            return buildBoundaryBody(context, selection, state);
         default:
-            return buildSettingsBody(context, { kind: "none" });
+            return buildSettingsBody(context, state, { kind: "none" });
     }
 };

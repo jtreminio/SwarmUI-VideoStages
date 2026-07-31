@@ -3,6 +3,7 @@ import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectu
 import {
     testArchitectureCapabilities,
     testArchitectureCatalog,
+    testAuthoringTransactionSnapshot,
     testRootDefaults,
     testSourceOnlyArchitecture,
 } from "../__test_helpers__/architectureFixtures";
@@ -13,10 +14,9 @@ import {
     minimalStage,
     sourceVideoFixture,
 } from "../__test_helpers__/clipFixtures";
-import { createCapabilityViewResolver } from "../architectures/policy";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import { __resetPersistenceForTests } from "../persistence";
-import type { Clip } from "../types";
+import type { Clip, VideoStagesConfig } from "../types";
 import { buildAudioBody } from "./audioPanel";
 import { buildClipBody } from "./clipPanel";
 import type { DetailStripContext } from "./context";
@@ -69,10 +69,17 @@ const context = (
         getDockEl: () => null,
         getSettingsMode: () => null,
         setSettingsMode: jest.fn(),
-        capabilities: () => createCapabilityViewResolver(models),
-        rootDefaults: () => testRootDefaults(models),
-        generatedEntryMode: () => "text-to-video",
+        authoring: () => testAuthoringTransactionSnapshot(models),
     }) as unknown as DetailStripContext;
+
+const documentFor = (clips: Clip[]): VideoStagesConfig => ({
+    width: 1024,
+    height: 576,
+    fps: 24,
+    dimsExplicit: false,
+    clips,
+    audioTracks: [],
+});
 
 /** A control a user could actually reach and operate with the keyboard. */
 const keyboardOperable = (element: HTMLButtonElement | null): boolean =>
@@ -93,7 +100,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const body = buildClipBody(
             context(models, [clip]),
             { kind: "clip", clipIdx: 0, stageIdx: 0 },
-            [clip],
+            documentFor([clip]),
         );
 
         const add = body.querySelector<HTMLButtonElement>(
@@ -113,7 +120,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const body = buildClipBody(
             ctx,
             { kind: "clip", clipIdx: 0, stageIdx: 0 },
-            [clip],
+            documentFor([clip]),
         );
         const section = body.querySelector<HTMLElement>(
             ".vst-detail-ref-section",
@@ -168,7 +175,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const body = buildClipBody(
             ctx,
             { kind: "clip", clipIdx: 0, stageIdx: 0 },
-            clips,
+            documentFor(clips),
         );
 
         const select = body.querySelector<HTMLSelectElement>(
@@ -195,7 +202,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const body = buildClipBody(
             ctx,
             { kind: "clip", clipIdx: 0, stageIdx: 0 },
-            clips,
+            documentFor(clips),
         );
         const select = body.querySelector<HTMLSelectElement>(
             "[data-vst-reference-framing]",
@@ -230,7 +237,11 @@ describe("persisted-but-unsupported repair contract", () => {
             apply(clips);
         };
 
-        const body = buildAudioBody(ctx, { kind: "audio", clipIdx: 0 }, clips);
+        const body = buildAudioBody(
+            ctx,
+            { kind: "audio", clipIdx: 0 },
+            documentFor(clips),
+        );
         const source = body.querySelector<HTMLSelectElement>("select");
         const reuse = body.querySelector<HTMLInputElement>(
             ".vst-detail-audio-reuse input",
@@ -269,7 +280,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const body = buildAudioBody(
             context(models, clips),
             { kind: "audio", clipIdx: 0 },
-            clips,
+            documentFor(clips),
         );
         const source = body.querySelector<HTMLSelectElement>("select");
         const duration = body.querySelector<HTMLInputElement>(
@@ -302,7 +313,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const uploadBody = buildAudioBody(
             context(models, [upload]),
             { kind: "audio", clipIdx: 0 },
-            [upload],
+            documentFor([upload]),
         );
         expect(
             uploadBody.querySelector<HTMLInputElement>(
@@ -316,7 +327,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const nativeBody = buildAudioBody(
             context(models, [native]),
             { kind: "audio", clipIdx: 0 },
-            [native],
+            documentFor([native]),
         );
         const duration = nativeBody.querySelector<HTMLInputElement>(
             ".vst-detail-audio-derived-duration input",
@@ -347,7 +358,11 @@ describe("persisted-but-unsupported repair contract", () => {
         ctx.structuralCommit = (apply) => {
             apply(clips);
         };
-        const body = buildAudioBody(ctx, { kind: "audio", clipIdx: 0 }, clips);
+        const body = buildAudioBody(
+            ctx,
+            { kind: "audio", clipIdx: 0 },
+            documentFor(clips),
+        );
         const duration = body.querySelector<HTMLInputElement>(
             ".vst-detail-audio-derived-duration input",
         );
@@ -364,7 +379,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const repairedBody = buildAudioBody(
             ctx,
             { kind: "audio", clipIdx: 0 },
-            clips,
+            documentFor(clips),
         );
         expect(
             repairedBody.querySelector<HTMLInputElement>(
@@ -384,7 +399,11 @@ describe("persisted-but-unsupported repair contract", () => {
         ctx.structuralCommit = (apply) => {
             apply(clips);
         };
-        const body = buildAudioBody(ctx, { kind: "audio", clipIdx: 0 }, clips);
+        const body = buildAudioBody(
+            ctx,
+            { kind: "audio", clipIdx: 0 },
+            documentFor(clips),
+        );
         const duration = body.querySelector<HTMLInputElement>(
             ".vst-detail-audio-derived-duration input",
         );
@@ -406,7 +425,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const repairedBody = buildAudioBody(
             ctx,
             { kind: "audio", clipIdx: 0 },
-            clips,
+            documentFor(clips),
         );
         expect(
             repairedBody.querySelector(
@@ -429,7 +448,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const body = buildAudioBody(
             context(models, clips),
             { kind: "audio", clipIdx: 0 },
-            clips,
+            documentFor(clips),
         );
         const durationRepair = body.querySelector<HTMLButtonElement>(
             ".vst-detail-audio-derived-duration .vst-detail-delete",
@@ -457,7 +476,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const body = buildAudioBody(
             context(models, clips),
             { kind: "audio", clipIdx: 0 },
-            clips,
+            documentFor(clips),
         );
         const status = body.querySelector<HTMLElement>(
             ".vst-detail-control-signal-derived-duration",
@@ -487,7 +506,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const body = buildAudioBody(
             context(models, clips),
             { kind: "audio", clipIdx: 0 },
-            clips,
+            documentFor(clips),
         );
         const status = body.querySelector<HTMLElement>(
             ".vst-detail-control-signal-derived-duration",
@@ -516,7 +535,7 @@ describe("persisted-but-unsupported repair contract", () => {
         const body = buildAudioBody(
             context(models, clips),
             { kind: "audio", clipIdx: 0 },
-            clips,
+            documentFor(clips),
         );
         const status = body.querySelector<HTMLElement>(
             ".vst-detail-control-signal-derived-duration",
@@ -551,7 +570,11 @@ describe("persisted-but-unsupported repair contract", () => {
         ctx.structuralCommit = (apply) => {
             apply(clips);
         };
-        const body = buildAudioBody(ctx, { kind: "audio", clipIdx: 0 }, clips);
+        const body = buildAudioBody(
+            ctx,
+            { kind: "audio", clipIdx: 0 },
+            documentFor(clips),
+        );
         const repair = body.querySelector<HTMLButtonElement>(
             ".vst-remove-control-signal-derived-duration",
         );

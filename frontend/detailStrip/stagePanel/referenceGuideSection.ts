@@ -53,8 +53,8 @@ export const appendStageReferenceGuideSection = ({
 }: StagePanelBindings): void => {
     if (clip.refs.length > 0) {
         const refDecision = context
-            .capabilities()
-            .forClip(clip)
+            .authoring()
+            .capabilities.forClip(clip)
             .decision("frameReferences");
         appendSectionHeader(fields, "Reference Strengths");
         const setRefHover = (refIdx: number, on: boolean): void => {
@@ -159,7 +159,7 @@ export const appendStageReferenceGuideSection = ({
     if (applicableIcLoras.length === 0) return;
 
     appendSectionHeader(fields, "IC-LoRA Guide Strengths");
-    const capabilityView = context.capabilities().forClip(clip);
+    const capabilityView = context.authoring().capabilities.forClip(clip);
     const icDecision = capabilityView.decision("icLora");
     const icGroup = document.createDocumentFragment();
     applicableIcLoras.forEach(({ entry, entryIdx }) => {

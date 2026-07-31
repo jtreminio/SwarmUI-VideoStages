@@ -1,10 +1,5 @@
-import type { CapabilityViewResolver } from "../architectures/policy";
-import type {
-    Clip,
-    RootDefaults,
-    TimelineSelection,
-    VideoStagesConfig,
-} from "../types";
+import type { AuthoringTransactionSnapshot } from "../authoringSnapshot";
+import type { Clip, TimelineSelection, VideoStagesConfig } from "../types";
 
 export interface ClampedNumberOpts {
     key: string;
@@ -17,11 +12,10 @@ export interface ClampedNumberOpts {
 }
 
 /**
- * The factory's commit pipeline, structural ops and closure-state accessors,
- * passed explicitly to each panel builder instead of captured. State readers
- * that are plain module functions (getClips/getState/getRootDefaults,
- * setSelection) are imported directly by the panels; only genuine factory
- * state (the listener/render hosts, the settings resolution mode) rides here.
+ * The detail strip's command, draft, selection, focus, and render services.
+ * Panel builders receive the current document separately and use `authoring`
+ * for the matching catalog/defaults projection, so this contract does not
+ * expose ambient repository readers.
  */
 export interface DetailStripContext {
     commit(mutate: (clips: Clip[]) => void): void;
@@ -37,9 +31,7 @@ export interface DetailStripContext {
         opts?: { rebuildAfterSelect?: boolean },
     ): void;
     render(): void;
-    capabilities(): CapabilityViewResolver;
-    rootDefaults(): RootDefaults;
-    generatedEntryMode(): "text-to-video" | "image-to-video";
+    authoring(): AuthoringTransactionSnapshot;
 
     addRefEntry(clipIdx: number): void;
     deleteRefEntry(clipIdx: number, refIdx: number): void;

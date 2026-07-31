@@ -12,14 +12,16 @@ export const buildStageRail = (
     editorForStage?: (stageIdx: number) => HTMLElement | undefined,
     open = true,
 ): HTMLElement => {
-    const canAdd =
-        clip.stages.length === 0 ||
-        context.capabilities().forClip(clip).decision("multiStage").supported;
+    const multiStage = context
+        .authoring()
+        .capabilities.forClip(clip)
+        .decision("multiStage");
+    const canAdd = clip.stages.length === 0 || multiStage.supported;
     const addTitle = canAdd
         ? clip.stages.length === 0
             ? "Add the first stage and choose its architecture"
             : "Add a refine stage"
-        : context.capabilities().forClip(clip).decision("multiStage").reason;
+        : multiStage.reason;
     return buildRepeatingEditor({
         key: "stages",
         label: "Stages",
