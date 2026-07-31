@@ -14,16 +14,8 @@ internal static class ArchitectureCapabilityValidator
     {
         List<PlanDiagnostic> diagnostics = [];
         bool hasActiveStages = clip.Stages is { Count: > 0 };
-        ArchitectureCapabilityDescriptor capabilities =
-            ResolvedVideoModelCapabilityPolicy.ForClip(
-                clip,
-                descriptor,
-                stageModels);
-        IReadOnlyList<AudioSourceKind> audioSourceKinds =
-            ResolvedVideoModelCapabilityPolicy.AudioSourceKindsForClip(
-                clip,
-                descriptor,
-                stageModels);
+        ArchitectureCapabilityDescriptor capabilities = descriptor.Capabilities;
+        IReadOnlyList<AudioSourceKind> audioSourceKinds = descriptor.AudioSourceKinds;
         void Require(bool configured, bool supported, string option)
         {
             if (configured && !supported)
@@ -145,7 +137,7 @@ internal static class ArchitectureCapabilityValidator
             Has(capabilities.Stage, StageCapability.Lora),
             "normal LoRA");
         ValidateAudioSourceKind(clip, descriptor, audioSourceKinds, diagnostics);
-        ValidateStages(clip, descriptor, stageModels, diagnostics);
+        ValidateStages(clip, descriptor, diagnostics);
         return diagnostics.AsReadOnly();
     }
 
@@ -245,18 +237,13 @@ internal static class ArchitectureCapabilityValidator
     private static void ValidateStages(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,
-        IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
         ICollection<PlanDiagnostic> diagnostics)
     {
         IReadOnlyList<StageSpec> stages = clip.Stages ?? [];
         for (int stageIndex = 0; stageIndex < stages.Count; stageIndex++)
         {
             StageSpec stage = stages[stageIndex];
-            StageCapability stageCapabilities =
-                ResolvedVideoModelCapabilityPolicy.ForStage(
-                    stage,
-                    descriptor,
-                    stageModels);
+            StageCapability stageCapabilities = descriptor.Capabilities.Stage;
             StageGuideReferenceSelection guide =
                 StageGuideReferencePolicy.Classify(stage.ImageReference);
             if (!descriptor.StageGuideReferences.Allows(guide))

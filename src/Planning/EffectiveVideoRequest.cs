@@ -209,8 +209,7 @@ internal static class EffectiveVideoRequestProjector
             EffectiveClipProjection common =
                 CapabilityDrivenEffectiveRequestProjector.ProjectUnsupportedFeatures(
                     clip.Effective,
-                    clip.Assignment.Architecture,
-                    clip.Assignment.StageModels);
+                    clip.Assignment.Architecture);
             clip.Effective = common.Clip;
             clip.Decisions.AddRange(common.Decisions);
         }

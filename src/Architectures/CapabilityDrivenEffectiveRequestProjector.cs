@@ -17,23 +17,12 @@ internal static class CapabilityDrivenEffectiveRequestProjector
 {
     internal static EffectiveClipProjection ProjectUnsupportedFeatures(
         ClipSpec authored,
-        VideoArchitectureDescriptor descriptor,
-        IReadOnlyDictionary<int, ResolvedVideoModel> stageModels)
+        VideoArchitectureDescriptor descriptor)
     {
         ArgumentNullException.ThrowIfNull(authored);
         ArgumentNullException.ThrowIfNull(descriptor);
-        ArgumentNullException.ThrowIfNull(stageModels);
-
-        ArchitectureCapabilityDescriptor capabilities =
-            ResolvedVideoModelCapabilityPolicy.ForClip(
-                authored,
-                descriptor,
-                stageModels);
-        IReadOnlyList<AudioSourceKind> audioSourceKinds =
-            ResolvedVideoModelCapabilityPolicy.AudioSourceKindsForClip(
-                authored,
-                descriptor,
-                stageModels);
+        ArchitectureCapabilityDescriptor capabilities = descriptor.Capabilities;
+        IReadOnlyList<AudioSourceKind> audioSourceKinds = descriptor.AudioSourceKinds;
         HashSet<UnsupportedAuthoringFeature> ignored =
             ArchitectureFeatureVocabulary
                 .IgnoredWhenUnsupported(capabilities)
@@ -281,10 +270,7 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                         stage.ClipStageRawIndex));
                 }
                 else if (!Has(
-                    ResolvedVideoModelCapabilityPolicy.ForStage(
-                        stage,
-                        descriptor,
-                        stageModels),
+                    descriptor.Capabilities.Stage,
                     required))
                 {
                     Ignore(

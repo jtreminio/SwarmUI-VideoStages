@@ -425,12 +425,6 @@ internal sealed record ResolvedVideoModel(
     public VideoModelEntryAbility EntryAbilities { get; init; } =
         VideoModelEntryPolicy.FromArchitectureLegacyAlias(Architecture);
 
-    public ArchitectureCapabilityDescriptor EffectiveCapabilities =>
-        Architecture.Capabilities;
-
-    public IReadOnlyList<AudioSourceKind> EffectiveAudioSourceKinds =>
-        Architecture.AudioSourceKinds;
-
     /// <summary>
     /// Frame positions accepted by this model's native image-conditioning path. Values are
     /// stable wire names such as <c>first</c>, <c>last</c>, and <c>any</c>.

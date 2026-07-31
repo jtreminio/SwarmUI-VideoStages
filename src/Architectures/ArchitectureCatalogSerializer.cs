@@ -125,8 +125,8 @@ internal static class ArchitectureCatalogSerializer
 
     private static JObject SerializeCapabilities(ResolvedVideoModel model)
     {
-        ArchitectureCapabilityDescriptor capabilities = model.EffectiveCapabilities;
-        IReadOnlyList<AudioSourceKind> audioKinds = model.EffectiveAudioSourceKinds;
+        ArchitectureCapabilityDescriptor capabilities = model.Architecture.Capabilities;
+        IReadOnlyList<AudioSourceKind> audioKinds = model.Architecture.AudioSourceKinds;
         return new()
         {
             ["architecture"] = new JArray(
