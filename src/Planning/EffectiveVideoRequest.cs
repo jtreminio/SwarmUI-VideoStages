@@ -138,6 +138,24 @@ internal sealed record EffectiveVideoRequest(
 /// </summary>
 internal static class EffectiveVideoRequestProjector
 {
+    /// <summary>
+    /// Owns the authored, canonical, and progressively projected forms of one timeline clip.
+    /// Decisions stay beside the clip they describe instead of being coordinated through
+    /// parallel arrays for each projection phase.
+    /// </summary>
+    private sealed class EffectiveClipPlanningContext(
+        int timelineIndex,
+        ClipSpec authored,
+        ClipArchitectureAssignment assignment)
+    {
+        internal int TimelineIndex { get; } = timelineIndex;
+        internal ClipSpec Authored { get; } = authored;
+        internal ClipArchitectureAssignment Assignment { get; } = assignment;
+        internal ClipSpec Canonical { get; set; } = authored;
+        internal ClipSpec Effective { get; set; } = authored;
+        internal List<EffectiveRequestDecision> Decisions { get; } = [];
+    }
+
     internal static EffectiveVideoRequest Project(
         VideoStagesSpec authored,
         ArchitecturePlanningResult architecturePlanning) =>
@@ -152,35 +170,34 @@ internal static class EffectiveVideoRequestProjector
         ArgumentNullException.ThrowIfNull(rootEnvironment);
         ArgumentNullException.ThrowIfNull(architecturePlanning);
 
-        ClipSpec[] authoredClips = (authored.Clips ?? []).ToArray();
-        ClipSpec[] canonicalClips = authoredClips.ToArray();
-        List<EffectiveRequestDecision>[] canonicalDecisions =
-            authoredClips.Select(_ => new List<EffectiveRequestDecision>()).ToArray();
-        for (int timelineIndex = 0; timelineIndex < authoredClips.Length; timelineIndex++)
+        EffectiveClipPlanningContext[] clips = (authored.Clips ?? [])
+            .Select((clip, timelineIndex) => new EffectiveClipPlanningContext(
+                timelineIndex,
+                clip,
+                architecturePlanning.Clips.GetValueOrDefault(clip.Id)))
+            .ToArray();
+        foreach (EffectiveClipPlanningContext clip in clips)
         {
-            ClipSpec clip = authoredClips[timelineIndex];
-            ClipArchitectureAssignment assignment =
-                architecturePlanning.Clips.GetValueOrDefault(clip.Id);
-            if (assignment is null)
+            if (clip.Assignment is null)
             {
                 continue;
             }
-            canonicalClips[timelineIndex] = CanonicalizeResolvedIdentityHints(
-                clip,
-                assignment,
-                canonicalDecisions[timelineIndex]);
+            clip.Canonical = CanonicalizeResolvedIdentityHints(
+                clip.Authored,
+                clip.Assignment,
+                clip.Decisions);
+            clip.Effective = clip.Canonical;
         }
 
-        ClipSpec[] effectiveClips = canonicalClips.ToArray();
-        List<EffectiveRequestDecision>[] architectureDecisions =
-            authoredClips.Select(_ => new List<EffectiveRequestDecision>()).ToArray();
         List<EffectiveRequestDecision> requestDecisions = [];
         int rootTimelineIndex = Array.FindIndex(
-            authoredClips,
-            clip => clip.SourceVideo is null && clip.Stages is { Count: > 0 });
+            clips,
+            clip => clip.Authored.SourceVideo is null
+                && clip.Authored.Stages is { Count: > 0 });
         RootPlan root = RootPlanCompiler.Compile(
             rootEnvironment,
-            authoredClips
+            clips
+                .Select(clip => clip.Authored)
                 .Where(clip =>
                     clip.SourceVideo is not null
                     || clip.Stages is { Count: > 0 })
@@ -190,8 +207,7 @@ internal static class EffectiveVideoRequestProjector
             && root.Use == RootUse.Discard
             && !rootEnvironment.HasGlobalRefineSource;
         foreach (ModuleProjectionBatch batch in BuildProjectionBatches(
-            effectiveClips,
-            architecturePlanning))
+            clips))
         {
             ArchitectureEffectiveRequestProjection projection =
                 batch.Projector.ProjectEffectiveRequest(new(
@@ -201,17 +217,12 @@ internal static class EffectiveVideoRequestProjector
             ApplyArchitectureProjection(
                 batch,
                 projection,
-                canonicalClips,
-                effectiveClips,
-                architectureDecisions,
+                clips,
                 requestDecisions);
         }
-        for (int timelineIndex = 0; timelineIndex < effectiveClips.Length; timelineIndex++)
+        foreach (EffectiveClipPlanningContext clip in clips)
         {
-            ClipSpec clip = effectiveClips[timelineIndex];
-            ClipArchitectureAssignment assignment =
-                architecturePlanning.Clips.GetValueOrDefault(clip.Id);
-            if (assignment is null)
+            if (clip.Assignment is null)
             {
                 continue;
             }
@@ -222,56 +233,48 @@ internal static class EffectiveVideoRequestProjector
             // behavior before temporal resolution and compilation.
             EffectiveClipProjection common =
                 CapabilityDrivenEffectiveRequestProjector.ProjectUnsupportedFeatures(
-                    clip,
-                    assignment.Architecture,
-                    assignment.StageModels);
-            effectiveClips[timelineIndex] = common.Clip;
-            architectureDecisions[timelineIndex].AddRange(common.Decisions);
+                    clip.Effective,
+                    clip.Assignment.Architecture,
+                    clip.Assignment.StageModels);
+            clip.Effective = common.Clip;
+            clip.Decisions.AddRange(common.Decisions);
         }
 
-        List<EffectiveRequestDecision>[] temporalDecisions =
-            authoredClips.Select(_ => new List<EffectiveRequestDecision>()).ToArray();
-        for (int timelineIndex = 0; timelineIndex < effectiveClips.Length; timelineIndex++)
+        foreach (EffectiveClipPlanningContext clip in clips)
         {
-            ClipSpec clip = effectiveClips[timelineIndex];
-            ClipArchitectureAssignment assignment =
-                architecturePlanning.Clips.GetValueOrDefault(clip.Id);
             bool admissionBlocked = architecturePlanning.Diagnostics.Any(diagnostic =>
                 diagnostic.Severity == PlanDiagnosticSeverity.Error
-                && diagnostic.ClipId == clip.Id)
-                || architectureDecisions[timelineIndex].Any(decision =>
+                && diagnostic.ClipId == clip.Effective.Id)
+                || clip.Decisions.Any(decision =>
                     decision.Disposition == EffectiveRequestDisposition.Block);
-            if (assignment is null || admissionBlocked)
+            if (clip.Assignment is null || admissionBlocked)
             {
                 continue;
             }
-            effectiveClips[timelineIndex] = ProjectResolvedTemporalGrid(
-                canonicalClips[timelineIndex],
-                clip,
-                assignment,
+            clip.Effective = ProjectResolvedTemporalGrid(
+                clip.Canonical,
+                clip.Effective,
+                clip.Assignment,
                 rootCanForceTextToVideoGeneration
-                    && timelineIndex == rootTimelineIndex,
-                temporalDecisions[timelineIndex]);
+                    && clip.TimelineIndex == rootTimelineIndex,
+                clip.Decisions);
         }
 
-        List<EffectiveRequestDecision> decisions = [];
-        for (int timelineIndex = 0; timelineIndex < authoredClips.Length; timelineIndex++)
-        {
-            decisions.AddRange(canonicalDecisions[timelineIndex]);
-            decisions.AddRange(architectureDecisions[timelineIndex]);
-            decisions.AddRange(temporalDecisions[timelineIndex]);
-        }
+        List<EffectiveRequestDecision> decisions =
+            clips.SelectMany(clip => clip.Decisions).ToList();
         Dictionary<int, BoundaryExecutionMode> authoredBoundaryModes = [];
         Dictionary<int, BoundaryFallback> projectedBoundaryFallbacks = [];
         ProjectUnsupportedBoundaries(
-            effectiveClips,
-            architecturePlanning,
+            clips,
             decisions,
             authoredBoundaryModes,
             projectedBoundaryFallbacks);
         decisions.AddRange(requestDecisions);
         return new(
-            authored with { Clips = Array.AsReadOnly(effectiveClips) },
+            authored with
+            {
+                Clips = Array.AsReadOnly(clips.Select(clip => clip.Effective).ToArray()),
+            },
             architecturePlanning,
             decisions.AsReadOnly(),
             authoredBoundaryModes,
@@ -284,27 +287,27 @@ internal static class EffectiveVideoRequestProjector
         List<ArchitectureOwnedEffectiveClip> OwnedClips);
 
     private static IReadOnlyList<ModuleProjectionBatch> BuildProjectionBatches(
-        IReadOnlyList<ClipSpec> clips,
-        ArchitecturePlanningResult architecturePlanning)
+        IReadOnlyList<EffectiveClipPlanningContext> clips)
     {
         List<ModuleProjectionBatch> batches = [];
-        for (int timelineIndex = 0; timelineIndex < clips.Count; timelineIndex++)
+        foreach (EffectiveClipPlanningContext clip in clips)
         {
-            ClipSpec clip = clips[timelineIndex];
-            ClipArchitectureAssignment assignment =
-                architecturePlanning.Clips.GetValueOrDefault(clip.Id);
-            if (assignment?.Module is not IArchitectureEffectiveRequestProjector projector)
+            if (clip.Assignment?.Module
+                is not IArchitectureEffectiveRequestProjector projector)
             {
                 continue;
             }
             ModuleProjectionBatch batch = batches.SingleOrDefault(
-                candidate => ReferenceEquals(candidate.Module, assignment.Module));
+                candidate => ReferenceEquals(candidate.Module, clip.Assignment.Module));
             if (batch is null)
             {
-                batch = new(projector, assignment.Module, []);
+                batch = new(projector, clip.Assignment.Module, []);
                 batches.Add(batch);
             }
-            batch.OwnedClips.Add(new(timelineIndex, clip, assignment));
+            batch.OwnedClips.Add(new(
+                clip.TimelineIndex,
+                clip.Effective,
+                clip.Assignment));
         }
         return batches.AsReadOnly();
     }
@@ -312,9 +315,7 @@ internal static class EffectiveVideoRequestProjector
     private static void ApplyArchitectureProjection(
         ModuleProjectionBatch batch,
         ArchitectureEffectiveRequestProjection projection,
-        IReadOnlyList<ClipSpec> canonicalClips,
-        ClipSpec[] effectiveClips,
-        IReadOnlyList<List<EffectiveRequestDecision>> architectureDecisions,
+        IReadOnlyList<EffectiveClipPlanningContext> clips,
         ICollection<EffectiveRequestDecision> requestDecisions)
     {
         if (projection is null)
@@ -343,7 +344,8 @@ internal static class EffectiveVideoRequestProjector
                     batch.Module,
                     "returned an unowned, duplicate, or null clip replacement");
             }
-            ClipSpec canonical = canonicalClips[projected.TimelineIndex];
+            EffectiveClipPlanningContext clip = clips[projected.TimelineIndex];
+            ClipSpec canonical = clip.Canonical;
             ValidateProjectedTopology(batch.Module, canonical, projected.Clip);
             if (projected.Decisions is null)
             {
@@ -360,9 +362,9 @@ internal static class EffectiveVideoRequestProjector
                         batch.Module,
                         $"returned a clip decision that does not target clip {canonical.Id}");
                 }
-                architectureDecisions[projected.TimelineIndex].Add(decision);
+                clip.Decisions.Add(decision);
             }
-            effectiveClips[projected.TimelineIndex] = projected.Clip;
+            clip.Effective = projected.Clip;
         }
         foreach (EffectiveRequestDecision decision in projection.RequestDecisions)
         {
@@ -653,24 +655,25 @@ internal static class EffectiveVideoRequestProjector
     }
 
     private static void ProjectUnsupportedBoundaries(
-        ClipSpec[] clips,
-        ArchitecturePlanningResult architecturePlanning,
+        IReadOnlyList<EffectiveClipPlanningContext> clips,
         ICollection<EffectiveRequestDecision> decisions,
         IDictionary<int, BoundaryExecutionMode> authoredBoundaryModes,
         IDictionary<int, BoundaryFallback> projectedBoundaryFallbacks)
     {
         int[] executableIndexes = clips
             .Select((clip, index) => (clip, index))
-            .Where(item => item.clip is not null
-                && (item.clip.SourceVideo is not null
-                    || item.clip.Stages is { Count: > 0 }))
+            .Where(item =>
+                item.clip.Effective.SourceVideo is not null
+                || item.clip.Effective.Stages is { Count: > 0 })
             .Select(item => item.index)
             .ToArray();
         for (int position = 0; position < executableIndexes.Length - 1; position++)
         {
             int fromIndex = executableIndexes[position];
             int toIndex = executableIndexes[position + 1];
-            ClipSpec sourceClip = clips[fromIndex];
+            EffectiveClipPlanningContext source = clips[fromIndex];
+            EffectiveClipPlanningContext target = clips[toIndex];
+            ClipSpec sourceClip = source.Effective;
             BoundaryExecutionMode requested =
                 BoundaryPolicy.ParsePlanMode(sourceClip.BoundaryOut, out bool known);
             if (!known
@@ -678,10 +681,8 @@ internal static class EffectiveVideoRequestProjector
             {
                 continue;
             }
-            ClipArchitectureAssignment fromAssignment =
-                architecturePlanning.Clips.GetValueOrDefault(sourceClip.Id);
-            ClipArchitectureAssignment toAssignment =
-                architecturePlanning.Clips.GetValueOrDefault(clips[toIndex].Id);
+            ClipArchitectureAssignment fromAssignment = source.Assignment;
+            ClipArchitectureAssignment toAssignment = target.Assignment;
             if (fromAssignment is null || toAssignment is null)
             {
                 continue;
@@ -710,7 +711,7 @@ internal static class EffectiveVideoRequestProjector
             authoredBoundaryModes[sourceClip.Id] = requested;
             projectedBoundaryFallbacks[sourceClip.Id] =
                 BoundaryFallback.ArchitectureRuleUnsupported;
-            clips[fromIndex] = sourceClip with
+            source.Effective = sourceClip with
             {
                 BoundaryOut = Constants.BoundaryOutCut,
                 BoundaryOutOverlap = 0,
