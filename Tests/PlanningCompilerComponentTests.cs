@@ -137,7 +137,10 @@ public class PlanningCompilerComponentTests
         };
 
         PromptRelayPlan prompt = PromptRelayPlanCompiler.Compile(clip, 24);
-        GuideReferencePlan guide = GuideReferencePlanCompiler.Compile(stage.ImageReference);
+        GuideReferencePlan guide = Ltx2ClipPlanCompiler
+            .Compile(clip, new(640, 360, 24))
+            .Stages[stage.ClipStageRawIndex]
+            .Guide;
         var loras = NormalLoraPlanCompiler.Compile(clip, stage);
         var icLoras = IcLoraPlanCompiler.Compile(clip, stage);
         var references = ImageReferencePlanCompiler.Compile(clip, stage);

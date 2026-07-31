@@ -36,7 +36,7 @@ internal static class Ltx2ClipPlanCompiler
                     stage.Scheduler,
                     stage.ControlNetStrength,
                     stage.ImageRefWasExplicit),
-                GuideReferencePlanCompiler.Compile(stage.ImageReference),
+                CompileGuideReference(stage.ImageReference),
                 StageUpscalePlanCompiler.Compile(stage),
                 NormalLoraPlanCompiler.Compile(clip, stage),
                 IcLoraPlanCompiler.Compile(clip, stage, context),
@@ -73,6 +73,13 @@ internal static class Ltx2ClipPlanCompiler
             retake.StartFrame,
             retake.LengthFrames,
             retake.Strength);
+
+    private static GuideReferencePlan CompileGuideReference(string rawValue)
+    {
+        string raw = rawValue?.Trim() ?? "";
+        StageGuideReferenceSelection selection = StageGuideReferencePolicy.Classify(raw);
+        return new(selection.Kind, raw, selection.ReferencedStageIndex);
+    }
 
     private static StageAudioAction CompileAudioAction(Ltx2AudioPlan audio, StageSpec stage)
     {
