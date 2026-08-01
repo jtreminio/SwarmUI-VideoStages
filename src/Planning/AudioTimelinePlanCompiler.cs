@@ -2,16 +2,10 @@ using System.Collections.Immutable;
 
 namespace VideoStages.Planning;
 
-/// <summary>
-/// Pairs a compiled timeline plan with the authored tracks used to build it.
-/// </summary>
 internal sealed record AudioTimelineCompilation(
     AudioTimelinePlan Plan,
     ImmutableArray<AudioTrackSpec> AuthoredTracks);
 
-/// <summary>
-/// Builds final clip windows and projects authored audio tracks.
-/// </summary>
 internal static class AudioTimelinePlanCompiler
 {
     internal static AudioTimelineCompilation Compile(
@@ -24,7 +18,7 @@ internal static class AudioTimelinePlanCompiler
         ImmutableArray<AudioTimelineClipWindow> clipWindows =
             BuildClipWindows(videoPlan, diagnostics);
         ImmutableArray<AudioTrackSpec> authoredTracks =
-            TimelineAudioSegmentTrackSpecPlanner.Compile(authoredSegments, clipWindows);
+            CompileAuthoredTracks(authoredSegments, clipWindows);
         return new(
             Project(videoPlan, clipWindows, diagnostics, authoredTracks),
             authoredTracks);
@@ -55,8 +49,85 @@ internal static class AudioTimelinePlanCompiler
             clipWindows,
             IndexClipWindows(clipWindows, diagnostics));
         diagnostics.AddRange(trackPlan.Diagnostics);
-        diagnostics.AddRange(AudioTimelineValidationPlanner.Validate(trackPlan.Tracks));
         return new(clipWindows, trackPlan.Tracks, diagnostics.ToImmutable());
+    }
+
+    private static ImmutableArray<AudioTrackSpec> CompileAuthoredTracks(
+        IReadOnlyList<TimelineAudioSegmentSpec> segments,
+        ImmutableArray<AudioTimelineClipWindow> windows)
+    {
+        IReadOnlyDictionary<int, AudioTimelineClipWindow> clipWindows =
+            windows.ToDictionary(window => window.ClipId);
+        ImmutableArray<AudioTrackSpec>.Builder tracks =
+            ImmutableArray.CreateBuilder<AudioTrackSpec>();
+        foreach (TimelineAudioSegmentSpec segment in segments ?? [])
+        {
+            if (segment is null)
+            {
+                continue;
+            }
+            AudioTimelineTrackSource source;
+            if (AudioHandler.TryParseAceStepFunAudioSource(segment.AceStepFunSource, out _))
+            {
+                source = new(AudioSourceKind.AceStepFun, segment.AceStepFunSource);
+            }
+            else if (!string.IsNullOrWhiteSpace(segment.Source?.Data))
+            {
+                AudioMediaIdentityPlan upload = AudioMediaIdentityPlan.From(segment.Source);
+                source = new(AudioSourceKind.Upload, upload.FileName, upload);
+            }
+            else
+            {
+                continue;
+            }
+
+            (double Start, double Length)? window = ResolveFinalWindow(segment, clipWindows);
+            if (window is not { } resolved)
+            {
+                continue;
+            }
+            tracks.Add(new(
+                segment.Id,
+                source,
+                [new AudioTrackSpanSpec(
+                    TimelineStartSeconds: resolved.Start,
+                    TimelineLengthSeconds: resolved.Length,
+                    SourceStartSeconds: segment.SourceStartSeconds)],
+                segment.Volume));
+        }
+        return tracks.ToImmutable();
+    }
+
+    private static (double Start, double Length)? ResolveFinalWindow(
+        TimelineAudioSegmentSpec segment,
+        IReadOnlyDictionary<int, AudioTimelineClipWindow> clipWindows)
+    {
+        bool hasAnchors =
+            segment.FirstClipId.HasValue
+            && segment.LastClipId.HasValue
+            && segment.FirstClipOffsetSeconds.HasValue
+            && segment.LastClipOffsetSeconds.HasValue;
+        if (!hasAnchors
+            || !clipWindows.TryGetValue(
+                segment.FirstClipId.Value,
+                out AudioTimelineClipWindow first)
+            || !clipWindows.TryGetValue(
+                segment.LastClipId.Value,
+                out AudioTimelineClipWindow last)
+            || !first.IsResolved
+            || !last.IsResolved)
+        {
+            return (segment.TimelineStartSeconds, segment.LengthSeconds);
+        }
+
+        double start = first.TimelineTimeAt(segment.FirstClipOffsetSeconds.Value);
+        double length = last.TimelineTimeAt(segment.LastClipOffsetSeconds.Value) - start;
+        return double.IsFinite(start)
+            && double.IsFinite(length)
+            && start >= 0
+            && length > 0
+                ? (start, length)
+                : null;
     }
 
     private static ImmutableDictionary<int, int> IndexClipWindows(

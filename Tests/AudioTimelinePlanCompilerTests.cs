@@ -44,27 +44,6 @@ public class AudioTimelinePlanCompilerTests
         Assert.Single(plan.Tracks.Where(track => track.TrackId == id));
 
     [Fact]
-    public void Default_projection_preserves_clip_relative_tracks()
-    {
-        VideoExecutionPlan video = Plan(Clip(10));
-
-        AudioTimelinePlan timeline = AudioTimelinePlanCompiler.Compile(
-            video,
-            [Track("overlay", new AudioTrackSpanSpec(
-                FirstClipId: 10,
-                LastClipId: 10,
-                SourceStartSeconds: 2,
-                ClipStartOffsetSeconds: 1,
-                ClipLengthSeconds: 0.5))]);
-        AudioTimelineTrackPlan overlayTrack = Track(timeline, "overlay");
-
-        AudioTrackClipWindow overlayWindow = Assert.Single(overlayTrack.Windows);
-        Assert.Equal(1, overlayWindow.TimelineStartSeconds, 8);
-        Assert.Equal(0.5, overlayWindow.DurationSeconds, 8);
-        Assert.Equal(2, overlayWindow.SourceStartSeconds, 8);
-    }
-
-    [Fact]
     public void Whole_timeline_track_partitions_across_all_clips()
     {
         VideoExecutionPlan video = Plan(Clip(0), Clip(1), Clip(2));
@@ -146,7 +125,7 @@ public class AudioTimelinePlanCompilerTests
     }
 
     [Fact]
-    public void Overlapping_tracks_remain_independent_and_are_marked_mixable()
+    public void Overlapping_tracks_remain_independent()
     {
         VideoExecutionPlan video = Plan(Clip(0), Clip(1));
         AudioTimelinePlan timeline = AudioTimelinePlanCompiler.Compile(video,
@@ -157,9 +136,6 @@ public class AudioTimelinePlanCompilerTests
 
         Assert.Equal(2, Track(timeline, "music").Windows.Length);
         Assert.Equal(2, Track(timeline, "voice").Windows.Length);
-        Assert.Contains(timeline.Diagnostics, diagnostic =>
-            diagnostic.Code == "audio.timeline.overlapping_tracks"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Info);
     }
 
     [Fact]
@@ -253,6 +229,33 @@ public class AudioTimelinePlanCompilerTests
         Assert.Contains(timeline.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.timeline.track.duplicate_id"
                 && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+    }
+
+    [Fact]
+    public void Invalid_track_metadata_warns_and_skips_unusable_tracks()
+    {
+        VideoExecutionPlan video = Plan(Clip(0));
+        AudioTimelineTrackSource source = new(AudioSourceKind.External, "source.wav");
+        ImmutableArray<AudioTrackSpec> tracks =
+        [
+            null,
+            new("", source, []),
+            new("missing-source", null, []),
+        ];
+
+        AudioTimelinePlan timeline = AudioTimelinePlanCompiler.Compile(video, tracks);
+
+        Assert.Empty(timeline.Tracks);
+        Assert.Equal(
+            [
+                "audio.timeline.track.null",
+                "audio.timeline.track.missing_id",
+                "audio.timeline.track.missing_source",
+            ],
+            timeline.Diagnostics.Select(diagnostic => diagnostic.Code));
+        Assert.All(
+            timeline.Diagnostics,
+            diagnostic => Assert.Equal(PlanDiagnosticSeverity.Warning, diagnostic.Severity));
     }
 
     [Theory]

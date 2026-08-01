@@ -745,8 +745,6 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(
             [0, 1],
             plan.Clips[1].Audio.Segments.Items.Select(item => item.AceStepFunTrack));
-        Assert.Contains(plan.AudioTimeline.Diagnostics, diagnostic =>
-            diagnostic.Code == "audio.timeline.overlapping_tracks");
     }
 
     [Fact]

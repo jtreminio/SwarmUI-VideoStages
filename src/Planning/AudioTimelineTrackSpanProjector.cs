@@ -6,9 +6,6 @@ internal sealed record AudioTimelineTrackProjectionResult(
     ImmutableArray<AudioTimelineTrackPlan> Tracks,
     ImmutableArray<PlanDiagnostic> Diagnostics);
 
-/// <summary>
-/// Projects audio spans onto final clip windows and reports unresolved timing inputs.
-/// </summary>
 internal static class AudioTimelineTrackSpanProjector
 {
     internal static AudioTimelineTrackProjectionResult Project(
@@ -24,14 +21,47 @@ internal static class AudioTimelineTrackSpanProjector
         foreach (AudioTrackSpec track in tracks)
         {
             string trackId = track?.TrackId?.Trim() ?? "";
-            AudioTrackValidation validation = AudioTimelineValidationPlanner.ValidateTrack(
-                track,
-                trackId,
-                isDuplicateId: trackId.Length > 0 && !seenTrackIds.Add(trackId));
-            diagnostics.AddRange(validation.Diagnostics);
-            if (!validation.CanProject)
+            if (track is null)
             {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
+                    "audio.timeline.track.null",
+                    "A null timeline audio track was ignored."));
                 continue;
+            }
+            if (trackId.Length == 0)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
+                    "audio.timeline.track.missing_id",
+                    "A timeline audio track with no id was ignored."));
+                continue;
+            }
+            if (!seenTrackIds.Add(trackId))
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
+                    "audio.timeline.track.duplicate_id",
+                    $"Timeline audio track '{trackId}' is duplicated; only the first is used.",
+                    TrackId: trackId));
+                continue;
+            }
+            if (track.Source is null)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
+                    "audio.timeline.track.missing_source",
+                    $"Timeline audio track '{trackId}' has no source and was ignored.",
+                    TrackId: trackId));
+                continue;
+            }
+            if ((track.Spans.IsDefault ? [] : track.Spans).IsEmpty)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
+                    "audio.timeline.track.no_spans",
+                    $"Timeline audio track '{trackId}' has no spans.",
+                    TrackId: trackId));
             }
 
             ImmutableArray<AudioTrackClipWindow>.Builder windows =
@@ -88,23 +118,6 @@ internal static class AudioTimelineTrackSpanProjector
 
         double? requestedStart = span.TimelineStartSeconds;
         double? requestedEnd = requestedStart + span.TimelineLengthSeconds;
-        if (span.HasClipRelativeWindow)
-        {
-            AudioTimelineClipWindow owner = clipWindows[firstIndex];
-            if (!owner.IsResolved)
-            {
-                diagnostics.Add(new(
-                    PlanDiagnosticSeverity.Warning,
-                    "audio.timeline.span.unresolved_clip_relative_timing",
-                    "A clip-relative audio span is pending until its clip timing is known.",
-                    TrackId: trackId,
-                    SpanIndex: spanIndex,
-                    ClipId: owner.ClipId));
-                return;
-            }
-            requestedStart = owner.TimelineTimeAt(span.ClipStartOffsetSeconds.Value);
-            requestedEnd = requestedStart + span.ClipLengthSeconds.Value;
-        }
         double? sourceAnchor = requestedStart;
         List<AudioTrackClipWindow> projected = [];
         bool emitted = false;

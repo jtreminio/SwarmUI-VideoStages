@@ -54,27 +54,20 @@ public class AudioTimelinePlanningComponentsTests
     }
 
     [Fact]
-    public void Span_projector_keeps_cross_clip_windows_and_unresolved_clip_relative_spans_atomic()
+    public void Span_projector_keeps_cross_clip_windows()
     {
         ImmutableArray<AudioTimelineClipWindow> clipWindows =
         [
             new(0, 0, 2),
             new(1, 2, 2),
-            new(2, null, null),
         ];
         ImmutableDictionary<int, int> clipIndices = ImmutableDictionary<int, int>.Empty
             .Add(0, 0)
-            .Add(1, 1)
-            .Add(2, 2);
+            .Add(1, 1);
 
         AudioTimelineTrackProjectionResult result = AudioTimelineTrackSpanProjector.Project(
         [
             Track("score", new AudioTrackSpanSpec(FirstClipId: 0, LastClipId: 1, SourceStartSeconds: 3)),
-            Track("pending", new AudioTrackSpanSpec(
-                FirstClipId: 2,
-                LastClipId: 2,
-                ClipStartOffsetSeconds: 0.5,
-                ClipLengthSeconds: 1)),
         ],
         clipWindows,
         clipIndices);
@@ -83,10 +76,6 @@ public class AudioTimelinePlanningComponentsTests
         Assert.Equal([0, 1], score.Windows.Select(window => window.ClipId));
         Assert.Equal([3d, 5d], score.Windows.Select(window => window.SourceStartSeconds));
 
-        AudioTimelineTrackPlan pending = Assert.Single(result.Tracks.Where(track => track.TrackId == "pending"));
-        Assert.Empty(pending.Windows);
-        Assert.Contains(result.Diagnostics, diagnostic =>
-            diagnostic.Code == "audio.timeline.span.unresolved_clip_relative_timing");
     }
 
     [Fact]
@@ -112,28 +101,6 @@ public class AudioTimelinePlanningComponentsTests
         Assert.Empty(score.Windows);
         Assert.Contains(result.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.timeline.span.unresolved_clip_timing");
-    }
-
-    [Fact]
-    public void Validation_planner_reports_cross_track_overlap_information()
-    {
-        AudioTimelineTrackSource source = new(AudioSourceKind.External, "source.wav");
-        ImmutableArray<AudioTimelineTrackPlan> tracks =
-        [
-            new("first", source,
-            [
-                new("first", 0, 0, 0, 2, 0),
-                new("first", 0, 0, 1, 1, 3),
-            ]),
-            new("second", source,
-            [new("second", 0, 0, 0.5, 1, 0)]),
-        ];
-
-        ImmutableArray<PlanDiagnostic> diagnostics = AudioTimelineValidationPlanner.Validate(tracks);
-
-        Assert.Equal(
-            ["audio.timeline.overlapping_tracks"],
-            diagnostics.Select(diagnostic => diagnostic.Code));
     }
 
     public static IEnumerable<object[]> FacadeParityCases()
