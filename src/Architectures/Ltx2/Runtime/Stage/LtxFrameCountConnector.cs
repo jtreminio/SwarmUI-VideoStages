@@ -17,30 +17,15 @@ internal static class LtxFrameCountConnector
         {
             if (videoData["inputs"] is JObject videoInputs)
             {
-                videoInputs["length"] = framesConnection?.DeepClone() as JArray;
+                videoInputs["length"] = framesConnection.DeepClone() as JArray;
             }
         });
         g.RunOnNodesOfClass(LTXVEmptyLatentAudioNode.ClassType, (_, audioData) =>
         {
             if (audioData["inputs"] is JObject audioInputs)
             {
-                SetFrameCountInput(audioInputs, framesConnection);
+                audioInputs["frames_number"] = framesConnection.DeepClone() as JArray;
             }
         });
-    }
-
-    public static void SetFrameCountInput(JObject inputs, JArray framesConnection)
-    {
-        if (inputs is null || framesConnection is null)
-        {
-            return;
-        }
-
-        string key = "frames_number";
-        if (!inputs.ContainsKey("frames_number") && inputs.ContainsKey("length"))
-        {
-            key = "length";
-        }
-        inputs[key] = framesConnection?.DeepClone() as JArray;
     }
 }

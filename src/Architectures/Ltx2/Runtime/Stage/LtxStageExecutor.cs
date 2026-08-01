@@ -104,7 +104,6 @@ internal sealed class LtxStageExecutor
             outputFinalizer.Complete(
                 genInfo,
                 stageFrame,
-                effectiveSourceMedia,
                 postVideoChain);
         }
         finally

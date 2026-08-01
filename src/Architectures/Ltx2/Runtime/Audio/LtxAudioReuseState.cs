@@ -9,11 +9,6 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal static class LtxAudioReuseState
 {
-    private static bool IsValidAudioLatentPath(JArray path)
-    {
-        return path is { Count: 2 };
-    }
-
     public static void PrepareReusableAudio(
         WorkflowGenerator generator,
         ClipContext clipContext,
@@ -34,8 +29,7 @@ internal static class LtxAudioReuseState
 
         if (action == StageAudioAction.CaptureForReuse
             && generator.CurrentMedia.AttachedAudio?.DataType == WGNodeData.DT_LATENT_AUDIO
-            && generator.CurrentMedia.AttachedAudio.Path is JArray currentAudioPath
-            && IsValidAudioLatentPath(currentAudioPath))
+            && generator.CurrentMedia.AttachedAudio.Path is JArray { Count: 2 } currentAudioPath)
         {
             audioReuse.Remember(new JArray(currentAudioPath[0], currentAudioPath[1]));
             return;
@@ -61,7 +55,6 @@ internal static class LtxAudioReuseState
     internal static bool UsesCapturedAudio(StagePlan stage) =>
         stage?.RequireLtx2Payload().AudioAction == StageAudioAction.ReuseCaptured;
 
-    /// <summary>Captures a latent found only in the post-video chain.</summary>
     internal static void CompletePostVideoChainCapture(
         Ltx2ClipAudioReuseState audioReuse,
         StagePlan stage,

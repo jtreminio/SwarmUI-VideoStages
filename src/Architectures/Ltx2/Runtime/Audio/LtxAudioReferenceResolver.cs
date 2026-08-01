@@ -65,7 +65,7 @@ internal sealed class LtxAudioReferenceResolver
             } preparedAudioLatent
             && attachedType == WGNodeData.DT_LATENT_AUDIO)
         {
-            // Prepared window masks and boundary context are already the exact sampling input.
+            // Reuse the prepared latent to preserve windowing and boundary context.
             return CloneAudioReference(preparedAudioLatent);
         }
 
@@ -115,7 +115,7 @@ internal sealed class LtxAudioReferenceResolver
         return JToken.DeepEquals(nativePath, state.AudioLatentPath);
     }
 
-    internal bool IsExplicitUploadAudio(WGNodeData audio)
+    private bool IsExplicitUploadAudio(WGNodeData audio)
     {
         if (audio?.DataType != WGNodeData.DT_AUDIO
             || audio.Path is not JArray { Count: 2 } audioPath)
