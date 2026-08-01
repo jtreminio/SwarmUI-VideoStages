@@ -219,7 +219,6 @@ internal static class VideoExecutionPlanCompiler
             HasConfiguredResolution = spec.HasConfiguredResolution,
             Clips = clipsWithTimelineAudio,
             Diagnostics = Array.AsReadOnly(diagnostics.ToArray()),
-            AudioTimeline = audioTimeline,
         };
     }
 

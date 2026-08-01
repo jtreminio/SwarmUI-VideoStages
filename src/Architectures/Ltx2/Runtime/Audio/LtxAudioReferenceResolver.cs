@@ -170,6 +170,6 @@ internal sealed class LtxAudioReferenceResolver
     private T2IModelCompatClass ResolveAudioCompat()
     {
         return g.CurrentAudioVae?.Compat
-            ?? LtxStageInputArtifactFactory.ResolveVideoCompat(g, state);
+            ?? T2IModelClassSorter.CompatLtxv2;
     }
 }

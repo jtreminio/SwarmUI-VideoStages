@@ -29,7 +29,7 @@ internal sealed class LtxStageInputArtifactFactory
             state.AvLatentPath,
             g,
             WGNodeData.DT_LATENT_AUDIOVIDEO,
-            ResolveVideoCompat(g, state)));
+            T2IModelClassSorter.CompatLtxv2));
         audioReferences.AttachSourceAudio(stageInput);
         return stageInput;
     }
@@ -40,7 +40,7 @@ internal sealed class LtxStageInputArtifactFactory
             ResolveReusableVideoLatentRoute(),
             g,
             WGNodeData.DT_LATENT_VIDEO,
-            ResolveVideoCompat(g, state)));
+            T2IModelClassSorter.CompatLtxv2));
         audioReferences.AttachSourceAudio(videoLatent);
         return videoLatent;
     }
@@ -51,7 +51,7 @@ internal sealed class LtxStageInputArtifactFactory
             state.VideoVaePath?.DeepClone() as JArray,
             g,
             WGNodeData.DT_VAE,
-            ResolveVideoCompat(g, state));
+            T2IModelClassSorter.CompatLtxv2);
     }
 
     public bool CanReuseCurrentOutputAsStageInput(WGNodeData sourceMedia)
@@ -128,16 +128,6 @@ internal sealed class LtxStageInputArtifactFactory
             };
         }
         return cloned;
-    }
-
-    internal static T2IModelCompatClass ResolveVideoCompat(
-        WorkflowGenerator generator,
-        LtxPostVideoChainState state)
-    {
-        return T2IModelClassSorter.CompatLtxv2
-            ?? generator.CurrentVae?.Compat
-            ?? state.CurrentOutputMedia?.Compat
-            ?? generator.CurrentCompat();
     }
 
     private JArray ResolveReusableVideoLatentRoute()

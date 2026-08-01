@@ -696,7 +696,6 @@ public class PlanningCompilerComponentTests
         return plan with
         {
             Diagnostics = Array.AsReadOnly(diagnostics.ToArray()),
-            AudioTimeline = audioTimeline,
         };
     }
 

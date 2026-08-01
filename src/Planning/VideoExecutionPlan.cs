@@ -18,12 +18,6 @@ internal sealed record VideoExecutionPlan(
 {
     /// <summary>Whether the author explicitly configured both timeline dimensions.</summary>
     public bool HasConfiguredResolution { get; init; } = true;
-
-    /// <summary>
-    /// Projection of authored timeline tracks onto final clip windows. Per-clip base audio remains
-    /// in <see cref="ClipPlan.Audio"/>.
-    /// </summary>
-    public AudioTimelinePlan AudioTimeline { get; init; } = AudioTimelinePlan.Empty;
 }
 
 /// <summary>Compiled host-root ownership decisions.</summary>

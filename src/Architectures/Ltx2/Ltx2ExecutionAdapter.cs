@@ -192,8 +192,8 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             StageClipExecutionContext stageContext = new(
                 context,
                 plan,
-                ToNodeData(context.PreviousClipOutput),
-                ToNodeData(context.PreviousTimelineClipOutput),
+                context.PreviousClipOutput?.ToHostMedia(generator),
+                context.PreviousTimelineClipOutput?.ToHostMedia(generator),
                 rootSources,
                 assembly,
                 hostScope,
@@ -205,34 +205,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         public void Dispose()
         {
             hostScope.Dispose();
-        }
-
-        private WGNodeData ToNodeData(DecodedClipArtifact artifact)
-        {
-            if (artifact is null)
-            {
-                return null;
-            }
-            WGNodeData media = new(
-                artifact.Video.ToPath(),
-                generator,
-                WGNodeData.DT_VIDEO,
-                null)
-            {
-                Width = artifact.Width,
-                Height = artifact.Height,
-                Frames = artifact.Frames,
-                FPS = artifact.FramesPerSecond,
-            };
-            if (artifact.Audio is not null)
-            {
-                media.AttachedAudio = new(
-                    artifact.Audio.ToPath(),
-                    generator,
-                    WGNodeData.DT_AUDIO,
-                    null);
-            }
-            return media;
         }
     }
 }

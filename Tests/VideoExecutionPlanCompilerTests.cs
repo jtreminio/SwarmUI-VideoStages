@@ -772,10 +772,6 @@ public class VideoExecutionPlanCompilerTests
         AudioSegmentItemPlan item = Assert.Single(plan.Clips[1].Audio.Segments.Items);
         Assert.Equal(0, item.StartSeconds);
         Assert.Equal(1, item.LengthSeconds);
-        Assert.Equal(49d / 24, Assert.Single(
-            plan.AudioTimeline.Tracks.Where(track => track.TrackId == "seam"))
-            .Windows[0]
-            .TimelineStartSeconds);
     }
 
     private static VideoStagesSpec Spec(bool isTextToVideo, params ClipSpec[] clips) =>

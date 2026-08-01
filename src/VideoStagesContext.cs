@@ -14,7 +14,7 @@ internal static class VideoStagesContext
 
     // The execution plan is deliberately a separate cache from the parsed specification so it
     // can be compiled before the host graph exists and consumed by every workflow phase.
-    private static readonly ConditionalWeakTable<WorkflowGenerator, PlanCacheEntry> PlanCache = new();
+    private static readonly ConditionalWeakTable<WorkflowGenerator, VideoExecutionPlanContext> PlanCache = new();
 
     // Prompt-tag section resolution has no live WorkflowGenerator to key the cache on, so repeated
     // videoclip[clip,stage] lookups in one generation share the parse via the stable param input.
@@ -27,7 +27,7 @@ internal static class VideoStagesContext
         PromptParseCache.GetValue(input, ParseForPromptTag);
 
     public static VideoExecutionPlanContext? GetVideoExecutionPlanContext(this WorkflowGenerator g) =>
-        PlanCache.GetValue(g, CompilePlan).Context;
+        PlanCache.GetValue(g, CompilePlan);
 
     public static VideoExecutionPlanContext RequireVideoExecutionPlanContext(
         this WorkflowGenerator g)
@@ -72,12 +72,12 @@ internal static class VideoStagesContext
         return VideoStagesSpecParser.Parse(generator);
     }
 
-    private static PlanCacheEntry CompilePlan(WorkflowGenerator g)
+    private static VideoExecutionPlanContext CompilePlan(WorkflowGenerator g)
     {
         VideoStagesSpec spec = g.GetVideoStagesSpec();
         if (spec.Clips.Count == 0)
         {
-            return new PlanCacheEntry(null);
+            return null;
         }
         ArchitecturePlanningResult architecturePlanning =
             ArchitecturePlanResolver.Resolve(
@@ -96,12 +96,10 @@ internal static class VideoStagesContext
         // Compilation happens once per workflow generator, so this is the one place a plan's
         // non-blocking diagnostics can reach the user without repeating on every phase lookup.
         PlanDiagnosticReporter.ReportToRequest(plan.Diagnostics, g.UserInput);
-        return new PlanCacheEntry(new VideoExecutionPlanContext(
+        return new VideoExecutionPlanContext(
             plan,
-            context => new VideoArchitectureExecutionHost(g, context)));
+            context => new VideoArchitectureExecutionHost(g, context));
     }
-
-    private sealed record PlanCacheEntry(VideoExecutionPlanContext? Context);
 }
 
 internal enum VideoExecutionState
