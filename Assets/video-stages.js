@@ -444,8 +444,6 @@
   // frontend/architectures/generatedFeatures.ts
   var CAPABILITY_WIRE_NAMES = {
     architecture: {
-      generatedEntry: "generated-entry",
-      initVideoEntry: "init-video-entry",
       nativeAudio: "native-audio"
     },
     clip: {

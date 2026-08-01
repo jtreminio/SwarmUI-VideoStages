@@ -296,7 +296,7 @@ public class ArchitectureRuntimeOwnershipTests
             [AudioSourceKind.Native],
             [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.InitVideo],
             new(
-                ArchitectureCapability.GeneratedEntry | ArchitectureCapability.InitVideoEntry,
+                ArchitectureCapability.None,
                 ClipCapability.InitVideo,
                 StageCapability.ImageInput | StageCapability.VideoInput),
             new ArchitectureBoundaryPolicy(

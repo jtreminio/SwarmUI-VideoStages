@@ -4,8 +4,6 @@
     "label": "LTX Video 2.3",
     "capabilities": {
       "architecture": [
-        "generated-entry",
-        "init-video-entry",
         "native-audio"
       ],
       "clip": [

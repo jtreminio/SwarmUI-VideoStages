@@ -39,17 +39,9 @@ internal static class ArchitectureCapabilityValidator
                 diagnostics);
         }
         Require(
-            clip.InitVideo is null,
-            Has(
-                capabilities.Architecture,
-                ArchitectureCapability.GeneratedEntry),
-            "generated entry");
-        Require(
-            clip.InitVideo is not null,
-            Has(
-                capabilities.Architecture,
-                ArchitectureCapability.InitVideoEntry),
-            "init-video entry");
+            configured: true,
+            descriptor.EntryModes.Contains(entryMode),
+            $"{ArchitectureFeatureVocabulary.WireName(entryMode)} entry");
         Require(
             clip.SaveAudioTrack,
             Has(

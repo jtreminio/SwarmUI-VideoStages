@@ -124,9 +124,9 @@ public class RealArchitectureContractTests
         Assert.All(
             Enum.GetValues<BoundaryJoinType>(),
             mode => Assert.True(descriptor.BoundaryRules.ContainsKey(mode)));
-        Assert.True(
-            descriptor.Capabilities.Architecture.HasFlag(
-                ArchitectureCapability.GeneratedEntry));
+        Assert.Contains(
+            descriptor.EntryModes,
+            mode => mode != ArchitectureEntryMode.InitVideo);
     }
 
     [Fact]

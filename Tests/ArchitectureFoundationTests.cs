@@ -732,7 +732,6 @@ public class ArchitectureFoundationTests
     public void Capability_validation_requires_video_input_for_every_later_stage()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
-            architecture: ArchitectureCapability.GeneratedEntry,
             stage: StageCapability.ImageInput);
         FakeRegistry registry = new(fakeDescriptor: descriptor);
         ClipSpec clip = GeneratedClip(
@@ -954,7 +953,6 @@ public class ArchitectureFoundationTests
     public void Capability_validation_requires_every_mixed_stage_model_to_allow_the_entry()
     {
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
-            architecture: ArchitectureCapability.GeneratedEntry,
             entryModes:
             [
                 ArchitectureEntryMode.ImageToVideo,
@@ -1564,9 +1562,7 @@ public class ArchitectureFoundationTests
         Assert.Null(none["defaultProfileId"]);
         Assert.Null(none["profiles"]);
         Assert.Null(none["extras"]);
-        Assert.Equal(
-            ["init-video-entry"],
-            none["capabilities"]["architecture"].Values<string>());
+        Assert.Empty(none["capabilities"]["architecture"]);
         Assert.Equal(
             ["init-video", "audio-sources", "audio-segments"],
             none["capabilities"]["clip"].Values<string>());
@@ -1588,11 +1584,7 @@ public class ArchitectureFoundationTests
         Assert.Null(capabilities["conditionalRules"]);
         Assert.Null(capabilities["clipAudio"]);
         Assert.Equal(
-            [
-                "generated-entry",
-                "init-video-entry",
-                "native-audio",
-            ],
+            ["native-audio"],
             capabilities["architecture"].Values<string>());
         Assert.Equal(
             [
@@ -1729,8 +1721,7 @@ public class ArchitectureFoundationTests
     }
 
     private static VideoArchitectureDescriptor FakeCapabilityDescriptor(
-        ArchitectureCapability architecture =
-            ArchitectureCapability.GeneratedEntry,
+        ArchitectureCapability architecture = ArchitectureCapability.None,
         StageCapability stage =
             StageCapability.ImageInput | StageCapability.VideoInput,
         IReadOnlyList<ArchitectureEntryMode> entryModes = null) =>
@@ -1914,7 +1905,7 @@ public class ArchitectureFoundationTests
                 ArchitectureEntryMode.ImageToVideo,
             ],
             new(
-                ArchitectureCapability.GeneratedEntry,
+                ArchitectureCapability.None,
                 ClipCapability.Prompts,
                 StageCapability.ImageInput | StageCapability.VideoInput),
             new ArchitectureBoundaryPolicy(

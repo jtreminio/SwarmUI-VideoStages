@@ -56,9 +56,7 @@ internal enum VideoModelEntryAbility
 internal enum ArchitectureCapability
 {
     None = 0,
-    GeneratedEntry = 1 << 0,
-    InitVideoEntry = 1 << 1,
-    NativeAudio = 1 << 2,
+    NativeAudio = 1 << 0,
 }
 
 [Flags]

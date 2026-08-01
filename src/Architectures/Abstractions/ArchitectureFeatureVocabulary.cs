@@ -64,8 +64,6 @@ internal static class ArchitectureFeatureVocabulary
 {
     internal static IReadOnlyList<CapabilityVocabularyEntry> Capabilities { get; } =
     [
-        For(ArchitectureCapability.GeneratedEntry, "generated-entry"),
-        For(ArchitectureCapability.InitVideoEntry, "init-video-entry"),
         For(ArchitectureCapability.NativeAudio, "native-audio"),
         For(ClipCapability.InitVideo, "init-video"),
         For(ClipCapability.Prompts, "prompts"),
@@ -196,6 +194,14 @@ internal static class ArchitectureFeatureVocabulary
             "retake-frame-references-unsupported"),
         new(ConditionalRuleCodeId.RetakeRequiresSource, "retake-source-required"),
     ];
+
+    internal static string WireName(ArchitectureEntryMode mode) => mode switch
+    {
+        ArchitectureEntryMode.TextToVideo => "text-to-video",
+        ArchitectureEntryMode.ImageToVideo => "image-to-video",
+        ArchitectureEntryMode.InitVideo => "init-video",
+        _ => throw new ArgumentOutOfRangeException(nameof(mode)),
+    };
 
     internal static string RuleCode(ConditionalRuleCodeId id) =>
         ConditionalRuleCodes.Single(entry => entry.Id == id).Code;

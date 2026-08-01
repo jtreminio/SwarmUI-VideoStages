@@ -164,13 +164,8 @@ internal static class ArchitectureCatalogSerializer
     private static IEnumerable<string> UpscaleModes(StageCapability value)
         => ArchitectureFeatureVocabulary.UpscaleModeWireNames(value);
 
-    private static string SerializeEntryMode(ArchitectureEntryMode mode) => mode switch
-    {
-        ArchitectureEntryMode.TextToVideo => "text-to-video",
-        ArchitectureEntryMode.ImageToVideo => "image-to-video",
-        ArchitectureEntryMode.InitVideo => "init-video",
-        _ => throw new ArgumentOutOfRangeException(nameof(mode)),
-    };
+    private static string SerializeEntryMode(ArchitectureEntryMode mode) =>
+        ArchitectureFeatureVocabulary.WireName(mode);
 
     private static string SerializeConditionalFeature(ConditionalRuleFeature feature) =>
         ArchitectureFeatureVocabulary.AuthoringKey(feature);
