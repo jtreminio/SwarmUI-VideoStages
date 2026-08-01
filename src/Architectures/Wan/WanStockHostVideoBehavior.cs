@@ -44,11 +44,15 @@ internal sealed class WanStockHostVideoBehavior(
         {
             return null;
         }
-        WanFrameReferencePlan authored =
-            clip.RequireWanPayload().LastFrameReference;
+        // An authored reference only claims this slot once it actually materializes. An
+        // unusable one has already reported itself, so the request-global end frame still wins
+        // its own policy check instead of being dropped by a reference that produced nothing.
+        Image authored = MaterializeUpload(
+            clip.RequireWanPayload().LastFrameReference,
+            "WAN final-frame reference");
         if (authored is not null)
         {
-            return MaterializeUpload(authored, "WAN final-frame reference");
+            return authored;
         }
         return WanVideoEndFramePolicy.ShouldApply(plan, clip, stage)
             ? generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null)

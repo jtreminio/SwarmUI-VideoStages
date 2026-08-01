@@ -3489,6 +3489,47 @@ public class WanRuntimeFlowTests
         AssertAcyclic(bridge);
     }
 
+    /// <summary>
+    /// A final-frame reference only claims the end-image slot once it materializes. "Base" is
+    /// dropped during planning; an upload with no payload survives planning and is refused at
+    /// runtime. Either way SwarmUI's request-global Video End Frame still applies.
+    /// </summary>
+    [Theory]
+    [InlineData("Base")]
+    [InlineData("Upload")]
+    public void Unusable_last_reference_leaves_the_global_end_image_in_place(string source)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 10));
+        clip["refs"] = new JArray(new JObject
+        {
+            ["source"] = source,
+            ["frame"] = 1,
+            ["fromEnd"] = true,
+        });
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
+
+        (JObject workflow, _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode conditioning = Assert.Single(
+            NodesOfClass(bridge, "WanFirstLastFrameToVideo"));
+        ComfyNode endScale = conditioning.FindInput("end_image").Connection?.Node;
+        Assert.NotNull(endScale);
+        LoadImageNode endLoad = Assert.IsType<LoadImageNode>(
+            endScale.FindInput("image").Connection?.Node);
+        Assert.Equal("${videoendframe}", endLoad.Image.LiteralAsString());
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
     [Fact]
     public void Global_end_image_warns_and_is_ignored_for_init_video_Wan_clip()
     {
