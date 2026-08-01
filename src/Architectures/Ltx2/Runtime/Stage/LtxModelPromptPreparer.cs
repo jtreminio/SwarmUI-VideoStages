@@ -10,9 +10,7 @@ using VideoStages.Architectures.Ltx2.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal sealed class LtxModelPromptPreparer(
-    WorkflowGenerator g,
-    LtxStageRuntimeSettings runtimeSettings)
+internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
 {
     private const double PromptRelayEpsilon = 0.001;
 
@@ -71,7 +69,7 @@ internal sealed class LtxModelPromptPreparer(
             return false;
         }
 
-        int fps = runtimeSettings.ResolveFps(genInfo, sourceMedia);
+        int fps = LtxStageRuntimeSettings.ResolveFps(g, genInfo, sourceMedia);
         int frameCount = genInfo.Frames
             ?? sourceMedia?.Frames
             ?? LtxStageRuntimeSettings.DefaultFrameCount;
@@ -104,9 +102,8 @@ internal sealed class LtxModelPromptPreparer(
             return false;
         }
 
-        // The node can only estimate latent geometry from the rounded window seconds, and the
-        // estimate is off by a frame on LTX's (n-1)/grid+1 mapping. The plan knows the real frame
-        // count, so send the latent frame total with the schedule.
+        // Rounded seconds can miss one frame under LTX's (n-1)/grid+1 mapping, so pass the planned
+        // latent-frame count.
         JObject relayPayload = new()
         {
             ["latentFrames"] = Ltx2ArchitectureModule.LatentFrameCount(frameCount),

@@ -12,7 +12,6 @@ internal sealed class LtxConditioningPipeline(
         WorkflowGenerator g,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         StageFrame stageFrame,
-        LtxStageRuntimeSettings runtimeSettings,
         LtxGuidePreprocessReuse guidePreprocessReuse)
 {
     private WGNodeData stageLatent;
@@ -20,9 +19,10 @@ internal sealed class LtxConditioningPipeline(
     public LtxConditioningPipeline WithLatent(WGNodeData stageLatent, WGNodeData sourceMedia)
     {
         this.stageLatent = stageLatent;
-        runtimeSettings.ApplyResolvedFpsToWorkflow(
+        LtxStageRuntimeSettings.ApplyResolvedFpsToWorkflow(
+            g,
             genInfo,
-            runtimeSettings.ResolveFps(genInfo, sourceMedia));
+            LtxStageRuntimeSettings.ResolveFps(g, genInfo, sourceMedia));
         genInfo.VideoFPS ??= LtxStageRuntimeSettings.DefaultFps;
         genInfo.Frames ??= LtxStageRuntimeSettings.DefaultFrameCount;
         genInfo.DefaultCFG = LtxStageRuntimeSettings.DefaultCfg;
@@ -55,10 +55,7 @@ internal sealed class LtxConditioningPipeline(
         return this;
     }
 
-    /// <summary>
-    /// Runs under a retake mask as well: the node merges the reference into the mask over its own
-    /// latent frames only, leaving the retake window elsewhere intact.
-    /// </summary>
+    // In-place references affect only their own latent frames, preserving the rest of a retake mask.
     public LtxConditioningPipeline WithInplaceMerges(IReadOnlyList<ResolvedClipRef> clipRefs)
     {
         foreach (ResolvedClipRef clipRef in clipRefs)
@@ -109,10 +106,7 @@ internal sealed class LtxConditioningPipeline(
         return this;
     }
 
-    /// <summary>
-    /// Re-freezes a continue boundary's tail after stage input binding so it wins over other
-    /// conditioning at the head. The opening stage uses the tail as its primary guide instead.
-    /// </summary>
+    // Apply a continue tail last so it takes precedence over other head conditioning.
     public LtxConditioningPipeline WithContinuityAnchor()
     {
         if (stageFrame.ContinuityAnchor is null)

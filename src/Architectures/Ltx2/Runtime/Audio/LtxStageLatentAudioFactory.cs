@@ -9,9 +9,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal sealed class LtxStageLatentAudioFactory(
-    WorkflowGenerator g,
-    LtxStageRuntimeSettings runtimeSettings)
+internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
 {
     internal WGNodeData CreateEmpty(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -50,7 +48,7 @@ internal sealed class LtxStageLatentAudioFactory(
         WGNodeData attachedAudio,
         JArray controlNetLengthFrames = null)
     {
-        int fps = runtimeSettings.ResolveFps(genInfo, sourceMedia);
+        int fps = LtxStageRuntimeSettings.ResolveFps(g, genInfo, sourceMedia);
         JArray audioLengthFrames = null;
         WGNodeData effectiveAttached = attachedAudio;
 
@@ -126,7 +124,7 @@ internal sealed class LtxStageLatentAudioFactory(
         StageFrame stageFrame,
         WGNodeData sourceMedia)
     {
-        int fps = runtimeSettings.ResolveFps(genInfo, sourceMedia);
+        int fps = LtxStageRuntimeSettings.ResolveFps(g, genInfo, sourceMedia);
         WGNodeData nativeHandoff = LtxDecodedAudioHandoff.PreferNativeLatent(g, latent);
         WGNodeData attachedAudio = nativeHandoff.AttachedAudio ?? sourceMedia?.AttachedAudio;
         WGNodeData conditionedAudio = ApplyPendingAudioConditioning(
@@ -185,7 +183,7 @@ internal sealed class LtxStageLatentAudioFactory(
         if (clip.ArchitecturePayload is not IArchitectureControlNetSourcePlan
             { ControlNetSourceIndex: int sourceIndex })
         {
-            // ApplyControlNetClipLength already warned; keep the authored clip length.
+            // Without a source, the authored clip length remains in effect.
             return null;
         }
         return new LtxControlNetMediaNormalizer(g).TryCreateFrameCount(
@@ -201,7 +199,7 @@ internal sealed class LtxStageLatentAudioFactory(
             or AudioSourceKind.AceStepFun
             or AudioSourceKind.ControlNet;
 
-    /// <summary>Uses planned dimensions because root media may retain its original size.</summary>
+    // Prefer planned dimensions because root media can retain its source size.
     private (int Width, int Height) ResolveStageLatentDims(
         StageFrame stageFrame,
         WGNodeData sourceMedia)

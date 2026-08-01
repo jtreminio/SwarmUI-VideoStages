@@ -12,18 +12,14 @@ namespace VideoStages.Architectures.Ltx2;
 internal sealed class LtxStageLatentBuilder
 {
     private readonly WorkflowGenerator g;
-    private readonly LtxStageRuntimeSettings runtimeSettings;
     private readonly LtxStageLatentAudioFactory latentAudioFactory;
     private readonly LtxReusableLatentResolver reusableLatentResolver;
     private readonly LtxVideoRetakeMasker retakeMasker;
 
-    internal LtxStageLatentBuilder(
-        WorkflowGenerator g,
-        LtxStageRuntimeSettings runtimeSettings)
+    internal LtxStageLatentBuilder(WorkflowGenerator g)
     {
         this.g = g;
-        this.runtimeSettings = runtimeSettings;
-        latentAudioFactory = new LtxStageLatentAudioFactory(g, runtimeSettings);
+        latentAudioFactory = new LtxStageLatentAudioFactory(g);
         reusableLatentResolver = new LtxReusableLatentResolver(g);
         retakeMasker = new LtxVideoRetakeMasker(g);
     }
@@ -40,8 +36,7 @@ internal sealed class LtxStageLatentBuilder
             ?? throw VideoStagesInvariant.Failure(
                 "LTX stage execution requires the compiled clip plan.");
         genInfo.StartStep = (int)Math.Floor(payload.Core.Steps * (1 - payload.Core.Control));
-        // The per-frame noise mask (not StartStep) gates what regenerates, so the whole latent must
-        // stay denoise-capable from step 0.
+        // The noise mask, not StartStep, limits regeneration during retakes.
         bool retakeActive = stage.HasActiveRetakeMask();
         if (retakeActive)
         {
@@ -122,7 +117,7 @@ internal sealed class LtxStageLatentBuilder
         JArray audioLengthFrames = matchAudioLength && !sourceCarriesPriorAudioLatent
             ? latentAudioFactory.BuildAudioLengthFrames(
                 sourceMedia.AttachedAudio,
-                runtimeSettings.ResolveFps(genInfo, sourceMedia)).FramesConnection
+                LtxStageRuntimeSettings.ResolveFps(g, genInfo, sourceMedia)).FramesConnection
             : null;
         JArray dynamicLengthFrames = controlNetLengthFrames ?? audioLengthFrames;
 

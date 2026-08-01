@@ -15,7 +15,6 @@ internal sealed class LtxStageExecutor
 
     private readonly WorkflowGenerator g;
     private readonly RootVideoStageResizer rootVideoStageResizer;
-    private readonly LtxStageRuntimeSettings runtimeSettings;
     private readonly LtxModelPromptPreparer modelPromptPreparer;
     private readonly LtxStageLatentBuilder latentBuilder;
     private readonly LtxStageSampler sampler;
@@ -27,9 +26,8 @@ internal sealed class LtxStageExecutor
     {
         this.g = g;
         this.rootVideoStageResizer = rootVideoStageResizer;
-        runtimeSettings = new LtxStageRuntimeSettings(g);
-        modelPromptPreparer = new LtxModelPromptPreparer(g, runtimeSettings);
-        latentBuilder = new LtxStageLatentBuilder(g, runtimeSettings);
+        modelPromptPreparer = new LtxModelPromptPreparer(g);
+        latentBuilder = new LtxStageLatentBuilder(g);
         sampler = new LtxStageSampler(g);
         outputFinalizer = new LtxStageOutputFinalizer(g);
     }
@@ -75,7 +73,6 @@ internal sealed class LtxStageExecutor
                         g,
                         genInfo,
                         stageFrame,
-                        runtimeSettings,
                         new LtxGuidePreprocessReuse(
                             g,
                             rootVideoStageResizer,

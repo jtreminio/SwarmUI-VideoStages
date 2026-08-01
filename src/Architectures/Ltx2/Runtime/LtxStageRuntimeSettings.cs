@@ -3,7 +3,7 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal sealed class LtxStageRuntimeSettings(WorkflowGenerator g)
+internal static class LtxStageRuntimeSettings
 {
     internal const int DefaultFps = 24;
     internal const int DefaultFrameCount = 97;
@@ -11,7 +11,8 @@ internal sealed class LtxStageRuntimeSettings(WorkflowGenerator g)
     internal const string DefaultSampler = "euler";
     internal const string DefaultScheduler = "normal";
 
-    internal void ApplyResolvedFpsToWorkflow(
+    internal static void ApplyResolvedFpsToWorkflow(
+        WorkflowGenerator g,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         int fps)
     {
@@ -23,7 +24,8 @@ internal sealed class LtxStageRuntimeSettings(WorkflowGenerator g)
         g.UserInput.Set(T2IParamTypes.VideoFPS, fps, genInfo.ContextID);
     }
 
-    internal int ResolveFps(
+    internal static int ResolveFps(
+        WorkflowGenerator g,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData sourceMedia)
     {
