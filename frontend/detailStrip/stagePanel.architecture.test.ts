@@ -18,7 +18,6 @@ import {
 } from "../__test_helpers__/dom";
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
 import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
-import { CONDITIONAL_RULE_CODES } from "../architectures/conditionalRules";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
@@ -314,77 +313,6 @@ describe("stage architecture model filtering", () => {
         expect(option("removed-lora.safetensors")).toMatchObject({
             disabled: true,
         });
-    });
-
-    it("repairs only the current stage's persisted passthrough LoRA weights", () => {
-        const models = catalog();
-        const reason =
-            "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.";
-        models.architectures[0].rules = [
-            {
-                support: "conditional",
-                code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
-                reason,
-                scope: "stage",
-                constraints: { exclusiveMinimumControl: 0 },
-            },
-        ];
-        const otherStage = minimalStage({
-            control: 0.5,
-            loraWeights: [0.4, -0.2],
-        });
-        const stage = minimalStage({ control: 0, loraWeights: [1, 0.75] });
-        const clip = minimalClip({
-            loras: [
-                { name: "persisted-lora.safetensors" },
-                { name: "second-lora.safetensors" },
-            ],
-            stages: [otherStage, stage],
-        });
-        const clips = [clip];
-        const ctx = context(models);
-        ctx.commit = (mutate) => mutate(clips);
-
-        const column = buildStageParamsColumn(
-            ctx,
-            clip,
-            0,
-            1,
-            stage,
-            testRootDefaults(models),
-        );
-        const inputs = column.querySelectorAll<HTMLInputElement>(
-            ".vst-stage-lora-weight",
-        );
-        const repair = column.querySelector<HTMLButtonElement>(
-            ".vst-reset-unsupported-stage-loras",
-        );
-
-        expect(Array.from(inputs, (input) => input.value)).toEqual([
-            "1",
-            "0.75",
-        ]);
-        expect(Array.from(inputs).every((input) => input.disabled)).toBe(true);
-        expect(
-            column.querySelector("[data-vst-capability-unsupported]")
-                ?.textContent,
-        ).toBe(reason);
-        expect(repair).not.toBeNull();
-        expect(repair?.disabled).toBe(false);
-        expect(repair?.tabIndex).toBeGreaterThanOrEqual(0);
-        expect(repair?.getAttribute("aria-label")).toBe(
-            "Set this stage's LoRA weights to 0",
-        );
-
-        repair?.click();
-
-        expect(clip.loras).toEqual([
-            { name: "persisted-lora.safetensors" },
-            { name: "second-lora.safetensors" },
-        ]);
-        expect(clip.stages[0].loraWeights).toEqual([0.4, -0.2]);
-        expect(clip.stages[1].loraWeights).toEqual([0, 0]);
-        expect(ctx.render).toHaveBeenCalledTimes(1);
     });
 
     it("keeps an unsupported persisted LTX IC-LoRA weight visible for repair", () => {

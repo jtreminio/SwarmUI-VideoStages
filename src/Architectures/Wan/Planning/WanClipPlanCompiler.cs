@@ -61,20 +61,6 @@ internal static class WanClipPlanCompiler
                     clip,
                     stage,
                     NormalLoraTargetPolicy.ModelOnly);
-            if (decodedStageInput
-                && stage.Control <= HostVideoStageRules
-                    .NormalLoraRequiresSamplingStage
-                    .Require<MinimumStageControlRuleConstraints>()
-                    .ExclusiveMinimumControl
-                && !loras.IsDefaultOrEmpty)
-            {
-                diagnostics.Add(new(
-                    PlanDiagnosticSeverity.Error,
-                    HostVideoStageRules.NormalLoraRequiresSamplingStageCode,
-                    HostVideoStageRules.NormalLoraRequiresSamplingStageReason,
-                    clip.Id,
-                    stage.Id));
-            }
             Refuse(
                 !firstStage
                     // Text-root parsing canonicalizes every selector to Generated. In other entry

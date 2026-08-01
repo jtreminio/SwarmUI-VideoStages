@@ -261,9 +261,6 @@ public class WanArchitectureTests
         Assert.True(descriptor.Capabilities.Stage.HasFlag(
             StageCapability.FrameReferences));
         Assert.True(descriptor.Capabilities.Clip.HasFlag(ClipCapability.References));
-        Assert.Contains(
-            HostVideoStageRules.NormalLoraRequiresSamplingStage,
-            descriptor.Rules);
         Assert.True(descriptor.StageGuideReferences.Allows(
             StageGuideReferencePolicy.Classify("Generated")));
         Assert.True(descriptor.StageGuideReferences.Allows(
@@ -632,27 +629,14 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Catalog_advertises_normal_LoRA_support_and_architecture_rule()
+    public void Catalog_advertises_normal_LoRA_support_without_conditional_rules()
     {
         JObject catalog = ArchitectureCatalogSerializer.Serialize(new WanCatalogRegistry());
         JObject wan = Assert.Single(
             catalog["architectures"].Values<JObject>(),
             item => item.Value<string>("id") == "wan22");
         Assert.Null(wan["profiles"]);
-        JObject rule = Assert.Single(wan["rules"].Values<JObject>());
-        Assert.Equal(
-            HostVideoStageRules.NormalLoraRequiresSamplingStageCode,
-            rule.Value<string>("code"));
-        Assert.Equal("conditional", rule.Value<string>("support"));
-        Assert.Equal("stage", rule.Value<string>("scope"));
-        Assert.Equal(
-            0,
-            rule["constraints"].Value<double>("exclusiveMinimumControl"));
-        Assert.Equal(
-            0,
-            HostVideoStageRules.NormalLoraRequiresSamplingStage
-                .Require<MinimumStageControlRuleConstraints>()
-                .ExclusiveMinimumControl);
+        Assert.Empty(wan["rules"].Values<JObject>());
     }
 
     [Fact]
@@ -1068,19 +1052,25 @@ public class WanArchitectureTests
             stage => Assert.Equal(0, stage.Core.Control));
     }
 
+    /// <summary>
+    /// A LoRA on a samplerless passthrough has no sampler to affect, but that is not worth
+    /// refusing: it compiles, and only a no-op weight drops the LoRA from the plan.
+    /// </summary>
     [Fact]
-    public void Compilation_refuses_effective_LoRAs_on_samplerless_passthrough()
+    public void Compilation_keeps_effective_LoRAs_on_samplerless_passthrough()
     {
         StageSpec passthrough = Stage(10, "wan-model") with { Control = 0 };
 
-        AssertBlocked(
-            Compile(
-                InitVideoClip(0, passthrough) with
-                {
-                    Loras = [new("clip-active", 0.5)],
-                }),
-            HostVideoStageRules.NormalLoraRequiresSamplingStageCode,
-            HostVideoStageRules.NormalLoraRequiresSamplingStageReason);
+        VideoExecutionPlan active = Compile(
+            InitVideoClip(0, passthrough) with
+            {
+                Loras = [new("clip-active", 0.5)],
+            });
+        Assert.DoesNotContain(
+            active.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        Assert.Single(Assert.Single(active.Clips).Stages[0].Core.Loras);
+
         VideoExecutionPlan textOnly = Compile(
             InitVideoClip(
                 0,
@@ -1088,24 +1078,8 @@ public class WanArchitectureTests
                 {
                     Loras = [new("stage-text-only", 0, 0.8)],
                 }));
-        Assert.DoesNotContain(
-            textOnly.Diagnostics,
-            diagnostic =>
-                diagnostic.Code
-                    == HostVideoStageRules.NormalLoraRequiresSamplingStageCode);
         Assert.Empty(
             Assert.Single(textOnly.Clips).Stages[0].Core.Loras);
-        AssertBlocked(
-            Compile(
-                InitVideoClip(
-                    0,
-                    passthrough with
-                    {
-                        Control = -0.1,
-                        Loras = [new("stage-negative-control", 1)],
-                    })),
-            HostVideoStageRules.NormalLoraRequiresSamplingStageCode,
-            HostVideoStageRules.NormalLoraRequiresSamplingStageReason);
 
         ClipSpec disabled = InitVideoClip(
             0,
@@ -1124,11 +1098,6 @@ public class WanArchitectureTests
                 {
                     Loras = [new("stage-no-op", 0, 0)],
                 }));
-        Assert.DoesNotContain(
-            stageNoOp.Diagnostics,
-            diagnostic =>
-                diagnostic.Code
-                    == HostVideoStageRules.NormalLoraRequiresSamplingStageCode);
         Assert.Empty(
             Assert.Single(stageNoOp.Clips).Stages[0].Core.Loras);
 
@@ -1137,11 +1106,6 @@ public class WanArchitectureTests
             {
                 Loras = [new("clip-active", 0.5)],
             });
-        Assert.DoesNotContain(
-            sampled.Diagnostics,
-            diagnostic =>
-                diagnostic.Code
-                    == HostVideoStageRules.NormalLoraRequiresSamplingStageCode);
         Assert.Single(
             Assert.Single(sampled.Clips).Stages[0].Core.Loras);
     }

@@ -114,7 +114,6 @@ internal sealed class HostVideoArchitectureModule :
         FrameGrid = 1,
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
-        Rules = [HostVideoStageRules.NormalLoraRequiresSamplingStage],
     };
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
@@ -219,20 +218,6 @@ internal sealed class HostVideoArchitectureModule :
                     clip,
                     "host-video.stage-control.invalid",
                     $"Stage {stage.Id} decoded-input control must be finite and within [0, 1].",
-                    stage.Id,
-                    stage.ClipStageRawIndex));
-            }
-            if (decodedInput
-                && stage.Control <= HostVideoStageRules
-                    .NormalLoraRequiresSamplingStage
-                    .Require<MinimumStageControlRuleConstraints>()
-                    .ExclusiveMinimumControl
-                && !loras.IsDefaultOrEmpty)
-            {
-                diagnostics.Add(Error(
-                    clip,
-                    HostVideoStageRules.NormalLoraRequiresSamplingStageCode,
-                    HostVideoStageRules.NormalLoraRequiresSamplingStageReason,
                     stage.Id,
                     stage.ClipStageRawIndex));
             }

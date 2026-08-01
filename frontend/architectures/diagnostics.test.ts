@@ -12,7 +12,6 @@ import {
     minimalStage,
 } from "../__test_helpers__/clipFixtures";
 import type { Clip } from "../types";
-import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
 import { deriveArchitectureDiagnostics } from "./diagnostics";
 import type { ArchitectureModelCatalog } from "./types";
 
@@ -769,47 +768,18 @@ describe("architecture diagnostics", () => {
         expect(codes).not.toContain("architecture.unsupported.stage-loras");
     });
 
-    it("diagnoses the sampling-stage LoRA rule only on active effective stages", () => {
+    it("leaves normal LoRAs on a samplerless stage undiagnosed", () => {
         const models = combinedCatalog();
-        const architecture = models.architectures[0];
-        architecture.rules = [
-            {
-                support: "conditional",
-                code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
-                reason: "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.",
-                scope: "stage",
-                constraints: { exclusiveMinimumControl: 0 },
-            },
-        ];
         const clip = minimalClip({
             loras: [{ name: "normal-lora.safetensors" }],
-            stages: [
-                minimalStage({ control: 0, loraWeights: [1] }),
-                minimalStage({
-                    skipped: true,
-                    control: 0,
-                    loraWeights: [1],
-                }),
-                minimalStage({ control: 0, loraWeights: [1] }),
-                minimalStage({ control: 0, loraWeights: [0] }),
-            ],
+            stages: [minimalStage({ control: 0, loraWeights: [1] })],
         });
 
-        const matching = deriveArchitectureDiagnostics([clip], models).filter(
-            ({ code }) =>
-                code === CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
-        );
-        expect(matching).toHaveLength(1);
-        expect(matching[0].message).toContain("Stage 0");
-
-        clip.skipped = true;
         expect(
-            deriveArchitectureDiagnostics([clip], models).some(
-                ({ code }) =>
-                    code ===
-                    CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
+            deriveArchitectureDiagnostics([clip], models).filter(({ code }) =>
+                code.includes("lora"),
             ),
-        ).toBe(false);
+        ).toEqual([]);
     });
 
     it("surfaces unrepresentable active temporal-grid combinations", () => {

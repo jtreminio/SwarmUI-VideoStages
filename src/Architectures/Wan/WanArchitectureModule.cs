@@ -77,7 +77,6 @@ internal sealed class WanArchitectureModule :
         FrameGrid = FrameGrid,
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
-        Rules = [HostVideoStageRules.NormalLoraRequiresSamplingStage],
     };
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)

@@ -95,12 +95,7 @@
         "code": "retake-frame-references-unsupported",
         "reason": "Retake and frame references are mutually exclusive because guide merging would overwrite the retake mask.",
         "scope": "stage",
-        "constraints": {
-          "mutuallyExclusive": [
-            "retake",
-            "frameReferences"
-          ]
-        }
+        "constraints": null
       },
       {
         "support": "conditional",

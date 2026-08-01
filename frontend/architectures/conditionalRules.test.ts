@@ -59,26 +59,27 @@ describe("typed conditional-rule evaluator", () => {
         ).toBe(true);
     });
 
-    it("reads the advertised exclusive stage-control minimum", () => {
-        const samplingRule = {
-            ...rule(CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage, {
-                exclusiveMinimumControl: 0,
-            }),
-            scope: "stage" as const,
-        };
+    it("reads the advertised retake entry modes instead of assuming them", () => {
+        const generated = minimalClip();
+        const requiring = (...modes: string[]) =>
+            rule(CONDITIONAL_RULE_CODES.retakeRequiresSource, {
+                requiresAnyEntryMode: modes,
+            });
         expect(
-            evaluateConditionalRule(samplingRule, {
-                stage: minimalStage({ control: 0 }),
+            evaluateConditionalRule(requiring("text-to-video"), {
+                clip: generated,
+            }),
+        ).toBe(false);
+        expect(
+            evaluateConditionalRule(requiring("init-video"), {
+                clip: generated,
+                generatedEntryMode: "image-to-video",
             }),
         ).toBe(true);
         expect(
-            evaluateConditionalRule(samplingRule, {
-                stage: minimalStage({ control: -0.1 }),
-            }),
-        ).toBe(true);
-        expect(
-            evaluateConditionalRule(samplingRule, {
-                stage: minimalStage({ control: 0.01 }),
+            evaluateConditionalRule(requiring("init-video", "image-to-video"), {
+                clip: generated,
+                generatedEntryMode: "image-to-video",
             }),
         ).toBe(false);
     });

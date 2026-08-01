@@ -6,10 +6,7 @@ import {
     conditionalRule,
     evaluateConditionalRule,
 } from "../conditionalRules";
-import {
-    effectiveClipCapabilities,
-    effectiveModelCapabilities,
-} from "../modelCapabilities";
+import { effectiveClipCapabilities } from "../modelCapabilities";
 import { NONE_ARCHITECTURE_ID } from "../none/identity";
 import { resolveClipFrameGridForLookup } from "../temporalGrid";
 import type {
@@ -190,30 +187,11 @@ export const createClipStageCapabilityViews = (
             ? NONE_ARCHITECTURE_ID
             : (resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID);
         const descriptor = architectureById.get(architectureId);
-        const capabilities = descriptor
-            ? effectiveModelCapabilities(resolvedModel, descriptor)
-            : null;
         const decision = (
             feature: "stageLoras" | "sampler" | "scheduler",
         ): CapabilityDecision => {
-            if (feature === "stageLoras" && descriptor && capabilities) {
-                // Every architecture drives normal LoRAs; only the sampling-stage
-                // rule can still refuse one.
-                const architectureRule = conditionalRule(
-                    descriptor.rules,
-                    CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
-                );
-                const violatedRule =
-                    architectureRule &&
-                    evaluateConditionalRule(architectureRule, { clip, stage })
-                        ? architectureRule
-                        : null;
-                return {
-                    supported: !violatedRule,
-                    reason: violatedRule?.reason ?? "",
-                    rule: violatedRule,
-                };
-            }
+            // Only sampler/scheduler are gated; every architecture drives normal
+            // LoRAs unconditionally.
             if (feature === "sampler" || feature === "scheduler") {
                 const supported =
                     descriptor !== undefined &&

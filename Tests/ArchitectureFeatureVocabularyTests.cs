@@ -31,12 +31,6 @@ public class ArchitectureFeatureVocabularyTests
             ArchitectureFeatureVocabulary.AuthoringFeatures
                 .Select(entry => entry.Feature)
                 .OrderBy(value => value));
-        Assert.Equal(
-            Enum.GetValues<ConditionalRuleFeature>().OrderBy(value => value),
-            ArchitectureFeatureVocabulary.AuthoringFeatures
-                .Where(entry => entry.ConditionalRuleFeature is not null)
-                .Select(entry => entry.ConditionalRuleFeature!.Value)
-                .OrderBy(value => value));
     }
 
     [Fact]

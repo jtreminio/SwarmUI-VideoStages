@@ -26,12 +26,6 @@ export const buildStageParamsColumn = (
     const stageCapabilities = context
         .authoring()
         .capabilities.forStage(clip, stage);
-    if (clip.loras.length > 0) {
-        column.dataset.vstStageLorasSupported = `${
-            stageCapabilities.decision("stageLoras").supported
-        }`;
-    }
-
     const commit = (mutate: (target: Stage) => void): void => {
         context.commit((clips) => {
             const target = clips[clipIdx]?.stages[stageIdx];

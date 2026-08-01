@@ -129,18 +129,6 @@ internal sealed record BoundaryRuleConstraints(
 internal sealed record MinimumActiveStagesRuleConstraints(
     int MinimumActiveStages) : RuleConstraints;
 
-internal sealed record MinimumStageControlRuleConstraints(
-    double ExclusiveMinimumControl) : RuleConstraints;
-
-internal enum ConditionalRuleFeature
-{
-    Retake,
-    FrameReferences,
-}
-
-internal sealed record MutuallyExclusiveRuleConstraints(
-    IReadOnlyList<ConditionalRuleFeature> MutuallyExclusive) : RuleConstraints;
-
 internal sealed record RequiredEntryModesRuleConstraints(
     IReadOnlyList<ArchitectureEntryMode> RequiresAnyEntryMode) : RuleConstraints;
 
@@ -152,7 +140,6 @@ internal sealed record RequiredEntryModesRuleConstraints(
 internal enum ConditionalRuleCodeId
 {
     AudioReuseRequiresStages,
-    NormalLoraRequiresSamplingStage,
     PromptRelayRequiresFixedLength,
     RetakeExcludesReferences,
     RetakeRequiresSource,

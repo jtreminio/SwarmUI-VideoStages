@@ -41,7 +41,6 @@ internal sealed record AuthoringFeatureVocabularyEntry(
     string AuthoringKey,
     string DisplayLabel,
     IReadOnlyList<CapabilityVocabularyEntry> Capabilities,
-    ConditionalRuleFeature? ConditionalRuleFeature = null,
     bool CanIgnoreWhenUnsupported = true,
     bool RequiresEveryCapability = true);
 
@@ -80,8 +79,7 @@ internal static class ArchitectureFeatureVocabulary
             [
                 Capability(ClipCapability.References),
                 Capability(StageCapability.FrameReferences),
-            ],
-            ConditionalRuleFeature.FrameReferences),
+            ]),
         new(
             AuthoringFeature.ReferenceFraming,
             "referenceFraming",
@@ -91,8 +89,7 @@ internal static class ArchitectureFeatureVocabulary
             AuthoringFeature.Retake,
             "retake",
             "Retakes",
-            [Capability(ClipCapability.Retake)],
-            ConditionalRuleFeature.Retake),
+            [Capability(ClipCapability.Retake)]),
         new(
             AuthoringFeature.PromptRelay,
             "promptRelay",
@@ -133,9 +130,6 @@ internal static class ArchitectureFeatureVocabulary
             ConditionalRuleCodeId.AudioReuseRequiresStages,
             "audio.reuse.requires_three_stages"),
         new(
-            ConditionalRuleCodeId.NormalLoraRequiresSamplingStage,
-            "normal-lora-requires-sampling-stage"),
-        new(
             ConditionalRuleCodeId.PromptRelayRequiresFixedLength,
             "prompt-relay-dynamic-length-unsupported"),
         new(
@@ -163,11 +157,6 @@ internal static class ArchitectureFeatureVocabulary
 
     internal static string AuthoringKey(AuthoringFeature feature) =>
         AuthoringFeatures.Single(entry => entry.Feature == feature).AuthoringKey;
-
-    internal static string AuthoringKey(ConditionalRuleFeature feature) =>
-        AuthoringFeatures
-            .Single(entry => entry.ConditionalRuleFeature == feature)
-            .AuthoringKey;
 
     internal static bool Supports(
         ArchitectureCapabilityDescriptor capabilities,

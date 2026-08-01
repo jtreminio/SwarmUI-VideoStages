@@ -1,5 +1,6 @@
 import { activeStageCount } from "../clipSemantics";
 import type { Clip, Stage } from "../types";
+import type { GeneratedEntryMode } from "./conversion/entryModePolicy";
 import {
     CONDITIONAL_RULE_CODES,
     type GeneratedConditionalRuleCode,
@@ -21,7 +22,20 @@ export const isKnownConditionalRuleCode = (
 export interface ConditionalRuleContext {
     clip?: Clip;
     stage?: Stage;
+    /**
+     * The root's generated mode, needed only to tell a text-to-video clip from an
+     * image-to-video one. Init-video clips carry their own mode.
+     */
+    generatedEntryMode?: GeneratedEntryMode;
 }
+
+export type CatalogEntryMode = GeneratedEntryMode | "init-video";
+
+const clipEntryMode = (
+    clip: Clip,
+    generatedEntryMode: GeneratedEntryMode = "text-to-video",
+): CatalogEntryMode =>
+    clip.initVideo !== null ? "init-video" : generatedEntryMode;
 
 export const conditionalRule = (
     rules: readonly CapabilityRuleDecision[],
@@ -36,6 +50,19 @@ const finiteConstraint = (
 ): number => {
     const value = Number(rule.constraints?.[key]);
     return Number.isFinite(value) ? value : fallback;
+};
+
+const DEFAULT_REQUIRED_ENTRY_MODES: readonly CatalogEntryMode[] = [
+    "init-video",
+];
+
+const requiredEntryModes = (
+    rule: CapabilityRuleDecision,
+): readonly CatalogEntryMode[] => {
+    const value = rule.constraints?.requiresAnyEntryMode;
+    return Array.isArray(value) && value.length > 0
+        ? (value as CatalogEntryMode[])
+        : DEFAULT_REQUIRED_ENTRY_MODES;
 };
 
 const DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES = 3;
@@ -67,12 +94,6 @@ export const evaluateConditionalRule = (
                 clip !== undefined &&
                 activeStageCount(clip) < audioReuseMinimumActiveStages(rule)
             );
-        case CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage:
-            return (
-                context.stage !== undefined &&
-                context.stage.control <=
-                    finiteConstraint(rule, "exclusiveMinimumControl", 0)
-            );
         case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
             return (
                 clip !== undefined &&
@@ -85,7 +106,12 @@ export const evaluateConditionalRule = (
                 clip.initVideo !== null
             );
         case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-            return clip !== undefined && clip.initVideo === null;
+            return (
+                clip !== undefined &&
+                !requiredEntryModes(rule).includes(
+                    clipEntryMode(clip, context.generatedEntryMode),
+                )
+            );
         default:
             // Catalog parsing rejects unknown executable rules atomically.
             // Fail closed as a defense if an unchecked runtime value reaches

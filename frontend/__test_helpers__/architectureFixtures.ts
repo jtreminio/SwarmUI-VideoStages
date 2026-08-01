@@ -112,9 +112,7 @@ export const testArchitectureCatalog = (
                     code: "retake-frame-references-unsupported",
                     reason: "Retake and frame references are mutually exclusive.",
                     scope: "stage",
-                    constraints: {
-                        mutuallyExclusive: ["retake", "frameReferences"],
-                    },
+                    constraints: null,
                 },
                 {
                     support: "conditional",

@@ -7,7 +7,6 @@ import {
 import type { Clip } from "../types";
 import { hasArchitectureSlotSourcedIcLora } from "./behaviorRegistry";
 import { resolvedClipArchitectureId } from "./clipIdentity";
-import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
 import { isIgnoredWhenUnsupportedFeature } from "./generatedFeatures";
 import { effectiveClipCapabilities } from "./modelCapabilities";
 import { NONE_ARCHITECTURE_ID } from "./none/identity";
@@ -362,27 +361,6 @@ export const deriveArchitectureDiagnostics = (
                         `Clip ${clipIdx} Stage ${stageIdx} caches a profile identity that does not match model '${stage.model}'. Generation uses the resolved profile and preserves the authored hint.`,
                         clipIdx,
                         "warning",
-                    ),
-                );
-            }
-            const hasEffectiveNormalLora = clip.loras.some(
-                (_, index) => (stage.loraWeights[index] ?? 1) !== 0,
-            );
-            const samplingStageRule = resolver
-                .forStage(clip, stage)
-                .decision("stageLoras").rule;
-            if (
-                executableClipIndexSet.has(clipIdx) &&
-                stageIdx < activeStageCount(clip) &&
-                hasEffectiveNormalLora &&
-                samplingStageRule?.code ===
-                    CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
-            ) {
-                diagnostics.push(
-                    issue(
-                        samplingStageRule.code,
-                        `Clip ${clipIdx} Stage ${stageIdx}: ${samplingStageRule.reason}`,
-                        clipIdx,
                     ),
                 );
             }

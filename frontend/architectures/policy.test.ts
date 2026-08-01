@@ -17,7 +17,6 @@ import {
 } from "../detailStrip/panelRouter";
 import { renderTimeline } from "../timelineView";
 import { reconcileClipArchitectureIdentity } from "./clipIdentity";
-import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
 import {
     architectureFeatureSupport,
     createCapabilityViewResolver,
@@ -486,45 +485,22 @@ describe("catalog-backed authoring policy", () => {
         expect(clip).toEqual(before);
     });
 
-    it("applies an architecture stage-control rule only to stage LoRA authoring", () => {
+    it("keeps stage LoRA authoring enabled on a samplerless stage", () => {
         const models = catalog();
-        const architecture = models.architectures[0];
-        architecture.rules = [
-            {
-                support: "conditional",
-                code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
-                reason: "Normal LoRAs require a sampling stage and cannot have nonzero weight on a samplerless passthrough.",
-                scope: "stage",
-                constraints: { exclusiveMinimumControl: 0 },
-            },
-        ];
         const clip = minimalClip({
             loras: [{ name: "persisted.safetensors" }],
             stages: [minimalStage({ control: 0, loraWeights: [1] })],
         });
         const resolver = createCapabilityViewResolver(models);
-        const stageDecision = resolver
-            .forStage(clip, clip.stages[0])
-            .decision("stageLoras");
 
-        expect(stageDecision).toMatchObject({
-            supported: false,
-            reason: architecture.rules[0].reason,
-            rule: {
-                code: CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
-            },
-        });
+        expect(
+            resolver.forStage(clip, clip.stages[0]).decision("stageLoras"),
+        ).toMatchObject({ supported: true, rule: null });
         expect(
             resolver
                 .forStage(clip, clip.stages[0])
                 .authoringState("stageLoras", true),
-        ).toMatchObject({ visible: true, enabled: false });
-
-        clip.stages[0].control = 0.1;
-        expect(
-            resolver.forStage(clip, clip.stages[0]).decision("stageLoras")
-                .supported,
-        ).toBe(true);
+        ).toMatchObject({ visible: true, enabled: true });
     });
 
     it("repairs none identity from authored Stage 0 after source removal", () => {

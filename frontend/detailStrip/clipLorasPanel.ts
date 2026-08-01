@@ -26,21 +26,13 @@ export const buildClipLorasSection = (
     const nextAvailableName = defaults.loraValues.find(
         (value) => !selectedNames.has(value),
     );
-    const applySupportedStageWeights = (
+    const applyStageWeights = (
         target: Clip,
         loraIdx: number,
-        supportedWeight: number,
+        weight: number,
     ): void => {
-        const capabilities = context.authoring().capabilities;
         for (const stage of target.stages) {
-            if (
-                !capabilities.forStage(target, stage).decision("stageLoras")
-                    .supported
-            ) {
-                stage.loraWeights[loraIdx] = 0;
-            } else {
-                stage.loraWeights[loraIdx] = supportedWeight;
-            }
+            stage.loraWeights[loraIdx] = weight;
         }
     };
     const items = clip.loras.map((lora, loraIdx) => {
@@ -72,7 +64,7 @@ export const buildClipLorasSection = (
                 if (target) {
                     const initialWeight = defaultLoraWeight(defaults, value);
                     replaceLoraModelAt(target, loraIdx, value, initialWeight);
-                    applySupportedStageWeights(target, loraIdx, initialWeight);
+                    applyStageWeights(target, loraIdx, initialWeight);
                 }
             });
             context.render();
@@ -125,7 +117,7 @@ export const buildClipLorasSection = (
                         }
                         const initialWeight = defaultLoraWeight(defaults, name);
                         appendLoraToClip(target, name, initialWeight);
-                        applySupportedStageWeights(
+                        applyStageWeights(
                             target,
                             target.loras.length - 1,
                             initialWeight,

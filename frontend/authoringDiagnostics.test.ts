@@ -31,7 +31,7 @@ describe("backend-aligned authoring diagnostics", () => {
         expect(activeStageCount(clip)).toBe(3);
     });
 
-    it("warns when requested audio reuse lacks generate/capture/reuse stages", () => {
+    it("stays silent when requested audio reuse lacks generate/capture/reuse stages", () => {
         const diagnostics = deriveAuthoringDiagnostics(
             [
                 minimalClip({
@@ -41,13 +41,9 @@ describe("backend-aligned authoring diagnostics", () => {
             ],
             { catalog: testArchitectureCatalog() },
         );
-        expect(diagnostics).toContainEqual({
-            severity: "warning",
-            code: "audio.reuse.requires_three_stages",
-            message:
-                "Audio reuse needs at least three active stages: generate, capture, then reuse.",
-            clipIdx: 0,
-        });
+        expect(diagnostics.map((item) => item.code)).not.toContain(
+            "audio.reuse.requires_three_stages",
+        );
     });
 
     it.each([

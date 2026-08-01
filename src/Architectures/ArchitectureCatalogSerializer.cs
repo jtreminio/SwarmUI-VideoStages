@@ -71,15 +71,6 @@ internal static class ArchitectureCatalogSerializer
             {
                 ["minimumActiveStages"] = value.MinimumActiveStages,
             },
-            MinimumStageControlRuleConstraints value => new()
-            {
-                ["exclusiveMinimumControl"] = value.ExclusiveMinimumControl,
-            },
-            MutuallyExclusiveRuleConstraints value => new()
-            {
-                ["mutuallyExclusive"] = new JArray(
-                    value.MutuallyExclusive.Select(ArchitectureFeatureVocabulary.AuthoringKey)),
-            },
             RequiredEntryModesRuleConstraints value => new()
             {
                 ["requiresAnyEntryMode"] = new JArray(

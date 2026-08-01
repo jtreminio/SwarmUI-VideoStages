@@ -8,7 +8,6 @@ import type {
     ArchitectureCatalogEntryDto,
     CapabilityRuleDecision,
     CapabilityRuleScope,
-    MinimumStageControlRuleConstraints,
     VideoArchitectureCatalogDto,
 } from "./types";
 
@@ -92,6 +91,9 @@ const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
     if (value.code === CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength) {
         return value.scope === "clip" && value.constraints === null;
     }
+    if (value.code === CONDITIONAL_RULE_CODES.retakeExcludesReferences) {
+        return value.scope === "stage" && value.constraints === null;
+    }
     if (!isRecord(value.constraints)) {
         return false;
     }
@@ -104,32 +106,13 @@ const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
                 Number.isInteger(constraints.minimumActiveStages) &&
                 Number(constraints.minimumActiveStages) > 0
             );
-        case CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage: {
-            const typed =
-                constraints as Partial<MinimumStageControlRuleConstraints>;
-            return (
-                value.scope === "stage" &&
-                hasExactKeys(constraints, ["exclusiveMinimumControl"]) &&
-                typeof typed.exclusiveMinimumControl === "number" &&
-                Number.isFinite(typed.exclusiveMinimumControl)
-            );
-        }
-        case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
-            return (
-                value.scope === "stage" &&
-                hasExactKeys(constraints, ["mutuallyExclusive"]) &&
-                isUniqueStringArray(constraints.mutuallyExclusive) &&
-                constraints.mutuallyExclusive.length === 2 &&
-                constraints.mutuallyExclusive.includes("retake") &&
-                constraints.mutuallyExclusive.includes("frameReferences")
-            );
         case CONDITIONAL_RULE_CODES.retakeRequiresSource:
+            // The listed modes are read, not assumed, so the backend can widen them.
             return (
                 value.scope === "clip" &&
                 hasExactKeys(constraints, ["requiresAnyEntryMode"]) &&
                 isEntryModeArray(constraints.requiresAnyEntryMode) &&
-                constraints.requiresAnyEntryMode.length === 1 &&
-                constraints.requiresAnyEntryMode.includes("init-video")
+                constraints.requiresAnyEntryMode.length > 0
             );
     }
     return false;

@@ -123,10 +123,9 @@ public class VideoExecutionPlanCompilerTests
         Assert.Single(compiled.Stages[0].RequireLtx2Payload().IcLoras);
         Assert.Single(compiled.Stages[0].RequireLtx2Payload().FrameReferences);
         Assert.Empty(compiled.Stages[1].RequireLtx2Payload().IcLoras);
-        Assert.Contains(plan.Diagnostics, diagnostic =>
-            diagnostic.Code == "audio.reuse.requires_three_stages"
-            && diagnostic.Severity == PlanDiagnosticSeverity.Warning
-            && diagnostic.ClipId == clip.Id);
+        // Ineligible audio reuse is dropped silently; the catalog rule only gates the control.
+        Assert.DoesNotContain(plan.Diagnostics, diagnostic =>
+            diagnostic.Code == "audio.reuse.requires_three_stages");
     }
 
     [Fact]

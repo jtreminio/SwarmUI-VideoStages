@@ -19,7 +19,6 @@ import {
 import { LORA_WEIGHT_STEP } from "../../loraAuthoring";
 import { refSourceLabel } from "../../timelineDetail";
 import {
-    applyPersistedCapabilityRepair,
     buildCapabilityNotice,
     disableCapabilityControls,
 } from "../capabilityUi";
@@ -47,8 +46,6 @@ export const appendStageReferenceGuideSection = ({
     stage,
     stageIdx,
     fields,
-    stageCapabilities,
-    commit,
     debouncedCommit,
 }: StagePanelBindings): void => {
     if (clip.refs.length > 0) {
@@ -107,10 +104,6 @@ export const appendStageReferenceGuideSection = ({
 
     if (clip.loras.length > 0) {
         appendSectionHeader(fields, "LoRA Weights");
-        const loraState = stageCapabilities.authoringState(
-            "stageLoras",
-            clip.loras.length > 0,
-        );
         const group = document.createDocumentFragment();
         clip.loras.forEach((entry, entryIdx) => {
             const weight = tagFocus(
@@ -131,25 +124,6 @@ export const appendStageReferenceGuideSection = ({
             row.title = entry.name;
             group.appendChild(row);
         });
-        if (!loraState.enabled) {
-            const hasEffectiveWeight = clip.loras.some(
-                (_, entryIdx) => (stage.loraWeights[entryIdx] ?? 1) !== 0,
-            );
-            applyPersistedCapabilityRepair(group, loraState, {
-                repair: hasEffectiveWeight
-                    ? {
-                          label: "Set this stage's LoRA weights to 0",
-                          className: "vst-reset-unsupported-stage-loras",
-                          onRepair: () => {
-                              commit((target) => {
-                                  target.loraWeights = clip.loras.map(() => 0);
-                              });
-                              context.render();
-                          },
-                      }
-                    : undefined,
-            });
-        }
         fields.appendChild(group);
     }
 

@@ -506,7 +506,6 @@
   };
   var CONDITIONAL_RULE_CODES = {
     audioReuseRequiresStages: "audio.reuse.requires_three_stages",
-    normalLoraRequiresSamplingStage: "normal-lora-requires-sampling-stage",
     promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
     retakeExcludesReferences: "retake-frame-references-unsupported",
     retakeRequiresSource: "retake-source-required"
@@ -517,10 +516,18 @@
     Object.values(CONDITIONAL_RULE_CODES)
   );
   var isKnownConditionalRuleCode = (value) => KNOWN_CONDITIONAL_RULE_CODES.has(value);
+  var clipEntryMode = (clip, generatedEntryMode = "text-to-video") => clip.initVideo !== null ? "init-video" : generatedEntryMode;
   var conditionalRule = (rules, code) => rules.find((rule) => rule.code === code) ?? null;
   var finiteConstraint = (rule, key, fallback) => {
     const value = Number(rule.constraints?.[key]);
     return Number.isFinite(value) ? value : fallback;
+  };
+  var DEFAULT_REQUIRED_ENTRY_MODES = [
+    "init-video"
+  ];
+  var requiredEntryModes = (rule) => {
+    const value = rule.constraints?.requiresAnyEntryMode;
+    return Array.isArray(value) && value.length > 0 ? value : DEFAULT_REQUIRED_ENTRY_MODES;
   };
   var DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES = 3;
   var audioReuseMinimumActiveStages = (rule) => rule?.code === CONDITIONAL_RULE_CODES.audioReuseRequiresStages ? finiteConstraint(
@@ -533,14 +540,14 @@
     switch (rule.code) {
       case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
         return clip !== void 0 && activeStageCount(clip) < audioReuseMinimumActiveStages(rule);
-      case CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage:
-        return context.stage !== void 0 && context.stage.control <= finiteConstraint(rule, "exclusiveMinimumControl", 0);
       case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
         return clip !== void 0 && (clip.clipLengthFromAudio || clip.clipLengthFromControlNet);
       case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
         return clip !== void 0 && clip.refs.length > 0 && clip.initVideo !== null;
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-        return clip !== void 0 && clip.initVideo === null;
+        return clip !== void 0 && !requiredEntryModes(rule).includes(
+          clipEntryMode(clip, context.generatedEntryMode)
+        );
       default:
         return true;
     }
@@ -879,6 +886,9 @@
     if (value.code === CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength) {
       return value.scope === "clip" && value.constraints === null;
     }
+    if (value.code === CONDITIONAL_RULE_CODES.retakeExcludesReferences) {
+      return value.scope === "stage" && value.constraints === null;
+    }
     if (!isRecord(value.constraints)) {
       return false;
     }
@@ -886,14 +896,8 @@
     switch (value.code) {
       case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
         return value.scope === "clip" && hasExactKeys(constraints, ["minimumActiveStages"]) && Number.isInteger(constraints.minimumActiveStages) && Number(constraints.minimumActiveStages) > 0;
-      case CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage: {
-        const typed = constraints;
-        return value.scope === "stage" && hasExactKeys(constraints, ["exclusiveMinimumControl"]) && typeof typed.exclusiveMinimumControl === "number" && Number.isFinite(typed.exclusiveMinimumControl);
-      }
-      case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
-        return value.scope === "stage" && hasExactKeys(constraints, ["mutuallyExclusive"]) && isUniqueStringArray(constraints.mutuallyExclusive) && constraints.mutuallyExclusive.length === 2 && constraints.mutuallyExclusive.includes("retake") && constraints.mutuallyExclusive.includes("frameReferences");
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-        return value.scope === "clip" && hasExactKeys(constraints, ["requiresAnyEntryMode"]) && isEntryModeArray(constraints.requiresAnyEntryMode) && constraints.requiresAnyEntryMode.length === 1 && constraints.requiresAnyEntryMode.includes("init-video");
+        return value.scope === "clip" && hasExactKeys(constraints, ["requiresAnyEntryMode"]) && isEntryModeArray(constraints.requiresAnyEntryMode) && constraints.requiresAnyEntryMode.length > 0;
     }
     return false;
   };
@@ -1447,20 +1451,7 @@
       const resolvedModel = sourceOnly ? void 0 : modelByName.get(stage.model);
       const architectureId = sourceOnly ? NONE_ARCHITECTURE_ID : resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID;
       const descriptor = architectureById.get(architectureId);
-      const capabilities = descriptor ? effectiveModelCapabilities(resolvedModel, descriptor) : null;
       const decision = (feature) => {
-        if (feature === "stageLoras" && descriptor && capabilities) {
-          const architectureRule = conditionalRule(
-            descriptor.rules,
-            CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
-          );
-          const violatedRule = architectureRule && evaluateConditionalRule(architectureRule, { clip, stage }) ? architectureRule : null;
-          return {
-            supported: !violatedRule,
-            reason: violatedRule?.reason ?? "",
-            rule: violatedRule
-          };
-        }
         if (feature === "sampler" || feature === "scheduler") {
           const supported = descriptor !== void 0 && resolvedModel !== void 0 && ((resolvedModel.entryAbilities?.length ?? 0) > 0 || resolvedModel.entryModes.length > 0);
           return {
@@ -6421,19 +6412,6 @@
             )
           );
         }
-        const hasEffectiveNormalLora = clip.loras.some(
-          (_, index) => (stage.loraWeights[index] ?? 1) !== 0
-        );
-        const samplingStageRule = resolver.forStage(clip, stage).decision("stageLoras").rule;
-        if (executableClipIndexSet.has(clipIdx) && stageIdx < activeStageCount(clip) && hasEffectiveNormalLora && samplingStageRule?.code === CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage) {
-          diagnostics.push(
-            issue(
-              samplingStageRule.code,
-              `Clip ${clipIdx} Stage ${stageIdx}: ${samplingStageRule.reason}`,
-              clipIdx
-            )
-          );
-        }
       });
     });
     for (const seam of executableBoundaries(clips)) {
@@ -6495,26 +6473,16 @@
       const view = capabilityViews?.forClip(clip);
       const conditionalFeatures = [
         {
-          feature: "audioReuse",
-          persisted: clip.reuseAudio,
-          severity: "warning"
-        },
-        {
           feature: "promptRelay",
-          persisted: clip.promptWindows.length > 0,
-          severity: "error"
+          persisted: clip.promptWindows.length > 0
         },
-        {
-          feature: "retake",
-          persisted: clip.retake !== null,
-          severity: "error"
-        }
+        { feature: "retake", persisted: clip.retake !== null }
       ];
       for (const check of conditionalFeatures) {
         const rule = view?.decision(check.feature).rule;
         if (check.persisted && rule) {
           diagnostics.push(
-            diagnostic(check.severity, rule.code, rule.reason, clipIdx)
+            diagnostic("error", rule.code, rule.reason, clipIdx)
           );
         }
       }
@@ -11158,14 +11126,9 @@
     const nextAvailableName = defaults.loraValues.find(
       (value) => !selectedNames.has(value)
     );
-    const applySupportedStageWeights = (target, loraIdx, supportedWeight) => {
-      const capabilities = context.authoring().capabilities;
+    const applyStageWeights = (target, loraIdx, weight) => {
       for (const stage of target.stages) {
-        if (!capabilities.forStage(target, stage).decision("stageLoras").supported) {
-          stage.loraWeights[loraIdx] = 0;
-        } else {
-          stage.loraWeights[loraIdx] = supportedWeight;
-        }
+        stage.loraWeights[loraIdx] = weight;
       }
     };
     const items = clip.loras.map((lora, loraIdx) => {
@@ -11192,7 +11155,7 @@
           if (target) {
             const initialWeight = defaultLoraWeight(defaults, value);
             replaceLoraModelAt(target, loraIdx, value, initialWeight);
-            applySupportedStageWeights(target, loraIdx, initialWeight);
+            applyStageWeights(target, loraIdx, initialWeight);
           }
         });
         context.render();
@@ -11243,7 +11206,7 @@
               }
               const initialWeight = defaultLoraWeight(defaults, name);
               appendLoraToClip(target, name, initialWeight);
-              applySupportedStageWeights(
+              applyStageWeights(
                 target,
                 target.loras.length - 1,
                 initialWeight
@@ -12056,8 +12019,6 @@ The conversion is one undoable change.`;
     stage,
     stageIdx,
     fields,
-    stageCapabilities,
-    commit,
     debouncedCommit
   }) => {
     if (clip.refs.length > 0) {
@@ -12108,10 +12069,6 @@ The conversion is one undoable change.`;
     }
     if (clip.loras.length > 0) {
       appendSectionHeader(fields, "LoRA Weights");
-      const loraState = stageCapabilities.authoringState(
-        "stageLoras",
-        clip.loras.length > 0
-      );
       const group = document.createDocumentFragment();
       clip.loras.forEach((entry, entryIdx) => {
         const weight = tagFocus(
@@ -12132,23 +12089,6 @@ The conversion is one undoable change.`;
         row.title = entry.name;
         group.appendChild(row);
       });
-      if (!loraState.enabled) {
-        const hasEffectiveWeight = clip.loras.some(
-          (_, entryIdx) => (stage.loraWeights[entryIdx] ?? 1) !== 0
-        );
-        applyPersistedCapabilityRepair(group, loraState, {
-          repair: hasEffectiveWeight ? {
-            label: "Set this stage's LoRA weights to 0",
-            className: "vst-reset-unsupported-stage-loras",
-            onRepair: () => {
-              commit((target) => {
-                target.loraWeights = clip.loras.map(() => 0);
-              });
-              context.render();
-            }
-          } : void 0
-        });
-      }
       fields.appendChild(group);
     }
     const applicableIcLoras = clip.icLoras.map((entry, entryIdx) => ({ entry, entryIdx })).filter(({ entry }) => entry.stage < 0 || entry.stage === stageIdx);
@@ -12365,9 +12305,6 @@ The conversion is one undoable change.`;
     const initVideoStage0 = stageIdx === 0 && !!clip.initVideo && stage.skipped !== true;
     const isRefine = stageIdx >= 1 || initVideoStage0;
     const stageCapabilities = context.authoring().capabilities.forStage(clip, stage);
-    if (clip.loras.length > 0) {
-      column.dataset.vstStageLorasSupported = `${stageCapabilities.decision("stageLoras").supported}`;
-    }
     const commit = (mutate) => {
       context.commit((clips) => {
         const target = clips[clipIdx]?.stages[stageIdx];
@@ -13904,18 +13841,6 @@ The conversion is one undoable change.`;
         return;
       }
       const clips = getState().clips;
-      const renderedStageParams = dockEl.querySelector(
-        "[data-vst-stage-loras-supported]"
-      );
-      if (selection.kind === "clip" && renderedStageParams?.dataset.vstStageLorasSupported !== void 0) {
-        const clip = clips[selection.clipIdx];
-        const stage = clip?.stages[selection.stageIdx];
-        const currentSupported = clip && stage ? captureAuthoringTransactionSnapshot().capabilities.forStage(clip, stage).decision("stageLoras").supported : null;
-        if (currentSupported !== null && `${currentSupported}` !== renderedStageParams.dataset.vstStageLorasSupported) {
-          render();
-          return;
-        }
-      }
       const breadcrumb = dockEl.querySelector(".vst-detail-crumb");
       if (breadcrumb) {
         breadcrumb.textContent = detailBreadcrumb(renderedSelection, clips);

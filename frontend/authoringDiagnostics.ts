@@ -56,28 +56,20 @@ export const deriveAuthoringDiagnostics = (
 
     for (const { clip, clipIdx } of executable) {
         const view = capabilityViews?.forClip(clip);
+        // Audio reuse is absent: an ineligible reuse is dropped silently, so its
+        // rule only disables the control instead of also reporting an issue.
         const conditionalFeatures = [
-            {
-                feature: "audioReuse",
-                persisted: clip.reuseAudio,
-                severity: "warning",
-            },
             {
                 feature: "promptRelay",
                 persisted: clip.promptWindows.length > 0,
-                severity: "error",
             },
-            {
-                feature: "retake",
-                persisted: clip.retake !== null,
-                severity: "error",
-            },
+            { feature: "retake", persisted: clip.retake !== null },
         ] as const;
         for (const check of conditionalFeatures) {
             const rule = view?.decision(check.feature).rule;
             if (check.persisted && rule) {
                 diagnostics.push(
-                    diagnostic(check.severity, rule.code, rule.reason, clipIdx),
+                    diagnostic("error", rule.code, rule.reason, clipIdx),
                 );
             }
         }

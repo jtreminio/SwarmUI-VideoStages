@@ -12,14 +12,6 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class HostVideoArchitectureTests
 {
-    [Fact]
-    public void Descriptor_publishes_the_stock_host_passthrough_LoRA_rule()
-    {
-        Assert.Contains(
-            HostVideoStageRules.NormalLoraRequiresSamplingStage,
-            HostVideoArchitectureModule.Instance.Descriptor.Rules);
-    }
-
     [Theory]
     [InlineData("hunyuan-video-1_5", "hunyuan-video-1_5", true, true)]
     [InlineData("hunyuan-video", "hunyuan-video", true, true)]

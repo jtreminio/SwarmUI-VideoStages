@@ -29,9 +29,7 @@ internal static class Ltx2ConditionalRulePolicySource
             ArchitectureFeatureVocabulary.RuleCode(
                 ConditionalRuleCodeId.RetakeExcludesReferences),
             "Retake and frame references are mutually exclusive because guide merging would overwrite the retake mask.",
-            RuleScope.Stage,
-            new MutuallyExclusiveRuleConstraints(
-                [ConditionalRuleFeature.Retake, ConditionalRuleFeature.FrameReferences]));
+            RuleScope.Stage);
 
     internal static RuleDecision RetakeRequiresSource { get; } =
         RuleDecision.Conditional(
@@ -66,15 +64,6 @@ internal static class Ltx2ConditionalRulePolicySource
         List<PlanDiagnostic> diagnostics = [];
         foreach (ClipPlan clip in clips)
         {
-            if (clip.ArchitecturePayload is Ltx2ClipPayload ltxClip
-                && ltxClip.AudioReuse.IsRequested
-                && !ltxClip.AudioReuse.IsEligible)
-            {
-                diagnostics.Add(Diagnostic(
-                    AudioReuseRequiresThreeStages,
-                    PlanDiagnosticSeverity.Warning,
-                    clip.ClipId));
-            }
             if (clip.Audio.Length.Owner is AudioLengthOwner.Audio or AudioLengthOwner.ControlNet
                 && clip.Stages.Any(stage =>
                     stage.ArchitecturePayload is Ltx2StagePayload payload
@@ -111,15 +100,8 @@ internal static class Ltx2ConditionalRulePolicySource
         RuleDecision rule,
         int? clipId = null,
         int? stageId = null) =>
-        Diagnostic(rule, PlanDiagnosticSeverity.Error, clipId, stageId);
-
-    private static PlanDiagnostic Diagnostic(
-        RuleDecision rule,
-        PlanDiagnosticSeverity severity,
-        int? clipId = null,
-        int? stageId = null) =>
         new(
-            severity,
+            PlanDiagnosticSeverity.Error,
             rule.Code,
             rule.Reason,
             clipId,
