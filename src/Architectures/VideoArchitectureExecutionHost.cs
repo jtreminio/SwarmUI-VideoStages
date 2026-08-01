@@ -80,7 +80,7 @@ internal sealed class VideoArchitectureExecutionHost
         ArchitectureRequestPreflightContext context = new(_plan, _rootOwner);
         foreach (IArchitectureGenerationSessionFactoryProvider provider in _activeProviders)
         {
-            diagnostics.AddRange(provider.PreflightRequest(context) ?? []);
+            diagnostics.AddRange(provider.PreflightRequest(context));
         }
         return diagnostics.AsReadOnly();
     }
@@ -114,9 +114,8 @@ internal sealed class VideoArchitectureExecutionHost
         {
             new ControlNetCoreMediaCapture(_generator).Capture();
         }
-        ArchitectureHostPhaseScope scope = ArchitectureHostPhasePolicy.Scope(phase);
         IEnumerable<IArchitectureGenerationSessionFactoryProvider> providers =
-            scope == ArchitectureHostPhaseScope.RootOwnerOnly
+            ArchitectureHostPhases.IsRootOwnerOnly(phase)
                 ? RootOwnerProvider()
                 : _activeProviders;
         foreach (IArchitectureHostPhaseParticipant participant in providers
@@ -124,25 +123,6 @@ internal sealed class VideoArchitectureExecutionHost
         {
             participant.ExecuteHostPhase(new(phase, _plan, _rootOwner));
         }
-    }
-
-    internal IArchitectureRootMediaResizer GetRootMediaResizer()
-    {
-        return RequireExecutionContext().ExecutePrepared(
-            this,
-            GetRootMediaResizerCore);
-    }
-
-    private IArchitectureRootMediaResizer GetRootMediaResizerCore()
-    {
-        if (_rootOwner is null
-            || !_providers.TryGetValue(
-                _rootOwner.Value,
-                out IArchitectureGenerationSessionFactoryProvider provider))
-        {
-            return null;
-        }
-        return (provider as IArchitectureRootMediaResizerProvider)?.CreateRootMediaResizer();
     }
 
     internal void RunConfiguredStages()

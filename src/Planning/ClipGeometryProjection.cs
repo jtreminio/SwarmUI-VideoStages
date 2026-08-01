@@ -22,13 +22,13 @@ internal static class ClipGeometryProjection
         Dictionary<int, (int Width, int Height)> projected = [];
         foreach (ClipPlan clip in clips)
         {
-            if (clip.ArchitecturePayload is not IArchitectureClipGeometryProjection projection)
+            if (clip.ArchitecturePayload is null)
             {
-                // An unprojectable clip would make the timeline minimum a guess; runtime conforming
-                // still covers it.
+                // An uncompiled clip would make the timeline minimum a guess; the plan already
+                // carries the error that blocked its compilation.
                 return [];
             }
-            projected[clip.ClipId] = projection.ProjectFinalDimensions(
+            projected[clip.ClipId] = clip.ArchitecturePayload.ProjectFinalDimensions(
                 clip.Stages,
                 clip.InitVideo?.TargetWidth ?? rootWidth,
                 clip.InitVideo?.TargetHeight ?? rootHeight);

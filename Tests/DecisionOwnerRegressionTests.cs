@@ -517,8 +517,7 @@ public class DecisionOwnerRegressionTests
     private sealed class HostPhaseTestProvider(
         IArchitectureGenerationSessionFactoryProvider inner) :
         IArchitectureGenerationSessionFactoryProvider,
-        IArchitectureHostPhaseParticipant,
-        IArchitectureRootMediaResizerProvider
+        IArchitectureHostPhaseParticipant
     {
         public ArchitectureId ArchitectureId => inner.ArchitectureId;
 
@@ -532,9 +531,6 @@ public class DecisionOwnerRegressionTests
 
         public IArchitectureGenerationSessionFactory CreateFactory() =>
             inner.CreateFactory();
-
-        public IArchitectureRootMediaResizer CreateRootMediaResizer() =>
-            (inner as IArchitectureRootMediaResizerProvider)?.CreateRootMediaResizer();
     }
 
     private static ClipPlan InitVideoClip(

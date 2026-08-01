@@ -7,7 +7,7 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class LtxAudioMaskResizer(
     WorkflowGenerator g,
-    IArchitectureRootMediaResizer rootVideoStageResizer)
+    RootVideoStageResizer rootVideoStageResizer)
 {
     internal void ApplyRootAudioMaskDimensionsAfterNativeVideo()
     {

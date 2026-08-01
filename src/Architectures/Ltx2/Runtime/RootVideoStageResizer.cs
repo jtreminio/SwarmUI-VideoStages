@@ -10,7 +10,7 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class RootVideoStageResizer(
     WorkflowGenerator g,
-    RootVideoStageHandoff handoff) : IArchitectureRootMediaResizer
+    RootVideoStageHandoff handoff)
 {
     private static int _registered;
 
@@ -34,8 +34,8 @@ internal sealed class RootVideoStageResizer(
 
         context.ExecutePrepared(() =>
         {
-            if (!TryGetVideoContextResizerWithRootSize(
-                genInfo, out IArchitectureRootMediaResizer resizer, out int width, out int height))
+            RootVideoStageResizer resizer = Create(genInfo.Generator);
+            if (!resizer.TryGetRootStageResolution(out int width, out int height))
             {
                 return;
             }
@@ -55,13 +55,16 @@ internal sealed class RootVideoStageResizer(
 
         context.ExecutePrepared(() =>
         {
-            if (TryGetVideoContextResizerWithRootSize(
-                genInfo, out IArchitectureRootMediaResizer resizer, out int width, out int height))
+            RootVideoStageResizer resizer = Create(genInfo.Generator);
+            if (resizer.TryGetRootStageResolution(out int width, out int height))
             {
                 resizer.SetCurrentMediaDimensions(width, height);
             }
         });
     }
+
+    private static RootVideoStageResizer Create(WorkflowGenerator g) =>
+        new(g, new RootVideoStageHandoff(g, new StageRefStore(g)));
 
     private static bool TryGetApplicableContext(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -77,22 +80,6 @@ internal sealed class RootVideoStageResizer(
         }
         return context.RootOwnerArchitectureId
             == Ltx2ArchitectureModule.ArchitectureId;
-    }
-
-    private static bool TryGetVideoContextResizerWithRootSize(
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        out IArchitectureRootMediaResizer resizer,
-        out int width,
-        out int height)
-    {
-        resizer = Runner.GetRootMediaResizer(genInfo.Generator);
-        if (resizer is null)
-        {
-            width = 0;
-            height = 0;
-            return false;
-        }
-        return resizer.TryGetRootStageResolution(out width, out height);
     }
 
     public void ApplyConfiguredRootStageResolutionToCurrentMedia()

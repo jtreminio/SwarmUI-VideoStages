@@ -10,7 +10,7 @@ namespace VideoStages.Architectures.Ltx2;
 internal sealed class StageSequenceRootSetup(
     WorkflowGenerator g,
     StageRefStore store,
-    IArchitectureRootMediaResizer rootVideoStageResizer)
+    RootVideoStageResizer rootVideoStageResizer)
 {
     public StageSequenceRootSources Prepare(
         AudioRuntimeSources preparedAudioSources,

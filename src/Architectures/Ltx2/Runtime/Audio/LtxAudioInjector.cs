@@ -11,7 +11,7 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class LtxAudioInjector(
     WorkflowGenerator g,
-    IArchitectureRootMediaResizer rootVideoStageResizer)
+    RootVideoStageResizer rootVideoStageResizer)
 {
     private const int AudioInjectionEnsureFallbackSlot = 50;
 

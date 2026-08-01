@@ -534,60 +534,6 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
-    public void ArchitectureClipCompilation_RejectsNullInputsAndNullStageValues()
-    {
-        TestClipPayload payload = new(new("test"));
-        TestStagePayload stagePayload = new(payload.ArchitectureId);
-
-        Assert.Equal(
-            "payload",
-            Assert.Throws<ArgumentNullException>(
-                () => new ArchitectureClipCompilation(
-                    null,
-                    new Dictionary<int, IArchitectureStagePayload>(),
-                    [])).ParamName);
-        Assert.Equal(
-            "stagePayloads",
-            Assert.Throws<ArgumentNullException>(
-                () => new ArchitectureClipCompilation(payload, null, [])).ParamName);
-        Assert.Equal(
-            "diagnostics",
-            Assert.Throws<ArgumentNullException>(
-                () => new ArchitectureClipCompilation(
-                    payload,
-                    new Dictionary<int, IArchitectureStagePayload> { [3] = stagePayload },
-                    null)).ParamName);
-        ArgumentException nullValueError = Assert.Throws<ArgumentException>(
-            () => new ArchitectureClipCompilation(
-                payload,
-                new Dictionary<int, IArchitectureStagePayload> { [3] = null },
-                []));
-        Assert.Equal("stagePayloads", nullValueError.ParamName);
-        Assert.Contains("raw stage 3", nullValueError.Message);
-    }
-
-    [Fact]
-    public void ArchitectureClipCompilation_SnapshotsStagePayloadMap()
-    {
-        TestClipPayload payload = new(new("test"));
-        TestStagePayload original = new(payload.ArchitectureId);
-        TestStagePayload replacement = new(payload.ArchitectureId);
-        Dictionary<int, IArchitectureStagePayload> stagePayloads = new()
-        {
-            [3] = original,
-        };
-        ArchitectureClipCompilation compilation = new(payload, stagePayloads, []);
-
-        stagePayloads[3] = replacement;
-        stagePayloads[7] = replacement;
-
-        KeyValuePair<int, IArchitectureStagePayload> entry =
-            Assert.Single(compilation.StagePayloads);
-        Assert.Equal(3, entry.Key);
-        Assert.Same(original, entry.Value);
-    }
-
-    [Fact]
     public void SourceOnlyCompilationPublishesAnEmptyStagePayloadMap()
     {
         ClipSpec clip = InitVideoClip(7);
@@ -827,6 +773,25 @@ public class PlanningCompilerComponentTests
         Assert.DoesNotContain(
             plan.Diagnostics,
             entry => entry.Code is "clip-geometry-will-conform" or "clip-aspect-mismatch");
+    }
+
+    [Fact]
+    public void ClipGeometryProjection_ProjectsStagelessInitVideoClipsInsteadOfGoingSilent()
+    {
+        VideoStagesSpec spec = new(512, 512, 24, false,
+        [
+            InitVideoClip(0),
+            GeneratedClip(1, Stage(11) with { Upscale = 2 }),
+        ]);
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+
+        PlanDiagnostic diagnostic = Assert.Single(
+            plan.Diagnostics,
+            entry => entry.Code == "clip-geometry-will-conform");
+        Assert.Equal(1, diagnostic.ClipId);
+        Assert.Contains("1024x1024", diagnostic.Message);
+        Assert.Contains("512x512", diagnostic.Message);
     }
 
     private static string Serialize(VideoExecutionPlan plan) =>

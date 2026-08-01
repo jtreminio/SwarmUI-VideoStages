@@ -123,9 +123,9 @@ or ambiguous.
 clip whose planned input consumes host root media or an empty latent. A init-video
 clip owns its own media and does not claim the host root.
 
-`ArchitectureHostPhasePolicy` is the exhaustive scope table. Adding a phase
-requires adding it to the enum and this switch; phases are not ad hoc string
-hooks.
+`ArchitectureHostPhases.IsRootOwnerOnly` decides who receives a phase. Adding a
+phase requires adding it to the enum and, if it is a root-media handoff, to that
+predicate; phases are not ad hoc string hooks.
 
 ## 4. Provider, factory, and session lifetimes
 

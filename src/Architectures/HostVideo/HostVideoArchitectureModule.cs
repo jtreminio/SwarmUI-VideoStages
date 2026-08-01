@@ -227,8 +227,7 @@ internal sealed class HostVideoArchitectureModule :
 internal sealed record HostVideoClipPayload(
     int ClipId,
     string CompatibilityClassId) :
-    IArchitectureClipPayload,
-    IArchitectureClipGeometryProjection
+    IArchitectureClipPayload
 {
     public ArchitectureId ArchitectureId =>
         HostVideoArchitectureModule.ArchitectureId;

@@ -10,7 +10,7 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class LtxGuidePreprocessReuse(
     WorkflowGenerator g,
-    IArchitectureRootMediaResizer rootVideoStageResizer,
+    RootVideoStageResizer rootVideoStageResizer,
     ReferenceFramingMode referenceFraming)
 {
     private const int ImgCompression = 25;

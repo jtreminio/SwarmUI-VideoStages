@@ -8,18 +8,16 @@ namespace VideoStages.Architectures.Abstractions;
 internal interface IArchitectureClipPayload
 {
     ArchitectureId ArchitectureId { get; }
-}
 
-/// <summary>
-/// A clip payload that can say, before anything runs, what dimensions its authored stage chain will
-/// finish at. Timeline planning uses it to warn about conforming ahead of generation.
-/// </summary>
-internal interface IArchitectureClipGeometryProjection
-{
+    /// <summary>
+    /// What dimensions this clip's authored stage chain will finish at, before anything runs.
+    /// Timeline planning uses it to warn about conforming ahead of generation. Payloads whose clips
+    /// carry no dimension-changing stages inherit the identity projection.
+    /// </summary>
     (int Width, int Height) ProjectFinalDimensions(
         IReadOnlyList<StagePlan> stages,
         int width,
-        int height);
+        int height) => (width, height);
 }
 
 /// <summary>
@@ -34,44 +32,15 @@ internal interface IArchitectureStagePayload
     StageCorePlan Core { get; }
 }
 
-internal sealed record ArchitectureClipCompilation
-{
-    internal ArchitectureClipCompilation(
-        IArchitectureClipPayload payload,
-        IReadOnlyDictionary<int, IArchitectureStagePayload> stagePayloads,
-        IReadOnlyList<PlanDiagnostic> diagnostics)
-    {
-        ArgumentNullException.ThrowIfNull(payload);
-        ArgumentNullException.ThrowIfNull(stagePayloads);
-        ArgumentNullException.ThrowIfNull(diagnostics);
-        foreach ((int rawStageIndex, IArchitectureStagePayload stagePayload) in stagePayloads)
-        {
-            if (stagePayload is null)
-            {
-                throw new ArgumentException(
-                    $"Stage payload map contains a null value for raw stage {rawStageIndex}.",
-                    nameof(stagePayloads));
-            }
-        }
-
-        Payload = payload;
-        StagePayloads = new System.Collections.ObjectModel.ReadOnlyDictionary<
-            int,
-            IArchitectureStagePayload>(
-                new Dictionary<int, IArchitectureStagePayload>(stagePayloads));
-        Diagnostics = Array.AsReadOnly(diagnostics.ToArray());
-    }
-
-    public IArchitectureClipPayload Payload { get; }
-
-    /// <summary>
-    /// Architecture-owned stage instructions keyed by authored raw stage index. Common planning
-    /// attaches them to generic stage plans without interpreting their concrete types.
-    /// </summary>
-    public IReadOnlyDictionary<int, IArchitectureStagePayload> StagePayloads { get; }
-
-    public IReadOnlyList<PlanDiagnostic> Diagnostics { get; }
-}
+/// <summary>
+/// <paramref name="StagePayloads"/> holds architecture-owned stage instructions keyed by authored
+/// raw stage index. Common planning attaches them to generic stage plans without interpreting their
+/// concrete types.
+/// </summary>
+internal sealed record ArchitectureClipCompilation(
+    IArchitectureClipPayload Payload,
+    IReadOnlyDictionary<int, IArchitectureStagePayload> StagePayloads,
+    IReadOnlyList<PlanDiagnostic> Diagnostics);
 
 /// <summary>One architecture session executes clips from only its own architecture.</summary>
 internal interface IVideoGenerationSession : IDisposable
@@ -176,30 +145,16 @@ internal enum ArchitectureHostPhase
     ApplyRootAudioMaskDimensions,
 }
 
-/// <summary>
-/// Who receives a host phase. The execution host routes on this before it builds the phase
-/// context; participants are selected by scope rather than told their own scope.
-/// </summary>
-internal enum ArchitectureHostPhaseScope
+internal static class ArchitectureHostPhases
 {
-    RootOwnerOnly,
-    AllActiveArchitectures,
-}
-
-internal static class ArchitectureHostPhasePolicy
-{
-    internal static ArchitectureHostPhaseScope Scope(ArchitectureHostPhase phase) => phase switch
-    {
-        ArchitectureHostPhase.CaptureControlNetPreprocessors
-            or ArchitectureHostPhase.CaptureBaseReference
-            or ArchitectureHostPhase.CaptureRefinerReference =>
-            ArchitectureHostPhaseScope.AllActiveArchitectures,
-        ArchitectureHostPhase.CapturePreCoreMedia
+    /// <summary>
+    /// Who receives a host phase. Root-media handoff belongs to the one root owner; every other
+    /// phase fans out, because a non-root architecture still captures its own stage references.
+    /// </summary>
+    internal static bool IsRootOwnerOnly(ArchitectureHostPhase phase) =>
+        phase is ArchitectureHostPhase.CapturePreCoreMedia
             or ArchitectureHostPhase.DropCoreOutput
-            or ArchitectureHostPhase.ApplyRootAudioMaskDimensions =>
-                ArchitectureHostPhaseScope.RootOwnerOnly,
-        _ => throw new ArgumentOutOfRangeException(nameof(phase), phase, null),
-    };
+            or ArchitectureHostPhase.ApplyRootAudioMaskDimensions;
 }
 
 internal sealed record ArchitectureHostPhaseContext(
@@ -210,26 +165,4 @@ internal sealed record ArchitectureHostPhaseContext(
 internal interface IArchitectureHostPhaseParticipant
 {
     void ExecuteHostPhase(ArchitectureHostPhaseContext context);
-}
-
-/// <summary>
-/// Architecture-selected root-media sizing behavior used by host image-to-video callbacks and
-/// architecture runtimes without exposing a concrete implementation through common orchestration.
-/// </summary>
-internal interface IArchitectureRootMediaResizer
-{
-    bool TryGetRootStageResolution(out int width, out int height);
-
-    void ApplyConfiguredRootStageResolutionToCurrentMedia();
-
-    void ApplyConfiguredRootStageResolutionToSurvivingRootMedia();
-
-    void ApplyCurrentMediaResolution(int width, int height);
-
-    void SetCurrentMediaDimensions(int width, int height);
-}
-
-internal interface IArchitectureRootMediaResizerProvider
-{
-    IArchitectureRootMediaResizer CreateRootMediaResizer();
 }

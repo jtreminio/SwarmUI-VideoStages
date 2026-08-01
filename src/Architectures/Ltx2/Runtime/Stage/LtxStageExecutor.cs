@@ -14,7 +14,7 @@ internal sealed class LtxStageExecutor
     private const double DefaultGuideMergeStrength = 1.0;
 
     private readonly WorkflowGenerator g;
-    private readonly IArchitectureRootMediaResizer rootVideoStageResizer;
+    private readonly RootVideoStageResizer rootVideoStageResizer;
     private readonly LtxStageRuntimeSettings runtimeSettings;
     private readonly LtxModelPromptPreparer modelPromptPreparer;
     private readonly LtxStageLatentBuilder latentBuilder;
@@ -23,7 +23,7 @@ internal sealed class LtxStageExecutor
 
     internal LtxStageExecutor(
         WorkflowGenerator g,
-        IArchitectureRootMediaResizer rootVideoStageResizer)
+        RootVideoStageResizer rootVideoStageResizer)
     {
         this.g = g;
         this.rootVideoStageResizer = rootVideoStageResizer;

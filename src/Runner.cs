@@ -23,9 +23,6 @@ namespace VideoStages;
 //
 // Phase 1 is the only place a request may be rejected for a missing dependency: every later phase
 // mutates the host graph, so a failure past it leaves the user with a broken workflow.
-//
-// Non-phase entry point (NOT registered as a workflow step — called from outside the pipeline):
-//   GetRootMediaResizer  architecture-selected sizing for static AltImageToVideo handlers.
 public static class Runner
 {
     public static void PreflightRequest(WorkflowGenerator g)
@@ -108,18 +105,6 @@ public static class Runner
         }
 
         context.RequirePreparedExecutionHost().RunConfiguredStages();
-    }
-
-    // --- Non-phase entry points (not registered as workflow steps; see header map) ---
-
-    internal static IArchitectureRootMediaResizer GetRootMediaResizer(WorkflowGenerator g)
-    {
-        if (!IsExtensionActive(g))
-        {
-            return null;
-        }
-        VideoExecutionPlanContext context = g.GetVideoExecutionPlanContext();
-        return context?.RequirePreparedExecutionHost().GetRootMediaResizer();
     }
 
     private static void Dispatch(

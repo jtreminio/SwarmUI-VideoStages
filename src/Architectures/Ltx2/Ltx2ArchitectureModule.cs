@@ -107,8 +107,7 @@ internal sealed record Ltx2ClipPayload(
     int? ControlNetSourceIndex,
     ReferenceFramingMode ReferenceFraming) :
     IArchitectureClipPayload,
-    IArchitectureControlNetSourcePlan,
-    IArchitectureClipGeometryProjection
+    IArchitectureControlNetSourcePlan
 {
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
 

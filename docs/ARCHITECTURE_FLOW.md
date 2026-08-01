@@ -411,7 +411,7 @@ The full prepared-state machine and exact eight-step priority table are in
 
 Later `Runner` phases dispatch through
 `VideoArchitectureExecutionHost.DispatchHostPhase`.
-`ArchitectureHostPhasePolicy` chooses all-active versus root-owner-only scope;
+`ArchitectureHostPhases.IsRootOwnerOnly` chooses root-owner-only versus all-active;
 `ArchitectureRootOwnerResolver` selects the one architecture allowed to
 transform host-root media.
 

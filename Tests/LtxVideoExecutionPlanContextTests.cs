@@ -3,6 +3,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures;
+using VideoStages.Architectures.Ltx2;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -75,7 +76,11 @@ public class VideoExecutionPlanContextTests
             Runner.DropCoreImageToVideoOutput,
             Runner.ApplyRootAudioMaskDimensionsAfterNativeVideo,
             Runner.RunConfiguredStages,
-            current => Runner.GetRootMediaResizer(current),
+            current => RootVideoStageResizer.ApplyRootResolutionBeforeImageToVideo(new()
+            {
+                Generator = current,
+                ContextID = T2IParamInput.SectionID_Video,
+            }),
         ];
 
         foreach (Action<WorkflowGenerator> phase in phases)

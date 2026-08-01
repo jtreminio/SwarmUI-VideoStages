@@ -10,8 +10,7 @@ namespace VideoStages.Architectures.Ltx2;
 /// </summary>
 internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
     IArchitectureGenerationSessionFactoryProvider,
-    IArchitectureHostPhaseParticipant,
-    IArchitectureRootMediaResizerProvider
+    IArchitectureHostPhaseParticipant
 {
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
 
@@ -87,9 +86,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             rootSetup,
             clipExecutor);
     }
-
-    public IArchitectureRootMediaResizer CreateRootMediaResizer() =>
-        BuildPipeline().Resizer;
 
     private Pipeline BuildPipeline()
     {

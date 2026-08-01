@@ -44,7 +44,6 @@ public class ArchitectureRuntimeOwnershipTests
         Assert.Empty(initVideoClip.HostPhases);
         ArchitectureHostPhaseContext rootPhase = Assert.Single(future.HostPhases);
         Assert.Equal(new ArchitectureId("future-arch"), rootPhase.RootOwnerArchitectureId);
-        Assert.Same(future.Resizer, host.GetRootMediaResizer());
     }
 
     [Fact]
@@ -352,14 +351,11 @@ public class ArchitectureRuntimeOwnershipTests
         string preflightError = null,
         Exception hostPhaseFailure = null) :
         IArchitectureGenerationSessionFactoryProvider,
-        IArchitectureHostPhaseParticipant,
-        IArchitectureRootMediaResizerProvider
+        IArchitectureHostPhaseParticipant
     {
         public ArchitectureId ArchitectureId => architectureId;
 
         internal List<ArchitectureHostPhaseContext> HostPhases { get; } = [];
-
-        internal RecordingResizer Resizer { get; } = new();
 
         public IReadOnlyList<PlanDiagnostic> PreflightRequest(
             ArchitectureRequestPreflightContext context)
@@ -381,8 +377,6 @@ public class ArchitectureRuntimeOwnershipTests
 
         public IArchitectureGenerationSessionFactory CreateFactory() =>
             new RecordingFactory(architectureId, calls);
-
-        public IArchitectureRootMediaResizer CreateRootMediaResizer() => Resizer;
     }
 
     private sealed class RecordingFactory(
@@ -402,31 +396,5 @@ public class ArchitectureRuntimeOwnershipTests
         public IVideoGenerationSession CreateSession(
             ArchitectureTimelineSessionContext context) =>
             throw new NotSupportedException();
-    }
-
-    private sealed class RecordingResizer : IArchitectureRootMediaResizer
-    {
-        public bool TryGetRootStageResolution(out int width, out int height)
-        {
-            width = 0;
-            height = 0;
-            return false;
-        }
-
-        public void ApplyConfiguredRootStageResolutionToCurrentMedia()
-        {
-        }
-
-        public void ApplyConfiguredRootStageResolutionToSurvivingRootMedia()
-        {
-        }
-
-        public void ApplyCurrentMediaResolution(int width, int height)
-        {
-        }
-
-        public void SetCurrentMediaDimensions(int width, int height)
-        {
-        }
     }
 }

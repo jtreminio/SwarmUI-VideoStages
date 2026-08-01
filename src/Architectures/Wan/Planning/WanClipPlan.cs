@@ -13,8 +13,7 @@ internal sealed record WanClipPayload(
     int ClipId,
     WanFrameReferencePlan FirstFrameReference = null,
     WanFrameReferencePlan LastFrameReference = null) :
-    IArchitectureClipPayload,
-    IArchitectureClipGeometryProjection
+    IArchitectureClipPayload
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
 

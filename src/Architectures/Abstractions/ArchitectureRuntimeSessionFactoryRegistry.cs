@@ -17,28 +17,7 @@ internal sealed class ArchitectureRuntimeSessionFactoryRegistry
     {
         ArgumentNullException.ThrowIfNull(request);
         _plan = request.Plan;
-        Dictionary<ArchitectureId, IArchitectureGenerationSessionFactory> byId = [];
-        foreach (IArchitectureGenerationSessionFactory factory in factories ?? [])
-        {
-            ArgumentNullException.ThrowIfNull(factory);
-            if (!byId.TryAdd(factory.ArchitectureId, factory))
-            {
-                throw new InvalidOperationException(
-                    $"Duplicate generation session factory for architecture "
-                    + $"'{factory.ArchitectureId}'.");
-            }
-        }
-        List<IArchitectureGenerationSessionFactory> active = [];
-        foreach (ArchitectureId id in request.ActiveArchitectureIds)
-        {
-            if (!byId.TryGetValue(id, out IArchitectureGenerationSessionFactory factory))
-            {
-                throw new InvalidOperationException(
-                    $"No generation session factory is registered for architecture '{id}'.");
-            }
-            active.Add(factory);
-        }
-        _activeFactories = active.AsReadOnly();
+        _activeFactories = Array.AsReadOnly((factories ?? []).ToArray());
         _rootOwner = request.RootOwnerArchitectureId;
     }
 
