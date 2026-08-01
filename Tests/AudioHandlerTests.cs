@@ -64,9 +64,9 @@ public class AudioHandlerTests
         FramesPerSecond: 24,
         new RootPlan(
             HostRootKind.ImageToVideo,
-            RootUse.ClipZeroSeed,
-            HostCoreDisposition.Handoff,
-            NativeAudioDisposition.MakeAvailableToTimeline),
+            DiscardsRoot: false,
+            UsesGeneratedClipDonor: false,
+            InterceptsHostCore: true),
         Clips: clips,
         Boundaries: [],
         Diagnostics: []);

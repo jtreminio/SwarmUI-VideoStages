@@ -26,40 +26,17 @@ internal sealed record VideoExecutionPlan(
     public AudioTimelinePlan AudioTimeline { get; init; } = AudioTimelinePlan.Empty;
 }
 
-/// <summary>What the timeline does with the host's pre-VideoStages result.</summary>
+/// <summary>Compiled host-root ownership decisions.</summary>
 internal sealed record RootPlan(
     HostRootKind HostKind,
-    RootUse Use,
-    HostCoreDisposition CoreDisposition,
-    NativeAudioDisposition NativeAudioDisposition);
+    bool DiscardsRoot,
+    bool UsesGeneratedClipDonor,
+    bool InterceptsHostCore);
 
 internal enum HostRootKind
 {
     ImageToVideo,
     TextToVideoRoot,
-}
-
-/// <summary>Who consumes the host root media, independently from what happens to host core nodes.</summary>
-internal enum RootUse
-{
-    None,
-    ClipZeroSeed,
-    GeneratedClipDonor,
-    Discard,
-}
-
-internal enum HostCoreDisposition
-{
-    Keep,
-    Handoff,
-    Drop,
-}
-
-internal enum NativeAudioDisposition
-{
-    KeepHostAudio,
-    MakeAvailableToTimeline,
-    DiscardWithRoot,
 }
 
 /// <summary>
@@ -96,7 +73,7 @@ internal sealed record ClipPlan(
 
     /// <summary>
     /// How this clip enters the timeline. Resolved once during compilation so plan validators do
-    /// not each re-derive it from root disposition and sourcing.
+    /// not each re-derive it from root ownership and sourcing.
     /// </summary>
     public ArchitectureEntryMode EntryMode { get; init; }
 

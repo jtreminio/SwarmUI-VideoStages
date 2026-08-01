@@ -5,11 +5,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Execution;
 
-/// <summary>
-/// Owns the host-root artifact for one video-timeline execution. The session is captured before any
-/// coordinator-level media replacement, then publishes the completed timeline before removing a
-/// root component that the immutable plan says is displaced.
-/// </summary>
+/// <summary>Captures the host root and publishes the completed timeline.</summary>
 internal sealed class RootRuntimeSession
 {
     private readonly WorkflowGenerator _generator;
@@ -69,7 +65,7 @@ internal sealed class RootRuntimeSession
                 "VideoStages: the completed timeline did not produce a publishable video artifact.");
         }
 
-        bool rootIsDisplaced = _rootPlan.Use is RootUse.Discard;
+        bool rootIsDisplaced = _rootPlan.DiscardsRoot;
         OutputPublisher publisher = new(
             _generator,
             _outputs,

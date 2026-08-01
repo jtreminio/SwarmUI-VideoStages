@@ -2,12 +2,7 @@ using VideoStages.Planning;
 
 namespace VideoStages;
 
-/// <summary>
-/// The one runtime interpretation of root ownership. All root handoff, text-to-video replacement,
-/// native-audio suppression, and source-lead behavior derives from this policy rather than from
-/// separate boolean predicates. Every fact it needs is already in the compiled plan, so runtime
-/// callers cannot supply a second, divergent view of the same timeline.
-/// </summary>
+/// <summary>Applies compiled host-root ownership decisions during graph execution.</summary>
 internal sealed class RootExecutionPolicy
 {
     public RootExecutionPolicy(VideoExecutionPlan plan)
@@ -26,7 +21,7 @@ internal sealed class RootExecutionPolicy
 
     public bool HasInitVideoLeadWithGeneratedClips { get; }
 
-    public bool InterceptsHostCore => Plan.CoreDisposition is not HostCoreDisposition.Keep;
+    public bool InterceptsHostCore => Plan.InterceptsHostCore;
 
     /// <summary>
     /// The current host media is the retained root handed into the first generated stage. A
@@ -39,7 +34,7 @@ internal sealed class RootExecutionPolicy
         && HasInitVideoLeadWithGeneratedClips;
 
     public bool ConformsSurvivingRootMedia =>
-        Plan.Use == RootUse.GeneratedClipDonor;
+        Plan.UsesGeneratedClipDonor;
 
     /// <summary>
     /// Only the first generated stage of a normal text-to-video timeline replaces the host text
@@ -48,7 +43,7 @@ internal sealed class RootExecutionPolicy
     /// </summary>
     public bool ReplacesTextToVideoRootStage(StagePlan stage, ClipPlan clip) =>
         Plan.HostKind == HostRootKind.TextToVideoRoot
-        && Plan.Use == RootUse.Discard
+        && Plan.DiscardsRoot
         && clip?.Input == ClipInputKind.EmptyLatent
         && stage?.Input == StageInputKind.EmptyLatent
         && stage.ClipStageIndex == 0;

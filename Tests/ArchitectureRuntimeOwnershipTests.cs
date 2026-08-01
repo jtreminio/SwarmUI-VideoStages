@@ -235,9 +235,9 @@ public class ArchitectureRuntimeOwnershipTests
             24,
             new(
                 HostRootKind.ImageToVideo,
-                RootUse.GeneratedClipDonor,
-                HostCoreDisposition.Handoff,
-                NativeAudioDisposition.MakeAvailableToTimeline),
+                DiscardsRoot: false,
+                UsesGeneratedClipDonor: true,
+                InterceptsHostCore: true),
             [initVideoClip, generated],
             [
                 new(

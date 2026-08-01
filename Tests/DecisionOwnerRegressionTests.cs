@@ -444,9 +444,9 @@ public class DecisionOwnerRegressionTests
             24,
             new(
                 HostRootKind.TextToVideoRoot,
-                RootUse.Discard,
-                HostCoreDisposition.Handoff,
-                NativeAudioDisposition.DiscardWithRoot),
+                DiscardsRoot: true,
+                UsesGeneratedClipDonor: false,
+                InterceptsHostCore: true),
             [clip],
             [],
             []);
@@ -521,9 +521,9 @@ public class DecisionOwnerRegressionTests
         24,
         new(
             HostRootKind.TextToVideoRoot,
-            RootUse.Discard,
-            HostCoreDisposition.Handoff,
-            NativeAudioDisposition.DiscardWithRoot),
+            DiscardsRoot: true,
+            UsesGeneratedClipDonor: false,
+            InterceptsHostCore: true),
         clips,
         [],
         []);

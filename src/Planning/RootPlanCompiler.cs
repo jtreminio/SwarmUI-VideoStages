@@ -7,22 +7,17 @@ internal static class RootPlanCompiler
     {
         if (clips.Count == 0)
         {
-            return new RootPlan(environment.HostKind, RootUse.None, HostCoreDisposition.Keep,
-                NativeAudioDisposition.KeepHostAudio);
+            return new RootPlan(environment.HostKind, false, false, false);
         }
 
         bool hasGeneratedClip = clips.Any(clip => clip.InitVideo is null);
         bool initVideoLeadWithGeneratedClips = clips[0].InitVideo is not null && hasGeneratedClip;
+        bool discardsRoot = environment.HostKind == HostRootKind.TextToVideoRoot
+            || !hasGeneratedClip;
         return new RootPlan(
             environment.HostKind,
-            environment.HostKind == HostRootKind.TextToVideoRoot || !hasGeneratedClip
-                ? RootUse.Discard
-                : initVideoLeadWithGeneratedClips ? RootUse.GeneratedClipDonor : RootUse.ClipZeroSeed,
-            environment.HostKind == HostRootKind.TextToVideoRoot || !hasGeneratedClip
-                ? HostCoreDisposition.Drop
-                : environment.CanHandoffHostCore ? HostCoreDisposition.Handoff : HostCoreDisposition.Keep,
-            environment.HostKind == HostRootKind.TextToVideoRoot || !hasGeneratedClip
-                ? NativeAudioDisposition.DiscardWithRoot
-                : NativeAudioDisposition.MakeAvailableToTimeline);
+            discardsRoot,
+            !discardsRoot && initVideoLeadWithGeneratedClips,
+            discardsRoot || environment.CanHandoffHostCore);
     }
 }

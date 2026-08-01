@@ -16,9 +16,9 @@ public class VideoExecutionPlanCompilerTests
             isTextToVideo: true,
             GeneratedClip(0, Stage(10))));
 
-        Assert.Equal(RootUse.Discard, plan.Root.Use);
-        Assert.Equal(HostCoreDisposition.Drop, plan.Root.CoreDisposition);
-        Assert.Equal(NativeAudioDisposition.DiscardWithRoot, plan.Root.NativeAudioDisposition);
+        Assert.True(plan.Root.DiscardsRoot);
+        Assert.True(plan.Root.InterceptsHostCore);
+        Assert.False(plan.Root.UsesGeneratedClipDonor);
         StagePlan stage = Assert.Single(Assert.Single(plan.Clips).Stages);
         Assert.Equal(StageInputKind.EmptyLatent, stage.Input);
         Assert.False(stage.IsPassthrough);
@@ -74,16 +74,16 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_RootEnvironment_SeparatesRootUseCoreAndAudioOwnership()
+    public void Compile_RootEnvironment_SeparatesRootDiscardHandoffAndDonorOwnership()
     {
         ClipSpec initVideoLead = InitVideoClip(0);
         VideoExecutionPlan plan = TestPlanCompiler.Compile(
             Spec(false, initVideoLead, GeneratedClip(1, Stage(11))),
             new RootEnvironment(HostRootKind.ImageToVideo, CanHandoffHostCore: true));
 
-        Assert.Equal(RootUse.GeneratedClipDonor, plan.Root.Use);
-        Assert.Equal(HostCoreDisposition.Handoff, plan.Root.CoreDisposition);
-        Assert.Equal(NativeAudioDisposition.MakeAvailableToTimeline, plan.Root.NativeAudioDisposition);
+        Assert.False(plan.Root.DiscardsRoot);
+        Assert.True(plan.Root.InterceptsHostCore);
+        Assert.True(plan.Root.UsesGeneratedClipDonor);
     }
 
     [Fact]
@@ -503,13 +503,9 @@ public class VideoExecutionPlanCompilerTests
 
         ClipPlan surviving = Assert.Single(plan.Clips);
         Assert.True(surviving.HasInitVideo);
-        Assert.Equal(RootUse.Discard, plan.Root.Use);
-        Assert.Equal(
-            HostCoreDisposition.Drop,
-            plan.Root.CoreDisposition);
-        Assert.Equal(
-            NativeAudioDisposition.DiscardWithRoot,
-            plan.Root.NativeAudioDisposition);
+        Assert.True(plan.Root.DiscardsRoot);
+        Assert.True(plan.Root.InterceptsHostCore);
+        Assert.False(plan.Root.UsesGeneratedClipDonor);
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "duplicate-clip-id"
                 && diagnostic.Severity == PlanDiagnosticSeverity.Warning);

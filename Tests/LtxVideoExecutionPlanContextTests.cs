@@ -31,7 +31,7 @@ public class VideoExecutionPlanContextTests
         Assert.NotNull(first);
         Assert.Same(first, second);
         Assert.Single(first.Plan.Clips);
-        Assert.NotEqual(HostCoreDisposition.Keep, first.Plan.Root.CoreDisposition);
+        Assert.True(first.Plan.Root.InterceptsHostCore);
     }
 
     [Fact]
