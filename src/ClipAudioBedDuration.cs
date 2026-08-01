@@ -4,14 +4,11 @@ using VideoStages.Planning;
 namespace VideoStages;
 
 /// <summary>
-/// The single rule for the silent-bed length a clip's audio segments are placed against. Both the
-/// staged (<c>ClipAudioPreparer</c>) and init-video-only (<c>SourceOnlyClipAudioPreparer</c>) paths
-/// feed <see cref="AudioSegmentCombiner"/>, so a resampled initVideoClip clip must not shift its segments
-/// purely because it happens to carry stages.
+/// Computes the silent-bed duration used to place a clip's audio segments.
 /// </summary>
 internal static class ClipAudioBedDuration
 {
-    /// <summary>Timeline fps wins; installed media fps is the fallback when the plan has none.</summary>
+    /// <summary>Uses planned fps when available, otherwise the installed media fps.</summary>
     internal static double Seconds(
         ClipPlan clip,
         int plannedFramesPerSecond,
