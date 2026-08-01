@@ -62,7 +62,6 @@ public class AudioHandlerTests
             HostRootKind.ImageToVideo,
             RootUse.ClipZeroSeed,
             HostCoreDisposition.Handoff,
-            TimelineOutputDisposition.PublishTimelineOutput,
             NativeAudioDisposition.MakeAvailableToTimeline),
         Clips: clips,
         Boundaries: [],

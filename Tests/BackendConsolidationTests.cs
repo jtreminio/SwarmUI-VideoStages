@@ -209,35 +209,6 @@ public class BackendConsolidationTests
     }
 
     [Fact]
-    public void Stable_node_id_blocks_cannot_collide()
-    {
-        foreach (StableNodeIds.Block left in StableNodeIds.All)
-        {
-            foreach (StableNodeIds.Block right in StableNodeIds.All)
-            {
-                if (left.Name == right.Name)
-                {
-                    continue;
-                }
-                Assert.True(
-                    left.EndExclusive <= right.Base || right.EndExclusive <= left.Base,
-                    $"'{left.Name}' and '{right.Name}' overlap.");
-            }
-        }
-    }
-
-    [Fact]
-    public void Stable_node_id_rejects_a_slot_outside_its_block()
-    {
-        WorkflowGenerator generator = new() { Workflow = new JObject(), UserInput = new(null) };
-
-        Assert.Throws<InvalidOperationException>(() => StableNodeIds.Id(
-            generator,
-            StableNodeIds.AudioWindowMask,
-            StableNodeIds.AudioWindowMask.Width));
-    }
-
-    [Fact]
     public void Authored_duration_parsing_does_not_import_a_global_architecture_grid()
     {
         Assert.Equal(

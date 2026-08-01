@@ -206,7 +206,7 @@ public class RuntimeArtifactTests
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
             () => new GlobalVideoFrameTrimmer(generator).Apply());
 
-        Assert.Contains("video stream required for global frame trim", error.Message);
+        Assert.Contains("no decoded output to trim", error.Message);
         Assert.True(JToken.DeepEquals(before, workflow));
         Assert.Equal(new JArray("missing-video", 0), generator.CurrentMedia.Path);
     }

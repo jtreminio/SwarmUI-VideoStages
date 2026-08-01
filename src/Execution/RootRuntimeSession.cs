@@ -64,10 +64,6 @@ internal sealed class RootRuntimeSession
     public void PublishTimeline(RuntimeArtifact timeline)
     {
         ArgumentNullException.ThrowIfNull(timeline);
-        if (_rootPlan.OutputDisposition != TimelineOutputDisposition.PublishTimelineOutput)
-        {
-            return;
-        }
         if (!timeline.HasMedia)
         {
             throw new SwarmUserErrorException(

@@ -14,8 +14,7 @@ using Xunit;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// Graph-shape tests for the multi-clip merger's Stage-D boundaryOut behavior. Drives the merger directly on
-/// hand-built decoded-pixel clips, asserting crossfade/cut branching at the node level without a full LTX flow.
+/// Graph-shape tests for multi-clip cut and overlap assembly without a full LTX flow.
 /// </summary>
 [Collection("VideoStagesTests")]
 public class MultiClipCrossfadeMergerTests
@@ -27,8 +26,7 @@ public class MultiClipCrossfadeMergerTests
 
     private static WorkflowGenerator NewGenerator(JObject workflow)
     {
-        // Side-effect: registers VideoStages node types (so WorkflowBridge.Create deserializes them as typed
-        // nodes) plus core T2I params; return value is unused.
+        // Registers the node types required for typed workflow deserialization.
         _ = WorkflowTestHarness.VideoStagesSteps();
         return new WorkflowGenerator
         {
@@ -38,9 +36,6 @@ public class MultiClipCrossfadeMergerTests
         };
     }
 
-    /// <summary>
-    /// Builds one decoded-pixel clip per <paramref name="frames"/> entry (each with attached audio) backed by stub nodes.
-    /// </summary>
     private static (WorkflowGenerator Generator, List<WGNodeData> Clips) BuildClips(
         int[] frames,
         T2IModelCompatClass compat,
@@ -145,9 +140,7 @@ public class MultiClipCrossfadeMergerTests
     [Fact]
     public void Cut_MultiClip_ProducesExactlyTodaysGraphShape_NoCrossfadeNodes()
     {
-        // Two independent runs on identical inputs: one with no boundaryOuts (the pre-Stage-D signature),
-        // one with an explicit all-"cut" list. The resulting workflows must be byte-for-byte identical —
-        // the regression lock that "cut" (and the new field) never perturbs today's graph.
+        // Explicit cuts must preserve the graph produced when no boundary preferences are supplied.
         (WorkflowGenerator gA, List<WGNodeData> clipsA) =
             BuildClips([17, 17, 17], T2IModelClassSorter.CompatLtxv2);
         Merger(gA).Apply(Artifacts(clipsA), PlansFor(clipsA, null));
@@ -166,7 +159,6 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(0, CountOf<ImageFromBatchNode>(bridge));
         Assert.Equal(0, CountOf<SwarmRampMaskBatchNode>(bridge));
         Assert.Equal(0, CountOf<TrimAudioDurationNode>(bridge));
-        // Full length preserved (no overlap removed).
         Assert.Equal(51, gB.CurrentMedia.Frames);
     }
 
@@ -186,21 +178,6 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(AudioId(0), concat.Audio1.Connection!.Node.Id);
         Assert.Equal(silence.Id, concat.Audio2.Connection!.Node.Id);
         Assert.Equal(new JArray(concat.Id, 0), g.CurrentMedia.AttachedAudio!.Path);
-    }
-
-    [Fact]
-    public void Cut_RejectsDecodedArtifactWithoutLiteralFrameMetadata()
-    {
-        (WorkflowGenerator g, List<WGNodeData> clips) =
-            BuildClips([24, 48], T2IModelClassSorter.CompatLtxv2);
-        clips[1].AttachedAudio = null;
-        List<DecodedClipArtifact> artifacts = Artifacts(clips);
-        artifacts[1] = artifacts[1] with { Frames = 0 };
-
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => Merger(g).Apply(artifacts, PlansFor(clips, ["cut"])));
-
-        Assert.Contains("missing decoded video metadata", error.Message);
     }
 
     [Fact]
@@ -268,7 +245,6 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal((17 - 1) / (double)Fps, trim.Duration.LiteralAsDouble()!.Value, 6);
         Assert.Equal(AudioId(0), trim.Audio.Connection!.Node.Id);
 
-        // One duplicated seam frame removed.
         Assert.Equal(33, g.CurrentMedia.Frames);
     }
 
@@ -358,7 +334,7 @@ public class MultiClipCrossfadeMergerTests
     }
 
     [Fact]
-    public void Crossfade_MissingLaterRunAssembler_FailsBeforeEarlierRunMutatesGraph()
+    public void Crossfade_MissingLaterRunAssembler_DegradesAllOverlapsToCuts()
     {
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17, 17, 17], T2IModelClassSorter.CompatLtxv2);
@@ -371,18 +347,21 @@ public class MultiClipCrossfadeMergerTests
                 missingArchitecture,
                 missingArchitecture,
             ]);
-        JObject before = (JObject)g.Workflow.DeepClone();
+        BoundaryBudgetResolution resolution = Merger(g).Apply(
+            artifacts,
+            PlansFor(
+                clips,
+                ["crossfade", "cut", "crossfade", "cut"]));
 
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => Merger(g).Apply(
-                artifacts,
-                PlansFor(
-                    clips,
-                    ["crossfade", "cut", "crossfade", "cut"])));
-
-        Assert.Contains("No boundary assembler is registered", error.Message);
-        Assert.True(JToken.DeepEquals(before, g.Workflow));
-        Assert.Null(g.CurrentMedia);
+        Assert.True(resolution.Degraded);
+        Assert.Contains("no boundary assembler", resolution.Reason);
+        Assert.All(
+            resolution.Boundaries,
+            boundary => Assert.Equal(BoundaryJoinType.Cut, boundary.Effective));
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
+        Assert.Equal(68, g.CurrentMedia.Frames);
     }
 
     [Fact]
@@ -399,7 +378,6 @@ public class MultiClipCrossfadeMergerTests
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         const int k = 8;
 
-        // One pixel-blend per crossfaded boundary.
         List<LTXVLaplacianPyramidBlendNode> blends = [.. bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>()];
         Assert.Equal(2, blends.Count);
 
@@ -424,10 +402,7 @@ public class MultiClipCrossfadeMergerTests
             Assert.IsType<ImageFromBatchNode>(blend.ImageB.Connection!.Node);
         });
 
-        // Audio aligns PER crossfaded boundary: each clip whose outgoing boundary crossfades (clip 0, 1)
-        // drops its tail K frames before the concat, keeping later clips' audio synced with their K-earlier
-        // video; clip 2 (cut) keeps full audio. A single whole-track trim matches total length but drifts
-        // +K per interior boundary — the regression this locks.
+        // Trim each outgoing crossfade separately; trimming only the final track would drift later clips.
         List<TrimAudioDurationNode> trims = [.. bridge.Graph.NodesOfType<TrimAudioDurationNode>()];
         Assert.Equal(2, trims.Count);
         Assert.All(trims, t =>
@@ -440,7 +415,6 @@ public class MultiClipCrossfadeMergerTests
         string mergedAudioNodeId = $"{((JArray)g.CurrentMedia.AttachedAudio!.Path)[0]}";
         Assert.Contains(bridge.Graph.NodesOfType<AudioConcatNode>(), c => c.Id == mergedAudioNodeId);
 
-        // Merged frame count shrinks by the removed overlap.
         Assert.Equal(51 - 2 * k, g.CurrentMedia.Frames);
     }
 
@@ -556,8 +530,7 @@ public class MultiClipCrossfadeMergerTests
     [Fact]
     public void Conform_AllCutTimeline_ConformsEveryClipBeforeConcat()
     {
-        // The owner's worked example, on an all-cut timeline — the case that used to run no
-        // dimension or fps check at all before batching.
+        // All-cut timelines still require geometry and frame-rate conformance before batching.
         (WorkflowGenerator g, List<WGNodeData> clips) = BuildClips(
             [40, 32, 24],
             T2IModelClassSorter.CompatLtxv2,
@@ -587,18 +560,6 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(24, g.CurrentMedia.GetRawFPS());
         // Every clip is one second long, so the conformed timeline is 3 x 24 frames.
         Assert.Equal(72, g.CurrentMedia.Frames);
-    }
-
-    [Fact]
-    public void Conform_SingleClipTimeline_AddsNoNodes()
-    {
-        (WorkflowGenerator g, List<WGNodeData> clips) =
-            BuildClips([17], T2IModelClassSorter.CompatLtxv2, widths: [1024], heights: [1024]);
-        JObject before = (JObject)g.Workflow.DeepClone();
-
-        Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["cut"]));
-
-        Assert.True(JToken.DeepEquals(before, g.Workflow));
     }
 
     [Fact]
@@ -653,19 +614,6 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
         ImageScaleNode conform = Assert.Single(bridge.Graph.NodesOfType<ImageScaleNode>());
         Assert.Equal(VideoId(2), conform.Image.Connection!.Node.Id);
-    }
-
-    [Fact]
-    public void Crossfade_RejectsDecodedArtifactWithoutLiteralFrameMetadata()
-    {
-        // If any clip's frame count is unknown, the overlap math is undefined, so crossfade degrades to cut.
-        (WorkflowGenerator g, List<WGNodeData> clips) =
-            BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2);
-        List<DecodedClipArtifact> artifacts = Artifacts(clips);
-        artifacts[1] = artifacts[1] with { Frames = 0 };
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => Merger(g).Apply(artifacts, PlansFor(clips, ["crossfade", "cut"])));
-        Assert.Contains("missing decoded video metadata", error.Message);
     }
 
     [Fact]

@@ -8,7 +8,7 @@ internal static class RootPlanCompiler
         if (clips.Count == 0)
         {
             return new RootPlan(environment.HostKind, RootUse.None, HostCoreDisposition.Keep,
-                TimelineOutputDisposition.PreserveHostOutput, NativeAudioDisposition.KeepHostAudio);
+                NativeAudioDisposition.KeepHostAudio);
         }
 
         bool hasGeneratedClip = clips.Any(clip => clip.InitVideo is null);
@@ -21,7 +21,6 @@ internal static class RootPlanCompiler
             environment.HostKind == HostRootKind.TextToVideoRoot || !hasGeneratedClip
                 ? HostCoreDisposition.Drop
                 : environment.CanHandoffHostCore ? HostCoreDisposition.Handoff : HostCoreDisposition.Keep,
-            TimelineOutputDisposition.PublishTimelineOutput,
             environment.HostKind == HostRootKind.TextToVideoRoot || !hasGeneratedClip
                 ? NativeAudioDisposition.DiscardWithRoot
                 : NativeAudioDisposition.MakeAvailableToTimeline);

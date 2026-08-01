@@ -70,7 +70,6 @@ internal sealed record DecodedClipArtifact(
     /// </summary>
     internal WGNodeData ToHostMedia(WorkflowGenerator g)
     {
-        ValidateDecoded();
         WGNodeData media = new(Video.ToPath(), g, WGNodeData.DT_VIDEO, null)
         {
             Width = Width,
@@ -128,7 +127,6 @@ internal sealed record DecodedClipArtifact(
             clip.Architecture?.Id ?? throw new InvalidOperationException(
                 $"Clip {clip.ClipId} has no resolved architecture identity."),
             clip.ClipId);
-        decoded.ValidateDecoded();
         return decoded;
     }
 }

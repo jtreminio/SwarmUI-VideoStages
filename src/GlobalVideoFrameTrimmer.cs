@@ -46,8 +46,7 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
         int trimStartFrames = g.UserInput.Get(T2IParamTypes.TrimVideoStartFrames, 0);
         int trimEndFrames = g.UserInput.Get(T2IParamTypes.TrimVideoEndFrames, 0);
         MediaRef media = artifact.Media;
-        // A requested trim is never dropped: an unusable output is the same failure as the
-        // non-video output rejected below, and silently publishing untrimmed video hides it.
+        // Fail closed because publishing untrimmed video would hide an unusable output.
         if (media?.Output is not INodeOutput videoOutput)
         {
             throw new SwarmUserErrorException(
@@ -101,27 +100,12 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
     }
 
     /// <summary>
-    /// The ambient compatibility adapter must validate before conversion because an unresolved
-    /// WGNodeData path becomes a null MediaRef and would otherwise be indistinguishable from an
-    /// intentionally absent stream. Explicit artifacts already carry resolved node outputs.
+    /// Validates attached host audio before conversion because an unresolved path would otherwise
+    /// be indistinguishable from intentionally absent audio.
     /// </summary>
     private void ValidateHostInput(WorkflowBridge bridge)
     {
-        if (g.CurrentMedia?.Path is not JArray { Count: 2 } videoPath)
-        {
-            throw new SwarmUserErrorException(
-                "VideoStages: the final output uses global frame trim, but the timeline produced "
-                + "no decoded output to trim.");
-        }
-        if (g.CurrentMedia.DataType != WGNodeData.DT_VIDEO)
-        {
-            throw new SwarmUserErrorException(
-                "VideoStages: the final output uses global frame trim, but it is not a decoded "
-                + "video stream.");
-        }
-        ResolveHostOutput(bridge, videoPath, "video");
-
-        WGNodeData audio = g.CurrentMedia.AttachedAudio;
+        WGNodeData audio = g.CurrentMedia?.AttachedAudio;
         if (audio is null)
         {
             return;

@@ -18,7 +18,6 @@ public class VideoExecutionPlanCompilerTests
 
         Assert.Equal(RootUse.Discard, plan.Root.Use);
         Assert.Equal(HostCoreDisposition.Drop, plan.Root.CoreDisposition);
-        Assert.Equal(TimelineOutputDisposition.PublishTimelineOutput, plan.Root.OutputDisposition);
         Assert.Equal(NativeAudioDisposition.DiscardWithRoot, plan.Root.NativeAudioDisposition);
         StagePlan stage = Assert.Single(Assert.Single(plan.Clips).Stages);
         Assert.Equal(StageInputKind.EmptyLatent, stage.Input);

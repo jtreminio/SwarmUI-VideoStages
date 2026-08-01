@@ -7,8 +7,8 @@ using VideoStages.Planning;
 namespace VideoStages;
 
 /// <summary>
-/// Owns final timeline assembly. The immutable execution plan chooses each boundary; the running
-/// sequence can explicitly downgrade a boundary when a required runtime artifact is unavailable.
+/// Owns final timeline assembly. The immutable execution plan chooses each boundary; runtime
+/// conditions can explicitly downgrade a boundary.
 /// Graph construction remains in <see cref="MultiClipParallelMerger"/>.
 /// </summary>
 internal sealed class TimelineAssemblySession
@@ -85,36 +85,18 @@ internal sealed class TimelineAssemblySession
                 $"VideoStages: timeline assembly expected {_plan.Clips.Count} clip outputs "
                 + $"but received {clipOutputs.Count}.");
         }
-        if (clipOutputs.Any(output => output?.HasVideo != true))
-        {
-            throw new SwarmUserErrorException(
-                "VideoStages: timeline assembly received an invalid clip video artifact.");
-        }
-        if (clipOutputs.Count < 2)
-        {
-            throw new InvalidOperationException(
-                "Multi-clip timeline assembly requires at least two clip outputs.");
-        }
-
         TimelineMergeResult result = _merger.Merge(clipOutputs, _effectiveBoundaries);
-        _effectiveBoundaries.Clear();
-        _effectiveBoundaries.AddRange(result.Boundaries.Boundaries);
         return _outputTrimmer.Apply(result.Artifact);
     }
 
     /// <summary>
-    /// Returns the one clip's decoded artifact as the timeline output, so publication reads what
-    /// the clip actually returned rather than whatever ambient media survived execution. A
-    /// init-video-only clip additionally has no stage finalizer, so assembly owns its terminal trim.
+    /// Returns a single clip's decoded artifact as the timeline output, so publication uses the
+    /// clip result instead of ambient media. An init-video-only clip has no stage finalizer, so
+    /// assembly owns its terminal trim.
     /// </summary>
     public RuntimeArtifact FinalizeSingleClip(DecodedClipArtifact clipOutput)
     {
         ArgumentNullException.ThrowIfNull(clipOutput);
-        if (_plan.Clips.Count != 1)
-        {
-            throw new InvalidOperationException(
-                "Only a single-clip timeline can use single-clip finalization.");
-        }
         if (clipOutput.HasVideo != true)
         {
             throw new SwarmUserErrorException(

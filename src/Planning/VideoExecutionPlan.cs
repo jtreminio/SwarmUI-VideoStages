@@ -33,7 +33,6 @@ internal sealed record RootPlan(
     HostRootKind HostKind,
     RootUse Use,
     HostCoreDisposition CoreDisposition,
-    TimelineOutputDisposition OutputDisposition,
     NativeAudioDisposition NativeAudioDisposition);
 
 internal enum HostRootKind
@@ -56,13 +55,6 @@ internal enum HostCoreDisposition
     Keep,
     Handoff,
     Drop,
-}
-
-/// <summary>Who owns final publication, independent of whether host core nodes are kept alive.</summary>
-internal enum TimelineOutputDisposition
-{
-    PreserveHostOutput,
-    PublishTimelineOutput,
 }
 
 internal enum NativeAudioDisposition

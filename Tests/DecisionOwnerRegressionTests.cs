@@ -232,7 +232,6 @@ public class DecisionOwnerRegressionTests
             VideoGraphHelpers.RemoveNode(generator, bridge, nodeId);
         }
 
-        // Removed captures must not resolve as live node references.
         Assert.False(
             ControlNetCoreMediaCapture.TryGetCapturedControlImage(
                 generator, 0, out WGNodeData image));
@@ -448,7 +447,6 @@ public class DecisionOwnerRegressionTests
                 HostRootKind.TextToVideoRoot,
                 RootUse.Discard,
                 HostCoreDisposition.Handoff,
-                TimelineOutputDisposition.PublishTimelineOutput,
                 NativeAudioDisposition.DiscardWithRoot),
             [clip],
             [],
@@ -526,7 +524,6 @@ public class DecisionOwnerRegressionTests
             HostRootKind.TextToVideoRoot,
             RootUse.Discard,
             HostCoreDisposition.Handoff,
-            TimelineOutputDisposition.PublishTimelineOutput,
             NativeAudioDisposition.DiscardWithRoot),
         clips,
         [],

@@ -237,7 +237,6 @@ public class ArchitectureRuntimeOwnershipTests
                 HostRootKind.ImageToVideo,
                 RootUse.GeneratedClipDonor,
                 HostCoreDisposition.Handoff,
-                TimelineOutputDisposition.PublishTimelineOutput,
                 NativeAudioDisposition.MakeAvailableToTimeline),
             [initVideoClip, generated],
             [

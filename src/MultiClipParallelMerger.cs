@@ -41,37 +41,6 @@ internal sealed class MultiClipParallelMerger(
         IReadOnlyList<DecodedClipArtifact> clipArtifacts,
         IReadOnlyList<BoundaryPlan> boundaries)
     {
-        if (clipArtifacts is null || clipArtifacts.Count < 2)
-        {
-            RuntimeArtifact artifact = null;
-            if (clipArtifacts?.Count == 1)
-            {
-                using WorkflowBridge singleBridge = BridgeSync.For(g);
-                artifact = RuntimeArtifact.FromDecoded(
-                    g,
-                    singleBridge,
-                    clipArtifacts[0]);
-            }
-            return new(
-                new(boundaries ?? [], Degraded: false, Reason: null),
-                artifact);
-        }
-        for (int i = 0; i < clipArtifacts.Count; i++)
-        {
-            DecodedClipArtifact artifact = clipArtifacts[i];
-            if (artifact?.HasVideo != true
-                || artifact.Video.Kind != DecodedMediaKind.Video
-                || (artifact.Audio is not null
-                    && artifact.Audio.Kind != DecodedMediaKind.Audio)
-                || artifact.Width <= 0
-                || artifact.Height <= 0
-                || artifact.Frames <= 0
-                || artifact.FramesPerSecond <= 0)
-            {
-                throw new SwarmUserErrorException(
-                    $"VideoStages: clip {i} is missing decoded video metadata.");
-            }
-        }
         using WorkflowBridge bridge = BridgeSync.For(g);
         List<INodeOutput> resolvedOutputs =
             ResolveOutputs(bridge, clipArtifacts.Select(clip => clip.Video.ToPath()));
@@ -108,11 +77,22 @@ internal sealed class MultiClipParallelMerger(
         }
         BoundaryOverlapPlan overlapPlan =
             BoundaryOverlapPlanner.ToOverlapPlan(runtimeBoundaries.Boundaries);
-        IReadOnlyList<ArchitectureMergeRun> architectureRuns = overlapPlan is null
-            ? []
-            : PreflightArchitectureRuns(
+        IReadOnlyList<ArchitectureMergeRun> architectureRuns = [];
+        if (overlapPlan is not null
+            && !TryPreflightArchitectureRuns(
                 clips,
-                runtimeBoundaries.Boundaries);
+                runtimeBoundaries.Boundaries,
+                out architectureRuns,
+                out string preflightFailure))
+        {
+            runtimeBoundaries = BoundaryOverlapPlanner.DegradeAllToCuts(
+                runtimeBoundaries.Boundaries,
+                preflightFailure);
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
+                $"VideoStages: overlap boundaries degraded to cuts because {preflightFailure}.");
+            overlapPlan = null;
+        }
         MultiClipAudioGraphAssembler.TimelineAudioPreflight audioPreflight =
             MultiClipAudioGraphAssembler.PreflightTimelineAudio(
                 bridge,
@@ -187,17 +167,20 @@ internal sealed class MultiClipParallelMerger(
         return MultiClipVideoGraphAssembler.MergeCut(bridge, runOutputs);
     }
 
-    private IReadOnlyList<ArchitectureMergeRun> PreflightArchitectureRuns(
+    private bool TryPreflightArchitectureRuns(
         IReadOnlyList<DecodedClipArtifact> artifacts,
-        IReadOnlyList<BoundaryPlan> boundaries)
+        IReadOnlyList<BoundaryPlan> boundaries,
+        out IReadOnlyList<ArchitectureMergeRun> runs,
+        out string failure)
     {
         if (boundaries.Count != artifacts.Count - 1)
         {
-            throw new InvalidOperationException(
-                "Timeline boundary count does not match the decoded clip count.");
+            runs = [];
+            failure = "the decoded clip count does not match the boundary count";
+            return false;
         }
 
-        List<ArchitectureMergeRun> runs = [];
+        List<ArchitectureMergeRun> resolved = [];
         int runStart = 0;
         for (int boundaryIndex = 0; boundaryIndex <= boundaries.Count; boundaryIndex++)
         {
@@ -212,7 +195,7 @@ internal sealed class MultiClipParallelMerger(
             int runLength = runEndExclusive - runStart;
             if (runLength == 1)
             {
-                runs.Add(new(runStart, runLength, null, null));
+                resolved.Add(new(runStart, runLength, null, null));
                 runStart = runEndExclusive;
                 continue;
             }
@@ -223,25 +206,33 @@ internal sealed class MultiClipParallelMerger(
                 .Take(runLength)
                 .Any(artifact => artifact.ArchitectureId != architectureId))
             {
-                throw new InvalidOperationException(
-                    "A non-cut boundary run crossed architecture ownership.");
+                runs = [];
+                failure = "an overlap crosses architecture ownership";
+                return false;
             }
             if (boundaryAssemblers is null
                 || !boundaryAssemblers.TryGetValue(
                     architectureId,
                     out IArchitectureBoundaryAssembler assembler))
             {
-                throw new InvalidOperationException(
-                    $"No boundary assembler is registered for architecture '{architectureId}'.");
+                runs = [];
+                failure = $"architecture '{architectureId}' has no boundary assembler";
+                return false;
             }
             BoundaryOverlapPlan runPlan = BoundaryOverlapPlanner.ToOverlapPlan(
-                [.. boundaries.Skip(runStart).Take(runLength - 1)])
-                ?? throw new InvalidOperationException(
-                    "A non-cut architecture run has no overlap plan.");
-            runs.Add(new(runStart, runLength, assembler, runPlan));
+                [.. boundaries.Skip(runStart).Take(runLength - 1)]);
+            if (runPlan is null)
+            {
+                runs = [];
+                failure = "an overlap run has no overlap plan";
+                return false;
+            }
+            resolved.Add(new(runStart, runLength, assembler, runPlan));
             runStart = runEndExclusive;
         }
-        return runs;
+        runs = resolved;
+        failure = null;
+        return true;
     }
 
     private static List<INodeOutput> ResolveOutputs(WorkflowBridge bridge, IEnumerable<JArray> paths)
