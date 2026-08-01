@@ -171,10 +171,15 @@ internal static class EffectiveVideoRequestProjector
         bool forceRootStageGeneration,
         ICollection<PlanDiagnostic> diagnostics)
     {
+        // Only an architecture that declares the feature derives the length at runtime; on any
+        // other one the authored flag is inert and must not suppress grid snapping.
+        ArchitectureFeature features = assignment.Architecture.Features;
         if (!projected.Frames.HasValue
             || projected.Stages is not { Count: > 0 }
-            || projected.ClipLengthFromAudio
-            || projected.ClipLengthFromControlNet)
+            || (projected.ClipLengthFromAudio
+                && features.HasFlag(ArchitectureFeature.AudioDerivedDuration))
+            || (projected.ClipLengthFromControlNet
+                && features.HasFlag(ArchitectureFeature.IcLora)))
         {
             return projected;
         }

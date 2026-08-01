@@ -143,6 +143,32 @@ public sealed class EffectiveVideoRequestTests
         Assert.Equal(27, request.Spec.Clips[0].Frames);
     }
 
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void Stale_runtime_derived_lengths_still_project_onto_the_resolved_grid(
+        bool fromAudio,
+        bool fromControl)
+    {
+        ClipSpec clip = Clip(Stage(0, rawIndex: 0)) with
+        {
+            Frames = 27,
+            ClipLengthFromAudio = fromAudio,
+            ClipLengthFromControlNet = fromControl,
+        };
+        VideoStagesSpec authored = Spec(clip);
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            ResolveWan(authored));
+
+        ClipSpec effective = Assert.Single(request.Spec.Clips);
+        Assert.Equal(4, WanArchitectureModule.Instance.Descriptor.FrameGrid);
+        Assert.Equal(29, effective.Frames);
+        Assert.Equal(fromAudio, effective.ClipLengthFromAudio);
+        Assert.Equal(fromControl, effective.ClipLengthFromControlNet);
+    }
+
     [Fact]
     public void InitVideo_passthrough_stages_do_not_change_the_source_frame_count()
     {
