@@ -13,8 +13,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Ltx2;
 
 /// <summary>
-/// Applies the audio stream consumed by an applicable IC-LoRA. Drive video frames are deliberately
-/// never exposed here; the normal clip entry path remains the sole source of generated visuals.
+/// Applies IC-LoRA audio conditioning without exposing drive-video frames.
 /// </summary>
 internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
 {
@@ -100,14 +99,16 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         }
         if (g.CurrentAudioVae is null)
         {
-            throw new SwarmUserErrorException(
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
                 "VideoStages: this audio-consuming IC-LoRA requires an LTX audio VAE, "
-                + "but none is available for the selected model.");
+                + "but none is available for the selected model; skipping its audio reference.");
+            return null;
         }
         return sample.EncodeToLatent(g.CurrentAudioVae).Path;
     }
 
-    private WGNodeData ResolveDriveAudio(
+    internal WGNodeData ResolveDriveAudio(
         WorkflowBridge bridge,
         IcLoraPlan entry,
         WGNodeData incomingMedia)
@@ -116,9 +117,11 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         {
             if (incomingMedia?.AttachedAudio is not WGNodeData incomingAudio)
             {
-                throw new SwarmUserErrorException(
+                PlanDiagnosticReporter.TrackRequestWarning(
+                    g.UserInput,
                     $"VideoStages: IC-LoRA entry {entry.EntryIndex} requests Incoming Audio, "
-                    + "but the incoming media has no attached audio.");
+                    + "but the incoming media has no attached audio; skipping its audio reference.");
+                return null;
             }
             return incomingAudio;
         }
@@ -135,8 +138,9 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         }
         if (media.Kind == IcLoraDriveMediaKind.Audio)
         {
-            return new(
-                LoadUploadedAudio(media),
+            JArray uploadedAudio = LoadUploadedAudio(media);
+            return uploadedAudio is null ? null : new(
+                uploadedAudio,
                 g,
                 WGNodeData.DT_AUDIO,
                 g.CurrentAudioVae?.Compat);
@@ -161,9 +165,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
             new UploadedMediaSpec(media.Data, media.FileName));
         if (uploaded is null)
         {
-            throw new SwarmUserErrorException(
-                "VideoStages: the IC-LoRA audio Drive Media could not be loaded. "
-                + "Choose a valid audio or video file.");
+            return null;
         }
         return new JArray(g.CreateAudioLoadNode(uploaded, "${vsicloraaudio}"), 0);
     }

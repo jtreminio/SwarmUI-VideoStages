@@ -187,7 +187,7 @@ public sealed class LtxIcLoraTests
     [Fact]
     public void Stage_scope_is_clip_relative_not_global()
     {
-        // Stage ids are global across clips; entry.Stage must match the clip's own stage list.
+        // Runtime stage IDs are global, but entry.Stage is clip-relative.
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         RegisterLora("UnitTest_IcLoraA");
@@ -212,7 +212,6 @@ public sealed class LtxIcLoraTests
     [Fact]
     public void Stage_scope_after_skip_marker_does_not_execute()
     {
-        // A skipped stage truncates the stage chain, so a later authored target is dormant.
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         RegisterLora("UnitTest_IcLoraA");
@@ -284,8 +283,7 @@ public sealed class LtxIcLoraTests
     [Fact]
     public void Stage_input_source_works_on_a_latent_upscale_stage()
     {
-        // The stage's input frames are the decoded prior output even when the sampled latent
-        // itself is carried forward through LTXVLatentUpsampler (the official Lipdub stage-2 shape).
+        // The guide uses a detached decode while the latent continues through the upsampler.
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         RegisterLora("UnitTest_IcLoraA");
@@ -305,8 +303,7 @@ public sealed class LtxIcLoraTests
 
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
         Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
-        // The drive must come from a detached decode of the prior stage's latent, not the live
-        // post-video chain (which is re-pointed to this stage's output — a self-referencing loop).
+        // Reusing the live post-video chain here would create a self-reference.
         AssertAcyclic(bridge);
     }
 
@@ -704,8 +701,7 @@ public sealed class LtxIcLoraTests
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
 
-        // The official Ingredients workflow tiles a still reference across the full video length;
-        // an ImageFromBatch trim would clamp the 1-frame batch to a single guide frame.
+        // Trimming a one-frame batch cannot produce a full-length guide.
         RepeatImageBatchNode repeat =
             Assert.Single(bridge.Graph.NodesOfType<RepeatImageBatchNode>());
         LTXAddVideoICLoRAGuideNode guide =
@@ -788,6 +784,117 @@ public sealed class LtxIcLoraTests
     }
 
     [Fact]
+    public void Incoming_audio_without_attached_audio_warns_and_drops_the_reference()
+    {
+        WorkflowGenerator generator = RuntimeGenerator();
+        using WorkflowBridge bridge = BridgeSync.For(generator);
+        IcLoraPlan plan = RuntimeIcLoraPlan(
+            IcLoraDriveData.Audio,
+            IcLoraMediaSourceKind.Incoming,
+            IcLoraDriveMediaKind.Video);
+        UnknownNode incoming = bridge
+            .AddStub("UnitTest_IncomingVideoWithoutAudio", "201")
+            .WithOutputs(WGNodeData.DT_VIDEO);
+
+        WGNodeData resolved = new IcLoraAudioReferenceApplicator(generator).ResolveDriveAudio(
+            bridge,
+            plan,
+            incoming.GetOutput(0).ToWGNodeData(generator, WGNodeData.DT_VIDEO));
+
+        Assert.Null(resolved);
+        Assert.Contains(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains("has no attached audio"));
+    }
+
+    [Fact]
+    public void Audio_reference_without_an_audio_vae_warns_and_drops_the_reference()
+    {
+        WorkflowGenerator generator = RuntimeGenerator();
+        WGNodeData audio;
+        using (WorkflowBridge bridge = BridgeSync.For(generator))
+        {
+            UnknownNode source = bridge
+                .AddStub("UnitTest_AudioWithoutVae", "201")
+                .WithOutputs(WGNodeData.DT_AUDIO);
+            audio = source.GetOutput(0).ToWGNodeData(generator, WGNodeData.DT_AUDIO);
+        }
+
+        JArray resolved =
+            new IcLoraAudioReferenceApplicator(generator).EnsureAudioReferenceLatent(audio);
+
+        Assert.Null(resolved);
+        Assert.Contains(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains("none is available for the selected model"));
+    }
+
+    [Fact]
+    public void Invalid_uploaded_audio_warns_and_drops_the_reference()
+    {
+        WorkflowGenerator generator = RuntimeGenerator();
+        using WorkflowBridge bridge = BridgeSync.For(generator);
+        IcLoraPlan plan = RuntimeIcLoraPlan(
+            IcLoraDriveData.Audio,
+            IcLoraMediaSourceKind.Upload,
+            IcLoraDriveMediaKind.Audio,
+            data: "not-base64");
+
+        WGNodeData resolved = new IcLoraAudioReferenceApplicator(generator).ResolveDriveAudio(
+            bridge,
+            plan,
+            incomingMedia: null);
+
+        Assert.Null(resolved);
+        Assert.NotEmpty(RequestWarnings(generator.UserInput));
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+    }
+
+    [Fact]
+    public void Missing_incoming_visual_media_warns_and_drops_the_guide()
+    {
+        WorkflowGenerator generator = RuntimeGenerator();
+        using WorkflowBridge bridge = BridgeSync.For(generator);
+        IcLoraPlan plan = RuntimeIcLoraPlan(
+            IcLoraDriveData.Visual,
+            IcLoraMediaSourceKind.Incoming,
+            IcLoraDriveMediaKind.Video);
+        ClipPlan clip = new(
+            ClipId: 7,
+            Frames: 25,
+            ClipInputKind.EmptyLatent,
+            HasInitVideo: false,
+            InitVideo: null,
+            Stages: [],
+            Audio: null);
+        StagePlan stage = new(
+            StageId: 11,
+            ClipStageIndex: 0,
+            ClipStageRawIndex: 3,
+            StageInputKind.EmptyLatent,
+            IsPassthrough: false,
+            ArchitecturePayload: null,
+            new StageOutputPlan(
+                IsTimelineTerminal: true,
+                IntermediateOutputEligibility.NotEligible,
+                PreserveConfiguredAudioTrackSave: false));
+
+        bool resolved = new IcLoraVisualGuideResolver(generator).TryResolve(
+            bridge,
+            clip,
+            stage,
+            plan,
+            stageInput: null,
+            out ResolvedIcLoraDrive drive);
+
+        Assert.False(resolved);
+        Assert.Null(drive);
+        Assert.Contains(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains("Incoming visual media is unavailable"));
+    }
+
+    [Fact]
     public void Lipdub_drive_audio_feeds_audio_reference_tokens_without_loading_video_or_guide_frames()
     {
         using SwarmUiTestContext testContext = new();
@@ -824,6 +931,35 @@ public sealed class LtxIcLoraTests
                 node => node.Id == driveAudio.Id) is not null,
             "LipDub voice conditioning does not trace to the audio Drive Media upload.");
     }
+
+    private static WorkflowGenerator RuntimeGenerator() => new()
+    {
+        UserInput = new T2IParamInput(null),
+        Features = [],
+        ModelFolderFormat = "/",
+        Workflow = new JObject(),
+    };
+
+    private static IcLoraPlan RuntimeIcLoraPlan(
+        IcLoraDriveData driveData,
+        IcLoraMediaSourceKind source,
+        IcLoraDriveMediaKind kind,
+        string data = null) => new(
+        EntryIndex: 0,
+        ModelName: "adapter.safetensors",
+        UsesAutoModel: false,
+        Preset: "custom",
+        ModelStrength: 1,
+        AttentionStrength: 1,
+        IcLoraControlMode.None,
+        IcLoraDriveMediaContracts.Resolve(driveData),
+        new(kind, data, "drive.wav"),
+        new(source, $"{source}", kind, ControlNetIndex: null, HasInput: true),
+        DimensionDownscaleFactor: 1,
+        GuideStrength: 1);
+
+    private static List<string> RequestWarnings(T2IParamInput input) =>
+        Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
 
     [Fact]
     public void Lipdub_audio_reference_obeys_the_entry_stage_scope()

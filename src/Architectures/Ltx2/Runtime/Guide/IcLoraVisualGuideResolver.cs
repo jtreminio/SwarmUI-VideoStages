@@ -2,7 +2,6 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 
@@ -13,7 +12,7 @@ internal sealed record ResolvedIcLoraDrive(
     int? ControlNetIndex,
     bool IsStillImage);
 
-/// <summary>Resolves planned drive identities into graph media and materializes embedded uploads.</summary>
+/// <summary>Materializes planned visual guides as graph image streams.</summary>
 internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
 {
     private readonly LtxRuntimeKeyScope _keys = new();
@@ -52,9 +51,11 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
             case IcLoraMediaSourceKind.Incoming:
                 if (stageInput is null || !IsImageStream(stageInput))
                 {
-                    throw new SwarmUserErrorException(
+                    PlanDiagnosticReporter.TrackRequestWarning(
+                        g.UserInput,
                         $"VideoStages: planned IC-LoRA Incoming visual media is unavailable for stage "
-                        + $"{stage.ClipStageRawIndex}.");
+                        + $"{stage.ClipStageRawIndex}; applying the model patch without a guide.");
+                    return false;
                 }
                 drive = new(
                     new JArray(stageInput.Path[0], stageInput.Path[1]),
