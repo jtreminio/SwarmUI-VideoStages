@@ -3,121 +3,16 @@ using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages.Planning;
 
-/// <summary>The graph-free disposition assigned to an authored request value.</summary>
-internal enum EffectiveRequestDisposition
-{
-    IgnoreWithWarning,
-    Block,
-}
-
-/// <summary>
-/// One explicit authored-to-effective request decision. Ignored values carry the warning that is
-/// reported through the normal plan diagnostic pipeline.
-/// </summary>
-internal sealed record EffectiveRequestDecision(
-    EffectiveRequestDisposition Disposition,
-    string Code,
-    string Message,
-    int? ClipId = null,
-    int? StageId = null,
-    int? RawStageIndex = null)
-{
-    internal static EffectiveRequestDecision Ignore(
-        string code,
-        string message,
-        int? clipId = null,
-        int? stageId = null,
-        int? rawStageIndex = null) =>
-        new(
-            EffectiveRequestDisposition.IgnoreWithWarning,
-            code,
-            message,
-            clipId,
-            stageId,
-            rawStageIndex);
-
-    internal static EffectiveRequestDecision Block(
-        string code,
-        string message,
-        int? clipId = null,
-        int? stageId = null,
-        int? rawStageIndex = null) =>
-        new(
-            EffectiveRequestDisposition.Block,
-            code,
-            message,
-            clipId,
-            stageId,
-            rawStageIndex);
-
-    internal PlanDiagnostic ToDiagnostic() => new(
-        Disposition == EffectiveRequestDisposition.Block
-            ? PlanDiagnosticSeverity.Error
-            : PlanDiagnosticSeverity.Warning,
-        Code,
-        Message,
-        ClipId,
-        StageId,
-        RawStageIndex);
-}
-
-/// <summary>One clip and assignment owned by a module in the effective timeline.</summary>
-internal sealed record ArchitectureOwnedEffectiveClip(
-    int TimelineIndex,
-    ClipSpec Clip,
-    ClipArchitectureAssignment Assignment);
-
-/// <summary>
-/// Graph-free clips and request-global legacy state supplied to one architecture module.
-/// </summary>
-internal sealed record ArchitectureEffectiveRequestProjectionContext(
-    LegacyVideoSwapRequestSnapshot LegacyVideoSwap,
-    IReadOnlyList<ArchitectureOwnedEffectiveClip> OwnedClips,
-    int? AuthoredRootTimelineIndex);
-
-/// <summary>One module-owned clip replacement and its local dispositions.</summary>
-internal sealed record ArchitectureProjectedEffectiveClip(
-    int TimelineIndex,
-    ClipSpec Clip,
-    IReadOnlyList<EffectiveRequestDecision> Decisions);
-
-/// <summary>Pure output of one architecture's request-level projection hook.</summary>
-internal sealed record ArchitectureEffectiveRequestProjection(
-    IReadOnlyList<ArchitectureProjectedEffectiveClip> Clips,
-    IReadOnlyList<EffectiveRequestDecision> RequestDecisions);
-
-/// <summary>
-/// Projected request consumed by common planning. The authored specification remains separate for
-/// authoring and prompt-tag concerns.
-/// </summary>
+/// <summary>Post-resolution request values and projection diagnostics.</summary>
 internal sealed record EffectiveVideoRequest(
     VideoStagesSpec Spec,
-    IReadOnlyList<EffectiveRequestDecision> Decisions,
-    IReadOnlyDictionary<int, BoundaryJoinType> AuthoredBoundaryModes,
-    IReadOnlyDictionary<int, BoundaryFallbackReason> ProjectedBoundaryFallbacks)
-{
-    internal IReadOnlyList<PlanDiagnostic> Diagnostics =>
-        Decisions
-            .Select(decision => decision.ToDiagnostic())
-            .ToArray();
-
-    internal IReadOnlySet<int> BlockedClipIds =>
-        Decisions
-            .Where(decision =>
-                decision.Disposition == EffectiveRequestDisposition.Block
-                && decision.ClipId.HasValue)
-            .Select(decision => decision.ClipId.Value)
-            .ToHashSet();
-}
+    IReadOnlyList<PlanDiagnostic> Diagnostics);
 
 /// <summary>
-/// Normalizes architecture policy, optional features, and temporal values after model resolution.
+/// Projects resolved temporal grids and reports stale model hints.
 /// </summary>
 internal static class EffectiveVideoRequestProjector
 {
-    /// <summary>
-    /// Tracks the authored, canonical, and projected forms of one clip with their decisions.
-    /// </summary>
     private sealed class EffectiveClipPlanningContext(
         int timelineIndex,
         ClipSpec authored,
@@ -126,9 +21,8 @@ internal static class EffectiveVideoRequestProjector
         internal int TimelineIndex { get; } = timelineIndex;
         internal ClipSpec Authored { get; } = authored;
         internal ClipArchitectureAssignment Assignment { get; } = assignment;
-        internal ClipSpec Canonical { get; set; } = authored;
         internal ClipSpec Effective { get; set; } = authored;
-        internal List<EffectiveRequestDecision> Decisions { get; } = [];
+        internal List<PlanDiagnostic> Diagnostics { get; } = [];
     }
 
     internal static EffectiveVideoRequest Project(
@@ -157,255 +51,49 @@ internal static class EffectiveVideoRequestProjector
             {
                 continue;
             }
-            clip.Canonical = CanonicalizeResolvedIdentityHints(
+            WarnAboutResolvedIdentityHints(
                 clip.Authored,
                 clip.Assignment,
-                clip.Decisions);
-            clip.Effective = clip.Canonical;
+                clip.Diagnostics);
         }
 
-        List<EffectiveRequestDecision> requestDecisions = [];
         int rootTimelineIndex = Array.FindIndex(
             clips,
             clip => clip.Authored.InitVideo is null
                 && clip.Authored.Stages is { Count: > 0 });
         bool rootCanForceTextToVideoGeneration =
             rootEnvironment.HostKind == HostRootKind.TextToVideoRoot;
-        foreach (ModuleProjectionBatch batch in BuildProjectionBatches(
-            clips))
-        {
-            ArchitectureEffectiveRequestProjection projection =
-                batch.Projector.ProjectEffectiveRequest(new(
-                    authored.LegacyVideoSwap,
-                    batch.OwnedClips.AsReadOnly(),
-                    rootTimelineIndex >= 0 ? rootTimelineIndex : null));
-            ApplyArchitectureProjection(
-                batch,
-                projection,
-                clips,
-                requestDecisions);
-        }
         foreach (EffectiveClipPlanningContext clip in clips)
         {
-            if (clip.Assignment is null)
-            {
-                continue;
-            }
-            // WAN terminal-reference policy must see latent upscale before common projection removes it.
-            EffectiveClipProjection common =
-                CapabilityDrivenEffectiveRequestProjector.ProjectUnsupportedFeatures(
-                    clip.Effective,
-                    clip.Assignment.Architecture);
-            clip.Effective = common.Clip;
-            clip.Decisions.AddRange(common.Decisions);
-        }
-
-        foreach (EffectiveClipPlanningContext clip in clips)
-        {
-            bool admissionBlocked = architecturePlanning.Diagnostics.Any(diagnostic =>
+            bool architectureResolutionBlocked = architecturePlanning.Diagnostics.Any(diagnostic =>
                 diagnostic.Severity == PlanDiagnosticSeverity.Error
-                && diagnostic.ClipId == clip.Effective.Id)
-                || clip.Decisions.Any(decision =>
-                    decision.Disposition == EffectiveRequestDisposition.Block);
-            if (clip.Assignment is null || admissionBlocked)
+                && diagnostic.ClipId == clip.Effective.Id);
+            if (clip.Assignment is null || architectureResolutionBlocked)
             {
                 continue;
             }
             clip.Effective = ProjectResolvedTemporalGrid(
-                clip.Canonical,
+                clip.Authored,
                 clip.Effective,
                 clip.Assignment,
                 rootCanForceTextToVideoGeneration
                     && clip.TimelineIndex == rootTimelineIndex,
-                clip.Decisions);
+                clip.Diagnostics);
         }
 
-        List<EffectiveRequestDecision> decisions =
-            clips.SelectMany(clip => clip.Decisions).ToList();
-        Dictionary<int, BoundaryJoinType> authoredBoundaryModes = [];
-        Dictionary<int, BoundaryFallbackReason> projectedBoundaryFallbacks = [];
-        ProjectUnsupportedBoundaries(
-            clips,
-            decisions,
-            authoredBoundaryModes,
-            projectedBoundaryFallbacks);
-        decisions.AddRange(requestDecisions);
         return new(
             authored with
             {
                 Clips = Array.AsReadOnly(clips.Select(clip => clip.Effective).ToArray()),
             },
-            decisions.AsReadOnly(),
-            authoredBoundaryModes,
-            projectedBoundaryFallbacks);
+            Array.AsReadOnly(clips.SelectMany(clip => clip.Diagnostics).ToArray()));
     }
 
-    private sealed record ModuleProjectionBatch(
-        IArchitectureEffectiveRequestProjector Projector,
-        IVideoArchitectureModule Module,
-        List<ArchitectureOwnedEffectiveClip> OwnedClips);
-
-    private static IReadOnlyList<ModuleProjectionBatch> BuildProjectionBatches(
-        IReadOnlyList<EffectiveClipPlanningContext> clips)
-    {
-        List<ModuleProjectionBatch> batches = [];
-        foreach (EffectiveClipPlanningContext clip in clips)
-        {
-            if (clip.Assignment?.Module
-                is not IArchitectureEffectiveRequestProjector projector)
-            {
-                continue;
-            }
-            ModuleProjectionBatch batch = batches.SingleOrDefault(
-                candidate => ReferenceEquals(candidate.Module, clip.Assignment.Module));
-            if (batch is null)
-            {
-                batch = new(projector, clip.Assignment.Module, []);
-                batches.Add(batch);
-            }
-            batch.OwnedClips.Add(new(
-                clip.TimelineIndex,
-                clip.Effective,
-                clip.Assignment));
-        }
-        return batches.AsReadOnly();
-    }
-
-    private static void ApplyArchitectureProjection(
-        ModuleProjectionBatch batch,
-        ArchitectureEffectiveRequestProjection projection,
-        IReadOnlyList<EffectiveClipPlanningContext> clips,
-        ICollection<EffectiveRequestDecision> requestDecisions)
-    {
-        if (projection is null)
-        {
-            throw ProjectionContractError(
-                batch.Module,
-                "returned a null effective-request projection");
-        }
-        if (projection.Clips is null
-            || projection.RequestDecisions is null)
-        {
-            throw ProjectionContractError(
-                batch.Module,
-                "returned null projection collections");
-        }
-        HashSet<int> ownedIndexes =
-            batch.OwnedClips.Select(owned => owned.TimelineIndex).ToHashSet();
-        HashSet<int> projectedIndexes = [];
-        foreach (ArchitectureProjectedEffectiveClip projected in projection.Clips)
-        {
-            if (projected is null
-                || !ownedIndexes.Contains(projected.TimelineIndex)
-                || !projectedIndexes.Add(projected.TimelineIndex))
-            {
-                throw ProjectionContractError(
-                    batch.Module,
-                    "returned an unowned, duplicate, or null clip replacement");
-            }
-            EffectiveClipPlanningContext clip = clips[projected.TimelineIndex];
-            ClipSpec canonical = clip.Canonical;
-            ValidateProjectedTopology(batch.Module, canonical, projected.Clip);
-            if (projected.Decisions is null)
-            {
-                throw ProjectionContractError(
-                    batch.Module,
-                    $"returned null decisions for clip {canonical.Id}");
-            }
-            foreach (EffectiveRequestDecision decision in projected.Decisions)
-            {
-                ValidateDecision(batch.Module, decision);
-                if (decision?.ClipId != canonical.Id)
-                {
-                    throw ProjectionContractError(
-                        batch.Module,
-                        $"returned a clip decision that does not target clip {canonical.Id}");
-                }
-                clip.Decisions.Add(decision);
-            }
-            clip.Effective = projected.Clip;
-        }
-        foreach (EffectiveRequestDecision decision in projection.RequestDecisions)
-        {
-            ValidateDecision(batch.Module, decision);
-            if (decision is null
-                || decision.Disposition
-                    != EffectiveRequestDisposition.IgnoreWithWarning
-                || decision.ClipId.HasValue
-                || decision.StageId.HasValue
-                || decision.RawStageIndex.HasValue)
-            {
-                throw ProjectionContractError(
-                    batch.Module,
-                    "returned a request-global decision that is not an identity-free warning");
-            }
-            requestDecisions.Add(decision);
-        }
-    }
-
-    private static void ValidateDecision(
-        IVideoArchitectureModule module,
-        EffectiveRequestDecision decision)
-    {
-        if (decision is null
-            || !Enum.IsDefined(decision.Disposition)
-            || string.IsNullOrWhiteSpace(decision.Code)
-            || string.IsNullOrWhiteSpace(decision.Message))
-        {
-            throw ProjectionContractError(
-                module,
-                "returned a null or malformed effective-request decision");
-        }
-    }
-
-    private static void ValidateProjectedTopology(
-        IVideoArchitectureModule module,
-        ClipSpec canonical,
-        ClipSpec projected)
-    {
-        StageSpec[] canonicalStages = (canonical.Stages ?? []).ToArray();
-        StageSpec[] projectedStages = (projected?.Stages ?? []).ToArray();
-        bool sameStageTopology =
-            canonicalStages.Length == projectedStages.Length
-            && canonicalStages.Zip(projectedStages).All(pair =>
-                pair.First is not null
-                && pair.Second is not null
-                && pair.First.Id == pair.Second.Id
-                && pair.First.ClipStageIndex == pair.Second.ClipStageIndex
-                && pair.First.ClipStageRawIndex == pair.Second.ClipStageRawIndex
-                && string.Equals(
-                    pair.First.Model,
-                    pair.Second.Model,
-                    StringComparison.Ordinal));
-        if (projected is null
-            || projected.Id != canonical.Id
-            || projected.InitVideo != canonical.InitVideo
-            || !sameStageTopology
-            || projected.AuthoredArchitectureHint != canonical.AuthoredArchitectureHint
-            || projected.AuthoredModelProfileHint != canonical.AuthoredModelProfileHint
-            || !(projected.AuthoredStages ?? []).SequenceEqual(
-                canonical.AuthoredStages ?? []))
-        {
-            throw ProjectionContractError(
-                module,
-                $"changed resolved topology or identity for clip {canonical.Id}");
-        }
-    }
-
-    private static InvalidOperationException ProjectionContractError(
-        IVideoArchitectureModule module,
-        string detail) =>
-        new(
-            $"Video architecture '{module.Descriptor.Id}' {detail}. "
-                + "Effective-request projectors may only replace optional values on owned clips.");
-
-    private static ClipSpec CanonicalizeResolvedIdentityHints(
+    private static void WarnAboutResolvedIdentityHints(
         ClipSpec authored,
         ClipArchitectureAssignment assignment,
-        ICollection<EffectiveRequestDecision> decisions)
+        ICollection<PlanDiagnostic> diagnostics)
     {
-        string architectureHint = authored.AuthoredArchitectureHint;
-        string profileHint = authored.AuthoredModelProfileHint;
         int? firstRawIndex = authored.Stages?.FirstOrDefault()?.ClipStageRawIndex;
         if (!firstRawIndex.HasValue
             && assignment.Architecture.Id != NoneArchitecture.Id)
@@ -418,70 +106,62 @@ internal static class EffectiveVideoRequestProjector
                 out ResolvedVideoModel firstModel)
             && firstModel is not null)
         {
-            if (!string.IsNullOrWhiteSpace(architectureHint)
+            if (!string.IsNullOrWhiteSpace(authored.AuthoredArchitectureHint)
                 && !string.Equals(
-                    architectureHint,
+                    authored.AuthoredArchitectureHint,
                     firstModel.ArchitectureId.Value,
                     StringComparison.OrdinalIgnoreCase))
             {
-                decisions.Add(EffectiveRequestDecision.Ignore(
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
                     "effective-request.stale-architecture-hint",
-                    $"Clip {authored.Id} cached architecture hint '{architectureHint}' does not match "
-                        + $"resolved model '{firstModel.ModelName}'. Using "
-                        + $"'{firstModel.ArchitectureId}' for this generation.",
+                    $"Clip {authored.Id} cached architecture hint '{authored.AuthoredArchitectureHint}' "
+                        + $"does not match resolved model '{firstModel.ModelName}'. Generation uses "
+                        + $"'{firstModel.ArchitectureId}' and preserves the authored hint.",
                     authored.Id,
-                    rawStageIndex: firstRawIndex));
-                architectureHint = firstModel.ArchitectureId.Value;
+                    RawStageIndex: firstRawIndex));
             }
-            if (!string.IsNullOrWhiteSpace(profileHint)
+            if (!string.IsNullOrWhiteSpace(authored.AuthoredModelProfileHint)
                 && !string.Equals(
-                    profileHint,
+                    authored.AuthoredModelProfileHint,
                     firstModel.ModelProfileId.Value,
                     StringComparison.OrdinalIgnoreCase))
             {
-                decisions.Add(EffectiveRequestDecision.Ignore(
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
                     "effective-request.stale-clip-profile-hint",
-                    $"Clip {authored.Id} cached model profile '{profileHint}' does not match "
-                        + $"resolved model '{firstModel.ModelName}'. Using "
-                        + $"'{firstModel.ModelProfileId}' for this generation.",
+                    $"Clip {authored.Id} cached model profile '{authored.AuthoredModelProfileHint}' "
+                        + $"does not match resolved model '{firstModel.ModelName}'. Generation uses "
+                        + $"'{firstModel.ModelProfileId}' and preserves the authored hint.",
                     authored.Id,
-                    rawStageIndex: firstRawIndex));
-                profileHint = firstModel.ModelProfileId.Value;
+                    RawStageIndex: firstRawIndex));
             }
         }
 
-        AuthoredStageModelSpec[] authoredStages = (authored.AuthoredStages ?? [])
-            .Select(stage =>
-            {
-                if (!assignment.StageModels.TryGetValue(
-                        stage.RawIndex,
-                        out ResolvedVideoModel resolved)
-                    || resolved is null
-                    || string.IsNullOrWhiteSpace(stage.ModelProfileId)
-                    || string.Equals(
-                        stage.ModelProfileId,
-                        resolved.ModelProfileId.Value,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    return stage;
-                }
-                decisions.Add(EffectiveRequestDecision.Ignore(
-                    "effective-request.stale-stage-profile-hint",
-                    $"Clip {authored.Id} authored stage {stage.RawIndex} cached model profile "
-                        + $"'{stage.ModelProfileId}', but model '{resolved.ModelName}' resolves "
-                        + $"to '{resolved.ModelProfileId}'. Using the resolved profile for this "
-                        + "generation.",
-                    authored.Id,
-                    rawStageIndex: stage.RawIndex));
-                return stage with { ModelProfileId = resolved.ModelProfileId.Value };
-            })
-            .ToArray();
-        return authored with
+        foreach (AuthoredStageModelSpec stage in authored.AuthoredStages ?? [])
         {
-            AuthoredArchitectureHint = architectureHint,
-            AuthoredModelProfileHint = profileHint,
-            AuthoredStages = Array.AsReadOnly(authoredStages),
-        };
+            if (!assignment.StageModels.TryGetValue(
+                    stage.RawIndex,
+                    out ResolvedVideoModel resolved)
+                || resolved is null
+                || string.IsNullOrWhiteSpace(stage.ModelProfileId)
+                || string.Equals(
+                    stage.ModelProfileId,
+                    resolved.ModelProfileId.Value,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Warning,
+                "effective-request.stale-stage-profile-hint",
+                $"Clip {authored.Id} authored stage {stage.RawIndex} cached model profile "
+                    + $"'{stage.ModelProfileId}', but model '{resolved.ModelName}' resolves "
+                    + $"to '{resolved.ModelProfileId}'. Generation uses the resolved profile "
+                    + "and preserves the authored hint.",
+                authored.Id,
+                RawStageIndex: stage.RawIndex));
+        }
     }
 
     private static ClipSpec ProjectResolvedTemporalGrid(
@@ -489,7 +169,7 @@ internal static class EffectiveVideoRequestProjector
         ClipSpec projected,
         ClipArchitectureAssignment assignment,
         bool forceRootStageGeneration,
-        ICollection<EffectiveRequestDecision> decisions)
+        ICollection<PlanDiagnostic> diagnostics)
     {
         if (!projected.Frames.HasValue
             || projected.Stages is not { Count: > 0 }
@@ -501,7 +181,9 @@ internal static class EffectiveVideoRequestProjector
 
         List<int> activeGrids = [];
         foreach (StageSpec stage in projected.Stages.Where(stage =>
-            !stage.IsPassthrough
+            !ArchitectureStageActivity.IsPassthrough(
+                stage,
+                assignment.Architecture)
             || (forceRootStageGeneration && stage.ClipStageIndex == 0)))
         {
             if (!assignment.StageModels.TryGetValue(
@@ -525,11 +207,12 @@ internal static class EffectiveVideoRequestProjector
         }
         catch (OverflowException)
         {
-            decisions.Add(EffectiveRequestDecision.Block(
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Warning,
                 "effective-request.temporal-grid-conflict",
                 $"Clip {projected.Id}'s active model handlers require temporal grids "
                     + $"[{string.Join(", ", activeGrids)}], whose compatible grid cannot be "
-                    + "represented. Use stage models with compatible temporal requirements.",
+                    + "represented. Keeping the authored frame count.",
                 projected.Id));
             return projected;
         }
@@ -542,10 +225,12 @@ internal static class EffectiveVideoRequestProjector
         }
         catch (OverflowException)
         {
-            decisions.Add(EffectiveRequestDecision.Block(
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Warning,
                 "effective-request.temporal-frame-count-overflow",
                 $"Clip {projected.Id}'s {projected.Frames.Value}-frame duration cannot be "
-                    + $"represented on its resolved {frameGrid}-frame temporal grid.",
+                    + $"represented on its resolved {frameGrid}-frame temporal grid. Keeping "
+                    + "the authored frame count.",
                 projected.Id));
             return projected;
         }
@@ -588,67 +273,6 @@ internal static class EffectiveVideoRequestProjector
             Frames = effectiveFrames,
             Stages = Array.AsReadOnly(effectiveStages),
         };
-    }
-
-    private static void ProjectUnsupportedBoundaries(
-        IReadOnlyList<EffectiveClipPlanningContext> clips,
-        ICollection<EffectiveRequestDecision> decisions,
-        IDictionary<int, BoundaryJoinType> authoredBoundaryModes,
-        IDictionary<int, BoundaryFallbackReason> projectedBoundaryFallbacks)
-    {
-        int[] executableIndexes = clips
-            .Select((clip, index) => (clip, index))
-            .Where(item =>
-                item.clip.Effective.InitVideo is not null
-                || item.clip.Effective.Stages is { Count: > 0 })
-            .Select(item => item.index)
-            .ToArray();
-        for (int position = 0; position < executableIndexes.Length - 1; position++)
-        {
-            int fromIndex = executableIndexes[position];
-            int toIndex = executableIndexes[position + 1];
-            EffectiveClipPlanningContext source = clips[fromIndex];
-            EffectiveClipPlanningContext target = clips[toIndex];
-            ClipSpec sourceClip = source.Effective;
-            BoundaryJoinType requested =
-                BoundaryPolicy.ParsePlanMode(sourceClip.BoundaryOut);
-            if (requested == BoundaryJoinType.Cut)
-            {
-                continue;
-            }
-            ClipArchitectureAssignment fromAssignment = source.Assignment;
-            ClipArchitectureAssignment toAssignment = target.Assignment;
-            if (fromAssignment is null || toAssignment is null)
-            {
-                continue;
-            }
-            RuleDecision policy = fromAssignment.Architecture
-                .BoundaryPolicy.Rules.GetValueOrDefault(requested);
-            bool crossesArchitectures =
-                fromAssignment.Architecture.Id != toAssignment.Architecture.Id;
-            if (!crossesArchitectures
-                && policy is not { Support: RuleSupport.Unsupported })
-            {
-                continue;
-            }
-            string reason = crossesArchitectures
-                ? "the adjacent clips use different architectures"
-                : policy.Reason;
-            decisions.Add(EffectiveRequestDecision.Ignore(
-                "effective-request.boundary-degraded-to-cut",
-                $"Clip {sourceClip.Id} boundary '{sourceClip.BoundaryOut}' cannot execute because {reason}. "
-                    + "The authored boundary remains saved, but this generation uses a cut.",
-                sourceClip.Id));
-            authoredBoundaryModes[sourceClip.Id] = requested;
-            projectedBoundaryFallbacks[sourceClip.Id] =
-                BoundaryFallbackReason.ArchitectureRuleUnsupported;
-            source.Effective = sourceClip with
-            {
-                BoundaryOut = Constants.BoundaryOutCut,
-                BoundaryOutOverlap = 0,
-                BoundaryOutCarryAudio = false,
-            };
-        }
     }
 
 }

@@ -1,7 +1,6 @@
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan.Planning;
-using VideoStages.HostVideo;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan;
@@ -10,9 +9,7 @@ namespace VideoStages.Architectures.Wan;
 /// WAN models recognized from the host's compatibility and checkpoint facts. Exact legacy
 /// profiles remain aliases for established paths.
 /// </summary>
-internal sealed class WanArchitectureModule :
-    IVideoArchitectureModule,
-    IArchitectureEffectiveRequestProjector
+internal sealed class WanArchitectureModule : IVideoArchitectureModule
 {
     private sealed record RecognizedProfile(
         string ModelClassId,
@@ -21,10 +18,7 @@ internal sealed class WanArchitectureModule :
 
     internal static ArchitectureId ArchitectureId { get; } = new("wan22");
 
-    /// <summary>
-    /// Wan's VAE compresses four pixel frames into one latent frame, so authored durations and
-    /// boundary windows step on four. Published as an architecture runtime fact.
-    /// </summary>
+    /// <summary>Wan generated frame counts advance in four-frame intervals.</summary>
     internal const int FrameGrid = 4;
 
     /// <summary>
@@ -187,10 +181,6 @@ internal sealed class WanArchitectureModule :
         }
         return false;
     }
-
-    public ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
-        ArchitectureEffectiveRequestProjectionContext context) =>
-        WanEffectiveRequestProjector.Project(context);
 
     public ArchitectureClipCompilation ValidateAndCompileClip(
         ClipSpec clip,

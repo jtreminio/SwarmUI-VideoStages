@@ -8,9 +8,7 @@ internal static class BoundaryPlanCompiler
 {
     internal static BoundaryPlanningResult Compile(
         IReadOnlyList<ClipSpec> clips,
-        IReadOnlyList<ClipPlan> plannedClips = null,
-        IReadOnlyDictionary<int, BoundaryJoinType> authoredBoundaryModes = null,
-        IReadOnlyDictionary<int, BoundaryFallbackReason> projectedBoundaryFallbacks = null)
+        IReadOnlyList<ClipPlan> plannedClips = null)
     {
         ImmutableArray<BoundaryPlan>.Builder boundaries = ImmutableArray.CreateBuilder<BoundaryPlan>();
         ImmutableArray<PlanDiagnostic>.Builder diagnostics =
@@ -20,19 +18,10 @@ internal static class BoundaryPlanCompiler
             ClipSpec from = clips[i];
             BoundaryJoinType effectiveRequested =
                 BoundaryPolicy.ParsePlanMode(from.BoundaryOut);
-            BoundaryJoinType requested =
-                authoredBoundaryModes?.GetValueOrDefault(from.Id)
-                ?? effectiveRequested;
+            BoundaryJoinType requested = effectiveRequested;
             ClipSpec to = clips[i + 1];
-            BoundaryFallbackReason projectedFallback = BoundaryFallbackReason.None;
-            bool hasProjectedFallback =
-                projectedBoundaryFallbacks is not null
-                && projectedBoundaryFallbacks.TryGetValue(
-                    from.Id,
-                    out projectedFallback);
-            BoundaryFallbackReason fallback = hasProjectedFallback
-                ? projectedFallback
-                : BoundaryFallbackReason.None;
+            BoundaryFallbackReason fallback = BoundaryFallbackReason.None;
+            bool fallbackReported = false;
             BoundaryJoinType effective = effectiveRequested;
             ClipPlan plannedFrom = plannedClips is not null && i < plannedClips.Count
                 ? plannedClips[i]
@@ -58,6 +47,7 @@ internal static class BoundaryPlanCompiler
                         + $"architecture '{plannedFrom.Architecture.Id}' and "
                         + $"'{plannedTo.Architecture.Id}'. Cross-architecture boundaries must be cuts.",
                     from.Id));
+                fallbackReported = true;
             }
             else if (effectiveRequested != BoundaryJoinType.Cut
                 && modePolicy is { Support: RuleSupport.Unsupported })
@@ -69,6 +59,7 @@ internal static class BoundaryPlanCompiler
                     modePolicy.Code,
                     modePolicy.Reason,
                     from.Id));
+                fallbackReported = true;
             }
             else if (effectiveRequested != BoundaryJoinType.Cut
                 && EvaluateTarget(constraints, to) is { } targetFallback)
@@ -87,7 +78,7 @@ internal static class BoundaryPlanCompiler
                 : 0;
             bool targetHasGenerationStage = plannedTo?.Stages is { Count: > 0 }
                 || (plannedTo is null && to.Stages is { Count: > 0 });
-            if (fallback != BoundaryFallbackReason.None && !hasProjectedFallback)
+            if (fallback != BoundaryFallbackReason.None && !fallbackReported)
             {
                 diagnostics.Add(new PlanDiagnostic(
                     PlanDiagnosticSeverity.Warning,

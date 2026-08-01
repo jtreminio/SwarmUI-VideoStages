@@ -27,7 +27,9 @@ internal static class ClipPlanCompiler
                 stage.ClipStageIndex,
                 stage.ClipStageRawIndex,
                 ResolveStageInput(clipInput, i),
-                stage.IsPassthrough,
+                ArchitectureStageActivity.IsPassthrough(
+                    stage,
+                    context.Architecture?.Architecture),
                 architectureCompilation?.StagePayloads[stage.ClipStageRawIndex],
                 new StageOutputPlan(
                     IsTimelineTerminal: isClipTerminal && context.IsLastClip && !context.IsMultiClip,

@@ -369,7 +369,7 @@ public class HostVideoRuntimeFlowTests
         Assert.Contains(
             generator.RequireVideoExecutionPlanContext().Plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.host-video-swap-ignored");
+                == "effective-request.video-swap-ignored");
     }
 
     [Fact]

@@ -193,58 +193,6 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_UnknownGuideReference_WarnsAndUsesTheStageDefault()
-    {
-        StageSpec stage = Stage(10) with { ImageReference = "not-a-reference" };
-
-        VideoExecutionPlan plan =
-            TestPlanCompiler.Compile(Spec(false, GeneratedClip(0, stage)));
-
-        Assert.Contains(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code
-                    == "effective-request.unsupported-stage-reference-ignored"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Warning
-                && diagnostic.ClipId == 0
-                && diagnostic.StageId == 10
-                && diagnostic.Message.Contains("'not-a-reference'"));
-        GuideReferencePlan guide = Assert.Single(plan.Clips)
-            .Stages[0]
-            .RequireLtx2Payload()
-            .Guide;
-        Assert.Equal(StageGuideReferenceKind.Generated, guide.Kind);
-        Assert.Equal("Generated", guide.RawValue);
-    }
-
-    [Fact]
-    public void Compile_UnknownLaterStageGuideReference_UsesPreviousStage()
-    {
-        StageSpec first = Stage(10);
-        StageSpec second = Stage(11) with
-        {
-            ClipStageIndex = 1,
-            ClipStageRawIndex = 1,
-            ImageReference = "not-a-reference",
-        };
-
-        VideoExecutionPlan plan =
-            TestPlanCompiler.Compile(Spec(false, GeneratedClip(0, first, second)));
-
-        GuideReferencePlan guide = Assert.Single(plan.Clips)
-            .Stages[1]
-            .RequireLtx2Payload()
-            .Guide;
-        Assert.Equal(StageGuideReferenceKind.PreviousStage, guide.Kind);
-        Assert.Equal("PreviousStage", guide.RawValue);
-        Assert.Contains(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code
-                    == "effective-request.unsupported-stage-reference-ignored"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Warning
-                && diagnostic.StageId == 11);
-    }
-
-    [Fact]
     public void Compile_TypedStageFields_AreActionableWithValidSources()
     {
         List<LoraRef> clipLoras = [new("clip.safetensors", 0.6, 0.4)];
@@ -588,7 +536,7 @@ public class VideoExecutionPlanCompilerTests
             boundary.Fallback);
         Assert.Equal(0, boundary.ContinuityWindowFrames);
         Assert.Contains(plan.Diagnostics, d =>
-            d.Code == "effective-request.boundary-degraded-to-cut"
+            d.Code == "boundary-cross-architecture-non-cut"
             && d.Severity == PlanDiagnosticSeverity.Warning);
         Assert.DoesNotContain(
             plan.Diagnostics,

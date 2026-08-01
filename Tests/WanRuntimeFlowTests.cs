@@ -172,13 +172,13 @@ public class WanRuntimeFlowTests
         Assert.Single(
             generator.RequireVideoExecutionPlanContext().Plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.wan-video-swap-ignored");
+                == "effective-request.video-swap-ignored");
         List<string> warnings = Assert.IsType<List<string>>(
             input.ExtraMeta["parser_warnings"]);
         Assert.Single(
             warnings,
             warning => warning.Contains(
-                "separate high-noise and low-noise timeline stages",
+                "Create separate timeline stages",
                 StringComparison.Ordinal));
 
         LegacyVideoSwapRequestSnapshot snapshot =

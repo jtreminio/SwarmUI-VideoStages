@@ -4,6 +4,8 @@ namespace VideoStages.Planning;
 
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.HostVideo;
+using VideoStages.Architectures.Wan;
 
 /// <summary>
 /// Compiles a parsed specification into a deterministic plan without inspecting or mutating the
@@ -31,6 +33,19 @@ internal static class VideoExecutionPlanCompiler
             .. architecturePlanning.Diagnostics,
             .. request.Diagnostics,
         ];
+        if (spec.LegacyVideoSwap?.IsConfigured == true
+            && architecturePlanning.Clips.Values.Any(assignment =>
+                assignment?.Architecture.Id == HostVideoArchitectureModule.ArchitectureId
+                || assignment?.Architecture.Id == WanArchitectureModule.ArchitectureId))
+        {
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Warning,
+                "effective-request.video-swap-ignored",
+                "VideoStages ignores SwarmUI's request-global Video Swap Model, Video Swap "
+                    + "Percent, and Video Swap section settings for stock-host video clips. "
+                    + "The authored values remain in request metadata. Create separate timeline "
+                    + "stages instead."));
+        }
         IReadOnlyList<ClipSpec> executableClips = (spec.Clips ?? []).Where(IsExecutableClip).ToArray();
         if (executableClips.Count != (spec.Clips?.Count ?? 0))
         {
@@ -61,8 +76,6 @@ internal static class VideoExecutionPlanCompiler
         int firstStageOrdinal = 0;
         for (int i = 0; i < activeClips.Count; i++)
         {
-            bool effectiveRequestBlocked =
-                request.BlockedClipIds.Contains(activeClips[i].Id);
             bool architectureResolutionBlocked =
                 architecturePlanning.Diagnostics.Any(diagnostic =>
                     diagnostic.Severity == PlanDiagnosticSeverity.Error
@@ -72,7 +85,6 @@ internal static class VideoExecutionPlanCompiler
             ArchitectureEntryMode entryMode = ResolveEntryMode(spec, activeClips[i]);
             ArchitectureClipCompilation acceptedArchitectureCompilation = null;
             if (assignment is not null
-                && !effectiveRequestBlocked
                 && !architectureResolutionBlocked)
             {
                 IReadOnlyList<PlanDiagnostic> capabilityDiagnostics =
@@ -121,9 +133,7 @@ internal static class VideoExecutionPlanCompiler
         diagnostics.AddRange(ClipGeometryProjection.Validate(clips, spec.Width, spec.Height));
         BoundaryPlanningResult boundaryResult = BoundaryPlanCompiler.Compile(
             activeClips,
-            clips,
-            request.AuthoredBoundaryModes,
-            request.ProjectedBoundaryFallbacks);
+            clips);
         diagnostics.AddRange(boundaryResult.Diagnostics);
         BoundaryBudgetResolution boundaryBudget = BoundaryOverlapPlanner.ResolvePlanBudgets(
             [.. activeClips.Select(clip => clip.Frames)],
@@ -198,8 +208,7 @@ internal static class VideoExecutionPlanCompiler
                 audioTimeline,
                 authoredTrackIds,
                 suppressedTimelineAudioClipIds);
-        // Audio diagnostics are collected only once the timeline projection has run, because the
-        // projected segments are what a clip's audio plan finally owns.
+        // Collect diagnostics from the projected audio segments owned by each clip.
         foreach (ClipPlan clipPlan in clipsWithTimelineAudio)
         {
             diagnostics.AddRange(clipPlan.Audio.Diagnostics.Select(audioDiagnostic =>

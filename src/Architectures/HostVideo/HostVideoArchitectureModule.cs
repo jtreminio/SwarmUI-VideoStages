@@ -7,9 +7,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.HostVideo;
 
 /// <summary>Last-priority baseline for models handled by SwarmUI's stock video graph.</summary>
-internal sealed class HostVideoArchitectureModule :
-    IVideoArchitectureModule,
-    IArchitectureEffectiveRequestProjector
+internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
 {
     internal static ArchitectureId ArchitectureId { get; } = new("host-video");
 
@@ -74,33 +72,6 @@ internal sealed class HostVideoArchitectureModule :
             compatibilityClassId,
             T2IModelClassSorter.CompatCosmosPredict2_14b.ID,
             StringComparison.Ordinal);
-
-    public ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
-        ArchitectureEffectiveRequestProjectionContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-
-        EffectiveRequestDecision[] requestDecisions =
-            context.LegacyVideoSwap?.IsConfigured == true
-                && context.AuthoredRootTimelineIndex.HasValue
-                && context.OwnedClips.Any(
-                    owned =>
-                        owned.TimelineIndex
-                        == context.AuthoredRootTimelineIndex.Value)
-            ?
-            [
-                EffectiveRequestDecision.Ignore(
-                    "effective-request.host-video-swap-ignored",
-                    "Generic VideoStages ignores SwarmUI's request-global Video Swap Model, "
-                        + "Video Swap Percent, and Video Swap section settings. The authored "
-                        + "values remain in request metadata. Create separate timeline stages "
-                        + "instead."),
-            ]
-            : [];
-        return new(
-            Array.Empty<ArchitectureProjectedEffectiveClip>(),
-            Array.AsReadOnly(requestDecisions));
-    }
 
     public ArchitectureClipCompilation ValidateAndCompileClip(
         ClipSpec clip,

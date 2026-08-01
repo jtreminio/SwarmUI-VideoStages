@@ -699,9 +699,7 @@ public class PlanningCompilerComponentTests
 
         BoundaryPlanningResult boundaries = BoundaryPlanCompiler.Compile(
             clips,
-            plans,
-            request.AuthoredBoundaryModes,
-            request.ProjectedBoundaryFallbacks);
+            plans);
         diagnostics.AddRange(boundaries.Diagnostics);
         BoundaryBudgetResolution boundaryBudget = BoundaryOverlapPlanner.ResolvePlanBudgets(
             [.. clips.Select(clip => clip.Frames)],

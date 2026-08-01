@@ -230,17 +230,6 @@ internal interface IVideoArchitectureModule
 }
 
 /// <summary>
-/// Optional architecture-owned projection after model resolution and before
-/// capability validation or workflow mutation. It runs once per selected
-/// module and may replace only the clips listed in its context.
-/// </summary>
-internal interface IArchitectureEffectiveRequestProjector
-{
-    ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
-        ArchitectureEffectiveRequestProjectionContext context);
-}
-
-/// <summary>
 /// Optional architecture-owned interpretation of a host ControlNet source. Common audio planning
 /// carries only the authored duration owner; it never infers IC-LoRA source semantics.
 /// </summary>

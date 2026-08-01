@@ -147,7 +147,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Effective_request_refreshes_profile_hints_for_skipped_raw_stage_positions()
+    public void Effective_request_warns_without_rewriting_skipped_stage_profile_hints()
     {
         ClipSpec inactive = GeneratedClip(0) with
         {
@@ -171,7 +171,7 @@ public class ArchitectureFoundationTests
         Assert.Contains("stage 3", diagnostic.Message);
         Assert.Equal(3, diagnostic.RawStageIndex);
         Assert.Equal(
-            "ltx-profile",
+            "wrong-profile",
             request.Spec.Clips[0].AuthoredStages[1].ModelProfileId);
         Assert.Equal(
             "wrong-profile",
@@ -386,7 +386,7 @@ public class ArchitectureFoundationTests
             boundary.Fallback);
         Assert.Single(
             plan.Diagnostics,
-            item => item.Code == "effective-request.boundary-degraded-to-cut"
+            item => item.Code == "boundary-cross-architecture-non-cut"
                 && item.Severity == PlanDiagnosticSeverity.Warning);
         Assert.DoesNotContain(
             plan.Diagnostics,

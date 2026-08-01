@@ -54,10 +54,7 @@ internal static class WanClipPlanCompiler
         Dictionary<int, StockHostVideoStagePayload> stages = [];
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
         bool initVideoEntry = clip.InitVideo is not null;
-        // The registry owns model-fact validity, the resolver owns same-architecture and
-        // same-compatibility admission, and the common capability validator owns stage entry roles.
-        // Reaching this compiler means those contracts passed; the indexer is intentionally an
-        // invariant assertion rather than a fourth user-facing model validation layer.
+        // Resolved stage models are a prerequisite; indexing asserts that planning contract.
         string clipCompatibilityClassId = activeStages.Count == 0
             ? ""
             : stageModels[activeStages[0].ClipStageRawIndex].CompatibilityClassId;
@@ -74,9 +71,8 @@ internal static class WanClipPlanCompiler
                     NormalLoraTargetPolicy.ModelOnly);
             WarnAndNormalize(
                 !firstStage
-                    // Text-root parsing canonicalizes every selector to Generated. In other entry
-                    // modes, Generated is individually supported but cannot describe the executable
-                    // later-stage edge, which common compilation always wires from PreviousStage.
+                    // Text-root parsing canonicalizes selectors to Generated. Other later stages
+                    // execute from PreviousStage.
                     && context.EntryMode != ArchitectureEntryMode.TextToVideo
                     && !StringUtils.Equals(stage.ImageReference, "PreviousStage"),
                 "a later-stage input other than 'PreviousStage'",
@@ -113,10 +109,10 @@ internal static class WanClipPlanCompiler
             stages.Add(stage.ClipStageRawIndex, payload);
         }
         WanFrameReferencePlan firstReference = CompileReference(
-            (clip.ImageRefs ?? []).SingleOrDefault(reference =>
+            (clip.ImageRefs ?? []).FirstOrDefault(reference =>
                 !reference.FromEnd && reference.Frame == 1));
         WanFrameReferencePlan lastReference = CompileReference(
-            (clip.ImageRefs ?? []).SingleOrDefault(reference =>
+            (clip.ImageRefs ?? []).FirstOrDefault(reference =>
                 reference.FromEnd && reference.Frame == 1));
         return new(
             new WanClipPayload(

@@ -31,7 +31,7 @@ public sealed class EffectiveVideoRequestTests
         VideoStagesSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = frameGrid };
-        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+        IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
             authored,
@@ -52,7 +52,7 @@ public sealed class EffectiveVideoRequestTests
         VideoStagesSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
-        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+        IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
             authored,
@@ -73,7 +73,7 @@ public sealed class EffectiveVideoRequestTests
         VideoStagesSpec authored = Spec(clip) with { IsTextToVideo = true };
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
-        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+        IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
             authored,
@@ -106,7 +106,7 @@ public sealed class EffectiveVideoRequestTests
         };
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
-        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+        IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
             authored,
@@ -115,151 +115,6 @@ public sealed class EffectiveVideoRequestTests
         Assert.Equal(
             new int?[] { 27, 33 },
             request.Spec.Clips.Select(clip => clip.Frames));
-    }
-
-    [Fact]
-    public void Temporal_grid_runs_after_architecture_effective_value_projection()
-    {
-        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
-        ClipSpec clip = Clip(stage) with { Frames = 27 };
-        VideoStagesSpec authored = Spec(clip);
-        VideoArchitectureDescriptor descriptor =
-            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
-        int? framesSeenByArchitecture = null;
-        RecordingProjectionModule module = new(
-            descriptor,
-            context =>
-            {
-                ArchitectureOwnedEffectiveClip owned = Assert.Single(context.OwnedClips);
-                framesSeenByArchitecture = owned.Clip.Frames;
-                return new(
-                [
-                    new(
-                        owned.TimelineIndex,
-                        owned.Clip with { Frames = 28 },
-                        []),
-                ],
-                []);
-            });
-
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
-            authored,
-            Resolve(authored, _ => module, _ => descriptor));
-
-        Assert.Equal(27, framesSeenByArchitecture);
-        Assert.Equal(33, request.Spec.Clips[0].Frames);
-    }
-
-    [Fact]
-    public void Authored_full_retake_survives_architecture_frame_projection()
-    {
-        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
-        {
-            RetakeWindow = new(2, 25, 0.6),
-        };
-        ClipSpec clip = Clip(stage) with { Frames = 27 };
-        VideoStagesSpec authored = Spec(clip);
-        VideoArchitectureDescriptor descriptor =
-            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
-        RecordingProjectionModule module = new(
-            descriptor,
-            context =>
-            {
-                ArchitectureOwnedEffectiveClip owned = Assert.Single(context.OwnedClips);
-                return new(
-                [
-                    new(
-                        owned.TimelineIndex,
-                        owned.Clip with { Frames = 28 },
-                        []),
-                ],
-                []);
-            });
-
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
-            authored,
-            Resolve(authored, _ => module, _ => descriptor));
-
-        Assert.Equal(33, request.Spec.Clips[0].Frames);
-        Assert.Equal(
-            31,
-            request.Spec.Clips[0].Stages[0].RetakeWindow.LengthFrames);
-    }
-
-    [Fact]
-    public void Architecture_owned_retake_projection_is_not_overwritten_by_common_grid_logic()
-    {
-        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
-        {
-            RetakeWindow = new(2, 25, 0.6),
-        };
-        ClipSpec clip = Clip(stage) with { Frames = 27 };
-        VideoStagesSpec authored = Spec(clip);
-        VideoArchitectureDescriptor descriptor =
-            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
-        RetakeWindowSpec projectedRetake = new(10, 5, 0.4);
-        RecordingProjectionModule module = new(
-            descriptor,
-            context =>
-            {
-                ArchitectureOwnedEffectiveClip owned = Assert.Single(context.OwnedClips);
-                StageSpec projectedStage = Assert.Single(owned.Clip.Stages) with
-                {
-                    RetakeWindow = projectedRetake,
-                };
-                return new(
-                [
-                    new(
-                        owned.TimelineIndex,
-                        owned.Clip with
-                        {
-                            Frames = 28,
-                            Stages = [projectedStage],
-                        },
-                        []),
-                ],
-                []);
-            });
-
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
-            authored,
-            Resolve(authored, _ => module, _ => descriptor));
-
-        Assert.Equal(33, request.Spec.Clips[0].Frames);
-        Assert.Equal(projectedRetake, request.Spec.Clips[0].Stages[0].RetakeWindow);
-    }
-
-    [Fact]
-    public void Retake_end_tracks_architecture_frames_when_the_grid_is_already_aligned()
-    {
-        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
-        {
-            RetakeWindow = new(2, 25, 0.6),
-        };
-        ClipSpec clip = Clip(stage) with { Frames = 27 };
-        VideoStagesSpec authored = Spec(clip);
-        VideoArchitectureDescriptor descriptor =
-            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
-        RecordingProjectionModule module = new(
-            descriptor,
-            context =>
-            {
-                ArchitectureOwnedEffectiveClip owned = Assert.Single(context.OwnedClips);
-                return new(
-                [
-                    new(
-                        owned.TimelineIndex,
-                        owned.Clip with { Frames = 33 },
-                        []),
-                ],
-                []);
-            });
-
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
-            authored,
-            Resolve(authored, _ => module, _ => descriptor));
-
-        Assert.Equal(31, request.Spec.Clips[0].Stages[0].RetakeWindow.LengthFrames);
     }
 
     [Theory]
@@ -279,7 +134,7 @@ public sealed class EffectiveVideoRequestTests
         VideoStagesSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
-        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+        IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
             authored,
@@ -303,7 +158,7 @@ public sealed class EffectiveVideoRequestTests
         VideoStagesSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
-        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+        IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
             authored,
@@ -313,7 +168,7 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Fact]
-    public void Work_ignored_by_an_architecture_does_not_activate_its_temporal_grid()
+    public void Unsupported_retake_remains_authored_without_activating_the_temporal_grid()
     {
         StageSpec stage = Stage(0, rawIndex: 0) with
         {
@@ -326,16 +181,22 @@ public sealed class EffectiveVideoRequestTests
             InitVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
         };
         VideoStagesSpec authored = Spec(clip);
+        ArchitecturePlanningResult architectures = ResolveWan(authored);
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
             authored,
-            ResolveWan(authored));
+            architectures);
 
         Assert.Equal(28, request.Spec.Clips[0].Frames);
-        Assert.Null(request.Spec.Clips[0].Stages[0].RetakeWindow);
+        Assert.Equal(stage.RetakeWindow, request.Spec.Clips[0].Stages[0].RetakeWindow);
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            authored,
+            RootEnvironment.FromSpec(authored),
+            architectures);
+        Assert.True(plan.Clips[0].Stages[0].IsPassthrough);
         Assert.Contains(
-            request.Decisions,
-            decision => decision.Code == "effective-request.unsupported-retake-ignored");
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code == "effective-request.unsupported-retake-ignored");
     }
 
     [Fact]
@@ -346,7 +207,7 @@ public sealed class EffectiveVideoRequestTests
         VideoStagesSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
-        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+        IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
         ArchitecturePlanningResult resolved =
             Resolve(authored, _ => module, _ => descriptor);
         ArchitecturePlanningResult blocked = resolved with
@@ -369,65 +230,29 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Fact]
-    public void Architecture_projection_blocks_suppress_temporal_execution()
-    {
-        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
-        ClipSpec clip = Clip(stage) with { Frames = 27 };
-        VideoStagesSpec authored = Spec(clip);
-        VideoArchitectureDescriptor descriptor =
-            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
-        RecordingProjectionModule module = new(
-            descriptor,
-            context =>
-            {
-                ArchitectureOwnedEffectiveClip owned = Assert.Single(context.OwnedClips);
-                return new(
-                [
-                    new(
-                        owned.TimelineIndex,
-                        owned.Clip,
-                        [
-                            EffectiveRequestDecision.Block(
-                                "effective-request.test-block",
-                                "Test architecture block.",
-                                owned.Clip.Id),
-                        ]),
-                ],
-                []);
-            });
-
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
-            authored,
-            Resolve(authored, _ => module, _ => descriptor));
-
-        Assert.Equal(27, request.Spec.Clips[0].Frames);
-        Assert.Contains(clip.Id, request.BlockedClipIds);
-    }
-
-    [Fact]
-    public void Unrepresentable_aligned_frame_count_blocks_instead_of_overflowing()
+    public void Unrepresentable_aligned_frame_count_warns_and_keeps_authored_frames()
     {
         StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
         ClipSpec clip = Clip(stage) with { Frames = int.MaxValue };
         VideoStagesSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
-        RecordingProjectionModule module = new(descriptor, IdentityProjection);
+        IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
             authored,
             Resolve(authored, _ => module, _ => descriptor));
 
-        Assert.Contains(clip.Id, request.BlockedClipIds);
+        Assert.Equal(int.MaxValue, request.Spec.Clips[0].Frames);
         Assert.Contains(
-            request.Decisions,
-            decision => decision.Code
+            request.Diagnostics,
+            diagnostic => diagnostic.Code
                     == "effective-request.temporal-frame-count-overflow"
-                && decision.Disposition == EffectiveRequestDisposition.Block);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
     }
 
     [Fact]
-    public void Projection_preserves_authored_values_and_removes_every_ignored_Wan_value()
+    public void Post_resolution_preserves_authored_values_and_warns_for_stale_hints()
     {
         StageSpec first = Stage(0, rawIndex: 0);
         StageSpec second = Stage(
@@ -471,28 +296,26 @@ public sealed class EffectiveVideoRequestTests
         Assert.Equal(2, clip.Stages[1].Upscale);
         Assert.Equal([0.8], clip.Stages[1].IcLoraStrengths);
 
-        Assert.Equal(WanArchitectureModule.ArchitectureId.Value, effective.AuthoredArchitectureHint);
+        Assert.Equal("stale-architecture", effective.AuthoredArchitectureHint);
+        Assert.Equal("stale-profile", effective.AuthoredModelProfileHint);
         Assert.Equal(
-            WanArchitectureModule.ImageToVideoProfileId.Value,
-            effective.AuthoredModelProfileHint);
-        Assert.All(
-            effective.AuthoredStages,
-            stage => Assert.Equal(
-                WanArchitectureModule.ImageToVideoProfileId.Value,
-                stage.ModelProfileId));
-        Assert.Empty(effective.IcLoras);
-        Assert.All(effective.Stages, stage => Assert.Empty(stage.IcLoraStrengths));
+            ["old-first-profile", "old-second-profile"],
+            effective.AuthoredStages.Select(stage => stage.ModelProfileId));
+        Assert.Single(effective.IcLoras);
+        Assert.Equal([0.8], effective.Stages[1].IcLoraStrengths);
         Assert.Equal(2, effective.Stages[1].Upscale);
         Assert.Equal(
             "latentmodel-detail.safetensors",
             effective.Stages[1].UpscaleMethod);
+        Assert.Equal(
+            4,
+            request.Diagnostics.Count(diagnostic =>
+                diagnostic.Code.Contains("stale", StringComparison.Ordinal)));
         Assert.All(
-            request.Decisions.Where(decision =>
-                decision.Code.Contains("stale", StringComparison.Ordinal)
-                || decision.Code.Contains("ignored", StringComparison.Ordinal)),
-            decision => Assert.Equal(
-                EffectiveRequestDisposition.IgnoreWithWarning,
-                decision.Disposition));
+            request.Diagnostics,
+            diagnostic => Assert.Equal(
+                PlanDiagnosticSeverity.Warning,
+                diagnostic.Severity));
     }
 
     [Fact]
@@ -539,7 +362,7 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Fact]
-    public void Generic_projection_warns_for_stage_only_reference_payload()
+    public void Capability_pass_warns_for_stage_only_reference_payload_without_erasing_it()
     {
         StageSpec stage = Stage(
             0,
@@ -569,21 +392,21 @@ public sealed class EffectiveVideoRequestTests
             _ => HostVideoArchitectureModule.Instance,
             _ => HostVideoArchitectureModule.Instance.Descriptor);
 
-        EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(authored, architectures);
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            authored,
+            RootEnvironment.FromSpec(authored),
+            architectures);
 
         Assert.Equal([0.7], authored.Clips[0].Stages[0].ImageRefStrengths);
-        Assert.Empty(request.Spec.Clips[0].Stages[0].ImageRefStrengths);
         Assert.Contains(
-            request.Decisions,
-            decision => decision.Code
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
                     == "effective-request.unsupported-frame-references-ignored"
-                && decision.Disposition
-                    == EffectiveRequestDisposition.IgnoreWithWarning);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
     }
 
     [Fact]
-    public void Published_host_ignore_dispositions_match_values_projection_removes()
+    public void Host_capability_warnings_do_not_erase_authored_values()
     {
         StageSpec first = Stage(
             0,
@@ -654,34 +477,36 @@ public sealed class EffectiveVideoRequestTests
         EffectiveVideoRequest request =
             EffectiveVideoRequestProjector.Project(authored, architectures);
         ClipSpec effective = Assert.Single(request.Spec.Clips);
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                effective,
+                HostVideoArchitectureModule.Instance.Descriptor,
+                ArchitectureEntryMode.InitVideo);
 
         Assert.Equal(
             ArchitectureFeature.None,
             HostVideoArchitectureModule.Instance.Descriptor.Features);
-        Assert.Empty(effective.ImageRefs);
-        Assert.All(effective.Stages, stage => Assert.Empty(stage.ImageRefStrengths));
-        Assert.Equal(ReferenceFramingMode.Crop, effective.ReferenceFraming);
-        Assert.All(effective.Stages, stage => Assert.Null(stage.RetakeWindow));
-        Assert.Empty(effective.PromptWindows);
-        Assert.Equal(Constants.AudioSourceNative, effective.AudioSource);
-        Assert.False(effective.SaveAudioTrack);
-        Assert.False(effective.ClipLengthFromAudio);
-        Assert.False(effective.ClipLengthFromControlNet);
-        Assert.False(effective.ReuseAudio);
-        Assert.Null(effective.UploadedAudio);
-        Assert.Empty(effective.IcLoras);
-        Assert.All(effective.Stages, stage => Assert.Empty(stage.IcLoraStrengths));
+        Assert.Equal(clip.ImageRefs, effective.ImageRefs);
+        Assert.Equal(first.ImageRefStrengths, effective.Stages[0].ImageRefStrengths);
+        Assert.Equal(ReferenceFramingMode.Fit, effective.ReferenceFraming);
+        Assert.Equal(first.RetakeWindow, effective.Stages[0].RetakeWindow);
+        Assert.Equal(clip.PromptWindows, effective.PromptWindows);
+        Assert.Equal(Constants.AudioSourceUpload, effective.AudioSource);
+        Assert.True(effective.SaveAudioTrack);
+        Assert.True(effective.ClipLengthFromAudio);
+        Assert.True(effective.ClipLengthFromControlNet);
+        Assert.True(effective.ReuseAudio);
+        Assert.Equal(clip.UploadedAudio, effective.UploadedAudio);
+        Assert.Equal(clip.IcLoras, effective.IcLoras);
+        Assert.Equal(first.IcLoraStrengths, effective.Stages[0].IcLoraStrengths);
         Assert.Equal(2, effective.Stages[0].Upscale);
         Assert.Contains(
-            request.Decisions,
-            decision => decision.Code
+            diagnostics,
+            diagnostic => diagnostic.Code
                     == "effective-request.unsupported-ic-lora-ignored"
-                && decision.Message.Contains(
+                && diagnostic.Message.Contains(
                     "Host Video does not support",
                     StringComparison.Ordinal));
-
-        // Supported authoring remains intact while the unsupported fields are
-        // projected away.
         Assert.Equal(2, effective.Stages.Count);
         Assert.Equal(clip.InitVideo, effective.InitVideo);
         Assert.Equal(clip.Loras, effective.Loras);
@@ -697,7 +522,7 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Fact]
-    public void Unsupported_non_cut_boundary_uses_an_effective_cut_without_editing_authored_data()
+    public void Unsupported_non_cut_boundary_is_normalized_only_in_the_boundary_plan()
     {
         ClipSpec ltxClip = LtxClip() with
         {
@@ -715,9 +540,9 @@ public sealed class EffectiveVideoRequestTests
         Assert.Equal(Constants.BoundaryOutCrossfade, ltxClip.BoundaryOut);
         Assert.Equal(16, ltxClip.BoundaryOutOverlap);
         Assert.True(ltxClip.BoundaryOutCarryAudio);
-        Assert.Equal(Constants.BoundaryOutCut, effectiveLeft.BoundaryOut);
-        Assert.Equal(0, effectiveLeft.BoundaryOutOverlap);
-        Assert.False(effectiveLeft.BoundaryOutCarryAudio);
+        Assert.Equal(Constants.BoundaryOutCrossfade, effectiveLeft.BoundaryOut);
+        Assert.Equal(16, effectiveLeft.BoundaryOutOverlap);
+        Assert.True(effectiveLeft.BoundaryOutCarryAudio);
 
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             authored,
@@ -733,180 +558,16 @@ public sealed class EffectiveVideoRequestTests
         Assert.Single(
             plan.Diagnostics,
             diagnostic => diagnostic.Code
-                    == "effective-request.boundary-degraded-to-cut"
+                    == "boundary-cross-architecture-non-cut"
                 && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
         Assert.DoesNotContain(
             plan.Diagnostics,
-            diagnostic => diagnostic.Code == "boundary-cross-architecture-non-cut"
+            diagnostic => diagnostic.Code == "effective-request.boundary-degraded-to-cut"
                 || diagnostic.Code == "boundary-architectureruleunsupported");
     }
 
     [Fact]
-    public void Projection_routes_once_through_the_resolved_module_after_identity_canonicalization()
-    {
-        ClipSpec root = Clip(Stage(0, rawIndex: 0)) with
-        {
-            AuthoredArchitectureHint = "stale-architecture",
-            AuthoredModelProfileHint = "stale-profile",
-            PromptWindows = [new("must remain", 0, 1)],
-        };
-        ClipSpec dormant = Clip(Stage(0, rawIndex: 0)) with
-        {
-            Id = 1,
-            Stages = [],
-        };
-        VideoStagesSpec authored = Spec(root, dormant);
-        RecordingProjectionModule module = new(
-            WanArchitectureModule.Instance.Descriptor,
-            context =>
-            {
-                Assert.Equal([0, 1], context.OwnedClips
-                    .Select(owned => owned.TimelineIndex));
-                Assert.Equal(
-                    WanArchitectureModule.ArchitectureId.Value,
-                    context.OwnedClips[0].Clip.AuthoredArchitectureHint);
-                Assert.Equal(
-                    WanArchitectureModule.ImageToVideoProfileId.Value,
-                    context.OwnedClips[0].Clip.AuthoredModelProfileHint);
-                Assert.Equal(0, context.AuthoredRootTimelineIndex);
-                Assert.Single(context.OwnedClips[0].Clip.PromptWindows);
-                return new(
-                    context.OwnedClips
-                        .Select(owned => new ArchitectureProjectedEffectiveClip(
-                            owned.TimelineIndex,
-                            owned.Clip,
-                            []))
-                        .ToArray(),
-                    [
-                        EffectiveRequestDecision.Ignore(
-                            "effective-request.test-module-routed",
-                            "The selected module owns this projection."),
-                    ]);
-            });
-        ArchitecturePlanningResult architectures = Resolve(
-            authored,
-            _ => module,
-            _ => module.Descriptor);
-
-        EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(authored, architectures);
-
-        Assert.Equal(1, module.ProjectionCount);
-        Assert.Empty(request.Spec.Clips[0].PromptWindows);
-        Assert.Contains(
-            request.Decisions,
-            decision => decision.Code == "effective-request.test-module-routed");
-        Assert.Contains(
-            request.Decisions,
-            decision => decision.Code
-                == "effective-request.unsupported-prompt-relay-ignored");
-    }
-
-    [Fact]
-    public void Projection_rejects_a_module_replacing_an_unowned_timeline_clip()
-    {
-        ClipSpec clip = Clip(Stage(0, rawIndex: 0));
-        VideoStagesSpec authored = Spec(clip);
-        RecordingProjectionModule module = new(
-            WanArchitectureModule.Instance.Descriptor,
-            _ => new(
-                [new(99, clip, [])],
-                []));
-        ArchitecturePlanningResult architectures = Resolve(
-            authored,
-            _ => module,
-            _ => module.Descriptor);
-
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => EffectiveVideoRequestProjector.Project(authored, architectures));
-
-        Assert.Contains("unowned", error.Message);
-        Assert.Contains(WanArchitectureModule.ArchitectureId.Value, error.Message);
-    }
-
-    [Fact]
-    public void Projection_allows_a_module_to_replace_only_the_owned_clips_it_changes()
-    {
-        ClipSpec first = Clip(Stage(0, rawIndex: 0));
-        ClipSpec second = Clip(Stage(0, rawIndex: 0)) with { Id = 1 };
-        VideoStagesSpec authored = Spec(first, second);
-        RecordingProjectionModule module = new(
-            Ltx2ArchitectureModule.Instance.Descriptor,
-            context => new(
-                [
-                    new(
-                        context.OwnedClips[0].TimelineIndex,
-                        context.OwnedClips[0].Clip with { SaveAudioTrack = true },
-                        []),
-                ],
-                []));
-        ArchitecturePlanningResult architectures = Resolve(
-            authored,
-            _ => module,
-            _ => module.Descriptor);
-
-        EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(authored, architectures);
-
-        Assert.True(request.Spec.Clips[0].SaveAudioTrack);
-        Assert.False(request.Spec.Clips[1].SaveAudioTrack);
-    }
-
-    [Fact]
-    public void Projection_rejects_null_collections_and_request_global_blocks()
-    {
-        ClipSpec clip = Clip(Stage(0, rawIndex: 0));
-        VideoStagesSpec authored = Spec(clip);
-
-        InvalidOperationException nullCollections = AssertContractViolation(
-            authored,
-            _ => new(null, null));
-        Assert.Contains("null projection collections", nullCollections.Message);
-
-        InvalidOperationException nullLocalDecisions = AssertContractViolation(
-            authored,
-            context => new(
-                [new(0, context.OwnedClips[0].Clip, null)],
-                []));
-        Assert.Contains("null decisions", nullLocalDecisions.Message);
-
-        InvalidOperationException globalBlock = AssertContractViolation(
-            authored,
-            context => new(
-                [new(0, context.OwnedClips[0].Clip, [])],
-                [
-                    EffectiveRequestDecision.Block(
-                        "effective-request.test-global-block",
-                        "Global blocks are not a supported hook result."),
-                ]));
-        Assert.Contains("identity-free warning", globalBlock.Message);
-    }
-
-    [Fact]
-    public void Projection_reports_null_projected_stages_as_a_contract_error()
-    {
-        ClipSpec clip = Clip(Stage(0, rawIndex: 0));
-        VideoStagesSpec authored = Spec(clip);
-
-        InvalidOperationException error = AssertContractViolation(
-            authored,
-            context => new(
-                [
-                    new(
-                        0,
-                        context.OwnedClips[0].Clip with
-                        {
-                            Stages = new StageSpec[] { null },
-                        },
-                        []),
-                ],
-                []));
-
-        Assert.Contains("changed resolved topology", error.Message);
-    }
-
-    [Fact]
-    public void Request_global_warnings_follow_first_module_appearance()
+    public void Request_global_video_swap_emits_one_common_warning()
     {
         StageSpec hostStage = Stage(0, rawIndex: 0, model: "host-model");
         ClipSpec host = Clip(hostStage) with
@@ -938,23 +599,19 @@ public sealed class EffectiveVideoRequestTests
                 ? HostVideoArchitectureModule.Instance.Descriptor
                 : WanArchitectureModule.Instance.Descriptor);
 
-        EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(authored, architectures);
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            authored,
+            RootEnvironment.FromSpec(authored),
+            architectures);
 
-        Assert.Equal(
-            [
-                "effective-request.host-video-swap-ignored",
-                "effective-request.wan-video-swap-ignored",
-            ],
-            request.Decisions
-                .Where(decision => decision.Code.EndsWith(
-                    "video-swap-ignored",
-                    StringComparison.Ordinal))
-                .Select(decision => decision.Code));
+        PlanDiagnostic warning = Assert.Single(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code == "effective-request.video-swap-ignored");
+        Assert.Equal(PlanDiagnosticSeverity.Warning, warning.Severity);
     }
 
     [Fact]
-    public void Unknown_Wan_upscale_remains_blocking_and_is_not_sanitized()
+    public void Unknown_Wan_upscale_warns_without_sanitizing_authored_data()
     {
         StageSpec first = Stage(0, rawIndex: 0);
         StageSpec unknown = Stage(
@@ -963,34 +620,28 @@ public sealed class EffectiveVideoRequestTests
             upscale: 2,
             upscaleMethod: "future-upscale");
         VideoStagesSpec spec = Spec(Clip(first, unknown));
-        RecordingWanModule module = new();
-        ArchitecturePlanningResult architectures = ResolveWan(spec, module);
+        ArchitecturePlanningResult architectures = ResolveWan(spec);
 
         EffectiveVideoRequest request =
             EffectiveVideoRequestProjector.Project(spec, architectures);
 
         Assert.Equal(2, request.Spec.Clips[0].Stages[1].Upscale);
-        Assert.Contains(
-            request.Decisions,
-            decision => decision.Code == "effective-request.unknown-upscale"
-                && decision.Disposition == EffectiveRequestDisposition.Block);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
             RootEnvironment.FromSpec(spec),
             architectures);
-        PlanDiagnostic error = Assert.Single(
+        PlanDiagnostic warning = Assert.Single(
             plan.Diagnostics,
-            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
-        Assert.Equal("effective-request.unknown-upscale", error.Code);
-        Assert.Equal(0, module.CompileCount);
+            diagnostic => diagnostic.Code == "effective-request.unknown-upscale");
+        Assert.Equal(PlanDiagnosticSeverity.Warning, warning.Severity);
         Assert.DoesNotContain(
             plan.Diagnostics,
-            diagnostic => diagnostic.Code == "architecture-capability-unsupported");
-        Assert.Null(plan.Clips[0].ArchitecturePayload);
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        Assert.NotNull(plan.Clips[0].ArchitecturePayload);
     }
 
     [Fact]
-    public void Prefix_only_Wan_upscale_is_malformed_and_blocks()
+    public void Prefix_only_Wan_upscale_warns_and_compiles()
     {
         StageSpec first = Stage(0, rawIndex: 0);
         StageSpec malformed = Stage(
@@ -999,16 +650,7 @@ public sealed class EffectiveVideoRequestTests
             upscale: 2,
             upscaleMethod: "pixel-   ");
         VideoStagesSpec spec = Spec(Clip(first, malformed));
-        RecordingWanModule module = new();
-        ArchitecturePlanningResult architectures = ResolveWan(spec, module);
-
-        EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(spec, architectures);
-
-        Assert.Contains(
-            request.Decisions,
-            decision => decision.Code == "effective-request.unknown-upscale"
-                && decision.Disposition == EffectiveRequestDisposition.Block);
+        ArchitecturePlanningResult architectures = ResolveWan(spec);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
             RootEnvironment.FromSpec(spec),
@@ -1016,8 +658,10 @@ public sealed class EffectiveVideoRequestTests
         Assert.Contains(
             plan.Diagnostics,
             diagnostic => diagnostic.Code == "effective-request.unknown-upscale"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
-        Assert.Equal(0, module.CompileCount);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
     }
 
     [Fact]
@@ -1036,14 +680,18 @@ public sealed class EffectiveVideoRequestTests
             _ => HostVideoArchitectureModule.Instance,
             _ => HostVideoArchitectureModule.Instance.Descriptor);
 
-        EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(spec, architectures);
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            architectures);
 
         Assert.DoesNotContain(
-            request.Decisions,
-            decision => decision.Code
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
                 == "effective-request.unsupported-ic-lora-ignored");
-        Assert.Null(request.Spec.Clips[0].Stages[0].ControlNetStrength);
+        Assert.Equal(
+            Constants.DefaultStageControlNetStrength,
+            spec.Clips[0].Stages[0].ControlNetStrength);
     }
 
     [Fact]
@@ -1223,93 +871,4 @@ public sealed class EffectiveVideoRequestTests
         return new(assignments, []);
     }
 
-    private static ArchitectureEffectiveRequestProjection IdentityProjection(
-        ArchitectureEffectiveRequestProjectionContext context) =>
-        new(
-            context.OwnedClips
-                .Select(owned => new ArchitectureProjectedEffectiveClip(
-                    owned.TimelineIndex,
-                    owned.Clip,
-                    []))
-                .ToArray(),
-            []);
-
-    private static InvalidOperationException AssertContractViolation(
-        VideoStagesSpec authored,
-        Func<
-            ArchitectureEffectiveRequestProjectionContext,
-            ArchitectureEffectiveRequestProjection> project)
-    {
-        RecordingProjectionModule module = new(
-            WanArchitectureModule.Instance.Descriptor,
-            project);
-        ArchitecturePlanningResult architectures = Resolve(
-            authored,
-            _ => module,
-            _ => module.Descriptor);
-        return Assert.Throws<InvalidOperationException>(
-            () => EffectiveVideoRequestProjector.Project(authored, architectures));
-    }
-
-    private sealed class RecordingWanModule :
-        IVideoArchitectureModule,
-        IArchitectureEffectiveRequestProjector
-    {
-        internal int CompileCount { get; private set; }
-
-        public VideoArchitectureDescriptor Descriptor =>
-            WanArchitectureModule.Instance.Descriptor;
-
-        public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
-        {
-            resolved = null;
-            return false;
-        }
-
-        public ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
-            ArchitectureEffectiveRequestProjectionContext context) =>
-            WanArchitectureModule.Instance.ProjectEffectiveRequest(context);
-
-        public ArchitectureClipCompilation ValidateAndCompileClip(
-            ClipSpec clip,
-            IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
-            ArchitectureClipCompileContext context)
-        {
-            CompileCount++;
-            throw new InvalidOperationException(
-                "A blocked effective request must not reach architecture compilation.");
-        }
-    }
-
-    private sealed class RecordingProjectionModule(
-        VideoArchitectureDescriptor descriptor,
-        Func<
-            ArchitectureEffectiveRequestProjectionContext,
-            ArchitectureEffectiveRequestProjection> project) :
-        IVideoArchitectureModule,
-        IArchitectureEffectiveRequestProjector
-    {
-        internal int ProjectionCount { get; private set; }
-
-        public VideoArchitectureDescriptor Descriptor => descriptor;
-
-        public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
-        {
-            resolved = null;
-            return false;
-        }
-
-        public ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
-            ArchitectureEffectiveRequestProjectionContext context)
-        {
-            ProjectionCount++;
-            return project(context);
-        }
-
-        public ArchitectureClipCompilation ValidateAndCompileClip(
-            ClipSpec clip,
-            IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
-            ArchitectureClipCompileContext context) =>
-            throw new NotSupportedException();
-    }
 }

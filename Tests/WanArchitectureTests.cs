@@ -270,9 +270,6 @@ public class WanArchitectureTests
             GeneratedClip(0, stage with { RetakeWindow = new(0, 8, 1) }),
             "effective-request.unsupported-retake-ignored");
         AssertIgnored(
-            GeneratedClip(0, stage) with { ImageRefs = [new("Generated", 1, false, null)] },
-            "effective-request.wan-frame-reference-source-ignored");
-        AssertIgnored(
             GeneratedClip(0, stage) with { PromptWindows = [new("late", 1, 1)] },
             "effective-request.unsupported-prompt-relay-ignored");
         AssertIgnored(
@@ -303,7 +300,7 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Effective_request_keeps_one_uploaded_first_and_last_reference_and_warns_for_the_rest()
+    public void Wan_compiler_uses_the_first_authored_first_and_last_references()
     {
         StageSpec stage = Stage(10, "wan-model");
         ClipSpec clip = GeneratedClip(0, stage) with
@@ -322,26 +319,15 @@ public class WanArchitectureTests
         WanClipPayload payload = Assert.Single(plan.Clips).RequireWanPayload();
 
         Assert.Equal("first.png", payload.FirstFrameReference.UploadFileName);
-        Assert.Equal("last.png", payload.LastFrameReference.UploadFileName);
-        Assert.Contains(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code
-                == "effective-request.wan-middle-frame-reference-ignored");
-        Assert.Contains(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code
-                == "effective-request.wan-duplicate-frame-reference-ignored");
-        Assert.Contains(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code
-                == "effective-request.wan-frame-reference-source-ignored");
+        Assert.Equal("Base", payload.LastFrameReference.Source);
+        Assert.Null(payload.LastFrameReference.UploadFileName);
         Assert.DoesNotContain(
             plan.Diagnostics,
             diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
     }
 
     [Fact]
-    public void Effective_request_ignores_last_reference_when_the_terminal_model_lacks_it()
+    public void Wan_compiler_preserves_last_reference_for_the_runtime_path()
     {
         StageSpec stage = Stage(10, "wan-five");
         ClipSpec clip = GeneratedClip(0, stage) with
@@ -359,19 +345,18 @@ public class WanArchitectureTests
                     [stage.Model] = WanArchitectureModule.Ti2v5bProfileId,
                 }));
 
-        Assert.Null(Assert.Single(plan.Clips).RequireWanPayload().LastFrameReference);
-        Assert.Contains(
+        Assert.NotNull(Assert.Single(plan.Clips).RequireWanPayload().LastFrameReference);
+        Assert.DoesNotContain(
             plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.wan-last-frame-reference-ignored"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+                == "effective-request.wan-last-frame-reference-ignored");
         Assert.DoesNotContain(
             plan.Diagnostics,
             diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
     }
 
     [Fact]
-    public void Ignored_non_upload_first_reference_does_not_change_text_entry()
+    public void Non_upload_first_reference_reaches_the_runtime_plan_without_changing_text_entry()
     {
         StageSpec stage = Stage(10, "wan-model");
         ClipSpec clip = GeneratedClip(0, stage) with
@@ -387,12 +372,11 @@ public class WanArchitectureTests
         ClipPlan compiled = Assert.Single(plan.Clips);
         Assert.Equal(ClipInputKind.EmptyLatent, compiled.Input);
         Assert.Equal(StageInputKind.EmptyLatent, Assert.Single(compiled.Stages).Input);
-        Assert.Null(compiled.RequireWanPayload().FirstFrameReference);
-        Assert.Contains(
+        Assert.NotNull(compiled.RequireWanPayload().FirstFrameReference);
+        Assert.DoesNotContain(
             plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.wan-frame-reference-source-ignored"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+                == "effective-request.wan-frame-reference-source-ignored");
     }
 
     [Fact]
@@ -424,7 +408,7 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void First_reference_permission_comes_from_the_first_effective_model()
+    public void First_reference_is_preserved_without_model_permission_filtering()
     {
         StageSpec stage = Stage(10, "wan-last-only");
         ClipSpec clip = GeneratedClip(0, stage) with
@@ -451,13 +435,12 @@ public class WanArchitectureTests
                 }));
 
         ClipPlan compiled = Assert.Single(plan.Clips);
-        Assert.Null(compiled.RequireWanPayload().FirstFrameReference);
+        Assert.NotNull(compiled.RequireWanPayload().FirstFrameReference);
         Assert.Equal(ClipInputKind.EmptyLatent, compiled.Input);
-        Assert.Contains(
+        Assert.DoesNotContain(
             plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.wan-first-frame-reference-ignored"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+                == "effective-request.wan-first-frame-reference-ignored");
     }
 
     [Fact]
@@ -484,7 +467,7 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Effective_request_checks_Wan_terminal_reference_before_ignoring_latent_upscale()
+    public void Wan_terminal_reference_is_not_filtered_by_a_later_model()
     {
         StageSpec first = Stage(10, "wan-last") with
         {
@@ -518,8 +501,8 @@ public class WanArchitectureTests
                         [latentTail.Model] = ["first"],
                     }));
 
-        Assert.Null(Assert.Single(plan.Clips).RequireWanPayload().LastFrameReference);
-        Assert.Contains(
+        Assert.NotNull(Assert.Single(plan.Clips).RequireWanPayload().LastFrameReference);
+        Assert.DoesNotContain(
             plan.Diagnostics,
             diagnostic => diagnostic.Code
                 == "effective-request.wan-last-frame-reference-ignored");
@@ -1103,8 +1086,6 @@ public class WanArchitectureTests
             error.Message);
     }
 
-    /// <summary>Decoded scheduling rules are architecture-owned. Root control and guide
-    /// canonicalization are intentionally owned by parsing/projection and are not repeated here.</summary>
     [Fact]
     public void Compiler_refuses_invalid_decoded_controls_and_quantized_schedules()
     {
