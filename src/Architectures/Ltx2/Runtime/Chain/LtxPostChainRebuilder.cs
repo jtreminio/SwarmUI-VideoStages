@@ -2,7 +2,6 @@ using ComfyTyped.Core;
 using ComfyTyped.Families;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
-using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 
@@ -264,14 +263,6 @@ internal static class LtxPostChainRebuilder
             newSeparate.AudioLatent,
             (node, input) => node.Id == audioDecode.Id
                           && input.Name == "samples");
-
-        if (!HasAudioDecodeConnectedToSeparate(bridge, audioDecode.Id, newSeparate.Id))
-        {
-            RetargetCapturedAudioDecodeViaJObject(
-                bridge,
-                audioDecode.Id,
-                newSeparate);
-        }
     }
 
     private static bool TryValidateCurrentOutputRecipe(
@@ -310,11 +301,8 @@ internal static class LtxPostChainRebuilder
         if (capture.AudioDecodeId is not null)
         {
             if (bridge.Graph.GetNode(capture.AudioDecodeId) is not ComfyNode resolvedAudioDecode
-                || bridge.Workflow[capture.AudioDecodeId] is not JObject audioDecodeObject
-                || !AudioDecodeReadsSeparate(
-                    resolvedAudioDecode,
-                    audioDecodeObject,
-                    oldSeparate.Id))
+                || resolvedAudioDecode.FindInput("samples")?.Connection?.Node?.Id
+                    != oldSeparate.Id)
             {
                 return false;
             }
@@ -363,56 +351,6 @@ internal static class LtxPostChainRebuilder
         && bridge.Graph.GetNode(id) is ComfyNode node
         && output.SlotIndex >= 0
         && output.SlotIndex < node.Outputs.Count;
-
-    private static bool AudioDecodeReadsSeparate(
-        ComfyNode audioDecode,
-        JObject audioDecodeObject,
-        string separateId)
-    {
-        if (audioDecode.FindInput("samples")?.Connection?.Node?.Id == separateId)
-        {
-            return true;
-        }
-        return audioDecodeObject["inputs"]?["samples"] is JArray samples
-            && samples.Count >= 2
-            && $"{samples[0]}" == separateId;
-    }
-
-    private static void RetargetCapturedAudioDecodeViaJObject(
-        WorkflowBridge bridge,
-        string audioDecodeId,
-        LTXVSeparateAVLatentNode newSeparate)
-    {
-        if (string.IsNullOrWhiteSpace(audioDecodeId)
-            || bridge.Workflow[audioDecodeId] is not JObject audioDecode)
-        {
-            return;
-        }
-
-        JObject inputs = audioDecode["inputs"] as JObject;
-        if (inputs is null)
-        {
-            inputs = [];
-            audioDecode["inputs"] = inputs;
-        }
-
-        inputs["samples"] = WorkflowBridge.ToPath(newSeparate.AudioLatent);
-    }
-
-    private static bool HasAudioDecodeConnectedToSeparate(
-        WorkflowBridge bridge,
-        string audioDecodeId,
-        string separateId)
-    {
-        ComfyNode audioNode = bridge.Graph.GetNode(audioDecodeId);
-        if (audioNode is null)
-        {
-            return false;
-        }
-
-        INodeInput samplesInput = audioNode.FindInput("samples");
-        return samplesInput?.Connection?.Node?.Id == separateId;
-    }
 
     private sealed record CurrentOutputSpliceRecipe(
         INodeOutput StageOutput,
