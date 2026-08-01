@@ -83,13 +83,6 @@
       },
       {
         "support": "conditional",
-        "code": "retake-frame-references-unsupported",
-        "reason": "Retake and frame references are mutually exclusive because guide merging would overwrite the retake mask.",
-        "scope": "stage",
-        "constraints": null
-      },
-      {
-        "support": "conditional",
         "code": "retake-source-required",
         "reason": "Retake requires an init-video clip.",
         "scope": "clip",

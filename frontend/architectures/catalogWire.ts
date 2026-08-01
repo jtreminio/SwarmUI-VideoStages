@@ -91,9 +91,6 @@ const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
     if (value.code === CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength) {
         return value.scope === "clip" && value.constraints === null;
     }
-    if (value.code === CONDITIONAL_RULE_CODES.retakeExcludesReferences) {
-        return value.scope === "stage" && value.constraints === null;
-    }
     if (!isRecord(value.constraints)) {
         return false;
     }

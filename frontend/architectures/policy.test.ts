@@ -301,7 +301,7 @@ describe("catalog-backed authoring policy", () => {
         });
     });
 
-    it("routes the retake/reference exclusion through the same decision", () => {
+    it("keeps retake available alongside frame references", () => {
         const models = catalog();
         const initVideoClip = minimalClip({ initVideo: initVideoFixture() });
         expect(
@@ -315,10 +315,7 @@ describe("catalog-backed authoring policy", () => {
             createCapabilityViewResolver(models)
                 .forClip(initVideoClip)
                 .decision("retake"),
-        ).toMatchObject({
-            supported: false,
-            reason: "Retake and frame references are mutually exclusive.",
-        });
+        ).toMatchObject({ supported: true, rule: null });
     });
 
     it("truncates the executable sequence at the first skipped clip", () => {

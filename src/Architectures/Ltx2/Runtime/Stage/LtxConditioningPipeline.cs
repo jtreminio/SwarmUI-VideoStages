@@ -63,12 +63,12 @@ internal sealed class LtxConditioningPipeline(
         return this;
     }
 
+    /// <summary>
+    /// Runs under a retake mask as well: the node merges the reference into the mask over its own
+    /// latent frames only, leaving the retake window elsewhere intact.
+    /// </summary>
     public LtxConditioningPipeline WithInplaceMerges(IReadOnlyList<ResolvedClipRef> clipRefs)
     {
-        if (RetakeMaskActive)
-        {
-            return this;
-        }
         foreach (ResolvedClipRef clipRef in clipRefs)
         {
             if (!UseLtxvInplaceForRef(clipRef.Reference) || clipRef.Strength <= 0)

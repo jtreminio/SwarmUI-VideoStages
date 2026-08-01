@@ -60,12 +60,11 @@ describe("typed conditional-rule evaluator", () => {
         ).toBe(false);
     });
 
-    it("evaluates retake entry and reference conditions", () => {
-        const generated = minimalClip();
+    it("requires an init video for retake, references notwithstanding", () => {
         expect(
             evaluateConditionalRule(
                 rule(CONDITIONAL_RULE_CODES.retakeRequiresSource),
-                { clip: generated },
+                { clip: minimalClip() },
             ),
         ).toBe(true);
 
@@ -82,9 +81,9 @@ describe("typed conditional-rule evaluator", () => {
         });
         expect(
             evaluateConditionalRule(
-                rule(CONDITIONAL_RULE_CODES.retakeExcludesReferences),
+                rule(CONDITIONAL_RULE_CODES.retakeRequiresSource),
                 { clip: initVideoClip },
             ),
-        ).toBe(true);
+        ).toBe(false);
     });
 });

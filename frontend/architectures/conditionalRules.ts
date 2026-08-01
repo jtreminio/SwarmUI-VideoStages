@@ -71,12 +71,6 @@ export const evaluateConditionalRule = (
                 clip !== undefined &&
                 (clip.clipLengthFromAudio || clip.clipLengthFromControlNet)
             );
-        case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
-            return (
-                clip !== undefined &&
-                clip.refs.length > 0 &&
-                clip.initVideo !== null
-            );
         case CONDITIONAL_RULE_CODES.retakeRequiresSource:
             return (
                 clip !== undefined &&

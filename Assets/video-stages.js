@@ -506,7 +506,6 @@
   };
   var CONDITIONAL_RULE_CODES = {
     promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
-    retakeExcludesReferences: "retake-frame-references-unsupported",
     retakeRequiresSource: "retake-source-required"
   };
 
@@ -529,8 +528,6 @@
     switch (rule.code) {
       case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
         return clip !== void 0 && (clip.clipLengthFromAudio || clip.clipLengthFromControlNet);
-      case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
-        return clip !== void 0 && clip.refs.length > 0 && clip.initVideo !== null;
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:
         return clip !== void 0 && !requiredEntryModes(rule).includes(
           clipEntryMode(clip, context.generatedEntryMode)
@@ -872,9 +869,6 @@
     }
     if (value.code === CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength) {
       return value.scope === "clip" && value.constraints === null;
-    }
-    if (value.code === CONDITIONAL_RULE_CODES.retakeExcludesReferences) {
-      return value.scope === "stage" && value.constraints === null;
     }
     if (!isRecord(value.constraints)) {
       return false;
@@ -1332,10 +1326,7 @@
   var UNRESOLVED_ARCHITECTURE_ID = "unsupported";
   var FEATURE_RULE_CODES = {
     promptRelay: [CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength],
-    retake: [
-      CONDITIONAL_RULE_CODES.retakeRequiresSource,
-      CONDITIONAL_RULE_CODES.retakeExcludesReferences
-    ]
+    retake: [CONDITIONAL_RULE_CODES.retakeRequiresSource]
   };
   var conditionalRuleFor = (clip, feature, descriptor) => {
     const codes = FEATURE_RULE_CODES[feature];

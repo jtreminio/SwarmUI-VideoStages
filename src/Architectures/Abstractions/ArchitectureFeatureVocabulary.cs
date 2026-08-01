@@ -129,9 +129,6 @@ internal static class ArchitectureFeatureVocabulary
         new(
             ConditionalRuleCodeId.PromptRelayRequiresFixedLength,
             "prompt-relay-dynamic-length-unsupported"),
-        new(
-            ConditionalRuleCodeId.RetakeExcludesReferences,
-            "retake-frame-references-unsupported"),
         new(ConditionalRuleCodeId.RetakeRequiresSource, "retake-source-required"),
     ];
 

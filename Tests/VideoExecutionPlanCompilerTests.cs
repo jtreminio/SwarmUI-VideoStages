@@ -444,21 +444,27 @@ public class VideoExecutionPlanCompilerTests
         Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
+    /// <summary>
+    /// Both LTX guide nodes merge a reference into the noise mask over the reference's own latent
+    /// frames only, so a frame reference narrows a retake window instead of invalidating it.
+    /// </summary>
     [Fact]
-    public void Compile_RetakeWithFrameReferences_IsRejected()
+    public void Compile_RetakeWithFrameReferences_IsAllowed()
     {
-        ClipSpec clip = GeneratedClip(
-            0,
-            Stage(10, retake: new RetakeWindowSpec(8, 16, 1))) with
+        ClipSpec clip = InitVideoClip(0) with
         {
+            Stages = [Stage(10, retake: new RetakeWindowSpec(8, 16, 1))],
             ImageRefs = [new ImageRefSpec("Upload", 2, false, "ref.png", "image")],
         };
 
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, clip));
 
-        Assert.Contains(plan.Diagnostics, diagnostic =>
-            diagnostic.Code == "retake-frame-references-unsupported"
-            && diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        Assert.DoesNotContain(plan.Diagnostics, diagnostic =>
+            diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        StagePlan stage = Assert.Single(Assert.Single(plan.Clips).Stages);
+        Ltx2StagePayload payload = stage.RequireLtx2Payload();
+        Assert.NotNull(payload.Retake);
+        Assert.Single(payload.FrameReferences);
     }
 
     [Fact]

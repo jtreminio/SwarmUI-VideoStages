@@ -1518,8 +1518,8 @@ public class ArchitectureFoundationTests
         JArray rules = (JArray)ltx["rules"];
         Assert.Contains(
             rules.Values<JObject>(),
-            rule => rule["code"]?.ToString() == "retake-frame-references-unsupported"
-                && rule["scope"]?.ToString() == "stage");
+            rule => rule["code"]?.ToString() == "retake-source-required"
+                && rule["scope"]?.ToString() == "clip");
         JObject wan = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "wan22");

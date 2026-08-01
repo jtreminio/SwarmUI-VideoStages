@@ -100,13 +100,6 @@ export const testArchitectureCatalog = (
                 },
                 {
                     support: "conditional",
-                    code: "retake-frame-references-unsupported",
-                    reason: "Retake and frame references are mutually exclusive.",
-                    scope: "stage",
-                    constraints: null,
-                },
-                {
-                    support: "conditional",
                     code: "retake-source-required",
                     reason: "Retake requires source footage.",
                     scope: "clip",

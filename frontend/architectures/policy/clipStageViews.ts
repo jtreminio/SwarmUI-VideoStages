@@ -45,10 +45,7 @@ const FEATURE_RULE_CODES: Partial<
     Record<AuthoringFeature, readonly ConditionalRuleCode[]>
 > = {
     promptRelay: [CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength],
-    retake: [
-        CONDITIONAL_RULE_CODES.retakeRequiresSource,
-        CONDITIONAL_RULE_CODES.retakeExcludesReferences,
-    ],
+    retake: [CONDITIONAL_RULE_CODES.retakeRequiresSource],
 };
 
 const conditionalRuleFor = (

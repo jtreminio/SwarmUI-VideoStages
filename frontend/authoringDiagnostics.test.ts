@@ -96,7 +96,7 @@ describe("backend-aligned authoring diagnostics", () => {
         expect(codes([initVideoClip])).not.toContain("retake-source-required");
     });
 
-    it("rejects frame references combined with an executable retake", () => {
+    it("accepts frame references combined with an executable retake", () => {
         expect(
             codes([
                 minimalClip({
@@ -116,7 +116,7 @@ describe("backend-aligned authoring diagnostics", () => {
                     refs: [minimalRef()],
                 }),
             ]),
-        ).toContain("retake-frame-references-unsupported");
+        ).toEqual([]);
     });
 
     it("does not diagnose architectures after the first skipped clip", () => {
@@ -173,9 +173,7 @@ describe("backend-aligned authoring diagnostics", () => {
 
         expect(diagnostics).not.toEqual(
             expect.arrayContaining([
-                "audio.reuse.requires_three_stages",
                 "prompt-relay-dynamic-length-unsupported",
-                "retake-frame-references-unsupported",
                 "retake-source-required",
             ]),
         );

@@ -1331,18 +1331,18 @@ describe("authoring diagnostics", () => {
             diagnostics: [
                 {
                     severity: "error",
-                    code: "retake-frame-references-unsupported",
-                    message: "Retake and references cannot run together.",
+                    code: "retake-source-required",
+                    message: "Retake requires an init-video clip.",
                     clipIdx: 0,
                 },
             ],
         });
         const item = document.querySelector<HTMLElement>(
-            '[data-vst-diagnostic="retake-frame-references-unsupported"]',
+            '[data-vst-diagnostic="retake-source-required"]',
         );
         expect(item?.textContent).toContain("Clip 0:");
         expect(item?.textContent).toContain(
-            "Retake and references cannot run together.",
+            "Retake requires an init-video clip.",
         );
         expect(item?.className).toContain("vst-diagnostic-error");
     });

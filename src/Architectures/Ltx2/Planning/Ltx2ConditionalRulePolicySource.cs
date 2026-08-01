@@ -22,13 +22,6 @@ internal static class Ltx2ConditionalRulePolicySource
             "Prompt relay requires a fixed frame count and cannot be combined with audio-owned or ControlNet-owned clip length.",
             RuleScope.Clip);
 
-    internal static RuleDecision RetakeAndReferencesAreExclusive { get; } =
-        RuleDecision.Conditional(
-            ArchitectureFeatureVocabulary.RuleCode(
-                ConditionalRuleCodeId.RetakeExcludesReferences),
-            "Retake and frame references are mutually exclusive because guide merging would overwrite the retake mask.",
-            RuleScope.Stage);
-
     internal static RuleDecision RetakeRequiresSource { get; } =
         RuleDecision.Conditional(
             ArchitectureFeatureVocabulary.RuleCode(
@@ -48,7 +41,6 @@ internal static class Ltx2ConditionalRulePolicySource
     internal static IReadOnlyList<RuleDecision> PublishedRules { get; } =
     [
         PromptRelayRequiresFixedLength,
-        RetakeAndReferencesAreExclusive,
         RetakeRequiresSource,
     ];
 
@@ -71,13 +63,6 @@ internal static class Ltx2ConditionalRulePolicySource
                 if (stage.ArchitecturePayload is not Ltx2StagePayload payload)
                 {
                     continue;
-                }
-                if (payload.Retake is not null && !payload.FrameReferences.IsDefaultOrEmpty)
-                {
-                    diagnostics.Add(Error(
-                        RetakeAndReferencesAreExclusive,
-                        clip.ClipId,
-                        stage.StageId));
                 }
                 if (payload.Retake is not null
                     && !RetakeEntryModes.Contains(clip.EntryMode))
