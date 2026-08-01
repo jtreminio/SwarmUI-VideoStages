@@ -168,29 +168,6 @@ public class IcLoraDriveMediaContractTests
                 == "ltx2.ic-lora.drive-media-kinds-contradictory");
     }
 
-    [Theory]
-    [InlineData("future")]
-    [InlineData("")]
-    public void Malformed_explicit_media_kinds_are_diagnostics(string mediaKind)
-    {
-        ClipSpec clip = Clip([
-            new(
-                "adapter.safetensors",
-                Constants.IcLoraSourceUpload,
-                1,
-                1,
-                Constants.IcLoraControlNone,
-                null,
-                DriveData: IcLoraDriveData.Visual,
-                DriveMediaKinds: [mediaKind]),
-        ]);
-
-        Assert.Contains(
-            CompileIcLoras(clip).Diagnostics,
-            diagnostic => diagnostic.Code
-                == "ltx2.ic-lora.drive-media-kinds-malformed");
-    }
-
     [Fact]
     public void Upload_without_media_never_falls_back_to_the_clip_input()
     {
@@ -260,25 +237,6 @@ public class IcLoraDriveMediaContractTests
         Assert.Contains(
             CompileIcLoras(clip).Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.drive-source-contradictory");
-    }
-
-    [Fact]
-    public void Malformed_drive_data_is_distinct_from_missing_none_intent()
-    {
-        ClipSpec clip = Clip([
-            new(
-                "adapter.safetensors",
-                Constants.IcLoraSourceUpload,
-                1,
-                1,
-                Constants.IcLoraControlNone,
-                null,
-                DriveData: (IcLoraDriveData)(-1)),
-        ]);
-
-        Assert.Contains(
-            CompileIcLoras(clip).Diagnostics,
-            diagnostic => diagnostic.Code == "ltx2.ic-lora.drive-data-unsupported");
     }
 
     [Fact]

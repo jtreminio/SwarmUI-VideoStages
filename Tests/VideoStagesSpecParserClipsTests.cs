@@ -433,7 +433,7 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseClips_IcLoraPreservesMalformedDriveDataForPlanningValidation()
+    public void ParseClips_IcLoraDefaultsMalformedDriveDataWithWarning()
     {
         JObject entry = new()
         {
@@ -446,14 +446,18 @@ public class VideoStagesSpecParserClipsTests
                 stages: [MakeStage("model-a")],
                 icLoras: new JArray(entry))));
 
+        WorkflowGenerator parser = BuildParser(json);
         IcLoraSpec parsed = Assert.Single(
-            Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json)).Clips).IcLoras);
+            Assert.Single(VideoStagesSpecParser.Parse(parser).Clips).IcLoras);
 
-        Assert.False(Enum.IsDefined(parsed.DriveData));
+        Assert.Equal(IcLoraDriveData.None, parsed.DriveData);
+        Assert.Contains(
+            Assert.IsType<List<string>>(parser.UserInput.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains("unsupported DriveData 'future-stream'"));
     }
 
     [Fact]
-    public void ParseClips_IcLoraMalformedDriveMediaKindsReachPlanningDiagnostics()
+    public void ParseClips_IcLoraDefaultsNonArrayDriveMediaKindsWithWarning()
     {
         JObject entry = new()
         {
@@ -467,22 +471,39 @@ public class VideoStagesSpecParserClipsTests
                 stages: [MakeStage("model-a")],
                 icLoras: new JArray(entry))));
 
-        ClipSpec clip = Assert.Single(
-            VideoStagesSpecParser.Parse(BuildParser(json)).Clips);
+        WorkflowGenerator parser = BuildParser(json);
+        IcLoraSpec parsed = Assert.Single(
+            Assert.Single(VideoStagesSpecParser.Parse(parser).Clips).IcLoras);
 
+        Assert.Null(parsed.DriveMediaKinds);
         Assert.Contains(
-            IcLoraPlanCompiler.CompileClip(
-                clip,
-                new(
-                    0,
-                    0,
-                    0,
-                    clip.InitVideo is null
-                        ? ArchitectureEntryMode.ImageToVideo
-                        : ArchitectureEntryMode.InitVideo))
-                .Diagnostics,
-            diagnostic => diagnostic.Code
-                == "ltx2.ic-lora.drive-media-kinds-malformed");
+            Assert.IsType<List<string>>(parser.UserInput.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains("DriveMediaKinds must be an array"));
+    }
+
+    [Fact]
+    public void ParseClips_IcLoraDropsInvalidAndDuplicateDriveMediaKindsWithWarnings()
+    {
+        JObject entry = new()
+        {
+            ["lora"] = "adapter.safetensors",
+            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveData"] = nameof(IcLoraDriveData.Visual),
+            ["driveMediaKinds"] = new JArray(123, "Image", "image", "future"),
+        };
+        WorkflowGenerator parser = BuildParser(JsonConvert.SerializeObject(new JArray(
+            MakeClip(
+                stages: [MakeStage("model-a")],
+                icLoras: new JArray(entry)))));
+
+        IcLoraSpec parsed = Assert.Single(
+            Assert.Single(VideoStagesSpecParser.Parse(parser).Clips).IcLoras);
+        List<string> warnings =
+            Assert.IsType<List<string>>(parser.UserInput.ExtraMeta["parser_warnings"]);
+
+        Assert.Equal(["image"], parsed.DriveMediaKinds);
+        Assert.Equal(3, warnings.Count(warning => warning.Contains("DriveMediaKinds")));
+        Assert.Contains(warnings, warning => warning.Contains("repeats 'image'"));
     }
 
     [Fact]
@@ -1199,7 +1220,6 @@ public class VideoStagesSpecParserClipsTests
 
         VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
 
-        // Stage 0 refines the source video, so its authored generation settings remain active.
         Assert.Equal(0.3, spec.Clips[0].Stages[0].Control);
         Assert.Equal(2.0, spec.Clips[0].Stages[0].Upscale);
         Assert.Equal("pixel-catmull", spec.Clips[0].Stages[0].UpscaleMethod);
@@ -1545,7 +1565,6 @@ public class VideoStagesSpecParserClipsTests
         ["sourceStartSeconds"] = sourceStart,
     };
 
-    // Browser lane splitting must preserve segment data and trackId:spanIndex identities.
     [Fact]
     public void Parse_RootTimelineAudioSegments_MultiSpanTrackMatchesSplitSingleSpanLanes()
     {

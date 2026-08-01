@@ -3,9 +3,6 @@ using Newtonsoft.Json.Linq;
 
 namespace VideoStages;
 
-/// <summary>
-/// Parses persisted clip resources.
-/// </summary>
 internal static class VideoStageResourceParser
 {
     internal const int IcLoraStrengthMin = 0;
@@ -106,9 +103,11 @@ internal static class VideoStageResourceParser
         Action<string> warn = null)
     {
         List<IcLoraSpec> entries = [];
-        foreach (JObject entry in VideoStagesJsonReader.GetObjectArray(
-            clipObject, UploadContainers.IcLorasCollection))
+        List<JObject> rawEntries = VideoStagesJsonReader.GetObjectArray(
+            clipObject, UploadContainers.IcLorasCollection);
+        for (int index = 0; index < rawEntries.Count; index++)
         {
+            JObject entry = rawEntries[index];
             string lora = NormalizeLoraName(VideoStagesJsonReader.GetString(entry, "lora"));
             if (lora.Length == 0)
             {
@@ -131,13 +130,16 @@ internal static class VideoStageResourceParser
                     entry, "attentionStrength", 1, "Clip IcLora", warn), 0, 1),
                 ControlType: VideoStagesJsonReader.GetString(entry, "controlType")?.Trim(),
                 DriveMedia: driveMedia,
-                DriveData: ParseDriveData(rawDriveData),
-                DriveMediaKinds: ParseDriveMediaKinds(entry)));
+                DriveData: ParseDriveData(rawDriveData, index, warn),
+                DriveMediaKinds: ParseDriveMediaKinds(entry, index, warn)));
         }
         return entries;
     }
 
-    private static IcLoraDriveData ParseDriveData(string rawValue)
+    private static IcLoraDriveData ParseDriveData(
+        string rawValue,
+        int entryIndex,
+        Action<string> warn)
     {
         string raw = StringUtils.Compact(rawValue);
         if (raw.Length == 0)
@@ -156,10 +158,17 @@ internal static class VideoStageResourceParser
         {
             return IcLoraDriveData.None;
         }
-        return (IcLoraDriveData)(-1);
+        VideoStagesJsonReader.Warn(
+            warn,
+            $"VideoStages: IC-LoRA {entryIndex} has unsupported DriveData '{rawValue}'; "
+                + "using None.");
+        return IcLoraDriveData.None;
     }
 
-    private static IReadOnlyList<string> ParseDriveMediaKinds(JObject entry)
+    private static IReadOnlyList<string> ParseDriveMediaKinds(
+        JObject entry,
+        int entryIndex,
+        Action<string> warn)
     {
         JToken token = VideoStagesJsonReader.GetToken(entry, "driveMediaKinds");
         if (token is null || token.Type == JTokenType.Null)
@@ -168,14 +177,58 @@ internal static class VideoStageResourceParser
         }
         if (token is not JArray array)
         {
-            return [$"[invalid-list:{token.Type}]"];
+            VideoStagesJsonReader.Warn(
+                warn,
+                $"VideoStages: IC-LoRA {entryIndex} DriveMediaKinds must be an array; ignoring it.");
+            return null;
         }
-        return
-        [
-            .. array.Select(item => item.Type == JTokenType.String
-                ? item.Value<string>()
-                : $"[invalid-kind:{item.Type}]"),
-        ];
+
+        List<string> kinds = [];
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        for (int itemIndex = 0; itemIndex < array.Count; itemIndex++)
+        {
+            string kind = NormalizeDriveMediaKind(array[itemIndex]);
+            if (kind is null)
+            {
+                VideoStagesJsonReader.Warn(
+                    warn,
+                    $"VideoStages: IC-LoRA {entryIndex} DriveMediaKinds item {itemIndex} "
+                        + "must be image, video, or audio; ignoring it.");
+                continue;
+            }
+            if (!seen.Add(kind))
+            {
+                VideoStagesJsonReader.Warn(
+                    warn,
+                    $"VideoStages: IC-LoRA {entryIndex} DriveMediaKinds repeats '{kind}'; "
+                        + "ignoring the duplicate.");
+                continue;
+            }
+            kinds.Add(kind);
+        }
+        return kinds;
+    }
+
+    private static string NormalizeDriveMediaKind(JToken token)
+    {
+        if (token.Type != JTokenType.String)
+        {
+            return null;
+        }
+        string compact = StringUtils.Compact(token.Value<string>());
+        if (StringUtils.Equals(compact, "image"))
+        {
+            return "image";
+        }
+        if (StringUtils.Equals(compact, "video"))
+        {
+            return "video";
+        }
+        if (StringUtils.Equals(compact, "audio"))
+        {
+            return "audio";
+        }
+        return null;
     }
 
     private static ImageRefSpec ParseImageReference(

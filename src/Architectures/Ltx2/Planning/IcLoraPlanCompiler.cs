@@ -30,14 +30,6 @@ internal static class IcLoraPlanCompiler
         {
             IcLoraSpec entry = entries[index];
             List<PlanDiagnostic> entryDiagnostics = [];
-            if (!Enum.IsDefined(entry.DriveData))
-            {
-                entryDiagnostics.Add(Warning(
-                    clip,
-                    index,
-                    "ltx2.ic-lora.drive-data-unsupported",
-                    "has malformed DriveData; expected None, Visual, or Audio"));
-            }
             if (entry.Stage >= 0 && !authoredStageIndices.Contains(entry.Stage))
             {
                 entryDiagnostics.Add(Warning(
@@ -133,8 +125,7 @@ internal static class IcLoraPlanCompiler
 
             diagnostics.AddRange(entryDiagnostics);
             diagnostics.AddRange(stageDiagnostics);
-            // Entry-scope conditions invalidate the entry everywhere; stage-scope ones drop only the
-            // stage that raised them, and an entry left with no stage drops exactly like a dropped one.
+            // Entry errors drop all stages; stage errors drop only the affected stage.
             if (entryDiagnostics.Count > 0 || pendingPlans.Count == 0)
             {
                 continue;
@@ -387,24 +378,14 @@ internal static class IcLoraPlanCompiler
         }
 
         HashSet<IcLoraDriveMediaKind> explicitKinds = [];
-        bool malformed = false;
         foreach (string rawKind in entry.DriveMediaKinds)
         {
-            if (!IcLoraDriveMediaContracts.TryParseKind(
+            if (IcLoraDriveMediaContracts.TryParseKind(
                     rawKind,
-                    out IcLoraDriveMediaKind kind)
-                || !explicitKinds.Add(kind))
+                    out IcLoraDriveMediaKind kind))
             {
-                malformed = true;
+                explicitKinds.Add(kind);
             }
-        }
-        if (malformed)
-        {
-            diagnostics.Add(Warning(
-                clip,
-                entryIndex,
-                "ltx2.ic-lora.drive-media-kinds-malformed",
-                "has malformed DriveMediaKinds; expected a unique list containing image, video, or audio"));
         }
 
         IcLoraDriveMediaContract generic =
