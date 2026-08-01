@@ -13,10 +13,7 @@ import {
 import { setSelection } from "../selection";
 import type { Clip, TimelineSelection } from "../types";
 import { gridCeil, gridFloor, roundToTenth } from "../utils";
-import {
-    applyPersistedCapabilityRepair,
-    buildCapabilityRepairButton,
-} from "./capabilityUi";
+import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
 type PromptSelection = Extract<
@@ -55,30 +52,6 @@ const buildMajorPromptSection = (
         flattenContent: true,
         className: "vst-detail-prompt-major",
     });
-    const decision = ctx
-        .authoring()
-        .capabilities.forClip(clip)
-        .decision("majorPrompt");
-    if (!decision.supported) {
-        applyPersistedCapabilityRepair(built.section, decision);
-        if (clip.prompt.trim()) {
-            built.content.appendChild(
-                buildCapabilityRepairButton({
-                    label: "Remove unsupported clip prompt",
-                    className: "vst-remove-unsupported-prompt",
-                    onRepair: () => {
-                        ctx.commit((clips) => {
-                            const target = clips[clipIdx];
-                            if (target) {
-                                target.prompt = "";
-                            }
-                        });
-                        ctx.render();
-                    },
-                }),
-            );
-        }
-    }
     return built.section;
 };
 

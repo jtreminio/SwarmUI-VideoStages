@@ -194,30 +194,23 @@ export const createClipStageCapabilityViews = (
             ? effectiveModelCapabilities(resolvedModel, descriptor)
             : null;
         const decision = (
-            feature: "stageLoras" | "upscale" | "sampler" | "scheduler",
+            feature: "stageLoras" | "sampler" | "scheduler",
         ): CapabilityDecision => {
             if (feature === "stageLoras" && descriptor && capabilities) {
-                const supported = architectureFeatureSupport(feature, {
-                    capabilities,
-                });
-                const architectureRule = supported
-                    ? conditionalRule(
-                          descriptor.rules,
-                          CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
-                      )
-                    : null;
+                // Every architecture drives normal LoRAs; only the sampling-stage
+                // rule can still refuse one.
+                const architectureRule = conditionalRule(
+                    descriptor.rules,
+                    CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
+                );
                 const violatedRule =
                     architectureRule &&
                     evaluateConditionalRule(architectureRule, { clip, stage })
                         ? architectureRule
                         : null;
                 return {
-                    supported: supported && !violatedRule,
-                    reason:
-                        supported && !violatedRule
-                            ? ""
-                            : (violatedRule?.reason ??
-                              `LoRAs are not supported by ${descriptor.label}.`),
+                    supported: !violatedRule,
+                    reason: violatedRule?.reason ?? "",
                     rule: violatedRule,
                 };
             }
@@ -235,24 +228,9 @@ export const createClipStageCapabilityViews = (
                     rule: null,
                 };
             }
-            const supported =
-                descriptor !== undefined &&
-                capabilities !== null &&
-                architectureFeatureSupport("upscale", {
-                    capabilities,
-                });
-            return {
-                supported,
-                reason: supported
-                    ? ""
-                    : descriptor
-                      ? architectureReason(descriptor.label, "upscale")
-                      : noArchitectureReason("upscale"),
-                rule: null,
-            };
+            return { supported: true, reason: "", rule: null };
         };
         const stageView: StageCapabilityView = {
-            upscaleModes: capabilities?.upscaleModes ?? [],
             decision,
             authoringState: (feature, persisted) => {
                 const result = decision(feature);

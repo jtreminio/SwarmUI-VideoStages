@@ -66,14 +66,8 @@ internal sealed class WanArchitectureModule :
             ArchitectureEntryMode.InitVideo,
         ],
         new(
-            ClipCapability.Prompts
-                | ClipCapability.InitVideo
-                | ClipCapability.References,
-            StageCapability.ImageInput
-                | StageCapability.VideoInput
-                | StageCapability.PixelUpscale
-                | StageCapability.Lora
-                | StageCapability.FrameReferences),
+            ClipCapability.References,
+            StageCapability.FrameReferences),
         ArchitectureBoundaryPolicy.CutOnly(
             "wan22",
             "Decoded Wan clips can be joined with a hard cut.",

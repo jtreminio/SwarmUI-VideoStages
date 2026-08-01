@@ -17,9 +17,9 @@ internal sealed class HostVideoStageEngine : IDisposable
     private readonly WorkflowGenerator _generator;
     private readonly GlobalVideoFrameTrimmer _trimmer;
     private readonly StagePixelScaleGraphBuilder _pixelScaler;
+    private readonly StageModelUpscaleGraphBuilder _modelScaler;
     private readonly HostVideoDecodedStageInput _decodedInput;
     private readonly StageHostExecutionScope _stageScope;
-    private readonly string _architectureDisplayLabel;
 
     internal HostVideoStageEngine(
         WorkflowGenerator generator,
@@ -30,9 +30,9 @@ internal sealed class HostVideoStageEngine : IDisposable
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentException.ThrowIfNullOrWhiteSpace(architectureDisplayLabel);
         _generator = generator;
-        _architectureDisplayLabel = architectureDisplayLabel;
         _trimmer = new(generator);
         _pixelScaler = new(generator);
+        _modelScaler = new(generator);
         _decodedInput = new(
             generator,
             plan.FramesPerSecond,
@@ -53,7 +53,7 @@ internal sealed class HostVideoStageEngine : IDisposable
         foreach (StagePlan stage in clip.Stages)
         {
             StageCorePlan settings = stage.Core;
-            ApplyPixelUpscale(stage, settings.Upscale);
+            ApplyUpscale(stage, settings.Upscale);
             if (stage.IsPassthrough)
             {
                 _decodedInput.ConfigurePassthrough(
@@ -84,17 +84,11 @@ internal sealed class HostVideoStageEngine : IDisposable
 
     public void Dispose() => _stageScope.Dispose();
 
-    private void ApplyPixelUpscale(StagePlan stage, StageUpscalePlan upscale)
+    private void ApplyUpscale(StagePlan stage, StageUpscalePlan upscale)
     {
         if (upscale.Mode == StageUpscaleMode.None)
         {
             return;
-        }
-        if (upscale.Mode != StageUpscaleMode.Pixel)
-        {
-            throw new InvalidOperationException(
-                $"Stage {stage.StageId} reached the {_architectureDisplayLabel} runtime with "
-                    + $"unsupported upscale method '{upscale.RawMethod}'.");
         }
         if (_generator.CurrentMedia is null)
         {
@@ -110,6 +104,15 @@ internal sealed class HostVideoStageEngine : IDisposable
         (int targetWidth, int targetHeight) = DimensionSnap.Snap(
             width * upscale.Factor,
             height * upscale.Factor);
+        if (upscale.Mode == StageUpscaleMode.Model)
+        {
+            _modelScaler.Apply(
+                _generator.CurrentMedia,
+                targetWidth,
+                targetHeight,
+                upscale.MethodName);
+            return;
+        }
         _pixelScaler.Apply(
             _generator.CurrentMedia,
             targetWidth,

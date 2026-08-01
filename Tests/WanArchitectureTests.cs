@@ -231,7 +231,6 @@ public class WanArchitectureTests
         Assert.Equal(
             "removed-profile-alias",
             model.Value<string>("modelProfileId"));
-        Assert.Contains("lora", model["capabilities"]["stage"].Values<string>());
         Assert.Null(model["enhancements"]["extras"]);
     }
 
@@ -257,12 +256,8 @@ public class WanArchitectureTests
     {
         VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
 
-        Assert.True(descriptor.Capabilities.Clip.HasFlag(ClipCapability.InitVideo));
+        Assert.Contains(ArchitectureEntryMode.ImageToVideo, descriptor.EntryModes);
         Assert.Contains(ArchitectureEntryMode.InitVideo, descriptor.EntryModes);
-        Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.ImageInput));
-        Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.VideoInput));
-        Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.PixelUpscale));
-        Assert.True(descriptor.Capabilities.Stage.HasFlag(StageCapability.Lora));
         Assert.True(descriptor.Capabilities.Stage.HasFlag(
             StageCapability.FrameReferences));
         Assert.True(descriptor.Capabilities.Clip.HasFlag(ClipCapability.References));
@@ -276,24 +271,20 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Effective_request_accepts_pixel_upscale_and_ignores_advanced_upscalers_and_ic_lora()
+    public void Effective_request_accepts_every_upscaler_and_ignores_ic_lora()
     {
         StageSpec stage = Stage(10, "wan-model");
 
-        VideoExecutionPlan pixelPlan = Compile(
-            GeneratedClip(0, stage with { Upscale = 2 }));
-        Assert.DoesNotContain(
-            pixelPlan.Diagnostics,
-            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
-        AssertIgnored(
-            GeneratedClip(
+        foreach (string method in
+            (string[])["pixel-lanczos", "model-fake-upscaler.safetensors"])
+        {
+            VideoExecutionPlan plan = Compile(GeneratedClip(
                 0,
-                stage with
-                {
-                    Upscale = 2,
-                    UpscaleMethod = "model-fake-upscaler.safetensors",
-                }),
-            "effective-request.unsupported-upscale-ignored");
+                stage with { Upscale = 2, UpscaleMethod = method }));
+            Assert.DoesNotContain(
+                plan.Diagnostics,
+                diagnostic => diagnostic.Message.Contains("upscale"));
+        }
         AssertIgnored(
             GeneratedClip(0, stage with { RetakeWindow = new(0, 8, 1) }),
             "effective-request.unsupported-retake-ignored");
@@ -544,10 +535,6 @@ public class WanArchitectureTests
             plan.Diagnostics,
             diagnostic => diagnostic.Code
                 == "effective-request.wan-last-frame-reference-ignored");
-        Assert.Contains(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code
-                == "effective-request.unsupported-upscale-ignored");
     }
 
     [Fact]
@@ -651,7 +638,6 @@ public class WanArchitectureTests
         JObject wan = Assert.Single(
             catalog["architectures"].Values<JObject>(),
             item => item.Value<string>("id") == "wan22");
-        Assert.Contains("lora", wan["capabilities"]["stage"].Values<string>());
         Assert.Null(wan["profiles"]);
         JObject rule = Assert.Single(wan["rules"].Values<JObject>());
         Assert.Equal(

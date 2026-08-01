@@ -35,7 +35,6 @@ internal static class ArchitectureCatalogSerializer
         // Authoritative, scope-preserving capability sets.
         ["clip"] = new JArray(ArchitectureFeatureVocabulary.WireNames(descriptor.Capabilities.Clip)),
         ["stage"] = new JArray(ArchitectureFeatureVocabulary.WireNames(descriptor.Capabilities.Stage)),
-        ["upscaleModes"] = new JArray(ArchitectureFeatureVocabulary.UpscaleModeWireNames(descriptor.Capabilities.Stage)),
         // Exact inputs that are not representable as flag sets.
         ["entryModes"] = new JArray(descriptor.EntryModes.Select(ArchitectureFeatureVocabulary.WireName)),
         ["audioSourceKinds"] = new JArray(descriptor.AudioSourceKinds.Select(
@@ -116,7 +115,6 @@ internal static class ArchitectureCatalogSerializer
         {
             ["clip"] = new JArray(ArchitectureFeatureVocabulary.WireNames(capabilities.Clip)),
             ["stage"] = new JArray(ArchitectureFeatureVocabulary.WireNames(capabilities.Stage)),
-            ["upscaleModes"] = new JArray(ArchitectureFeatureVocabulary.UpscaleModeWireNames(capabilities.Stage)),
             ["entryModes"] = new JArray(ModelEntryModes(model)),
             ["audioSourceKinds"] = new JArray(audioKinds.Select(SerializeAudioSourceKind)),
         };

@@ -42,10 +42,7 @@ const applyPickedInitVideo = (
         const clips = state.clips;
         const target = findClipByStableId(clips, operation.clipId);
         const { capabilities, defaults } = context.authoring();
-        if (
-            !target ||
-            !capabilities.forClip(target).decision("initVideo").supported
-        ) {
+        if (!target) {
             return;
         }
         target.initVideo = initVideoFromProbe(

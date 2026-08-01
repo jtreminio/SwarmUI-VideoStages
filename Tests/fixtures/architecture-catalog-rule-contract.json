@@ -4,8 +4,6 @@
     "label": "LTX Video 2.3",
     "capabilities": {
       "clip": [
-        "init-video",
-        "prompts",
         "prompt-relay",
         "references",
         "reference-framing",
@@ -17,21 +15,8 @@
         "control-signal-derived-duration"
       ],
       "stage": [
-        "image-input",
-        "video-input",
-        "pixel-upscale",
-        "model-upscale",
-        "latent-upscale",
-        "latent-model-upscale",
-        "lora",
         "ic-lora",
         "frame-references"
-      ],
-      "upscaleModes": [
-        "pixel",
-        "model",
-        "latent",
-        "latent-model"
       ],
       "entryModes": [
         "text-to-video",

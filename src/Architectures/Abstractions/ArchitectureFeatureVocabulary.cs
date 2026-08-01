@@ -9,8 +9,7 @@ internal enum CapabilityVocabularyScope
 internal sealed record CapabilityVocabularyEntry(
     ClipCapability Clip,
     StageCapability Stage,
-    string WireName,
-    string UpscaleModeWireName = null)
+    string WireName)
 {
     internal CapabilityVocabularyScope Scope =>
         Clip != ClipCapability.None
@@ -55,8 +54,6 @@ internal static class ArchitectureFeatureVocabulary
 {
     internal static IReadOnlyList<CapabilityVocabularyEntry> Capabilities { get; } =
     [
-        For(ClipCapability.InitVideo, "init-video"),
-        For(ClipCapability.Prompts, "prompts"),
         For(ClipCapability.PromptRelay, "prompt-relay"),
         For(ClipCapability.References, "references"),
         For(ClipCapability.ReferenceFraming, "reference-framing"),
@@ -68,16 +65,6 @@ internal static class ArchitectureFeatureVocabulary
         For(
             ClipCapability.ControlSignalDerivedDuration,
             "control-signal-derived-duration"),
-        For(StageCapability.ImageInput, "image-input"),
-        For(StageCapability.VideoInput, "video-input"),
-        For(StageCapability.PixelUpscale, "pixel-upscale", "pixel"),
-        For(StageCapability.ModelUpscale, "model-upscale", "model"),
-        For(StageCapability.LatentUpscale, "latent-upscale", "latent"),
-        For(
-            StageCapability.LatentModelUpscale,
-            "latent-model-upscale",
-            "latent-model"),
-        For(StageCapability.Lora, "lora"),
         For(StageCapability.IcLora, "ic-lora"),
         For(StageCapability.FrameReferences, "frame-references"),
     ];
@@ -86,12 +73,6 @@ internal static class ArchitectureFeatureVocabulary
         AuthoringFeatures
     { get; } =
     [
-        new(
-            AuthoringFeature.InitVideo,
-            "initVideo",
-            "Source video",
-            [Capability(ClipCapability.InitVideo)],
-            CanIgnoreWhenUnsupported: false),
         new(
             AuthoringFeature.FrameReferences,
             "frameReferences",
@@ -112,12 +93,6 @@ internal static class ArchitectureFeatureVocabulary
             "Retakes",
             [Capability(ClipCapability.Retake)],
             ConditionalRuleFeature.Retake),
-        new(
-            AuthoringFeature.MajorPrompt,
-            "majorPrompt",
-            "Major prompts",
-            [Capability(ClipCapability.Prompts)],
-            CanIgnoreWhenUnsupported: false),
         new(
             AuthoringFeature.PromptRelay,
             "promptRelay",
@@ -144,26 +119,10 @@ internal static class ArchitectureFeatureVocabulary
             "Control-signal-derived clip duration",
             [Capability(ClipCapability.ControlSignalDerivedDuration)]),
         new(
-            AuthoringFeature.StageLoras,
-            "stageLoras",
-            "LoRAs",
-            [Capability(StageCapability.Lora)]),
-        new(
             AuthoringFeature.IcLora,
             "icLora",
             "IC-LoRA",
             [Capability(StageCapability.IcLora)]),
-        new(
-            AuthoringFeature.Upscale,
-            "upscale",
-            "Stage upscaling",
-            [
-                Capability(StageCapability.PixelUpscale),
-                Capability(StageCapability.ModelUpscale),
-                Capability(StageCapability.LatentUpscale),
-                Capability(StageCapability.LatentModelUpscale),
-            ],
-            RequiresEveryCapability: false),
     ];
 
     internal static IReadOnlyList<ConditionalRuleCodeVocabularyEntry>
@@ -201,11 +160,6 @@ internal static class ArchitectureFeatureVocabulary
 
     internal static IEnumerable<string> WireNames(StageCapability value) =>
         Capabilities.Where(entry => entry.Supports(value)).Select(entry => entry.WireName);
-
-    internal static IEnumerable<string> UpscaleModeWireNames(StageCapability value) =>
-        Capabilities
-            .Where(entry => entry.Supports(value) && entry.UpscaleModeWireName is not null)
-            .Select(entry => entry.UpscaleModeWireName);
 
     internal static string AuthoringKey(AuthoringFeature feature) =>
         AuthoringFeatures.Single(entry => entry.Feature == feature).AuthoringKey;
@@ -276,7 +230,6 @@ internal static class ArchitectureFeatureVocabulary
         Line("export type GeneratedAuthoringFeatureCapability = readonly [");
         Line("    scope: CapabilityVocabularyScope,");
         Line("    wireName: string,");
-        Line("    upscaleMode: string | null,");
         Line("];");
         Line();
         Line("export const AUTHORING_FEATURES = [");
@@ -340,12 +293,9 @@ internal static class ArchitectureFeatureVocabulary
                 string onlyScope = CamelCase(only.Scope.ToString());
                 string onlyReference =
                     $"CAPABILITY_WIRE_NAMES.{onlyScope}.{CamelCase(only.SymbolName)}";
-                string onlyUpscaleMode = only.UpscaleModeWireName is null
-                    ? "null"
-                    : Quote(only.UpscaleModeWireName);
                 string inline =
                     $"    {feature.AuthoringKey}: "
-                    + $"[[{Quote(onlyScope)}, {onlyReference}, {onlyUpscaleMode}]],";
+                    + $"[[{Quote(onlyScope)}, {onlyReference}]],";
                 if (inline.Length <= 80)
                 {
                     Line(inline);
@@ -359,10 +309,7 @@ internal static class ArchitectureFeatureVocabulary
                 string symbol = CamelCase(capability.SymbolName);
                 string capabilityReference =
                     $"CAPABILITY_WIRE_NAMES.{scope}.{symbol}";
-                string upscaleMode = capability.UpscaleModeWireName is null
-                    ? "null"
-                    : Quote(capability.UpscaleModeWireName);
-                AppendBinding(scope, capabilityReference, upscaleMode);
+                AppendBinding(scope, capabilityReference);
             }
             Line("    ],");
         }
@@ -380,10 +327,9 @@ internal static class ArchitectureFeatureVocabulary
 
         return result.ToString();
 
-        void AppendBinding(string scope, string capabilityReference, string upscaleMode)
+        void AppendBinding(string scope, string capabilityReference)
         {
-            string binding =
-                $"        [{Quote(scope)}, {capabilityReference}, {upscaleMode}],";
+            string binding = $"        [{Quote(scope)}, {capabilityReference}],";
             if (binding.Length <= 80)
             {
                 Line(binding);
@@ -392,7 +338,6 @@ internal static class ArchitectureFeatureVocabulary
             Line("        [");
             Line($"            {Quote(scope)},");
             Line($"            {capabilityReference},");
-            Line($"            {upscaleMode},");
             Line("        ],");
         }
     }
@@ -404,9 +349,8 @@ internal static class ArchitectureFeatureVocabulary
 
     private static CapabilityVocabularyEntry For(
         StageCapability capability,
-        string wireName,
-        string upscaleModeWireName = null) =>
-        new(ClipCapability.None, capability, wireName, upscaleModeWireName);
+        string wireName) =>
+        new(ClipCapability.None, capability, wireName);
 
     private static CapabilityVocabularyEntry Capability(ClipCapability capability) =>
         Capabilities.Single(entry => entry.Clip == capability);

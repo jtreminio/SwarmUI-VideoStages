@@ -94,12 +94,7 @@ export const buildClipBody = (
     }
     body.appendChild(stages);
     const appendCapabilitySection = (
-        feature:
-            | "frameReferences"
-            | "stageLoras"
-            | "icLora"
-            | "initVideo"
-            | "retake",
+        feature: "frameReferences" | "icLora" | "retake",
         persisted: boolean,
         content: () => HTMLElement | DocumentFragment,
     ): void => {
@@ -125,7 +120,7 @@ export const buildClipBody = (
             selection.kind === "ref",
         ),
     );
-    appendCapabilitySection("stageLoras", clip.loras.length > 0, () =>
+    body.appendChild(
         buildClipLorasSection(context, clip, clipIdx, stageIdx, defaults),
     );
     appendCapabilitySection("icLora", clip.icLoras.length > 0, () =>
@@ -138,9 +133,7 @@ export const buildClipBody = (
             selection.kind === "ic-lora",
         ),
     );
-    appendCapabilitySection("initVideo", clip.initVideo !== null, () =>
-        buildInitVideoSection(context, clip, clipIdx, false),
-    );
+    body.appendChild(buildInitVideoSection(context, clip, clipIdx, false));
     appendCapabilitySection("retake", clip.retake !== null, () =>
         buildRetakeSection(context, clip, clipIdx, selection.kind === "retake"),
     );

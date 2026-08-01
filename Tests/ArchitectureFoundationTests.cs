@@ -432,7 +432,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Common_projection_ignores_stage_loras_before_fake_module_compilation()
+    public void Common_projection_keeps_stage_loras_for_every_architecture()
     {
         FakeRegistry registry = new();
         StageSpec stage = Stage(10, "fake-model") with
@@ -450,10 +450,9 @@ public class ArchitectureFoundationTests
             RootEnvironment.FromSpec(spec),
             ArchitecturePlanResolver.Resolve(spec, registry));
 
-        Assert.Contains(
+        Assert.DoesNotContain(
             plan.Diagnostics,
-            item => item.Code == "effective-request.unsupported-stage-loras-ignored"
-                && item.Severity == PlanDiagnosticSeverity.Warning);
+            item => item.Message.Contains("LoRA"));
         Assert.Equal(1, registry.CompileCounts[new ArchitectureId("fake")]);
         Assert.NotNull(Assert.Single(plan.Clips).ArchitecturePayload);
     }
@@ -729,103 +728,13 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Capability_validation_requires_video_input_for_every_later_stage()
+    public void Common_projection_requires_both_frame_reference_capabilities()
     {
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
-            stage: StageCapability.ImageInput);
-        FakeRegistry registry = new(fakeDescriptor: descriptor);
-        ClipSpec clip = GeneratedClip(
-            0,
-            Stage(10, "fake-model") with { ClipStageRawIndex = 0 },
-            Stage(11, "fake-model") with
-            {
-                ClipStageIndex = 1,
-                ClipStageRawIndex = 1,
-            }) with
-        {
-            AuthoredStages =
-            [
-                new(0, "fake-model", "fake-profile", false),
-                new(1, "fake-model", "fake-profile", false),
-            ],
-        };
-
-        VideoExecutionPlan plan = Compile(clip, registry);
-
-        Assert.Contains(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
-                && diagnostic.StageId == 11
-                && diagnostic.Message.Contains("video stage input for a later stage"));
-        Assert.Equal(0, registry.CompileCounts[new("fake")]);
-    }
-
-    [Fact]
-    public void Stage_running_architecture_must_advertise_major_prompt_support()
-    {
-        // Stage execution resolves the host's authored prompt, so an architecture that runs
-        // stages without publishing prompt support is rejected instead of silently consuming it.
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
-            stage: StageCapability.ImageInput | StageCapability.VideoInput) with
+        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor() with
         {
             Capabilities = FakeCapabilityDescriptor().Capabilities with
             {
                 Clip = ClipCapability.References,
-            },
-        };
-        StageSpec stage = Stage(10, "fake-model");
-        ClipSpec clip = GeneratedClip(0, stage);
-        Dictionary<int, ResolvedVideoModel> stageModels = new()
-        {
-            [stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
-                stage.Model,
-                new ModelProfileId("fake-profile"),
-                descriptor),
-        };
-
-        IReadOnlyList<PlanDiagnostic> diagnostics =
-            ArchitectureCapabilityValidator.Validate(
-                clip,
-                descriptor,
-                ArchitectureEntryMode.ImageToVideo,
-                stageModels);
-
-        Assert.Contains(
-            diagnostics,
-            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
-                && diagnostic.Message.Contains("major prompt"));
-    }
-
-    [Fact]
-    public void InitVideo_only_architecture_needs_no_major_prompt_support()
-    {
-        // The init-video-only architecture publishes no prompt capability and runs no stage, so the
-        // prompt gate must not fire for it.
-        VideoArchitectureDescriptor descriptor = NoneArchitecture.Descriptor;
-        ClipSpec clip = InitVideoClip(0);
-
-        IReadOnlyList<PlanDiagnostic> diagnostics =
-            ArchitectureCapabilityValidator.Validate(
-                clip,
-                descriptor,
-                ArchitectureEntryMode.InitVideo,
-                new Dictionary<int, ResolvedVideoModel>());
-
-        Assert.DoesNotContain(
-            diagnostics,
-            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
-                && diagnostic.Message.Contains("major prompt"));
-    }
-
-    [Fact]
-    public void Common_projection_requires_both_frame_reference_capabilities()
-    {
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
-            stage: StageCapability.ImageInput | StageCapability.VideoInput) with
-        {
-            Capabilities = FakeCapabilityDescriptor().Capabilities with
-            {
-                Clip = ClipCapability.Prompts | ClipCapability.References,
             },
         };
         FakeRegistry registry = new(fakeDescriptor: descriptor);
@@ -846,12 +755,10 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Common_projection_ignores_the_actual_unsupported_upscale_mode()
+    public void Common_projection_keeps_every_known_upscale_mode()
     {
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
-            stage: StageCapability.ImageInput
-                | StageCapability.VideoInput
-                | StageCapability.PixelUpscale);
+        // Upscale methods are architecture-neutral, so no architecture can refuse one.
+        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor();
         FakeRegistry registry = new(fakeDescriptor: descriptor);
         ClipSpec clip = GeneratedClip(
             0,
@@ -865,10 +772,9 @@ public class ArchitectureFoundationTests
         };
         VideoExecutionPlan plan = Compile(clip, registry);
 
-        Assert.Contains(
+        Assert.DoesNotContain(
             plan.Diagnostics,
-            item => item.Code == "effective-request.unsupported-upscale-ignored"
-                && item.Message.Contains("model-fake"));
+            item => item.Message.Contains("upscale"));
         Assert.Equal(1, registry.CompileCounts[new("fake")]);
     }
 
@@ -1563,14 +1469,13 @@ public class ArchitectureFoundationTests
         Assert.Null(none["profiles"]);
         Assert.Null(none["extras"]);
         Assert.Equal(
-            ["init-video", "audio-sources", "audio-segments"],
+            ["audio-sources", "audio-segments"],
             none["capabilities"]["clip"].Values<string>());
         Assert.Equal(
             ["Disabled", "Upload"],
             none["capabilities"]["audioSourceKinds"].Values<string>());
         Assert.Empty(none["capabilities"]["stage"]);
         Assert.Null(none["capabilities"]["output"]);
-        Assert.Empty(none["capabilities"]["upscaleModes"]);
         JObject ltx = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "ltx2");
@@ -1584,8 +1489,6 @@ public class ArchitectureFoundationTests
         Assert.Null(capabilities["clipAudio"]);
         Assert.Equal(
             [
-                "init-video",
-                "prompts",
                 "prompt-relay",
                 "references",
                 "reference-framing",
@@ -1598,9 +1501,6 @@ public class ArchitectureFoundationTests
             ],
             capabilities["clip"].Values<string>());
         Assert.Contains("frame-references", capabilities["stage"].Values<string>());
-        Assert.Equal(
-            ["pixel", "model", "latent", "latent-model"],
-            capabilities["upscaleModes"].Values<string>());
         Assert.Null(capabilities["initVideo"]);
         JObject crossfadeRule = (JObject)ltx["boundaryRules"]["crossfade"];
         Assert.Equal("boundary", crossfadeRule["scope"]);
@@ -1717,14 +1617,13 @@ public class ArchitectureFoundationTests
     }
 
     private static VideoArchitectureDescriptor FakeCapabilityDescriptor(
-        StageCapability stage =
-            StageCapability.ImageInput | StageCapability.VideoInput,
+        StageCapability stage = StageCapability.None,
         IReadOnlyList<ArchitectureEntryMode> entryModes = null) =>
         Descriptor("fake") with
         {
             AudioSourceKinds = [AudioSourceKind.Native],
             EntryModes = entryModes ?? [ArchitectureEntryMode.ImageToVideo],
-            Capabilities = new(ClipCapability.Prompts, stage),
+            Capabilities = new(ClipCapability.None, stage),
         };
 
     private static Session RestrictedSession(params string[] modelPrefixes)
@@ -1896,9 +1795,7 @@ public class ArchitectureFoundationTests
                 ArchitectureEntryMode.TextToVideo,
                 ArchitectureEntryMode.ImageToVideo,
             ],
-            new(
-                ClipCapability.Prompts,
-                StageCapability.ImageInput | StageCapability.VideoInput),
+            new(ClipCapability.None, StageCapability.None),
             new ArchitectureBoundaryPolicy(
                 new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>
                 {

@@ -295,9 +295,7 @@ public class ArchitectureRuntimeOwnershipTests
             id,
             [AudioSourceKind.Native],
             [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.InitVideo],
-            new(
-                ClipCapability.InitVideo,
-                StageCapability.ImageInput | StageCapability.VideoInput),
+            new(ClipCapability.None, StageCapability.None),
             new ArchitectureBoundaryPolicy(
                 new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>()));
     }

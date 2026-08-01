@@ -45,8 +45,6 @@ export interface FeatureSupportScope {
     capabilities: ArchitectureCapabilities;
     /** Persisted audio source, when the caller needs the value checked too. */
     audioSource?: string;
-    /** Persisted upscale method, when the caller needs the mode checked too. */
-    upscaleMethod?: string;
 }
 
 /**
@@ -61,21 +59,11 @@ export const architectureFeatureSupport = (
     const supports = (
         binding: GeneratedAuthoringFeatureCapability,
     ): boolean => {
-        const [capabilityScope, wireName, upscaleMode] = binding;
-        const typedCapability =
-            upscaleMode === null
-                ? capability[capabilityScope].includes(wireName)
-                : capability.upscaleModes.includes(upscaleMode);
-        return typedCapability;
+        const [capabilityScope, wireName] = binding;
+        return capability[capabilityScope].includes(wireName);
     };
 
-    let bindings = AUTHORING_FEATURE_CAPABILITIES[feature];
-    if (feature === "upscale" && scope.upscaleMethod !== undefined) {
-        const requestedMode = upscaleModeForMethod(scope.upscaleMethod);
-        bindings = bindings.filter(
-            ([, , upscaleMode]) => upscaleMode === requestedMode,
-        );
-    }
+    const bindings = AUTHORING_FEATURE_CAPABILITIES[feature];
     const supported = doesAuthoringFeatureRequireEveryCapability(feature)
         ? bindings.every(supports)
         : bindings.some(supports);

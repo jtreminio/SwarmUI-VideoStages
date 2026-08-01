@@ -74,8 +74,6 @@ export const renderPromptTrackRow = (
         const width = clipInnerWidth(layout.widthPx);
         const windows = clip.promptWindows ?? [];
         const clipCapabilities = capabilities?.forClip(clip);
-        const majorSupported =
-            clipCapabilities?.decision("majorPrompt").supported ?? true;
         const relaySupported =
             clipCapabilities?.decision("promptRelay").supported ?? true;
         const ownPrompt = `${clip.prompt ?? ""}`.trim();
@@ -102,17 +100,12 @@ export const renderPromptTrackRow = (
             (inherited && major !== ""
                 ? " — inherited from the global prompt; click to set a clip prompt"
                 : " — click to edit");
-        if (majorSupported || ownPrompt !== "") {
-            const renderedMajorTitle = majorSupported
-                ? majorTitle
-                : "Persisted major prompt is unsupported by this architecture; click to inspect or remove it";
-            parts.push(
-                `<div class="vst-major-seg${majorClass}${majorSupported ? "" : " vst-capability-disabled"}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(renderedMajorTitle)}">` +
-                    overlays +
-                    `<span class="vst-major-text">${escapeHtml(majorText)}</span>` +
-                    `</div>`,
-            );
-        }
+        parts.push(
+            `<div class="vst-major-seg${majorClass}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(majorTitle)}">` +
+                overlays +
+                `<span class="vst-major-text">${escapeHtml(majorText)}</span>` +
+                `</div>`,
+        );
 
         const minorSegments = windows
             .map((window, windowIdx) => {

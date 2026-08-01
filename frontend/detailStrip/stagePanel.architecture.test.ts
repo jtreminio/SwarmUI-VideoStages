@@ -102,6 +102,17 @@ const context = (
         testAuthoringTransactionSnapshot(models, generatedEntryMode),
 });
 
+const upscaleMethodOptions = (column: HTMLElement): string[] => {
+    const field = Array.from(
+        column.querySelectorAll<HTMLElement>(".auto-input"),
+    ).find((entry) =>
+        entry.querySelector("label")?.textContent?.includes("Upscale Method"),
+    );
+    return Array.from(field?.querySelectorAll("option") ?? []).map(
+        (option) => option.value,
+    );
+};
+
 const modelOptions = (column: HTMLElement): HTMLOptionElement[] => {
     const modelField = Array.from(
         column.querySelectorAll<HTMLElement>(".auto-input"),
@@ -450,6 +461,62 @@ describe("stage architecture model filtering", () => {
         );
         expect(add?.disabled).toBe(true);
         expect(panel.querySelector("select")).toBeNull();
+    });
+
+    it("never offers plain latent upscaling and leaves latent-model alone", () => {
+        const models = catalogWithWan();
+        const defaults = {
+            ...testRootDefaults(models),
+            upscaleMethodValues: [
+                "pixel-lanczos",
+                "model-ultrasharp.safetensors",
+                "latent-nearest-exact",
+                "latentmodel-detail.safetensors",
+            ],
+            upscaleMethodLabels: [
+                "Lanczos",
+                "UltraSharp",
+                "Latent Nearest",
+                "Latent Detail",
+            ],
+        };
+        const methodsFor = (
+            model: string,
+            upscaleMethod = "pixel-lanczos",
+        ): string[] => {
+            const clip = minimalClip({
+                stages: [
+                    minimalStage({ model, upscaleMethod }),
+                    minimalStage({ model, upscaleMethod }),
+                ],
+            });
+            return upscaleMethodOptions(
+                buildStageParamsColumn(
+                    context(models),
+                    clip,
+                    0,
+                    1,
+                    clip.stages[1],
+                    defaults,
+                ),
+            );
+        };
+
+        const withoutPlainLatent = [
+            "pixel-lanczos",
+            "model-ultrasharp.safetensors",
+            "latentmodel-detail.safetensors",
+        ];
+        expect(methodsFor("ltx")).toEqual(withoutPlainLatent);
+        expect(methodsFor("wan-current.safetensors")).toEqual(
+            withoutPlainLatent,
+        );
+        // A latent method persisted before the option was withdrawn stays visible so it can
+        // be changed.
+        expect(methodsFor("ltx", "latent-nearest-exact")).toEqual([
+            "latent-nearest-exact",
+            ...withoutPlainLatent,
+        ]);
     });
 
     it("offers every supported architecture model on stage 0", () => {

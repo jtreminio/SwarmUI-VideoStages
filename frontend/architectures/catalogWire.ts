@@ -208,7 +208,6 @@ const isCapabilities = (value: unknown): value is ArchitectureCapabilities => {
         !hasExactKeys(value, [
             "clip",
             "stage",
-            "upscaleModes",
             "entryModes",
             "audioSourceKinds",
         ])
@@ -216,12 +215,9 @@ const isCapabilities = (value: unknown): value is ArchitectureCapabilities => {
         return false;
     }
     return (
-        [
-            value.clip,
-            value.stage,
-            value.upscaleModes,
-            value.audioSourceKinds,
-        ].every(isUniqueStringArray) && isEntryModeArray(value.entryModes)
+        [value.clip, value.stage, value.audioSourceKinds].every(
+            isUniqueStringArray,
+        ) && isEntryModeArray(value.entryModes)
     );
 };
 

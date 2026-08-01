@@ -40,9 +40,7 @@ internal sealed class Ltx2ArchitectureModule :
             ArchitectureEntryMode.InitVideo,
         ],
         new(
-            ClipCapability.InitVideo
-                | ClipCapability.Prompts
-                | ClipCapability.PromptRelay
+            ClipCapability.PromptRelay
                 | ClipCapability.References
                 | ClipCapability.Retake
                 | ClipCapability.AudioSources
@@ -51,15 +49,7 @@ internal sealed class Ltx2ArchitectureModule :
                 | ClipCapability.AudioDerivedDuration
                 | ClipCapability.ControlSignalDerivedDuration
                 | ClipCapability.ReferenceFraming,
-            StageCapability.ImageInput
-                | StageCapability.VideoInput
-                | StageCapability.PixelUpscale
-                | StageCapability.ModelUpscale
-                | StageCapability.LatentUpscale
-                | StageCapability.LatentModelUpscale
-                | StageCapability.Lora
-                | StageCapability.IcLora
-                | StageCapability.FrameReferences),
+            StageCapability.IcLora | StageCapability.FrameReferences),
         Ltx2BoundaryPolicy.Instance)
     {
         FrameGrid = FrameGrid,

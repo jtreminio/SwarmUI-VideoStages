@@ -482,8 +482,10 @@ public sealed class EffectiveVideoRequestTests
                 stage.ModelProfileId));
         Assert.Empty(effective.IcLoras);
         Assert.All(effective.Stages, stage => Assert.Empty(stage.IcLoraStrengths));
-        Assert.Equal(1, effective.Stages[1].Upscale);
-        Assert.Equal("pixel-lanczos", effective.Stages[1].UpscaleMethod);
+        Assert.Equal(2, effective.Stages[1].Upscale);
+        Assert.Equal(
+            "latentmodel-detail.safetensors",
+            effective.Stages[1].UpscaleMethod);
         Assert.All(
             request.Decisions.Where(decision =>
                 decision.Code.Contains("stale", StringComparison.Ordinal)
@@ -531,13 +533,9 @@ public sealed class EffectiveVideoRequestTests
         Assert.Contains(
             plan.Diagnostics,
             diagnostic => diagnostic.Code == "effective-request.unsupported-ic-lora-ignored");
-        Assert.Contains(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code
-                == "effective-request.unsupported-upscale-ignored");
         StockHostVideoStagePayload payload = plan.Clips[0].Stages[1].RequireWanPayload();
-        Assert.Equal(StageUpscaleMode.None, payload.Core.Upscale.Mode);
-        Assert.Equal(1, payload.Core.Upscale.Factor);
+        Assert.Equal(StageUpscaleMode.Model, payload.Core.Upscale.Mode);
+        Assert.Equal(2, payload.Core.Upscale.Factor);
     }
 
     [Fact]
@@ -685,20 +683,13 @@ public sealed class EffectiveVideoRequestTests
         Assert.Null(effective.UploadedAudio);
         Assert.Empty(effective.IcLoras);
         Assert.All(effective.Stages, stage => Assert.Empty(stage.IcLoraStrengths));
-        Assert.Equal(1, effective.Stages[0].Upscale);
+        Assert.Equal(2, effective.Stages[0].Upscale);
         Assert.Contains(
             request.Decisions,
             decision => decision.Code
                     == "effective-request.unsupported-ic-lora-ignored"
                 && decision.Message.Contains(
                     "Host Video does not support",
-                    StringComparison.Ordinal));
-        Assert.Contains(
-            request.Decisions,
-            decision => decision.Code
-                    == "effective-request.unsupported-upscale-ignored"
-                && decision.Message.Contains(
-                    "unsupported upscale",
                     StringComparison.Ordinal));
 
         // Supported authoring remains intact while the unsupported fields are
@@ -1129,7 +1120,6 @@ public sealed class EffectiveVideoRequestTests
         Assert.Contains(warnings, warning => warning.Contains("cached architecture"));
         Assert.Contains(warnings, warning => warning.Contains("cached model profile"));
         Assert.Contains(warnings, warning => warning.Contains("IC-LoRA data"));
-        Assert.Contains(warnings, warning => warning.Contains("unsupported upscale method"));
         ClipSpec authored = Assert.Single(generator.GetVideoStagesSpec().Clips);
         Assert.Equal("old-wan-cache", authored.AuthoredArchitectureHint);
         Assert.Equal("old-wan-profile", authored.AuthoredModelProfileHint);
@@ -1137,7 +1127,7 @@ public sealed class EffectiveVideoRequestTests
         Assert.Equal(2, authored.Stages[1].Upscale);
         Assert.Equal([0.8], authored.Stages[1].IcLoraStrengths);
         Assert.Equal(
-            StageUpscaleMode.None,
+            StageUpscaleMode.Latent,
             plan.Clips[0].Stages[1].Core.Upscale.Mode);
     }
 

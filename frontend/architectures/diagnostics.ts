@@ -98,53 +98,27 @@ const persistedCapabilityIssues = (
         "Retake",
     );
     unsupported(
-        !supports("majorPrompt") && clip.prompt.trim().length > 0,
-        "majorPrompt",
-        "major-prompt",
-        "Major prompt",
-    );
-    unsupported(
-        !supports("initVideo") && clip.initVideo !== null,
-        "initVideo",
-        "init-video",
-        "Source video",
-    );
-    unsupported(
         !supports("promptRelay") && clip.promptWindows.length > 0,
         "promptRelay",
         "prompt-relay",
         "Prompt relay",
     );
-    unsupported(
-        !supports("stageLoras") &&
-            clip.stages.some((stage) =>
-                clip.loras.some(
-                    (_, index) => (stage.loraWeights[index] ?? 1) !== 0,
-                ),
+    // Upscale methods are architecture-neutral, so only an unclassifiable one is a defect.
+    if (
+        clip.stages.some(
+            (stage) =>
+                stage.upscale !== 1 &&
+                upscaleModeForMethod(stage.upscaleMethod) === "unsupported",
+        )
+    ) {
+        diagnostics.push(
+            issue(
+                "architecture.unsupported.upscale",
+                `Stage upscaling is persisted on Clip ${clipIdx}, but its upscale method is not a known method. Remove it or choose a known method.`,
+                clipIdx,
             ),
-        "stageLoras",
-        "stage-loras",
-        "LoRAs",
-    );
-    const unsupportedUpscales = clip.stages.filter(
-        (stage) =>
-            stage.upscale !== 1 &&
-            !supports("upscale", { upscaleMethod: stage.upscaleMethod }),
-    );
-    const isKnownUpscale = (method: string): boolean =>
-        upscaleModeForMethod(method) !== "unsupported";
-    unsupported(
-        unsupportedUpscales.length > 0,
-        "upscale",
-        "upscale",
-        "Stage upscaling",
-        isIgnoredWhenUnsupportedFeature("upscale") &&
-            unsupportedUpscales.every((stage) =>
-                isKnownUpscale(stage.upscaleMethod),
-            )
-            ? "warning"
-            : "error",
-    );
+        );
+    }
     const sourceKind = audioSourceKind(clip.audioSource);
     const clipAudioCapabilitySupported = supports("clipAudio");
     const standaloneAudioSupported =

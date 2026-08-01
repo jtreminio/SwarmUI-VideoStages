@@ -4,7 +4,6 @@ import {
     testArchitectureCapabilities,
     testArchitectureCatalog,
     testAuthoringTransactionSnapshot,
-    testRootDefaults,
     testSourceOnlyArchitecture,
 } from "../__test_helpers__/architectureFixtures";
 import {
@@ -20,7 +19,6 @@ import type { Clip, VideoStagesConfig } from "../types";
 import { buildAudioBody } from "./audioPanel";
 import { buildClipBody } from "./clipPanel";
 import type { DetailStripContext } from "./context";
-import { buildStageParamsColumn } from "./stagePanel";
 
 /** LTX-2 catalog with frame references and upscaling taken away. */
 const restrictedCatalog = (): ArchitectureModelCatalog => {
@@ -35,7 +33,6 @@ const restrictedCatalog = (): ArchitectureModelCatalog => {
             "audio-segments",
         ],
         stage: ["image-input", "video-input", "lora", "ic-lora"],
-        upscaleModes: [],
     });
     return models;
 };
@@ -140,30 +137,6 @@ describe("persisted-but-unsupported repair contract", () => {
         expect(keyboardOperable(remove ?? null)).toBe(true);
         remove?.click();
         expect(ctx.deleteRefEntry).toHaveBeenCalledWith(0, 0);
-    });
-
-    it("offers a reset for an unsupported persisted upscale", () => {
-        const models = restrictedCatalog();
-        const stage = minimalStage({ upscale: 2 });
-        const clip = minimalClip({ stages: [minimalStage(), stage] });
-        const clips = [clip];
-        const ctx = context(models, clips);
-
-        const column = buildStageParamsColumn(
-            ctx,
-            clip,
-            0,
-            1,
-            stage,
-            testRootDefaults(models),
-        );
-
-        const reset = column.querySelector<HTMLButtonElement>(
-            ".vst-reset-unsupported-upscale",
-        );
-        expect(keyboardOperable(reset)).toBe(true);
-        reset?.click();
-        expect(clips[0].stages[1].upscale).toBe(1);
     });
 
     it("keeps unsupported green framing visible with an operable reset", () => {

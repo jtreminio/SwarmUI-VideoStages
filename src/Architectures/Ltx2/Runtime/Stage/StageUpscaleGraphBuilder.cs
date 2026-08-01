@@ -1,7 +1,3 @@
-using ComfyTyped.Core;
-using ComfyTyped.Generated;
-using ComfyTyped.SwarmUI;
-using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Planning;
@@ -79,13 +75,13 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
 
         if (upscale.Mode == StageUpscaleMode.Model)
         {
-            ImageScaleNode fitScale = AddModelUpscaleChain(
-                upscaleSource.Path,
-                upscale.MethodName,
+            WGNodeData scaled = new StageModelUpscaleGraphBuilder(g).Apply(
+                upscaleSource,
                 targetWidth,
-                targetHeight);
+                targetHeight,
+                upscale.MethodName);
             return PublishUpscaledMedia(
-                upscaleSource.WithPath(fitScale.IMAGE),
+                scaled,
                 dimensions,
                 targetWidth,
                 targetHeight);
@@ -135,25 +131,4 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
         return detached;
     }
 
-    private ImageScaleNode AddModelUpscaleChain(
-        JArray sourcePath,
-        string modelName,
-        int targetWidth,
-        int targetHeight)
-    {
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        UpscaleModelLoaderNode loader = bridge.AddNode(new UpscaleModelLoaderNode()).With(
-            ModelName: modelName);
-
-        ImageUpscaleWithModelNode upscale = bridge.AddNode(new ImageUpscaleWithModelNode().With(
-            UpscaleModel: loader.UPSCALEMODEL));
-        upscale.Image.ConnectFromPath(bridge, sourcePath);
-
-        return bridge.AddNode(new ImageScaleNode().With(
-            Width: targetWidth,
-            Height: targetHeight,
-            UpscaleMethod: "lanczos",
-            Crop: "disabled",
-            Image: upscale.IMAGE));
-    }
 }

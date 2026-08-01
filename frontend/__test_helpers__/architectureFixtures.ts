@@ -33,7 +33,6 @@ export const testArchitectureCapabilities = (
         "frame-references",
         "pixel-upscale",
     ],
-    upscaleModes: ["pixel"],
     entryModes: ["text-to-video", "image-to-video", "init-video"],
     audioSourceKinds: ["Native", "Upload"],
     ...overrides,
@@ -215,7 +214,6 @@ export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
     capabilities: testArchitectureCapabilities({
         clip: ["init-video", "audio-sources", "audio-segments"],
         stage: [],
-        upscaleModes: [],
         entryModes: ["init-video"],
         audioSourceKinds: ["Disabled", "Upload"],
     }),
@@ -256,7 +254,6 @@ export const fakeArchitectureCatalog = (
             capabilities: testArchitectureCapabilities({
                 clip: ["prompts"],
                 stage: [],
-                upscaleModes: [],
                 entryModes: ["text-to-video", "image-to-video", "init-video"],
                 audioSourceKinds: ["Native"],
             }),

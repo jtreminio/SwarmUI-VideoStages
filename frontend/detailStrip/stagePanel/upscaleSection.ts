@@ -1,30 +1,25 @@
-import { upscaleModeForMethod } from "../../architectures/policy";
 import {
     buildField,
     buildOptionSelect,
     type OptionSpec,
 } from "../../detailWidgets";
-import { applyPersistedCapabilityRepair } from "../capabilityUi";
 import type { StagePanelBindings } from "./types";
 
 const UPSCALE_EPSILON = 1e-6;
+
+/** Plain latent scaling is never offered; nothing in the pipeline consumes it. */
+const isLatentUpscaleMethod = (method: string): boolean =>
+    method.trim().toLowerCase().startsWith("latent-");
 
 export const appendStageUpscaleSection = (
     bindings: StagePanelBindings,
     isRefine: boolean,
 ): void => {
     if (!isRefine) return;
-    const { stage, defaults, fields, stageCapabilities, slider, commit } =
-        bindings;
-    const upscaleState = stageCapabilities.authoringState(
-        "upscale",
-        stage.upscale !== 1,
-    );
-    if (!upscaleState.visible) return;
-
+    const { stage, defaults, fields, slider, commit } = bindings;
     const supportedMethods: OptionSpec[] = defaults.upscaleMethodValues.flatMap(
         (value, index) =>
-            stageCapabilities.upscaleModes.includes(upscaleModeForMethod(value))
+            !isLatentUpscaleMethod(value)
                 ? [
                       {
                           value,
@@ -88,24 +83,4 @@ export const appendStageUpscaleSection = (
     );
     fields.append(upscaleSlider, methodField);
     syncMethod(stage.upscale);
-    if (!upscaleState.enabled) {
-        applyPersistedCapabilityRepair(upscaleSlider, upscaleState, {
-            // A persisted unsupported upscale must be repairable from here:
-            // 1× is the removal of the value, so it is this section's remove.
-            repair:
-                Math.abs(stage.upscale - 1) < UPSCALE_EPSILON
-                    ? undefined
-                    : {
-                          label: "Reset upscale to 1×",
-                          className: "vst-reset-unsupported-upscale",
-                          onRepair: () => {
-                              commit((target) => {
-                                  target.upscale = 1;
-                              });
-                              bindings.context.render();
-                          },
-                      },
-        });
-        applyPersistedCapabilityRepair(methodField, upscaleState);
-    }
 };

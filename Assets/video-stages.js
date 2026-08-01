@@ -444,8 +444,6 @@
   // frontend/architectures/generatedFeatures.ts
   var CAPABILITY_WIRE_NAMES = {
     clip: {
-      initVideo: "init-video",
-      prompts: "prompts",
       promptRelay: "prompt-relay",
       references: "references",
       referenceFraming: "reference-framing",
@@ -457,13 +455,6 @@
       controlSignalDerivedDuration: "control-signal-derived-duration"
     },
     stage: {
-      imageInput: "image-input",
-      videoInput: "video-input",
-      pixelUpscale: "pixel-upscale",
-      modelUpscale: "model-upscale",
-      latentUpscale: "latent-upscale",
-      latentModelUpscale: "latent-model-upscale",
-      lora: "lora",
       icLora: "ic-lora",
       frameReferences: "frame-references"
     }
@@ -477,9 +468,7 @@
     "audioReuse",
     "audioDerivedDuration",
     "controlSignalDerivedDuration",
-    "stageLoras",
-    "icLora",
-    "upscale"
+    "icLora"
   ];
   var AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY = [
     "frameReferences"
@@ -487,52 +476,33 @@
   var doesAuthoringFeatureRequireEveryCapability = (feature) => AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY.includes(feature);
   var isIgnoredWhenUnsupportedFeature = (feature) => IGNORED_WHEN_UNSUPPORTED_FEATURES.includes(feature);
   var AUTHORING_FEATURE_LABELS = {
-    initVideo: "Source video",
     frameReferences: "Frame references",
     referenceFraming: "Reference framing",
     retake: "Retakes",
-    majorPrompt: "Major prompts",
     promptRelay: "Relay prompts",
     clipAudio: "Clip audio",
     audioReuse: "Captured stage audio reuse",
     audioDerivedDuration: "Audio-derived clip duration",
     controlSignalDerivedDuration: "Control-signal-derived clip duration",
-    stageLoras: "LoRAs",
-    icLora: "IC-LoRA",
-    upscale: "Stage upscaling"
+    icLora: "IC-LoRA"
   };
   var AUTHORING_FEATURE_CAPABILITIES = {
-    initVideo: [["clip", CAPABILITY_WIRE_NAMES.clip.initVideo, null]],
     frameReferences: [
-      ["clip", CAPABILITY_WIRE_NAMES.clip.references, null],
-      ["stage", CAPABILITY_WIRE_NAMES.stage.frameReferences, null]
+      ["clip", CAPABILITY_WIRE_NAMES.clip.references],
+      ["stage", CAPABILITY_WIRE_NAMES.stage.frameReferences]
     ],
-    referenceFraming: [
-      ["clip", CAPABILITY_WIRE_NAMES.clip.referenceFraming, null]
-    ],
-    retake: [["clip", CAPABILITY_WIRE_NAMES.clip.retake, null]],
-    majorPrompt: [["clip", CAPABILITY_WIRE_NAMES.clip.prompts, null]],
-    promptRelay: [["clip", CAPABILITY_WIRE_NAMES.clip.promptRelay, null]],
-    clipAudio: [["clip", CAPABILITY_WIRE_NAMES.clip.audioSources, null]],
-    audioReuse: [["clip", CAPABILITY_WIRE_NAMES.clip.audioReuse, null]],
+    referenceFraming: [["clip", CAPABILITY_WIRE_NAMES.clip.referenceFraming]],
+    retake: [["clip", CAPABILITY_WIRE_NAMES.clip.retake]],
+    promptRelay: [["clip", CAPABILITY_WIRE_NAMES.clip.promptRelay]],
+    clipAudio: [["clip", CAPABILITY_WIRE_NAMES.clip.audioSources]],
+    audioReuse: [["clip", CAPABILITY_WIRE_NAMES.clip.audioReuse]],
     audioDerivedDuration: [
-      ["clip", CAPABILITY_WIRE_NAMES.clip.audioDerivedDuration, null]
+      ["clip", CAPABILITY_WIRE_NAMES.clip.audioDerivedDuration]
     ],
     controlSignalDerivedDuration: [
-      ["clip", CAPABILITY_WIRE_NAMES.clip.controlSignalDerivedDuration, null]
+      ["clip", CAPABILITY_WIRE_NAMES.clip.controlSignalDerivedDuration]
     ],
-    stageLoras: [["stage", CAPABILITY_WIRE_NAMES.stage.lora, null]],
-    icLora: [["stage", CAPABILITY_WIRE_NAMES.stage.icLora, null]],
-    upscale: [
-      ["stage", CAPABILITY_WIRE_NAMES.stage.pixelUpscale, "pixel"],
-      ["stage", CAPABILITY_WIRE_NAMES.stage.modelUpscale, "model"],
-      ["stage", CAPABILITY_WIRE_NAMES.stage.latentUpscale, "latent"],
-      [
-        "stage",
-        CAPABILITY_WIRE_NAMES.stage.latentModelUpscale,
-        "latent-model"
-      ]
-    ]
+    icLora: [["stage", CAPABILITY_WIRE_NAMES.stage.icLora]]
   };
   var CONDITIONAL_RULE_CODES = {
     audioReuseRequiresStages: "audio.reuse.requires_three_stages",
@@ -595,10 +565,6 @@
       return {
         clip: intersect(effective.clip, capabilities.clip),
         stage: intersect(effective.stage, capabilities.stage),
-        upscaleModes: intersect(
-          effective.upscaleModes,
-          capabilities.upscaleModes
-        ),
         entryModes: intersect(
           effective.entryModes,
           capabilities.entryModes
@@ -740,17 +706,10 @@
   var architectureFeatureSupport = (feature, scope) => {
     const capability = scope.capabilities;
     const supports = (binding) => {
-      const [capabilityScope, wireName, upscaleMode] = binding;
-      const typedCapability = upscaleMode === null ? capability[capabilityScope].includes(wireName) : capability.upscaleModes.includes(upscaleMode);
-      return typedCapability;
+      const [capabilityScope, wireName] = binding;
+      return capability[capabilityScope].includes(wireName);
     };
-    let bindings = AUTHORING_FEATURE_CAPABILITIES[feature];
-    if (feature === "upscale" && scope.upscaleMethod !== void 0) {
-      const requestedMode = upscaleModeForMethod(scope.upscaleMethod);
-      bindings = bindings.filter(
-        ([, , upscaleMode]) => upscaleMode === requestedMode
-      );
-    }
+    const bindings = AUTHORING_FEATURE_CAPABILITIES[feature];
     const supported = doesAuthoringFeatureRequireEveryCapability(feature) ? bindings.every(supports) : bindings.some(supports);
     if (!supported) {
       return false;
@@ -816,12 +775,7 @@
       if ((stage.upscale ?? 1) === 1 || upscaleMode !== "latent" && upscaleMode !== "latent-model") {
         return false;
       }
-      const model = modelForName(stage.model);
-      const descriptor = model?.architectureId ? architectureForId(model.architectureId) : void 0;
-      return !descriptor || architectureFeatureSupport("upscale", {
-        capabilities: effectiveModelCapabilities(model, descriptor),
-        upscaleMethod: stage.upscaleMethod ?? ""
-      });
+      return true;
     }).map((stage) => stage.model);
   };
   var resolveClipFrameGridForLookup = (clip, modelForName, architectureForId) => {
@@ -988,18 +942,14 @@
     if (!isRecord(value) || !hasExactKeys(value, [
       "clip",
       "stage",
-      "upscaleModes",
       "entryModes",
       "audioSourceKinds"
     ])) {
       return false;
     }
-    return [
-      value.clip,
-      value.stage,
-      value.upscaleModes,
-      value.audioSourceKinds
-    ].every(isUniqueStringArray) && isEntryModeArray(value.entryModes);
+    return [value.clip, value.stage, value.audioSourceKinds].every(
+      isUniqueStringArray
+    ) && isEntryModeArray(value.entryModes);
   };
   var hasCompleteBoundaryRules = (value) => {
     if (!isRecord(value)) {
@@ -1500,39 +1450,28 @@
       const capabilities = descriptor ? effectiveModelCapabilities(resolvedModel, descriptor) : null;
       const decision = (feature) => {
         if (feature === "stageLoras" && descriptor && capabilities) {
-          const supported2 = architectureFeatureSupport(feature, {
-            capabilities
-          });
-          const architectureRule = supported2 ? conditionalRule(
+          const architectureRule = conditionalRule(
             descriptor.rules,
             CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage
-          ) : null;
+          );
           const violatedRule = architectureRule && evaluateConditionalRule(architectureRule, { clip, stage }) ? architectureRule : null;
           return {
-            supported: supported2 && !violatedRule,
-            reason: supported2 && !violatedRule ? "" : violatedRule?.reason ?? `LoRAs are not supported by ${descriptor.label}.`,
+            supported: !violatedRule,
+            reason: violatedRule?.reason ?? "",
             rule: violatedRule
           };
         }
         if (feature === "sampler" || feature === "scheduler") {
-          const supported2 = descriptor !== void 0 && resolvedModel !== void 0 && ((resolvedModel.entryAbilities?.length ?? 0) > 0 || resolvedModel.entryModes.length > 0);
+          const supported = descriptor !== void 0 && resolvedModel !== void 0 && ((resolvedModel.entryAbilities?.length ?? 0) > 0 || resolvedModel.entryModes.length > 0);
           return {
-            supported: supported2,
-            reason: supported2 ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection requires a resolved generating video model.`,
+            supported,
+            reason: supported ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection requires a resolved generating video model.`,
             rule: null
           };
         }
-        const supported = descriptor !== void 0 && capabilities !== null && architectureFeatureSupport("upscale", {
-          capabilities
-        });
-        return {
-          supported,
-          reason: supported ? "" : descriptor ? architectureReason(descriptor.label, "upscale") : noArchitectureReason("upscale"),
-          rule: null
-        };
+        return { supported: true, reason: "", rule: null };
       };
       const stageView = {
-        upscaleModes: capabilities?.upscaleModes ?? [],
         decision,
         authoringState: (feature, persisted) => {
           const result = decision(feature);
@@ -6289,46 +6228,22 @@
       "Retake"
     );
     unsupported(
-      !supports("majorPrompt") && clip.prompt.trim().length > 0,
-      "majorPrompt",
-      "major-prompt",
-      "Major prompt"
-    );
-    unsupported(
-      !supports("initVideo") && clip.initVideo !== null,
-      "initVideo",
-      "init-video",
-      "Source video"
-    );
-    unsupported(
       !supports("promptRelay") && clip.promptWindows.length > 0,
       "promptRelay",
       "prompt-relay",
       "Prompt relay"
     );
-    unsupported(
-      !supports("stageLoras") && clip.stages.some(
-        (stage) => clip.loras.some(
-          (_, index) => (stage.loraWeights[index] ?? 1) !== 0
+    if (clip.stages.some(
+      (stage) => stage.upscale !== 1 && upscaleModeForMethod(stage.upscaleMethod) === "unsupported"
+    )) {
+      diagnostics.push(
+        issue(
+          "architecture.unsupported.upscale",
+          `Stage upscaling is persisted on Clip ${clipIdx}, but its upscale method is not a known method. Remove it or choose a known method.`,
+          clipIdx
         )
-      ),
-      "stageLoras",
-      "stage-loras",
-      "LoRAs"
-    );
-    const unsupportedUpscales = clip.stages.filter(
-      (stage) => stage.upscale !== 1 && !supports("upscale", { upscaleMethod: stage.upscaleMethod })
-    );
-    const isKnownUpscale = (method) => upscaleModeForMethod(method) !== "unsupported";
-    unsupported(
-      unsupportedUpscales.length > 0,
-      "upscale",
-      "upscale",
-      "Stage upscaling",
-      isIgnoredWhenUnsupportedFeature("upscale") && unsupportedUpscales.every(
-        (stage) => isKnownUpscale(stage.upscaleMethod)
-      ) ? "warning" : "error"
-    );
+      );
+    }
     const sourceKind = audioSourceKind(clip.audioSource);
     const clipAudioCapabilitySupported = supports("clipAudio");
     const standaloneAudioSupported = capabilities.audioSourceKinds.includes("Native");
@@ -11390,7 +11305,7 @@
       const clips = state.clips;
       const target = findClipByStableId(clips, operation.clipId);
       const { capabilities, defaults } = context.authoring();
-      if (!target || !capabilities.forClip(target).decision("initVideo").supported) {
+      if (!target) {
         return;
       }
       target.initVideo = initVideoFromProbe(
@@ -12383,16 +12298,12 @@ The conversion is one undoable change.`;
 
   // frontend/detailStrip/stagePanel/upscaleSection.ts
   var UPSCALE_EPSILON = 1e-6;
+  var isLatentUpscaleMethod = (method) => method.trim().toLowerCase().startsWith("latent-");
   var appendStageUpscaleSection = (bindings, isRefine) => {
     if (!isRefine) return;
-    const { stage, defaults, fields, stageCapabilities, slider, commit } = bindings;
-    const upscaleState = stageCapabilities.authoringState(
-      "upscale",
-      stage.upscale !== 1
-    );
-    if (!upscaleState.visible) return;
+    const { stage, defaults, fields, slider, commit } = bindings;
     const supportedMethods = defaults.upscaleMethodValues.flatMap(
-      (value, index) => stageCapabilities.upscaleModes.includes(upscaleModeForMethod(value)) ? [
+      (value, index) => !isLatentUpscaleMethod(value) ? [
         {
           value,
           label: defaults.upscaleMethodLabels[index] ?? value
@@ -12445,23 +12356,6 @@ The conversion is one undoable change.`;
     );
     fields.append(upscaleSlider, methodField);
     syncMethod(stage.upscale);
-    if (!upscaleState.enabled) {
-      applyPersistedCapabilityRepair(upscaleSlider, upscaleState, {
-        // A persisted unsupported upscale must be repairable from here:
-        // 1× is the removal of the value, so it is this section's remove.
-        repair: Math.abs(stage.upscale - 1) < UPSCALE_EPSILON ? void 0 : {
-          label: "Reset upscale to 1×",
-          className: "vst-reset-unsupported-upscale",
-          onRepair: () => {
-            commit((target) => {
-              target.upscale = 1;
-            });
-            bindings.context.render();
-          }
-        }
-      });
-      applyPersistedCapabilityRepair(methodField, upscaleState);
-    }
   };
 
   // frontend/detailStrip/stagePanel.ts
@@ -12665,10 +12559,8 @@ The conversion is one undoable change.`;
         selection.kind === "ref"
       )
     );
-    appendCapabilitySection(
-      "stageLoras",
-      clip.loras.length > 0,
-      () => buildClipLorasSection(context, clip, clipIdx, stageIdx, defaults)
+    body.appendChild(
+      buildClipLorasSection(context, clip, clipIdx, stageIdx, defaults)
     );
     appendCapabilitySection(
       "icLora",
@@ -12682,11 +12574,7 @@ The conversion is one undoable change.`;
         selection.kind === "ic-lora"
       )
     );
-    appendCapabilitySection(
-      "initVideo",
-      clip.initVideo !== null,
-      () => buildInitVideoSection(context, clip, clipIdx, false)
-    );
+    body.appendChild(buildInitVideoSection(context, clip, clipIdx, false));
     appendCapabilitySection(
       "retake",
       clip.retake !== null,
@@ -12790,27 +12678,6 @@ The conversion is one undoable change.`;
       flattenContent: true,
       className: "vst-detail-prompt-major"
     });
-    const decision = ctx.authoring().capabilities.forClip(clip).decision("majorPrompt");
-    if (!decision.supported) {
-      applyPersistedCapabilityRepair(built.section, decision);
-      if (clip.prompt.trim()) {
-        built.content.appendChild(
-          buildCapabilityRepairButton({
-            label: "Remove unsupported clip prompt",
-            className: "vst-remove-unsupported-prompt",
-            onRepair: () => {
-              ctx.commit((clips) => {
-                const target = clips[clipIdx];
-                if (target) {
-                  target.prompt = "";
-                }
-              });
-              ctx.render();
-            }
-          })
-        );
-      }
-    }
     return built.section;
   };
   var buildRelayPromptSection = (ctx, clip, clipIdx, selectedWindowIdx, open) => {
@@ -14946,9 +14813,6 @@ The conversion is one undoable change.`;
       if (clipIdx === null || !getClips()[clipIdx]) {
         return;
       }
-      if (getCapabilities && !getCapabilities().forClip(getClips()[clipIdx]).decision("majorPrompt").supported && !getClips()[clipIdx].prompt.trim()) {
-        return;
-      }
       setSelection({ kind: "prompt-major", clipIdx });
     }
   });
@@ -15571,7 +15435,6 @@ The conversion is one undoable change.`;
       const width = clipInnerWidth(layout.widthPx);
       const windows = clip.promptWindows ?? [];
       const clipCapabilities = capabilities?.forClip(clip);
-      const majorSupported = clipCapabilities?.decision("majorPrompt").supported ?? true;
       const relaySupported = clipCapabilities?.decision("promptRelay").supported ?? true;
       const ownPrompt = `${clip.prompt ?? ""}`.trim();
       const inherited = ownPrompt === "";
@@ -15584,12 +15447,9 @@ The conversion is one undoable change.`;
       const majorText = major === "" ? PROMPT_PLACEHOLDER : truncate(major, 120);
       const majorClass = (major === "" ? " vst-major-empty" : "") + (inherited && major !== "" ? " vst-major-inherited" : "");
       const majorTitle = (major === "" ? PROMPT_PLACEHOLDER : major) + (inherited && major !== "" ? " — inherited from the global prompt; click to set a clip prompt" : " — click to edit");
-      if (majorSupported || ownPrompt !== "") {
-        const renderedMajorTitle = majorSupported ? majorTitle : "Persisted major prompt is unsupported by this architecture; click to inspect or remove it";
-        parts.push(
-          `<div class="vst-major-seg${majorClass}${majorSupported ? "" : " vst-capability-disabled"}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(renderedMajorTitle)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
-        );
-      }
+      parts.push(
+        `<div class="vst-major-seg${majorClass}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(majorTitle)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
+      );
       const minorSegments = windows.map((window2, windowIdx) => {
         const geometry = promptWindowGeom(layout, window2, pxPerSecond);
         const text2 = `${window2.prompt ?? ""}`.trim();

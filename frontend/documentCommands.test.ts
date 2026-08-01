@@ -1578,8 +1578,6 @@ describe("reduceDocumentCommand", () => {
     it("preserves unsupported LoRA and upscale settings as dormant data", () => {
         const source = document();
         const fake = fakeArchitectureCatalog();
-        fake.architectures[0].capabilities.stage = ["lora"];
-        fake.architectures[0].capabilities.upscaleModes = ["pixel"];
         source.clips[1].loras = [{ name: "detail" }];
         source.clips[1].stages = [
             {

@@ -199,15 +199,6 @@ export const createTimelinePromptTrack = (
             if (clipIdx === null || !getClips()[clipIdx]) {
                 return;
             }
-            if (
-                getCapabilities &&
-                !getCapabilities()
-                    .forClip(getClips()[clipIdx])
-                    .decision("majorPrompt").supported &&
-                !getClips()[clipIdx].prompt.trim()
-            ) {
-                return;
-            }
             setSelection({ kind: "prompt-major", clipIdx });
         },
     });

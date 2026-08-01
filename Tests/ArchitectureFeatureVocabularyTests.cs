@@ -125,30 +125,6 @@ public class ArchitectureFeatureVocabularyTests
     }
 
     [Fact]
-    public void Upscale_support_requires_any_published_upscale_mode()
-    {
-        ArchitectureCapabilityDescriptor pixelOnly = new(
-            ClipCapability.None,
-            StageCapability.PixelUpscale);
-        ArchitectureCapabilityDescriptor latentOnly = new(
-            ClipCapability.None,
-            StageCapability.LatentUpscale);
-        ArchitectureCapabilityDescriptor none = new(
-            ClipCapability.None,
-            StageCapability.None);
-
-        Assert.True(ArchitectureFeatureVocabulary.Supports(
-            pixelOnly,
-            AuthoringFeature.Upscale));
-        Assert.True(ArchitectureFeatureVocabulary.Supports(
-            latentOnly,
-            AuthoringFeature.Upscale));
-        Assert.False(ArchitectureFeatureVocabulary.Supports(
-            none,
-            AuthoringFeature.Upscale));
-    }
-
-    [Fact]
     public void Capability_binding_mode_is_the_generated_frontend_authority()
     {
         Assert.True(
@@ -156,33 +132,6 @@ public class ArchitectureFeatureVocabularyTests
                 .Single(entry =>
                     entry.Feature == AuthoringFeature.FrameReferences)
                 .RequiresEveryCapability);
-        Assert.False(
-            ArchitectureFeatureVocabulary.AuthoringFeatures
-                .Single(entry => entry.Feature == AuthoringFeature.Upscale)
-                .RequiresEveryCapability);
-    }
-
-    [Fact]
-    public void Structural_features_are_never_silently_ignored()
-    {
-        AuthoringFeature[] structural =
-        [
-            AuthoringFeature.InitVideo,
-            AuthoringFeature.MajorPrompt,
-        ];
-
-        Assert.All(
-            structural,
-            feature => Assert.False(
-                ArchitectureFeatureVocabulary.AuthoringFeatures
-                    .Single(entry => entry.Feature == feature)
-                    .CanIgnoreWhenUnsupported));
-        Assert.DoesNotContain(
-            ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(
-                new(
-                    ClipCapability.None,
-                    StageCapability.None)),
-            structural.Contains);
     }
 
     [Fact]

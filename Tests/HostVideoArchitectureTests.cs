@@ -274,9 +274,7 @@ public class HostVideoArchitectureTests
             id,
             [AudioSourceKind.Disabled],
             [ArchitectureEntryMode.TextToVideo],
-            new(
-                ClipCapability.Prompts,
-                StageCapability.Lora),
+            new(ClipCapability.None, StageCapability.None),
             new ArchitectureBoundaryPolicy(new Dictionary<
                 BoundaryJoinType,
                 ArchitectureBoundaryModePolicy>

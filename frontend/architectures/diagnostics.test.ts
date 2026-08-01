@@ -46,7 +46,6 @@ const wanCatalog = (): ArchitectureModelCatalog => {
             capability !== "reference-framing" &&
             capability !== "audio-reuse",
     );
-    wan.capabilities.upscaleModes = ["pixel"];
     models.architectures.push(wan);
     models.entries.push({
         value: "wan-14b.safetensors",
@@ -68,14 +67,8 @@ const hostVideoCatalog = (): ArchitectureModelCatalog => {
     const host = structuredClone(template);
     host.id = "host-video";
     host.label = "Host Video";
-    host.capabilities.clip = ["prompts", "init-video"];
-    host.capabilities.stage = [
-        "image-input",
-        "video-input",
-        "pixel-upscale",
-        "lora",
-    ];
-    host.capabilities.upscaleModes = ["pixel"];
+    host.capabilities.clip = [];
+    host.capabilities.stage = [];
     host.capabilities.audioSourceKinds = ["Disabled"];
     models.architectures.push(host);
     models.entries.push({
@@ -171,7 +164,7 @@ describe("architecture diagnostics", () => {
         );
     });
 
-    it("warns for safely ignored WAN IC-LoRA and advanced upscale values", () => {
+    it("warns for safely ignored WAN IC-LoRA and advanced values", () => {
         const clip = minimalClip({
             architectureHint: "wan22",
             modelProfileId: "wan22-i2v-14b",
@@ -196,14 +189,13 @@ describe("architecture diagnostics", () => {
         ).filter(({ code }) =>
             [
                 "architecture.unsupported.ic-lora",
-                "architecture.unsupported.upscale",
                 "architecture.unsupported.reference-framing",
                 "architecture.unsupported.prompt-relay",
                 "architecture.unsupported.audio-reuse",
             ].includes(code),
         );
 
-        expect(matching).toHaveLength(5);
+        expect(matching).toHaveLength(4);
         expect(matching.every(({ severity }) => severity === "warning")).toBe(
             true,
         );
@@ -281,33 +273,6 @@ describe("architecture diagnostics", () => {
                 }),
             ]),
         );
-    });
-
-    it("keeps absent structural capabilities blocking", () => {
-        const models = hostVideoCatalog();
-        const host = models.architectures.find(
-            (entry) => entry.id === "host-video",
-        );
-        if (!host) throw new Error("missing host fixture");
-        host.capabilities.clip = host.capabilities.clip.filter(
-            (capability) => capability !== "init-video",
-        );
-        const clip = minimalClip({
-            architectureHint: host.id,
-            initVideo: initVideoFixture(),
-            stages: [
-                minimalStage({
-                    model: "host-video.safetensors",
-                    modelProfileId: "host-video",
-                }),
-            ],
-        });
-
-        expect(
-            deriveArchitectureDiagnostics([clip], models).find(
-                ({ code }) => code === "architecture.unsupported.init-video",
-            )?.severity,
-        ).toBe("error");
     });
 
     it("keeps an unclassifiable WAN upscale blocking", () => {
@@ -590,10 +555,7 @@ describe("architecture diagnostics", () => {
             expect.arrayContaining([
                 "architecture.unsupported.frame-references",
                 "architecture.unsupported.reference-framing",
-                "architecture.unsupported.major-prompt",
                 "architecture.unsupported.prompt-relay",
-                "architecture.unsupported.stage-loras",
-                "architecture.unsupported.upscale",
                 "architecture.unsupported.audio-derived-duration",
             ]),
         );
@@ -848,28 +810,6 @@ describe("architecture diagnostics", () => {
                     CONDITIONAL_RULE_CODES.normalLoraRequiresSamplingStage,
             ),
         ).toBe(false);
-    });
-
-    it("diagnoses a persisted upscale method whose exact mode is unsupported", () => {
-        const models = combinedCatalog();
-        const ltx = models.architectures.find((entry) => entry.id === "ltx2");
-        if (!ltx) throw new Error("missing LTX architecture");
-        ltx.capabilities.upscaleModes = ["pixel"];
-        const clip = minimalClip({
-            stages: [
-                minimalStage({
-                    upscale: 2,
-                    upscaleMethod: "latentmodel-detail.safetensors",
-                    model: "ltx",
-                }),
-            ],
-        });
-
-        expect(
-            deriveArchitectureDiagnostics([clip], models).map(
-                ({ code }) => code,
-            ),
-        ).toContain("architecture.unsupported.upscale");
     });
 
     it("surfaces unrepresentable active temporal-grid combinations", () => {

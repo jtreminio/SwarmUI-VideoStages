@@ -37,12 +37,11 @@ export interface ClipCapabilityView {
 }
 
 export interface StageCapabilityView {
-    upscaleModes: readonly string[];
     decision(
-        feature: "stageLoras" | "upscale" | "sampler" | "scheduler",
+        feature: "stageLoras" | "sampler" | "scheduler",
     ): CapabilityDecision;
     authoringState(
-        feature: "stageLoras" | "upscale" | "sampler" | "scheduler",
+        feature: "stageLoras" | "sampler" | "scheduler",
         persisted: boolean,
     ): AuthoringState;
 }

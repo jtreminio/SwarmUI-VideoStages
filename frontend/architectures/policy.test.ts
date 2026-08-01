@@ -42,14 +42,12 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
     const models = catalog();
     const ltx = models.architectures.find((entry) => entry.id === "ltx2");
     if (!ltx) throw new Error("missing LTX architecture");
-    ltx.capabilities.upscaleModes = ["model"];
     const wan = structuredClone(ltx);
     wan.id = "wan22";
     wan.label = "WAN 2.2";
     wan.capabilities.stage = wan.capabilities.stage.filter(
         (capability) => capability !== "lora" && capability !== "ic-lora",
     );
-    wan.capabilities.upscaleModes = ["pixel"];
     models.architectures.push(wan);
     models.entries.push({
         value: "wan-14b.safetensors",
@@ -123,7 +121,6 @@ describe("catalog-backed authoring policy", () => {
             fakeClip(),
         );
 
-        expect(view.decision("majorPrompt").supported).toBe(true);
         expect(view.decision("frameReferences").supported).toBe(false);
         expect(view.decision("referenceFraming").supported).toBe(false);
         expect(view.decision("clipAudio").supported).toBe(false);
@@ -225,8 +222,6 @@ describe("catalog-backed authoring policy", () => {
         });
         const view = createCapabilityViewResolver(models).forClip(clip);
         expect(view.known).toBe(true);
-        expect(view.decision("initVideo").supported).toBe(true);
-        expect(view.decision("majorPrompt").supported).toBe(false);
         expect(view.decision("clipAudio").supported).toBe(true);
         expect(view.decision("audioReuse").supported).toBe(false);
         expect(view.decision("audioDerivedDuration").supported).toBe(false);
@@ -241,7 +236,6 @@ describe("catalog-backed authoring policy", () => {
             clip,
             clip.stages[0],
         );
-        expect(sourceStage.upscaleModes).toEqual([]);
         expect(sourceStage.decision("sampler").supported).toBe(false);
         expect(
             createCapabilityViewResolver(models)
@@ -487,12 +481,8 @@ describe("catalog-backed authoring policy", () => {
             known: true,
         });
         expect(clipView.decision("icLora").supported).toBe(false);
-        expect(clipView.decision("stageLoras").supported).toBe(false);
-        expect(stageView.upscaleModes).toEqual(["pixel"]);
-        expect(stageView.decision("upscale").supported).toBe(true);
         expect(stageView.decision("sampler").supported).toBe(true);
         expect(stageView.decision("scheduler").supported).toBe(true);
-        expect(stageView.decision("stageLoras").supported).toBe(false);
         expect(clip).toEqual(before);
     });
 
@@ -529,9 +519,6 @@ describe("catalog-backed authoring policy", () => {
                 .forStage(clip, clip.stages[0])
                 .authoringState("stageLoras", true),
         ).toMatchObject({ visible: true, enabled: false });
-        expect(resolver.forClip(clip).decision("stageLoras").supported).toBe(
-            true,
-        );
 
         clip.stages[0].control = 0.1;
         expect(

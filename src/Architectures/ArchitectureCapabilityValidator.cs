@@ -47,28 +47,6 @@ internal static class ArchitectureCapabilityValidator
             audioSourceKinds.Contains(AudioSourceKind.Native),
             "standalone audio output");
         Require(
-            clip.Stages is { Count: > 0 }
-                && entryMode == ArchitectureEntryMode.ImageToVideo,
-            Has(capabilities.Stage, StageCapability.ImageInput),
-            "image stage input");
-        Require(
-            clip.Stages is { Count: > 0 }
-                && entryMode == ArchitectureEntryMode.InitVideo,
-            Has(capabilities.Stage, StageCapability.VideoInput),
-            "video stage input");
-        Require(
-            clip.InitVideo is not null,
-            Has(capabilities.Clip, ClipCapability.InitVideo),
-            "source video");
-        // Every stage runner resolves the host's authored prompt for the clip and stage it is
-        // executing, so running a stage is what consumes the major prompt. An architecture that
-        // executes stages must therefore advertise prompt support; a init-video-only clip runs no
-        // stage and consumes no prompt.
-        Require(
-            hasActiveStages,
-            Has(capabilities.Clip, ClipCapability.Prompts),
-            "major prompt");
-        Require(
             hasActiveStages && clip.PromptWindows is { Count: > 0 },
             Has(capabilities.Clip, ClipCapability.PromptRelay),
             "prompt relay");
@@ -121,11 +99,6 @@ internal static class ArchitectureCapabilityValidator
             hasActiveStages && clip.IcLoras is { Count: > 0 },
             Has(capabilities.Stage, StageCapability.IcLora),
             "IC-LoRA");
-        Require(
-            hasActiveStages
-                && clip.Stages?.Any(stage => HasNormalLora(clip, stage)) == true,
-            Has(capabilities.Stage, StageCapability.Lora),
-            "normal LoRA");
         ValidateAudioSourceKind(clip, descriptor, audioSourceKinds, diagnostics);
         ValidateStages(clip, descriptor, diagnostics);
         return diagnostics.AsReadOnly();
@@ -233,7 +206,6 @@ internal static class ArchitectureCapabilityValidator
         for (int stageIndex = 0; stageIndex < stages.Count; stageIndex++)
         {
             StageSpec stage = stages[stageIndex];
-            StageCapability stageCapabilities = descriptor.Capabilities.Stage;
             StageGuideReferenceSelection guide =
                 StageGuideReferencePolicy.Classify(stage.ImageReference);
             if (!descriptor.StageGuideReferences.Allows(guide))
@@ -244,67 +216,20 @@ internal static class ArchitectureCapabilityValidator
                     $"stage image reference '{stage.ImageReference}'",
                     stage.Id));
             }
-            if (stageIndex > 0
-                && !Has(stageCapabilities, StageCapability.VideoInput))
+            // Upscale methods are architecture-neutral; only an unrecognized method is refused.
+            if (stage.Upscale != 1
+                && StageUpscalePlanCompiler.Classify(stage.UpscaleMethod)
+                    == StageUpscaleMode.Unsupported)
             {
                 diagnostics.Add(Unsupported(
                     clip,
                     descriptor,
-                    "video stage input for a later stage",
+                    $"unknown upscale mode '{stage.UpscaleMethod}'",
                     stage.Id));
-            }
-            if (stage.Upscale != 1)
-            {
-                StageCapability required = stage.IsPixelUpscale
-                    ? StageCapability.PixelUpscale
-                    : stage.IsModelUpscale
-                        ? StageCapability.ModelUpscale
-                        : stage.IsLatentUpscale
-                            ? StageCapability.LatentUpscale
-                            : stage.IsLatentModelUpscale
-                                ? StageCapability.LatentModelUpscale
-                                : StageCapability.None;
-                if (required == StageCapability.None
-                    || !Has(stageCapabilities, required))
-                {
-                    diagnostics.Add(Unsupported(
-                        clip,
-                        descriptor,
-                        required == StageCapability.None
-                            ? $"unknown upscale mode '{stage.UpscaleMethod}'"
-                            : $"upscale mode '{required}'",
-                        stage.Id));
-                }
             }
         }
     }
 
-    private static bool HasNormalLora(ClipSpec clip, StageSpec stage)
-    {
-        if (stage.Loras is { Count: > 0 })
-        {
-            return true;
-        }
-        if (clip.Loras is not { Count: > 0 })
-        {
-            return false;
-        }
-        if (stage.LoraWeights is null)
-        {
-            return true;
-        }
-        for (int index = 0; index < clip.Loras.Count; index++)
-        {
-            double weight = index < stage.LoraWeights.Count
-                ? stage.LoraWeights[index]
-                : clip.Loras[index].Weight;
-            if (weight != 0)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
 
     private static PlanDiagnostic Unsupported(
         ClipSpec clip,

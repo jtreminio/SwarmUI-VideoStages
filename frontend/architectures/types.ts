@@ -23,7 +23,6 @@ export interface MinimumStageControlRuleConstraints {
 export interface ArchitectureCapabilities {
     clip: string[];
     stage: string[];
-    upscaleModes: string[];
     entryModes: string[];
     audioSourceKinds: string[];
 }

@@ -56,32 +56,23 @@ internal enum VideoModelEntryAbility
 internal enum ClipCapability
 {
     None = 0,
-    InitVideo = 1 << 0,
-    Prompts = 1 << 1,
-    PromptRelay = 1 << 2,
-    References = 1 << 3,
-    Retake = 1 << 4,
-    AudioSources = 1 << 5,
-    AudioSegments = 1 << 6,
-    ReferenceFraming = 1 << 7,
-    AudioReuse = 1 << 8,
-    AudioDerivedDuration = 1 << 9,
-    ControlSignalDerivedDuration = 1 << 10,
+    PromptRelay = 1 << 0,
+    References = 1 << 1,
+    Retake = 1 << 2,
+    AudioSources = 1 << 3,
+    AudioSegments = 1 << 4,
+    ReferenceFraming = 1 << 5,
+    AudioReuse = 1 << 6,
+    AudioDerivedDuration = 1 << 7,
+    ControlSignalDerivedDuration = 1 << 8,
 }
 
 [Flags]
 internal enum StageCapability
 {
     None = 0,
-    ImageInput = 1 << 0,
-    VideoInput = 1 << 1,
-    PixelUpscale = 1 << 2,
-    ModelUpscale = 1 << 3,
-    LatentUpscale = 1 << 4,
-    LatentModelUpscale = 1 << 5,
-    Lora = 1 << 6,
-    IcLora = 1 << 7,
-    FrameReferences = 1 << 8,
+    IcLora = 1 << 0,
+    FrameReferences = 1 << 1,
 }
 
 internal sealed record ArchitectureCapabilityDescriptor(
@@ -95,19 +86,15 @@ internal sealed record ArchitectureCapabilityDescriptor(
 /// </summary>
 internal enum AuthoringFeature
 {
-    InitVideo,
     FrameReferences,
     ReferenceFraming,
     Retake,
-    MajorPrompt,
     PromptRelay,
     ClipAudio,
     AudioReuse,
     AudioDerivedDuration,
     ControlSignalDerivedDuration,
-    StageLoras,
     IcLora,
-    Upscale,
 }
 
 // --- Rules: what an architecture allows in a given configuration, where a capability flag is

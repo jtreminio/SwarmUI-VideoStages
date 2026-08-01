@@ -94,22 +94,6 @@ internal static class CapabilityDrivenEffectiveRequestProjector
             effective = effective with { ReferenceFraming = ReferenceFramingMode.Crop };
         }
 
-        if (ignored.Contains(AuthoringFeature.StageLoras))
-        {
-            bool configured = effective.Loras is { Count: > 0 }
-                || stages.Any(stage =>
-                    stage.Loras is { Count: > 0 }
-                    || stage.LoraWeights is { Count: > 0 });
-            Ignore(
-                configured,
-                AuthoringFeature.StageLoras,
-                "stage LoRAs");
-            effective = effective with { Loras = [] };
-            stages = stages
-                .Select(stage => stage with { Loras = [], LoraWeights = [] })
-                .ToArray();
-        }
-
         if (ignored.Contains(AuthoringFeature.IcLora))
         {
             bool configured = effective.IcLoras is { Count: > 0 }
@@ -229,43 +213,19 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                 };
             }
 
-            if (stage.Upscale != 1)
+            // Every architecture can drive every known upscale method, so only an
+            // unrecognized one is refused.
+            if (stage.Upscale != 1
+                && StageUpscalePlanCompiler.Classify(stage.UpscaleMethod)
+                    == StageUpscaleMode.Unsupported)
             {
-                StageCapability required = stage.IsPixelUpscale
-                    ? StageCapability.PixelUpscale
-                    : stage.IsModelUpscale
-                        ? StageCapability.ModelUpscale
-                        : stage.IsLatentUpscale
-                            ? StageCapability.LatentUpscale
-                            : stage.IsLatentModelUpscale
-                                ? StageCapability.LatentModelUpscale
-                                : StageCapability.None;
-                if (required == StageCapability.None)
-                {
-                    decisions.Add(EffectiveRequestDecision.Block(
-                        "effective-request.unknown-upscale",
-                        $"Clip {authored.Id} Stage {stage.Id} uses unknown upscale mode "
-                            + $"'{stage.UpscaleMethod}'.",
-                        authored.Id,
-                        stage.Id,
-                        stage.ClipStageRawIndex));
-                }
-                else if (!Has(
-                    descriptor.Capabilities.Stage,
-                    required))
-                {
-                    Ignore(
-                        configured: true,
-                        AuthoringFeature.Upscale,
-                        $"unsupported upscale method '{stage.UpscaleMethod}'",
-                        stage.Id,
-                        stage.ClipStageRawIndex);
-                    stage = stage with
-                    {
-                        Upscale = 1,
-                        UpscaleMethod = "pixel-lanczos",
-                    };
-                }
+                decisions.Add(EffectiveRequestDecision.Block(
+                    "effective-request.unknown-upscale",
+                    $"Clip {authored.Id} Stage {stage.Id} uses unknown upscale mode "
+                        + $"'{stage.UpscaleMethod}'.",
+                    authored.Id,
+                    stage.Id,
+                    stage.ClipStageRawIndex));
             }
             stages[index] = stage;
         }

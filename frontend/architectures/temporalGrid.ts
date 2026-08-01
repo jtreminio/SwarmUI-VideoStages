@@ -1,10 +1,7 @@
 import { activeStageCount } from "../clipSemantics";
 import type { Clip } from "../types";
 import { architectureDescriptor, modelCatalogEntry } from "./catalogQueries";
-import {
-    effectiveClipCapabilities,
-    effectiveModelCapabilities,
-} from "./modelCapabilities";
+import { effectiveClipCapabilities } from "./modelCapabilities";
 import {
     architectureFeatureSupport,
     upscaleModeForMethod,
@@ -150,17 +147,7 @@ const effectiveGridModels = (
             ) {
                 return false;
             }
-            const model = modelForName(stage.model);
-            const descriptor = model?.architectureId
-                ? architectureForId(model.architectureId)
-                : undefined;
-            return (
-                !descriptor ||
-                architectureFeatureSupport("upscale", {
-                    capabilities: effectiveModelCapabilities(model, descriptor),
-                    upscaleMethod: stage.upscaleMethod ?? "",
-                })
-            );
+            return true;
         })
         .map((stage) => stage.model);
 };

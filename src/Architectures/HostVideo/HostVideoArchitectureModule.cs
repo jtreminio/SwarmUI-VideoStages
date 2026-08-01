@@ -102,11 +102,8 @@ internal sealed class HostVideoArchitectureModule :
             ArchitectureEntryMode.InitVideo,
         ],
         new(
-            ClipCapability.Prompts | ClipCapability.InitVideo,
-            StageCapability.ImageInput
-                | StageCapability.VideoInput
-                | StageCapability.PixelUpscale
-                | StageCapability.Lora),
+            ClipCapability.None,
+            StageCapability.None),
         ArchitectureBoundaryPolicy.CutOnly(
             "host-video",
             "Decoded host videos can be joined with a hard cut.",

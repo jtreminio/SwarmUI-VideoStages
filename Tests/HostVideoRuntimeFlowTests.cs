@@ -593,10 +593,6 @@ public class HostVideoRuntimeFlowTests
         Assert.Contains(
             generator.RequireVideoExecutionPlanContext().Plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == "effective-request.unsupported-upscale-ignored");
-        Assert.Contains(
-            generator.RequireVideoExecutionPlanContext().Plan.Diagnostics,
-            diagnostic => diagnostic.Code
                 == "effective-request.unsupported-ic-lora-ignored");
         Assert.Contains(
             generator.RequireVideoExecutionPlanContext().Plan.Diagnostics,
@@ -621,6 +617,12 @@ public class HostVideoRuntimeFlowTests
             warning => warning.Contains(
                 "'Video2Video Creativity'",
                 StringComparison.Ordinal));
+        // An upscale model is a stock ComfyUI operation, so the generic runtime drives it too.
+        Assert.NotEmpty(NodesOfClass(bridge, "UpscaleModelLoader"));
+        Assert.NotEmpty(NodesOfClass(bridge, "ImageUpscaleWithModel"));
+        Assert.DoesNotContain(
+            warnings,
+            warning => warning.Contains("upscale", StringComparison.OrdinalIgnoreCase));
         VideoStagesSpec authored = generator.GetVideoStagesSpec();
         ClipSpec authoredClip = Assert.Single(authored.Clips);
         Assert.True(authoredClip.SaveAudioTrack);
