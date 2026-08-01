@@ -9,8 +9,8 @@ using VideoStages.Planning;
 namespace VideoStages.HostVideo.Runtime;
 
 /// <summary>
-/// Runs architectures whose stages delegate to SwarmUI's stock video builders. WAN-specific
-/// behavior is supplied by <see cref="WanStockHostVideoBehavior"/>.
+/// Runs architectures that use SwarmUI's stock video builders, with WAN behavior supplied by
+/// <see cref="WanStockHostVideoBehavior"/>.
 /// </summary>
 internal sealed class StockHostVideoGenerationSession(
     WorkflowGenerator g,
@@ -153,11 +153,9 @@ internal sealed class StockHostVideoGenerationSession(
                     stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
                     return;
                 }
-                int startStep = stage.Input == StageInputKind.RootMedia
-                    ? 0
-                    : HostVideoStageSchedulePolicy.StartStep(
-                        core.Steps,
-                        core.Control);
+                int startStep = HostVideoStageSchedulePolicy.StartStep(
+                    core.Steps,
+                    core.Control);
                 if (!materializedFirstFrame)
                 {
                     stageInput.Configure(clip, stage, genInfo, startStep);
@@ -205,16 +203,6 @@ internal sealed class StockHostVideoGenerationSession(
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
         StageCorePlan core = stage.Core;
-        if (clip.EntryMode != ArchitectureEntryMode.TextToVideo
-            || clip.Input != ClipInputKind.EmptyLatent
-            || stage.ClipStageIndex != 0)
-        {
-            throw VideoStagesInvariant.Failure(
-                $"Clip {clip.ClipId} stage {stage.StageId} has an invalid "
-                    + $"{architectureLabel} text "
-                    + "execution contract.");
-        }
-
         WGNodeData ambientAudioVae = g.CurrentAudioVae;
         bool ambientImageToVideo = g.IsImageToVideo;
         try

@@ -4,7 +4,6 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
-using SwarmUI.Text2Image;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Generated;
 using VideoStages.Planning;
@@ -23,7 +22,6 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
             .SingleOrDefault(entry => entry.HasAudioReference);
         if (audioReference is null
             || genInfo.Model is null
-            || genInfo.VideoModel?.ModelClass?.CompatClass?.ID != T2IModelClassSorter.CompatLtxv2.ID
             || genInfo.PosCond is null
             || genInfo.NegCond is null)
         {

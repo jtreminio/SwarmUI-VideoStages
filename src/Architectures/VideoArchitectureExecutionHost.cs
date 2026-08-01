@@ -5,9 +5,6 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures;
 
-/// <summary>
-/// Coordinates architecture runtime providers for one request.
-/// </summary>
 internal sealed class VideoArchitectureExecutionHost
 {
     private readonly WorkflowGenerator _generator;
@@ -130,7 +127,6 @@ internal sealed class VideoArchitectureExecutionHost
 
     private void RunConfiguredStagesCore(VideoExecutionPlanContext context)
     {
-        context.RequirePrepared();
         if (_plan.Clips.Count == 0)
         {
             return;

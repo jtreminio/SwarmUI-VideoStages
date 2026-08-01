@@ -12,7 +12,6 @@ internal sealed class VideoStagesCoordinator(
     internal void RunConfiguredStages(VideoExecutionPlanContext planContext)
     {
         ArgumentNullException.ThrowIfNull(planContext);
-        planContext.RequirePrepared();
         if (planContext.Plan.Clips.Count == 0)
         {
             return;
@@ -37,8 +36,7 @@ internal sealed class VideoStagesCoordinator(
         finalArtifact = new TimelineFrameInterpolator(g).Apply(
             finalArtifact,
             planContext.Plan);
-        // Timeline publication metadata is architecture-neutral; VAE ownership stays on the
-        // runtime artifact for host saves.
+        // Compat metadata is architecture-neutral; the runtime artifact retains VAE ownership.
         if (finalArtifact.Media is not null)
         {
             finalArtifact.Media.Compat = null;
@@ -47,7 +45,6 @@ internal sealed class VideoStagesCoordinator(
                 finalArtifact.Media.AttachedAudio.Compat = null;
             }
         }
-        // The common pipeline publishes to the host only after timeline transforms finish.
         finalArtifact.PublishTo(g);
         rootSession.PublishTimeline(finalArtifact);
     }

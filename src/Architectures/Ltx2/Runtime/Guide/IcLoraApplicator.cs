@@ -3,14 +3,12 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
-using SwarmUI.Text2Image;
 using VideoStages.Generated;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>Applies a compiled IC-LoRA stage plan to the workflow graph.</summary>
 internal sealed class IcLoraApplicator(WorkflowGenerator g)
 {
     internal bool ApplyIcLoras(
@@ -22,8 +20,7 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
     {
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
         if (payload.IcLoras.IsDefaultOrEmpty
-            || genInfo.Model is null
-            || genInfo.VideoModel.ModelClass.CompatClass.ID != T2IModelClassSorter.CompatLtxv2.ID)
+            || genInfo.Model is null)
         {
             return false;
         }

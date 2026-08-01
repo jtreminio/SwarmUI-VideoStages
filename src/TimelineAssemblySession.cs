@@ -6,9 +6,8 @@ using VideoStages.Planning;
 namespace VideoStages;
 
 /// <summary>
-/// Owns final timeline assembly. The immutable execution plan chooses each boundary; runtime
-/// conditions can explicitly downgrade a boundary.
-/// Graph construction remains in <see cref="MultiClipParallelMerger"/>.
+/// Assembles the final timeline from planned boundaries and runtime downgrades.
+/// <see cref="MultiClipParallelMerger"/> builds the graph.
 /// </summary>
 internal sealed class TimelineAssemblySession
 {
@@ -109,10 +108,6 @@ internal sealed class TimelineAssemblySession
     }
 
     private int BoundaryIndex(int fromClipId) =>
-        _plan.Boundaries.Select((boundary, index) => (boundary, index))
-            .Where(entry => entry.boundary.FromClipId == fromClipId)
-            .Select(entry => entry.index)
-            .DefaultIfEmpty(-1)
-            .Single();
+        _effectiveBoundaries.FindIndex(boundary => boundary.FromClipId == fromClipId);
 
 }
