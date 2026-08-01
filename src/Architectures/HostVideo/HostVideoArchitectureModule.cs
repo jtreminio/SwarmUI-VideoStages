@@ -16,8 +16,7 @@ internal sealed class HostVideoArchitectureModule :
 {
     internal sealed record ProvenHostPath(
         string CompatibilityClassId,
-        string ModelClassId,
-        VideoModelEntryAbility EntryAbilities);
+        string ModelClassId);
 
     internal static ArchitectureId ArchitectureId { get; } = new("host-video");
 
@@ -25,72 +24,26 @@ internal sealed class HostVideoArchitectureModule :
 
     internal static IReadOnlyList<ProvenHostPath> ProvenPaths { get; } =
     [
-        Path(
-            T2IModelClassSorter.CompatHunyuanVideo1_5,
-            "hunyuan-video-1_5",
-            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo),
-        Path(
-            T2IModelClassSorter.CompatHunyuanVideo,
-            "hunyuan-video",
-            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo),
-        Path(
-            T2IModelClassSorter.CompatHunyuanVideo,
-            "hunyuan-video-skyreels",
-            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo),
-        Path(
-            T2IModelClassSorter.CompatHunyuanVideo,
-            "hunyuan-video-skyreels-i2v",
-            VideoModelEntryAbility.ImageToVideo),
-        Path(
-            T2IModelClassSorter.CompatHunyuanVideo,
-            "hunyuan-video-i2v",
-            VideoModelEntryAbility.ImageToVideo),
-        Path(
-            T2IModelClassSorter.CompatHunyuanVideo,
-            "hunyuan-video-i2v-v2",
-            VideoModelEntryAbility.ImageToVideo),
-        Path(
-            T2IModelClassSorter.CompatGenmoMochi,
-            "genmo-mochi-1",
-            VideoModelEntryAbility.TextToVideo),
-        Path(
-            T2IModelClassSorter.CompatKandinsky5VidLite,
-            "kandinsky5-video-lite",
-            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo),
-        Path(
-            T2IModelClassSorter.CompatKandinsky5VidPro,
-            "kandinsky5-video-pro",
-            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo),
-        Path(
-            T2IModelClassSorter.CompatCosmos,
-            "nvidia-cosmos-1-7b-text2world",
-            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo),
-        Path(
-            T2IModelClassSorter.CompatCosmos,
-            "nvidia-cosmos-1-14b-text2world",
-            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo),
-        Path(
-            T2IModelClassSorter.CompatCosmos,
-            "nvidia-cosmos-1-7b-video2world",
-            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo),
-        Path(
-            T2IModelClassSorter.CompatCosmos,
-            "nvidia-cosmos-1-14b-video2world",
-            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo),
-        Path(
-            T2IModelClassSorter.CompatLtxv,
-            "lightricks-ltx-video",
-            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo),
-        Path(
-            T2IModelClassSorter.CompatLtxv2,
-            "lightricks-ltx-video-2",
-            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo),
+        Path(T2IModelClassSorter.CompatHunyuanVideo1_5, "hunyuan-video-1_5"),
+        Path(T2IModelClassSorter.CompatHunyuanVideo, "hunyuan-video"),
+        Path(T2IModelClassSorter.CompatHunyuanVideo, "hunyuan-video-skyreels"),
+        Path(T2IModelClassSorter.CompatHunyuanVideo, "hunyuan-video-skyreels-i2v"),
+        Path(T2IModelClassSorter.CompatHunyuanVideo, "hunyuan-video-i2v"),
+        Path(T2IModelClassSorter.CompatHunyuanVideo, "hunyuan-video-i2v-v2"),
+        Path(T2IModelClassSorter.CompatGenmoMochi, "genmo-mochi-1"),
+        Path(T2IModelClassSorter.CompatKandinsky5VidLite, "kandinsky5-video-lite"),
+        Path(T2IModelClassSorter.CompatKandinsky5VidPro, "kandinsky5-video-pro"),
+        Path(T2IModelClassSorter.CompatCosmos, "nvidia-cosmos-1-7b-text2world"),
+        Path(T2IModelClassSorter.CompatCosmos, "nvidia-cosmos-1-14b-text2world"),
+        Path(T2IModelClassSorter.CompatCosmos, "nvidia-cosmos-1-7b-video2world"),
+        Path(T2IModelClassSorter.CompatCosmos, "nvidia-cosmos-1-14b-video2world"),
+        Path(T2IModelClassSorter.CompatLtxv, "lightricks-ltx-video"),
+        Path(T2IModelClassSorter.CompatLtxv2, "lightricks-ltx-video-2"),
     ];
 
     internal static HostVideoArchitectureModule Instance { get; } = new();
 
-    public ArchitectureResolutionTier ResolutionTier =>
-        ArchitectureResolutionTier.Fallback;
+    public bool IsFallback => true;
 
     public VideoArchitectureDescriptor Descriptor { get; } = new(
         ArchitectureId,
@@ -101,14 +54,10 @@ internal sealed class HostVideoArchitectureModule :
             ArchitectureEntryMode.ImageToVideo,
             ArchitectureEntryMode.InitVideo,
         ],
-        new(
-            ClipCapability.None,
-            StageCapability.None),
+        ArchitectureFeature.None,
         ArchitectureBoundaryPolicy.CutOnly(
             "host-video",
-            "Decoded host videos can be joined with a hard cut.",
-            "The generic host-video fallback has no continuity path.",
-            "The generic host-video fallback has no transition path."))
+            "Decoded host videos can be joined with a hard cut."))
     {
         // Unknown video families do not share one trustworthy temporal grid.
         FrameGrid = 1,
@@ -145,7 +94,6 @@ internal sealed class HostVideoArchitectureModule :
             Descriptor,
             modelClass.ID,
             compatibility.ID,
-            path.EntryAbilities,
             [],
             compatibility.LorasTargetTextEnc);
         return true;
@@ -189,9 +137,9 @@ internal sealed class HostVideoArchitectureModule :
 
         List<PlanDiagnostic> diagnostics = [];
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
-        // Model facts are registry-owned, clip compatibility is resolver-owned, and entry-role
-        // admission is capability-validator-owned. This compiler consumes that vetted assignment;
-        // an absent key is a caller contract violation, not another user-facing validation result.
+        // Model facts are registry-owned and clip compatibility is resolver-owned. This compiler
+        // consumes that vetted assignment; an absent key is a caller contract violation, not
+        // another user-facing validation result.
         string compatibilityClassId = activeStages.Count == 0
             ? ""
             : stageModels[activeStages[0].ClipStageRawIndex].CompatibilityClassId;
@@ -258,9 +206,8 @@ internal sealed class HostVideoArchitectureModule :
 
     private static ProvenHostPath Path(
         T2IModelCompatClass compatibility,
-        string modelClassId,
-        VideoModelEntryAbility entryAbilities) =>
-        new(compatibility.ID, modelClassId, entryAbilities);
+        string modelClassId) =>
+        new(compatibility.ID, modelClassId);
 
     private static PlanDiagnostic Error(
         ClipSpec clip,

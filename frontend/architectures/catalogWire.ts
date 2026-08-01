@@ -13,7 +13,6 @@ import type {
 
 const BOUNDARY_MODES = ["cut", "continue", "crossfade"] as const;
 const ENTRY_MODES = ["text-to-video", "image-to-video", "init-video"] as const;
-const ENTRY_ABILITIES = ["text", "image"] as const;
 const REFERENCE_POSITIONS = ["first", "last", "any"] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -30,12 +29,6 @@ const isUniqueStringArray = (value: unknown): value is string[] =>
 const isEntryModeArray = (value: unknown): value is string[] =>
     isUniqueStringArray(value) &&
     value.every((entry) => (ENTRY_MODES as readonly string[]).includes(entry));
-
-const isEntryAbilityArray = (value: unknown): value is string[] =>
-    isUniqueStringArray(value) &&
-    value.every((entry) =>
-        (ENTRY_ABILITIES as readonly string[]).includes(entry),
-    );
 
 const isReferencePositionArray = (value: unknown): value is string[] =>
     isUniqueStringArray(value) &&
@@ -68,7 +61,7 @@ const isRuleDecision = (
         !isTrimmedNonEmpty(value.code) ||
         !isTrimmedNonEmpty(value.reason) ||
         typeof value.scope !== "string" ||
-        !["clip", "stage", "boundary"].includes(value.scope) ||
+        !["clip", "boundary"].includes(value.scope) ||
         (value.constraints !== null && !isRecord(value.constraints))
     ) {
         return false;
@@ -84,19 +77,12 @@ const isRuleDecision = (
 };
 
 const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
-    if (value.support !== "conditional" || !isRecord(value.constraints)) {
+    if (value.support !== "conditional") {
         return false;
     }
-    const constraints = value.constraints;
     switch (value.code) {
         case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-            // The listed modes are read, not assumed, so the backend can widen them.
-            return (
-                value.scope === "clip" &&
-                hasExactKeys(constraints, ["requiresAnyEntryMode"]) &&
-                isEntryModeArray(constraints.requiresAnyEntryMode) &&
-                constraints.requiresAnyEntryMode.length > 0
-            );
+            return value.scope === "clip" && value.constraints === null;
     }
     return false;
 };
@@ -171,19 +157,13 @@ const isRuleArray = (
 const isCapabilities = (value: unknown): value is ArchitectureCapabilities => {
     if (
         !isRecord(value) ||
-        !hasExactKeys(value, [
-            "clip",
-            "stage",
-            "entryModes",
-            "audioSourceKinds",
-        ])
+        !hasExactKeys(value, ["features", "entryModes", "audioSourceKinds"])
     ) {
         return false;
     }
     return (
-        [value.clip, value.stage, value.audioSourceKinds].every(
-            isUniqueStringArray,
-        ) && isEntryModeArray(value.entryModes)
+        [value.features, value.audioSourceKinds].every(isUniqueStringArray) &&
+        isEntryModeArray(value.entryModes)
     );
 };
 
@@ -232,7 +212,7 @@ export const parseVideoArchitectureCatalog = (
             !isTrimmedNonEmpty(raw.label) ||
             !isCapabilities(raw.capabilities) ||
             !hasCompleteBoundaryRules(raw.boundaryRules) ||
-            !isRuleArray(raw.rules, ["clip", "stage"])
+            !isRuleArray(raw.rules, ["clip"])
         ) {
             return null;
         }
@@ -270,7 +250,6 @@ export const parseVideoArchitectureCatalog = (
                 "modelClassId",
                 "compatibilityClassId",
                 "frameGrid",
-                "entryAbilities",
                 "capabilities",
                 "enhancements",
             ]) ||
@@ -284,8 +263,6 @@ export const parseVideoArchitectureCatalog = (
             Number(raw.frameGrid) < 1 ||
             Number(raw.frameGrid) > MAX_FRAME_GRID ||
             !isCapabilities(raw.capabilities) ||
-            !isEntryAbilityArray(raw.entryAbilities) ||
-            raw.entryAbilities.length === 0 ||
             !isRecord(raw.enhancements) ||
             !hasExactKeys(raw.enhancements, ["referencePositions"]) ||
             !isReferencePositionArray(raw.enhancements.referencePositions)
@@ -304,7 +281,6 @@ export const parseVideoArchitectureCatalog = (
             compatibilityClassId: raw.compatibilityClassId,
             frameGrid: Number(raw.frameGrid),
             capabilities: structuredClone(raw.capabilities),
-            entryAbilities: [...raw.entryAbilities],
             enhancements: {
                 referencePositions: [
                     ...(raw.enhancements.referencePositions as string[]),

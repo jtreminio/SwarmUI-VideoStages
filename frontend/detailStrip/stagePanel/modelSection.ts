@@ -4,7 +4,6 @@ import {
     modelCatalogEntry,
 } from "../../architectures/catalog";
 import { resolvedClipArchitectureId } from "../../architectures/clipIdentity";
-import { modelSupportsStageEntry } from "../../architectures/conversion/entryModePolicy";
 import { planArchitectureConversion } from "../../architectures/conversion/plan";
 import {
     architectureConversionMessage,
@@ -22,7 +21,6 @@ import {
 import type { StagePanelBindings } from "./types";
 
 export const appendStageModelSection = ({
-    context,
     clip,
     clipIdx,
     stageIdx,
@@ -74,20 +72,7 @@ export const appendStageModelSection = ({
                       model.compatibilityClassId !== null &&
                       model.compatibilityClassId ===
                           rootModel?.compatibilityClassId;
-            const supportsRetargetedRoles = requiresWholeClipConversion
-                ? planArchitectureConversion(
-                      clip,
-                      target,
-                      defaults.modelCatalog,
-                      context.authoring().generatedEntryMode,
-                  ) !== null
-                : modelSupportsStageEntry(
-                      model,
-                      clip,
-                      stageIdx,
-                      context.authoring().generatedEntryMode,
-                  );
-            return preservesClipLock && supportsRetargetedRoles
+            return preservesClipLock
                 ? [{ value: entry.value, label: entry.label }]
                 : [];
         },
@@ -127,7 +112,6 @@ export const appendStageModelSection = ({
                     clip,
                     plan,
                     defaults.modelCatalog,
-                    context.authoring().generatedEntryMode,
                 );
                 if (!conversion) {
                     modelSelect.value = stage.model;

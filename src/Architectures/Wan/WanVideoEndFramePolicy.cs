@@ -54,9 +54,7 @@ internal static class WanVideoEndFramePolicy
         {
             ArchitectureId: var architectureId,
             CompatibilityClassId: var compatibility,
-            EntryAbilities: var abilities,
         }
         && architectureId == WanArchitectureModule.ArchitectureId
-        && abilities.HasFlag(VideoModelEntryAbility.ImageToVideo)
         && WanArchitectureModule.SupportsHostEndFrame(compatibility);
 }

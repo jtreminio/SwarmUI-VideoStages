@@ -34,8 +34,8 @@ internal readonly record struct ModelProfileId
     public override string ToString() => Value;
 }
 
-// --- Capability vocabulary: what an architecture can ever do. Published to the frontend as
-// wire-name lists; see ArchitectureFeatureVocabulary for the spellings. ---
+// --- Feature vocabulary: what an architecture can ever do. Published to the frontend as a
+// wire-name list; see ArchitectureFeatureVocabulary for the spellings. ---
 
 internal enum ArchitectureEntryMode
 {
@@ -45,56 +45,19 @@ internal enum ArchitectureEntryMode
 }
 
 [Flags]
-internal enum VideoModelEntryAbility
-{
-    None = 0,
-    TextToVideo = 1 << 0,
-    ImageToVideo = 1 << 1,
-}
-
-[Flags]
-internal enum ClipCapability
+internal enum ArchitectureFeature
 {
     None = 0,
     PromptRelay = 1 << 0,
-    References = 1 << 1,
-    Retake = 1 << 2,
-    AudioSources = 1 << 3,
-    AudioSegments = 1 << 4,
-    ReferenceFraming = 1 << 5,
+    FrameReferences = 1 << 1,
+    ReferenceFraming = 1 << 2,
+    Retake = 1 << 3,
+    ClipAudio = 1 << 4,
+    AudioSegments = 1 << 5,
     AudioReuse = 1 << 6,
     AudioDerivedDuration = 1 << 7,
     ControlSignalDerivedDuration = 1 << 8,
-}
-
-[Flags]
-internal enum StageCapability
-{
-    None = 0,
-    IcLora = 1 << 0,
-    FrameReferences = 1 << 1,
-}
-
-internal sealed record ArchitectureCapabilityDescriptor(
-    ClipCapability Clip,
-    StageCapability Stage);
-
-/// <summary>
-/// Authored product features an architecture may or may not support. Each entry's vocabulary
-/// binding decides whether an effective-request projector can omit it while preserving the
-/// authored value, or whether an unsupported feature blocks instead.
-/// </summary>
-internal enum AuthoringFeature
-{
-    FrameReferences,
-    ReferenceFraming,
-    Retake,
-    PromptRelay,
-    ClipAudio,
-    AudioReuse,
-    AudioDerivedDuration,
-    ControlSignalDerivedDuration,
-    IcLora,
+    IcLora = 1 << 9,
 }
 
 // --- Rules: what an architecture allows in a given configuration, where a capability flag is
@@ -110,11 +73,8 @@ internal enum RuleSupport
 internal enum RuleScope
 {
     Clip,
-    Stage,
     Boundary,
 }
-
-internal abstract record RuleConstraints;
 
 internal sealed record BoundaryRuleConstraints(
     int FrameStep,
@@ -124,10 +84,7 @@ internal sealed record BoundaryRuleConstraints(
     int ContinuityExtraFrames,
     bool TargetRequiresGeneratedEntry,
     bool TargetRequiresStage,
-    bool TargetDisallowsInitialReference) : RuleConstraints;
-
-internal sealed record RequiredEntryModesRuleConstraints(
-    IReadOnlyList<ArchitectureEntryMode> RequiresAnyEntryMode) : RuleConstraints;
+    bool TargetDisallowsInitialReference);
 
 /// <summary>
 /// Every conditional rule the frontend evaluates. The wire spelling lives in
@@ -144,13 +101,13 @@ internal sealed record RuleDecision(
     string Code,
     string Reason,
     RuleScope Scope,
-    RuleConstraints Constraints = null)
+    BoundaryRuleConstraints Constraints = null)
 {
     public static RuleDecision Supported(
         string code,
         string reason,
         RuleScope scope,
-        RuleConstraints constraints = null) =>
+        BoundaryRuleConstraints constraints = null) =>
         new(RuleSupport.Supported, code, reason, scope, constraints);
 
     public static RuleDecision Unsupported(string code, string reason, RuleScope scope) =>
@@ -160,135 +117,46 @@ internal sealed record RuleDecision(
         string code,
         string reason,
         RuleScope scope,
-        RuleConstraints constraints = null) =>
+        BoundaryRuleConstraints constraints = null) =>
         new(RuleSupport.Conditional, code, reason, scope, constraints);
-
-    /// <summary>
-    /// The published constraints, typed. Evaluators read their thresholds from here so a rule's
-    /// numbers exist once instead of being restated as literals next to the check.
-    /// </summary>
-    public TConstraints Require<TConstraints>()
-        where TConstraints : RuleConstraints =>
-        Constraints as TConstraints
-        ?? throw new InvalidOperationException(
-            $"Rule '{Code}' does not publish {typeof(TConstraints).Name}.");
 }
 
-// --- Boundary policy: the one rule family the backend also executes, not just publishes.
-// The executable mode projects to the published rule so the two cannot drift. ---
-
-/// <summary>
-/// One typed boundary rule used for both catalog publication and backend planning.
-/// </summary>
-internal sealed record ArchitectureBoundaryModePolicy
-{
-    private ArchitectureBoundaryModePolicy(
-        RuleSupport support,
-        string code,
-        string reason,
-        BoundaryRuleConstraints constraints)
-    {
-        Support = support;
-        Code = RequireText(code, nameof(code));
-        Reason = RequireText(reason, nameof(reason));
-        Constraints = constraints;
-    }
-
-    internal RuleSupport Support { get; }
-
-    internal string Code { get; }
-
-    internal string Reason { get; }
-
-    /// <summary>
-    /// The thresholds a conditional mode publishes and compiles against; null for the
-    /// unconditional modes, which have no numbers to agree on.
-    /// </summary>
-    internal BoundaryRuleConstraints Constraints { get; }
-
-    internal static ArchitectureBoundaryModePolicy Supported(string code, string reason) =>
-        new(RuleSupport.Supported, code, reason, null);
-
-    internal static ArchitectureBoundaryModePolicy Unsupported(string code, string reason) =>
-        new(RuleSupport.Unsupported, code, reason, null);
-
-    internal static ArchitectureBoundaryModePolicy Conditional(
-        string code,
-        string reason,
-        BoundaryRuleConstraints constraints) =>
-        new(
-            RuleSupport.Conditional,
-            code,
-            reason,
-            constraints ?? throw new ArgumentNullException(nameof(constraints)));
-
-    internal RuleDecision ToRuleDecision() => Support switch
-    {
-        RuleSupport.Supported => RuleDecision.Supported(Code, Reason, RuleScope.Boundary),
-        RuleSupport.Unsupported => RuleDecision.Unsupported(Code, Reason, RuleScope.Boundary),
-        _ => RuleDecision.Conditional(Code, Reason, RuleScope.Boundary, Constraints),
-    };
-
-    internal int NormalizeOverlap(int authoredFrames)
-    {
-        if (Support == RuleSupport.Unsupported || Constraints is null)
-        {
-            return 0;
-        }
-        int step = Math.Max(1, Constraints.FrameStep);
-        int candidate = Math.Clamp(
-            authoredFrames <= 0 ? Constraints.DefaultFrames : authoredFrames,
-            Constraints.MinFrames,
-            Constraints.MaxFrames);
-        return Constraints.MinFrames + ((candidate - Constraints.MinFrames) / step * step);
-    }
-
-    private static string RequireText(string value, string parameterName) =>
-        string.IsNullOrWhiteSpace(value)
-            ? throw new ArgumentException("Value cannot be empty.", parameterName)
-            : value;
-}
+// --- Boundary policy: the one rule family the backend also executes, not just publishes. ---
 
 /// <summary>
 /// The single owner of an architecture's boundary behavior: catalog publication and plan
-/// compilation both read the same typed modes, so the advertised rule and the compiled rule
-/// cannot drift.
+/// compilation read the same typed rules.
 /// </summary>
 internal sealed class ArchitectureBoundaryPolicy
 {
     internal ArchitectureBoundaryPolicy(
-        IReadOnlyDictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy> modes)
+        IReadOnlyDictionary<BoundaryJoinType, RuleDecision> rules)
     {
-        Modes = new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>(
-            modes ?? throw new ArgumentNullException(nameof(modes)));
-        PublishedRules = Modes.ToDictionary(
-            pair => pair.Key,
-            pair => pair.Value.ToRuleDecision());
+        Rules = new Dictionary<BoundaryJoinType, RuleDecision>(
+            rules ?? throw new ArgumentNullException(nameof(rules)));
     }
 
-    internal IReadOnlyDictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy> Modes
-    {
-        get;
-    }
-
-    internal IReadOnlyDictionary<BoundaryJoinType, RuleDecision> PublishedRules { get; }
+    internal IReadOnlyDictionary<BoundaryJoinType, RuleDecision> Rules { get; }
 
     internal static ArchitectureBoundaryPolicy CutOnly(
         string codePrefix,
         string cutReason,
-        string continueReason,
-        string crossfadeReason) =>
-        new(new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>
+        string continueReason = "This architecture has no continuity path.",
+        string crossfadeReason = "This architecture has no decoded transition path.") =>
+        new(new Dictionary<BoundaryJoinType, RuleDecision>
         {
-            [BoundaryJoinType.Cut] = ArchitectureBoundaryModePolicy.Supported(
+            [BoundaryJoinType.Cut] = RuleDecision.Supported(
                 $"{codePrefix}.boundary.cut",
-                cutReason),
-            [BoundaryJoinType.Continue] = ArchitectureBoundaryModePolicy.Unsupported(
+                cutReason,
+                RuleScope.Boundary),
+            [BoundaryJoinType.Continue] = RuleDecision.Unsupported(
                 $"{codePrefix}.boundary.continue.unsupported",
-                continueReason),
-            [BoundaryJoinType.Crossfade] = ArchitectureBoundaryModePolicy.Unsupported(
+                continueReason,
+                RuleScope.Boundary),
+            [BoundaryJoinType.Crossfade] = RuleDecision.Unsupported(
                 $"{codePrefix}.boundary.crossfade.unsupported",
-                crossfadeReason),
+                crossfadeReason,
+                RuleScope.Boundary),
         });
 }
 
@@ -299,7 +167,7 @@ internal sealed record VideoArchitectureDescriptor(
     string DisplayName,
     IReadOnlyList<AudioSourceKind> AudioSourceKinds,
     IReadOnlyList<ArchitectureEntryMode> EntryModes,
-    ArchitectureCapabilityDescriptor Capabilities,
+    ArchitectureFeature Features,
     ArchitectureBoundaryPolicy BoundaryPolicy)
 {
     /// <summary>
@@ -315,9 +183,8 @@ internal sealed record VideoArchitectureDescriptor(
     public StageGuideReferencePolicy StageGuideReferences { get; init; } =
         StageGuideReferencePolicy.GeneratedOnly;
 
-    /// <summary>The catalog projection of <see cref="BoundaryPolicy"/>; never a separate source.</summary>
     public IReadOnlyDictionary<BoundaryJoinType, RuleDecision> BoundaryRules =>
-        BoundaryPolicy.PublishedRules;
+        BoundaryPolicy.Rules;
 
     public IReadOnlyList<RuleDecision> Rules { get; init; } = [];
 
@@ -325,131 +192,30 @@ internal sealed record VideoArchitectureDescriptor(
 
 // --- A host model bound to the architecture that claimed it ---
 
-internal sealed record ResolvedVideoModel
+/// <param name="ReferencePositions">
+/// Frame positions accepted by this model's native image-conditioning path. Values are
+/// stable wire names such as <c>first</c>, <c>last</c>, and <c>any</c>.
+/// </param>
+/// <param name="LorasTargetTextEncoder">
+/// Core-owned LoRA targeting fact from the resolved model compatibility.
+/// False means normal LoRAs must not become effective solely through their
+/// text-encoder weight.
+/// </param>
+internal sealed record ResolvedVideoModel(
+    string ModelName,
+    ModelProfileId ModelProfileId,
+    VideoArchitectureDescriptor Architecture,
+    string ModelClassId,
+    string CompatibilityClassId,
+    IReadOnlyList<string> ReferencePositions,
+    bool LorasTargetTextEncoder)
 {
-    internal ResolvedVideoModel(
-        string modelName,
-        ModelProfileId modelProfileId,
-        VideoArchitectureDescriptor architecture,
-        string modelClassId,
-        string compatibilityClassId,
-        VideoModelEntryAbility entryAbilities,
-        IReadOnlyList<string> referencePositions,
-        bool lorasTargetTextEncoder)
-    {
-        ModelName = RequireText(modelName, nameof(modelName));
-        if (string.IsNullOrWhiteSpace(modelProfileId.Value))
-        {
-            throw new ArgumentException(
-                "Model profile id cannot be empty.",
-                nameof(modelProfileId));
-        }
-        ModelProfileId = modelProfileId;
-        Architecture = architecture
-            ?? throw new ArgumentNullException(nameof(architecture));
-        ModelClassId = RequireText(modelClassId, nameof(modelClassId));
-        CompatibilityClassId = RequireText(
-            compatibilityClassId,
-            nameof(compatibilityClassId));
-        VideoModelEntryAbility knownAbilities =
-            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo;
-        if (entryAbilities == VideoModelEntryAbility.None
-            || (entryAbilities & ~knownAbilities) != 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(entryAbilities),
-                entryAbilities,
-                "A resolved video model must declare at least one known entry ability.");
-        }
-        EntryAbilities = entryAbilities;
-        ReferencePositions = Array.AsReadOnly(
-            (referencePositions
-                ?? throw new ArgumentNullException(nameof(referencePositions))).ToArray());
-        LorasTargetTextEncoder = lorasTargetTextEncoder;
-    }
-
-    public string ModelName { get; }
-
     public ArchitectureId ArchitectureId => Architecture.Id;
 
-    public ModelProfileId ModelProfileId { get; }
-
-    public VideoArchitectureDescriptor Architecture { get; }
-
     public int FrameGrid => Architecture.FrameGrid;
-
-    public string ModelClassId { get; }
-
-    public string CompatibilityClassId { get; }
-
-    public VideoModelEntryAbility EntryAbilities { get; }
-
-    /// <summary>
-    /// Frame positions accepted by this model's native image-conditioning path. Values are
-    /// stable wire names such as <c>first</c>, <c>last</c>, and <c>any</c>.
-    /// </summary>
-    public IReadOnlyList<string> ReferencePositions { get; }
-
-    /// <summary>
-    /// Core-owned LoRA targeting fact from the resolved model compatibility.
-    /// False means normal LoRAs must not become effective solely through their
-    /// text-encoder weight.
-    /// </summary>
-    public bool LorasTargetTextEncoder { get; }
-
-    internal ResolvedVideoModel WithArchitecture(
-        VideoArchitectureDescriptor architecture) =>
-        new(
-            ModelName,
-            ModelProfileId,
-            architecture,
-            ModelClassId,
-            CompatibilityClassId,
-            EntryAbilities,
-            ReferencePositions,
-            LorasTargetTextEncoder);
-
-    private static string RequireText(string value, string parameterName)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new ArgumentException("Value cannot be empty.", parameterName);
-        }
-        return value;
-    }
-}
-
-internal static class VideoModelEntryPolicy
-{
-    internal static bool SupportsStageRole(
-        ResolvedVideoModel model,
-        int activeStageIndex,
-        ArchitectureEntryMode rootEntryMode)
-    {
-        if (model is null)
-        {
-            return false;
-        }
-        VideoModelEntryAbility required = activeStageIndex == 0
-            ? rootEntryMode == ArchitectureEntryMode.TextToVideo
-                ? VideoModelEntryAbility.TextToVideo
-                : VideoModelEntryAbility.ImageToVideo
-            : VideoModelEntryAbility.ImageToVideo;
-        return (model.EntryAbilities & required) == required;
-    }
 }
 
 // --- Behavior contracts: backend-only, never serialized ---
-
-/// <summary>
-/// Specialized modules win model resolution over the generic host-video fallback. Ambiguity
-/// remains an error within the winning tier so registration order never silently changes policy.
-/// </summary>
-internal enum ArchitectureResolutionTier
-{
-    Specialized,
-    Fallback,
-}
 
 internal sealed record ArchitectureClipCompileContext(
     int Width,
@@ -462,8 +228,12 @@ internal interface IVideoArchitectureModule
 {
     VideoArchitectureDescriptor Descriptor { get; }
 
-    ArchitectureResolutionTier ResolutionTier =>
-        ArchitectureResolutionTier.Specialized;
+    /// <summary>
+    /// Specialized modules win model resolution over the generic host-video fallback. Ambiguity
+    /// remains an error within the winning tier so registration order never silently changes
+    /// policy.
+    /// </summary>
+    bool IsFallback => false;
 
     bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved);
 
@@ -476,8 +246,8 @@ internal interface IVideoArchitectureModule
     /// architecture-resolution diagnostics, and pass
     /// <see cref="VideoStages.Architectures.ArchitectureCapabilityValidator"/>. Implementations may
     /// therefore treat a
-    /// missing active-stage resolution, mismatched architecture, incompatible model, or missing
-    /// model entry ability as a caller contract violation instead of re-validating those facts.
+    /// missing active-stage resolution, mismatched architecture, or incompatible model as a caller
+    /// contract violation instead of re-validating those facts.
     /// Architecture-private entry-mode semantics remain the module's responsibility.
     /// </remarks>
     ArchitectureClipCompilation ValidateAndCompileClip(

@@ -105,16 +105,16 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                         $"Video architecture module '{module.Descriptor.Id}' returned an invalid "
                         + $"model resolution for '{model?.Name}'.");
                 }
-                matches.Add(match.WithArchitecture(module.Descriptor));
+                matches.Add(match with { Architecture = module.Descriptor });
             }
         }
         if (matches.Count > 0)
         {
-            ArchitectureResolutionTier winningTier = matches.Min(match =>
-                GetModule(match.ArchitectureId).ResolutionTier);
+            bool winningTierIsFallback = matches.All(match =>
+                GetModule(match.ArchitectureId).IsFallback);
             matches = matches
                 .Where(match =>
-                    GetModule(match.ArchitectureId).ResolutionTier == winningTier)
+                    GetModule(match.ArchitectureId).IsFallback == winningTierIsFallback)
                 .ToList();
         }
         if (matches.Count > 1)

@@ -8,27 +8,13 @@ namespace VideoStages.Tests;
 public class ArchitectureFeatureVocabularyTests
 {
     [Fact]
-    public void Vocabulary_covers_every_typed_capability_and_authoring_feature()
+    public void Vocabulary_covers_every_typed_feature()
     {
         Assert.Equal(
-            Enum.GetValues<ClipCapability>()
-                .Where(value => value != ClipCapability.None)
+            Enum.GetValues<ArchitectureFeature>()
+                .Where(value => value != ArchitectureFeature.None)
                 .OrderBy(value => value),
-            ArchitectureFeatureVocabulary.Capabilities
-                .Where(entry => entry.Clip != ClipCapability.None)
-                .Select(entry => entry.Clip)
-                .OrderBy(value => value));
-        Assert.Equal(
-            Enum.GetValues<StageCapability>()
-                .Where(value => value != StageCapability.None)
-                .OrderBy(value => value),
-            ArchitectureFeatureVocabulary.Capabilities
-                .Where(entry => entry.Stage != StageCapability.None)
-                .Select(entry => entry.Stage)
-                .OrderBy(value => value));
-        Assert.Equal(
-            Enum.GetValues<AuthoringFeature>().OrderBy(value => value),
-            ArchitectureFeatureVocabulary.AuthoringFeatures
+            ArchitectureFeatureVocabulary.Features
                 .Select(entry => entry.Feature)
                 .OrderBy(value => value));
     }
@@ -60,72 +46,21 @@ public class ArchitectureFeatureVocabularyTests
     }
 
     [Fact]
-    public void Vocabulary_entries_are_unambiguous_and_unique()
+    public void Vocabulary_entries_are_unique()
     {
-        Assert.All(
-            ArchitectureFeatureVocabulary.Capabilities,
-            entry =>
-            {
-                int owners =
-                    (entry.Clip == ClipCapability.None ? 0 : 1)
-                    + (entry.Stage == StageCapability.None ? 0 : 1);
-                Assert.Equal(1, owners);
-            });
+        int count = ArchitectureFeatureVocabulary.Features.Count;
         Assert.Equal(
-            ArchitectureFeatureVocabulary.Capabilities.Count,
-            ArchitectureFeatureVocabulary.Capabilities
-                .Select(entry => (entry.Scope, entry.WireName))
-                .Distinct()
+            count,
+            ArchitectureFeatureVocabulary.Features
+                .Select(entry => entry.WireName)
+                .Distinct(StringComparer.Ordinal)
                 .Count());
         Assert.Equal(
-            ArchitectureFeatureVocabulary.AuthoringFeatures.Count,
-            ArchitectureFeatureVocabulary.AuthoringFeatures
-                .Select(entry => entry.Feature)
-                .Distinct()
-                .Count());
-        Assert.Equal(
-            ArchitectureFeatureVocabulary.AuthoringFeatures.Count,
-            ArchitectureFeatureVocabulary.AuthoringFeatures
+            count,
+            ArchitectureFeatureVocabulary.Features
                 .Select(entry => entry.AuthoringKey)
                 .Distinct(StringComparer.Ordinal)
                 .Count());
-        Assert.All(
-            ArchitectureFeatureVocabulary.AuthoringFeatures,
-            entry => Assert.NotEmpty(entry.Capabilities));
-    }
-
-    [Fact]
-    public void Frame_references_require_both_clip_and_stage_capabilities()
-    {
-        ArchitectureCapabilityDescriptor clipOnly = new(
-            ClipCapability.References,
-            StageCapability.None);
-        ArchitectureCapabilityDescriptor stageOnly = new(
-            ClipCapability.None,
-            StageCapability.FrameReferences);
-        ArchitectureCapabilityDescriptor complete = new(
-            ClipCapability.References,
-            StageCapability.FrameReferences);
-
-        Assert.False(ArchitectureFeatureVocabulary.Supports(
-            clipOnly,
-            AuthoringFeature.FrameReferences));
-        Assert.False(ArchitectureFeatureVocabulary.Supports(
-            stageOnly,
-            AuthoringFeature.FrameReferences));
-        Assert.True(ArchitectureFeatureVocabulary.Supports(
-            complete,
-            AuthoringFeature.FrameReferences));
-    }
-
-    [Fact]
-    public void Capability_binding_mode_is_the_generated_frontend_authority()
-    {
-        Assert.True(
-            ArchitectureFeatureVocabulary.AuthoringFeatures
-                .Single(entry =>
-                    entry.Feature == AuthoringFeature.FrameReferences)
-                .RequiresEveryCapability);
     }
 
     [Fact]

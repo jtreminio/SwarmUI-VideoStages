@@ -621,25 +621,11 @@ public class ArchitectureFoundationTests
                 : null,
             ClipLengthFromAudio = true,
         };
-        Dictionary<int, ResolvedVideoModel> stageModels = new()
-        {
-            [stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
-                stage.Model,
-                Ltx2ArchitectureModule.ProfileId,
-                descriptor,
-                "ltx-test",
-                T2IModelClassSorter.CompatLtxv2.ID,
-                entryAbilities:
-                    VideoModelEntryAbility.TextToVideo
-                    | VideoModelEntryAbility.ImageToVideo),
-        };
-
         IReadOnlyList<PlanDiagnostic> diagnostics =
             ArchitectureCapabilityValidator.Validate(
                 clip,
                 descriptor,
-                ArchitectureEntryMode.ImageToVideo,
-                stageModels);
+                ArchitectureEntryMode.ImageToVideo);
 
         Assert.DoesNotContain(
             diagnostics,
@@ -656,20 +642,11 @@ public class ArchitectureFoundationTests
         {
             ClipLengthFromAudio = true,
         };
-        Dictionary<int, ResolvedVideoModel> stageModels = new()
-        {
-            [stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
-                stage.Model,
-                Ltx2ArchitectureModule.ProfileId,
-                descriptor),
-        };
-
         IReadOnlyList<PlanDiagnostic> diagnostics =
             ArchitectureCapabilityValidator.Validate(
                 clip,
                 descriptor,
-                ArchitectureEntryMode.ImageToVideo,
-                stageModels);
+                ArchitectureEntryMode.ImageToVideo);
 
         Assert.Contains(
             diagnostics,
@@ -728,16 +705,9 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Common_projection_requires_both_frame_reference_capabilities()
+    public void Common_projection_ignores_unsupported_frame_references()
     {
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor() with
-        {
-            Capabilities = FakeCapabilityDescriptor().Capabilities with
-            {
-                Clip = ClipCapability.References,
-            },
-        };
-        FakeRegistry registry = new(fakeDescriptor: descriptor);
+        FakeRegistry registry = new(fakeDescriptor: FakeCapabilityDescriptor());
         ClipSpec clip = GeneratedClip(0, Stage(10, "fake-model")) with
         {
             ImageRefs = [new("Upload", 1, false, "ref.png")],
@@ -792,114 +762,9 @@ public class ArchitectureFoundationTests
 
         Assert.Contains(
             plan.Diagnostics,
-            item => item.Code == "architecture-model-entry-unsupported"
-                && item.Message.Contains("entry ability 'ImageToVideo'"));
+            item => item.Code == "architecture-capability-unsupported"
+                && item.Message.Contains("'image-to-video entry'"));
         Assert.Equal(0, registry.CompileCounts[new("fake")]);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Capability_validation_fails_closed_when_an_active_stage_resolution_is_missing(
-        bool includeNullResolution)
-    {
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor();
-        StageSpec stage = Stage(10, "fake-model");
-        ClipSpec clip = GeneratedClip(0, stage);
-        Dictionary<int, ResolvedVideoModel> stageModels = [];
-        if (includeNullResolution)
-        {
-            stageModels[stage.ClipStageRawIndex] = null;
-        }
-
-        IReadOnlyList<PlanDiagnostic> diagnostics =
-            ArchitectureCapabilityValidator.Validate(
-                clip,
-                descriptor,
-                ArchitectureEntryMode.ImageToVideo,
-                stageModels);
-
-        PlanDiagnostic diagnostic = Assert.Single(
-            diagnostics,
-            item => item.Message.Contains(
-                "entry ability 'ImageToVideo'"));
-        Assert.Equal("architecture-model-entry-unsupported", diagnostic.Code);
-    }
-
-    [Fact]
-    public void Capability_validation_uses_model_entry_facts_instead_of_profile_aliases()
-    {
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor();
-        StageSpec stage = Stage(10, "fake-model");
-        ClipSpec clip = GeneratedClip(0, stage);
-        Dictionary<int, ResolvedVideoModel> stageModels = new()
-        {
-            [stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
-                stage.Model,
-                new("ghost-profile"),
-                descriptor,
-                "fake-model",
-                "fake-compat",
-                VideoModelEntryAbility.ImageToVideo),
-        };
-
-        IReadOnlyList<PlanDiagnostic> diagnostics =
-            ArchitectureCapabilityValidator.Validate(
-                clip,
-                descriptor,
-                ArchitectureEntryMode.ImageToVideo,
-                stageModels);
-
-        Assert.DoesNotContain(
-            diagnostics,
-            item => item.Code == "architecture-model-entry-unsupported");
-    }
-
-    [Fact]
-    public void Capability_validation_requires_every_mixed_stage_model_to_allow_the_entry()
-    {
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor(
-            entryModes:
-            [
-                ArchitectureEntryMode.ImageToVideo,
-                ArchitectureEntryMode.TextToVideo,
-            ]);
-        StageSpec first = Stage(10, "first") with { ClipStageRawIndex = 0 };
-        StageSpec second = Stage(11, "second") with
-        {
-            ClipStageIndex = 1,
-            ClipStageRawIndex = 1,
-        };
-        ClipSpec clip = GeneratedClip(0, first, second);
-        Dictionary<int, ResolvedVideoModel> stageModels = new()
-        {
-            [0] = TestResolvedVideoModel.Create(
-                first.Model,
-                new("allows-image"),
-                descriptor,
-                "fake-image",
-                "fake-compat",
-                VideoModelEntryAbility.ImageToVideo),
-            [1] = TestResolvedVideoModel.Create(
-                second.Model,
-                new("text-only"),
-                descriptor,
-                "fake-text",
-                "fake-compat",
-                VideoModelEntryAbility.TextToVideo),
-        };
-
-        IReadOnlyList<PlanDiagnostic> diagnostics =
-            ArchitectureCapabilityValidator.Validate(
-                clip,
-                descriptor,
-                ArchitectureEntryMode.ImageToVideo,
-                stageModels);
-
-        Assert.Single(
-            diagnostics,
-            item => item.Message.Contains(
-                "entry ability 'ImageToVideo'"));
     }
 
     [Theory]
@@ -1396,11 +1261,12 @@ public class ArchitectureFoundationTests
         VideoArchitectureDescriptor invalid = Descriptor("fake") with
         {
             BoundaryPolicy = new ArchitectureBoundaryPolicy(
-                new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>
+                new Dictionary<BoundaryJoinType, RuleDecision>
                 {
-                    [BoundaryJoinType.Cut] = ArchitectureBoundaryModePolicy.Supported(
+                    [BoundaryJoinType.Cut] = RuleDecision.Supported(
                         "fake.cut",
-                        "cut"),
+                        "cut",
+                        RuleScope.Boundary),
                 }),
         };
 
@@ -1470,11 +1336,10 @@ public class ArchitectureFoundationTests
         Assert.Null(none["extras"]);
         Assert.Equal(
             ["audio-sources", "audio-segments"],
-            none["capabilities"]["clip"].Values<string>());
+            none["capabilities"]["features"].Values<string>());
         Assert.Equal(
             ["Disabled", "Upload"],
             none["capabilities"]["audioSourceKinds"].Values<string>());
-        Assert.Empty(none["capabilities"]["stage"]);
         Assert.Null(none["capabilities"]["output"]);
         JObject ltx = Assert.Single(
             architectures.Values<JObject>(),
@@ -1490,7 +1355,7 @@ public class ArchitectureFoundationTests
         Assert.Equal(
             [
                 "prompt-relay",
-                "references",
+                "frame-references",
                 "reference-framing",
                 "retake",
                 "audio-sources",
@@ -1498,9 +1363,9 @@ public class ArchitectureFoundationTests
                 "audio-reuse",
                 "audio-derived-duration",
                 "control-signal-derived-duration",
+                "ic-lora",
             ],
-            capabilities["clip"].Values<string>());
-        Assert.Contains("frame-references", capabilities["stage"].Values<string>());
+            capabilities["features"].Values<string>());
         Assert.Null(capabilities["initVideo"]);
         JObject crossfadeRule = (JObject)ltx["boundaryRules"]["crossfade"];
         Assert.Equal("boundary", crossfadeRule["scope"]);
@@ -1534,8 +1399,8 @@ public class ArchitectureFoundationTests
         Assert.Equal("ltx-2.3", model["modelProfileId"]);
         Assert.Equal(Ltx2ArchitectureModule.FrameGrid, model["frameGrid"]);
         Assert.Equal(
-            capabilities["clip"].Values<string>(),
-            model["capabilities"]["clip"].Values<string>());
+            capabilities["features"].Values<string>(),
+            model["capabilities"]["features"].Values<string>());
         Assert.Null(model["entryModes"]);
         Assert.Null(model["enhancements"]["extras"]);
     }
@@ -1613,13 +1478,11 @@ public class ArchitectureFoundationTests
     }
 
     private static VideoArchitectureDescriptor FakeCapabilityDescriptor(
-        StageCapability stage = StageCapability.None,
         IReadOnlyList<ArchitectureEntryMode> entryModes = null) =>
         Descriptor("fake") with
         {
             AudioSourceKinds = [AudioSourceKind.Native],
             EntryModes = entryModes ?? [ArchitectureEntryMode.ImageToVideo],
-            Capabilities = new(ClipCapability.None, stage),
         };
 
     private static Session RestrictedSession(params string[] modelPrefixes)
@@ -1730,26 +1593,13 @@ public class ArchitectureFoundationTests
         private static ResolvedVideoModel Resolved(
             string name,
             VideoArchitectureDescriptor architecture,
-            string profile)
-        {
-            ModelProfileId profileId = new(profile);
-            IReadOnlyList<ArchitectureEntryMode> entryModes = architecture.EntryModes;
-            return TestResolvedVideoModel.Create(
+            string profile) =>
+            TestResolvedVideoModel.Create(
                 name,
-                profileId,
+                new(profile),
                 architecture,
                 $"{architecture.Id}-test-model",
-                $"{architecture.Id}-test-compat",
-                (
-                    (entryModes.Contains(ArchitectureEntryMode.TextToVideo)
-                        ? VideoModelEntryAbility.TextToVideo
-                        : VideoModelEntryAbility.None)
-                    | (entryModes.Any(mode => mode is
-                            ArchitectureEntryMode.ImageToVideo
-                            or ArchitectureEntryMode.InitVideo)
-                        ? VideoModelEntryAbility.ImageToVideo
-                        : VideoModelEntryAbility.None)));
-        }
+                $"{architecture.Id}-test-compat");
 
         private sealed class FakeModule(
             VideoArchitectureDescriptor descriptor,
@@ -1791,13 +1641,14 @@ public class ArchitectureFoundationTests
                 ArchitectureEntryMode.TextToVideo,
                 ArchitectureEntryMode.ImageToVideo,
             ],
-            new(ClipCapability.None, StageCapability.None),
+            ArchitectureFeature.None,
             new ArchitectureBoundaryPolicy(
-                new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>
+                new Dictionary<BoundaryJoinType, RuleDecision>
                 {
-                    [BoundaryJoinType.Cut] = ArchitectureBoundaryModePolicy.Supported(
+                    [BoundaryJoinType.Cut] = RuleDecision.Supported(
                         $"{id}.cut",
-                        "cut"),
+                        "cut",
+                        RuleScope.Boundary),
                     [BoundaryJoinType.Continue] = BoundaryMode(
                         $"{id}.continue",
                         "same architecture"),
@@ -1806,12 +1657,13 @@ public class ArchitectureFoundationTests
                         "same architecture"),
                 }));
 
-    private static ArchitectureBoundaryModePolicy BoundaryMode(
+    private static RuleDecision BoundaryMode(
         string code,
         string reason) =>
-        ArchitectureBoundaryModePolicy.Conditional(
+        RuleDecision.Conditional(
             code,
             reason,
+            RuleScope.Boundary,
             new BoundaryRuleConstraints(
                 FrameStep: 1,
                 MinFrames: 1,
@@ -1836,10 +1688,7 @@ public class ArchitectureFoundationTests
                 new($"{descriptor.Id.Value}-test-profile"),
                 resolvedDescriptor ?? descriptor,
                 model.ModelClass.ID,
-                model.ModelClass.CompatClass.ID,
-                entryAbilities:
-                    VideoModelEntryAbility.TextToVideo
-                    | VideoModelEntryAbility.ImageToVideo);
+                model.ModelClass.CompatClass.ID);
             return true;
         }
 

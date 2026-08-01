@@ -107,8 +107,7 @@ text-versus-image families.
 `HostVideoArchitectureModule.TryResolveModel` is the last-priority baseline. It
 does not trust `IsText2Video` / `IsImage2Video` by themselves. Its proof table
 admits exact stock branches for Hunyuan Video, Hunyuan Video 1.5, Mochi,
-Cosmos 1, Kandinsky 5 Video, LTX Video 1, and non-2.3 LTX Video 2. Each row
-publishes only the entry abilities its real host branch can perform. Cosmos
+Cosmos 1, Kandinsky 5 Video, LTX Video 1, and non-2.3 LTX Video 2. Cosmos
 Predict2, SVD, component LoRA/VAE checkpoints, Hunyuan 1.5 SR, and unknown
 synthetic video classes remain unresolved.
 `NoneArchitectureModule.TryResolveModel` always returns false; common planning
@@ -122,8 +121,8 @@ or frontend classification cannot authorize an unsupported model.
 `Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`,
 `HostVideoArchitectureModule.Descriptor`, and `NoneArchitecture.Descriptor`
 are typed `VideoArchitectureDescriptor` values.
-Each resolved model owns its entry abilities and complete effective
-capabilities. The descriptor publishes architecture defaults; model selection,
+Each resolved model owns its complete effective capabilities. The descriptor
+publishes architecture defaults; model selection,
 diagnostics, conversion, planning, and runtime authorization use the exact
 selected model facts, which may narrow those defaults. Every accepted WAN model
 publishes text, image, and source entry. Those entry modes describe the current
@@ -156,7 +155,7 @@ the currently resolved, session-authorized host models to:
 ```text
 schemaVersion   = 2
 architectures[] = id + label + complete capabilities + boundary rules + rules
-models[]        = identity + core facts + frame grid + entry abilities
+models[]        = identity + core facts + frame grid
                   + complete effective capabilities + reference positions
 ```
 
@@ -254,7 +253,7 @@ controls.
 |---|---|---|
 | Executable architecture/profile identity | Backend-resolved stage-0 model | Planning, runtime dispatch, clip lock |
 | Architecture descriptor capabilities | Backend architecture catalog record | Family overview and default policy |
-| Effective model capabilities, grid, entry abilities, reference positions | Backend resolved-model catalog record | Model picker, sidebar/timeline feature gates, conversion |
+| Effective model capabilities, grid, reference positions | Backend resolved-model catalog record | Model picker, sidebar/timeline feature gates, conversion |
 | Persisted `architectureHint` / profile hints | Authoring document | Unresolved-model display and repair only |
 | Local architecture behavior/panel gates | Frontend implementation | How an already-authorized bespoke control renders/edits |
 

@@ -8,41 +8,15 @@ import type { CapabilityRuleDecision } from "./types";
 
 const rule = (
     code: (typeof CONDITIONAL_RULE_CODES)[keyof typeof CONDITIONAL_RULE_CODES],
-    constraints: Record<string, unknown> | null = null,
 ): CapabilityRuleDecision => ({
     support: "conditional",
     code,
     reason: code,
     scope: "clip",
-    constraints,
+    constraints: null,
 });
 
 describe("typed conditional-rule evaluator", () => {
-    it("reads the advertised retake entry modes instead of assuming them", () => {
-        const generated = minimalClip();
-        const requiring = (...modes: string[]) =>
-            rule(CONDITIONAL_RULE_CODES.retakeRequiresSource, {
-                requiresAnyEntryMode: modes,
-            });
-        expect(
-            evaluateConditionalRule(requiring("text-to-video"), {
-                clip: generated,
-            }),
-        ).toBe(false);
-        expect(
-            evaluateConditionalRule(requiring("init-video"), {
-                clip: generated,
-                generatedEntryMode: "image-to-video",
-            }),
-        ).toBe(true);
-        expect(
-            evaluateConditionalRule(requiring("init-video", "image-to-video"), {
-                clip: generated,
-                generatedEntryMode: "image-to-video",
-            }),
-        ).toBe(false);
-    });
-
     it("requires an init video for retake, references notwithstanding", () => {
         expect(
             evaluateConditionalRule(

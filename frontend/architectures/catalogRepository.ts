@@ -206,11 +206,6 @@ export const buildArchitectureModelCatalog = (
                               backendModel.capabilities,
                           ),
                       }),
-                ...(backendModel?.entryAbilities === undefined
-                    ? {}
-                    : {
-                          entryAbilities: [...backendModel.entryAbilities],
-                      }),
                 ...(backendModel?.enhancements === undefined
                     ? {}
                     : {

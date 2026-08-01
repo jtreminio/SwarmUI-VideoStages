@@ -9,12 +9,11 @@ internal static class ArchitectureCapabilityValidator
     internal static IReadOnlyList<PlanDiagnostic> Validate(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,
-        ArchitectureEntryMode entryMode,
-        IReadOnlyDictionary<int, ResolvedVideoModel> stageModels)
+        ArchitectureEntryMode entryMode)
     {
         List<PlanDiagnostic> diagnostics = [];
         bool hasActiveStages = clip.Stages is { Count: > 0 };
-        ArchitectureCapabilityDescriptor capabilities = descriptor.Capabilities;
+        ArchitectureFeature features = descriptor.Features;
         IReadOnlyList<AudioSourceKind> audioSourceKinds = descriptor.AudioSourceKinds;
         void Require(bool configured, bool supported, string option)
         {
@@ -29,15 +28,6 @@ internal static class ArchitectureCapabilityValidator
             }
         }
 
-        if (hasActiveStages)
-        {
-            ValidateModelEntryRoles(
-                clip,
-                descriptor,
-                entryMode,
-                stageModels,
-                diagnostics);
-        }
         Require(
             configured: true,
             descriptor.EntryModes.Contains(entryMode),
@@ -48,23 +38,19 @@ internal static class ArchitectureCapabilityValidator
             "standalone audio output");
         Require(
             hasActiveStages && clip.PromptWindows is { Count: > 0 },
-            Has(capabilities.Clip, ClipCapability.PromptRelay),
+            features.HasFlag(ArchitectureFeature.PromptRelay),
             "prompt relay");
         Require(
             hasActiveStages && clip.ImageRefs is { Count: > 0 },
-            Has(capabilities.Clip, ClipCapability.References),
-            "image references");
-        Require(
-            hasActiveStages && clip.ImageRefs is { Count: > 0 },
-            Has(capabilities.Stage, StageCapability.FrameReferences),
+            features.HasFlag(ArchitectureFeature.FrameReferences),
             "frame references");
         Require(
             clip.ReferenceFraming != ReferenceFramingMode.Crop,
-            Has(capabilities.Clip, ClipCapability.ReferenceFraming),
+            features.HasFlag(ArchitectureFeature.ReferenceFraming),
             "reference framing");
         Require(
             clip.Stages?.Any(stage => stage.RetakeWindow is not null) == true,
-            Has(capabilities.Clip, ClipCapability.Retake),
+            features.HasFlag(ArchitectureFeature.Retake),
             "retake");
         Require(
             clip.UploadedAudio is not null
@@ -72,11 +58,10 @@ internal static class ArchitectureCapabilityValidator
                     clip.AudioSource,
                     Constants.AudioSourceNative,
                     StringComparison.OrdinalIgnoreCase),
-            Has(capabilities.Clip, ClipCapability.AudioSources),
+            features.HasFlag(ArchitectureFeature.ClipAudio),
             "clip audio source");
-        bool supportsAudioDerivedDuration = Has(
-            capabilities.Clip,
-            ClipCapability.AudioDerivedDuration);
+        bool supportsAudioDerivedDuration =
+            features.HasFlag(ArchitectureFeature.AudioDerivedDuration);
         Require(
             clip.ClipLengthFromAudio,
             supportsAudioDerivedDuration,
@@ -87,62 +72,19 @@ internal static class ArchitectureCapabilityValidator
             diagnostics);
         Require(
             clip.ClipLengthFromControlNet,
-            Has(
-                capabilities.Clip,
-                ClipCapability.ControlSignalDerivedDuration),
+            features.HasFlag(ArchitectureFeature.ControlSignalDerivedDuration),
             "control-signal-derived clip duration");
         Require(
             clip.ReuseAudio,
-            Has(capabilities.Clip, ClipCapability.AudioReuse),
+            features.HasFlag(ArchitectureFeature.AudioReuse),
             "captured stage audio reuse");
         Require(
             hasActiveStages && clip.IcLoras is { Count: > 0 },
-            Has(capabilities.Stage, StageCapability.IcLora),
+            features.HasFlag(ArchitectureFeature.IcLora),
             "IC-LoRA");
         ValidateAudioSourceKind(clip, descriptor, audioSourceKinds, diagnostics);
         ValidateStages(clip, descriptor, diagnostics);
         return diagnostics.AsReadOnly();
-    }
-
-    private static void ValidateModelEntryRoles(
-        ClipSpec clip,
-        VideoArchitectureDescriptor descriptor,
-        ArchitectureEntryMode entryMode,
-        IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
-        ICollection<PlanDiagnostic> diagnostics)
-    {
-        for (int activeStageIndex = 0; activeStageIndex < clip.Stages.Count; activeStageIndex++)
-        {
-            StageSpec stage = clip.Stages[activeStageIndex];
-            bool resolvedForArchitecture =
-                stageModels.TryGetValue(
-                    stage.ClipStageRawIndex,
-                    out ResolvedVideoModel resolved)
-                && resolved is not null
-                && resolved.ArchitectureId == descriptor.Id
-                && ReferenceEquals(resolved.Architecture, descriptor);
-            if (resolvedForArchitecture
-                && VideoModelEntryPolicy.SupportsStageRole(
-                    resolved,
-                    activeStageIndex,
-                    entryMode))
-            {
-                continue;
-            }
-            string required = activeStageIndex == 0
-                ? entryMode.ToString()
-                : ArchitectureEntryMode.ImageToVideo.ToString();
-            diagnostics.Add(new(
-                PlanDiagnosticSeverity.Error,
-                "architecture-model-entry-unsupported",
-                $"Clip {clip.Id} stage {stage.Id} model "
-                    + $"'{resolved?.ModelName ?? stage.Model}' cannot perform its "
-                    + (activeStageIndex == 0 ? "clip-root" : "decoded later-stage")
-                    + $" role, which requires entry ability '{required}'.",
-                clip.Id,
-                stage.Id,
-                stage.ClipStageRawIndex));
-        }
     }
 
     private static void ValidateAudioDerivedDurationSource(
@@ -243,9 +185,4 @@ internal static class ArchitectureCapabilityValidator
                 + $"'{descriptor.Id}' does not support.",
             clip.Id,
             stageId);
-
-    private static bool Has<T>(T value, T capability) where T : struct, Enum =>
-        (Convert.ToInt64(value) & Convert.ToInt64(capability))
-            == Convert.ToInt64(capability);
-
 }

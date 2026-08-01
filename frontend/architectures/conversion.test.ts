@@ -9,7 +9,6 @@ import {
     minimalStage,
 } from "../__test_helpers__/clipFixtures";
 import { createTimelineHistory } from "../timelineHistory";
-import { modelSupportsStageEntry } from "./conversion/entryModePolicy";
 import { planArchitectureConversion } from "./conversion/plan";
 import {
     architectureConversionMessage,
@@ -68,150 +67,6 @@ describe("architecture conversion policy", () => {
         expect(apply).toHaveBeenCalledTimes(1);
     });
 
-    it("requires the host-generated root mode and accepts decoded source entry", () => {
-        const source = minimalClip({
-            initVideo: {
-                data: "data:video/mp4;base64,AA==",
-                fileName: "source.mp4",
-                fps: 24,
-                durationSeconds: 2,
-                startSeconds: 0,
-                lengthSeconds: 2,
-            },
-        });
-
-        expect(
-            modelSupportsStageEntry(
-                { entryModes: ["image-to-video"] },
-                source,
-                0,
-                "text-to-video",
-            ),
-        ).toBe(true);
-        expect(
-            modelSupportsStageEntry(
-                { entryModes: ["text-to-video"] },
-                source,
-                0,
-                "text-to-video",
-            ),
-        ).toBe(false);
-        expect(
-            modelSupportsStageEntry(
-                { entryModes: ["init-video"] },
-                source,
-                0,
-                "text-to-video",
-            ),
-        ).toBe(true);
-        const guidedText = minimalClip({ refs: [minimalRef({ frame: 1 })] });
-        expect(
-            modelSupportsStageEntry(
-                { entryModes: ["text-to-video"] },
-                guidedText,
-                0,
-                "text-to-video",
-            ),
-        ).toBe(true);
-        expect(
-            modelSupportsStageEntry(
-                { entryModes: ["image-to-video"] },
-                guidedText,
-                0,
-                "text-to-video",
-            ),
-        ).toBe(false);
-    });
-
-    it("uses model entry facts before the legacy text/image aliases", () => {
-        const clip = minimalClip({
-            stages: [minimalStage(), minimalStage()],
-        });
-        const contradictory = {
-            entryAbilities: ["text"],
-            entryModes: ["text-to-video", "image-to-video"],
-        };
-
-        expect(
-            modelSupportsStageEntry(contradictory, clip, 0, "text-to-video"),
-        ).toBe(true);
-        expect(
-            modelSupportsStageEntry(contradictory, clip, 1, "text-to-video"),
-        ).toBe(false);
-    });
-
-    it("uses the host root mode only for the first active stage", () => {
-        const textOnly = { entryModes: ["text-to-video"] };
-        const imageOnly = { entryModes: ["image-to-video"] };
-        const clip = minimalClip({
-            stages: [minimalStage(), minimalStage()],
-        });
-
-        expect(
-            modelSupportsStageEntry(textOnly, clip, 0, "text-to-video"),
-        ).toBe(true);
-        expect(
-            modelSupportsStageEntry(imageOnly, clip, 0, "text-to-video"),
-        ).toBe(false);
-        expect(
-            modelSupportsStageEntry(textOnly, clip, 1, "text-to-video"),
-        ).toBe(false);
-        expect(
-            modelSupportsStageEntry(imageOnly, clip, 1, "text-to-video"),
-        ).toBe(true);
-    });
-
-    it("rejects an image-only whole-clip target when the first active stage needs text entry", () => {
-        const catalog = fakeArchitectureCatalog();
-        catalog.entries[0].entryModes = ["image-to-video"];
-        const clip = minimalClip({
-            stages: [
-                minimalStage({ skipped: true }),
-                minimalStage({ model: "ltx" }),
-            ],
-        });
-
-        expect(
-            planArchitectureConversion(
-                clip,
-                {
-                    architectureId: "test-video",
-                    modelProfileId: "test-profile",
-                    model: "test-video.safetensors",
-                    capabilities: catalog.architectures[0].capabilities,
-                    entryModes: ["image-to-video"],
-                },
-                catalog,
-                "text-to-video",
-            ),
-        ).toBeNull();
-    });
-
-    it("rejects a target that cannot perform a preserved later stage", () => {
-        const catalog = fakeArchitectureCatalog();
-        catalog.entries[0].entryModes = ["text-to-video"];
-        const source = minimalClip({
-            stages: [minimalStage(), minimalStage()],
-        });
-        const before = structuredClone(source);
-
-        const conversion = planArchitectureConversion(
-            source,
-            {
-                architectureId: "test-video",
-                modelProfileId: "test-profile",
-                model: "test-video.safetensors",
-                capabilities: catalog.architectures[0].capabilities,
-                entryModes: ["text-to-video"],
-            },
-            catalog,
-            "text-to-video",
-        );
-
-        expect(conversion).toBeNull();
-        expect(source).toEqual(before);
-    });
-
     it("preserves source video when an image-capable target can refine it", () => {
         const catalog = fakeArchitectureCatalog();
         catalog.entries[0].entryModes = ["image-to-video"];
@@ -237,32 +92,9 @@ describe("architecture conversion policy", () => {
                 entryModes: ["image-to-video"],
             },
             catalog,
-            "text-to-video",
         );
         expect(conversion?.clip.initVideo).toEqual(source.initVideo);
         expect(source).toEqual(before);
-    });
-
-    it("accepts image-capable models for decoded source refinement", () => {
-        const initVideoClip = minimalClip({
-            initVideo: {
-                data: "data:video/mp4;base64,AA==",
-                fileName: "source.mp4",
-                fps: 24,
-                durationSeconds: 2,
-                startSeconds: 0,
-                lengthSeconds: 2,
-            },
-        });
-
-        expect(
-            modelSupportsStageEntry(
-                { entryModes: ["image-to-video"] },
-                initVideoClip,
-                0,
-                "text-to-video",
-            ),
-        ).toBe(true);
     });
 
     it("retains clip LoRAs and dormant samplerless weights", () => {

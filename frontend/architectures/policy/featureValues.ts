@@ -1,9 +1,7 @@
 import { isAllowedAudioSource } from "../../audioSource";
 import {
-    AUTHORING_FEATURE_CAPABILITIES,
     AUTHORING_FEATURE_LABELS,
-    doesAuthoringFeatureRequireEveryCapability,
-    type GeneratedAuthoringFeatureCapability,
+    AUTHORING_FEATURE_WIRE_NAMES,
 } from "../generatedFeatures";
 import type { ArchitectureCapabilities } from "../types";
 import type { AuthoringFeature, ClipCapabilityView } from "./types";
@@ -56,18 +54,7 @@ export const architectureFeatureSupport = (
     scope: FeatureSupportScope,
 ): boolean => {
     const capability = scope.capabilities;
-    const supports = (
-        binding: GeneratedAuthoringFeatureCapability,
-    ): boolean => {
-        const [capabilityScope, wireName] = binding;
-        return capability[capabilityScope].includes(wireName);
-    };
-
-    const bindings = AUTHORING_FEATURE_CAPABILITIES[feature];
-    const supported = doesAuthoringFeatureRequireEveryCapability(feature)
-        ? bindings.every(supports)
-        : bindings.some(supports);
-    if (!supported) {
+    if (!capability.features.includes(AUTHORING_FEATURE_WIRE_NAMES[feature])) {
         return false;
     }
     if (feature === "clipAudio" && scope.audioSource !== undefined) {

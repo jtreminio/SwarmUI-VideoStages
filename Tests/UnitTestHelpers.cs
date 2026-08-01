@@ -17,8 +17,6 @@ internal static class TestResolvedVideoModel
         VideoArchitectureDescriptor architecture,
         string modelClassId = null,
         string compatibilityClassId = null,
-        VideoModelEntryAbility entryAbilities =
-            VideoModelEntryAbility.TextToVideo | VideoModelEntryAbility.ImageToVideo,
         IReadOnlyList<string> referencePositions = null,
         bool lorasTargetTextEncoder = true) =>
         new(
@@ -27,7 +25,6 @@ internal static class TestResolvedVideoModel
             architecture,
             modelClassId ?? modelName,
             compatibilityClassId ?? architecture.Id.Value,
-            entryAbilities,
             referencePositions ?? [],
             lorasTargetTextEncoder);
 }

@@ -7,7 +7,6 @@ import {
 import type { Clip } from "../types";
 import { hasArchitectureSlotSourcedIcLora } from "./behaviorRegistry";
 import { resolvedClipArchitectureId } from "./clipIdentity";
-import { isIgnoredWhenUnsupportedFeature } from "./generatedFeatures";
 import { effectiveClipCapabilities } from "./modelCapabilities";
 import { NONE_ARCHITECTURE_ID } from "./none/identity";
 import { createCapabilityViewResolver } from "./policy";
@@ -49,17 +48,12 @@ const persistedCapabilityIssues = (
         architectureFeatureSupport(feature, { capabilities, ...value });
     const unsupported = (
         active: boolean,
-        feature: AuthoringFeature,
         key: string,
         label: string,
         severity?: ArchitectureDiagnostic["severity"],
     ): void => {
         if (active) {
-            const effectiveSeverity =
-                severity ??
-                (isIgnoredWhenUnsupportedFeature(feature)
-                    ? "warning"
-                    : "error");
+            const effectiveSeverity = severity ?? "warning";
             diagnostics.push(
                 issue(
                     `architecture.unsupported.${key}`,
@@ -74,31 +68,26 @@ const persistedCapabilityIssues = (
     };
     unsupported(
         !supports("frameReferences") && clip.refs.length > 0,
-        "frameReferences",
         "frame-references",
         "Frame references",
     );
     unsupported(
         !supports("referenceFraming") && clip.refFraming !== "crop",
-        "referenceFraming",
         "reference-framing",
         "Reference framing",
     );
     unsupported(
         !supports("icLora") && clip.icLoras.length > 0,
-        "icLora",
         "ic-lora",
         "IC-LoRA",
     );
     unsupported(
         !supports("retake") && clip.retake !== null,
         "retake",
-        "retake",
         "Retake",
     );
     unsupported(
         !supports("promptRelay") && clip.promptWindows.length > 0,
-        "promptRelay",
         "prompt-relay",
         "Prompt relay",
     );
@@ -127,13 +116,11 @@ const persistedCapabilityIssues = (
     });
     unsupported(
         !supports("audioReuse") && clip.reuseAudio,
-        "audioReuse",
         "audio-reuse",
         "Captured stage audio reuse",
     );
     unsupported(
         !supports("audioDerivedDuration") && clip.clipLengthFromAudio,
-        "audioDerivedDuration",
         "audio-derived-duration",
         "Audio-derived clip duration",
     );
@@ -142,21 +129,18 @@ const persistedCapabilityIssues = (
     );
     unsupported(
         !supportsControlSignalDerivedDuration && clip.clipLengthFromControlNet,
-        "controlSignalDerivedDuration",
         "control-signal-derived-duration",
         "Control-signal-derived clip duration",
     );
     unsupported(
         !selectedAudioSourceSupported &&
             (sourceKind !== "Native" || clip.uploadedAudio !== null),
-        "clipAudio",
         "audio-source",
         `Audio source '${sourceKind}'`,
         clipAudioCapabilitySupported ? "error" : undefined,
     );
     unsupported(
         clip.saveAudioTrack && !standaloneAudioSupported,
-        "clipAudio",
         "audio-output",
         "Standalone audio output",
     );

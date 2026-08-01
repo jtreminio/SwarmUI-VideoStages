@@ -356,7 +356,6 @@
       modelProfileId: profileId,
       model,
       capabilities: structuredClone(capabilities),
-      ...entry.entryAbilities === void 0 ? {} : { entryAbilities: [...entry.entryAbilities] },
       entryModes: [...entry.entryModes]
     } : null;
   };
@@ -442,67 +441,29 @@
   };
 
   // frontend/architectures/generatedFeatures.ts
-  var CAPABILITY_WIRE_NAMES = {
-    clip: {
-      promptRelay: "prompt-relay",
-      references: "references",
-      referenceFraming: "reference-framing",
-      retake: "retake",
-      audioSources: "audio-sources",
-      audioSegments: "audio-segments",
-      audioReuse: "audio-reuse",
-      audioDerivedDuration: "audio-derived-duration",
-      controlSignalDerivedDuration: "control-signal-derived-duration"
-    },
-    stage: {
-      icLora: "ic-lora",
-      frameReferences: "frame-references"
-    }
+  var AUTHORING_FEATURE_WIRE_NAMES = {
+    promptRelay: "prompt-relay",
+    frameReferences: "frame-references",
+    referenceFraming: "reference-framing",
+    retake: "retake",
+    clipAudio: "audio-sources",
+    audioSegments: "audio-segments",
+    audioReuse: "audio-reuse",
+    audioDerivedDuration: "audio-derived-duration",
+    controlSignalDerivedDuration: "control-signal-derived-duration",
+    icLora: "ic-lora"
   };
-  var IGNORED_WHEN_UNSUPPORTED_FEATURES = [
-    "frameReferences",
-    "referenceFraming",
-    "retake",
-    "promptRelay",
-    "clipAudio",
-    "audioReuse",
-    "audioDerivedDuration",
-    "controlSignalDerivedDuration",
-    "icLora"
-  ];
-  var AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY = [
-    "frameReferences"
-  ];
-  var doesAuthoringFeatureRequireEveryCapability = (feature) => AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY.includes(feature);
-  var isIgnoredWhenUnsupportedFeature = (feature) => IGNORED_WHEN_UNSUPPORTED_FEATURES.includes(feature);
   var AUTHORING_FEATURE_LABELS = {
+    promptRelay: "Relay prompts",
     frameReferences: "Frame references",
     referenceFraming: "Reference framing",
     retake: "Retakes",
-    promptRelay: "Relay prompts",
     clipAudio: "Clip audio",
+    audioSegments: "Audio segments",
     audioReuse: "Captured stage audio reuse",
     audioDerivedDuration: "Audio-derived clip duration",
     controlSignalDerivedDuration: "Control-signal-derived clip duration",
     icLora: "IC-LoRA"
-  };
-  var AUTHORING_FEATURE_CAPABILITIES = {
-    frameReferences: [
-      ["clip", CAPABILITY_WIRE_NAMES.clip.references],
-      ["stage", CAPABILITY_WIRE_NAMES.stage.frameReferences]
-    ],
-    referenceFraming: [["clip", CAPABILITY_WIRE_NAMES.clip.referenceFraming]],
-    retake: [["clip", CAPABILITY_WIRE_NAMES.clip.retake]],
-    promptRelay: [["clip", CAPABILITY_WIRE_NAMES.clip.promptRelay]],
-    clipAudio: [["clip", CAPABILITY_WIRE_NAMES.clip.audioSources]],
-    audioReuse: [["clip", CAPABILITY_WIRE_NAMES.clip.audioReuse]],
-    audioDerivedDuration: [
-      ["clip", CAPABILITY_WIRE_NAMES.clip.audioDerivedDuration]
-    ],
-    controlSignalDerivedDuration: [
-      ["clip", CAPABILITY_WIRE_NAMES.clip.controlSignalDerivedDuration]
-    ],
-    icLora: [["stage", CAPABILITY_WIRE_NAMES.stage.icLora]]
   };
   var CONDITIONAL_RULE_CODES = {
     retakeRequiresSource: "retake-source-required"
@@ -513,22 +474,11 @@
     Object.values(CONDITIONAL_RULE_CODES)
   );
   var isKnownConditionalRuleCode = (value) => KNOWN_CONDITIONAL_RULE_CODES.has(value);
-  var clipEntryMode = (clip, generatedEntryMode = "text-to-video") => clip.initVideo !== null ? "init-video" : generatedEntryMode;
   var conditionalRule = (rules, code) => rules.find((rule) => rule.code === code) ?? null;
-  var DEFAULT_REQUIRED_ENTRY_MODES = [
-    "init-video"
-  ];
-  var requiredEntryModes = (rule) => {
-    const value = rule.constraints?.requiresAnyEntryMode;
-    return Array.isArray(value) && value.length > 0 ? value : DEFAULT_REQUIRED_ENTRY_MODES;
-  };
   var evaluateConditionalRule = (rule, context) => {
-    const clip = context.clip;
     switch (rule.code) {
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-        return clip !== void 0 && !requiredEntryModes(rule).includes(
-          clipEntryMode(clip, context.generatedEntryMode)
-        );
+        return context.clip !== void 0 && context.clip.initVideo === null;
       default:
         return true;
     }
@@ -551,8 +501,7 @@
     return models.reduce((effective, model) => {
       const capabilities = effectiveModelCapabilities(model, architecture);
       return {
-        clip: intersect(effective.clip, capabilities.clip),
-        stage: intersect(effective.stage, capabilities.stage),
+        features: intersect(effective.features, capabilities.features),
         entryModes: intersect(
           effective.entryModes,
           capabilities.entryModes
@@ -693,13 +642,7 @@
   };
   var architectureFeatureSupport = (feature, scope) => {
     const capability = scope.capabilities;
-    const supports = (binding) => {
-      const [capabilityScope, wireName] = binding;
-      return capability[capabilityScope].includes(wireName);
-    };
-    const bindings = AUTHORING_FEATURE_CAPABILITIES[feature];
-    const supported = doesAuthoringFeatureRequireEveryCapability(feature) ? bindings.every(supports) : bindings.some(supports);
-    if (!supported) {
+    if (!capability.features.includes(AUTHORING_FEATURE_WIRE_NAMES[feature])) {
       return false;
     }
     if (feature === "clipAudio" && scope.audioSource !== void 0) {
@@ -828,15 +771,11 @@
   // frontend/architectures/catalogWire.ts
   var BOUNDARY_MODES = ["cut", "continue", "crossfade"];
   var ENTRY_MODES = ["text-to-video", "image-to-video", "init-video"];
-  var ENTRY_ABILITIES = ["text", "image"];
   var REFERENCE_POSITIONS = ["first", "last", "any"];
   var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var isTrimmedNonEmpty = (value) => typeof value === "string" && value.length > 0 && value === value.trim();
   var isUniqueStringArray = (value) => Array.isArray(value) && value.every((entry) => isTrimmedNonEmpty(entry)) && new Set(value).size === value.length;
   var isEntryModeArray = (value) => isUniqueStringArray(value) && value.every((entry) => ENTRY_MODES.includes(entry));
-  var isEntryAbilityArray = (value) => isUniqueStringArray(value) && value.every(
-    (entry) => ENTRY_ABILITIES.includes(entry)
-  );
   var isReferencePositionArray = (value) => isUniqueStringArray(value) && value.every(
     (entry) => REFERENCE_POSITIONS.includes(entry)
   );
@@ -848,7 +787,7 @@
       "reason",
       "scope",
       "constraints"
-    ]) || typeof value.support !== "string" || !["supported", "unsupported", "conditional"].includes(value.support) || !isTrimmedNonEmpty(value.code) || !isTrimmedNonEmpty(value.reason) || typeof value.scope !== "string" || !["clip", "stage", "boundary"].includes(value.scope) || value.constraints !== null && !isRecord(value.constraints)) {
+    ]) || typeof value.support !== "string" || !["supported", "unsupported", "conditional"].includes(value.support) || !isTrimmedNonEmpty(value.code) || !isTrimmedNonEmpty(value.reason) || typeof value.scope !== "string" || !["clip", "boundary"].includes(value.scope) || value.constraints !== null && !isRecord(value.constraints)) {
       return false;
     }
     const scope = value.scope;
@@ -861,13 +800,12 @@
     return true;
   };
   var isKnownExecutableRule = (value) => {
-    if (value.support !== "conditional" || !isRecord(value.constraints)) {
+    if (value.support !== "conditional") {
       return false;
     }
-    const constraints = value.constraints;
     switch (value.code) {
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-        return value.scope === "clip" && hasExactKeys(constraints, ["requiresAnyEntryMode"]) && isEntryModeArray(constraints.requiresAnyEntryMode) && constraints.requiresAnyEntryMode.length > 0;
+        return value.scope === "clip" && value.constraints === null;
     }
     return false;
   };
@@ -913,17 +851,10 @@
     (rule) => isRuleDecision(rule, allowedScopes) && isKnownConditionalRuleCode(rule.code) && isKnownExecutableRule(rule)
   ) && new Set(value.map((rule) => rule.code)).size === value.length;
   var isCapabilities = (value) => {
-    if (!isRecord(value) || !hasExactKeys(value, [
-      "clip",
-      "stage",
-      "entryModes",
-      "audioSourceKinds"
-    ])) {
+    if (!isRecord(value) || !hasExactKeys(value, ["features", "entryModes", "audioSourceKinds"])) {
       return false;
     }
-    return [value.clip, value.stage, value.audioSourceKinds].every(
-      isUniqueStringArray
-    ) && isEntryModeArray(value.entryModes);
+    return [value.features, value.audioSourceKinds].every(isUniqueStringArray) && isEntryModeArray(value.entryModes);
   };
   var hasCompleteBoundaryRules = (value) => {
     if (!isRecord(value)) {
@@ -945,7 +876,7 @@
         "capabilities",
         "boundaryRules",
         "rules"
-      ]) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isCapabilities(raw.capabilities) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["clip", "stage"])) {
+      ]) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isCapabilities(raw.capabilities) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["clip"])) {
         return null;
       }
       const executableRuleCodes = [
@@ -977,10 +908,9 @@
         "modelClassId",
         "compatibilityClassId",
         "frameGrid",
-        "entryAbilities",
         "capabilities",
         "enhancements"
-      ]) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !isCapabilities(raw.capabilities) || !isEntryAbilityArray(raw.entryAbilities) || raw.entryAbilities.length === 0 || !isRecord(raw.enhancements) || !hasExactKeys(raw.enhancements, ["referencePositions"]) || !isReferencePositionArray(raw.enhancements.referencePositions)) {
+      ]) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !isCapabilities(raw.capabilities) || !isRecord(raw.enhancements) || !hasExactKeys(raw.enhancements, ["referencePositions"]) || !isReferencePositionArray(raw.enhancements.referencePositions)) {
         return null;
       }
       if (modelNames.has(raw.modelName)) {
@@ -995,7 +925,6 @@
         compatibilityClassId: raw.compatibilityClassId,
         frameGrid: Number(raw.frameGrid),
         capabilities: structuredClone(raw.capabilities),
-        entryAbilities: [...raw.entryAbilities],
         enhancements: {
           referencePositions: [
             ...raw.enhancements.referencePositions
@@ -1143,9 +1072,6 @@
             capabilities: structuredClone(
               backendModel.capabilities
             )
-          },
-          ...backendModel?.entryAbilities === void 0 ? {} : {
-            entryAbilities: [...backendModel.entryAbilities]
           },
           ...backendModel?.enhancements === void 0 ? {} : {
             enhancements: structuredClone(
@@ -1418,7 +1344,7 @@
       const descriptor = architectureById.get(architectureId);
       const decision = (feature) => {
         if (feature === "sampler" || feature === "scheduler") {
-          const supported = descriptor !== void 0 && resolvedModel !== void 0 && ((resolvedModel.entryAbilities?.length ?? 0) > 0 || resolvedModel.entryModes.length > 0);
+          const supported = descriptor !== void 0 && resolvedModel !== void 0 && resolvedModel.entryModes.length > 0;
           return {
             supported,
             reason: supported ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection requires a resolved generating video model.`,
@@ -1946,7 +1872,7 @@
     if (!target) {
       return false;
     }
-    return target.entryAbilities === void 0 ? target.entryModes.includes("text-to-video") : target.entryAbilities.includes("text");
+    return target.entryModes.includes("text-to-video");
   };
   var getRootGeneratedEntryMode = (modelCatalog) => !`${getRootModelInput()?.value ?? ""}`.trim() || isRootTextToVideoModel(modelCatalog) ? "text-to-video" : "image-to-video";
   var getDropdownOptions = (paramId, fallbackSelectId) => {
@@ -4235,28 +4161,6 @@
     console.debug(`[VideoStages debug ${area}]`, message, ...details);
   };
 
-  // frontend/architectures/conversion/entryModePolicy.ts
-  var firstActiveStageIndex = (clip) => {
-    const index = clip.stages.findIndex((stage) => !stage.skipped);
-    return index >= 0 ? index : null;
-  };
-  var modelSupportsStageEntry = (model, clip, stageIdx, generatedEntryMode) => {
-    const supportsText = model.entryAbilities?.includes("text") ?? model.entryModes.includes("text-to-video");
-    const supportsImage = model.entryAbilities?.includes("image") ?? model.entryModes.includes("image-to-video");
-    const firstActive = firstActiveStageIndex(clip);
-    const isClipRoot = firstActive === null ? !clip.stages.slice(0, stageIdx).some((candidate) => !candidate.skipped) : stageIdx === firstActive;
-    if (!isClipRoot) {
-      return supportsImage;
-    }
-    if (clip.initVideo === null) {
-      return generatedEntryMode === "text-to-video" ? supportsText : supportsImage;
-    }
-    return supportsImage || model.entryModes.includes("init-video");
-  };
-  var modelSupportsAllActiveStageEntries = (model, clip, generatedEntryMode) => clip.stages.every(
-    (stage, stageIdx) => stage.skipped || modelSupportsStageEntry(model, clip, stageIdx, generatedEntryMode)
-  );
-
   // frontend/architectures/conversion/plan.ts
   var resolveArchitectureRetarget = (requested, catalog) => {
     if (!catalog) {
@@ -4277,16 +4181,12 @@
       capabilities: structuredClone(
         model.capabilities ?? descriptor.capabilities
       ),
-      ...model.entryAbilities === void 0 ? {} : { entryAbilities: [...model.entryAbilities] },
       entryModes: [...model.entryModes]
     };
   };
-  var planArchitectureConversion = (source, requested, catalog, generatedEntryMode = "text-to-video") => {
+  var planArchitectureConversion = (source, requested, catalog) => {
     const target = resolveArchitectureRetarget(requested, catalog);
     if (!target) {
-      return null;
-    }
-    if (!modelSupportsAllActiveStageEntries(target, source, generatedEntryMode)) {
       return null;
     }
     const clip = structuredClone(source);
@@ -4738,18 +4638,10 @@
         stage.skipped = nextStage.skipped;
       }
     }
-    if (!modelSupportsAllActiveStageEntries(
-      targetEntry,
-      next,
-      context.generatedEntryMode ?? "text-to-video"
-    )) {
-      throw new DocumentDiffError("architecture-invariant");
-    }
     const baselinePlan = planArchitectureConversion(
       conversionSource,
       target,
-      catalog,
-      context.generatedEntryMode ?? "text-to-video"
+      catalog
     );
     if (!baselinePlan) {
       throw new DocumentDiffError("architecture-invariant");
@@ -5152,8 +5044,7 @@
         const conversion = planArchitectureConversion(
           clip,
           target,
-          context.architectureCatalog,
-          context.generatedEntryMode ?? "text-to-video"
+          context.architectureCatalog
         );
         if (!conversion) {
           return failure(document2, "invalid-architecture-conversion");
@@ -6146,9 +6037,9 @@
   var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities) => {
     const diagnostics = [];
     const supports = (feature, value) => architectureFeatureSupport(feature, { capabilities, ...value });
-    const unsupported = (active, feature, key, label, severity) => {
+    const unsupported = (active, key, label, severity) => {
       if (active) {
-        const effectiveSeverity = severity ?? (isIgnoredWhenUnsupportedFeature(feature) ? "warning" : "error");
+        const effectiveSeverity = severity ?? "warning";
         diagnostics.push(
           issue(
             `architecture.unsupported.${key}`,
@@ -6161,31 +6052,26 @@
     };
     unsupported(
       !supports("frameReferences") && clip.refs.length > 0,
-      "frameReferences",
       "frame-references",
       "Frame references"
     );
     unsupported(
       !supports("referenceFraming") && clip.refFraming !== "crop",
-      "referenceFraming",
       "reference-framing",
       "Reference framing"
     );
     unsupported(
       !supports("icLora") && clip.icLoras.length > 0,
-      "icLora",
       "ic-lora",
       "IC-LoRA"
     );
     unsupported(
       !supports("retake") && clip.retake !== null,
       "retake",
-      "retake",
       "Retake"
     );
     unsupported(
       !supports("promptRelay") && clip.promptWindows.length > 0,
-      "promptRelay",
       "prompt-relay",
       "Prompt relay"
     );
@@ -6208,13 +6094,11 @@
     });
     unsupported(
       !supports("audioReuse") && clip.reuseAudio,
-      "audioReuse",
       "audio-reuse",
       "Captured stage audio reuse"
     );
     unsupported(
       !supports("audioDerivedDuration") && clip.clipLengthFromAudio,
-      "audioDerivedDuration",
       "audio-derived-duration",
       "Audio-derived clip duration"
     );
@@ -6223,20 +6107,17 @@
     );
     unsupported(
       !supportsControlSignalDerivedDuration && clip.clipLengthFromControlNet,
-      "controlSignalDerivedDuration",
       "control-signal-derived-duration",
       "Control-signal-derived clip duration"
     );
     unsupported(
       !selectedAudioSourceSupported && (sourceKind !== "Native" || clip.uploadedAudio !== null),
-      "clipAudio",
       "audio-source",
       `Audio source '${sourceKind}'`,
       clipAudioCapabilitySupported ? "error" : void 0
     );
     unsupported(
       clip.saveAudioTrack && !standaloneAudioSupported,
-      "clipAudio",
       "audio-output",
       "Standalone audio output"
     );
@@ -11811,7 +11692,6 @@ The conversion is one undoable change.`;
 
   // frontend/detailStrip/stagePanel/modelSection.ts
   var appendStageModelSection = ({
-    context,
     clip,
     clipIdx,
     stageIdx,
@@ -11847,18 +11727,7 @@ The conversion is one undoable change.`;
         );
         const requiresWholeClipConversion = stageIdx === 0 && (ownerArchitectureId === null || target.architectureId !== ownerArchitectureId);
         const preservesClipLock = stageIdx === 0 ? requiresWholeClipConversion || leavesAuthoredStagesCompatible : model.architectureId === rootModel?.architectureId && model.compatibilityClassId !== null && model.compatibilityClassId === rootModel?.compatibilityClassId;
-        const supportsRetargetedRoles = requiresWholeClipConversion ? planArchitectureConversion(
-          clip,
-          target,
-          defaults.modelCatalog,
-          context.authoring().generatedEntryMode
-        ) !== null : modelSupportsStageEntry(
-          model,
-          clip,
-          stageIdx,
-          context.authoring().generatedEntryMode
-        );
-        return preservesClipLock && supportsRetargetedRoles ? [{ value: entry.value, label: entry.label }] : [];
+        return preservesClipLock ? [{ value: entry.value, label: entry.label }] : [];
       }
     );
     if (stage.model && !modelOptions.some((option) => option.value === stage.model)) {
@@ -11888,8 +11757,7 @@ The conversion is one undoable change.`;
           const conversion = planArchitectureConversion(
             clip,
             plan,
-            defaults.modelCatalog,
-            context.authoring().generatedEntryMode
+            defaults.modelCatalog
           );
           if (!conversion) {
             modelSelect.value = stage.model;

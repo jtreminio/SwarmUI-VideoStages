@@ -97,10 +97,6 @@ public class WanArchitectureTests
                 WanArchitectureModule.OrdinaryImageToVideoProfileId,
                 accepted.ModelProfileId);
             Assert.Equal(compatibility.ID, accepted.CompatibilityClassId);
-            Assert.Equal(
-                VideoModelEntryAbility.TextToVideo
-                    | VideoModelEntryAbility.ImageToVideo,
-                accepted.EntryAbilities);
         }
         foreach ((string modelClassId, T2IModelCompatClass compatibility) in new[]
         {
@@ -120,10 +116,6 @@ public class WanArchitectureTests
             Assert.Equal(
                 WanArchitectureModule.OrdinaryImageToVideoProfileId,
                 accepted.ModelProfileId);
-            Assert.Equal(
-                VideoModelEntryAbility.TextToVideo
-                    | VideoModelEntryAbility.ImageToVideo,
-                accepted.EntryAbilities);
         }
         foreach (string rejectedClassId in new[]
         {
@@ -194,9 +186,6 @@ public class WanArchitectureTests
             catalogModel.Value<string>("modelProfileId"));
         Assert.Equal(WanArchitectureModule.FrameGrid, catalogModel.Value<int>("frameGrid"));
         Assert.Equal(
-            ["text", "image"],
-            catalogModel["entryAbilities"].Values<string>());
-        Assert.Equal(
             ["first"],
             catalogModel["enhancements"]["referencePositions"].Values<string>());
         Assert.Equal(
@@ -220,10 +209,7 @@ public class WanArchitectureTests
         ResolvedVideoModel resolved = TestResolvedVideoModel.Create(
             "wan-stale-profile.safetensors",
             new("removed-profile-alias"),
-            descriptor,
-            entryAbilities:
-                VideoModelEntryAbility.TextToVideo
-                | VideoModelEntryAbility.ImageToVideo);
+            descriptor);
 
         JObject catalog = ArchitectureCatalogSerializer.Serialize(
             new WanCatalogRegistry(resolved));
@@ -258,9 +244,7 @@ public class WanArchitectureTests
 
         Assert.Contains(ArchitectureEntryMode.ImageToVideo, descriptor.EntryModes);
         Assert.Contains(ArchitectureEntryMode.InitVideo, descriptor.EntryModes);
-        Assert.True(descriptor.Capabilities.Stage.HasFlag(
-            StageCapability.FrameReferences));
-        Assert.True(descriptor.Capabilities.Clip.HasFlag(ClipCapability.References));
+        Assert.True(descriptor.Features.HasFlag(ArchitectureFeature.FrameReferences));
         Assert.True(descriptor.StageGuideReferences.Allows(
             StageGuideReferencePolicy.Classify("Generated")));
         Assert.True(descriptor.StageGuideReferences.Allows(
@@ -984,8 +968,7 @@ public class WanArchitectureTests
             WanArchitectureModule.ImageToVideoProfileId,
             descriptor,
             WanArchitectureModule.ImageToVideoModelClassId,
-            T2IModelClassSorter.CompatWan21_14b.ID,
-            VideoModelEntryAbility.ImageToVideo);
+            T2IModelClassSorter.CompatWan21_14b.ID);
 
         WanClipPlanCompilation compilation = WanClipPlanCompiler.Compile(
             GeneratedClip(0, stage),
@@ -1001,32 +984,6 @@ public class WanArchitectureTests
         Assert.Equal(
             resolved.ModelClassId,
             Assert.Single(compilation.Stages).Value.ModelClassId);
-    }
-
-    [Fact]
-    public void Capability_validation_rejects_a_missing_stage_resolution_before_Wan_compilation()
-    {
-        StageSpec stage = Stage(10, "authored-wan-model");
-        ClipSpec clip = GeneratedClip(0, stage);
-        VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
-
-        IReadOnlyList<PlanDiagnostic> diagnostics =
-            ArchitectureCapabilityValidator.Validate(
-                clip,
-                descriptor,
-                ArchitectureEntryMode.ImageToVideo,
-                new Dictionary<int, ResolvedVideoModel>
-                {
-                    [stage.ClipStageRawIndex] = null,
-                });
-
-        PlanDiagnostic diagnostic = Assert.Single(
-            diagnostics,
-            item => item.Code == "architecture-model-entry-unsupported");
-        Assert.Equal(PlanDiagnosticSeverity.Error, diagnostic.Severity);
-        Assert.Equal(stage.Id, diagnostic.StageId);
-        Assert.Equal(stage.ClipStageRawIndex, diagnostic.RawStageIndex);
-        Assert.Contains(stage.Model, diagnostic.Message);
     }
 
     [Fact]
@@ -1394,8 +1351,6 @@ public class WanArchitectureTests
             five
                 ? T2IModelClassSorter.CompatWan22_5b.ID
                 : T2IModelClassSorter.CompatWan21_14b.ID,
-            VideoModelEntryAbility.TextToVideo
-                | VideoModelEntryAbility.ImageToVideo,
             referencePositions ?? (five ? ["first"] : ["first", "last"]));
     }
 

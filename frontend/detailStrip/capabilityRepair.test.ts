@@ -24,15 +24,13 @@ import type { DetailStripContext } from "./context";
 const restrictedCatalog = (): ArchitectureModelCatalog => {
     const models = testArchitectureCatalog();
     models.architectures[0].capabilities = testArchitectureCapabilities({
-        clip: [
-            "init-video",
-            "prompts",
+        features: [
             "prompt-relay",
             "retake",
             "audio-sources",
             "audio-segments",
+            "ic-lora",
         ],
-        stage: ["image-input", "video-input", "lora", "ic-lora"],
     });
     return models;
 };
@@ -192,7 +190,7 @@ describe("persisted-but-unsupported repair contract", () => {
     it("keeps supported audio reuse operable while repairing unsupported clip audio", () => {
         const models = testArchitectureCatalog();
         models.architectures[0].capabilities = testArchitectureCapabilities({
-            clip: ["audio-reuse"],
+            features: ["audio-reuse"],
             audioSourceKinds: ["Disabled"],
         });
         const clip = minimalClip({
@@ -319,7 +317,7 @@ describe("persisted-but-unsupported repair contract", () => {
     it("normalizes a disallowed source without deleting supported duration state", () => {
         const models = testArchitectureCatalog();
         models.architectures[0].capabilities = testArchitectureCapabilities({
-            clip: ["audio-sources", "audio-derived-duration"],
+            features: ["audio-sources", "audio-derived-duration"],
             audioSourceKinds: ["Upload"],
         });
         const clip = minimalClip({
@@ -410,7 +408,7 @@ describe("persisted-but-unsupported repair contract", () => {
     it("repairs Wan-like duration while preserving its valid disabled-audio alias", () => {
         const models = testArchitectureCatalog();
         models.architectures[0].capabilities = testArchitectureCapabilities({
-            clip: [],
+            features: [],
             audioSourceKinds: ["Disabled"],
         });
         const clip = minimalClip({
@@ -525,7 +523,7 @@ describe("persisted-but-unsupported repair contract", () => {
     it("keeps control-signal duration repair operable when clip audio is read-only", () => {
         const models = testArchitectureCatalog();
         models.architectures[0].capabilities = testArchitectureCapabilities({
-            clip: ["control-signal-derived-duration"],
+            features: ["control-signal-derived-duration"],
             audioSourceKinds: ["Disabled"],
         });
         const clip = minimalClip({

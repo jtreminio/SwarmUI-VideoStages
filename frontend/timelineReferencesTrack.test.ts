@@ -323,8 +323,8 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         document.dispatchEvent(
             new MouseEvent("mousemove", { bubbles: true, clientX: 60 }),
         );
-        authoringCatalog.architectures[0].capabilities.stage =
-            authoringCatalog.architectures[0].capabilities.stage.filter(
+        authoringCatalog.architectures[0].capabilities.features =
+            authoringCatalog.architectures[0].capabilities.features.filter(
                 (feature) => feature !== "frame-references",
             );
         document.dispatchEvent(

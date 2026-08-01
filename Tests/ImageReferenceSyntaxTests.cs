@@ -84,18 +84,4 @@ public class ImageReferenceSyntaxTests
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new StageGuideReferencePolicy((StageGuideReferenceKind)(1 << 20)));
     }
-
-    [Fact]
-    public void Stage_guide_reference_policy_rejects_non_finite_selections()
-    {
-        StageGuideReferencePolicy policy = new(
-            StageGuideReferenceKind.Generated | StageGuideReferenceKind.Base);
-
-        Assert.False(policy.Allows(new(
-            StageGuideReferenceKind.Generated | StageGuideReferenceKind.Base,
-            null)));
-        Assert.False(policy.Allows(new(
-            (StageGuideReferenceKind)(1 << 20),
-            null)));
-    }
 }

@@ -43,9 +43,9 @@ internal static class BoundaryPlanCompiler
                 ? plannedClips[i + 1]
                 : null;
             // One owner: the architecture's typed boundary policy. The catalog publishes the
-            // same modes, so the advertised rule is the rule compiled here.
-            ArchitectureBoundaryModePolicy modePolicy = plannedFrom?.Architecture?.BoundaryPolicy
-                ?.Modes.GetValueOrDefault(effectiveRequested);
+            // same rules, so the advertised rule is the rule compiled here.
+            RuleDecision modePolicy = plannedFrom?.Architecture?.BoundaryPolicy
+                ?.Rules.GetValueOrDefault(effectiveRequested);
             BoundaryRuleConstraints constraints = modePolicy?.Constraints;
             if (!isKnown)
             {
@@ -86,8 +86,9 @@ internal static class BoundaryPlanCompiler
 
             int overlap = effective == BoundaryJoinType.Cut
                 ? 0
-                : modePolicy?.NormalizeOverlap(from.BoundaryOutOverlap)
-                    ?? Math.Max(1, from.BoundaryOutOverlap);
+                : modePolicy is null
+                    ? Math.Max(1, from.BoundaryOutOverlap)
+                    : NormalizeOverlap(modePolicy, from.BoundaryOutOverlap);
             int continuityWindow = effective == BoundaryJoinType.Continue
                 ? overlap + (constraints?.ContinuityExtraFrames ?? 0)
                 : 0;
@@ -131,6 +132,21 @@ internal static class BoundaryPlanCompiler
             });
         }
         return new BoundaryPlanningResult(boundaries.ToImmutable(), diagnostics.ToImmutable());
+    }
+
+    internal static int NormalizeOverlap(RuleDecision rule, int authoredFrames)
+    {
+        if (rule.Support == RuleSupport.Unsupported || rule.Constraints is null)
+        {
+            return 0;
+        }
+        int step = Math.Max(1, rule.Constraints.FrameStep);
+        int candidate = Math.Clamp(
+            authoredFrames <= 0 ? rule.Constraints.DefaultFrames : authoredFrames,
+            rule.Constraints.MinFrames,
+            rule.Constraints.MaxFrames);
+        return rule.Constraints.MinFrames
+            + ((candidate - rule.Constraints.MinFrames) / step * step);
     }
 
     private static BoundaryFallbackReason? EvaluateTarget(

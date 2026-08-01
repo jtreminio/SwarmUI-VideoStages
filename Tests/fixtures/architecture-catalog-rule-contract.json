@@ -3,20 +3,17 @@
     "id": "ltx2",
     "label": "LTX Video 2.3",
     "capabilities": {
-      "clip": [
+      "features": [
         "prompt-relay",
-        "references",
+        "frame-references",
         "reference-framing",
         "retake",
         "audio-sources",
         "audio-segments",
         "audio-reuse",
         "audio-derived-duration",
-        "control-signal-derived-duration"
-      ],
-      "stage": [
-        "ic-lora",
-        "frame-references"
+        "control-signal-derived-duration",
+        "ic-lora"
       ],
       "entryModes": [
         "text-to-video",
@@ -79,11 +76,7 @@
         "code": "retake-source-required",
         "reason": "Retake requires an init-video clip.",
         "scope": "clip",
-        "constraints": {
-          "requiresAnyEntryMode": [
-            "init-video"
-          ]
-        }
+        "constraints": null
       }
     ]
   }

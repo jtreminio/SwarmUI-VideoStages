@@ -176,7 +176,6 @@ export const reduceDocumentCommand = (
                 clip,
                 target,
                 context.architectureCatalog,
-                context.generatedEntryMode ?? "text-to-video",
             );
             if (!conversion) {
                 return failure(document, "invalid-architecture-conversion");

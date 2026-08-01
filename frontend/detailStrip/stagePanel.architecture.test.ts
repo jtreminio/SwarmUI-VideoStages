@@ -144,7 +144,6 @@ describe("stage architecture model filtering", () => {
                 modelProfileId: "wan22-i2v-14b",
                 modelClassId: "wan-i2v-14b",
                 compatibilityClassId: "wan-video",
-                entryAbilities: ["text", "image"],
                 entryModes: ["image-to-video", "init-video"],
             },
             {
@@ -154,7 +153,6 @@ describe("stage architecture model filtering", () => {
                 modelProfileId: "wan22-ti2v-5b",
                 modelClassId: "wan-ti2v-5b",
                 compatibilityClassId: "wan-video",
-                entryAbilities: ["text", "image"],
                 entryModes: ["text-to-video", "image-to-video"],
             },
         );
@@ -530,68 +528,6 @@ describe("stage architecture model filtering", () => {
         );
     });
 
-    it("hides an image-only whole-clip target when a skipped Stage 0 leaves a text-entry root at Stage 1", () => {
-        const models = catalog();
-        const imageOnly = models.entries.find(
-            (entry) => entry.value === "test-video.safetensors",
-        );
-        if (!imageOnly) {
-            throw new Error("missing test video model");
-        }
-        imageOnly.entryModes = ["image-to-video"];
-        const clip = minimalClip({
-            stages: [
-                minimalStage({ skipped: true }),
-                minimalStage({ model: "ltx" }),
-            ],
-        });
-
-        const column = buildStageParamsColumn(
-            context(models, "text-to-video"),
-            clip,
-            0,
-            0,
-            clip.stages[0],
-            testRootDefaults(models),
-        );
-
-        expect(modelOptions(column).map(({ value }) => value)).not.toContain(
-            "test-video.safetensors",
-        );
-    });
-
-    it("hides a text-only target that cannot preserve a later decoded stage", () => {
-        const models = catalog();
-        const target = models.entries.find(
-            (entry) => entry.value === "test-video.safetensors",
-        );
-        const architecture = models.architectures.find(
-            (entry) => entry.id === "test-video",
-        );
-        if (!target || !architecture) {
-            throw new Error("missing test video model");
-        }
-        target.entryModes = ["text-to-video"];
-        const clip = minimalClip({
-            stages: [minimalStage(), minimalStage()],
-        });
-        const before = structuredClone(clip);
-
-        const column = buildStageParamsColumn(
-            context(models, "text-to-video"),
-            clip,
-            0,
-            0,
-            clip.stages[0],
-            testRootDefaults(models),
-        );
-
-        expect(modelOptions(column).map(({ value }) => value)).not.toContain(
-            "test-video.safetensors",
-        );
-        expect(clip).toEqual(before);
-    });
-
     it("shows an image-only target because source video remains authored", () => {
         const models = catalog();
         const target = models.entries.find(
@@ -749,91 +685,6 @@ describe("stage architecture model filtering", () => {
         );
     });
 
-    it("excludes a text-only architecture from a init-video start", () => {
-        const models = catalog();
-        const fake = models.architectures.find(
-            (entry) => entry.id === "test-video",
-        );
-        if (!fake) throw new Error("missing fake architecture");
-        fake.capabilities.clip.push("init-video");
-        const fakeModel = models.entries.find(
-            (entry) => entry.value === "test-video.safetensors",
-        );
-        if (!fakeModel) throw new Error("missing fake model");
-        fakeModel.entryModes = ["text-to-video"];
-        const clip = minimalClip({
-            initVideo: {
-                data: "data:video/mp4;base64,AA==",
-                fileName: "source.mp4",
-                fps: 24,
-                durationSeconds: 2,
-                startSeconds: 0,
-                lengthSeconds: 2,
-            },
-            stages: [minimalStage({ model: "ltx" })],
-        });
-
-        const column = buildStageParamsColumn(
-            context(models),
-            clip,
-            0,
-            0,
-            clip.stages[0],
-            testRootDefaults(models),
-        );
-
-        expect(modelOptions(column).map((option) => option.value)).toEqual([
-            "ltx-2.3.safetensors",
-            "ltx",
-        ]);
-    });
-
-    it("keeps an entry-incompatible persisted stage-0 model read-only", () => {
-        const models = catalog();
-        const fake = models.architectures.find(
-            (entry) => entry.id === "test-video",
-        );
-        if (!fake) throw new Error("missing fake architecture");
-        const fakeModel = models.entries.find(
-            (entry) => entry.value === "test-video.safetensors",
-        );
-        if (!fakeModel) throw new Error("missing fake model");
-        fakeModel.entryModes = ["text-to-video"];
-        const persisted = minimalStage({
-            model: "test-video.safetensors",
-            modelProfileId: "test-profile",
-        });
-        const clip = minimalClip({
-            architectureHint: "test-video",
-            modelProfileId: "test-profile",
-            initVideo: {
-                data: "data:video/mp4;base64,AA==",
-                fileName: "source.mp4",
-                fps: 24,
-                durationSeconds: 2,
-                startSeconds: 0,
-                lengthSeconds: 2,
-            },
-            stages: [persisted],
-        });
-
-        const column = buildStageParamsColumn(
-            context(models),
-            clip,
-            0,
-            0,
-            persisted,
-            testRootDefaults(models),
-        );
-        const options = modelOptions(column);
-
-        expect(options[0]).toMatchObject({
-            value: "test-video.safetensors",
-            disabled: true,
-        });
-        expect(options[0].textContent).toContain("unsupported persisted value");
-    });
-
     it("restores the model selection when architecture conversion is canceled", () => {
         const models = catalog();
         const clip = minimalClip({
@@ -952,11 +803,6 @@ describe("stage architecture model filtering", () => {
                                 architecture.id === entry.architectureId,
                         )?.capabilities,
                 ),
-                entryAbilities:
-                    entry.entryAbilities ??
-                    (entry.entryModes.includes("text-to-video")
-                        ? ["text", "image"]
-                        : ["image"]),
                 enhancements: {
                     referencePositions:
                         entry.enhancements?.referencePositions ?? [],
@@ -1076,56 +922,5 @@ describe("stage architecture model filtering", () => {
         expect(field("Scheduler")?.querySelector("select")?.disabled).toBe(
             false,
         );
-    });
-
-    it("separates pure-text and host-image model choices in both directions", () => {
-        const models = catalog();
-        const ltx = models.architectures.find((entry) => entry.id === "ltx2");
-        const fake = models.architectures.find(
-            (entry) => entry.id === "test-video",
-        );
-        if (!ltx || !fake) throw new Error("missing test architectures");
-        for (const model of models.entries) {
-            model.entryModes =
-                model.architectureId === "ltx2"
-                    ? ["image-to-video"]
-                    : ["text-to-video"];
-        }
-        const textStage = minimalStage({
-            model: "test-video.safetensors",
-            modelProfileId: "test-profile",
-        });
-        const textClip = minimalClip({
-            architectureHint: "test-video",
-            modelProfileId: "test-profile",
-            stages: [textStage],
-        });
-        const imageStage = minimalStage({ model: "ltx" });
-        const imageClip = minimalClip({ stages: [imageStage] });
-
-        const textColumn = buildStageParamsColumn(
-            context(models, "text-to-video"),
-            textClip,
-            0,
-            0,
-            textStage,
-            testRootDefaults(models),
-        );
-        const imageColumn = buildStageParamsColumn(
-            context(models, "image-to-video"),
-            imageClip,
-            0,
-            0,
-            imageStage,
-            testRootDefaults(models),
-        );
-
-        expect(modelOptions(textColumn).map(({ value }) => value)).toEqual([
-            "test-video.safetensors",
-        ]);
-        expect(modelOptions(imageColumn).map(({ value }) => value)).toEqual([
-            "ltx-2.3.safetensors",
-            "ltx",
-        ]);
     });
 });

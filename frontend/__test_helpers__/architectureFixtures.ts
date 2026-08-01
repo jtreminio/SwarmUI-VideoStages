@@ -12,11 +12,9 @@ import type { RootDefaults } from "../types";
 export const testArchitectureCapabilities = (
     overrides: Partial<ArchitectureCapabilities> = {},
 ): ArchitectureCapabilities => ({
-    clip: [
-        "init-video",
-        "prompts",
+    features: [
         "prompt-relay",
-        "references",
+        "frame-references",
         "reference-framing",
         "retake",
         "audio-sources",
@@ -24,14 +22,7 @@ export const testArchitectureCapabilities = (
         "audio-reuse",
         "audio-derived-duration",
         "control-signal-derived-duration",
-    ],
-    stage: [
-        "image-input",
-        "video-input",
-        "lora",
         "ic-lora",
-        "frame-references",
-        "pixel-upscale",
     ],
     entryModes: ["text-to-video", "image-to-video", "init-video"],
     audioSourceKinds: ["Native", "Upload"],
@@ -96,9 +87,7 @@ export const testArchitectureCatalog = (
                     code: "retake-source-required",
                     reason: "Retake requires source footage.",
                     scope: "clip",
-                    constraints: {
-                        requiresAnyEntryMode: ["init-video"],
-                    },
+                    constraints: null,
                 },
             ],
         },
@@ -155,25 +144,6 @@ export const testArchitectureCatalogDto = (
                               )?.capabilities ??
                               testArchitectureCapabilities(),
                       ),
-                      ...(entry.entryAbilities
-                          ? { entryAbilities: [...entry.entryAbilities] }
-                          : {
-                                entryAbilities: [
-                                    ...(entry.entryModes.includes(
-                                        "text-to-video",
-                                    )
-                                        ? ["text"]
-                                        : []),
-                                    ...(entry.entryModes.some((mode) =>
-                                        [
-                                            "image-to-video",
-                                            "init-video",
-                                        ].includes(mode),
-                                    )
-                                        ? ["image"]
-                                        : []),
-                                ],
-                            }),
                       enhancements: structuredClone(
                           entry.enhancements ?? { referencePositions: [] },
                       ),
@@ -187,8 +157,7 @@ export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
     id: "none",
     label: "Decoded source only",
     capabilities: testArchitectureCapabilities({
-        clip: ["init-video", "audio-sources", "audio-segments"],
-        stage: [],
+        features: ["audio-sources", "audio-segments"],
         entryModes: ["init-video"],
         audioSourceKinds: ["Disabled", "Upload"],
     }),
@@ -227,8 +196,7 @@ export const fakeArchitectureCatalog = (
             id: architectureId,
             label: "Test Video",
             capabilities: testArchitectureCapabilities({
-                clip: ["prompts"],
-                stage: [],
+                features: [],
                 entryModes: ["text-to-video", "image-to-video", "init-video"],
                 audioSourceKinds: ["Native"],
             }),

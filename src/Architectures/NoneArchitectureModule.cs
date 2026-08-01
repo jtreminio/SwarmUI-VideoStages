@@ -13,9 +13,7 @@ internal static class NoneArchitecture
     internal static ArchitectureBoundaryPolicy BoundaryPolicy { get; } =
         ArchitectureBoundaryPolicy.CutOnly(
             "none",
-            "Decoded init-video clips can be joined with a hard cut.",
-            "A init-video-only clip has no architecture stage that can consume continuity.",
-            "Architecture-neutral init-video clips currently support cut joins only.");
+            "Decoded init-video clips can be joined with a hard cut.");
 
     internal static VideoArchitectureDescriptor Descriptor { get; } = new(
         Id,
@@ -25,9 +23,7 @@ internal static class NoneArchitecture
             AudioSourceKind.Upload,
         ],
         [ArchitectureEntryMode.InitVideo],
-        new(
-            ClipCapability.AudioSources | ClipCapability.AudioSegments,
-            StageCapability.None),
+        ArchitectureFeature.ClipAudio | ArchitectureFeature.AudioSegments,
         BoundaryPolicy)
     {
         FrameGrid = 1,

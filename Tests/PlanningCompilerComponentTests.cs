@@ -872,11 +872,12 @@ public class PlanningCompilerComponentTests
 
     private static readonly ArchitectureBoundaryPolicy FakeBoundaryPolicy =
         new ArchitectureBoundaryPolicy(
-            new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>
+            new Dictionary<BoundaryJoinType, RuleDecision>
             {
-                [BoundaryJoinType.Continue] = ArchitectureBoundaryModePolicy.Conditional(
+                [BoundaryJoinType.Continue] = RuleDecision.Conditional(
                     "fake.continue",
                     "Fake policy with a different grid and permissive target.",
+                    RuleScope.Boundary,
                     new BoundaryRuleConstraints(
                         FrameStep: 5,
                         MinFrames: 10,

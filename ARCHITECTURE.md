@@ -198,8 +198,8 @@ table:
 - each architecture publishes its ID, label, complete descriptor capability
   set, boundary rules, and conditional rules;
 - each resolved model publishes architecture/profile identity, core model and
-  compatibility identities, frame grid, entry abilities, complete effective
-  capabilities, and supported frame-reference positions;
+  compatibility identities, frame grid, complete effective capabilities, and
+  supported frame-reference positions;
 - clip: source video, prompts, relay, references, retakes, audio sources, and
   projected audio segments;
 - stage: input modes, each upscale mode (also republished as a flat
@@ -383,8 +383,8 @@ Adding another family should require:
 1. a manifest registration supplying module, runtime provider, host handlers,
    API routes, and dependency registration together;
 2. a model resolver that returns stable architecture/profile identity, core
-   model facts, entry abilities, frame grid, and complete effective
-   capabilities for every claimed model;
+   model facts, frame grid, and complete effective capabilities for every
+   claimed model;
 3. descriptor capabilities and rules, including a rule for every boundary
    mode — the registry rejects an incomplete catalog at construction;
 4. an architecture-owned clip compiler and typed payload whose stage payload
@@ -421,7 +421,7 @@ rejected on the merits.
   payload would cost the catalog its typed wire and buy nothing: the meaning of
   each is already module-owned.
 - **The timeline audio track has no per-clip capability gate.** Every
-  `AuthoringFeature` is clip-scoped and a document-level entity has no owning
+  `ArchitectureFeature` is clip-scoped and a document-level entity has no owning
   clip. The backend validates the projected segments after projection, which is
   the first point at which a clip owns them.
 - **`frontend/renderUtils.ts` keeps its own frame-alignment constant.**

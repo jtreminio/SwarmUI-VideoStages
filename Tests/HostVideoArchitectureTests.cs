@@ -13,24 +13,22 @@ namespace VideoStages.Tests;
 public class HostVideoArchitectureTests
 {
     [Theory]
-    [InlineData("hunyuan-video-1_5", "hunyuan-video-1_5", true, true)]
-    [InlineData("hunyuan-video", "hunyuan-video", true, true)]
-    [InlineData("hunyuan-video-skyreels", "hunyuan-video", true, true)]
-    [InlineData("hunyuan-video-skyreels-i2v", "hunyuan-video", false, true)]
-    [InlineData("hunyuan-video-i2v", "hunyuan-video", false, true)]
-    [InlineData("hunyuan-video-i2v-v2", "hunyuan-video", false, true)]
-    [InlineData("genmo-mochi-1", "genmo-mochi-1", true, false)]
-    [InlineData("kandinsky5-video-lite", "kandinsky5-vidlite", true, true)]
-    [InlineData("kandinsky5-video-pro", "kandinsky5-vidpro", true, true)]
-    [InlineData("nvidia-cosmos-1-7b-text2world", "nvidia-cosmos-1", true, true)]
-    [InlineData("nvidia-cosmos-1-14b-video2world", "nvidia-cosmos-1", true, true)]
-    [InlineData("lightricks-ltx-video", "lightricks-ltx-video", true, true)]
-    [InlineData("lightricks-ltx-video-2", "lightricks-ltx-video-2", true, true)]
+    [InlineData("hunyuan-video-1_5", "hunyuan-video-1_5")]
+    [InlineData("hunyuan-video", "hunyuan-video")]
+    [InlineData("hunyuan-video-skyreels", "hunyuan-video")]
+    [InlineData("hunyuan-video-skyreels-i2v", "hunyuan-video")]
+    [InlineData("hunyuan-video-i2v", "hunyuan-video")]
+    [InlineData("hunyuan-video-i2v-v2", "hunyuan-video")]
+    [InlineData("genmo-mochi-1", "genmo-mochi-1")]
+    [InlineData("kandinsky5-video-lite", "kandinsky5-vidlite")]
+    [InlineData("kandinsky5-video-pro", "kandinsky5-vidpro")]
+    [InlineData("nvidia-cosmos-1-7b-text2world", "nvidia-cosmos-1")]
+    [InlineData("nvidia-cosmos-1-14b-video2world", "nvidia-cosmos-1")]
+    [InlineData("lightricks-ltx-video", "lightricks-ltx-video")]
+    [InlineData("lightricks-ltx-video-2", "lightricks-ltx-video-2")]
     public void Resolves_only_exact_proven_host_paths(
         string modelClassId,
-        string compatibilityClassId,
-        bool text,
-        bool image)
+        string compatibilityClassId)
     {
         using SwarmUiTestContext context = new();
         T2IModel model = Model(modelClassId, Compatibility(compatibilityClassId));
@@ -38,16 +36,10 @@ public class HostVideoArchitectureTests
         Assert.True(HostVideoArchitectureModule.Instance.TryResolveModel(
             model,
             out ResolvedVideoModel resolved));
-        VideoModelEntryAbility expected =
-            (text ? VideoModelEntryAbility.TextToVideo : VideoModelEntryAbility.None)
-            | (image ? VideoModelEntryAbility.ImageToVideo : VideoModelEntryAbility.None);
-        Assert.Equal(expected, resolved.EntryAbilities);
         Assert.Equal(
             HostVideoArchitectureModule.ArchitectureId,
             resolved.ArchitectureId);
-        Assert.Equal(
-            ArchitectureResolutionTier.Fallback,
-            HostVideoArchitectureModule.Instance.ResolutionTier);
+        Assert.True(HostVideoArchitectureModule.Instance.IsFallback);
         Assert.Equal(
             model.ModelClass.CompatClass.LorasTargetTextEnc,
             resolved.LorasTargetTextEncoder);
@@ -179,8 +171,8 @@ public class HostVideoArchitectureTests
                 IsText2Video = true,
                 IsImage2Video = true,
             });
-        MatchingModule specialized = new("specialized", ArchitectureResolutionTier.Specialized);
-        MatchingModule fallback = new("fallback", ArchitectureResolutionTier.Fallback);
+        MatchingModule specialized = new("specialized", isFallback: false);
+        MatchingModule fallback = new("fallback", isFallback: true);
         VideoArchitectureRegistry registry = new([fallback, specialized]);
 
         Assert.True(registry.TryResolveModel(model, out ResolvedVideoModel resolved));
@@ -226,15 +218,15 @@ public class HostVideoArchitectureTests
 
     private sealed class MatchingModule : IVideoArchitectureModule
     {
-        internal MatchingModule(string id, ArchitectureResolutionTier tier)
+        internal MatchingModule(string id, bool isFallback)
         {
-            ResolutionTier = tier;
+            IsFallback = isFallback;
             Descriptor = DescriptorFor(id);
         }
 
         public VideoArchitectureDescriptor Descriptor { get; }
 
-        public ArchitectureResolutionTier ResolutionTier { get; }
+        public bool IsFallback { get; }
 
         public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
         {
@@ -243,8 +235,7 @@ public class HostVideoArchitectureTests
                 new("video"),
                 Descriptor,
                 model.ModelClass.ID,
-                model.ModelClass.CompatClass.ID,
-                VideoModelEntryAbility.TextToVideo);
+                model.ModelClass.CompatClass.ID);
             return true;
         }
 
@@ -258,18 +249,17 @@ public class HostVideoArchitectureTests
     private static VideoArchitectureDescriptor DescriptorFor(string id)
     {
         ArchitectureId architectureId = new(id);
-        ArchitectureBoundaryModePolicy boundary = ArchitectureBoundaryModePolicy.Supported(
+        RuleDecision boundary = RuleDecision.Supported(
             $"{id}.cut",
-            "cut");
+            "cut",
+            RuleScope.Boundary);
         return new(
             architectureId,
             id,
             [AudioSourceKind.Disabled],
             [ArchitectureEntryMode.TextToVideo],
-            new(ClipCapability.None, StageCapability.None),
-            new ArchitectureBoundaryPolicy(new Dictionary<
-                BoundaryJoinType,
-                ArchitectureBoundaryModePolicy>
+            ArchitectureFeature.None,
+            new ArchitectureBoundaryPolicy(new Dictionary<BoundaryJoinType, RuleDecision>
             {
                 [BoundaryJoinType.Cut] = boundary,
                 [BoundaryJoinType.Continue] = boundary,

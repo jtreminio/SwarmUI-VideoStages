@@ -444,40 +444,6 @@ describe("diffDocuments", () => {
         expect(result.document).toEqual(after);
     });
 
-    it("rejects an atomic init-video-to-generated conversion whose target cannot enter the final root role", () => {
-        const before = document();
-        before.clips[0].initVideo = {
-            data: "data:video/mp4;base64,AAAA",
-            fileName: "source.mp4",
-            fps: 24,
-            durationSeconds: 4,
-            startSeconds: 0,
-            lengthSeconds: 4,
-        };
-        const { catalog, target } = crossArchitectureCatalog();
-        const targetEntry = catalog.entries.find(
-            (entry) => entry.value === target.model,
-        );
-        if (!targetEntry) throw new Error("missing target model");
-        targetEntry.entryAbilities = ["image"];
-        targetEntry.entryModes = ["image-to-video", "init-video"];
-        const after = structuredClone(before);
-        after.clips[0].initVideo = null;
-        after.clips[0].architectureHint = target.architectureId;
-        after.clips[0].modelProfileId = target.modelProfileId;
-        after.clips[0].stages.forEach((entry) => {
-            entry.model = target.model;
-            entry.modelProfileId = target.modelProfileId;
-        });
-
-        expect(() =>
-            diffDocuments(before, after, {
-                architectureCatalog: catalog,
-                generatedEntryMode: "text-to-video",
-            }),
-        ).toThrow(new DocumentDiffError("architecture-invariant"));
-    });
-
     it("applies the final source role before an atomic generated-to-init-video conversion", () => {
         const before = document();
         const { catalog, target } = crossArchitectureCatalog();
@@ -485,7 +451,6 @@ describe("diffDocuments", () => {
             (entry) => entry.value === target.model,
         );
         if (!targetEntry) throw new Error("missing target model");
-        targetEntry.entryAbilities = ["image"];
         targetEntry.entryModes = ["image-to-video", "init-video"];
         const after = structuredClone(before);
         after.clips[0].initVideo = {
@@ -524,7 +489,6 @@ describe("diffDocuments", () => {
             (entry) => entry.value === target.model,
         );
         if (!targetEntry) throw new Error("missing target model");
-        targetEntry.entryAbilities = ["text"];
         targetEntry.entryModes = ["text-to-video"];
         const after = structuredClone(before);
         after.clips[0].stages = [after.clips[0].stages[0]];
@@ -655,11 +619,6 @@ describe("diffDocuments", () => {
         before.clips[0].architectureHint = "none";
         before.clips[0].modelProfileId = "none";
         const { catalog, target } = crossArchitectureCatalog();
-        const fake = catalog.architectures.find(
-            (entry) => entry.id === "test-video",
-        );
-        if (!fake) throw new Error("missing fake descriptor");
-        fake.capabilities.clip = [...fake.capabilities.clip, "init-video"];
         const planned = planArchitectureConversion(
             before.clips[0],
             target,

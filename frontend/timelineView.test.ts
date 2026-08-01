@@ -1351,8 +1351,7 @@ describe("authoring diagnostics", () => {
 describe("unsupported persisted timeline controls", () => {
     it("keeps repair targets operable while disabling empty creation lanes", () => {
         const catalog = testArchitectureCatalog();
-        catalog.architectures[0].capabilities.clip = [];
-        catalog.architectures[0].capabilities.stage = [];
+        catalog.architectures[0].capabilities.features = [];
         const persisted = minimalClip({
             prompt: "persisted major",
             promptWindows: [

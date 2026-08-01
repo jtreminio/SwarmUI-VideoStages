@@ -118,9 +118,7 @@ export const isRootTextToVideoModel = (
     if (!target) {
         return false;
     }
-    return target.entryAbilities === undefined
-        ? target.entryModes.includes("text-to-video")
-        : target.entryAbilities.includes("text");
+    return target.entryModes.includes("text-to-video");
 };
 
 export const getRootGeneratedEntryMode = (

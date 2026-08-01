@@ -8,10 +8,7 @@ import {
     modelIdentityFromCatalog,
     reconcileClipArchitectureIdentity,
 } from "./architectures/clipIdentity";
-import {
-    type GeneratedEntryMode,
-    modelSupportsAllActiveStageEntries,
-} from "./architectures/conversion/entryModePolicy";
+import type { GeneratedEntryMode } from "./architectures/conversion/entryModePolicy";
 import { planArchitectureConversion } from "./architectures/conversion/plan";
 import { NONE_ARCHITECTURE_ID } from "./architectures/none/identity";
 import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
@@ -493,20 +490,10 @@ const clipDiffBase = (
             stage.skipped = nextStage.skipped;
         }
     }
-    if (
-        !modelSupportsAllActiveStageEntries(
-            targetEntry,
-            next,
-            context.generatedEntryMode ?? "text-to-video",
-        )
-    ) {
-        throw new DocumentDiffError("architecture-invariant");
-    }
     const baselinePlan = planArchitectureConversion(
         conversionSource,
         target,
         catalog,
-        context.generatedEntryMode ?? "text-to-video",
     );
     if (!baselinePlan) {
         throw new DocumentDiffError("architecture-invariant");

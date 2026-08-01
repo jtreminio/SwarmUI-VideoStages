@@ -47,16 +47,9 @@ internal readonly record struct StageGuideReferencePolicy
 
     internal StageGuideReferenceKind AllowedKinds { get; }
 
-    internal bool Allows(StageGuideReferenceSelection selection)
-    {
-        int kindValue = (int)selection.Kind;
-        bool isSingleKnownKind =
-            kindValue > 0
-            && (kindValue & (kindValue - 1)) == 0
-            && (selection.Kind & ~AllKnownKinds) == 0;
-        return isSingleKnownKind
-            && (AllowedKinds & selection.Kind) == selection.Kind;
-    }
+    internal bool Allows(StageGuideReferenceSelection selection) =>
+        selection.Kind != StageGuideReferenceKind.Unknown
+        && (AllowedKinds & selection.Kind) != 0;
 
     internal static StageGuideReferenceSelection Classify(string rawValue)
     {

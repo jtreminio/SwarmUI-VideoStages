@@ -32,9 +32,7 @@ internal static class ArchitectureCatalogSerializer
 
     private static JObject SerializeCapabilities(VideoArchitectureDescriptor descriptor) => new()
     {
-        // Authoritative, scope-preserving capability sets.
-        ["clip"] = new JArray(ArchitectureFeatureVocabulary.WireNames(descriptor.Capabilities.Clip)),
-        ["stage"] = new JArray(ArchitectureFeatureVocabulary.WireNames(descriptor.Capabilities.Stage)),
+        ["features"] = new JArray(ArchitectureFeatureVocabulary.WireNames(descriptor.Features)),
         // Exact inputs that are not representable as flag sets.
         ["entryModes"] = new JArray(descriptor.EntryModes.Select(ArchitectureFeatureVocabulary.WireName)),
         ["audioSourceKinds"] = new JArray(descriptor.AudioSourceKinds.Select(
@@ -52,31 +50,18 @@ internal static class ArchitectureCatalogSerializer
             : SerializeRuleConstraints(decision.Constraints),
     };
 
-    private static JObject SerializeRuleConstraints(RuleConstraints constraints) =>
-        constraints switch
-        {
-            BoundaryRuleConstraints value => new()
-            {
-                ["sameArchitecture"] = true,
-                ["frameStep"] = value.FrameStep,
-                ["minFrames"] = value.MinFrames,
-                ["maxFrames"] = value.MaxFrames,
-                ["defaultFrames"] = value.DefaultFrames,
-                ["continuityExtraFrames"] = value.ContinuityExtraFrames,
-                ["targetRequiresGeneratedEntry"] = value.TargetRequiresGeneratedEntry,
-                ["targetRequiresStage"] = value.TargetRequiresStage,
-                ["targetDisallowsInitialReference"] = value.TargetDisallowsInitialReference,
-            },
-            RequiredEntryModesRuleConstraints value => new()
-            {
-                ["requiresAnyEntryMode"] = new JArray(
-                    value.RequiresAnyEntryMode.Select(ArchitectureFeatureVocabulary.WireName)),
-            },
-            _ => throw new ArgumentOutOfRangeException(
-                nameof(constraints),
-                constraints,
-                "Unknown architecture rule constraint type."),
-        };
+    private static JObject SerializeRuleConstraints(BoundaryRuleConstraints value) => new()
+    {
+        ["sameArchitecture"] = true,
+        ["frameStep"] = value.FrameStep,
+        ["minFrames"] = value.MinFrames,
+        ["maxFrames"] = value.MaxFrames,
+        ["defaultFrames"] = value.DefaultFrames,
+        ["continuityExtraFrames"] = value.ContinuityExtraFrames,
+        ["targetRequiresGeneratedEntry"] = value.TargetRequiresGeneratedEntry,
+        ["targetRequiresStage"] = value.TargetRequiresStage,
+        ["targetDisallowsInitialReference"] = value.TargetDisallowsInitialReference,
+    };
 
     private static JObject Serialize(ResolvedVideoModel model) => new()
     {
@@ -86,52 +71,12 @@ internal static class ArchitectureCatalogSerializer
         ["modelClassId"] = model.ModelClassId,
         ["compatibilityClassId"] = model.CompatibilityClassId,
         ["frameGrid"] = model.FrameGrid,
-        ["entryAbilities"] = new JArray(ModelEntryAbilities(model.EntryAbilities)),
-        ["capabilities"] = SerializeCapabilities(model),
+        ["capabilities"] = SerializeCapabilities(model.Architecture),
         ["enhancements"] = new JObject
         {
             ["referencePositions"] = new JArray(model.ReferencePositions ?? []),
         },
     };
-
-    private static JObject SerializeCapabilities(ResolvedVideoModel model)
-    {
-        ArchitectureCapabilityDescriptor capabilities = model.Architecture.Capabilities;
-        IReadOnlyList<AudioSourceKind> audioKinds = model.Architecture.AudioSourceKinds;
-        return new()
-        {
-            ["clip"] = new JArray(ArchitectureFeatureVocabulary.WireNames(capabilities.Clip)),
-            ["stage"] = new JArray(ArchitectureFeatureVocabulary.WireNames(capabilities.Stage)),
-            ["entryModes"] = new JArray(ModelEntryModes(model)),
-            ["audioSourceKinds"] = new JArray(audioKinds.Select(SerializeAudioSourceKind)),
-        };
-    }
-
-    private static IEnumerable<string> ModelEntryAbilities(VideoModelEntryAbility abilities)
-    {
-        if (Has(abilities, VideoModelEntryAbility.TextToVideo))
-        {
-            yield return "text";
-        }
-        if (Has(abilities, VideoModelEntryAbility.ImageToVideo))
-        {
-            yield return "image";
-        }
-    }
-
-    private static IEnumerable<string> ModelEntryModes(ResolvedVideoModel model)
-    {
-        foreach (ArchitectureEntryMode mode in model.Architecture.EntryModes)
-        {
-            VideoModelEntryAbility required = mode == ArchitectureEntryMode.TextToVideo
-                ? VideoModelEntryAbility.TextToVideo
-                : VideoModelEntryAbility.ImageToVideo;
-            if ((model.EntryAbilities & required) == required)
-            {
-                yield return ArchitectureFeatureVocabulary.WireName(mode);
-            }
-        }
-    }
 
     private static string SerializeAudioSourceKind(AudioSourceKind kind) => kind switch
     {
@@ -162,15 +107,7 @@ internal static class ArchitectureCatalogSerializer
     private static string SerializeRuleScope(RuleScope scope) => scope switch
     {
         RuleScope.Clip => "clip",
-        RuleScope.Stage => "stage",
         RuleScope.Boundary => "boundary",
         _ => throw new ArgumentOutOfRangeException(nameof(scope)),
     };
-
-    private static bool Has<T>(T value, T flags) where T : struct, Enum
-    {
-        long raw = Convert.ToInt64(value);
-        long requested = Convert.ToInt64(flags);
-        return (raw & requested) == requested;
-    }
 }

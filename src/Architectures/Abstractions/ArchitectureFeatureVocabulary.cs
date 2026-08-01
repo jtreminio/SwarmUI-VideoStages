@@ -1,125 +1,74 @@
 namespace VideoStages.Architectures.Abstractions;
 
-internal enum CapabilityVocabularyScope
-{
-    Clip,
-    Stage,
-}
-
-internal sealed record CapabilityVocabularyEntry(
-    ClipCapability Clip,
-    StageCapability Stage,
-    string WireName)
-{
-    internal CapabilityVocabularyScope Scope =>
-        Clip != ClipCapability.None
-            ? CapabilityVocabularyScope.Clip
-            : CapabilityVocabularyScope.Stage;
-
-    internal string SymbolName => Scope switch
-    {
-        CapabilityVocabularyScope.Clip => Clip.ToString(),
-        CapabilityVocabularyScope.Stage => Stage.ToString(),
-        _ => throw new ArgumentOutOfRangeException(),
-    };
-
-    internal bool Supports(ClipCapability value) =>
-        Clip != ClipCapability.None
-        && value.HasFlag(Clip);
-
-    internal bool Supports(StageCapability value) =>
-        Stage != StageCapability.None
-        && value.HasFlag(Stage);
-}
+internal sealed record ArchitectureFeatureVocabularyEntry(
+    ArchitectureFeature Feature,
+    string WireName,
+    string AuthoringKey,
+    string DisplayLabel);
 
 internal sealed record ConditionalRuleCodeVocabularyEntry(
     ConditionalRuleCodeId Id,
     string Code);
 
-internal sealed record AuthoringFeatureVocabularyEntry(
-    AuthoringFeature Feature,
-    string AuthoringKey,
-    string DisplayLabel,
-    IReadOnlyList<CapabilityVocabularyEntry> Capabilities,
-    bool CanIgnoreWhenUnsupported = true,
-    bool RequiresEveryCapability = true);
-
 /// <summary>
-/// The single cross-language vocabulary for architecture capabilities and authored features.
-/// Capability enums remain the typed programming surface; this registry owns their wire names,
-/// authoring keys, labels, and the relationships between them.
+/// The single cross-language vocabulary for architecture features. <see cref="ArchitectureFeature"/>
+/// remains the typed programming surface; this registry owns its wire names, authoring keys, and
+/// labels.
 /// </summary>
 internal static class ArchitectureFeatureVocabulary
 {
-    internal static IReadOnlyList<CapabilityVocabularyEntry> Capabilities { get; } =
-    [
-        For(ClipCapability.PromptRelay, "prompt-relay"),
-        For(ClipCapability.References, "references"),
-        For(ClipCapability.ReferenceFraming, "reference-framing"),
-        For(ClipCapability.Retake, "retake"),
-        For(ClipCapability.AudioSources, "audio-sources"),
-        For(ClipCapability.AudioSegments, "audio-segments"),
-        For(ClipCapability.AudioReuse, "audio-reuse"),
-        For(ClipCapability.AudioDerivedDuration, "audio-derived-duration"),
-        For(
-            ClipCapability.ControlSignalDerivedDuration,
-            "control-signal-derived-duration"),
-        For(StageCapability.IcLora, "ic-lora"),
-        For(StageCapability.FrameReferences, "frame-references"),
-    ];
-
-    internal static IReadOnlyList<AuthoringFeatureVocabularyEntry>
-        AuthoringFeatures
-    { get; } =
+    internal static IReadOnlyList<ArchitectureFeatureVocabularyEntry> Features { get; } =
     [
         new(
-            AuthoringFeature.FrameReferences,
-            "frameReferences",
-            "Frame references",
-            [
-                Capability(ClipCapability.References),
-                Capability(StageCapability.FrameReferences),
-            ]),
-        new(
-            AuthoringFeature.ReferenceFraming,
-            "referenceFraming",
-            "Reference framing",
-            [Capability(ClipCapability.ReferenceFraming)]),
-        new(
-            AuthoringFeature.Retake,
-            "retake",
-            "Retakes",
-            [Capability(ClipCapability.Retake)]),
-        new(
-            AuthoringFeature.PromptRelay,
+            ArchitectureFeature.PromptRelay,
+            "prompt-relay",
             "promptRelay",
-            "Relay prompts",
-            [Capability(ClipCapability.PromptRelay)]),
+            "Relay prompts"),
         new(
-            AuthoringFeature.ClipAudio,
+            ArchitectureFeature.FrameReferences,
+            "frame-references",
+            "frameReferences",
+            "Frame references"),
+        new(
+            ArchitectureFeature.ReferenceFraming,
+            "reference-framing",
+            "referenceFraming",
+            "Reference framing"),
+        new(
+            ArchitectureFeature.Retake,
+            "retake",
+            "retake",
+            "Retakes"),
+        new(
+            ArchitectureFeature.ClipAudio,
+            "audio-sources",
             "clipAudio",
-            "Clip audio",
-            [Capability(ClipCapability.AudioSources)]),
+            "Clip audio"),
         new(
-            AuthoringFeature.AudioReuse,
+            ArchitectureFeature.AudioSegments,
+            "audio-segments",
+            "audioSegments",
+            "Audio segments"),
+        new(
+            ArchitectureFeature.AudioReuse,
+            "audio-reuse",
             "audioReuse",
-            "Captured stage audio reuse",
-            [Capability(ClipCapability.AudioReuse)]),
+            "Captured stage audio reuse"),
         new(
-            AuthoringFeature.AudioDerivedDuration,
+            ArchitectureFeature.AudioDerivedDuration,
+            "audio-derived-duration",
             "audioDerivedDuration",
-            "Audio-derived clip duration",
-            [Capability(ClipCapability.AudioDerivedDuration)]),
+            "Audio-derived clip duration"),
         new(
-            AuthoringFeature.ControlSignalDerivedDuration,
+            ArchitectureFeature.ControlSignalDerivedDuration,
+            "control-signal-derived-duration",
             "controlSignalDerivedDuration",
-            "Control-signal-derived clip duration",
-            [Capability(ClipCapability.ControlSignalDerivedDuration)]),
+            "Control-signal-derived clip duration"),
         new(
-            AuthoringFeature.IcLora,
+            ArchitectureFeature.IcLora,
+            "ic-lora",
             "icLora",
-            "IC-LoRA",
-            [Capability(StageCapability.IcLora)]),
+            "IC-LoRA"),
     ];
 
     internal static IReadOnlyList<ConditionalRuleCodeVocabularyEntry>
@@ -140,44 +89,13 @@ internal static class ArchitectureFeatureVocabulary
     internal static string RuleCode(ConditionalRuleCodeId id) =>
         ConditionalRuleCodes.Single(entry => entry.Id == id).Code;
 
-    internal static IEnumerable<string> WireNames(ClipCapability value) =>
-        Capabilities.Where(entry => entry.Supports(value)).Select(entry => entry.WireName);
+    internal static IEnumerable<string> WireNames(ArchitectureFeature features) =>
+        Features
+            .Where(entry => features.HasFlag(entry.Feature))
+            .Select(entry => entry.WireName);
 
-    internal static IEnumerable<string> WireNames(StageCapability value) =>
-        Capabilities.Where(entry => entry.Supports(value)).Select(entry => entry.WireName);
-
-    internal static string AuthoringKey(AuthoringFeature feature) =>
-        AuthoringFeatures.Single(entry => entry.Feature == feature).AuthoringKey;
-
-    internal static bool Supports(
-        ArchitectureCapabilityDescriptor capabilities,
-        AuthoringFeature feature)
-    {
-        AuthoringFeatureVocabularyEntry entry =
-            AuthoringFeatures.Single(candidate => candidate.Feature == feature);
-        bool SupportsCapability(CapabilityVocabularyEntry capability) =>
-            capability.Scope switch
-            {
-                CapabilityVocabularyScope.Clip =>
-                    capability.Supports(capabilities.Clip),
-                CapabilityVocabularyScope.Stage =>
-                    capability.Supports(capabilities.Stage),
-                _ => throw new ArgumentOutOfRangeException(),
-            };
-        return entry.RequiresEveryCapability
-            ? entry.Capabilities.All(SupportsCapability)
-            : entry.Capabilities.Any(SupportsCapability);
-    }
-
-    internal static IReadOnlySet<AuthoringFeature>
-        IgnoredWhenUnsupported(
-            ArchitectureCapabilityDescriptor capabilities) =>
-        AuthoringFeatures
-            .Where(entry =>
-                entry.CanIgnoreWhenUnsupported
-                && !Supports(capabilities, entry.Feature))
-            .Select(entry => entry.Feature)
-            .ToHashSet();
+    internal static string AuthoringKey(ArchitectureFeature feature) =>
+        Features.Single(entry => entry.Feature == feature).AuthoringKey;
 
     /// <summary>
     /// Renders the checked-in TypeScript projection. A backend test compares this output byte for
@@ -190,108 +108,23 @@ internal static class ArchitectureFeatureVocabulary
 
         Line("// Generated from ArchitectureFeatureVocabulary.cs. Do not edit by hand.");
         Line();
-        Line("export const CAPABILITY_WIRE_NAMES = {");
-        foreach (CapabilityVocabularyScope scope in Enum.GetValues<CapabilityVocabularyScope>())
+        Line("export const AUTHORING_FEATURE_WIRE_NAMES = {");
+        foreach (ArchitectureFeatureVocabularyEntry feature in Features)
         {
-            Line($"    {CamelCase(scope.ToString())}: {{");
-            foreach (CapabilityVocabularyEntry capability in
-                Capabilities.Where(entry => entry.Scope == scope))
-            {
-                Line(
-                    $"        {CamelCase(capability.SymbolName)}: "
-                    + $"{Quote(capability.WireName)},");
-            }
-            Line("    },");
+            Line($"    {feature.AuthoringKey}: {Quote(feature.WireName)},");
         }
         Line("} as const;");
         Line();
-        Line("export type CapabilityVocabularyScope = keyof typeof CAPABILITY_WIRE_NAMES;");
-        Line();
-        Line("export type GeneratedAuthoringFeatureCapability = readonly [");
-        Line("    scope: CapabilityVocabularyScope,");
-        Line("    wireName: string,");
-        Line("];");
-        Line();
-        Line("export const AUTHORING_FEATURES = [");
-        foreach (AuthoringFeatureVocabularyEntry feature in AuthoringFeatures)
-        {
-            Line($"    {Quote(feature.AuthoringKey)},");
-        }
-        Line("] as const;");
-        Line();
-        Line("export type GeneratedAuthoringFeature = (typeof AUTHORING_FEATURES)[number];");
-        Line();
-        Line("export const IGNORED_WHEN_UNSUPPORTED_FEATURES = [");
-        foreach (AuthoringFeatureVocabularyEntry feature in
-            AuthoringFeatures.Where(entry => entry.CanIgnoreWhenUnsupported))
-        {
-            Line($"    {Quote(feature.AuthoringKey)},");
-        }
-        Line("] as const satisfies readonly GeneratedAuthoringFeature[];");
-        Line();
-        Line("export const AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY = [");
-        foreach (AuthoringFeatureVocabularyEntry feature in
-            AuthoringFeatures.Where(entry =>
-                entry.Capabilities.Count > 1
-                && entry.RequiresEveryCapability))
-        {
-            Line($"    {Quote(feature.AuthoringKey)},");
-        }
-        Line("] as const satisfies readonly GeneratedAuthoringFeature[];");
-        Line();
-        Line("export const doesAuthoringFeatureRequireEveryCapability = (");
-        Line("    feature: GeneratedAuthoringFeature,");
-        Line("): boolean =>");
-        Line("    (");
-        Line("        AUTHORING_FEATURES_REQUIRING_EVERY_CAPABILITY as readonly string[]");
-        Line("    ).includes(feature);");
-        Line();
-        Line("export const isIgnoredWhenUnsupportedFeature = (");
-        Line("    feature: GeneratedAuthoringFeature,");
-        Line("): boolean =>");
-        Line("    (IGNORED_WHEN_UNSUPPORTED_FEATURES as readonly string[]).includes(feature);");
+        Line("export type GeneratedAuthoringFeature =");
+        Line("    keyof typeof AUTHORING_FEATURE_WIRE_NAMES;");
         Line();
         Line("export const AUTHORING_FEATURE_LABELS: Record<");
         Line("    GeneratedAuthoringFeature,");
         Line("    string");
         Line("> = {");
-        foreach (AuthoringFeatureVocabularyEntry feature in AuthoringFeatures)
+        foreach (ArchitectureFeatureVocabularyEntry feature in Features)
         {
             Line($"    {feature.AuthoringKey}: {Quote(feature.DisplayLabel)},");
-        }
-        Line("};");
-        Line();
-        Line("export const AUTHORING_FEATURE_CAPABILITIES: Record<");
-        Line("    GeneratedAuthoringFeature,");
-        Line("    readonly GeneratedAuthoringFeatureCapability[]");
-        Line("> = {");
-        foreach (AuthoringFeatureVocabularyEntry feature in AuthoringFeatures)
-        {
-            if (feature.Capabilities.Count == 1)
-            {
-                CapabilityVocabularyEntry only = feature.Capabilities[0];
-                string onlyScope = CamelCase(only.Scope.ToString());
-                string onlyReference =
-                    $"CAPABILITY_WIRE_NAMES.{onlyScope}.{CamelCase(only.SymbolName)}";
-                string inline =
-                    $"    {feature.AuthoringKey}: "
-                    + $"[[{Quote(onlyScope)}, {onlyReference}]],";
-                if (inline.Length <= 80)
-                {
-                    Line(inline);
-                    continue;
-                }
-            }
-            Line($"    {feature.AuthoringKey}: [");
-            foreach (CapabilityVocabularyEntry capability in feature.Capabilities)
-            {
-                string scope = CamelCase(capability.Scope.ToString());
-                string symbol = CamelCase(capability.SymbolName);
-                string capabilityReference =
-                    $"CAPABILITY_WIRE_NAMES.{scope}.{symbol}";
-                AppendBinding(scope, capabilityReference);
-            }
-            Line("    ],");
         }
         Line("};");
         Line();
@@ -306,37 +139,7 @@ internal static class ArchitectureFeatureVocabulary
         Line("    (typeof CONDITIONAL_RULE_CODES)[keyof typeof CONDITIONAL_RULE_CODES];");
 
         return result.ToString();
-
-        void AppendBinding(string scope, string capabilityReference)
-        {
-            string binding = $"        [{Quote(scope)}, {capabilityReference}],";
-            if (binding.Length <= 80)
-            {
-                Line(binding);
-                return;
-            }
-            Line("        [");
-            Line($"            {Quote(scope)},");
-            Line($"            {capabilityReference},");
-            Line("        ],");
-        }
     }
-
-    private static CapabilityVocabularyEntry For(
-        ClipCapability capability,
-        string wireName) =>
-        new(capability, StageCapability.None, wireName);
-
-    private static CapabilityVocabularyEntry For(
-        StageCapability capability,
-        string wireName) =>
-        new(ClipCapability.None, capability, wireName);
-
-    private static CapabilityVocabularyEntry Capability(ClipCapability capability) =>
-        Capabilities.Single(entry => entry.Clip == capability);
-
-    private static CapabilityVocabularyEntry Capability(StageCapability capability) =>
-        Capabilities.Single(entry => entry.Stage == capability);
 
     private static string CamelCase(string value) =>
         char.ToLowerInvariant(value[0]) + value[1..];

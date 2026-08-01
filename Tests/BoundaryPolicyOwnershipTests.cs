@@ -7,7 +7,7 @@ namespace VideoStages.Tests;
 
 /// <summary>
 /// One typed policy owns boundary behavior: the catalog rule an architecture advertises and the
-/// rule <see cref="BoundaryPlanCompiler"/> consumes are derived from the same modes.
+/// rule <see cref="BoundaryPlanCompiler"/> consumes are the same rule.
 /// </summary>
 public class BoundaryPolicyOwnershipTests
 {
@@ -21,12 +21,10 @@ public class BoundaryPolicyOwnershipTests
             Assert.NotNull(policy);
             Assert.Equal(
                 Enum.GetValues<BoundaryJoinType>().Order(),
-                policy.Modes.Keys.Order());
+                policy.Rules.Keys.Order());
             foreach (BoundaryJoinType mode in Enum.GetValues<BoundaryJoinType>())
             {
-                Assert.Equal(
-                    policy.Modes[mode].ToRuleDecision(),
-                    descriptor.BoundaryRules[mode]);
+                Assert.Equal(policy.Rules[mode], descriptor.BoundaryRules[mode]);
             }
         }
     }
@@ -36,9 +34,10 @@ public class BoundaryPolicyOwnershipTests
     {
         // A module that only declares a descriptor: the advertised continue rule must still be
         // the rule that compiles, grid and continuity window included.
-        ArchitectureBoundaryModePolicy continueMode = ArchitectureBoundaryModePolicy.Conditional(
+        RuleDecision continueMode = RuleDecision.Conditional(
             "fixture.boundary.continue",
             "Fixture grid.",
+            RuleScope.Boundary,
             new BoundaryRuleConstraints(
                 FrameStep: 5,
                 MinFrames: 10,
@@ -67,7 +66,7 @@ public class BoundaryPolicyOwnershipTests
                 Architecture = plan.Clips[0].Architecture with
                 {
                     BoundaryPolicy = new ArchitectureBoundaryPolicy(
-                        new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>
+                        new Dictionary<BoundaryJoinType, RuleDecision>
                         {
                             [BoundaryJoinType.Continue] = continueMode,
                         }),
@@ -80,7 +79,9 @@ public class BoundaryPolicyOwnershipTests
             BoundaryPlanCompiler.Compile(spec.Clips, planned).Boundaries);
 
         Assert.Equal(BoundaryJoinType.Continue, boundary.Effective);
-        Assert.Equal(continueMode.NormalizeOverlap(22), boundary.OverlapFrames);
+        Assert.Equal(
+            BoundaryPlanCompiler.NormalizeOverlap(continueMode, 22),
+            boundary.OverlapFrames);
         Assert.Equal(20, boundary.OverlapFrames);
         Assert.Equal(continueMode.Constraints.FrameStep, boundary.FrameStep);
         Assert.Equal(continueMode.Constraints.MinFrames, boundary.MinFrames);

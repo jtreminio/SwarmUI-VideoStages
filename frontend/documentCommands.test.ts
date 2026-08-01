@@ -1543,38 +1543,6 @@ describe("reduceDocumentCommand", () => {
         );
     });
 
-    it("rejects a whole-clip conversion whose model cannot perform the first active root role", () => {
-        const source = document();
-        source.clips[0].stages[0].skipped = true;
-        const fake = fakeArchitectureCatalog();
-        fake.entries[0].entryModes = ["image-to-video"];
-
-        const result = reduceDocumentCommand(
-            source,
-            {
-                type: "clip.convert-architecture",
-                clipId: "clip-a",
-                target: {
-                    architectureId: "test-video",
-                    modelProfileId: "test-profile",
-                    model: "test-video.safetensors",
-                    capabilities: fake.architectures[0].capabilities,
-                    entryModes: ["text-to-video"],
-                },
-            },
-            {
-                architectureCatalog: catalogWithFake(fake),
-                generatedEntryMode: "text-to-video",
-            },
-        );
-
-        expect(result).toMatchObject({
-            applied: false,
-            failure: "invalid-architecture-conversion",
-        });
-        expect(result.document).toEqual(source);
-    });
-
     it("preserves unsupported LoRA and upscale settings as dormant data", () => {
         const source = document();
         const fake = fakeArchitectureCatalog();

@@ -655,21 +655,9 @@ public sealed class EffectiveVideoRequestTests
             EffectiveVideoRequestProjector.Project(authored, architectures);
         ClipSpec effective = Assert.Single(request.Spec.Clips);
 
-        Assert.True(
-            new HashSet<AuthoringFeature>
-            {
-                AuthoringFeature.FrameReferences,
-                AuthoringFeature.ReferenceFraming,
-                AuthoringFeature.Retake,
-                AuthoringFeature.PromptRelay,
-                AuthoringFeature.ClipAudio,
-                AuthoringFeature.AudioReuse,
-                AuthoringFeature.AudioDerivedDuration,
-                AuthoringFeature.ControlSignalDerivedDuration,
-                AuthoringFeature.IcLora,
-            }.SetEquals(
-                ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(
-                    HostVideoArchitectureModule.Instance.Descriptor.Capabilities)));
+        Assert.Equal(
+            ArchitectureFeature.None,
+            HostVideoArchitectureModule.Instance.Descriptor.Features);
         Assert.Empty(effective.ImageRefs);
         Assert.All(effective.Stages, stage => Assert.Empty(stage.ImageRefStrengths));
         Assert.Equal(ReferenceFramingMode.Crop, effective.ReferenceFraming);
@@ -703,20 +691,9 @@ public sealed class EffectiveVideoRequestTests
     [Fact]
     public void Wan_absent_capabilities_derive_ignore_dispositions_without_frame_references()
     {
-        Assert.True(
-            new HashSet<AuthoringFeature>
-            {
-                AuthoringFeature.ReferenceFraming,
-                AuthoringFeature.Retake,
-                AuthoringFeature.PromptRelay,
-                AuthoringFeature.ClipAudio,
-                AuthoringFeature.AudioReuse,
-                AuthoringFeature.AudioDerivedDuration,
-                AuthoringFeature.ControlSignalDerivedDuration,
-                AuthoringFeature.IcLora,
-            }.SetEquals(
-                ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(
-                    WanArchitectureModule.Instance.Descriptor.Capabilities)));
+        Assert.Equal(
+            ArchitectureFeature.FrameReferences,
+            WanArchitectureModule.Instance.Descriptor.Features);
     }
 
     [Fact]

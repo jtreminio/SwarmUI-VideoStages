@@ -34,7 +34,6 @@ const dto: VideoArchitectureCatalogDto = {
             frameGrid: 8,
             capabilities:
                 testArchitectureCatalog().architectures[0].capabilities,
-            entryAbilities: ["text", "image"],
             enhancements: { referencePositions: ["any"] },
         },
         {
@@ -48,7 +47,6 @@ const dto: VideoArchitectureCatalogDto = {
                 ...testArchitectureCatalog().architectures[0].capabilities,
                 entryModes: ["image-to-video"],
             },
-            entryAbilities: ["image"],
             enhancements: { referencePositions: ["first"] },
         },
     ],
@@ -144,7 +142,6 @@ describe("architecture catalog wire contract", () => {
             "compatibilityClassId",
             "frameGrid",
             "capabilities",
-            "entryAbilities",
             "enhancements",
         ] as const) {
             const missing = structuredClone(dto) as unknown as Record<
@@ -302,18 +299,14 @@ describe("architecture catalog wire contract", () => {
 
     it("rejects known executable rules with mismatched semantics", () => {
         const wrongScope = structuredClone(dto);
-        wrongScope.architectures[0].rules[0].scope = "stage";
+        wrongScope.architectures[0].rules[0].scope = "boundary";
         expect(parseVideoArchitectureCatalog(wrongScope)).toBeNull();
 
-        const extraConstraint = structuredClone(dto);
-        const constrained = extraConstraint.architectures[0].rules.find(
-            (rule) => rule.constraints !== null,
-        );
-        if (!constrained?.constraints) {
-            throw new Error("no rule publishes constraints");
-        }
-        constrained.constraints.unpublishedBehavior = true;
-        expect(parseVideoArchitectureCatalog(extraConstraint)).toBeNull();
+        const unpublishedConstraint = structuredClone(dto);
+        unpublishedConstraint.architectures[0].rules[0].constraints = {
+            requiresAnyEntryMode: ["init-video"],
+        };
+        expect(parseVideoArchitectureCatalog(unpublishedConstraint)).toBeNull();
     });
 
     it("defensively treats unchecked unknown rules as violated", () => {
@@ -470,8 +463,8 @@ describe("authoritative catalog repository", () => {
     it("retains the exact ready DTO through a failed refresh and later replaces it", async () => {
         const refreshFailure = deferred<unknown>();
         const replacement = structuredClone(dto);
-        replacement.architectures[0].capabilities.stage =
-            replacement.architectures[0].capabilities.stage.filter(
+        replacement.architectures[0].capabilities.features =
+            replacement.architectures[0].capabilities.features.filter(
                 (capability) => capability !== "ic-lora",
             );
         replacement.models = replacement.models.slice(0, 1);
@@ -634,23 +627,7 @@ describe("authoritative catalog repository", () => {
         expect(isRootTextToVideoModel()).toBe(true);
     });
 
-    it("uses authoritative entry abilities over the architecture overview", async () => {
-        const current: VideoArchitectureCatalogDto = structuredClone(dto);
-        current.models[0].entryAbilities = ["image"];
-        setVideoStagesHostBridgeForTests({
-            ...createDefaultVideoStagesHostBridge(),
-            requestJson: async () => current,
-        });
-        await loadAuthoritativeArchitectureCatalog();
-        const input = document.createElement("input");
-        input.id = "input_model";
-        input.value = current.models[0].modelName;
-        document.body.appendChild(input);
-
-        expect(isRootTextToVideoModel()).toBe(false);
-    });
-
-    it("classifies a root model by its authoritative entry abilities instead of the architecture union", async () => {
+    it("classifies a root model by its authoritative entry modes instead of the architecture union", async () => {
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson: async () => dto,
@@ -664,7 +641,9 @@ describe("authoritative catalog repository", () => {
         expect(dto.architectures[0].capabilities.entryModes).toContain(
             "text-to-video",
         );
-        expect(dto.models[1].entryAbilities).not.toContain("text");
+        expect(dto.models[1].capabilities.entryModes).not.toContain(
+            "text-to-video",
+        );
         expect(isRootTextToVideoModel()).toBe(false);
     });
 });

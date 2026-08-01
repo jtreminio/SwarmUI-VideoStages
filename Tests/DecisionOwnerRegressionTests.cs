@@ -587,9 +587,9 @@ public class DecisionOwnerRegressionTests
             "Unit Test Foreign",
             [AudioSourceKind.Native],
             [ArchitectureEntryMode.ImageToVideo],
-            new(ClipCapability.None, StageCapability.None),
+            ArchitectureFeature.None,
             new ArchitectureBoundaryPolicy(
-                new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>()));
+                new Dictionary<BoundaryJoinType, RuleDecision>()));
     }
 
     /// <summary>

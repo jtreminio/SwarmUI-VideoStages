@@ -295,9 +295,9 @@ public class ArchitectureRuntimeOwnershipTests
             id,
             [AudioSourceKind.Native],
             [ArchitectureEntryMode.ImageToVideo, ArchitectureEntryMode.InitVideo],
-            new(ClipCapability.None, StageCapability.None),
+            ArchitectureFeature.None,
             new ArchitectureBoundaryPolicy(
-                new Dictionary<BoundaryJoinType, ArchitectureBoundaryModePolicy>()));
+                new Dictionary<BoundaryJoinType, RuleDecision>()));
     }
 
     private static WorkflowGenerator Generator()

@@ -47,8 +47,7 @@ The stages before runtime are:
    overrides.
 3. `ArchitecturePlanResolver` resolves every authored stage model—including
    skipped stages—through the session-authorized backend registry. Resolved
-   stage models own architecture, profile, entry abilities, and feature
-   support. Persisted architecture/profile values are diagnostic hints.
+   stage models own architecture, profile, and feature support. Persisted architecture/profile values are diagnostic hints.
 4. `EffectiveVideoRequestProjector`, called inside
    `VideoExecutionPlanCompiler`, keeps authored data intact while producing the
    values that this generation can execute from those resolved facts. Common
@@ -309,8 +308,8 @@ the documented prune command in [`README.md`](../README.md), then run
 When adding an architecture using the existing vocabulary:
 
 1. register its module and runtime provider in `VideoArchitectureManifest`;
-2. publish typed capabilities, entry abilities, frame grid, and reference
-   positions from resolved model facts;
+2. publish typed capabilities, frame grid, and reference positions from
+   resolved model facts;
 3. implement graph-free projection/compilation and typed architecture payloads
    whose stage payloads expose the required common core;
 4. implement provider → factory → session lifetimes;

@@ -8,7 +8,7 @@ namespace VideoStages.Architectures.Wan;
 
 /// <summary>
 /// WAN models recognized from the host's compatibility and checkpoint facts. Exact legacy
-/// profiles remain aliases for established paths; entry authorization is family-wide.
+/// profiles remain aliases for established paths.
 /// </summary>
 internal sealed class WanArchitectureModule :
     IVideoArchitectureModule,
@@ -65,14 +65,10 @@ internal sealed class WanArchitectureModule :
             ArchitectureEntryMode.ImageToVideo,
             ArchitectureEntryMode.InitVideo,
         ],
-        new(
-            ClipCapability.References,
-            StageCapability.FrameReferences),
+        ArchitectureFeature.FrameReferences,
         ArchitectureBoundaryPolicy.CutOnly(
             "wan22",
-            "Decoded Wan clips can be joined with a hard cut.",
-            "Wan has no generation-time continuity path yet.",
-            "Wan has no decoded transition path yet."))
+            "Decoded Wan clips can be joined with a hard cut."))
     {
         FrameGrid = FrameGrid,
         StageGuideReferences = new(
@@ -105,8 +101,6 @@ internal sealed class WanArchitectureModule :
             Descriptor,
             modelClassId,
             compatClassId,
-            VideoModelEntryAbility.TextToVideo
-                | VideoModelEntryAbility.ImageToVideo,
             SupportsHostEndFrame(compatClassId)
                 ? ["first", "last"]
                 : ["first"],

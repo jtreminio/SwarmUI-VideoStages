@@ -6,7 +6,7 @@ import type { GeneratedAuthoringFeature } from "./generatedFeatures";
 export type CatalogAuthoringFeature = GeneratedAuthoringFeature;
 
 export type CapabilitySupport = "supported" | "unsupported" | "conditional";
-export type CapabilityRuleScope = "clip" | "stage" | "boundary";
+export type CapabilityRuleScope = "clip" | "boundary";
 
 export interface CapabilityRuleDecision {
     support: CapabilitySupport;
@@ -17,8 +17,7 @@ export interface CapabilityRuleDecision {
 }
 
 export interface ArchitectureCapabilities {
-    clip: string[];
-    stage: string[];
+    features: string[];
     entryModes: string[];
     audioSourceKinds: string[];
 }
@@ -33,7 +32,6 @@ export interface ArchitectureModelEntry {
     frameGrid?: number | null;
     /** Complete effective support for this resolved model; absent only for host-only unknowns. */
     capabilities?: ArchitectureCapabilities;
-    entryAbilities?: string[];
     enhancements?: ModelEnhancements;
     /** Internal entry-mode projection derived from typed model capabilities. */
     entryModes: string[];
@@ -61,7 +59,6 @@ export interface ArchitectureRetargetPlan {
     modelProfileId: ModelProfileId;
     model: string;
     capabilities: ArchitectureCapabilities;
-    entryAbilities?: string[];
     entryModes: string[];
 }
 
@@ -73,7 +70,6 @@ export interface ArchitectureCatalogModelDto {
     compatibilityClassId: string;
     frameGrid: number;
     capabilities: ArchitectureCapabilities;
-    entryAbilities: string[];
     enhancements: ModelEnhancements;
 }
 

@@ -4,10 +4,6 @@ import type {
     ArchitectureModelCatalog,
     ArchitectureRetargetPlan,
 } from "../types";
-import {
-    type GeneratedEntryMode,
-    modelSupportsAllActiveStageEntries,
-} from "./entryModePolicy";
 
 export interface ArchitectureConversionPlan {
     /** The complete converted clip; the source clip is never mutated. */
@@ -55,9 +51,6 @@ export const resolveArchitectureRetarget = (
         capabilities: structuredClone(
             model.capabilities ?? descriptor.capabilities,
         ),
-        ...(model.entryAbilities === undefined
-            ? {}
-            : { entryAbilities: [...model.entryAbilities] }),
         entryModes: [...model.entryModes],
     };
 };
@@ -72,16 +65,9 @@ export const planArchitectureConversion = (
     source: Clip,
     requested: ArchitectureRetargetPlan,
     catalog: ArchitectureModelCatalog | null,
-    generatedEntryMode: GeneratedEntryMode = "text-to-video",
 ): ArchitectureConversionPlan | null => {
     const target = resolveArchitectureRetarget(requested, catalog);
     if (!target) {
-        return null;
-    }
-
-    if (
-        !modelSupportsAllActiveStageEntries(target, source, generatedEntryMode)
-    ) {
         return null;
     }
 

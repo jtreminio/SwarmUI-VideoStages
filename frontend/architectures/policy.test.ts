@@ -44,8 +44,8 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
     const wan = structuredClone(ltx);
     wan.id = "wan22";
     wan.label = "WAN 2.2";
-    wan.capabilities.stage = wan.capabilities.stage.filter(
-        (capability) => capability !== "lora" && capability !== "ic-lora",
+    wan.capabilities.features = wan.capabilities.features.filter(
+        (capability) => capability !== "ic-lora",
     );
     models.architectures.push(wan);
     models.entries.push({
@@ -99,15 +99,7 @@ describe("catalog-backed authoring policy", () => {
             architectureFeatureSupport("frameReferences", { capabilities }),
         ).toBe(true);
 
-        capabilities.clip = capabilities.clip.filter(
-            (capability) => capability !== "references",
-        );
-        expect(
-            architectureFeatureSupport("frameReferences", { capabilities }),
-        ).toBe(false);
-
-        capabilities.clip.push("references");
-        capabilities.stage = capabilities.stage.filter(
+        capabilities.features = capabilities.features.filter(
             (capability) => capability !== "frame-references",
         );
         expect(
@@ -152,11 +144,11 @@ describe("catalog-backed authoring policy", () => {
         }
         first.enhancements = { referencePositions: [] };
         first.capabilities = structuredClone(descriptor.capabilities);
-        first.capabilities.stage = first.capabilities.stage.filter(
+        first.capabilities.features = first.capabilities.features.filter(
             (capability) => capability !== "ic-lora",
         );
         second.capabilities = structuredClone(descriptor.capabilities);
-        second.capabilities.clip = second.capabilities.clip.filter(
+        second.capabilities.features = second.capabilities.features.filter(
             (capability) => capability !== "prompt-relay",
         );
         const clip = minimalClip({

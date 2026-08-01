@@ -127,7 +127,6 @@ const authoritativeDto = (
         capabilities: structuredClone(
             testArchitectureCatalog().architectures[0].capabilities,
         ),
-        entryAbilities: ["text", "image"],
         enhancements: { referencePositions: ["any"] },
     })),
 });
@@ -462,7 +461,6 @@ describe("videoStagesTimeline", () => {
                     capabilities: structuredClone(
                         testArchitectureCatalog().architectures[0].capabilities,
                     ),
-                    entryAbilities: ["text", "image"],
                     enhancements: { referencePositions: ["any"] },
                 },
             ],
@@ -593,8 +591,8 @@ describe("videoStagesTimeline", () => {
         expect(document.querySelector(".vst-detail-add-iclora")).not.toBeNull();
 
         const replacement = authoritativeDto();
-        replacement.architectures[0].capabilities.stage =
-            replacement.architectures[0].capabilities.stage.filter(
+        replacement.architectures[0].capabilities.features =
+            replacement.architectures[0].capabilities.features.filter(
                 (capability) => capability !== "ic-lora",
             );
         resolveTrailing(replacement);
@@ -710,8 +708,8 @@ describe("videoStagesTimeline", () => {
         expect(document.querySelector(".vst-detail-add-iclora")).not.toBeNull();
 
         const replacement = authoritativeDto();
-        replacement.architectures[0].capabilities.stage =
-            replacement.architectures[0].capabilities.stage.filter(
+        replacement.architectures[0].capabilities.features =
+            replacement.architectures[0].capabilities.features.filter(
                 (capability) => capability !== "ic-lora",
             );
         document

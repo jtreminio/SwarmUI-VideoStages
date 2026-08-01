@@ -15,21 +15,15 @@ internal static class Ltx2ConditionalRulePolicySource
     /// </summary>
     internal const int AudioReuseMinimumActiveStages = 3;
 
+    internal static IReadOnlyList<ArchitectureEntryMode> RetakeEntryModes { get; } =
+        [ArchitectureEntryMode.InitVideo];
+
     internal static RuleDecision RetakeRequiresSource { get; } =
         RuleDecision.Conditional(
             ArchitectureFeatureVocabulary.RuleCode(
                 ConditionalRuleCodeId.RetakeRequiresSource),
             "Retake requires an init-video clip.",
-            RuleScope.Clip,
-            new RequiredEntryModesRuleConstraints(
-                [ArchitectureEntryMode.InitVideo]));
-
-    /// <summary>
-    /// Read back out of the published rule, so the catalog value and the value the evaluator
-    /// enforces are the same list by construction.
-    /// </summary>
-    internal static IReadOnlyList<ArchitectureEntryMode> RetakeEntryModes { get; } =
-        RetakeRequiresSource.Require<RequiredEntryModesRuleConstraints>().RequiresAnyEntryMode;
+            RuleScope.Clip);
 
     internal static IReadOnlyList<RuleDecision> PublishedRules { get; } =
     [

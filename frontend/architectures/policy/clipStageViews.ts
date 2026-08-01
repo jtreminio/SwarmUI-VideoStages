@@ -191,8 +191,7 @@ export const createClipStageCapabilityViews = (
                 const supported =
                     descriptor !== undefined &&
                     resolvedModel !== undefined &&
-                    ((resolvedModel.entryAbilities?.length ?? 0) > 0 ||
-                        resolvedModel.entryModes.length > 0);
+                    resolvedModel.entryModes.length > 0;
                 return {
                     supported,
                     reason: supported

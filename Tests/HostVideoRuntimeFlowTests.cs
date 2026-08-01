@@ -497,26 +497,6 @@ public class HostVideoRuntimeFlowTests
     }
 
     [Fact]
-    public void Mochi_cannot_be_used_as_a_decoded_later_stage()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = HostModel(
-            T2IModelClassSorter.CompatGenmoMochi,
-            "genmo-mochi-1");
-        T2IParamInput input = BuildTextToVideoInput(
-            models.VideoModel,
-            JsonSingleClipStages(
-                MakeStage(models.VideoModel.Name, "Generated", steps: 8),
-                MakeStage(
-                    models.VideoModel.Name,
-                    "PreviousStage",
-                    control: 0.5,
-                    steps: 8)));
-
-        AssertRejectedBeforeMutation(input, "decoded later-stage");
-    }
-
-    [Fact]
     public void One_clip_cannot_mix_generic_compatibility_classes()
     {
         using SwarmUiTestContext context = new();

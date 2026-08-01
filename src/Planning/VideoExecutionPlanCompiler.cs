@@ -84,8 +84,7 @@ internal static class VideoExecutionPlanCompiler
                     ArchitectureCapabilityValidator.Validate(
                         activeClips[i],
                         assignment.Architecture,
-                        entryMode,
-                        assignment.StageModels);
+                        entryMode);
                 diagnostics.AddRange(capabilityDiagnostics);
                 if (!capabilityDiagnostics.Any(diagnostic =>
                     diagnostic.Severity == PlanDiagnosticSeverity.Error))
@@ -173,8 +172,8 @@ internal static class VideoExecutionPlanCompiler
             .. plan.Clips
                 .Where(clip =>
                     clip.Architecture is not null
-                    && !clip.Architecture.Capabilities.Clip.HasFlag(
-                        ClipCapability.AudioSegments))
+                    && !clip.Architecture.Features.HasFlag(
+                        ArchitectureFeature.AudioSegments))
                 .Select(clip => clip.ClipId),
         ];
         bool noClipSupportsAudioSegments =

@@ -42,8 +42,7 @@ export const effectiveClipCapabilities = (
     return (models as ArchitectureModelEntry[]).reduce((effective, model) => {
         const capabilities = effectiveModelCapabilities(model, architecture);
         return {
-            clip: intersect(effective.clip, capabilities.clip),
-            stage: intersect(effective.stage, capabilities.stage),
+            features: intersect(effective.features, capabilities.features),
             entryModes: intersect(
                 effective.entryModes,
                 capabilities.entryModes,

@@ -39,17 +39,16 @@ internal sealed class Ltx2ArchitectureModule :
             ArchitectureEntryMode.ImageToVideo,
             ArchitectureEntryMode.InitVideo,
         ],
-        new(
-            ClipCapability.PromptRelay
-                | ClipCapability.References
-                | ClipCapability.Retake
-                | ClipCapability.AudioSources
-                | ClipCapability.AudioReuse
-                | ClipCapability.AudioSegments
-                | ClipCapability.AudioDerivedDuration
-                | ClipCapability.ControlSignalDerivedDuration
-                | ClipCapability.ReferenceFraming,
-            StageCapability.IcLora | StageCapability.FrameReferences),
+        ArchitectureFeature.PromptRelay
+            | ArchitectureFeature.FrameReferences
+            | ArchitectureFeature.Retake
+            | ArchitectureFeature.ClipAudio
+            | ArchitectureFeature.AudioReuse
+            | ArchitectureFeature.AudioSegments
+            | ArchitectureFeature.AudioDerivedDuration
+            | ArchitectureFeature.ControlSignalDerivedDuration
+            | ArchitectureFeature.ReferenceFraming
+            | ArchitectureFeature.IcLora,
         Ltx2BoundaryPolicy.Instance)
     {
         FrameGrid = FrameGrid,
@@ -80,13 +79,6 @@ internal sealed class Ltx2ArchitectureModule :
             Descriptor,
             model.ModelClass.ID,
             model.ModelClass.CompatClass.ID,
-            (
-                (model.ModelClass.CompatClass.IsText2Video
-                    ? VideoModelEntryAbility.TextToVideo
-                    : VideoModelEntryAbility.None)
-                | (model.ModelClass.CompatClass.IsImage2Video
-                    ? VideoModelEntryAbility.ImageToVideo
-                    : VideoModelEntryAbility.None)),
             ["any"],
             model.ModelClass.CompatClass.LorasTargetTextEnc);
         return true;

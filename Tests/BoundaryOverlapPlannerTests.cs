@@ -87,9 +87,10 @@ public class BoundaryOverlapPlannerTests
     [Fact]
     public void BoundaryPolicy_NormalizesRelativeToItsMinimumInsteadOfZero()
     {
-        ArchitectureBoundaryModePolicy policy = ArchitectureBoundaryModePolicy.Conditional(
+        RuleDecision policy = RuleDecision.Conditional(
             "fake.crossfade",
             "test",
+            RuleScope.Boundary,
             new BoundaryRuleConstraints(
                 FrameStep: 4,
                 MinFrames: 5,
@@ -100,11 +101,11 @@ public class BoundaryOverlapPlannerTests
                 TargetRequiresStage: false,
                 TargetDisallowsInitialReference: false));
 
-        Assert.Equal(9, policy.NormalizeOverlap(0));
-        Assert.Equal(5, policy.NormalizeOverlap(4));
-        Assert.Equal(5, policy.NormalizeOverlap(8));
-        Assert.Equal(9, policy.NormalizeOverlap(10));
-        Assert.Equal(21, policy.NormalizeOverlap(999));
+        Assert.Equal(9, BoundaryPlanCompiler.NormalizeOverlap(policy, 0));
+        Assert.Equal(5, BoundaryPlanCompiler.NormalizeOverlap(policy, 4));
+        Assert.Equal(5, BoundaryPlanCompiler.NormalizeOverlap(policy, 8));
+        Assert.Equal(9, BoundaryPlanCompiler.NormalizeOverlap(policy, 10));
+        Assert.Equal(21, BoundaryPlanCompiler.NormalizeOverlap(policy, 999));
     }
 
     [Fact]

@@ -36,11 +36,9 @@ const wanCatalog = (): ArchitectureModelCatalog => {
     const wan = structuredClone(template);
     wan.id = "wan22";
     wan.label = "WAN 2.2";
-    wan.capabilities.stage = wan.capabilities.stage.filter(
-        (capability) => capability !== "ic-lora",
-    );
-    wan.capabilities.clip = wan.capabilities.clip.filter(
+    wan.capabilities.features = wan.capabilities.features.filter(
         (capability) =>
+            capability !== "ic-lora" &&
             capability !== "prompt-relay" &&
             capability !== "reference-framing" &&
             capability !== "audio-reuse",
@@ -53,7 +51,6 @@ const wanCatalog = (): ArchitectureModelCatalog => {
         modelProfileId: "wan22-i2v-14b",
         modelClassId: "wan-i2v-14b",
         compatibilityClassId: "wan-video",
-        entryAbilities: ["text", "image"],
         entryModes: ["image-to-video", "init-video"],
     });
     return models;
@@ -66,8 +63,7 @@ const hostVideoCatalog = (): ArchitectureModelCatalog => {
     const host = structuredClone(template);
     host.id = "host-video";
     host.label = "Host Video";
-    host.capabilities.clip = [];
-    host.capabilities.stage = [];
+    host.capabilities.features = [];
     host.capabilities.audioSourceKinds = ["Disabled"];
     models.architectures.push(host);
     models.entries.push({
@@ -77,7 +73,6 @@ const hostVideoCatalog = (): ArchitectureModelCatalog => {
         modelProfileId: "host-video",
         modelClassId: "host-video",
         compatibilityClassId: "host-video",
-        entryAbilities: ["text", "image"],
         entryModes: ["text-to-video", "image-to-video", "init-video"],
     });
     return models;
@@ -517,7 +512,7 @@ describe("architecture diagnostics", () => {
             (entry) => entry.id === "test-video",
         );
         if (!fake) throw new Error("missing fake architecture");
-        fake.capabilities.clip = [];
+        fake.capabilities.features = [];
         const clip = minimalClip({
             architectureHint: "test-video",
             modelProfileId: "test-profile",
@@ -874,7 +869,6 @@ describe("architecture diagnostics", () => {
                 modelProfileId: "wan22-i2v-14b",
                 modelClassId: "wan-i2v-14b",
                 compatibilityClassId: "wan-video",
-                entryAbilities: ["text", "image"],
                 entryModes: ["image-to-video", "init-video"],
             },
             {
@@ -884,7 +878,6 @@ describe("architecture diagnostics", () => {
                 modelProfileId: "wan22-ti2v-5b",
                 modelClassId: "wan-ti2v-5b",
                 compatibilityClassId: "wan-video",
-                entryAbilities: ["text", "image"],
                 entryModes: ["text-to-video", "image-to-video"],
             },
         );

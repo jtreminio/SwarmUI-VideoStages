@@ -637,8 +637,8 @@ internal static class EffectiveVideoRequestProjector
             {
                 continue;
             }
-            ArchitectureBoundaryModePolicy policy = fromAssignment.Architecture
-                .BoundaryPolicy.Modes.GetValueOrDefault(requested);
+            RuleDecision policy = fromAssignment.Architecture
+                .BoundaryPolicy.Rules.GetValueOrDefault(requested);
             bool crossesArchitectures =
                 fromAssignment.Architecture.Id != toAssignment.Architecture.Id;
             if (!crossesArchitectures
