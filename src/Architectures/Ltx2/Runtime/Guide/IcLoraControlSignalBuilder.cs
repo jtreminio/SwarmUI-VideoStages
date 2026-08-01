@@ -31,7 +31,9 @@ internal sealed class IcLoraControlSignalBuilder(WorkflowGenerator g)
         {
             IcLoraControlMode.Canny => BuildCanny(bridge, driveImages),
             IcLoraControlMode.Depth => BuildDepth(bridge, driveImages),
-            _ => BuildNormal(bridge, driveImages),
+            IcLoraControlMode.Normal => BuildNormal(bridge, driveImages),
+            IcLoraControlMode.Unknown => driveImages,
+            _ => driveImages,
         };
         VideoGraphHelpers.CachePath(g, key, processed);
         return processed;

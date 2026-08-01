@@ -4,10 +4,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2.Planning;
 
-/// <summary>
-/// Compiles stage-applicable IC-LoRAs from explicit source and data-stream intent. Presets select
-/// weights and genuinely custom graph behavior elsewhere; they do not change media interpretation.
-/// </summary>
+/// <summary>Compiled IC-LoRA plans, source selection, and diagnostics for one clip.</summary>
 internal sealed record IcLoraClipPlanCompilation(
     ImmutableDictionary<int, ImmutableArray<IcLoraPlan>> Stages,
     int? PrimaryControlNetSourceIndex,
@@ -63,13 +60,6 @@ internal static class IcLoraPlanCompiler
                 IcLoraDimensionPolicyResolver.Resolve(
                     entry.Preset,
                     entry.Lora);
-            if (primaryControlNetSourceIndex is null
-                && ControlNetSourcePlan.TryParseIndex(
-                    normalizedSource,
-                    out int sourceIndex))
-            {
-                primaryControlNetSourceIndex = sourceIndex;
-            }
             if (contract.DriveData == IcLoraDriveData.None
                 && authoredSource != IcLoraMediaSourceKind.Upload)
             {
@@ -86,6 +76,22 @@ internal static class IcLoraPlanCompiler
                     index,
                     "ltx2.ic-lora.drive-media-source-mismatch",
                     "configures DriveMedia, but only DriveSource Upload may consume it"));
+            }
+            if (controlMode == IcLoraControlMode.Unknown)
+            {
+                diagnostics.Add(Error(
+                    clip,
+                    index,
+                    "ltx2.ic-lora.control-mode-unsupported",
+                    $"uses unsupported control mode '{entry.ControlType}'"));
+            }
+            else if (!contract.ConsumesVisual && controlMode != IcLoraControlMode.None)
+            {
+                diagnostics.Add(Error(
+                    clip,
+                    index,
+                    "ltx2.ic-lora.drive-control-unsupported",
+                    $"consumes {entry.DriveData} data and cannot use visual control preprocessing"));
             }
             foreach (StageSpec stage in ApplicableStages(clip, entry))
             {
@@ -109,24 +115,14 @@ internal static class IcLoraPlanCompiler
                     input));
             }
 
-            if (controlMode == IcLoraControlMode.Unknown)
-            {
-                diagnostics.Add(Error(
-                    clip,
-                    index,
-                    "ltx2.ic-lora.control-mode-unsupported",
-                    $"uses unsupported control mode '{entry.ControlType}'"));
-            }
-            else if (!contract.ConsumesVisual && controlMode != IcLoraControlMode.None)
-            {
-                diagnostics.Add(Error(
-                    clip,
-                    index,
-                    "ltx2.ic-lora.drive-control-unsupported",
-                    $"consumes {entry.DriveData} data and cannot use visual control preprocessing"));
-            }
-
             ValidateAutoModel(clip, entry, index, diagnostics);
+            if (primaryControlNetSourceIndex is null
+                && ControlNetSourcePlan.TryParseIndex(
+                    normalizedSource,
+                    out int sourceIndex))
+            {
+                primaryControlNetSourceIndex = sourceIndex;
+            }
         }
 
         foreach (StageSpec stage in clip.Stages ?? [])

@@ -89,7 +89,7 @@ internal sealed class LtxConditioningPipeline(
         WGNodeData guideMedia,
         double guideMergeStrength)
     {
-        if (skipGuideReinjection || guideMergeStrength <= 0)
+        if (guideMedia is null || skipGuideReinjection || guideMergeStrength <= 0)
         {
             g.CurrentMedia = stageLatent;
             return this;
@@ -110,10 +110,8 @@ internal sealed class LtxConditioningPipeline(
     }
 
     /// <summary>
-    /// Re-freezes a continue boundary's tail over the stage's opening frames. It runs after the stage's
-    /// own input is bound so it wins over whatever conditioning covers the head, and it conditions only
-    /// the tail's own frame count, leaving everything past the overlap window as the handoff left it.
-    /// The opening stage of a clip takes the tail as its primary guide instead and skips this.
+    /// Re-freezes a continue boundary's tail after stage input binding so it wins over other
+    /// conditioning at the head. The opening stage uses the tail as its primary guide instead.
     /// </summary>
     public LtxConditioningPipeline WithContinuityAnchor()
     {

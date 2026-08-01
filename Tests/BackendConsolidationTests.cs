@@ -11,15 +11,9 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// Covers the consolidated backend decisions: one diagnostic channel, the fail-closed paths, the
-/// unified audio-source vocabulary, and the named stage-input dispatch.
-/// </summary>
 [Collection("VideoStagesTests")]
 public class BackendConsolidationTests
 {
-    // --- 5a: one diagnostic type, with warnings persisted through the host output channel -----
-
     [Fact]
     public void Reporter_routes_each_severity_to_its_supplied_sink()
     {
@@ -121,8 +115,6 @@ public class BackendConsolidationTests
     [Fact]
     public void Plan_warnings_survive_compilation_instead_of_being_computed_and_discarded()
     {
-        // A continue boundary the clip frame budget cannot fund degrades silently today; the plan
-        // must still carry the warning so the reporter can hand it to the user.
         VideoExecutionPlan plan = TestPlanCompiler.Compile(new VideoStagesSpec(
             512,
             512,
@@ -142,8 +134,6 @@ public class BackendConsolidationTests
         Assert.NotEmpty(warnings);
         Assert.All(warnings, line => Assert.StartsWith("VideoStages: ", line));
     }
-
-    // --- 5b: fail closed where the docs promise it -------------------------------------------
 
     [Fact]
     public void Global_frame_trim_fails_closed_instead_of_dropping_a_requested_trim()
@@ -186,8 +176,6 @@ public class BackendConsolidationTests
             MetadataSanitizer.StripUploadDataFromJsonParameter("{\"data\":\"AAAA"));
     }
 
-    // --- 5e: one audio-source vocabulary with one agreed unknown-input behaviour ---------------
-
     [Theory]
     [InlineData("Native", (int)AudioSourceKind.Native)]
     [InlineData("", (int)AudioSourceKind.Native)]
@@ -215,13 +203,10 @@ public class BackendConsolidationTests
                 .Where(diagnostic => diagnostic.Message.Contains("not-a-real-source")));
         Assert.Equal(AudioBaseSourcePlanCompiler.UnknownSourceCode, error.Code);
         Assert.Equal(0, error.ClipId);
-        // The capability validator no longer disagrees with a second, softer verdict.
         Assert.Equal(
             AudioSourceKind.Unknown,
             Assert.Single(plan.Clips).Audio.Base.Kind);
     }
-
-    // --- 5e: one stable-node-id allocation map ------------------------------------------------
 
     [Fact]
     public void Stable_node_id_blocks_cannot_collide()
@@ -251,8 +236,6 @@ public class BackendConsolidationTests
             StableNodeIds.AudioWindowMask,
             StableNodeIds.AudioWindowMask.Width));
     }
-
-    // --- 5e: authored time parsing is structural ------------------------------------------------
 
     [Fact]
     public void Authored_duration_parsing_does_not_import_a_global_architecture_grid()
@@ -286,8 +269,6 @@ public class BackendConsolidationTests
                 int.MaxValue));
     }
 
-    // --- 5e: published rule constraints are the values the evaluator enforces ------------------
-
     [Fact]
     public void Conditional_rule_thresholds_come_from_the_published_constraints()
     {
@@ -295,8 +276,6 @@ public class BackendConsolidationTests
             [ArchitectureEntryMode.InitVideo],
             Ltx2ClipPolicy.RetakeEntryModes);
     }
-
-    // --- 5f: one bounded dispatch names every stage-input case ---------------------------------
 
     [Fact]
     public void Stage_input_dispatch_names_the_primary_guide_cases_in_priority_order()
@@ -311,7 +290,8 @@ public class BackendConsolidationTests
                 ReplacesTextToVideoRoot: true,
                 InitVideoFootageIsStageInput: true,
                 RefinesIncomingLatent: true,
-                PriorStageLatentIsReusable: true)));
+                PriorStageLatentIsReusable: true,
+                HasGuide: true)));
         Assert.Equal(
             StageInputCase.ContinuationTail,
             StageInputDispatcher.Resolve(Facts() with
@@ -356,17 +336,26 @@ public class BackendConsolidationTests
     [Fact]
     public void Stage_input_dispatch_falls_back_to_reinjecting_the_resolved_guide()
     {
-        StageInputCase actual = StageInputDispatcher.Resolve(Facts());
+        StageInputCase actual = StageInputDispatcher.Resolve(Facts() with { HasGuide = true });
 
         Assert.Equal(StageInputCase.GuideReinjection, actual);
         Assert.False(StageInputDispatcher.SkipsGuideReinjection(actual));
     }
 
     [Fact]
+    public void Stage_input_dispatch_skips_reinjection_when_no_guide_resolved()
+    {
+        StageInputCase actual = StageInputDispatcher.Resolve(Facts());
+
+        Assert.Equal(StageInputCase.NoGuide, actual);
+        Assert.True(StageInputDispatcher.SkipsGuideReinjection(actual));
+    }
+
+    [Fact]
     public void Every_stage_input_case_is_reachable_from_the_dispatch()
     {
         HashSet<StageInputCase> produced = [];
-        for (int mask = 0; mask < 1 << 8; mask++)
+        for (int mask = 0; mask < 1 << 9; mask++)
         {
             produced.Add(StageInputDispatcher.Resolve(new StageInputFacts(
                 HasPrimaryGuide: (mask & 1) != 0,
@@ -376,13 +365,12 @@ public class BackendConsolidationTests
                 ReplacesTextToVideoRoot: (mask & 16) != 0,
                 InitVideoFootageIsStageInput: (mask & 32) != 0,
                 RefinesIncomingLatent: (mask & 64) != 0,
-                PriorStageLatentIsReusable: (mask & 128) != 0)));
+                PriorStageLatentIsReusable: (mask & 128) != 0,
+                HasGuide: (mask & 256) != 0)));
         }
 
         Assert.Equal(Enum.GetValues<StageInputCase>().ToHashSet(), produced);
     }
-
-    // --- 5g: the stage orchestrator is gone, StageRunner owns the layer ------------------------
 
     [Fact]
     public void Stage_execution_has_one_owner_per_layer()
@@ -409,7 +397,8 @@ public class BackendConsolidationTests
         ReplacesTextToVideoRoot: false,
         InitVideoFootageIsStageInput: false,
         RefinesIncomingLatent: false,
-        PriorStageLatentIsReusable: false);
+        PriorStageLatentIsReusable: false,
+        HasGuide: false);
 
     private static ClipSpec ClipWithBoundary(int id, int frames, string boundary) => new(
         Id: id,

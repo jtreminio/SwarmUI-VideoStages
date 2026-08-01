@@ -14,12 +14,6 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// Pins the multi-IC-LoRA behaviors of <c>IcLoraApplicator.ApplyIcLoras</c>: the per-entry loader
-/// chain, guide stacking on conditioning + latent, metadata-driven downscale wiring, the Advanced
-/// guide for attention strength, uploaded drive videos, control-signal preprocessing, and loader-only
-/// entries.
-/// </summary>
 [Collection("VideoStagesTests")]
 public sealed class LtxIcLoraTests
 {
@@ -419,15 +413,12 @@ public sealed class LtxIcLoraTests
         List<LTXAddVideoICLoRAGuideNode> guides = [.. bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>()
             .OrderBy(n => int.Parse(n.Id))];
         Assert.Equal(2, guides.Count);
-        // Guides stack: the second reads the first's conditioning and latent outputs.
         Assert.Same(guides[0], guides[1].PositiveInput.Connection?.Node);
         Assert.Same(guides[0], guides[1].NegativeInput.Connection?.Node);
         Assert.Same(guides[0], guides[1].LatentInput.Connection?.Node);
-        // Each guide's downscale factor is wired from ITS loader's metadata output, not a literal.
         Assert.Same(loaders[0], guides[0].LatentDownscaleFactor.Connection?.Node);
         Assert.Same(loaders[1], guides[1].LatentDownscaleFactor.Connection?.Node);
         Assert.Equal(1, guides[0].LatentDownscaleFactor.Connection?.SlotIndex);
-        // Stage guide strength applies to every entry's guide.
         Assert.Equal(0.7, guides[0].Strength.LiteralAsDouble() ?? double.NaN, 4);
         Assert.Equal(0.7, guides[1].Strength.LiteralAsDouble() ?? double.NaN, 4);
     }
@@ -479,7 +470,6 @@ public sealed class LtxIcLoraTests
         LTXAddVideoICLoRAGuideAdvancedNode advanced =
             Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideAdvancedNode>());
         Assert.Equal(0.65, advanced.AttentionStrength.LiteralAsDouble() ?? double.NaN, 4);
-        // The advanced guide stacks on the basic one.
         Assert.Same(basic, advanced.PositiveInput.Connection?.Node);
     }
 
@@ -572,6 +562,48 @@ public sealed class LtxIcLoraTests
     }
 
     [Fact]
+    public void Unknown_control_mode_leaves_drive_images_unmodified()
+    {
+        WorkflowGenerator generator = new()
+        {
+            UserInput = new T2IParamInput(null),
+            Workflow = new JObject(),
+        };
+        using WorkflowBridge bridge = BridgeSync.For(generator);
+        UnknownNode drive = bridge
+            .AddStub("UnitTest_UnknownControlDrive", "201")
+            .WithOutputs(WGNodeData.DT_IMAGE);
+        JArray driveImages = new("201", 0);
+        IcLoraPlan plan = new(
+            EntryIndex: 0,
+            ModelName: "adapter.safetensors",
+            UsesAutoModel: false,
+            Preset: "custom",
+            ModelStrength: 1,
+            AttentionStrength: 1,
+            IcLoraControlMode.Unknown,
+            IcLoraDriveMediaContracts.Resolve(IcLoraDriveData.Visual),
+            new(IcLoraDriveMediaKind.Image, null, null),
+            new(
+                IcLoraMediaSourceKind.Upload,
+                Constants.IcLoraSourceUpload,
+                IcLoraDriveMediaKind.Image,
+                ControlNetIndex: null,
+                HasInput: true),
+            DimensionDownscaleFactor: 1,
+            GuideStrength: 1);
+
+        JArray result = new IcLoraControlSignalBuilder(generator).Apply(
+            bridge,
+            clipId: 0,
+            plan,
+            driveImages);
+
+        Assert.True(JToken.DeepEquals(driveImages, result));
+        Assert.Empty(bridge.Graph.NodesOfType<LoadMoGeModelNode>());
+    }
+
+    [Fact]
     public void Uploaded_image_drive_uses_image_b64_load()
     {
         using SwarmUiTestContext testContext = new();
@@ -652,7 +684,6 @@ public sealed class LtxIcLoraTests
         (JObject _, WorkflowBridge bridge) = Generate(clip, models);
         using WorkflowBridge _ = bridge;
 
-        // One upload/load chain feeds both stages; loaders and guides stay per-stage.
         Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
         Assert.Single(bridge.Graph.NodesOfType<GetVideoComponentsNode>());
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>().Count());

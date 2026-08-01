@@ -3,12 +3,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures;
 
-/// <summary>
-/// The last word on facts <see cref="CapabilityDrivenEffectiveRequestProjector"/> cannot safely
-/// drop: entry mode and audio-source kind decide which models execute, and a malformed stage
-/// selector has no supported default. Every optional feature is already projected away by then,
-/// so re-checking one here could only ever restate a value the projector reset.
-/// </summary>
+/// <summary>Validates architecture constraints that remain after effective-request projection.</summary>
 internal static class ArchitectureCapabilityValidator
 {
     internal static IReadOnlyList<PlanDiagnostic> Validate(
@@ -34,7 +29,7 @@ internal static class ArchitectureCapabilityValidator
         ClipSpec clip,
         ICollection<PlanDiagnostic> diagnostics)
     {
-        if (!clip.ClipLengthFromAudio)
+        if (!clip.ClipLengthFromAudio || clip.ClipLengthFromControlNet)
         {
             return;
         }
@@ -62,8 +57,7 @@ internal static class ArchitectureCapabilityValidator
         AudioSourceKind kind = AudioSourceParser.Parse(clip.AudioSource).Kind;
         if (kind == AudioSourceKind.Unknown)
         {
-            // AudioBaseSourcePlanCompiler owns the unknown-source error for every clip, whether or
-            // not an architecture was resolved, so re-reporting it here would only duplicate it.
+            // AudioBaseSourcePlanCompiler owns unknown-source errors for every clip.
             return;
         }
         if (kind == AudioSourceKind.Native
@@ -81,10 +75,6 @@ internal static class ArchitectureCapabilityValidator
             $"audio source kind '{kind}'"));
     }
 
-    /// <summary>
-    /// The projector rewrites every selector it can read, so only malformed syntax survives to
-    /// here.
-    /// </summary>
     private static void ValidateStageGuideReferences(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,

@@ -7,7 +7,7 @@ using VideoStages.Planning;
 
 namespace VideoStages;
 
-/// <summary>Materializes every compiled clip audio identity exactly once.</summary>
+/// <summary>Materializes compiled clip audio sources.</summary>
 internal sealed class AudioRuntimeSourceResolver(
     WorkflowGenerator g,
     AudioHandler audioHandler)
@@ -64,7 +64,7 @@ internal sealed class AudioRuntimeSourceResolver(
         return sources;
     }
 
-    private static int ResolveControlNetSourceIndex(
+    private int ResolveControlNetSourceIndex(
         ClipPlan clip,
         ControlNetAudioCapture controlNet)
     {

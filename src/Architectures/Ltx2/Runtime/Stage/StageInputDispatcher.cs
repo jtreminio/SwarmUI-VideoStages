@@ -33,6 +33,8 @@ internal enum StageInputCase
     /// <summary>The previous stage's live latent is reusable, so no decode/re-encode round trip.</summary>
     PriorStageLatentReuse,
 
+    NoGuide,
+
     /// <summary>The default: the resolved guide media is re-injected for this stage.</summary>
     GuideReinjection,
 }
@@ -49,9 +51,9 @@ internal readonly record struct StageInputFacts(
     bool ReplacesTextToVideoRoot,
     bool InitVideoFootageIsStageInput,
     bool RefinesIncomingLatent,
-    bool PriorStageLatentIsReusable);
+    bool PriorStageLatentIsReusable,
+    bool HasGuide);
 
-/// <summary>The one dispatch for "how does stage N get its input".</summary>
 internal static class StageInputDispatcher
 {
     internal static StageInputCase Resolve(StageInputFacts facts) => facts switch
@@ -65,16 +67,16 @@ internal static class StageInputDispatcher
         { InitVideoFootageIsStageInput: true } => StageInputCase.InitVideoFootage,
         { RefinesIncomingLatent: true } => StageInputCase.IncomingLatentRefine,
         { PriorStageLatentIsReusable: true } => StageInputCase.PriorStageLatentReuse,
+        { HasGuide: false } => StageInputCase.NoGuide,
         _ => StageInputCase.GuideReinjection,
     };
 
-    /// <summary>
-    /// Whether the case supplies its own stage input and must not have a guide re-injected on top.
-    /// </summary>
+    /// <summary>Whether the case must not have a guide re-injected.</summary>
     internal static bool SkipsGuideReinjection(StageInputCase inputCase) => inputCase
         is StageInputCase.TextToVideoRootReplacement
         or StageInputCase.FrameReferencesOnly
         or StageInputCase.InitVideoFootage
         or StageInputCase.IncomingLatentRefine
-        or StageInputCase.PriorStageLatentReuse;
+        or StageInputCase.PriorStageLatentReuse
+        or StageInputCase.NoGuide;
 }

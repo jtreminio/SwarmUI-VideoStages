@@ -9,10 +9,7 @@ using VideoStages.Architectures.Ltx2.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>
-/// The one owner of a single compiled stage: it prepares the frame, decides how the stage gets its
-/// input, and drives the LTX executor. Focused collaborators own the graph work it delegates.
-/// </summary>
+/// <summary>Prepares and executes a single compiled LTX stage.</summary>
 internal class StageRunner
 {
     private readonly WorkflowGenerator _generator;
@@ -145,12 +142,9 @@ internal class StageRunner
         bool isContinuationTail = reanchorsContinuityTail && clipContext.IsFirstStage(stage);
         if (isContinuationTail)
         {
-            // "continue" boundary: generate this clip with the previous clip's tail frames frozen as
-            // its opening latent context (LTXVImgToVideoInplace encodes the whole batch). The sequence
-            // runner only arms ContinuityFrame when the clip has no explicit first-frame ref, so this
-            // can only ever displace the implicit image-to-video default ref. The tail is duplicated
-            // because preparing a guide stamps the consuming stage's dimensions onto the media it is
-            // given, and the stored tail has to stay at its own resolution for the later stages.
+            // A continue boundary uses the previous clip's tail as its opening guide. Duplicate it
+            // because guide preparation changes dimensions, while later stages need the stored tail
+            // at its original resolution.
             primaryGuideClipRef = new ResolvedClipRef(
                 clipContext.ContinuityFrame.Duplicate(),
                 new ImageReferencePlan(
@@ -166,9 +160,8 @@ internal class StageRunner
         }
         else if (reanchorsContinuityTail)
         {
-            // Every later stage regenerates the head too, and the direct latent handoff pins nothing:
-            // re-freeze the tail here as well, conformed to THIS stage's resolution so the seam is
-            // anchored to the previous clip's own frames rather than to the opening stage's downscale.
+            // Later stages also re-freeze the tail at their own resolution because a latent handoff
+            // does not preserve the opening frames.
             stageFrame.ContinuityAnchor = GuideMediaPreparation.Prepare(
                 _generator,
                 clipContext.ContinuityFrame.Duplicate(),
@@ -186,7 +179,7 @@ internal class StageRunner
             IsContinuationTail: isContinuationTail,
             HasOtherFrameReferences: clipRefs is { Count: > 0 },
             ReplacesTextToVideoRoot: stageFrame.ReplacesTextToVideoRoot,
-            // A initVideoClip clip's first stage samples its encoded footage directly (initVideoClip
+            // An initVideoClip clip's first stage samples its encoded footage directly (initVideoClip
             // img2img); reinjecting that same footage as an i2v inplace guide would overwrite the
             // noise mask of every frame it spans. The official upscaler/V2V flows are encode-only.
             InitVideoFootageIsStageInput: clipContext.PlannedClip.HasInitVideo
@@ -204,7 +197,8 @@ internal class StageRunner
                 sourceMedia,
                 guideReference,
                 genInfo,
-                postVideoChain)));
+                postVideoChain),
+            HasGuide: primaryGuideClipRef?.Image is not null || guideReference?.Media is not null));
 
         _stageExecutor.RunStage(
             genInfo,
@@ -246,7 +240,6 @@ internal class StageRunner
             _ => null,
         };
 
-    /// <summary>The primary guide points at the very media this stage already samples from.</summary>
     private bool PrimaryGuideIsStageInput(
         ResolvedClipRef primaryGuideClipRef,
         JArray priorOutputPath,

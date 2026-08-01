@@ -105,8 +105,7 @@ public class ArchitectureFoundationTests
         IVideoArchitectureRegistry restricted =
             production.ForSession(RestrictedSession(models.VideoModel.Name));
 
-        // Pinning the documented policy: no user means no authorization context to
-        // apply, not an unauthenticated request to refuse.
+        // A missing request user means there is no authorization context to apply.
         Assert.Same(production, production.ForSession(null));
         Assert.Same(production, production.ForSession(new Session()));
         Assert.Contains(
@@ -659,6 +658,29 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
+    public void ControlNet_length_precedence_suppresses_audio_duration_source_validation()
+    {
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor;
+        StageSpec stage = Stage(10, "ltx-model");
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            ClipLengthFromAudio = true,
+            ClipLengthFromControlNet = true,
+        };
+
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                clip,
+                descriptor,
+                ArchitectureEntryMode.ImageToVideo);
+
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic => diagnostic.Code == "audio.length.source_cannot_drive_duration");
+    }
+
+    [Fact]
     public void Audio_derived_duration_leaves_unknown_source_diagnostics_to_audio_planning()
     {
         VideoArchitectureDescriptor descriptor =
@@ -726,7 +748,6 @@ public class ArchitectureFoundationTests
     [Fact]
     public void Common_projection_keeps_every_known_upscale_mode()
     {
-        // Upscale methods are architecture-neutral, so no architecture can refuse one.
         VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor();
         FakeRegistry registry = new(fakeDescriptor: descriptor);
         ClipSpec clip = GeneratedClip(
@@ -1103,9 +1124,8 @@ public class ArchitectureFoundationTests
             spec,
             RootEnvironment.FromSpec(spec),
             ArchitecturePlanResolver.Resolve(spec, new FakeRegistry()));
-        // This is a pure common-orchestrator routing test. Its synthetic alternating clips do not
-        // satisfy production entry-role planning, so keep those planner diagnostics out of the
-        // prepared runtime seam being exercised here.
+        // Synthetic alternating clips bypass production entry-role validation so this test can
+        // isolate runtime routing.
         plan = plan with { Diagnostics = [] };
 
         JObject workflow = [];

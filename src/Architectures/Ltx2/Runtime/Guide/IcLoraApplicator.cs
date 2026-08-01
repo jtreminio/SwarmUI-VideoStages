@@ -11,11 +11,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>
-/// Applies the already-compiled IC-LoRA stage plan. Parsing, stage scoping, drive-source
-/// classification, control-mode classification, and guide-strength selection are deliberately
-/// owned by <see cref="VideoExecutionPlanCompiler"/>, not this graph builder.
-/// </summary>
+/// <summary>Applies a compiled IC-LoRA stage plan to the workflow graph.</summary>
 internal sealed class IcLoraApplicator(WorkflowGenerator g)
 {
     internal bool ApplyIcLoras(
@@ -33,7 +29,8 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
             return false;
         }
 
-        List<ResolvedIcLoraModel> resolved = IcLoraModelResolver.Resolve(payload.IcLoras);
+        List<ResolvedIcLoraModel> resolved =
+            IcLoraModelResolver.Resolve(payload.IcLoras, g.UserInput);
         if (resolved.Count == 0)
         {
             return false;

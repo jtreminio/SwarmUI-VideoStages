@@ -7,15 +7,17 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal sealed record ResolvedIcLoraModel(IcLoraPlan Plan, T2IModel Model);
 
-/// <summary>Centralized model validation for compiled IC-LoRA model identities.</summary>
+/// <summary>Resolves compiled IC-LoRA model identities against installed models.</summary>
 internal static class IcLoraModelResolver
 {
-    internal static List<ResolvedIcLoraModel> Resolve(IEnumerable<IcLoraPlan> plans)
+    internal static List<ResolvedIcLoraModel> Resolve(
+        IEnumerable<IcLoraPlan> plans,
+        T2IParamInput input)
     {
         List<ResolvedIcLoraModel> resolved = [];
         foreach (IcLoraPlan plan in plans ?? [])
         {
-            T2IModel model = Resolve(plan);
+            T2IModel model = Resolve(plan, input);
             if (model is not null)
             {
                 resolved.Add(new(plan, model));
@@ -24,21 +26,17 @@ internal static class IcLoraModelResolver
         return resolved;
     }
 
-    /// <summary>
-    /// Graph-free resolvability check for request preflight: the reason this entry cannot be
-    /// resolved, or null when it can. A named (non-[AUTO]) LoRA that is missing stays a skip rather
-    /// than a failure, exactly as <see cref="Resolve(IEnumerable{IcLoraPlan})"/> treats it.
-    /// </summary>
+    /// <summary>Returns a preflight error for an invalid [AUTO] selection.</summary>
     internal static string DescribeUnresolvable(IcLoraPlan plan) =>
         plan is not null && plan.UsesAutoModel && !TryResolveAutoModel(plan, out _, out string error)
             ? error
             : null;
 
-    private static T2IModel Resolve(IcLoraPlan plan)
+    private static T2IModel Resolve(IcLoraPlan plan, T2IParamInput input)
     {
         if (!plan.UsesAutoModel)
         {
-            return ResolveLoraModel(plan.ModelName);
+            return ResolveLoraModel(plan.ModelName, input);
         }
         return TryResolveAutoModel(plan, out T2IModel model, out string error)
             ? model
@@ -75,7 +73,9 @@ internal static class IcLoraModelResolver
         return true;
     }
 
-    internal static T2IModel ResolveLoraModel(string loraName)
+    internal static T2IModel ResolveLoraModel(
+        string loraName,
+        T2IParamInput input)
     {
         T2IModel lora = FindLoraModel(loraName);
         if (lora is null)

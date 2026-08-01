@@ -190,14 +190,6 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                 StageGuideReferencePolicy.Classify(stage.ImageReference);
             if (!descriptor.StageGuideReferences.Allows(guide))
             {
-                if (guide.Kind == StageGuideReferenceKind.Unknown)
-                {
-                    // There is no safe semantic fallback for malformed selector syntax.
-                    // Preserve it so the post-projection capability validator reports the
-                    // existing hard error instead of laundering it into a supported default.
-                    stages[index] = stage;
-                    continue;
-                }
                 decisions.Add(EffectiveRequestDecision.Ignore(
                     "effective-request.unsupported-stage-reference-ignored",
                     $"Clip {authored.Id} Stage {stage.Id} uses image selector "
@@ -236,7 +228,6 @@ internal static class CapabilityDrivenEffectiveRequestProjector
             decisions.AsReadOnly());
     }
 
-    /// <summary>Kebab-cases the feature's wire name; diagnostic codes are dash-separated.</summary>
     private static string DiagnosticKey(ArchitectureFeature feature)
     {
         StringBuilder result = new();
