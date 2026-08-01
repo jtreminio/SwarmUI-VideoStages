@@ -11,15 +11,13 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public sealed class StageRefStoreScopeTests
 {
-    // Formatter-level companion to the generated-workflow sweep below: it covers the key families a
-    // single representative generation does not reach, and pins that they stay distinct.
+    // Covers key families that a representative generated workflow does not reach.
     [Fact]
     public void Every_owned_runtime_key_family_uses_the_ltx_architecture_prefix()
     {
         LtxRuntimeKeyScope keys = new();
         List<string> runtimeKeys =
         [
-            keys.PreCoreNodeIds,
             keys.ControlNetNormalized,
             keys.ControlNetFullImage(2),
             keys.ControlNetFrameCount(2),
@@ -74,8 +72,7 @@ public sealed class StageRefStoreScopeTests
                     .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
                     .Concat(WorkflowTestHarness.VideoStagesSteps()));
 
-        // The only VideoStages runtime keys that may sit outside an architecture
-        // scope are the architecture-neutral captures common orchestration owns.
+        // Common orchestration owns the architecture-neutral ControlNet captures.
         string[] videoStagesKeys = [.. generator.NodeHelpers.Keys
             .Where(key => key.StartsWith("videostages.", StringComparison.Ordinal))
             .Where(key => !key.StartsWith("videostages.controlnet.", StringComparison.Ordinal))];
@@ -101,45 +98,6 @@ public sealed class StageRefStoreScopeTests
             data.Vae);
 
         AssertStageRef(read.Generated, "300", "301", "302");
-    }
-
-    [Fact]
-    public void Pre_root_handoff_cleans_ltx_scope_without_touching_unrelated_helpers()
-    {
-        WorkflowGenerator generator = Generator();
-        StageRefStore ltx = new(generator);
-        (WGNodeData Media, WGNodeData Vae) ltxData =
-            AddStageData(generator, "400");
-        ltx.Capture(
-            StageRefStore.StageKind.PreRootVideo,
-            ltxData.Media,
-            ltxData.Vae);
-        string allNodeIds;
-        using (WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow))
-        {
-            allNodeIds = string.Join(",", bridge.Graph.Nodes.Keys);
-        }
-        generator.NodeHelpers[ltx.PreCoreNodeIdsKey] = allNodeIds;
-        const string unrelatedKey = "host.runtime.marker";
-        generator.NodeHelpers[unrelatedKey] = "unrelated-runtime-value";
-
-        new RootVideoStageHandoff(generator, ltx)
-            .DropCoreImageToVideoOutput();
-
-        Assert.Null(ltx.PreRootVideo);
-        Assert.False(generator.NodeHelpers.ContainsKey(ltx.PreCoreNodeIdsKey));
-        Assert.Equal(
-            "unrelated-runtime-value",
-            generator.NodeHelpers[unrelatedKey]);
-        Assert.DoesNotContain(
-            "videostages.pre-core-node-ids",
-            generator.NodeHelpers.Keys);
-        Assert.DoesNotContain(
-            "videostages.preroot.media",
-            generator.NodeHelpers.Keys);
-        Assert.True(JToken.DeepEquals(
-            generator.CurrentMedia.Path,
-            new JArray("400", 0)));
     }
 
     private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>

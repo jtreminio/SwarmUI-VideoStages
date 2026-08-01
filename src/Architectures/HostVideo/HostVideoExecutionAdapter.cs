@@ -6,11 +6,14 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.HostVideo;
 
-/// <summary>Connects the proven stock-host fallback to common execution orchestration.</summary>
 internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
     IArchitectureGenerationSessionFactoryProvider,
     IArchitectureHostPhaseParticipant
 {
+    private readonly RootMediaHandoff _rootHandoff = new(
+        generator,
+        "generic host video");
+
     public ArchitectureId ArchitectureId =>
         HostVideoArchitectureModule.ArchitectureId;
 
@@ -53,17 +56,13 @@ internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
     public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        HostVideoRootMediaHandoff handoff = new(
-            generator,
-            ArchitectureId,
-            "generic host video");
         switch (context.Phase)
         {
             case ArchitectureHostPhase.CapturePreCoreMedia:
-                handoff.CapturePreCoreMedia();
+                _rootHandoff.CapturePreCoreMedia();
                 break;
             case ArchitectureHostPhase.DropCoreOutput:
-                handoff.DropCoreOutput();
+                _rootHandoff.DropCoreOutput();
                 break;
             case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
             case ArchitectureHostPhase.CaptureBaseReference:
@@ -86,8 +85,8 @@ internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
 }
 
 /// <summary>
-/// Keeps request-global host video settings out of the core pass that VideoStages discards.
-/// Authored stage passes use non-core section IDs and are deliberately untouched.
+/// Keeps request-global host video settings out of the discarded core pass without changing
+/// authored stage passes.
 /// </summary>
 internal static class HostVideoCorePassIsolation
 {
@@ -124,9 +123,8 @@ internal static class HostVideoCorePassIsolation
             genInfo.VideoEndFrame = null;
             genInfo.StartStep = 0;
 
-            // The core pass is only a donor that VideoStages drops immediately afterward. Reuse the
-            // already-live base model state so this throwaway pass never loads the selected video
-            // checkpoint, reads its audio-reference options, or leaves a video audio VAE behind.
+            // Reuse the live base model state so the discarded core pass never loads the selected
+            // video checkpoint, reads its audio-reference options, or leaves a video audio VAE behind.
             genInfo.Model = generator.CurrentModel
                 ?? throw new InvalidOperationException(
                     "The generic host-video core pass has no live base model.");

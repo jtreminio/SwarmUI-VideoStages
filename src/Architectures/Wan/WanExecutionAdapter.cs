@@ -6,13 +6,14 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan;
 
-/// <summary>
-/// Wan-owned adapter for request preflight, host phases, and timeline-session construction.
-/// </summary>
 internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     IArchitectureGenerationSessionFactoryProvider,
     IArchitectureHostPhaseParticipant
 {
+    private readonly RootMediaHandoff _rootHandoff = new(
+        generator,
+        "Wan");
+
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
 
     /// <summary>
@@ -62,20 +63,15 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        HostVideoRootMediaHandoff handoff = new(
-            generator,
-            WanArchitectureModule.ArchitectureId,
-            "Wan");
         switch (context.Phase)
         {
             case ArchitectureHostPhase.CapturePreCoreMedia:
-                handoff.CapturePreCoreMedia();
+                _rootHandoff.CapturePreCoreMedia();
                 break;
             case ArchitectureHostPhase.DropCoreOutput:
-                handoff.DropCoreOutput();
+                _rootHandoff.DropCoreOutput();
                 break;
-            // PreviousStage is a Wan-local decoded handoff assembled by the session. It is not a
-            // captured host reference, so Wan needs nothing from reference or ControlNet phases.
+            // Wan handles previous-stage media inside its session and has no work for these hooks.
             case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
             case ArchitectureHostPhase.CaptureBaseReference:
             case ArchitectureHostPhase.CaptureRefinerReference:

@@ -1,6 +1,5 @@
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>Formats the request-local runtime keys owned by one architecture adapter.</summary>
 internal sealed class LtxRuntimeKeyScope
 {
     internal enum StageRefComponent
@@ -17,8 +16,6 @@ internal sealed class LtxRuntimeKeyScope
         StageRefStore.StageKind kind,
         StageRefComponent component) =>
         $"{Prefix}.stage-ref.{StageName(kind)}.{ComponentName(component)}";
-
-    internal string PreCoreNodeIds => $"{Prefix}.pre-core-node-ids";
 
     internal string ControlNetNormalized => $"{Prefix}.controlnet.normalized";
 
@@ -51,7 +48,6 @@ internal sealed class LtxRuntimeKeyScope
         StageRefStore.StageKind.Base => "base",
         StageRefStore.StageKind.Refiner => "refiner",
         StageRefStore.StageKind.Generated => "generated",
-        StageRefStore.StageKind.PreRootVideo => "preroot",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 

@@ -74,11 +74,7 @@ public class AudioHandlerTests
         generator,
         new LtxAudioInjector(
             generator,
-            new RootVideoStageResizer(
-                generator,
-                new RootVideoStageHandoff(
-                    generator,
-                    new StageRefStore(generator)))));
+            new RootVideoStageResizer(generator)));
 
     [Fact]
     public void DetectAceStepFunAudio_returns_decode_audio_for_matching_track()

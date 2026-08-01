@@ -18,7 +18,7 @@ internal static class WorkflowGraphCleanup
         IDictionary<string, string> nodeHelpers = null)
     {
         HashSet<string> removed = RemoveUnusedUpstreamNodesAndCollect(bridge, startNodeId, protectedNodeIds);
-        InvalidateNodeHelperCacheForRemovedIds(nodeHelpers, removed);
+        VideoGraphHelpers.InvalidateForRemovedNodes(nodeHelpers, removed);
     }
 
     public static HashSet<string> RemoveUnusedUpstreamNodesAndCollect(
@@ -75,6 +75,26 @@ internal static class WorkflowGraphCleanup
             }
         }
         return removed;
+    }
+
+    public static void PruneNodesAddedSince(
+        WorkflowBridge bridge,
+        ISet<string> preservedNodeIds,
+        IDictionary<string, string> nodeHelpers)
+    {
+        ArgumentNullException.ThrowIfNull(bridge);
+        ArgumentNullException.ThrowIfNull(preservedNodeIds);
+        HashSet<string> removed = [];
+        foreach (string nodeId in bridge.Graph.Nodes.Keys
+            .Where(id => !preservedNodeIds.Contains(id))
+            .ToArray())
+        {
+            removed.UnionWith(RemoveUnusedUpstreamNodesAndCollect(
+                bridge,
+                nodeId,
+                preservedNodeIds));
+        }
+        VideoGraphHelpers.InvalidateForRemovedNodes(nodeHelpers, removed);
     }
 
     /// <summary>
@@ -140,7 +160,7 @@ internal static class WorkflowGraphCleanup
             bridge.RemoveNode(nodeId);
             removed.Add(nodeId);
         }
-        InvalidateNodeHelperCacheForRemovedIds(nodeHelpers, removed);
+        VideoGraphHelpers.InvalidateForRemovedNodes(nodeHelpers, removed);
     }
 
     internal static HashSet<string> CollectUpstreamClosure(
@@ -190,8 +210,4 @@ internal static class WorkflowGraphCleanup
         return seen;
     }
 
-    public static void InvalidateNodeHelperCacheForRemovedIds(
-        IDictionary<string, string> nodeHelpers,
-        IReadOnlyCollection<string> removedNodeIds) =>
-        VideoGraphHelpers.InvalidateForRemovedNodes(nodeHelpers, removedNodeIds);
 }

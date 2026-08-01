@@ -5,13 +5,14 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>
-/// LTX-owned adapter for host phases, timeline-session construction, and root-media sizing.
-/// </summary>
 internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
     IArchitectureGenerationSessionFactoryProvider,
     IArchitectureHostPhaseParticipant
 {
+    private readonly RootMediaHandoff _rootHandoff = new(
+        generator,
+        "LTX");
+
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
 
     public IReadOnlyList<PlanDiagnostic> PreflightRequest(
@@ -24,6 +25,16 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
     public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
+        if (context.Phase == ArchitectureHostPhase.CapturePreCoreMedia)
+        {
+            _rootHandoff.CapturePreCoreMedia();
+            return;
+        }
+        if (context.Phase == ArchitectureHostPhase.DropCoreOutput)
+        {
+            _rootHandoff.DropCoreOutput();
+            return;
+        }
         if (context.Phase == ArchitectureHostPhase.CaptureControlNetPreprocessors)
         {
             new LtxControlNetMediaNormalizer(generator).Normalize(
@@ -38,12 +49,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
                 break;
             case ArchitectureHostPhase.CaptureRefinerReference:
                 pipeline.StageRefStore.Capture(StageRefStore.StageKind.Refiner);
-                break;
-            case ArchitectureHostPhase.CapturePreCoreMedia:
-                pipeline.Handoff.CapturePreCoreVideoMedia();
-                break;
-            case ArchitectureHostPhase.DropCoreOutput:
-                pipeline.Handoff.DropCoreImageToVideoOutput();
                 break;
             case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
                 pipeline.AudioMaskResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo();
@@ -88,8 +93,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
     private Pipeline BuildPipeline()
     {
         StageRefStore stageRefStore = new(generator);
-        RootVideoStageHandoff handoff = new(generator, stageRefStore);
-        RootVideoStageResizer resizer = new(generator, handoff);
+        RootVideoStageResizer resizer = new(generator);
         LtxStageGuideMediaResolver guideMediaResolver = new(generator);
         Base2EditPublishedStageRefs base2Edit = new(generator);
         LtxAudioInjector audioInjector = new(generator, resizer);
@@ -101,7 +105,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             base2Edit);
         return new(
             stageRefStore,
-            handoff,
             resizer,
             base2Edit,
             audioInjector,
@@ -113,7 +116,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
 
     private readonly record struct Pipeline(
         StageRefStore StageRefStore,
-        RootVideoStageHandoff Handoff,
         RootVideoStageResizer Resizer,
         Base2EditPublishedStageRefs Base2Edit,
         LtxAudioInjector AudioInjector,

@@ -8,9 +8,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal sealed class RootVideoStageResizer(
-    WorkflowGenerator g,
-    RootVideoStageHandoff handoff)
+internal sealed class RootVideoStageResizer(WorkflowGenerator g)
 {
     private static int _registered;
 
@@ -64,7 +62,7 @@ internal sealed class RootVideoStageResizer(
     }
 
     private static RootVideoStageResizer Create(WorkflowGenerator g) =>
-        new(g, new RootVideoStageHandoff(g, new StageRefStore(g)));
+        new(g);
 
     private static bool TryGetApplicableContext(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -100,10 +98,8 @@ internal sealed class RootVideoStageResizer(
     }
 
     /// <summary>
-    /// Pixel-resizes the current media to the configured timeline resolution, with no text-to-video
-    /// metadata shortcut — for flows where the root generation SURVIVES as the clips' shared source
-    /// (initVideoClip first clip) instead of being handed off. Left at the core params' size it would
-    /// splinter the timeline's resolutions and degrade every overlap-boundary merge to a hard cut.
+    /// Pixel-resizes a surviving root generation used as the clips' shared source. Leaving it at the
+    /// core resolution would force overlap-boundary merges to use hard cuts.
     /// </summary>
     public void ApplyConfiguredRootStageResolutionToSurvivingRootMedia()
     {
@@ -129,7 +125,8 @@ internal sealed class RootVideoStageResizer(
 
     private bool CurrentMediaFeedsSaveImage()
     {
-        if (!handoff.ShouldHandoffRootStage()
+        if (!new RootExecutionPolicy(
+                g.RequireVideoExecutionPlanContext().Plan).InterceptsHostCore
             || g.CurrentMedia?.Path is not { Count: 2 } mediaPath)
         {
             return false;

@@ -13,8 +13,7 @@ internal class StageRefStore(WorkflowGenerator g)
     {
         Base,
         Refiner,
-        Generated,
-        PreRootVideo
+        Generated
     }
 
     public sealed record StageRef(
@@ -31,23 +30,11 @@ internal class StageRefStore(WorkflowGenerator g)
     private string AudioKey(StageKind kind) =>
         _keys.StageRef(kind, LtxRuntimeKeyScope.StageRefComponent.Audio);
 
-    internal string PreCoreNodeIdsKey => _keys.PreCoreNodeIds;
-
     public StageRef Base => GetIfCaptured(StageKind.Base);
 
     public StageRef Refiner => GetIfCaptured(StageKind.Refiner);
 
     public StageRef Generated => GetIfCaptured(StageKind.Generated);
-
-    public StageRef PreRootVideo => GetIfCaptured(StageKind.PreRootVideo);
-
-    public bool DiscardPreRootVideo()
-    {
-        bool removedMedia = VideoGraphHelpers.RemoveCached(g, MediaKey(StageKind.PreRootVideo));
-        bool removedVae = VideoGraphHelpers.RemoveCached(g, VaeKey(StageKind.PreRootVideo));
-        VideoGraphHelpers.RemoveCached(g, AudioKey(StageKind.PreRootVideo));
-        return removedMedia || removedVae;
-    }
 
     public void Capture(
         StageKind kind,

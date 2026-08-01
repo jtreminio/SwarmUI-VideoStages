@@ -23,14 +23,9 @@ public class AudioInjectionTests
         IReadOnlyList<(double Start, double End)> preserveWindows = null) =>
         new LtxAudioInjector(
             generator,
-            new RootVideoStageResizer(
-                generator,
-                new RootVideoStageHandoff(
-                    generator,
-                    new StageRefStore(generator))))
+            new RootVideoStageResizer(generator))
         .TryInject(audio, matchVideoLengthToAudio, preserveWindows);
 
-    // Keep these fixture defaults stable across audio-injection tests.
     private static JObject MakeStage(string model) => new()
     {
         ["control"] = 1.0,

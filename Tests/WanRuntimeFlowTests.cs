@@ -2700,7 +2700,6 @@ public class WanRuntimeFlowTests
             generator.CurrentMedia.Frames);
         Assert.Equal(13, generator.CurrentMedia.Frames);
         Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
-        // Published timeline media does not retain architecture compatibility metadata.
         Assert.Null(generator.CurrentMedia.Compat);
         Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
     }
@@ -3583,44 +3582,41 @@ public class WanRuntimeFlowTests
     }
 
 
-    [Theory]
-    [InlineData("missing-media", "marker is missing")]
-    [InlineData("malformed-media", "marker is malformed")]
-    [InlineData("removed-media-node", "was removed")]
-    [InlineData("missing-snapshot", "snapshot is missing")]
-    public void Corrupt_pre_core_handoff_fails_closed_and_cleans_every_Wan_key(
-        string corruption,
-        string expectedReason)
+    [Fact]
+    public void Missing_typed_pre_core_handoff_fails_closed()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        WorkflowGenerator captured = null;
-        string keyPrefix = $"videostages.arch.{WanArchitectureModule.ArchitectureId}";
-        string preCoreMediaKey = $"{keyPrefix}.pre-core.media";
-        string preCoreNodeIdsKey = $"{keyPrefix}.pre-core-node-ids";
-        WorkflowGenerator.WorkflowGenStep remember =
-            new(g => captured = g, Constants.WorkflowStepPriority.CapturePreCoreVideoMedia - 0.1);
+        WorkflowGenerator.WorkflowGenStep corrupt = new(
+            g => new RootMediaHandoff(g, "Wan test").DropCoreOutput(),
+            Constants.WorkflowStepPriority.DropCoreImageToVideoOutput - 0.01);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                WanInput(models, steps: 10),
+                WorkflowTestHarness.Template_BaseOnlyImage()
+                    .Concat([
+                        WorkflowTestHarness.CoreImageToVideoStep(),
+                        corrupt,
+                    ])
+                    .Concat(WorkflowTestHarness.VideoStagesSteps())));
+
+        Assert.Contains("captured root state is missing", error.Message);
+    }
+
+    [Fact]
+    public void Removed_pre_core_media_fails_closed()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        string rootMediaNodeId = null;
+        WorkflowGenerator.WorkflowGenStep remember = new(
+            g => rootMediaNodeId = $"{g.CurrentMedia.Path[0]}",
+            Constants.WorkflowStepPriority.CapturePreCoreVideoMedia - 0.1);
         WorkflowGenerator.WorkflowGenStep corrupt = new(g =>
         {
-            if (corruption == "missing-media")
-            {
-                g.NodeHelpers.Remove(preCoreMediaKey);
-            }
-            else if (corruption == "malformed-media")
-            {
-                g.NodeHelpers[preCoreMediaKey] = "not-a-marker";
-            }
-            else if (corruption == "missing-snapshot")
-            {
-                g.NodeHelpers.Remove(preCoreNodeIdsKey);
-            }
-            else
-            {
-                string nodeId = g.NodeHelpers[preCoreMediaKey]
-                    .Split(VideoGraphHelpers.MarkerSeparator)[0];
-                using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-                bridge.RemoveNode(nodeId);
-            }
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            bridge.RemoveNode(rootMediaNodeId);
         }, Constants.WorkflowStepPriority.DropCoreImageToVideoOutput - 0.01);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
@@ -3634,10 +3630,7 @@ public class WanRuntimeFlowTests
                     ])
                     .Concat(WorkflowTestHarness.VideoStagesSteps())));
 
-        Assert.Contains(expectedReason, error.Message);
-        Assert.DoesNotContain(
-            captured.NodeHelpers.Keys,
-            key => key.StartsWith("videostages.arch.wan22.", StringComparison.Ordinal));
+        Assert.Contains("host root media is missing or no longer resolves", error.Message);
     }
 
     [Fact]
