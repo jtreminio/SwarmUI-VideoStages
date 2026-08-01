@@ -170,8 +170,7 @@ public class StageSequenceCollaboratorTests
             input,
             WorkflowTestHarness.Template_BaseOnlyImage());
         StageRefStore store = new(generator);
-        Base2EditPublishedStageRefs base2Edit = new(generator);
-        StageGuideReferenceState state = new(generator, store, base2Edit);
+        StageGuideReferenceState state = new(generator, store);
         StagePlan stage = Assert.Single(
             Assert.Single(
                 TestPlanCompiler.Compile(generator.GetVideoStagesSpec()).Clips)

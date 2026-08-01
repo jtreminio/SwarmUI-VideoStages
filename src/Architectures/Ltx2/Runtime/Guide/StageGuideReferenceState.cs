@@ -5,20 +5,15 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>
-/// Resolves guide references and tracks stage outputs for one sequence run.
-/// </summary>
 internal sealed class StageGuideReferenceState(
     WorkflowGenerator g,
-    StageRefStore store,
-    Base2EditPublishedStageRefs base2EditPublishedStageRefs)
+    StageRefStore store)
 {
     private readonly Dictionary<int, StageRefStore.StageRef> _stageOutputs = [];
     private StageRefStore.StageRef _previousStageRef;
 
     /// <summary>
-    /// Starts a new clip-local guide namespace. Authored Stage&lt;N&gt; selectors use the stage
-    /// number shown within their clip, so outputs from an earlier clip must never satisfy them.
+    /// Prevents Stage&lt;N&gt; selectors from resolving outputs captured for an earlier clip.
     /// </summary>
     public void BeginClip()
     {
@@ -61,7 +56,7 @@ internal sealed class StageGuideReferenceState(
     {
         int? stageIndex = guide.ReferencedStageIndex;
         if (stageIndex is int index
-            && base2EditPublishedStageRefs.TryGetStageRef(index, out StageRefStore.StageRef reference))
+            && store.TryGetBase2EditStageRef(index, out StageRefStore.StageRef reference))
         {
             return reference;
         }

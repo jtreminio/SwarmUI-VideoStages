@@ -10,8 +10,7 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class LtxClipRefResolver(
     WorkflowGenerator g,
-    LtxStageGuideMediaResolver guideMediaResolver,
-    Base2EditPublishedStageRefs base2EditPublishedStageRefs)
+    LtxStageGuideMediaResolver guideMediaResolver)
 {
     internal List<ResolvedClipRef> ResolveStageClipRefs(
         ClipPlan clip,
@@ -129,7 +128,7 @@ internal sealed class LtxClipRefResolver(
             ImageReferenceSourceKind.Refiner => refStore.Refiner,
             ImageReferenceSourceKind.Base2Edit
                 when reference.Base2EditStageIndex is int editStage
-                    && base2EditPublishedStageRefs.TryGetStageRef(editStage, out StageRefStore.StageRef editRef)
+                    && refStore.TryGetBase2EditStageRef(editStage, out StageRefStore.StageRef editRef)
                 => editRef,
             _ => null,
         };

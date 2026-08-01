@@ -72,8 +72,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             pipeline.Resizer);
         StageGuideReferenceState guideReferences = new(
             generator,
-            pipeline.StageRefStore,
-            pipeline.Base2Edit);
+            pipeline.StageRefStore);
         StageClipExecutor clipExecutor = new(
             generator,
             pipeline.StageRefStore,
@@ -95,18 +94,15 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         StageRefStore stageRefStore = new(generator);
         RootVideoStageResizer resizer = new(generator);
         LtxStageGuideMediaResolver guideMediaResolver = new(generator);
-        Base2EditPublishedStageRefs base2Edit = new(generator);
         LtxAudioInjector audioInjector = new(generator, resizer);
         LtxAudioMaskResizer audioMaskResizer = new(generator, resizer);
         LtxStageExecutor stageExecutor = new(generator, resizer);
         LtxClipRefResolver clipRefResolver = new(
             generator,
-            guideMediaResolver,
-            base2Edit);
+            guideMediaResolver);
         return new(
             stageRefStore,
             resizer,
-            base2Edit,
             audioInjector,
             audioMaskResizer,
             stageExecutor,
@@ -117,7 +113,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
     private readonly record struct Pipeline(
         StageRefStore StageRefStore,
         RootVideoStageResizer Resizer,
-        Base2EditPublishedStageRefs Base2Edit,
         LtxAudioInjector AudioInjector,
         LtxAudioMaskResizer AudioMaskResizer,
         LtxStageExecutor StageExecutor,

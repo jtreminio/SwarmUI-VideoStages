@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -7,6 +8,7 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal class StageRefStore(WorkflowGenerator g)
 {
+    private const string Base2EditPrefix = "b2e.published.edit.";
     private readonly LtxRuntimeKeyScope _keys = new();
 
     public enum StageKind
@@ -36,6 +38,43 @@ internal class StageRefStore(WorkflowGenerator g)
 
     public StageRef Generated => GetIfCaptured(StageKind.Generated);
 
+    public bool TryGetBase2EditStageRef(
+        int stageIndex,
+        [MaybeNullWhen(false)] out StageRef stageRef)
+    {
+        stageRef = null;
+        if (!g.NodeHelpers.TryGetValue($"{Base2EditPrefix}{stageIndex}", out string encoded)
+            || string.IsNullOrWhiteSpace(encoded))
+        {
+            return false;
+        }
+
+        JObject payload;
+        try
+        {
+            payload = JToken.Parse(encoded) as JObject;
+        }
+        catch
+        {
+            return false;
+        }
+        if (payload?["media"] is not JObject mediaObj)
+        {
+            return false;
+        }
+
+        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        WGNodeData vae = BuildNodeData(bridge, payload["vae"] as JObject, fallbackVae: null);
+        WGNodeData media = BuildNodeData(bridge, mediaObj, fallbackVae: vae);
+        if (media is null)
+        {
+            return false;
+        }
+
+        stageRef = new StageRef(media, vae);
+        return true;
+    }
+
     public void Capture(
         StageKind kind,
         WGNodeData mediaOverride = null,
@@ -56,7 +95,7 @@ internal class StageRefStore(WorkflowGenerator g)
     }
 
     /// <summary>
-    /// Captures the current decoded stage reference, peeling the LTX post-video chain when present.
+    /// Captures the decoded stage output before LTX post-video processing.
     /// </summary>
     public StageRef CaptureCurrentOutputReference()
     {
@@ -103,6 +142,27 @@ internal class StageRefStore(WorkflowGenerator g)
             media.AttachedAudio = LoadMarker(bridge, AudioKey(kind), fallbackVae: g.CurrentAudioVae);
         }
         return new StageRef(Media: media, Vae: vae);
+    }
+
+    private WGNodeData BuildNodeData(WorkflowBridge bridge, JObject data, WGNodeData fallbackVae)
+    {
+        if (data is null
+            || data["path"] is not JArray rawPath
+            || bridge.ResolvePath(rawPath) is not INodeOutput output)
+        {
+            return null;
+        }
+
+        return WGNodeDataMarkerCodec.Build(
+            g,
+            output,
+            data.Value<string>("dataType"),
+            data.Value<string>("compatId"),
+            fallbackVae,
+            data.Value<int?>("width"),
+            data.Value<int?>("height"),
+            data.Value<int?>("frames"),
+            data.Value<int?>("fps"));
     }
 
     private WGNodeData LoadMarker(WorkflowBridge bridge, string key, WGNodeData fallbackVae)
