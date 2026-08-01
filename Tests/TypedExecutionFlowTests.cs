@@ -10,10 +10,6 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// Characterization coverage for the plan-backed typed execution path. These cases run through
-/// the canonical LTX plan and assert the required graph-level outcomes.
-/// </summary>
 public partial class StageFlowTests
 {
     [Fact]
@@ -119,6 +115,35 @@ public partial class StageFlowTests
         Assert.True(ReachesUpstream(bridge, trim.Image.Connection!.Node, samplers[1].Id));
         Assert.Equal(new JArray(trim.Id, 0), generator.CurrentMedia.Path);
         Assert.Equal(11, generator.CurrentMedia.Frames);
+    }
+
+    [Fact]
+    public void Typed_plan_multi_stage_intermediate_output_applies_global_trim_to_terminal_output()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8),
+                MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5, steps: 10)));
+        input.Set(T2IParamTypes.OutputIntermediateImages, true);
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 2);
+        input.Set(T2IParamTypes.TrimVideoEndFrames, 3);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeStepsWithTrimWrapper(attachAudioToCurrentMedia: true));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        string terminalNodeId = $"{generator.CurrentMedia.Path[0]}";
+        SwarmTrimFramesNode trim = Assert.IsType<SwarmTrimFramesNode>(bridge.Graph.Nodes[terminalNodeId]);
+        SwarmKSamplerNode terminalSampler = SamplerNodesOrdered(bridge).Last();
+        Assert.True(ReachesUpstream(bridge, trim.Image.Connection!.Node, terminalSampler.Id));
+        Assert.Equal(2, trim.TrimStart.LiteralAsInt());
+        Assert.Equal(3, trim.TrimEnd.LiteralAsInt());
     }
 
     [Fact]

@@ -16,9 +16,8 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
         WGNodeData sourceMedia,
         LtxPostVideoChainCapture postVideoChain)
     {
-        // Clip dimensions are updated by both pixel/model and latent upscalers. They are the
-        // authoritative rendered dimensions; intermediate WGNodeData instances can still carry
-        // the pre-upscale source metadata after the sampler swaps only their graph path.
+        // Clip dimensions include all upscale modes; WGNodeData can retain pre-upscale metadata
+        // when a sampler replaces only its graph path.
         int outputWidth = stageFrame.ClipContext.Dimensions.Width;
         int outputHeight = stageFrame.ClipContext.Dimensions.Height;
         bool splicedIntoNativeChain = postVideoChain is not null;
@@ -72,7 +71,7 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
 
         bool shouldApplyTrim = stageFrame.Stage.Output.IsTimelineTerminal
             && globalVideoFrameTrimmer.IsRequested
-            && !(splicedIntoNativeChain && postVideoChain.HasPostDecodeWrappers);
+            && !(splicedIntoNativeChain && !requiresDedicatedOutput && postVideoChain.HasPostDecodeWrappers);
         if (shouldApplyTrim)
         {
             globalVideoFrameTrimmer.Apply();
@@ -103,9 +102,8 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
 
         LtxPostChainRebuilder.AttachDecodedLtxAudio(bridge, currentMedia, audioVae);
 
-        // MediaRef.FromWGNodeData pre-copies any existing AttachedAudio (possibly a latent
-        // route) into the snapshot, so non-null cannot mean "freshly decoded" — only a
-        // DT_AUDIO attachment proves AttachDecodedLtxAudio succeeded.
+        // FromWGNodeData preserves an existing latent attachment; only DT_AUDIO proves decoding
+        // succeeded.
         if (currentMedia.AttachedAudio is MediaRef attachedAudio
             && attachedAudio.DataType == WGNodeData.DT_AUDIO)
         {
@@ -115,10 +113,8 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
             && latentAudio.DataType == WGNodeData.DT_LATENT_AUDIO
             && latentAudio.Path is JArray latentAudioPath)
         {
-            // AsRawImage on a concat AV latent (e.g. the crop-guides output) reads the concat's
-            // pre-join routes, so the video decode consumes the crop node — not a separate — and
-            // the decode→separate shortcut above finds no audio. The stashed latent-audio route
-            // is authoritative: decode it directly so no consumer sees a latent as save audio.
+            // Concat AV latents can bypass the decode-then-separate path. Decode the stashed
+            // latent-audio route directly.
             LTXVAudioVAEDecodeNode audioDecode = bridge.AddNode(new LTXVAudioVAEDecodeNode());
             audioDecode.Samples.TryConnectFromPath(bridge, latentAudioPath);
             audioDecode.AudioVae.ConnectFrom(audioVae);
