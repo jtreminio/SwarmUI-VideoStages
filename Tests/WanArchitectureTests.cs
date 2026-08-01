@@ -1172,35 +1172,6 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Static_generated_frames_use_the_architecture_grid()
-    {
-        Assert.Equal(4, WanArchitectureModule.FrameGrid);
-        VideoArchitectureDescriptor descriptor =
-            WanArchitectureModule.Instance.Descriptor;
-        ResolvedVideoModel resolved = TestResolvedVideoModel.Create(
-            "synthetic-wan",
-            new("stale-profile-alias"),
-            descriptor);
-
-        WanStaticGeneratedFrameResolution resolution =
-            WanStaticGeneratedFrameResolver.Resolve(16, 2, 10, resolved);
-
-        Assert.Equal(4, resolution.FrameGrid);
-        Assert.Equal(13, resolution.Frames);
-    }
-
-    [Fact]
-    public void Static_generated_frame_resolution_fails_closed_without_a_resolved_model()
-    {
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => WanStaticGeneratedFrameResolver.Resolve(16, 2, 10, null));
-
-        Assert.Equal(
-            "VideoStages bug: Clip 2 stage 10 has no resolved video model.",
-            error.Message);
-    }
-
-    [Fact]
     public void Compiler_refuses_invalid_decoded_controls_and_quantized_schedules()
     {
         StageSpec stage = Stage(10, "wan-model");

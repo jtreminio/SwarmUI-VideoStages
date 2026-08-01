@@ -13,10 +13,8 @@ using Image = SwarmUI.Utils.Image;
 namespace VideoStages.Architectures.Wan;
 
 /// <summary>
-/// Owns the concrete WAN graph behavior used by the shared stock-host session. This is
-/// deliberately a concrete collaborator rather than a policy interface: generic host video uses
-/// the stock path directly, while WAN adds bounded references, temporal snapping, native final
-/// conditioning, and 5B cleanup.
+/// Adds Wan bounded references, temporal snapping, final-frame conditioning, and 5B cleanup to
+/// the shared stock-host path.
 /// </summary>
 internal sealed class WanStockHostVideoBehavior(
     WorkflowGenerator generator,
@@ -44,9 +42,7 @@ internal sealed class WanStockHostVideoBehavior(
         {
             return null;
         }
-        // An authored reference only claims this slot once it actually materializes. An
-        // unusable one has already reported itself, so the request-global end frame still wins
-        // its own policy check instead of being dropped by a reference that produced nothing.
+        // An unusable authored reference must not suppress the request-level end frame.
         Image authored = MaterializeUpload(
             clip.RequireWanPayload().LastFrameReference,
             "WAN final-frame reference");
@@ -69,18 +65,13 @@ internal sealed class WanStockHostVideoBehavior(
         {
             return null;
         }
-        WanStaticGeneratedFrameResolution resolution =
-            WanStaticGeneratedFrameResolver.Resolve(
-                frames,
-                clip.ClipId,
-                stage.StageId,
-                stage.ResolvedModel);
-        int snapped = resolution.Frames;
+        int frameGrid = stage.ResolvedModel.FrameGrid;
+        int snapped = StaticGeneratedFrameGrid.SnapDown(frames, frameGrid);
         if (snapped != frames)
         {
             Logs.Info(
                 $"VideoStages: clip {clip.ClipId} stage {stage.StageId} length {frames} snapped to "
-                + $"{snapped} — Wan generates in steps of {resolution.FrameGrid} frames.");
+                + $"{snapped} — Wan generates in steps of {frameGrid} frames.");
         }
         return snapped;
     }
