@@ -4,7 +4,6 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>Builds the optional pixel/model upscale graph that feeds a stage.</summary>
 internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
 {
     public WGNodeData Apply(
@@ -19,9 +18,7 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
 
         ClipDimensionState dimensions = clipContext.Dimensions;
         WGNodeData source = VaeDecodePreference.AsRawImage(g, g.CurrentMedia, g.CurrentVae);
-        // ClipDimensionState is updated by every prior stage, including latent-only upscalers.
-        // A decoded WGNodeData can retain the pre-upscale marker dimensions even though its latent
-        // path is already larger, so the clip state is authoritative for the next stage.
+        // Clip dimensions include latent-only upscales that decoded-media metadata may not.
         int width = Math.Max(dimensions.Width, 16);
         int height = Math.Max(dimensions.Height, 16);
         source.Width = width;
@@ -34,9 +31,7 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
             return source;
         }
 
-        // Once a clip has entered a latent-upscaled resolution, later pixel/model requests are
-        // intentionally ignored. Decoding merely to resize and re-encode would discard the
-        // latent-upscaler's representation and used to leave duplicate scale scaffolding.
+        // Preserve a latent-upscaled representation instead of decoding it for another resize.
         if (dimensions.HasLatentUpscale
             && upscale.Mode is StageUpscaleMode.Pixel or StageUpscaleMode.Model)
         {
@@ -61,10 +56,11 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
         WGNodeData upscaleSource = ResolveSourceMedia(source, postVideoChain, width, height);
         if (upscale.Mode == StageUpscaleMode.Pixel)
         {
-            WGNodeData scaled = new StagePixelScaleGraphBuilder(g).Apply(
+            WGNodeData scaled = new StageUpscaleGraph(g).Apply(
                 upscaleSource,
                 targetWidth,
                 targetHeight,
+                upscale.Mode,
                 upscale.MethodName);
             return PublishUpscaledMedia(
                 scaled,
@@ -75,10 +71,11 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
 
         if (upscale.Mode == StageUpscaleMode.Model)
         {
-            WGNodeData scaled = new StageModelUpscaleGraphBuilder(g).Apply(
+            WGNodeData scaled = new StageUpscaleGraph(g).Apply(
                 upscaleSource,
                 targetWidth,
                 targetHeight,
+                upscale.Mode,
                 upscale.MethodName);
             return PublishUpscaledMedia(
                 scaled,

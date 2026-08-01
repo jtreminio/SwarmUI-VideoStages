@@ -16,8 +16,7 @@ internal sealed class HostVideoStageEngine : IDisposable
 {
     private readonly WorkflowGenerator _generator;
     private readonly GlobalVideoFrameTrimmer _trimmer;
-    private readonly StagePixelScaleGraphBuilder _pixelScaler;
-    private readonly StageModelUpscaleGraphBuilder _modelScaler;
+    private readonly StageUpscaleGraph _upscaleGraph;
     private readonly HostVideoDecodedStageInput _decodedInput;
     private readonly StageHostExecutionScope _stageScope;
 
@@ -31,8 +30,7 @@ internal sealed class HostVideoStageEngine : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(architectureDisplayLabel);
         _generator = generator;
         _trimmer = new(generator);
-        _pixelScaler = new(generator);
-        _modelScaler = new(generator);
+        _upscaleGraph = new(generator);
         _decodedInput = new(
             generator,
             plan.FramesPerSecond,
@@ -109,22 +107,15 @@ internal sealed class HostVideoStageEngine : IDisposable
         int height = _generator.CurrentMedia.Height
             ?? throw new InvalidOperationException(
                 $"Stage {stage.StageId} cannot pixel-scale media with no height.");
-        (int targetWidth, int targetHeight) = DimensionSnap.Snap(
-            width * upscale.Factor,
-            height * upscale.Factor);
-        if (upscale.Mode == StageUpscaleMode.Model)
-        {
-            _modelScaler.Apply(
-                _generator.CurrentMedia,
-                targetWidth,
-                targetHeight,
-                upscale.MethodName);
-            return;
-        }
-        _pixelScaler.Apply(
+        (int targetWidth, int targetHeight) = StageUpscaleGraph.ResolveTargetDimensions(
+            width,
+            height,
+            upscale.Factor);
+        _upscaleGraph.Apply(
             _generator.CurrentMedia,
             targetWidth,
             targetHeight,
+            upscale.Mode,
             upscale.MethodName);
     }
 }

@@ -14,15 +14,24 @@ internal static class StageDimensionRules
     {
         ArgumentNullException.ThrowIfNull(stage);
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
-        int targetWidth = AlignTo16((int)Math.Round(
-            Math.Max(width, 16) * payload.Core.Upscale.Factor));
-        int targetHeight = AlignTo16((int)Math.Round(
-            Math.Max(height, 16) * payload.Core.Upscale.Factor));
-        return SnapForIcLora(stage, targetWidth, targetHeight);
+        int multiple = RequiredMultiple(payload.IcLoras);
+        (int alignedWidth, int alignedHeight) = StageUpscaleGraph.AlignScaledDimensions(
+            width,
+            height,
+            payload.Core.Upscale.Factor);
+        (int targetWidth, int targetHeight) = StageUpscaleGraph.ResolveTargetDimensions(
+            width,
+            height,
+            payload.Core.Upscale.Factor,
+            multiple);
+        if (targetWidth != alignedWidth || targetHeight != alignedHeight)
+        {
+            LogSnap(stage.StageId, multiple, alignedWidth, alignedHeight, targetWidth, targetHeight);
+        }
+        return (targetWidth, targetHeight);
     }
 
-    // Every VideoStages architecture uses the /32 pixel grid. LTX IC-LoRAs with a
-    // reference-downscale factor raise that requirement to 32×factor.
+    // IC-LoRA reference downscaling raises the /32 grid requirement to 32×factor.
     public static (int Width, int Height) SnapForIcLora(StagePlan stage, int width, int height)
     {
         ArgumentNullException.ThrowIfNull(stage);
@@ -34,13 +43,7 @@ internal static class StageDimensionRules
             return (width, height);
         }
 
-        int factor = multiple / DimensionSnap.MinimumMultiple;
-        string reason = factor > 1
-            ? $"the active IC-LoRA's reference downscale factor requires multiples of {multiple}"
-            : "the VideoStages pixel grid requires multiples of 32";
-        Logs.Info(
-            $"VideoStages: stage {stage.StageId} dims {width}x{height} snapped to "
-            + $"{snappedWidth}x{snappedHeight} — {reason}.");
+        LogSnap(stage.StageId, multiple, width, height, snappedWidth, snappedHeight);
         return (snappedWidth, snappedHeight);
     }
 
@@ -79,6 +82,20 @@ internal static class StageDimensionRules
             stageId);
     }
 
-    private static int AlignTo16(int value) =>
-        Math.Max(16, Math.Max(value, 16) / 16 * 16);
+    private static void LogSnap(
+        int stageId,
+        int multiple,
+        int width,
+        int height,
+        int snappedWidth,
+        int snappedHeight)
+    {
+        int factor = multiple / DimensionSnap.MinimumMultiple;
+        string reason = factor > 1
+            ? $"the active IC-LoRA's reference downscale factor requires multiples of {multiple}"
+            : "the VideoStages pixel grid requires multiples of 32";
+        Logs.Info(
+            $"VideoStages: stage {stageId} dims {width}x{height} snapped to "
+            + $"{snappedWidth}x{snappedHeight} — {reason}.");
+    }
 }

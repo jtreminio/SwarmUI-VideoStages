@@ -196,6 +196,14 @@ public class StageRunnerCollaboratorTests
     }
 
     [Fact]
+    public void Shared_upscale_dimensions_align_before_grid_snap()
+    {
+        Assert.Equal(
+            (288, 448),
+            StageUpscaleGraph.ResolveTargetDimensions(256, 416, 1.1));
+    }
+
+    [Fact]
     public void Dimension_snap_prefers_aspect_and_clamps_its_candidate_grid()
     {
         Assert.Equal((1280, 704), DimensionSnap.Snap(1232, 688, 64));
