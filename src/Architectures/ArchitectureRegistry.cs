@@ -8,12 +8,22 @@ namespace VideoStages.Architectures;
 internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
 {
     private readonly IReadOnlyList<IVideoArchitectureModule> _modules;
+    private readonly IReadOnlyList<VideoArchitectureDescriptor> _descriptors;
 
-    internal VideoArchitectureRegistry(IEnumerable<IVideoArchitectureModule> modules)
+    internal VideoArchitectureRegistry(IEnumerable<IVideoArchitectureModule> modules) :
+        this(modules, null)
+    {
+    }
+
+    internal VideoArchitectureRegistry(
+        IEnumerable<IVideoArchitectureModule> modules,
+        IEnumerable<VideoArchitectureDescriptor> descriptors)
     {
         IVideoArchitectureModule[] resolved = (modules ?? []).ToArray();
+        VideoArchitectureDescriptor[] resolvedDescriptors = (descriptors
+            ?? resolved.Select(module => module.Descriptor)).ToArray();
         ArchitectureId[] duplicates = [
-            .. resolved.GroupBy(module => module.Descriptor.Id)
+            .. resolvedDescriptors.GroupBy(descriptor => descriptor.Id)
                 .Where(group => group.Count() > 1)
                 .Select(group => group.Key)
         ];
@@ -23,9 +33,8 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                 "Duplicate video architecture ids: "
                 + string.Join(", ", duplicates.Select(id => $"'{id}'")));
         }
-        foreach (IVideoArchitectureModule module in resolved)
+        foreach (VideoArchitectureDescriptor descriptor in resolvedDescriptors)
         {
-            VideoArchitectureDescriptor descriptor = module.Descriptor;
             if (descriptor.FrameGrid < 1)
             {
                 throw new InvalidOperationException(
@@ -59,13 +68,16 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
             }
         }
         _modules = Array.AsReadOnly(resolved);
+        _descriptors = Array.AsReadOnly(resolvedDescriptors);
     }
 
     internal static VideoArchitectureRegistry Production { get; } =
-        new(VideoArchitectureManifest.ProductionModules);
+        new(
+            VideoArchitectureManifest.ProductionModules,
+            VideoArchitectureManifest.ProductionDescriptors);
 
     public IReadOnlyList<VideoArchitectureDescriptor> Catalog =>
-        Array.AsReadOnly(_modules.Select(module => module.Descriptor).ToArray());
+        _descriptors;
 
     public IVideoArchitectureModule GetModule(ArchitectureId architectureId) =>
         _modules.SingleOrDefault(module => module.Descriptor.Id == architectureId)

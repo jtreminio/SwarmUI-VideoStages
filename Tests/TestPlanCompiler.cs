@@ -38,7 +38,7 @@ internal static class TestPlanCompiler
             {
                 clips.TryAdd(clip.Id, new(
                     clip.Id,
-                    NoneArchitectureModule.Instance,
+                    null,
                     NoneArchitecture.Descriptor,
                     new Dictionary<int, ResolvedVideoModel>()));
                 continue;

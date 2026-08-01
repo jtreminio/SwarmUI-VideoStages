@@ -787,7 +787,6 @@ public class WanArchitectureTests
         VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
         VideoArchitectureRegistry registry = new(
         [
-            NoneArchitectureModule.Instance,
             Ltx2ArchitectureModule.Instance,
             WanArchitectureModule.Instance,
         ]);
@@ -844,7 +843,6 @@ public class WanArchitectureTests
         VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
         VideoArchitectureRegistry registry = new(
         [
-            NoneArchitectureModule.Instance,
             Ltx2ArchitectureModule.Instance,
             WanArchitectureModule.Instance,
         ]);

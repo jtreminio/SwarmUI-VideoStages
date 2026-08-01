@@ -97,9 +97,9 @@ internal static class VideoExecutionPlanCompiler
                     diagnostic.Severity == PlanDiagnosticSeverity.Error))
                 {
                     ArchitectureClipCompilation architectureCompilation =
-                        assignment.Module.ValidateAndCompileClip(
+                        CompileArchitecture(
                             activeClips[i],
-                            assignment.StageModels,
+                            assignment,
                             new(
                                 spec.Width,
                                 spec.Height,
@@ -208,7 +208,6 @@ internal static class VideoExecutionPlanCompiler
                 audioTimeline,
                 authoredTrackIds,
                 suppressedTimelineAudioClipIds);
-        // Collect diagnostics from the projected audio segments owned by each clip.
         foreach (ClipPlan clipPlan in clipsWithTimelineAudio)
         {
             diagnostics.AddRange(clipPlan.Audio.Diagnostics.Select(audioDiagnostic =>
@@ -226,6 +225,29 @@ internal static class VideoExecutionPlanCompiler
 
     private static bool IsExecutableClip(ClipSpec clip) =>
         clip is not null && (clip.InitVideo is not null || clip.Stages is { Count: > 0 });
+
+    private static ArchitectureClipCompilation CompileArchitecture(
+        ClipSpec clip,
+        ClipArchitectureAssignment assignment,
+        ArchitectureClipCompileContext context)
+    {
+        if (assignment.Module is not null)
+        {
+            return assignment.Module.ValidateAndCompileClip(
+                clip,
+                assignment.StageModels,
+                context);
+        }
+        if (assignment.Architecture.Id == NoneArchitecture.Id)
+        {
+            return new(
+                new NoneClipPayload(clip.Id),
+                new Dictionary<int, IArchitectureStagePayload>(),
+                []);
+        }
+        throw VideoStagesInvariant.Failure(
+            $"architecture '{assignment.Architecture.Id}' has no clip compiler");
+    }
 
     private static ArchitectureEntryMode ResolveEntryMode(
         VideoStagesSpec spec,

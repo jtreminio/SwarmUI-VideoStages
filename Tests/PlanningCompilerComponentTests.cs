@@ -494,18 +494,18 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
-    public void SourceOnlyCompilationPublishesAnEmptyStagePayloadMap()
+    public void SourceOnlyDescriptorCompilesWithoutAModule()
     {
         ClipSpec clip = InitVideoClip(7);
+        VideoArchitectureRegistration registration = Assert.Single(
+            VideoArchitectureManifest.Production,
+            item => item.Descriptor.Id == NoneArchitecture.Id);
 
-        ArchitectureClipCompilation compilation =
-            NoneArchitectureModule.Instance.ValidateAndCompileClip(
-                clip,
-                new Dictionary<int, ResolvedVideoModel>(),
-                new(640, 360, 30, ArchitectureEntryMode.InitVideo));
-
-        Assert.IsType<NoneClipPayload>(compilation.Payload);
-        Assert.Empty(compilation.StagePayloads);
+        Assert.Null(registration.Module);
+        ClipPlan compiled = Assert.Single(TestPlanCompiler.Compile(
+            new VideoStagesSpec(640, 360, 30, false, [clip])).Clips);
+        Assert.IsType<NoneClipPayload>(compiled.ArchitecturePayload);
+        Assert.Empty(compiled.Stages);
     }
 
     [Theory]
@@ -616,11 +616,17 @@ public class PlanningCompilerComponentTests
         {
             ClipArchitectureAssignment assignment =
                 architecture.Clips.GetValueOrDefault(clips[i].Id);
-            ArchitectureClipCompilation compilation = assignment?.Module
-                .ValidateAndCompileClip(
-                    clips[i],
-                    assignment.StageModels,
-                    new(spec.Width, spec.Height, spec.FPS));
+            ArchitectureClipCompilation compilation = assignment is null
+                ? null
+                : assignment.Module is not null
+                    ? assignment.Module.ValidateAndCompileClip(
+                        clips[i],
+                        assignment.StageModels,
+                        new(spec.Width, spec.Height, spec.FPS))
+                    : new(
+                        new NoneClipPayload(clips[i].Id),
+                        new Dictionary<int, IArchitectureStagePayload>(),
+                        []);
             diagnostics.AddRange(compilation?.Diagnostics ?? []);
             ArchitectureClipCompilation acceptedCompilation =
                 compilation is not null

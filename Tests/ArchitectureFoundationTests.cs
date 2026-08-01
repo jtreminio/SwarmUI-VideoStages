@@ -1083,11 +1083,11 @@ public class ArchitectureFoundationTests
         };
 
         Assert.Equal(
-            VideoArchitectureManifest.Production.Select(item => item.Module.Descriptor.Id),
+            VideoArchitectureManifest.Production.Select(item => item.Descriptor.Id),
             VideoArchitectureManifest.CreateProductionRuntimeProviders(
                 generator,
                 VideoArchitectureManifest.Production.Select(
-                    item => item.Module.Descriptor.Id))
+                    item => item.Descriptor.Id))
                 .Select(provider => provider.ArchitectureId));
     }
 

@@ -1,4 +1,3 @@
-using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
@@ -9,7 +8,6 @@ internal static class NoneArchitecture
     internal static ArchitectureId Id { get; } = new("none");
     internal static ModelProfileId ProfileId { get; } = new("none");
 
-    /// <summary>Cut-only, owned here and published from the same modes the compiler reads.</summary>
     internal static ArchitectureBoundaryPolicy BoundaryPolicy { get; } =
         ArchitectureBoundaryPolicy.CutOnly(
             "none",
@@ -29,28 +27,6 @@ internal static class NoneArchitecture
         FrameGrid = 1,
         StageGuideReferences = StageGuideReferencePolicy.GeneratedOnly,
     };
-}
-
-internal sealed class NoneArchitectureModule : IVideoArchitectureModule
-{
-    internal static NoneArchitectureModule Instance { get; } = new();
-
-    public VideoArchitectureDescriptor Descriptor => NoneArchitecture.Descriptor;
-
-    public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
-    {
-        resolved = null;
-        return false;
-    }
-
-    public ArchitectureClipCompilation ValidateAndCompileClip(
-        ClipSpec clip,
-        IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
-        ArchitectureClipCompileContext context) =>
-        new(
-            new NoneClipPayload(clip.Id),
-            new Dictionary<int, IArchitectureStagePayload>(),
-            []);
 }
 
 internal sealed record NoneClipPayload(int ClipId) : IArchitectureClipPayload

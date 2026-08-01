@@ -2,17 +2,18 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.HostVideo;
 using VideoStages.Architectures.Ltx2;
-using VideoStages.Architectures.None;
 using VideoStages.Architectures.Wan;
+using VideoStages.Execution;
 
 namespace VideoStages.Architectures;
 
 internal sealed record VideoArchitectureRegistration(
+    VideoArchitectureDescriptor Descriptor,
     IVideoArchitectureModule Module,
     Func<WorkflowGenerator, IArchitectureGenerationSessionFactoryProvider> CreateRuntimeProvider,
-    Action RegisterHostHandlers,
-    Action RegisterApiRoutes,
-    Action RegisterDependencies);
+    Action RegisterHostHandlers = null,
+    Action RegisterApiRoutes = null,
+    Action RegisterDependencies = null);
 
 /// <summary>
 /// One production registration list owns model resolution, catalog publication, and runtime
@@ -23,12 +24,11 @@ internal static class VideoArchitectureManifest
     internal static IReadOnlyList<VideoArchitectureRegistration> Production { get; } =
     [
         new(
-            NoneArchitectureModule.Instance,
-            generator => new SourceOnlyExecutionAdapter(generator),
-            static () => { },
-            static () => { },
-            static () => { }),
+            NoneArchitecture.Descriptor,
+            null,
+            generator => new SourceOnlyExecutionAdapter(generator)),
         new(
+            Ltx2ArchitectureModule.Instance.Descriptor,
             Ltx2ArchitectureModule.Instance,
             generator => new Ltx2ExecutionAdapter(generator),
             RootVideoStageResizer.RegisterHandlers,
@@ -38,23 +38,27 @@ internal static class VideoArchitectureManifest
         // request-global options out of the discarded core pass; the authored session applies the
         // supported values itself.
         new(
+            WanArchitectureModule.Instance.Descriptor,
             WanArchitectureModule.Instance,
             generator => new WanExecutionAdapter(generator),
-            WanHostHandlers.Register,
-            static () => { },
-            static () => { }),
+            WanHostHandlers.Register),
         // The fallback resolves only exact model classes with proven stock host video branches.
         // Its resolution tier keeps every specialized module authoritative.
         new(
+            HostVideoArchitectureModule.Instance.Descriptor,
             HostVideoArchitectureModule.Instance,
             generator => new HostVideoExecutionAdapter(generator),
-            HostVideoCorePassIsolation.RegisterHandlers,
-            static () => { },
-            static () => { }),
+            HostVideoCorePassIsolation.RegisterHandlers),
     ];
 
-    internal static IReadOnlyList<IVideoArchitectureModule> ProductionModules =>
-        Array.AsReadOnly(Production.Select(item => item.Module).ToArray());
+    internal static IReadOnlyList<IVideoArchitectureModule> ProductionModules { get; } =
+        Array.AsReadOnly(Production
+            .Where(item => item.Module is not null)
+            .Select(item => item.Module)
+            .ToArray());
+
+    internal static IReadOnlyList<VideoArchitectureDescriptor> ProductionDescriptors { get; } =
+        Array.AsReadOnly(Production.Select(item => item.Descriptor).ToArray());
 
     internal static IReadOnlyList<IArchitectureGenerationSessionFactoryProvider>
         CreateProductionRuntimeProviders(
@@ -64,7 +68,7 @@ internal static class VideoArchitectureManifest
         ArgumentNullException.ThrowIfNull(generator);
         ArgumentNullException.ThrowIfNull(activeArchitectureIds);
         Dictionary<ArchitectureId, VideoArchitectureRegistration> registrations =
-            Production.ToDictionary(item => item.Module.Descriptor.Id);
+            Production.ToDictionary(item => item.Descriptor.Id);
         List<IArchitectureGenerationSessionFactoryProvider> providers = [];
         foreach (ArchitectureId architectureId in activeArchitectureIds.Distinct())
         {
@@ -85,7 +89,7 @@ internal static class VideoArchitectureManifest
     {
         foreach (VideoArchitectureRegistration registration in Production)
         {
-            registration.RegisterHostHandlers();
+            registration.RegisterHostHandlers?.Invoke();
         }
     }
 
@@ -93,7 +97,7 @@ internal static class VideoArchitectureManifest
     {
         foreach (VideoArchitectureRegistration registration in Production)
         {
-            registration.RegisterApiRoutes();
+            registration.RegisterApiRoutes?.Invoke();
         }
     }
 
@@ -101,7 +105,7 @@ internal static class VideoArchitectureManifest
     {
         foreach (VideoArchitectureRegistration registration in Production)
         {
-            registration.RegisterDependencies();
+            registration.RegisterDependencies?.Invoke();
         }
     }
 }

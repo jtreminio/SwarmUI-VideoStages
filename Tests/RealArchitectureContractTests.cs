@@ -390,7 +390,6 @@ public class RealArchitectureContractTests
 
     private static VideoArchitectureRegistry RealRegistry() =>
         new([
-            NoneArchitectureModule.Instance,
             Ltx2ArchitectureModule.Instance,
             WanArchitectureModule.Instance,
         ]);

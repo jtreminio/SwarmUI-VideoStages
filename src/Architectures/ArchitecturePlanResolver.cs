@@ -67,7 +67,7 @@ internal static class ArchitecturePlanResolver
                     }
                     assignments.TryAdd(clip.Id, new(
                         clip.Id,
-                        NoneArchitectureModule.Instance,
+                        null,
                         NoneArchitecture.Descriptor,
                         stageModels));
                 }

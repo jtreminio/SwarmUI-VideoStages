@@ -5,9 +5,28 @@ using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages.Execution;
 
-/// <summary>
-/// Publishes pre-existing footage without invoking a generation stage.
-/// </summary>
+internal sealed class SourceOnlyExecutionAdapter(
+    WorkflowGenerator generator) :
+    IArchitectureGenerationSessionFactoryProvider
+{
+    public ArchitectureId ArchitectureId => NoneArchitecture.Id;
+
+    public IArchitectureGenerationSessionFactory CreateFactory() =>
+        new SourceOnlyGenerationSessionFactory(generator);
+}
+
+internal sealed class SourceOnlyGenerationSessionFactory(
+    WorkflowGenerator generator) : IArchitectureGenerationSessionFactory
+{
+    public ArchitectureId ArchitectureId => NoneArchitecture.Id;
+
+    public IVideoGenerationSession CreateSession(ArchitectureTimelineSessionContext context) =>
+        new SourceOnlyGenerationSession(
+            generator,
+            context.Plan.FramesPerSecond,
+            context.AudioSources);
+}
+
 internal sealed class SourceOnlyGenerationSession(
     WorkflowGenerator generator,
     int framesPerSecond,
