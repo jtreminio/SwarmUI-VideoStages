@@ -38,10 +38,10 @@ const wanCatalog = (): ArchitectureModelCatalog => {
     wan.label = "WAN 2.2";
     wan.capabilities.features = wan.capabilities.features.filter(
         (capability) =>
-            capability !== "ic-lora" &&
-            capability !== "prompt-relay" &&
-            capability !== "reference-framing" &&
-            capability !== "audio-reuse",
+            capability !== "icLora" &&
+            capability !== "promptRelay" &&
+            capability !== "referenceFraming" &&
+            capability !== "audioReuse",
     );
     models.architectures.push(wan);
     models.entries.push({
@@ -587,7 +587,6 @@ describe("architecture diagnostics", () => {
             support: "unsupported",
             code: "wan22.boundary.continue.unsupported",
             reason: "WAN 2.2 only supports cut boundaries.",
-            scope: "boundary",
             constraints: null,
         };
         const staleWanClip = (boundaryOut: Clip["boundaryOut"]) =>

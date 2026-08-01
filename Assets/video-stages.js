@@ -440,50 +440,6 @@
     return true;
   };
 
-  // frontend/architectures/generatedFeatures.ts
-  var AUTHORING_FEATURE_WIRE_NAMES = {
-    promptRelay: "prompt-relay",
-    frameReferences: "frame-references",
-    referenceFraming: "reference-framing",
-    retake: "retake",
-    clipAudio: "audio-sources",
-    audioSegments: "audio-segments",
-    audioReuse: "audio-reuse",
-    audioDerivedDuration: "audio-derived-duration",
-    controlSignalDerivedDuration: "control-signal-derived-duration",
-    icLora: "ic-lora"
-  };
-  var AUTHORING_FEATURE_LABELS = {
-    promptRelay: "Relay prompts",
-    frameReferences: "Frame references",
-    referenceFraming: "Reference framing",
-    retake: "Retakes",
-    clipAudio: "Clip audio",
-    audioSegments: "Audio segments",
-    audioReuse: "Captured stage audio reuse",
-    audioDerivedDuration: "Audio-derived clip duration",
-    controlSignalDerivedDuration: "Control-signal-derived clip duration",
-    icLora: "IC-LoRA"
-  };
-  var CONDITIONAL_RULE_CODES = {
-    retakeRequiresSource: "retake-source-required"
-  };
-
-  // frontend/architectures/conditionalRules.ts
-  var KNOWN_CONDITIONAL_RULE_CODES = new Set(
-    Object.values(CONDITIONAL_RULE_CODES)
-  );
-  var isKnownConditionalRuleCode = (value) => KNOWN_CONDITIONAL_RULE_CODES.has(value);
-  var conditionalRule = (rules, code) => rules.find((rule) => rule.code === code) ?? null;
-  var evaluateConditionalRule = (rule, context) => {
-    switch (rule.code) {
-      case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-        return context.clip !== void 0 && context.clip.initVideo === null;
-      default:
-        return true;
-    }
-  };
-
   // frontend/architectures/modelCapabilities.ts
   var intersect = (left, right) => left.filter((value) => right.includes(value));
   var effectiveModelCapabilities = (model, architecture) => model?.capabilities ?? architecture.capabilities;
@@ -628,7 +584,26 @@
     return options;
   };
 
+  // frontend/architectures/generatedFeatures.ts
+  var AUTHORING_FEATURE_LABELS = {
+    promptRelay: "Relay prompts",
+    frameReferences: "Frame references",
+    referenceFraming: "Reference framing",
+    retake: "Retakes",
+    audioSegments: "Audio segments",
+    audioReuse: "Captured stage audio reuse",
+    audioDerivedDuration: "Audio-derived clip duration",
+    icLora: "IC-LoRA"
+  };
+
   // frontend/architectures/policy/featureValues.ts
+  var RETAKE_SOURCE_RULE = {
+    code: "retake-source-required",
+    reason: "Retake requires an init-video clip."
+  };
+  var supportsClipAudio = (audioSourceKinds) => audioSourceKinds.some(
+    (kind) => kind !== AUDIO_SOURCE_DISABLED_KIND && kind !== AUDIO_SOURCE_NATIVE
+  );
   var architectureReason = (label, feature) => `${AUTHORING_FEATURE_LABELS[feature]} is not supported by ${label}.`;
   var noArchitectureReason = (feature) => `${AUTHORING_FEATURE_LABELS[feature]} requires a generated clip with a known architecture.`;
   var upscaleModeForMethod = (method) => {
@@ -640,19 +615,7 @@
     if (hasMethodName("model-")) return "model";
     return "unsupported";
   };
-  var architectureFeatureSupport = (feature, scope) => {
-    const capability = scope.capabilities;
-    if (!capability.features.includes(AUTHORING_FEATURE_WIRE_NAMES[feature])) {
-      return false;
-    }
-    if (feature === "clipAudio" && scope.audioSource !== void 0) {
-      return isAllowedAudioSource(
-        capability.audioSourceKinds,
-        scope.audioSource
-      );
-    }
-    return true;
-  };
+  var architectureFeatureSupport = (feature, capabilities) => capabilities.features.includes(feature);
 
   // frontend/architectures/temporalGrid.ts
   var MAX_FRAME_GRID = 2147483647;
@@ -692,9 +655,7 @@
     const firstModel = modelForName(stages[0].model);
     const clipDescriptor = firstModel?.architectureId ? architectureForId(firstModel.architectureId) : void 0;
     const clipCapabilities = clipDescriptor ? effectiveClipCapabilities(clip, clipDescriptor, modelForName) : null;
-    const retakeCanExecute = clip.retake !== null && clip.retake !== void 0 && clip.initVideo != null && (!clipDescriptor || !clipCapabilities || architectureFeatureSupport("retake", {
-      capabilities: clipCapabilities
-    }));
+    const retakeCanExecute = clip.retake !== null && clip.retake !== void 0 && clip.initVideo != null && (!clipDescriptor || !clipCapabilities || architectureFeatureSupport("retake", clipCapabilities));
     return stages.filter((stage, stageIndex) => {
       if (stageIndex === 0 && clip.initVideo == null) {
         return true;
@@ -739,11 +700,7 @@
     if (!capabilities) {
       return { status: "unknown" };
     }
-    const supportScope = { capabilities };
-    if (clip.clipLengthFromAudio === true && architectureFeatureSupport("audioDerivedDuration", supportScope) || clip.clipLengthFromControlNet === true && architectureFeatureSupport(
-      "controlSignalDerivedDuration",
-      supportScope
-    )) {
+    if (clip.clipLengthFromAudio === true && architectureFeatureSupport("audioDerivedDuration", capabilities) || clip.clipLengthFromControlNet === true && architectureFeatureSupport("icLora", capabilities)) {
       return { status: "not-applicable" };
     }
     const models = effectiveGridModels(clip, modelForName, architectureForId);
@@ -780,37 +737,9 @@
     (entry) => REFERENCE_POSITIONS.includes(entry)
   );
   var hasExactKeys = (value, expected) => Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
-  var isRuleDecision = (value, allowedScopes) => {
-    if (!isRecord(value) || !hasExactKeys(value, [
-      "support",
-      "code",
-      "reason",
-      "scope",
-      "constraints"
-    ]) || typeof value.support !== "string" || !["supported", "unsupported", "conditional"].includes(value.support) || !isTrimmedNonEmpty(value.code) || !isTrimmedNonEmpty(value.reason) || typeof value.scope !== "string" || !["clip", "boundary"].includes(value.scope) || value.constraints !== null && !isRecord(value.constraints)) {
-      return false;
-    }
-    const scope = value.scope;
-    if (allowedScopes && !allowedScopes.includes(scope)) {
-      return false;
-    }
-    if (value.support === "unsupported" && value.constraints !== null) {
-      return false;
-    }
-    return true;
-  };
-  var isKnownExecutableRule = (value) => {
-    if (value.support !== "conditional") {
-      return false;
-    }
-    switch (value.code) {
-      case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-        return value.scope === "clip" && value.constraints === null;
-    }
-    return false;
-  };
+  var isRuleDecision = (value) => isRecord(value) && hasExactKeys(value, ["support", "code", "reason", "constraints"]) && typeof value.support === "string" && ["supported", "unsupported", "conditional"].includes(value.support) && isTrimmedNonEmpty(value.code) && isTrimmedNonEmpty(value.reason) && (value.constraints === null || isRecord(value.constraints) && value.support !== "unsupported");
   var isBoundaryRule = (value) => {
-    if (!isRuleDecision(value, ["boundary"])) {
+    if (!isRuleDecision(value)) {
       return false;
     }
     if (value.support !== "conditional") {
@@ -847,9 +776,6 @@
     const continuityExtraFrames = constraints.continuityExtraFrames;
     return frameStep > 0 && minFrames >= 0 && maxFrames >= minFrames && defaultFrames >= minFrames && defaultFrames <= maxFrames && continuityExtraFrames >= 0 && (defaultFrames - minFrames) % frameStep === 0;
   };
-  var isRuleArray = (value, allowedScopes) => Array.isArray(value) && value.every(
-    (rule) => isRuleDecision(rule, allowedScopes) && isKnownConditionalRuleCode(rule.code) && isKnownExecutableRule(rule)
-  ) && new Set(value.map((rule) => rule.code)).size === value.length;
   var isCapabilities = (value) => {
     if (!isRecord(value) || !hasExactKeys(value, ["features", "entryModes", "audioSourceKinds"])) {
       return false;
@@ -874,16 +800,14 @@
         "id",
         "label",
         "capabilities",
-        "boundaryRules",
-        "rules"
-      ]) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isCapabilities(raw.capabilities) || !hasCompleteBoundaryRules(raw.boundaryRules) || !isRuleArray(raw.rules, ["clip"])) {
+        "boundaryRules"
+      ]) || !isTrimmedNonEmpty(raw.id) || !isTrimmedNonEmpty(raw.label) || !isCapabilities(raw.capabilities) || !hasCompleteBoundaryRules(raw.boundaryRules)) {
         return null;
       }
-      const executableRuleCodes = [
-        ...Object.values(raw.boundaryRules).map((rule) => rule.code),
-        ...raw.rules.map((rule) => rule.code)
-      ];
-      if (architectureIds.has(raw.id) || new Set(executableRuleCodes).size !== executableRuleCodes.length) {
+      const boundaryCodes = Object.values(raw.boundaryRules).map(
+        (rule) => rule.code
+      );
+      if (architectureIds.has(raw.id) || new Set(boundaryCodes).size !== boundaryCodes.length) {
         return null;
       }
       architectureIds.add(raw.id);
@@ -891,8 +815,7 @@
         id: raw.id,
         label: raw.label,
         capabilities: structuredClone(raw.capabilities),
-        boundaryRules: structuredClone(raw.boundaryRules),
-        rules: structuredClone(raw.rules)
+        boundaryRules: structuredClone(raw.boundaryRules)
       });
     }
     if (architectures.length === 0) {
@@ -1241,20 +1164,6 @@
 
   // frontend/architectures/policy/clipStageViews.ts
   var UNRESOLVED_ARCHITECTURE_ID = "unsupported";
-  var FEATURE_RULE_CODES = {
-    retake: [CONDITIONAL_RULE_CODES.retakeRequiresSource]
-  };
-  var conditionalRuleFor = (clip, feature, descriptor) => {
-    const codes = FEATURE_RULE_CODES[feature];
-    if (!codes) return void 0;
-    for (const code of codes) {
-      const rule = conditionalRule(descriptor.rules, code);
-      if (rule && evaluateConditionalRule(rule, { clip })) {
-        return rule;
-      }
-    }
-    return void 0;
-  };
   var createClipStageCapabilityViews = (architectureById, modelByName) => {
     const clipViews = /* @__PURE__ */ new WeakMap();
     const stageViews = /* @__PURE__ */ new WeakMap();
@@ -1285,21 +1194,18 @@
           return {
             supported: false,
             reason: noArchitectureReason(feature),
-            rule: null
+            code: ""
           };
         }
-        const conditionalRule2 = conditionalRuleFor(
-          clip,
+        const featureSupported = architectureFeatureSupport(
           feature,
-          descriptor
-        );
-        const supported = architectureFeatureSupport(feature, {
           capabilities
-        }) && !conditionalRule2;
+        );
+        const needsRetakeSource = feature === "retake" && featureSupported && clip.initVideo === null;
         return {
-          supported,
-          reason: supported ? "" : conditionalRule2?.reason ?? architectureReason(label, feature),
-          rule: conditionalRule2 ?? null
+          supported: featureSupported && !needsRetakeSource,
+          reason: needsRetakeSource ? RETAKE_SOURCE_RULE.reason : featureSupported ? "" : architectureReason(label, feature),
+          code: needsRetakeSource ? RETAKE_SOURCE_RULE.code : ""
         };
       };
       const frameGridResolution = resolveClipFrameGridForLookup(
@@ -1314,6 +1220,13 @@
         frameGrid: frameGridResolution.status === "resolved" ? frameGridResolution.frameGrid : 1,
         frameGridResolution,
         audioSourceKinds: capabilities?.audioSourceKinds ?? [],
+        clipAudio: {
+          supported: supportsClipAudio(
+            capabilities?.audioSourceKinds ?? []
+          ),
+          reason: supportsClipAudio(capabilities?.audioSourceKinds ?? []) ? "" : `Clip audio is not supported by ${label}.`,
+          code: ""
+        },
         decision,
         authoringState: (feature, persisted) => {
           const result = decision(feature);
@@ -1348,10 +1261,10 @@
           return {
             supported,
             reason: supported ? "" : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection requires a resolved generating video model.`,
-            rule: null
+            code: ""
           };
         }
-        return { supported: true, reason: "", rule: null };
+        return { supported: true, reason: "", code: "" };
       };
       const stageView = {
         decision,
@@ -6036,7 +5949,7 @@
   var issue = (code, message, clipIdx, severity = "error") => ({ severity, code, message, clipIdx });
   var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities) => {
     const diagnostics = [];
-    const supports = (feature, value) => architectureFeatureSupport(feature, { capabilities, ...value });
+    const supports = (feature) => architectureFeatureSupport(feature, capabilities);
     const unsupported = (active, key, label, severity) => {
       if (active) {
         const effectiveSeverity = severity ?? "warning";
@@ -6087,11 +6000,14 @@
       );
     }
     const sourceKind = audioSourceKind(clip.audioSource);
-    const clipAudioCapabilitySupported = supports("clipAudio");
+    const clipAudioCapabilitySupported = supportsClipAudio(
+      capabilities.audioSourceKinds
+    );
     const standaloneAudioSupported = capabilities.audioSourceKinds.includes("Native");
-    const selectedAudioSourceSupported = supports("clipAudio", {
-      audioSource: clip.audioSource
-    });
+    const selectedAudioSourceSupported = isAllowedAudioSource(
+      capabilities.audioSourceKinds,
+      clip.audioSource
+    );
     unsupported(
       !supports("audioReuse") && clip.reuseAudio,
       "audio-reuse",
@@ -6102,9 +6018,7 @@
       "audio-derived-duration",
       "Audio-derived clip duration"
     );
-    const supportsControlSignalDerivedDuration = supports(
-      "controlSignalDerivedDuration"
-    );
+    const supportsControlSignalDerivedDuration = supports("icLora");
     unsupported(
       !supportsControlSignalDerivedDuration && clip.clipLengthFromControlNet,
       "control-signal-derived-duration",
@@ -6316,17 +6230,11 @@
       );
     }
     for (const { clip, clipIdx } of executable) {
-      const view = capabilityViews?.forClip(clip);
-      const conditionalFeatures = [
-        { feature: "retake", persisted: clip.retake !== null }
-      ];
-      for (const check of conditionalFeatures) {
-        const rule = view?.decision(check.feature).rule;
-        if (check.persisted && rule) {
-          diagnostics.push(
-            diagnostic("error", rule.code, rule.reason, clipIdx)
-          );
-        }
+      const retake = capabilityViews?.forClip(clip).decision("retake");
+      if (clip.retake !== null && retake?.code) {
+        diagnostics.push(
+          diagnostic("error", retake.code, retake.reason, clipIdx)
+        );
       }
     }
     return diagnostics;
@@ -9361,12 +9269,14 @@
     const { clipIdx } = sel;
     const clip = clips[clipIdx];
     const capabilityView = ctx.authoring().capabilities.forClip(clip);
-    const audioCapabilityDecision = capabilityView.decision("clipAudio");
+    const audioCapabilityDecision = capabilityView.clipAudio;
     const reuseDecision = capabilityView.decision("audioReuse");
     const durationDecision = capabilityView.decision("audioDerivedDuration");
-    const controlDurationDecision = capabilityView.decision(
-      "controlSignalDerivedDuration"
-    );
+    const icLoraDecision = capabilityView.decision("icLora");
+    const controlDurationDecision = icLoraDecision.supported ? icLoraDecision : {
+      ...icLoraDecision,
+      reason: `Control-signal-derived clip duration is not supported by ${capabilityView.architectureLabel}.`
+    };
     const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
       capabilityView.architectureId,
       clip.icLoras
@@ -9915,7 +9825,7 @@
         buildCapabilityNotice({
           supported: false,
           reason: capability.reason,
-          rule: null
+          code: ""
         })
       );
     }
@@ -15293,7 +15203,7 @@ The conversion is one undoable change.`;
       }
       const badge = audioSourceBadge(clip.audioSource ?? "");
       const clipCapabilities = capabilities?.forClip(clip);
-      const clipAudioSupported = clipCapabilities?.decision("clipAudio").supported ?? true;
+      const clipAudioSupported = clipCapabilities?.clipAudio.supported ?? true;
       const persistedAudio = clip.audioSource !== "Native" || clip.uploadedAudio !== null || clip.reuseAudio || clip.clipLengthFromAudio || clip.saveAudioTrack;
       const audioOperable = clipAudioSupported || persistedAudio;
       const native = badge.label === "Native";

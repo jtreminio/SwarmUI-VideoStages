@@ -877,7 +877,6 @@ public class PlanningCompilerComponentTests
                 [BoundaryJoinType.Continue] = RuleDecision.Conditional(
                     "fake.continue",
                     "Fake policy with a different grid and permissive target.",
-                    RuleScope.Boundary,
                     new BoundaryRuleConstraints(
                         FrameStep: 5,
                         MinFrames: 10,

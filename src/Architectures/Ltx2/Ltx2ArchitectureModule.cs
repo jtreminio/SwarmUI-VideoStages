@@ -42,11 +42,9 @@ internal sealed class Ltx2ArchitectureModule :
         ArchitectureFeature.PromptRelay
             | ArchitectureFeature.FrameReferences
             | ArchitectureFeature.Retake
-            | ArchitectureFeature.ClipAudio
             | ArchitectureFeature.AudioReuse
             | ArchitectureFeature.AudioSegments
             | ArchitectureFeature.AudioDerivedDuration
-            | ArchitectureFeature.ControlSignalDerivedDuration
             | ArchitectureFeature.ReferenceFraming
             | ArchitectureFeature.IcLora,
         Ltx2BoundaryPolicy.Instance)
@@ -59,7 +57,6 @@ internal sealed class Ltx2ArchitectureModule :
                 | StageGuideReferenceKind.PreviousStage
                 | StageGuideReferenceKind.ExplicitStage
                 | StageGuideReferenceKind.Base2Edit),
-        Rules = Ltx2ConditionalRulePolicySource.PublishedRules,
     };
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
@@ -100,7 +97,7 @@ internal sealed class Ltx2ArchitectureModule :
 
     public IReadOnlyList<PlanDiagnostic> ValidatePlan(
         IReadOnlyList<ClipPlan> architectureClips) =>
-        Ltx2ConditionalRulePolicySource.Validate(architectureClips);
+        Ltx2ClipPolicy.Validate(architectureClips);
 
 }
 

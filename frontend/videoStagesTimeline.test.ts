@@ -593,7 +593,7 @@ describe("videoStagesTimeline", () => {
         const replacement = authoritativeDto();
         replacement.architectures[0].capabilities.features =
             replacement.architectures[0].capabilities.features.filter(
-                (capability) => capability !== "ic-lora",
+                (capability) => capability !== "icLora",
             );
         resolveTrailing(replacement);
         await flushMicrotasks();
@@ -710,7 +710,7 @@ describe("videoStagesTimeline", () => {
         const replacement = authoritativeDto();
         replacement.architectures[0].capabilities.features =
             replacement.architectures[0].capabilities.features.filter(
-                (capability) => capability !== "ic-lora",
+                (capability) => capability !== "icLora",
             );
         document
             .querySelector<HTMLButtonElement>(".vst-catalog-retry")

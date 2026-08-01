@@ -283,7 +283,7 @@ public class WanArchitectureTests
             "effective-request.unsupported-audio-derived-duration-ignored");
         AssertIgnored(
             GeneratedClip(0, stage) with { ClipLengthFromControlNet = true },
-            "effective-request.unsupported-control-signal-derived-duration-ignored");
+            "effective-request.unsupported-ic-lora-ignored");
         AssertIgnored(
             GeneratedClip(0, stage with { ImageReference = "Base" }),
             "effective-request.unsupported-stage-reference-ignored");
@@ -293,6 +293,13 @@ public class WanArchitectureTests
                 IcLoras = [new("wan-ic.safetensors", "Upload", 1, 1, "canny", null)],
             },
             "effective-request.unsupported-ic-lora-ignored");
+        AssertIgnored(
+            GeneratedClip(0, stage) with
+            {
+                AudioSource = Constants.AudioSourceUpload,
+                UploadedAudio = new("data:audio/wav;base64,AA==", "voice.wav"),
+            },
+            "effective-request.unsupported-audio-source-ignored");
     }
 
     [Fact]
@@ -620,7 +627,7 @@ public class WanArchitectureTests
             catalog["architectures"].Values<JObject>(),
             item => item.Value<string>("id") == "wan22");
         Assert.Null(wan["profiles"]);
-        Assert.Empty(wan["rules"].Values<JObject>());
+        Assert.Null(wan["rules"]);
     }
 
     [Fact]

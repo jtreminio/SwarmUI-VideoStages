@@ -6,13 +6,11 @@ import type { GeneratedAuthoringFeature } from "./generatedFeatures";
 export type CatalogAuthoringFeature = GeneratedAuthoringFeature;
 
 export type CapabilitySupport = "supported" | "unsupported" | "conditional";
-export type CapabilityRuleScope = "clip" | "boundary";
 
 export interface CapabilityRuleDecision {
     support: CapabilitySupport;
     code: string;
     reason: string;
-    scope: CapabilityRuleScope;
     constraints: Record<string, unknown> | null;
 }
 
@@ -78,7 +76,6 @@ export interface ArchitectureCatalogEntryDto {
     label: string;
     capabilities: ArchitectureCapabilities;
     boundaryRules: Record<string, CapabilityRuleDecision>;
-    rules: CapabilityRuleDecision[];
 }
 
 /** Serializable projection supplied by the authoritative backend catalog. */

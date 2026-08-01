@@ -102,7 +102,16 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                 configured,
                 ArchitectureFeature.IcLora,
                 "IC-LoRA data");
-            effective = effective with { IcLoras = [] };
+            // The control signal is IC-LoRA media, so its duration goes with it.
+            Ignore(
+                effective.ClipLengthFromControlNet,
+                ArchitectureFeature.IcLora,
+                "control-signal-derived clip duration");
+            effective = effective with
+            {
+                IcLoras = [],
+                ClipLengthFromControlNet = false,
+            };
             stages = stages
                 .Select(stage => stage with
                 {
@@ -111,22 +120,27 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                 })
                 .ToArray();
         }
-        if (Unsupported(ArchitectureFeature.ClipAudio))
+
+        AudioSourceKind authoredAudioKind =
+            AudioSourceParser.Parse(effective.AudioSource).Kind;
+        if (authoredAudioKind != AudioSourceKind.Unknown
+            && !audioSourceKinds.Contains(authoredAudioKind)
+            && !(authoredAudioKind == AudioSourceKind.Native
+                && audioSourceKinds.Contains(AudioSourceKind.Disabled)))
         {
-            Ignore(
-                effective.UploadedAudio is not null
-                    || !string.Equals(
-                        effective.AudioSource,
-                        Constants.AudioSourceNative,
-                        StringComparison.OrdinalIgnoreCase),
-                ArchitectureFeature.ClipAudio,
-                "a clip audio source");
+            decisions.Add(EffectiveRequestDecision.Ignore(
+                "effective-request.unsupported-audio-source-ignored",
+                $"Clip {authored.Id} configures audio source kind '{authoredAudioKind}', "
+                    + $"which {descriptor.DisplayName} does not support. The authored setting "
+                    + "remains saved and is ignored for this generation.",
+                authored.Id));
             effective = effective with
             {
                 AudioSource = Constants.AudioSourceNative,
                 UploadedAudio = null,
             };
         }
+
         if (!audioSourceKinds.Contains(AudioSourceKind.Native)
             && effective.SaveAudioTrack)
         {
@@ -146,15 +160,6 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                 ArchitectureFeature.AudioDerivedDuration,
                 "audio-derived clip duration");
             effective = effective with { ClipLengthFromAudio = false };
-        }
-
-        if (Unsupported(ArchitectureFeature.ControlSignalDerivedDuration))
-        {
-            Ignore(
-                effective.ClipLengthFromControlNet,
-                ArchitectureFeature.ControlSignalDerivedDuration,
-                "control-signal-derived clip duration");
-            effective = effective with { ClipLengthFromControlNet = false };
         }
 
         if (Unsupported(ArchitectureFeature.AudioReuse))
@@ -231,11 +236,11 @@ internal static class CapabilityDrivenEffectiveRequestProjector
             decisions.AsReadOnly());
     }
 
+    /// <summary>Kebab-cases the feature's wire name; diagnostic codes are dash-separated.</summary>
     private static string DiagnosticKey(ArchitectureFeature feature)
     {
-        string key = ArchitectureFeatureVocabulary.AuthoringKey(feature);
         StringBuilder result = new();
-        foreach (char value in key)
+        foreach (char value in ArchitectureFeatureVocabulary.WireName(feature))
         {
             if (char.IsUpper(value))
             {

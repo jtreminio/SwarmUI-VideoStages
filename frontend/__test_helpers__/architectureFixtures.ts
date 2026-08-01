@@ -13,16 +13,14 @@ export const testArchitectureCapabilities = (
     overrides: Partial<ArchitectureCapabilities> = {},
 ): ArchitectureCapabilities => ({
     features: [
-        "prompt-relay",
-        "frame-references",
-        "reference-framing",
+        "promptRelay",
+        "frameReferences",
+        "referenceFraming",
         "retake",
-        "audio-sources",
-        "audio-segments",
-        "audio-reuse",
-        "audio-derived-duration",
-        "control-signal-derived-duration",
-        "ic-lora",
+        "audioSegments",
+        "audioReuse",
+        "audioDerivedDuration",
+        "icLora",
     ],
     entryModes: ["text-to-video", "image-to-video", "init-video"],
     audioSourceKinds: ["Native", "Upload"],
@@ -43,14 +41,12 @@ export const testArchitectureCatalog = (
                     support: "supported",
                     code: "ltx2.boundary.cut",
                     reason: "Cut is supported.",
-                    scope: "boundary",
                     constraints: null,
                 },
                 continue: {
                     support: "conditional",
                     code: "ltx2.boundary.continue",
                     reason: "Continue requires matching architectures.",
-                    scope: "boundary",
                     constraints: {
                         sameArchitecture: true,
                         targetRequiresGeneratedEntry: true,
@@ -67,7 +63,6 @@ export const testArchitectureCatalog = (
                     support: "conditional",
                     code: "ltx2.boundary.crossfade",
                     reason: "Crossfade requires matching architectures.",
-                    scope: "boundary",
                     constraints: {
                         sameArchitecture: true,
                         targetRequiresGeneratedEntry: false,
@@ -81,15 +76,6 @@ export const testArchitectureCatalog = (
                     },
                 },
             },
-            rules: [
-                {
-                    support: "conditional",
-                    code: "retake-source-required",
-                    reason: "Retake requires source footage.",
-                    scope: "clip",
-                    constraints: null,
-                },
-            ],
         },
     ],
     entries: [
@@ -157,7 +143,7 @@ export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
     id: "none",
     label: "Decoded source only",
     capabilities: testArchitectureCapabilities({
-        features: ["audio-sources", "audio-segments"],
+        features: ["audioSegments"],
         entryModes: ["init-video"],
         audioSourceKinds: ["Disabled", "Upload"],
     }),
@@ -166,25 +152,21 @@ export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
             support: "supported",
             code: "none.boundary.cut",
             reason: "Decoded init-video clips can be joined with a hard cut.",
-            scope: "boundary",
             constraints: null,
         },
         continue: {
             support: "unsupported",
             code: "none.boundary.continue.unsupported",
             reason: "InitVideo-only clips do not support continuation.",
-            scope: "boundary",
             constraints: null,
         },
         crossfade: {
             support: "unsupported",
             code: "none.boundary.crossfade.unsupported",
             reason: "InitVideo-only clips do not support crossfade.",
-            scope: "boundary",
             constraints: null,
         },
     },
-    rules: [],
 });
 
 export const fakeArchitectureCatalog = (
@@ -205,25 +187,21 @@ export const fakeArchitectureCatalog = (
                     support: "supported",
                     code: "test.boundary.cut",
                     reason: "Only cuts are supported.",
-                    scope: "boundary",
                     constraints: null,
                 },
                 continue: {
                     support: "unsupported",
                     code: "test.boundary.continue.unsupported",
                     reason: "Continue is unsupported.",
-                    scope: "boundary",
                     constraints: null,
                 },
                 crossfade: {
                     support: "unsupported",
                     code: "test.boundary.crossfade.unsupported",
                     reason: "Crossfade is unsupported.",
-                    scope: "boundary",
                     constraints: null,
                 },
             },
-            rules: [],
         },
     ],
     entries: [

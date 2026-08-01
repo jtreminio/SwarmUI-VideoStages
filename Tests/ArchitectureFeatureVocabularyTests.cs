@@ -20,45 +20,12 @@ public class ArchitectureFeatureVocabularyTests
     }
 
     [Fact]
-    public void Every_published_conditional_rule_code_is_registered()
-    {
-        Assert.Equal(
-            Enum.GetValues<ConditionalRuleCodeId>().OrderBy(value => value),
-            ArchitectureFeatureVocabulary.ConditionalRuleCodes
-                .Select(entry => entry.Id)
-                .OrderBy(value => value));
-
-        string[] registered =
-        [
-            .. ArchitectureFeatureVocabulary.ConditionalRuleCodes
-                .Select(entry => entry.Code),
-        ];
-        string[] published =
-        [
-            .. VideoArchitectureManifest.ProductionModules
-                .SelectMany(module => module.Descriptor.Rules)
-                .Select(rule => rule.Code)
-                .Distinct(StringComparer.Ordinal),
-        ];
-
-        Assert.Empty(published.Except(registered, StringComparer.Ordinal));
-        Assert.Empty(registered.Except(published, StringComparer.Ordinal));
-    }
-
-    [Fact]
     public void Vocabulary_entries_are_unique()
     {
-        int count = ArchitectureFeatureVocabulary.Features.Count;
         Assert.Equal(
-            count,
+            ArchitectureFeatureVocabulary.Features.Count,
             ArchitectureFeatureVocabulary.Features
                 .Select(entry => entry.WireName)
-                .Distinct(StringComparer.Ordinal)
-                .Count());
-        Assert.Equal(
-            count,
-            ArchitectureFeatureVocabulary.Features
-                .Select(entry => entry.AuthoringKey)
                 .Distinct(StringComparer.Ordinal)
                 .Count());
     }

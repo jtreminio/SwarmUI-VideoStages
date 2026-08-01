@@ -597,8 +597,7 @@ public class ArchitectureFoundationTests
 
         Assert.Contains(
             plan.Diagnostics,
-            diagnostic => diagnostic.Code
-                    == "effective-request.unsupported-control-signal-derived-duration-ignored"
+            diagnostic => diagnostic.Code == "effective-request.unsupported-ic-lora-ignored"
                 && diagnostic.Message.Contains("control-signal-derived clip duration"));
         Assert.NotNull(Assert.Single(plan.Clips).ArchitecturePayload);
     }
@@ -1265,8 +1264,7 @@ public class ArchitectureFoundationTests
                 {
                     [BoundaryJoinType.Cut] = RuleDecision.Supported(
                         "fake.cut",
-                        "cut",
-                        RuleScope.Boundary),
+                        "cut"),
                 }),
         };
 
@@ -1335,7 +1333,7 @@ public class ArchitectureFoundationTests
         Assert.Null(none["profiles"]);
         Assert.Null(none["extras"]);
         Assert.Equal(
-            ["audio-sources", "audio-segments"],
+            ["audioSegments"],
             none["capabilities"]["features"].Values<string>());
         Assert.Equal(
             ["Disabled", "Upload"],
@@ -1354,21 +1352,19 @@ public class ArchitectureFoundationTests
         Assert.Null(capabilities["clipAudio"]);
         Assert.Equal(
             [
-                "prompt-relay",
-                "frame-references",
-                "reference-framing",
+                "promptRelay",
+                "frameReferences",
+                "referenceFraming",
                 "retake",
-                "audio-sources",
-                "audio-segments",
-                "audio-reuse",
-                "audio-derived-duration",
-                "control-signal-derived-duration",
-                "ic-lora",
+                "audioSegments",
+                "audioReuse",
+                "audioDerivedDuration",
+                "icLora",
             ],
             capabilities["features"].Values<string>());
         Assert.Null(capabilities["initVideo"]);
         JObject crossfadeRule = (JObject)ltx["boundaryRules"]["crossfade"];
-        Assert.Equal("boundary", crossfadeRule["scope"]);
+        Assert.Null(crossfadeRule["scope"]);
         Assert.Equal("conditional", crossfadeRule["support"]);
         Assert.Equal("ltx2.boundary.crossfade", crossfadeRule["code"]);
         Assert.Null(crossfadeRule["entityId"]);
@@ -1380,11 +1376,7 @@ public class ArchitectureFoundationTests
         JObject continueRule = (JObject)ltx["boundaryRules"]["continue"];
         Assert.Equal(1, continueRule["constraints"]["continuityExtraFrames"]);
         Assert.True(continueRule["constraints"]["targetRequiresGeneratedEntry"].Value<bool>());
-        JArray rules = (JArray)ltx["rules"];
-        Assert.Contains(
-            rules.Values<JObject>(),
-            rule => rule["code"]?.ToString() == "retake-source-required"
-                && rule["scope"]?.ToString() == "clip");
+        Assert.Null(ltx["rules"]);
         JObject wan = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "wan22");
@@ -1647,8 +1639,7 @@ public class ArchitectureFoundationTests
                 {
                     [BoundaryJoinType.Cut] = RuleDecision.Supported(
                         $"{id}.cut",
-                        "cut",
-                        RuleScope.Boundary),
+                        "cut"),
                     [BoundaryJoinType.Continue] = BoundaryMode(
                         $"{id}.continue",
                         "same architecture"),
@@ -1663,7 +1654,6 @@ public class ArchitectureFoundationTests
         RuleDecision.Conditional(
             code,
             reason,
-            RuleScope.Boundary,
             new BoundaryRuleConstraints(
                 FrameStep: 1,
                 MinFrames: 1,

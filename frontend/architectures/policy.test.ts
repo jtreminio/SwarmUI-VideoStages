@@ -45,7 +45,7 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
     wan.id = "wan22";
     wan.label = "WAN 2.2";
     wan.capabilities.features = wan.capabilities.features.filter(
-        (capability) => capability !== "ic-lora",
+        (capability) => capability !== "icLora",
     );
     models.architectures.push(wan);
     models.entries.push({
@@ -96,14 +96,14 @@ describe("catalog-backed authoring policy", () => {
             catalog().architectures[0].capabilities,
         );
         expect(
-            architectureFeatureSupport("frameReferences", { capabilities }),
+            architectureFeatureSupport("frameReferences", capabilities),
         ).toBe(true);
 
         capabilities.features = capabilities.features.filter(
-            (capability) => capability !== "frame-references",
+            (capability) => capability !== "frameReferences",
         );
         expect(
-            architectureFeatureSupport("frameReferences", { capabilities }),
+            architectureFeatureSupport("frameReferences", capabilities),
         ).toBe(false);
     });
 
@@ -114,7 +114,7 @@ describe("catalog-backed authoring policy", () => {
 
         expect(view.decision("frameReferences").supported).toBe(false);
         expect(view.decision("referenceFraming").supported).toBe(false);
-        expect(view.decision("clipAudio").supported).toBe(false);
+        expect(view.clipAudio.supported).toBe(false);
         expect(view.authoringState("frameReferences", false)).toMatchObject({
             visible: false,
             enabled: false,
@@ -145,11 +145,11 @@ describe("catalog-backed authoring policy", () => {
         first.enhancements = { referencePositions: [] };
         first.capabilities = structuredClone(descriptor.capabilities);
         first.capabilities.features = first.capabilities.features.filter(
-            (capability) => capability !== "ic-lora",
+            (capability) => capability !== "icLora",
         );
         second.capabilities = structuredClone(descriptor.capabilities);
         second.capabilities.features = second.capabilities.features.filter(
-            (capability) => capability !== "prompt-relay",
+            (capability) => capability !== "promptRelay",
         );
         const clip = minimalClip({
             stages: [
@@ -213,12 +213,10 @@ describe("catalog-backed authoring policy", () => {
         });
         const view = createCapabilityViewResolver(models).forClip(clip);
         expect(view.known).toBe(true);
-        expect(view.decision("clipAudio").supported).toBe(true);
+        expect(view.clipAudio.supported).toBe(true);
         expect(view.decision("audioReuse").supported).toBe(false);
         expect(view.decision("audioDerivedDuration").supported).toBe(false);
-        expect(view.decision("controlSignalDerivedDuration").supported).toBe(
-            false,
-        );
+        expect(view.decision("icLora").supported).toBe(false);
         expect(view.authoringState("audioReuse", true)).toMatchObject({
             visible: true,
             enabled: false,
@@ -231,7 +229,7 @@ describe("catalog-backed authoring policy", () => {
         expect(
             createCapabilityViewResolver(models)
                 .forClip(minimalClip())
-                .decision("controlSignalDerivedDuration").supported,
+                .decision("icLora").supported,
         ).toBe(true);
     });
 
@@ -257,7 +255,7 @@ describe("catalog-backed authoring policy", () => {
 
         expect(view.decision("retake")).toMatchObject({
             supported: false,
-            reason: "Retake requires source footage.",
+            reason: "Retake requires an init-video clip.",
         });
         // Absent and unsupported: never offered for authoring.
         expect(view.authoringState("retake", false)).toMatchObject({
@@ -285,7 +283,7 @@ describe("catalog-backed authoring policy", () => {
             createCapabilityViewResolver(models)
                 .forClip(initVideoClip)
                 .decision("retake"),
-        ).toMatchObject({ supported: true, rule: null });
+        ).toMatchObject({ supported: true, code: "" });
     });
 
     it("truncates the executable sequence at the first skipped clip", () => {
@@ -452,7 +450,7 @@ describe("catalog-backed authoring policy", () => {
 
         expect(
             resolver.forStage(clip, clip.stages[0]).decision("stageLoras"),
-        ).toMatchObject({ supported: true, rule: null });
+        ).toMatchObject({ supported: true, code: "" });
         expect(
             resolver
                 .forStage(clip, clip.stages[0])

@@ -3,7 +3,12 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures;
 
-/// <summary>Rejects architecture-owned settings before an architecture module receives a clip.</summary>
+/// <summary>
+/// The last word on facts <see cref="CapabilityDrivenEffectiveRequestProjector"/> cannot safely
+/// drop: entry mode and audio-source kind decide which models execute, and a malformed stage
+/// selector has no supported default. Every optional feature is already projected away by then,
+/// so re-checking one here could only ever restate a value the projector reset.
+/// </summary>
 internal static class ArchitectureCapabilityValidator
 {
     internal static IReadOnlyList<PlanDiagnostic> Validate(
@@ -12,87 +17,24 @@ internal static class ArchitectureCapabilityValidator
         ArchitectureEntryMode entryMode)
     {
         List<PlanDiagnostic> diagnostics = [];
-        bool hasActiveStages = clip.Stages is { Count: > 0 };
-        ArchitectureFeature features = descriptor.Features;
-        IReadOnlyList<AudioSourceKind> audioSourceKinds = descriptor.AudioSourceKinds;
-        void Require(bool configured, bool supported, string option)
+        if (!descriptor.EntryModes.Contains(entryMode))
         {
-            if (configured && !supported)
-            {
-                diagnostics.Add(new(
-                    PlanDiagnosticSeverity.Error,
-                    "architecture-capability-unsupported",
-                    $"Clip {clip.Id} configures '{option}', which architecture "
-                        + $"'{descriptor.Id}' does not support.",
-                    clip.Id));
-            }
+            diagnostics.Add(Unsupported(
+                clip,
+                descriptor,
+                $"{ArchitectureFeatureVocabulary.WireName(entryMode)} entry"));
         }
-
-        Require(
-            configured: true,
-            descriptor.EntryModes.Contains(entryMode),
-            $"{ArchitectureFeatureVocabulary.WireName(entryMode)} entry");
-        Require(
-            clip.SaveAudioTrack,
-            audioSourceKinds.Contains(AudioSourceKind.Native),
-            "standalone audio output");
-        Require(
-            hasActiveStages && clip.PromptWindows is { Count: > 0 },
-            features.HasFlag(ArchitectureFeature.PromptRelay),
-            "prompt relay");
-        Require(
-            hasActiveStages && clip.ImageRefs is { Count: > 0 },
-            features.HasFlag(ArchitectureFeature.FrameReferences),
-            "frame references");
-        Require(
-            clip.ReferenceFraming != ReferenceFramingMode.Crop,
-            features.HasFlag(ArchitectureFeature.ReferenceFraming),
-            "reference framing");
-        Require(
-            clip.Stages?.Any(stage => stage.RetakeWindow is not null) == true,
-            features.HasFlag(ArchitectureFeature.Retake),
-            "retake");
-        Require(
-            clip.UploadedAudio is not null
-                || !string.Equals(
-                    clip.AudioSource,
-                    Constants.AudioSourceNative,
-                    StringComparison.OrdinalIgnoreCase),
-            features.HasFlag(ArchitectureFeature.ClipAudio),
-            "clip audio source");
-        bool supportsAudioDerivedDuration =
-            features.HasFlag(ArchitectureFeature.AudioDerivedDuration);
-        Require(
-            clip.ClipLengthFromAudio,
-            supportsAudioDerivedDuration,
-            "audio-derived clip duration");
-        ValidateAudioDerivedDurationSource(
-            clip,
-            supportsAudioDerivedDuration,
-            diagnostics);
-        Require(
-            clip.ClipLengthFromControlNet,
-            features.HasFlag(ArchitectureFeature.ControlSignalDerivedDuration),
-            "control-signal-derived clip duration");
-        Require(
-            clip.ReuseAudio,
-            features.HasFlag(ArchitectureFeature.AudioReuse),
-            "captured stage audio reuse");
-        Require(
-            hasActiveStages && clip.IcLoras is { Count: > 0 },
-            features.HasFlag(ArchitectureFeature.IcLora),
-            "IC-LoRA");
-        ValidateAudioSourceKind(clip, descriptor, audioSourceKinds, diagnostics);
-        ValidateStages(clip, descriptor, diagnostics);
+        ValidateAudioDerivedDurationSource(clip, diagnostics);
+        ValidateAudioSourceKind(clip, descriptor, diagnostics);
+        ValidateStageGuideReferences(clip, descriptor, diagnostics);
         return diagnostics.AsReadOnly();
     }
 
     private static void ValidateAudioDerivedDurationSource(
         ClipSpec clip,
-        bool capabilitySupported,
         ICollection<PlanDiagnostic> diagnostics)
     {
-        if (!clip.ClipLengthFromAudio || !capabilitySupported)
+        if (!clip.ClipLengthFromAudio)
         {
             return;
         }
@@ -114,9 +56,9 @@ internal static class ArchitectureCapabilityValidator
     private static void ValidateAudioSourceKind(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,
-        IReadOnlyList<AudioSourceKind> audioSourceKinds,
         ICollection<PlanDiagnostic> diagnostics)
     {
+        IReadOnlyList<AudioSourceKind> audioSourceKinds = descriptor.AudioSourceKinds;
         AudioSourceKind kind = AudioSourceParser.Parse(clip.AudioSource).Kind;
         if (kind == AudioSourceKind.Unknown)
         {
@@ -139,18 +81,19 @@ internal static class ArchitectureCapabilityValidator
             $"audio source kind '{kind}'"));
     }
 
-    private static void ValidateStages(
+    /// <summary>
+    /// The projector rewrites every selector it can read, so only malformed syntax survives to
+    /// here.
+    /// </summary>
+    private static void ValidateStageGuideReferences(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,
         ICollection<PlanDiagnostic> diagnostics)
     {
-        IReadOnlyList<StageSpec> stages = clip.Stages ?? [];
-        for (int stageIndex = 0; stageIndex < stages.Count; stageIndex++)
+        foreach (StageSpec stage in clip.Stages ?? [])
         {
-            StageSpec stage = stages[stageIndex];
-            StageGuideReferenceSelection guide =
-                StageGuideReferencePolicy.Classify(stage.ImageReference);
-            if (!descriptor.StageGuideReferences.Allows(guide))
+            if (!descriptor.StageGuideReferences.Allows(
+                StageGuideReferencePolicy.Classify(stage.ImageReference)))
             {
                 diagnostics.Add(Unsupported(
                     clip,
@@ -158,20 +101,8 @@ internal static class ArchitectureCapabilityValidator
                     $"stage image reference '{stage.ImageReference}'",
                     stage.Id));
             }
-            // Upscale methods are architecture-neutral; only an unrecognized method is refused.
-            if (stage.Upscale != 1
-                && StageUpscalePlanCompiler.Classify(stage.UpscaleMethod)
-                    == StageUpscaleMode.Unsupported)
-            {
-                diagnostics.Add(Unsupported(
-                    clip,
-                    descriptor,
-                    $"unknown upscale mode '{stage.UpscaleMethod}'",
-                    stage.Id));
-            }
         }
     }
-
 
     private static PlanDiagnostic Unsupported(
         ClipSpec clip,

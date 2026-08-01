@@ -96,7 +96,7 @@ describe("resolved temporal grid", () => {
         const descriptor = catalog.architectures[0];
         descriptor.capabilities.features =
             descriptor.capabilities.features.filter(
-                (feature) => feature !== "audio-derived-duration",
+                (feature) => feature !== "audioDerivedDuration",
             );
         const clip = minimalClip({
             clipLengthFromAudio: true,

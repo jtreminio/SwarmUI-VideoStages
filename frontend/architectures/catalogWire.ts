@@ -1,13 +1,8 @@
-import {
-    CONDITIONAL_RULE_CODES,
-    isKnownConditionalRuleCode,
-} from "./conditionalRules";
 import { MAX_FRAME_GRID } from "./temporalGrid";
 import type {
     ArchitectureCapabilities,
     ArchitectureCatalogEntryDto,
     CapabilityRuleDecision,
-    CapabilityRuleScope,
     VideoArchitectureCatalogDto,
 } from "./types";
 
@@ -43,52 +38,18 @@ const hasExactKeys = (
     Object.keys(value).length === expected.length &&
     expected.every((key) => Object.hasOwn(value, key));
 
-const isRuleDecision = (
-    value: unknown,
-    allowedScopes?: readonly CapabilityRuleScope[],
-): value is CapabilityRuleDecision => {
-    if (
-        !isRecord(value) ||
-        !hasExactKeys(value, [
-            "support",
-            "code",
-            "reason",
-            "scope",
-            "constraints",
-        ]) ||
-        typeof value.support !== "string" ||
-        !["supported", "unsupported", "conditional"].includes(value.support) ||
-        !isTrimmedNonEmpty(value.code) ||
-        !isTrimmedNonEmpty(value.reason) ||
-        typeof value.scope !== "string" ||
-        !["clip", "boundary"].includes(value.scope) ||
-        (value.constraints !== null && !isRecord(value.constraints))
-    ) {
-        return false;
-    }
-    const scope = value.scope as CapabilityRuleScope;
-    if (allowedScopes && !allowedScopes.includes(scope)) {
-        return false;
-    }
-    if (value.support === "unsupported" && value.constraints !== null) {
-        return false;
-    }
-    return true;
-};
-
-const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
-    if (value.support !== "conditional") {
-        return false;
-    }
-    switch (value.code) {
-        case CONDITIONAL_RULE_CODES.retakeRequiresSource:
-            return value.scope === "clip" && value.constraints === null;
-    }
-    return false;
-};
+const isRuleDecision = (value: unknown): value is CapabilityRuleDecision =>
+    isRecord(value) &&
+    hasExactKeys(value, ["support", "code", "reason", "constraints"]) &&
+    typeof value.support === "string" &&
+    ["supported", "unsupported", "conditional"].includes(value.support) &&
+    isTrimmedNonEmpty(value.code) &&
+    isTrimmedNonEmpty(value.reason) &&
+    (value.constraints === null ||
+        (isRecord(value.constraints) && value.support !== "unsupported"));
 
 const isBoundaryRule = (value: unknown): value is CapabilityRuleDecision => {
-    if (!isRuleDecision(value, ["boundary"])) {
+    if (!isRuleDecision(value)) {
         return false;
     }
     if (value.support !== "conditional") {
@@ -140,19 +101,6 @@ const isBoundaryRule = (value: unknown): value is CapabilityRuleDecision => {
         (defaultFrames - minFrames) % frameStep === 0
     );
 };
-
-const isRuleArray = (
-    value: unknown,
-    allowedScopes: readonly CapabilityRuleScope[],
-): value is CapabilityRuleDecision[] =>
-    Array.isArray(value) &&
-    value.every(
-        (rule) =>
-            isRuleDecision(rule, allowedScopes) &&
-            isKnownConditionalRuleCode(rule.code) &&
-            isKnownExecutableRule(rule),
-    ) &&
-    new Set(value.map((rule) => rule.code)).size === value.length;
 
 const isCapabilities = (value: unknown): value is ArchitectureCapabilities => {
     if (
@@ -206,23 +154,20 @@ export const parseVideoArchitectureCatalog = (
                 "label",
                 "capabilities",
                 "boundaryRules",
-                "rules",
             ]) ||
             !isTrimmedNonEmpty(raw.id) ||
             !isTrimmedNonEmpty(raw.label) ||
             !isCapabilities(raw.capabilities) ||
-            !hasCompleteBoundaryRules(raw.boundaryRules) ||
-            !isRuleArray(raw.rules, ["clip"])
+            !hasCompleteBoundaryRules(raw.boundaryRules)
         ) {
             return null;
         }
-        const executableRuleCodes = [
-            ...Object.values(raw.boundaryRules).map((rule) => rule.code),
-            ...raw.rules.map((rule) => rule.code),
-        ];
+        const boundaryCodes = Object.values(raw.boundaryRules).map(
+            (rule) => rule.code,
+        );
         if (
             architectureIds.has(raw.id) ||
-            new Set(executableRuleCodes).size !== executableRuleCodes.length
+            new Set(boundaryCodes).size !== boundaryCodes.length
         ) {
             return null;
         }
@@ -232,7 +177,6 @@ export const parseVideoArchitectureCatalog = (
             label: raw.label,
             capabilities: structuredClone(raw.capabilities),
             boundaryRules: structuredClone(raw.boundaryRules),
-            rules: structuredClone(raw.rules),
         });
     }
     if (architectures.length === 0) {

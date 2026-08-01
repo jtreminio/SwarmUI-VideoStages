@@ -3,7 +3,6 @@ import type { BoundaryOverlapConstraints } from "../boundaryConstraints";
 import type { FrameGridResolution } from "../temporalGrid";
 import type {
     ArchitectureModelCatalog,
-    CapabilityRuleDecision,
     CatalogAuthoringFeature,
 } from "../types";
 
@@ -12,7 +11,8 @@ export type AuthoringFeature = CatalogAuthoringFeature;
 export interface CapabilityDecision {
     supported: boolean;
     reason: string;
-    rule: CapabilityRuleDecision | null;
+    /** Diagnostic code when a named precondition blocks the feature; empty otherwise. */
+    code: string;
 }
 
 export interface AuthoringState extends CapabilityDecision {
@@ -29,6 +29,8 @@ export interface ClipCapabilityView {
     /** Distinguishes a neutral grid from missing facts or an unrepresentable combination. */
     frameGridResolution: FrameGridResolution;
     audioSourceKinds: readonly string[];
+    /** Audio sourcing is stated by `audioSourceKinds`, not by a feature flag. */
+    clipAudio: CapabilityDecision;
     decision(feature: AuthoringFeature): CapabilityDecision;
     authoringState(
         feature: AuthoringFeature,

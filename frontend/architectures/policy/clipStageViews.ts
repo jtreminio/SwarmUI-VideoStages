@@ -1,23 +1,18 @@
 import { activeStageCount } from "../../clipSemantics";
 import type { Clip, Stage } from "../../types";
-import {
-    CONDITIONAL_RULE_CODES,
-    type ConditionalRuleCode,
-    conditionalRule,
-    evaluateConditionalRule,
-} from "../conditionalRules";
 import { effectiveClipCapabilities } from "../modelCapabilities";
 import { NONE_ARCHITECTURE_ID } from "../none/identity";
 import { resolveClipFrameGridForLookup } from "../temporalGrid";
 import type {
     ArchitectureCatalogEntryDto,
     ArchitectureModelEntry,
-    CapabilityRuleDecision,
 } from "../types";
 import {
     architectureFeatureSupport,
     architectureReason,
     noArchitectureReason,
+    RETAKE_SOURCE_RULE,
+    supportsClipAudio,
 } from "./featureValues";
 import type {
     AuthoringFeature,
@@ -35,33 +30,6 @@ interface EffectiveCatalogIdentity {
 }
 
 const UNRESOLVED_ARCHITECTURE_ID = "unsupported";
-
-/**
- * Conditional rules that gate an authoring feature. Every consumer reaches
- * these through `decision()`, so a control is disabled where it is authored
- * instead of being enabled and then flagged by the error summary.
- */
-const FEATURE_RULE_CODES: Partial<
-    Record<AuthoringFeature, readonly ConditionalRuleCode[]>
-> = {
-    retake: [CONDITIONAL_RULE_CODES.retakeRequiresSource],
-};
-
-const conditionalRuleFor = (
-    clip: Clip,
-    feature: AuthoringFeature,
-    descriptor: ArchitectureCatalogEntryDto,
-): CapabilityRuleDecision | undefined => {
-    const codes = FEATURE_RULE_CODES[feature];
-    if (!codes) return undefined;
-    for (const code of codes) {
-        const rule = conditionalRule(descriptor.rules, code);
-        if (rule && evaluateConditionalRule(rule, { clip })) {
-            return rule;
-        }
-    }
-    return undefined;
-};
 
 export const createClipStageCapabilityViews = (
     architectureById: ArchitectureLookup,
@@ -110,25 +78,26 @@ export const createClipStageCapabilityViews = (
                 return {
                     supported: false,
                     reason: noArchitectureReason(feature),
-                    rule: null,
+                    code: "",
                 };
             }
-            const conditionalRule = conditionalRuleFor(
-                clip,
+            const featureSupported = architectureFeatureSupport(
                 feature,
-                descriptor,
+                capabilities,
             );
-            const supported =
-                architectureFeatureSupport(feature, {
-                    capabilities,
-                }) && !conditionalRule;
+            // Only a clip that could otherwise retake is told it lacks a source.
+            const needsRetakeSource =
+                feature === "retake" &&
+                featureSupported &&
+                clip.initVideo === null;
             return {
-                supported,
-                reason: supported
-                    ? ""
-                    : (conditionalRule?.reason ??
-                      architectureReason(label, feature)),
-                rule: conditionalRule ?? null,
+                supported: featureSupported && !needsRetakeSource,
+                reason: needsRetakeSource
+                    ? RETAKE_SOURCE_RULE.reason
+                    : featureSupported
+                      ? ""
+                      : architectureReason(label, feature),
+                code: needsRetakeSource ? RETAKE_SOURCE_RULE.code : "",
             };
         };
         const frameGridResolution = resolveClipFrameGridForLookup(
@@ -146,6 +115,15 @@ export const createClipStageCapabilityViews = (
                     : 1,
             frameGridResolution,
             audioSourceKinds: capabilities?.audioSourceKinds ?? [],
+            clipAudio: {
+                supported: supportsClipAudio(
+                    capabilities?.audioSourceKinds ?? [],
+                ),
+                reason: supportsClipAudio(capabilities?.audioSourceKinds ?? [])
+                    ? ""
+                    : `Clip audio is not supported by ${label}.`,
+                code: "",
+            },
             decision,
             authoringState: (feature, persisted) => {
                 const result = decision(feature);
@@ -197,10 +175,10 @@ export const createClipStageCapabilityViews = (
                     reason: supported
                         ? ""
                         : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection requires a resolved generating video model.`,
-                    rule: null,
+                    code: "",
                 };
             }
-            return { supported: true, reason: "", rule: null };
+            return { supported: true, reason: "", code: "" };
         };
         const stageView: StageCapabilityView = {
             decision,

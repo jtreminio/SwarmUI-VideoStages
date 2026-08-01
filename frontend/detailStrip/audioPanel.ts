@@ -37,12 +37,18 @@ export const buildAudioBody = (
     const { clipIdx } = sel;
     const clip = clips[clipIdx];
     const capabilityView = ctx.authoring().capabilities.forClip(clip);
-    const audioCapabilityDecision = capabilityView.decision("clipAudio");
+    const audioCapabilityDecision = capabilityView.clipAudio;
     const reuseDecision = capabilityView.decision("audioReuse");
     const durationDecision = capabilityView.decision("audioDerivedDuration");
-    const controlDurationDecision = capabilityView.decision(
-        "controlSignalDerivedDuration",
-    );
+    // The control signal is IC-LoRA media, so its duration rides on that feature; the reason
+    // still names the control the user is looking at.
+    const icLoraDecision = capabilityView.decision("icLora");
+    const controlDurationDecision = icLoraDecision.supported
+        ? icLoraDecision
+        : {
+              ...icLoraDecision,
+              reason: `Control-signal-derived clip duration is not supported by ${capabilityView.architectureLabel}.`,
+          };
     const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
         capabilityView.architectureId,
         clip.icLoras,

@@ -55,17 +55,11 @@ export const deriveAuthoringDiagnostics = (
     }
 
     for (const { clip, clipIdx } of executable) {
-        const view = capabilityViews?.forClip(clip);
-        const conditionalFeatures = [
-            { feature: "retake", persisted: clip.retake !== null },
-        ] as const;
-        for (const check of conditionalFeatures) {
-            const rule = view?.decision(check.feature).rule;
-            if (check.persisted && rule) {
-                diagnostics.push(
-                    diagnostic("error", rule.code, rule.reason, clipIdx),
-                );
-            }
+        const retake = capabilityViews?.forClip(clip).decision("retake");
+        if (clip.retake !== null && retake?.code) {
+            diagnostics.push(
+                diagnostic("error", retake.code, retake.reason, clipIdx),
+            );
         }
     }
 

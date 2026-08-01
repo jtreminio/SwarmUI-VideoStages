@@ -251,8 +251,7 @@ public class HostVideoArchitectureTests
         ArchitectureId architectureId = new(id);
         RuleDecision boundary = RuleDecision.Supported(
             $"{id}.cut",
-            "cut",
-            RuleScope.Boundary);
+            "cut");
         return new(
             architectureId,
             id,

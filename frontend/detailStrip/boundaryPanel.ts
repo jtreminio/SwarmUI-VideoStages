@@ -92,7 +92,7 @@ export const buildBoundaryBody = (
             buildCapabilityNotice({
                 supported: false,
                 reason: capability.reason,
-                rule: null,
+                code: "",
             }),
         );
     }

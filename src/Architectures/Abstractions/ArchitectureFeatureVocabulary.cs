@@ -3,79 +3,27 @@ namespace VideoStages.Architectures.Abstractions;
 internal sealed record ArchitectureFeatureVocabularyEntry(
     ArchitectureFeature Feature,
     string WireName,
-    string AuthoringKey,
     string DisplayLabel);
-
-internal sealed record ConditionalRuleCodeVocabularyEntry(
-    ConditionalRuleCodeId Id,
-    string Code);
 
 /// <summary>
 /// The single cross-language vocabulary for architecture features. <see cref="ArchitectureFeature"/>
-/// remains the typed programming surface; this registry owns its wire names, authoring keys, and
-/// labels.
+/// remains the typed programming surface; this registry owns its one wire spelling and its labels.
 /// </summary>
 internal static class ArchitectureFeatureVocabulary
 {
     internal static IReadOnlyList<ArchitectureFeatureVocabularyEntry> Features { get; } =
     [
-        new(
-            ArchitectureFeature.PromptRelay,
-            "prompt-relay",
-            "promptRelay",
-            "Relay prompts"),
-        new(
-            ArchitectureFeature.FrameReferences,
-            "frame-references",
-            "frameReferences",
-            "Frame references"),
-        new(
-            ArchitectureFeature.ReferenceFraming,
-            "reference-framing",
-            "referenceFraming",
-            "Reference framing"),
-        new(
-            ArchitectureFeature.Retake,
-            "retake",
-            "retake",
-            "Retakes"),
-        new(
-            ArchitectureFeature.ClipAudio,
-            "audio-sources",
-            "clipAudio",
-            "Clip audio"),
-        new(
-            ArchitectureFeature.AudioSegments,
-            "audio-segments",
-            "audioSegments",
-            "Audio segments"),
-        new(
-            ArchitectureFeature.AudioReuse,
-            "audio-reuse",
-            "audioReuse",
-            "Captured stage audio reuse"),
+        new(ArchitectureFeature.PromptRelay, "promptRelay", "Relay prompts"),
+        new(ArchitectureFeature.FrameReferences, "frameReferences", "Frame references"),
+        new(ArchitectureFeature.ReferenceFraming, "referenceFraming", "Reference framing"),
+        new(ArchitectureFeature.Retake, "retake", "Retakes"),
+        new(ArchitectureFeature.AudioSegments, "audioSegments", "Audio segments"),
+        new(ArchitectureFeature.AudioReuse, "audioReuse", "Captured stage audio reuse"),
         new(
             ArchitectureFeature.AudioDerivedDuration,
-            "audio-derived-duration",
             "audioDerivedDuration",
             "Audio-derived clip duration"),
-        new(
-            ArchitectureFeature.ControlSignalDerivedDuration,
-            "control-signal-derived-duration",
-            "controlSignalDerivedDuration",
-            "Control-signal-derived clip duration"),
-        new(
-            ArchitectureFeature.IcLora,
-            "ic-lora",
-            "icLora",
-            "IC-LoRA"),
-    ];
-
-    internal static IReadOnlyList<ConditionalRuleCodeVocabularyEntry>
-        ConditionalRuleCodes
-    { get; } =
-    [
-        new(ConditionalRuleCodeId.RetakeRequiresSource, "retake-source-required"),
+        new(ArchitectureFeature.IcLora, "icLora", "IC-LoRA"),
     ];
 
     internal static string WireName(ArchitectureEntryMode mode) => mode switch
@@ -86,16 +34,13 @@ internal static class ArchitectureFeatureVocabulary
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
 
-    internal static string RuleCode(ConditionalRuleCodeId id) =>
-        ConditionalRuleCodes.Single(entry => entry.Id == id).Code;
-
     internal static IEnumerable<string> WireNames(ArchitectureFeature features) =>
         Features
             .Where(entry => features.HasFlag(entry.Feature))
             .Select(entry => entry.WireName);
 
-    internal static string AuthoringKey(ArchitectureFeature feature) =>
-        Features.Single(entry => entry.Feature == feature).AuthoringKey;
+    internal static string WireName(ArchitectureFeature feature) =>
+        Features.Single(entry => entry.Feature == feature).WireName;
 
     /// <summary>
     /// Renders the checked-in TypeScript projection. A backend test compares this output byte for
@@ -108,46 +53,15 @@ internal static class ArchitectureFeatureVocabulary
 
         Line("// Generated from ArchitectureFeatureVocabulary.cs. Do not edit by hand.");
         Line();
-        Line("export const AUTHORING_FEATURE_WIRE_NAMES = {");
+        Line("export const AUTHORING_FEATURE_LABELS = {");
         foreach (ArchitectureFeatureVocabularyEntry feature in Features)
         {
-            Line($"    {feature.AuthoringKey}: {Quote(feature.WireName)},");
+            Line($"    {feature.WireName}: \"{feature.DisplayLabel}\",");
         }
         Line("} as const;");
         Line();
-        Line("export type GeneratedAuthoringFeature =");
-        Line("    keyof typeof AUTHORING_FEATURE_WIRE_NAMES;");
-        Line();
-        Line("export const AUTHORING_FEATURE_LABELS: Record<");
-        Line("    GeneratedAuthoringFeature,");
-        Line("    string");
-        Line("> = {");
-        foreach (ArchitectureFeatureVocabularyEntry feature in Features)
-        {
-            Line($"    {feature.AuthoringKey}: {Quote(feature.DisplayLabel)},");
-        }
-        Line("};");
-        Line();
-        Line("export const CONDITIONAL_RULE_CODES = {");
-        foreach (ConditionalRuleCodeVocabularyEntry rule in ConditionalRuleCodes)
-        {
-            Line($"    {CamelCase(rule.Id.ToString())}: {Quote(rule.Code)},");
-        }
-        Line("} as const;");
-        Line();
-        Line("export type GeneratedConditionalRuleCode =");
-        Line("    (typeof CONDITIONAL_RULE_CODES)[keyof typeof CONDITIONAL_RULE_CODES];");
+        Line("export type GeneratedAuthoringFeature = keyof typeof AUTHORING_FEATURE_LABELS;");
 
         return result.ToString();
     }
-
-    private static string CamelCase(string value) =>
-        char.ToLowerInvariant(value[0]) + value[1..];
-
-    private static string Quote(string value) =>
-        $"\"{value
-            .Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace("\"", "\\\"", StringComparison.Ordinal)
-            .Replace("\r", "\\r", StringComparison.Ordinal)
-            .Replace("\n", "\\n", StringComparison.Ordinal)}\"";
 }

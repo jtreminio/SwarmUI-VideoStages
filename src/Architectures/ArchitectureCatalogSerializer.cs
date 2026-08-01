@@ -27,7 +27,6 @@ internal static class ArchitectureCatalogSerializer
             new JProperty(
                 SerializeBoundaryMode(pair.Key),
                 SerializeRule(pair.Value)))),
-        ["rules"] = new JArray(descriptor.Rules.Select(SerializeRule)),
     };
 
     private static JObject SerializeCapabilities(VideoArchitectureDescriptor descriptor) => new()
@@ -44,7 +43,6 @@ internal static class ArchitectureCatalogSerializer
         ["support"] = SerializeRuleSupport(decision.Support),
         ["code"] = decision.Code,
         ["reason"] = decision.Reason,
-        ["scope"] = SerializeRuleScope(decision.Scope),
         ["constraints"] = decision.Constraints is null
             ? null
             : SerializeRuleConstraints(decision.Constraints),
@@ -102,12 +100,5 @@ internal static class ArchitectureCatalogSerializer
         RuleSupport.Unsupported => "unsupported",
         RuleSupport.Conditional => "conditional",
         _ => throw new ArgumentOutOfRangeException(nameof(support)),
-    };
-
-    private static string SerializeRuleScope(RuleScope scope) => scope switch
-    {
-        RuleScope.Clip => "clip",
-        RuleScope.Boundary => "boundary",
-        _ => throw new ArgumentOutOfRangeException(nameof(scope)),
     };
 }

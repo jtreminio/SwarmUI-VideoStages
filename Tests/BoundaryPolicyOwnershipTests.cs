@@ -37,7 +37,6 @@ public class BoundaryPolicyOwnershipTests
         RuleDecision continueMode = RuleDecision.Conditional(
             "fixture.boundary.continue",
             "Fixture grid.",
-            RuleScope.Boundary,
             new BoundaryRuleConstraints(
                 FrameStep: 5,
                 MinFrames: 10,

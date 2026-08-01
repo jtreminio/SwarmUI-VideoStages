@@ -90,7 +90,6 @@ public class BoundaryOverlapPlannerTests
         RuleDecision policy = RuleDecision.Conditional(
             "fake.crossfade",
             "test",
-            RuleScope.Boundary,
             new BoundaryRuleConstraints(
                 FrameStep: 4,
                 MinFrames: 5,

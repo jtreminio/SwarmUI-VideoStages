@@ -125,9 +125,7 @@ const effectiveGridModels = (
         clip.initVideo != null &&
         (!clipDescriptor ||
             !clipCapabilities ||
-            architectureFeatureSupport("retake", {
-                capabilities: clipCapabilities,
-            }));
+            architectureFeatureSupport("retake", clipCapabilities));
 
     return stages
         .filter((stage, stageIndex) => {
@@ -202,15 +200,11 @@ export const resolveClipFrameGridForLookup = (
     if (!capabilities) {
         return { status: "unknown" };
     }
-    const supportScope = { capabilities };
     if (
         (clip.clipLengthFromAudio === true &&
-            architectureFeatureSupport("audioDerivedDuration", supportScope)) ||
+            architectureFeatureSupport("audioDerivedDuration", capabilities)) ||
         (clip.clipLengthFromControlNet === true &&
-            architectureFeatureSupport(
-                "controlSignalDerivedDuration",
-                supportScope,
-            ))
+            architectureFeatureSupport("icLora", capabilities))
     ) {
         return { status: "not-applicable" };
     }

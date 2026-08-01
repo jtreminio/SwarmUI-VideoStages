@@ -4,16 +4,14 @@
     "label": "LTX Video 2.3",
     "capabilities": {
       "features": [
-        "prompt-relay",
-        "frame-references",
-        "reference-framing",
+        "promptRelay",
+        "frameReferences",
+        "referenceFraming",
         "retake",
-        "audio-sources",
-        "audio-segments",
-        "audio-reuse",
-        "audio-derived-duration",
-        "control-signal-derived-duration",
-        "ic-lora"
+        "audioSegments",
+        "audioReuse",
+        "audioDerivedDuration",
+        "icLora"
       ],
       "entryModes": [
         "text-to-video",
@@ -32,14 +30,12 @@
         "support": "supported",
         "code": "ltx2.boundary.cut",
         "reason": "Decoded LTX clips can be joined with a hard cut.",
-        "scope": "boundary",
         "constraints": null
       },
       "continue": {
         "support": "conditional",
         "code": "ltx2.boundary.continue",
         "reason": "Continue requires adjacent LTX clips and a compatible generated target.",
-        "scope": "boundary",
         "constraints": {
           "sameArchitecture": true,
           "frameStep": 8,
@@ -56,7 +52,6 @@
         "support": "conditional",
         "code": "ltx2.boundary.crossfade",
         "reason": "Crossfade currently uses the LTX-owned decoded transition path.",
-        "scope": "boundary",
         "constraints": {
           "sameArchitecture": true,
           "frameStep": 8,
@@ -69,15 +64,6 @@
           "targetDisallowsInitialReference": false
         }
       }
-    },
-    "rules": [
-      {
-        "support": "conditional",
-        "code": "retake-source-required",
-        "reason": "Retake requires an init-video clip.",
-        "scope": "clip",
-        "constraints": null
-      }
-    ]
+    }
   }
 }

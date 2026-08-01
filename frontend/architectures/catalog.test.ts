@@ -17,7 +17,6 @@ import {
     refreshAuthoritativeArchitectureCatalog,
     subscribeArchitectureCatalog,
 } from "./catalog";
-import { evaluateConditionalRule } from "./conditionalRules";
 import { createCapabilityViewResolver } from "./policy";
 import type { VideoArchitectureCatalogDto } from "./types";
 
@@ -129,10 +128,10 @@ describe("architecture catalog wire contract", () => {
 
         const retiredRuleAlias = structuredClone(dto) as unknown as {
             architectures: Array<{
-                rules: Array<Record<string, unknown>>;
+                boundaryRules: Record<string, Record<string, unknown>>;
             }>;
         };
-        retiredRuleAlias.architectures[0].rules[0].extras = {};
+        retiredRuleAlias.architectures[0].boundaryRules.cut.extras = {};
         expect(parseVideoArchitectureCatalog(retiredRuleAlias)).toBeNull();
     });
 
@@ -251,10 +250,6 @@ describe("architecture catalog wire contract", () => {
             parseVideoArchitectureCatalog(extraBoundaryConstraint),
         ).toBeNull();
 
-        const wrongScope = structuredClone(dto);
-        wrongScope.architectures[0].boundaryRules.continue.scope = "clip";
-        expect(parseVideoArchitectureCatalog(wrongScope)).toBeNull();
-
         const missingConditionalConstraints = structuredClone(dto);
         missingConditionalConstraints.architectures[0].boundaryRules.continue.constraints =
             null;
@@ -280,14 +275,9 @@ describe("architecture catalog wire contract", () => {
         expect(parseVideoArchitectureCatalog(invalidGrid)).toBeNull();
 
         const duplicateCode = structuredClone(dto);
-        duplicateCode.architectures[0].rules[0].code =
+        duplicateCode.architectures[0].boundaryRules.crossfade.code =
             duplicateCode.architectures[0].boundaryRules.continue.code;
         expect(parseVideoArchitectureCatalog(duplicateCode)).toBeNull();
-
-        const unknownExecutableRule = structuredClone(dto);
-        unknownExecutableRule.architectures[0].rules[0].code =
-            "future-rule-with-unknown-semantics";
-        expect(parseVideoArchitectureCatalog(unknownExecutableRule)).toBeNull();
 
         const arbitraryBoundaryCode = structuredClone(dto);
         arbitraryBoundaryCode.architectures[0].boundaryRules.continue.code =
@@ -295,33 +285,6 @@ describe("architecture catalog wire contract", () => {
         expect(parseVideoArchitectureCatalog(arbitraryBoundaryCode)).toEqual(
             arbitraryBoundaryCode,
         );
-    });
-
-    it("rejects known executable rules with mismatched semantics", () => {
-        const wrongScope = structuredClone(dto);
-        wrongScope.architectures[0].rules[0].scope = "boundary";
-        expect(parseVideoArchitectureCatalog(wrongScope)).toBeNull();
-
-        const unpublishedConstraint = structuredClone(dto);
-        unpublishedConstraint.architectures[0].rules[0].constraints = {
-            requiresAnyEntryMode: ["init-video"],
-        };
-        expect(parseVideoArchitectureCatalog(unpublishedConstraint)).toBeNull();
-    });
-
-    it("defensively treats unchecked unknown rules as violated", () => {
-        expect(
-            evaluateConditionalRule(
-                {
-                    support: "conditional",
-                    code: "future-rule",
-                    reason: "Unknown behavior",
-                    scope: "clip",
-                    constraints: {},
-                },
-                {},
-            ),
-        ).toBe(true);
     });
 
     it("uses exact authoritative boundary constraints", () => {
@@ -465,7 +428,7 @@ describe("authoritative catalog repository", () => {
         const replacement = structuredClone(dto);
         replacement.architectures[0].capabilities.features =
             replacement.architectures[0].capabilities.features.filter(
-                (capability) => capability !== "ic-lora",
+                (capability) => capability !== "icLora",
             );
         replacement.models = replacement.models.slice(0, 1);
         const requestJson = jest

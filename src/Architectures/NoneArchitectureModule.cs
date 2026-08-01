@@ -23,7 +23,7 @@ internal static class NoneArchitecture
             AudioSourceKind.Upload,
         ],
         [ArchitectureEntryMode.InitVideo],
-        ArchitectureFeature.ClipAudio | ArchitectureFeature.AudioSegments,
+        ArchitectureFeature.AudioSegments,
         BoundaryPolicy)
     {
         FrameGrid = 1,

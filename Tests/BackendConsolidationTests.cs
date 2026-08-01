@@ -293,7 +293,7 @@ public class BackendConsolidationTests
     {
         Assert.Equal(
             [ArchitectureEntryMode.InitVideo],
-            Ltx2ConditionalRulePolicySource.RetakeEntryModes);
+            Ltx2ClipPolicy.RetakeEntryModes);
     }
 
     // --- 5f: one bounded dispatch names every stage-input case ---------------------------------

@@ -11,7 +11,6 @@ describe("catalog boundary constraints", () => {
             support: "conditional",
             code: "future.boundary.continue",
             reason: "Future architecture continuity.",
-            scope: "boundary",
             constraints: {
                 frameStep: 5,
                 minFrames: 5,
@@ -31,7 +30,6 @@ describe("catalog boundary constraints", () => {
             support: "conditional",
             code: "future.boundary.offset-grid",
             reason: "Offset frame grid.",
-            scope: "boundary",
             constraints: {
                 frameStep: 4,
                 minFrames: 5,

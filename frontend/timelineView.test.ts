@@ -1352,6 +1352,8 @@ describe("unsupported persisted timeline controls", () => {
     it("keeps repair targets operable while disabling empty creation lanes", () => {
         const catalog = testArchitectureCatalog();
         catalog.architectures[0].capabilities.features = [];
+        // Audio sourcing is stated by the kinds, not by the feature list.
+        catalog.architectures[0].capabilities.audioSourceKinds = ["Disabled"];
         const persisted = minimalClip({
             prompt: "persisted major",
             promptWindows: [

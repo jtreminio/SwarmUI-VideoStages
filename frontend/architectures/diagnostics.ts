@@ -1,4 +1,8 @@
-import { audioSourceKind, canUseClipLengthFromAudio } from "../audioSource";
+import {
+    audioSourceKind,
+    canUseClipLengthFromAudio,
+    isAllowedAudioSource,
+} from "../audioSource";
 import {
     activeStageCount,
     executableBoundaries,
@@ -12,6 +16,7 @@ import { NONE_ARCHITECTURE_ID } from "./none/identity";
 import { createCapabilityViewResolver } from "./policy";
 import {
     architectureFeatureSupport,
+    supportsClipAudio,
     upscaleModeForMethod,
 } from "./policy/featureValues";
 import type { AuthoringFeature, CapabilityViewResolver } from "./policy/types";
@@ -41,11 +46,8 @@ const persistedCapabilityIssues = (
     capabilities: ArchitectureCapabilities,
 ): ArchitectureDiagnostic[] => {
     const diagnostics: ArchitectureDiagnostic[] = [];
-    const supports = (
-        feature: AuthoringFeature,
-        value?: { audioSource?: string; upscaleMethod?: string },
-    ): boolean =>
-        architectureFeatureSupport(feature, { capabilities, ...value });
+    const supports = (feature: AuthoringFeature): boolean =>
+        architectureFeatureSupport(feature, capabilities);
     const unsupported = (
         active: boolean,
         key: string,
@@ -108,12 +110,15 @@ const persistedCapabilityIssues = (
         );
     }
     const sourceKind = audioSourceKind(clip.audioSource);
-    const clipAudioCapabilitySupported = supports("clipAudio");
+    const clipAudioCapabilitySupported = supportsClipAudio(
+        capabilities.audioSourceKinds,
+    );
     const standaloneAudioSupported =
         capabilities.audioSourceKinds.includes("Native");
-    const selectedAudioSourceSupported = supports("clipAudio", {
-        audioSource: clip.audioSource,
-    });
+    const selectedAudioSourceSupported = isAllowedAudioSource(
+        capabilities.audioSourceKinds,
+        clip.audioSource,
+    );
     unsupported(
         !supports("audioReuse") && clip.reuseAudio,
         "audio-reuse",
@@ -124,9 +129,8 @@ const persistedCapabilityIssues = (
         "audio-derived-duration",
         "Audio-derived clip duration",
     );
-    const supportsControlSignalDerivedDuration = supports(
-        "controlSignalDerivedDuration",
-    );
+    // The control signal is IC-LoRA media, so its duration rides on that feature.
+    const supportsControlSignalDerivedDuration = supports("icLora");
     unsupported(
         !supportsControlSignalDerivedDuration && clip.clipLengthFromControlNet,
         "control-signal-derived-duration",

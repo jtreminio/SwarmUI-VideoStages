@@ -249,7 +249,7 @@ export const renderAudioTrackRow = (
             const badge = audioSourceBadge(clip.audioSource ?? "");
             const clipCapabilities = capabilities?.forClip(clip);
             const clipAudioSupported =
-                clipCapabilities?.decision("clipAudio").supported ?? true;
+                clipCapabilities?.clipAudio.supported ?? true;
             const persistedAudio =
                 clip.audioSource !== "Native" ||
                 clip.uploadedAudio !== null ||

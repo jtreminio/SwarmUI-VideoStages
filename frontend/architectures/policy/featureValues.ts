@@ -1,10 +1,32 @@
-import { isAllowedAudioSource } from "../../audioSource";
 import {
-    AUTHORING_FEATURE_LABELS,
-    AUTHORING_FEATURE_WIRE_NAMES,
-} from "../generatedFeatures";
+    AUDIO_SOURCE_DISABLED_KIND,
+    AUDIO_SOURCE_NATIVE,
+    isAllowedAudioSource,
+} from "../../audioSource";
+import { AUTHORING_FEATURE_LABELS } from "../generatedFeatures";
 import type { ArchitectureCapabilities } from "../types";
 import type { AuthoringFeature, ClipCapabilityView } from "./types";
+
+/**
+ * Retake re-diffuses a window of existing footage, so a clip with no init video has nothing to
+ * retake. The code is the one the backend plan reports for the same condition.
+ */
+export const RETAKE_SOURCE_RULE = {
+    code: "retake-source-required",
+    reason: "Retake requires an init-video clip.",
+} as const;
+
+/**
+ * Clip audio is authorable when the architecture takes a source the user picks. Native and
+ * Disabled are the two spellings of "whatever the model does on its own", so neither counts.
+ */
+export const supportsClipAudio = (
+    audioSourceKinds: readonly string[],
+): boolean =>
+    audioSourceKinds.some(
+        (kind) =>
+            kind !== AUDIO_SOURCE_DISABLED_KIND && kind !== AUDIO_SOURCE_NATIVE,
+    );
 
 export const architectureReason = (
     label: string,
@@ -39,29 +61,11 @@ export const upscaleModeForMethod = (method: string): UpscaleMethodMode => {
     return "unsupported";
 };
 
-export interface FeatureSupportScope {
-    capabilities: ArchitectureCapabilities;
-    /** Persisted audio source, when the caller needs the value checked too. */
-    audioSource?: string;
-}
-
 /**
  * The single "does this capability set support feature X" predicate. Capability views,
  * diagnostics, and temporal execution previews all answer through it.
  */
 export const architectureFeatureSupport = (
     feature: AuthoringFeature,
-    scope: FeatureSupportScope,
-): boolean => {
-    const capability = scope.capabilities;
-    if (!capability.features.includes(AUTHORING_FEATURE_WIRE_NAMES[feature])) {
-        return false;
-    }
-    if (feature === "clipAudio" && scope.audioSource !== undefined) {
-        return isAllowedAudioSource(
-            capability.audioSourceKinds,
-            scope.audioSource,
-        );
-    }
-    return true;
-};
+    capabilities: ArchitectureCapabilities,
+): boolean => capabilities.features.includes(feature);

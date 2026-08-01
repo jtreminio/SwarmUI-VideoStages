@@ -24,13 +24,7 @@ import type { DetailStripContext } from "./context";
 const restrictedCatalog = (): ArchitectureModelCatalog => {
     const models = testArchitectureCatalog();
     models.architectures[0].capabilities = testArchitectureCapabilities({
-        features: [
-            "prompt-relay",
-            "retake",
-            "audio-sources",
-            "audio-segments",
-            "ic-lora",
-        ],
+        features: ["promptRelay", "retake", "audioSegments", "icLora"],
     });
     return models;
 };
@@ -190,7 +184,7 @@ describe("persisted-but-unsupported repair contract", () => {
     it("keeps supported audio reuse operable while repairing unsupported clip audio", () => {
         const models = testArchitectureCatalog();
         models.architectures[0].capabilities = testArchitectureCapabilities({
-            features: ["audio-reuse"],
+            features: ["audioReuse"],
             audioSourceKinds: ["Disabled"],
         });
         const clip = minimalClip({
@@ -317,7 +311,7 @@ describe("persisted-but-unsupported repair contract", () => {
     it("normalizes a disallowed source without deleting supported duration state", () => {
         const models = testArchitectureCatalog();
         models.architectures[0].capabilities = testArchitectureCapabilities({
-            features: ["audio-sources", "audio-derived-duration"],
+            features: ["audioDerivedDuration"],
             audioSourceKinds: ["Upload"],
         });
         const clip = minimalClip({
@@ -523,7 +517,7 @@ describe("persisted-but-unsupported repair contract", () => {
     it("keeps control-signal duration repair operable when clip audio is read-only", () => {
         const models = testArchitectureCatalog();
         models.architectures[0].capabilities = testArchitectureCapabilities({
-            features: ["control-signal-derived-duration"],
+            features: ["icLora"],
             audioSourceKinds: ["Disabled"],
         });
         const clip = minimalClip({

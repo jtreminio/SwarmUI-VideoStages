@@ -44,6 +44,11 @@ internal enum ArchitectureEntryMode
     InitVideo,
 }
 
+/// <summary>
+/// Extras an architecture declares beyond the baseline every video model gets. Audio sourcing is
+/// not here: <see cref="VideoArchitectureDescriptor.AudioSourceKinds"/> already states it, and
+/// control-signal-derived duration is a property of <see cref="IcLora"/> media.
+/// </summary>
 [Flags]
 internal enum ArchitectureFeature
 {
@@ -52,28 +57,20 @@ internal enum ArchitectureFeature
     FrameReferences = 1 << 1,
     ReferenceFraming = 1 << 2,
     Retake = 1 << 3,
-    ClipAudio = 1 << 4,
-    AudioSegments = 1 << 5,
-    AudioReuse = 1 << 6,
-    AudioDerivedDuration = 1 << 7,
-    ControlSignalDerivedDuration = 1 << 8,
-    IcLora = 1 << 9,
+    AudioSegments = 1 << 4,
+    AudioReuse = 1 << 5,
+    AudioDerivedDuration = 1 << 6,
+    IcLora = 1 << 7,
 }
 
-// --- Rules: what an architecture allows in a given configuration, where a capability flag is
-// too coarse. Published with typed constraints so both sides evaluate the same thresholds. ---
+// --- Boundary rules: the only rule family, published with typed constraints so the backend and
+// the frontend evaluate the same thresholds, and executed by the backend from the same source. ---
 
 internal enum RuleSupport
 {
     Supported,
     Unsupported,
     Conditional,
-}
-
-internal enum RuleScope
-{
-    Clip,
-    Boundary,
 }
 
 internal sealed record BoundaryRuleConstraints(
@@ -86,42 +83,24 @@ internal sealed record BoundaryRuleConstraints(
     bool TargetRequiresStage,
     bool TargetDisallowsInitialReference);
 
-/// <summary>
-/// Every conditional rule the frontend evaluates. The wire spelling lives in
-/// <see cref="ArchitectureFeatureVocabulary.ConditionalRuleCodes"/>; publishing a rule whose code is
-/// not registered here fails the vocabulary coverage test.
-/// </summary>
-internal enum ConditionalRuleCodeId
-{
-    RetakeRequiresSource,
-}
-
 internal sealed record RuleDecision(
     RuleSupport Support,
     string Code,
     string Reason,
-    RuleScope Scope,
     BoundaryRuleConstraints Constraints = null)
 {
-    public static RuleDecision Supported(
-        string code,
-        string reason,
-        RuleScope scope,
-        BoundaryRuleConstraints constraints = null) =>
-        new(RuleSupport.Supported, code, reason, scope, constraints);
+    public static RuleDecision Supported(string code, string reason) =>
+        new(RuleSupport.Supported, code, reason);
 
-    public static RuleDecision Unsupported(string code, string reason, RuleScope scope) =>
-        new(RuleSupport.Unsupported, code, reason, scope);
+    public static RuleDecision Unsupported(string code, string reason) =>
+        new(RuleSupport.Unsupported, code, reason);
 
     public static RuleDecision Conditional(
         string code,
         string reason,
-        RuleScope scope,
-        BoundaryRuleConstraints constraints = null) =>
-        new(RuleSupport.Conditional, code, reason, scope, constraints);
+        BoundaryRuleConstraints constraints) =>
+        new(RuleSupport.Conditional, code, reason, constraints);
 }
-
-// --- Boundary policy: the one rule family the backend also executes, not just publishes. ---
 
 /// <summary>
 /// The single owner of an architecture's boundary behavior: catalog publication and plan
@@ -147,16 +126,13 @@ internal sealed class ArchitectureBoundaryPolicy
         {
             [BoundaryJoinType.Cut] = RuleDecision.Supported(
                 $"{codePrefix}.boundary.cut",
-                cutReason,
-                RuleScope.Boundary),
+                cutReason),
             [BoundaryJoinType.Continue] = RuleDecision.Unsupported(
                 $"{codePrefix}.boundary.continue.unsupported",
-                continueReason,
-                RuleScope.Boundary),
+                continueReason),
             [BoundaryJoinType.Crossfade] = RuleDecision.Unsupported(
                 $"{codePrefix}.boundary.crossfade.unsupported",
-                crossfadeReason,
-                RuleScope.Boundary),
+                crossfadeReason),
         });
 }
 
@@ -185,9 +161,6 @@ internal sealed record VideoArchitectureDescriptor(
 
     public IReadOnlyDictionary<BoundaryJoinType, RuleDecision> BoundaryRules =>
         BoundaryPolicy.Rules;
-
-    public IReadOnlyList<RuleDecision> Rules { get; init; } = [];
-
 }
 
 // --- A host model bound to the architecture that claimed it ---
