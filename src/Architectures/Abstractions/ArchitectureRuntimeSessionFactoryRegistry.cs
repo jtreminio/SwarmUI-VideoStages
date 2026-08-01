@@ -7,7 +7,6 @@ namespace VideoStages.Architectures.Abstractions;
 /// </summary>
 internal sealed class ArchitectureRuntimeSessionFactoryRegistry
 {
-    private readonly VideoExecutionPlan _plan;
     private readonly IReadOnlyList<IArchitectureGenerationSessionFactory> _activeFactories;
     private readonly ArchitectureId? _rootOwner;
 
@@ -16,7 +15,6 @@ internal sealed class ArchitectureRuntimeSessionFactoryRegistry
         VideoExecutionPlanContext request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        _plan = request.Plan;
         _activeFactories = Array.AsReadOnly((factories ?? []).ToArray());
         _rootOwner = request.RootOwnerArchitectureId;
     }
@@ -48,14 +46,7 @@ internal sealed class ArchitectureRuntimeSessionFactoryRegistry
             .Where(pair => pair.BoundaryAssembler is not null)
             .ToDictionary(pair => pair.ArchitectureId, pair => pair.BoundaryAssembler);
 
-    private void RequirePlan(VideoExecutionPlan plan)
-    {
+    private static void RequirePlan(VideoExecutionPlan plan) =>
         ArgumentNullException.ThrowIfNull(plan);
-        if (!ReferenceEquals(plan, _plan))
-        {
-            throw new InvalidOperationException(
-                "The architecture runtime registry cannot execute a different video plan.");
-        }
-    }
 
 }

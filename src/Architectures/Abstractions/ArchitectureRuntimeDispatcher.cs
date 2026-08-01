@@ -77,8 +77,7 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
                 + $"'{output.ClipId}' instead of planned clip '{context.Clip.ClipId}'.");
         }
         ArchitectureId plannedArchitectureId = context.Clip.Architecture.Id;
-        if (output.ArchitectureId != session.ArchitectureId
-            || output.ArchitectureId != plannedArchitectureId)
+        if (output.ArchitectureId != session.ArchitectureId)
         {
             throw new InvalidOperationException(
                 $"Architecture '{session.ArchitectureId}' returned artifact for architecture "

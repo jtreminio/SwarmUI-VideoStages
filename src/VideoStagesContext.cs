@@ -223,9 +223,6 @@ internal sealed class VideoExecutionPlanContext
         {
             _failure.Throw();
         }
-        PlanDiagnosticReporter.ThrowIfBlocking(
-            Plan.Diagnostics,
-            "VideoStages could not create a valid architecture execution plan");
         // Do not prepare lazily from a mutation callback: alternate host callbacks run after core
         // graph construction. The registered graph-free preflight phase is the sole preparation
         // owner, and skipping it must fail before this extension mutates anything.

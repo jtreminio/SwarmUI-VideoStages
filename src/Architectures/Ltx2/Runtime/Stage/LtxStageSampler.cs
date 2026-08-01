@@ -60,33 +60,6 @@ internal sealed class LtxStageSampler(WorkflowGenerator g)
             CropGuidesAfterSampler(genInfo, stageFrame);
         }
 
-        if (genInfo.DoFirstFrameLatentSwap is not null)
-        {
-            ApplyFirstFrameLatentSwap(genInfo);
-        }
-    }
-
-    private void ApplyFirstFrameLatentSwap(WorkflowGenerator.ImageToVideoGenInfo genInfo)
-    {
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        ReplaceVideoLatentFramesNode replace = bridge.AddNode(new ReplaceVideoLatentFramesNode().With(
-            Index: 0));
-        if (g.CurrentMedia?.Path is JArray destPath)
-        {
-            replace.Destination.ConnectFromPath(bridge, destPath);
-        }
-        if (genInfo.DoFirstFrameLatentSwap is JArray sourcePath)
-        {
-            replace.Source.TryConnectFromPath(bridge, sourcePath);
-        }
-
-        NormalizeVideoLatentStartNode normalize = bridge.AddNode(new NormalizeVideoLatentStartNode().With(
-            StartFrameCount: 4,
-            ReferenceFrameCount: 5,
-            LatentInput: replace.LATENT));
-
-        g.CurrentMedia = g.CurrentMedia.WithPath(normalize.Latent);
-        genInfo.DoFirstFrameLatentSwap = null;
     }
 
     private void CropGuidesAfterSampler(

@@ -228,14 +228,7 @@ internal sealed class VideoArchitectureExecutionHost
         List<IArchitectureGenerationSessionFactoryProvider> active = [];
         foreach (ArchitectureId id in activeArchitectureIds)
         {
-            if (!providers.TryGetValue(
-                id,
-                out IArchitectureGenerationSessionFactoryProvider provider))
-            {
-                throw new InvalidOperationException(
-                    $"No generation runtime provider is registered for architecture '{id}'.");
-            }
-            active.Add(provider);
+            active.Add(providers[id]);
         }
         return active;
     }

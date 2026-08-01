@@ -4,7 +4,6 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 using VideoStages.Generated;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
@@ -35,14 +34,6 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
         {
             return false;
         }
-        if (!Ltx2HostIntegration.IsAvailable(g.Features))
-        {
-            throw new SwarmUserErrorException(
-                "VideoStages IC-LoRAs require the ComfyUI-LTXVideo custom nodes. "
-                + $"Install {Ltx2HostIntegration.NodeUrl} "
-                + "or use SwarmUI's LTXVideo feature installer.");
-        }
-
         using WorkflowBridge bridge = BridgeSync.For(g);
         List<LTXICLoRALoaderModelOnlyNode> loaders = [];
         foreach (ResolvedIcLoraModel entry in resolved)

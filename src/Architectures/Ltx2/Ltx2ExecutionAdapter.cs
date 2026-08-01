@@ -48,8 +48,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
                 pipeline.AudioMaskResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo();
                 break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(context));
         }
     }
 
@@ -194,11 +192,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             ArchitectureClipRuntimeContext context)
         {
             ArgumentNullException.ThrowIfNull(context);
-            if (context.Clip.ArchitecturePayload is not Ltx2ClipPayload)
-            {
-                throw new InvalidOperationException(
-                    $"Clip {context.Clip.ClipId} has no LTX architecture payload.");
-            }
             StageClipExecutionContext stageContext = new(
                 context,
                 plan,

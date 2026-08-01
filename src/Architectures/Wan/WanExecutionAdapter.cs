@@ -82,8 +82,6 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
             case ArchitectureHostPhase.CaptureRefinerReference:
             case ArchitectureHostPhase.CaptureControlNetPreprocessors:
                 break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(context));
         }
     }
 
