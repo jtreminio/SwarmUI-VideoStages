@@ -11,9 +11,7 @@ internal sealed record WanClipPlanCompilation(
     IReadOnlyList<PlanDiagnostic> Diagnostics);
 
 /// <summary>
-/// Compiles the Wan-owned settings of one clip before the common clip plan is assembled. Settings
-/// this slice cannot honor are refused here rather than dropped: a compiled payload is the whole
-/// instruction, so anything it omits must have been rejected.
+/// Compiles Wan-owned clip settings and reports unsupported or normalized options.
 /// </summary>
 internal static class WanClipPlanCompiler
 {
@@ -35,6 +33,19 @@ internal static class WanClipPlanCompiler
                     "wan22.option.unsupported",
                     $"Clip {clip.Id} configures '{option}', which architecture "
                         + $"'{WanArchitectureModule.ArchitectureId}' does not support.",
+                    clip.Id,
+                    stageId));
+            }
+        }
+        void WarnAndNormalize(bool configured, string option, int? stageId = null)
+        {
+            if (configured)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
+                    "wan22.option.unsupported",
+                    $"Clip {clip.Id} configures '{option}', which architecture "
+                        + $"'{WanArchitectureModule.ArchitectureId}' normalizes to 'PreviousStage'.",
                     clip.Id,
                     stageId));
             }
@@ -61,7 +72,7 @@ internal static class WanClipPlanCompiler
                     clip,
                     stage,
                     NormalLoraTargetPolicy.ModelOnly);
-            Refuse(
+            WarnAndNormalize(
                 !firstStage
                     // Text-root parsing canonicalizes every selector to Generated. In other entry
                     // modes, Generated is individually supported but cannot describe the executable

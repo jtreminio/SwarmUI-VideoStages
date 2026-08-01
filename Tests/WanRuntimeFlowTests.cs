@@ -3321,24 +3321,23 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Global_creativity_is_refused_in_favor_of_clip_local_Wan_control()
+    public void Global_creativity_warns_and_uses_clip_local_Wan_control()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
 
         T2IParamInput input = WanInput(models, steps: 10);
-        PreflightSnapshot snapshot = new();
         input.Set(T2IParamTypes.Video2VideoCreativity, 0.5);
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                WorkflowTestHarness.Template_BaseOnlyImage()
-                    .Concat([snapshot.Step(), WorkflowTestHarness.CoreImageToVideoStep()])
-                    .Concat(WorkflowTestHarness.VideoStagesSteps())));
-        Assert.Contains("refinement strength is clip-local", error.Message);
-        Assert.DoesNotContain("request: VideoStages:", error.Message);
-        snapshot.AssertUnchanged();
+        (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            WorkflowTestHarness.Template_BaseOnlyImage()
+                .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
+                .Concat(WorkflowTestHarness.VideoStagesSteps()));
+
+        Assert.NotEmpty(workflow);
+        List<string> warnings = Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
+        Assert.Contains(warnings, warning => warning.Contains("refinement strength is clip-local"));
     }
 
     [Fact]

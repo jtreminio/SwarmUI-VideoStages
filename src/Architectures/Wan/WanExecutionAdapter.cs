@@ -16,9 +16,8 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
 
     /// <summary>
-    /// Validates request-global host video parameters before any host graph phase runs. Parameters
-    /// that do not belong to the authored WAN timeline are either projected to one warning and
-    /// ignored, or refused when silently changing their meaning would be misleading.
+    /// Reports request-global host video parameters that cannot be applied to the authored Wan
+    /// timeline before any host graph phase runs.
     /// </summary>
     public IReadOnlyList<PlanDiagnostic> PreflightRequest(
         ArchitectureRequestPreflightContext context)
@@ -52,7 +51,7 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
                 out double creativity)
             && creativity != 1)
         {
-            diagnostics.Add(Refuse(
+            diagnostics.Add(Warn(
                 "'Video2Video Creativity' is request-global, but Wan refinement strength is "
                 + "clip-local. Use init-video stage 0 or each later stage's authored 'Control' "
                 + "value instead."));
@@ -92,11 +91,11 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
             "Wan",
             plan => new WanStockHostVideoBehavior(generator, plan));
 
-    private static PlanDiagnostic Refuse(
+    private static PlanDiagnostic Warn(
         string message,
         int? clipId = null,
         int? stageId = null) => new(
-        PlanDiagnosticSeverity.Error,
+        PlanDiagnosticSeverity.Warning,
         "wan22.host-param.unsupported",
         message,
         clipId,

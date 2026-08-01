@@ -55,6 +55,25 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
+    public void Compile_RetakeWithoutInitVideo_WarnsAndDropsRetake()
+    {
+        ClipSpec clip = GeneratedClip(
+            0,
+            Stage(10, retake: new RetakeWindowSpec(8, 16, 1)));
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, clip));
+
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code == "retake-source-required"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.Null(Assert.Single(Assert.Single(plan.Clips).Stages).RequireLtx2Payload().Retake);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void Compile_RootEnvironment_SeparatesRootUseCoreAndAudioOwnership()
     {
         ClipSpec initVideoLead = InitVideoClip(0);
@@ -226,7 +245,7 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_TypedStageFields_AreActionableWithoutCompatibilitySource()
+    public void Compile_TypedStageFields_AreActionableWithValidSources()
     {
         List<LoraRef> clipLoras = [new("clip.safetensors", 0.6, 0.4)];
         List<LoraRef> stageLoras = [new("stage.safetensors", 1.2)];
@@ -297,7 +316,8 @@ public class VideoExecutionPlanCompilerTests
             [
                 new("opening prompt", 0, 1),
                 new("ending prompt", 2, 1),
-            ]);
+            ],
+            InitVideo: new InitVideoSpec("data", "source.mp4", 0));
 
         StagePlan compiled = TestPlanCompiler
             .Compile(Spec(false, clip))

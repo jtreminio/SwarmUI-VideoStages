@@ -5,9 +5,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal sealed class Ltx2ArchitectureModule :
-    IVideoArchitectureModule,
-    IArchitecturePlanValidator
+internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
 {
     internal static ArchitectureId ArchitectureId { get; } = new("ltx2");
 
@@ -94,10 +92,6 @@ internal sealed class Ltx2ArchitectureModule :
                 pair => (IArchitectureStagePayload)pair.Value),
             compilation.Diagnostics);
     }
-
-    public IReadOnlyList<PlanDiagnostic> ValidatePlan(
-        IReadOnlyList<ClipPlan> architectureClips) =>
-        Ltx2ClipPolicy.Validate(architectureClips);
 
 }
 

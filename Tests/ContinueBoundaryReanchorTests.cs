@@ -198,7 +198,10 @@ public partial class StageFlowTests
                 ReanchorStageSpec(2, model) with { RetakeWindow = new RetakeWindowSpec(24, 8, 1.0) },
                 // Control 0 with no retake and no latent scaling regenerates nothing.
                 ReanchorStageSpec(3, model) with { Control = 0.0 },
-                ReanchorStageSpec(4, model)),
+                ReanchorStageSpec(4, model)) with
+            {
+                InitVideo = new("data", "source.mp4", 0),
+            },
         ]);
         VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
         IReadOnlyList<StagePlan> stages = plan.Clips[1].Stages;

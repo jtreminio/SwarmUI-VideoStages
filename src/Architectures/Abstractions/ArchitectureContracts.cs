@@ -241,16 +241,6 @@ internal interface IArchitectureEffectiveRequestProjector
 }
 
 /// <summary>
-/// Optional architecture validation that runs after common compilation, when every clip carries
-/// its compiled payload and its common audio/entry facts. Per-clip compilation cannot see those,
-/// which is why this hook exists; it is not a timeline-wide pass.
-/// </summary>
-internal interface IArchitecturePlanValidator
-{
-    IReadOnlyList<PlanDiagnostic> ValidatePlan(IReadOnlyList<ClipPlan> architectureClips);
-}
-
-/// <summary>
 /// Optional architecture-owned interpretation of a host ControlNet source. Common audio planning
 /// carries only the authored duration owner; it never infers IC-LoRA source semantics.
 /// </summary>

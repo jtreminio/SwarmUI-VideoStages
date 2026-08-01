@@ -1123,7 +1123,7 @@ public class WanArchitectureTests
                     ClipStageRawIndex = 1,
                 }),
             "finite range [0, 1]");
-        AssertRefused(
+        AssertWarnedAndNormalized(
             GeneratedClip(
                 0,
                 stage,
@@ -1251,6 +1251,20 @@ public class WanArchitectureTests
 
     private static void AssertRefused(ClipSpec clip, string expectedOption) =>
         AssertBlocked(Compile(clip), "wan22.option.unsupported", expectedOption);
+
+    private static void AssertWarnedAndNormalized(ClipSpec clip, string expectedOption)
+    {
+        VideoExecutionPlan plan = Compile(clip);
+        Assert.Contains(
+            plan.Diagnostics,
+            item => item.Code == "wan22.option.unsupported"
+                && item.Severity == PlanDiagnosticSeverity.Warning
+                && item.Message.Contains(expectedOption));
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            item => item.Severity == PlanDiagnosticSeverity.Error);
+        Assert.NotNull(Assert.Single(plan.Clips).ArchitecturePayload);
+    }
 
     private static void AssertBlocked(
         VideoExecutionPlan plan,

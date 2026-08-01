@@ -241,14 +241,6 @@ public class BackendConsolidationTests
     }
 
     [Fact]
-    public void Conditional_rule_thresholds_come_from_the_published_constraints()
-    {
-        Assert.Equal(
-            [ArchitectureEntryMode.InitVideo],
-            Ltx2ClipPolicy.RetakeEntryModes);
-    }
-
-    [Fact]
     public void Stage_input_dispatch_names_the_primary_guide_cases_in_priority_order()
     {
         Assert.Equal(

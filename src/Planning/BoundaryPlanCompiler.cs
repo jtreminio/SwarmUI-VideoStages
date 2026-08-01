@@ -59,7 +59,7 @@ internal static class BoundaryPlanCompiler
                 effective = BoundaryJoinType.Cut;
                 fallback = BoundaryFallbackReason.ArchitectureRuleUnsupported;
                 diagnostics.Add(new PlanDiagnostic(
-                    PlanDiagnosticSeverity.Error,
+                    PlanDiagnosticSeverity.Warning,
                     "boundary-cross-architecture-non-cut",
                     $"Clip {from.Id} boundary '{from.BoundaryOut}' is invalid between "
                         + $"architecture '{plannedFrom.Architecture.Id}' and "
@@ -72,7 +72,7 @@ internal static class BoundaryPlanCompiler
                 effective = BoundaryJoinType.Cut;
                 fallback = BoundaryFallbackReason.ArchitectureRuleUnsupported;
                 diagnostics.Add(new PlanDiagnostic(
-                    PlanDiagnosticSeverity.Error,
+                    PlanDiagnosticSeverity.Warning,
                     modePolicy.Code,
                     modePolicy.Reason,
                     from.Id));

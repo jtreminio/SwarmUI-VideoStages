@@ -26,6 +26,8 @@ internal sealed record Ltx2AudioPlan(
 
 internal static class Ltx2AudioPlanCompiler
 {
+    private const int AudioReuseMinimumActiveStages = 3;
+
     internal static Ltx2AudioPlan Compile(
         ClipSpec clip,
         int? controlNetSourceIndex)
@@ -56,7 +58,7 @@ internal static class Ltx2AudioPlanCompiler
     {
         int stageCount = clip.Stages?.Count ?? 0;
         bool eligible = clip.ReuseAudio
-            && stageCount >= Ltx2ClipPolicy.AudioReuseMinimumActiveStages;
+            && stageCount >= AudioReuseMinimumActiveStages;
         return new(
             clip.ReuseAudio,
             eligible,

@@ -30,6 +30,17 @@ internal static class Ltx2ClipPlanCompiler
         Dictionary<int, Ltx2StagePayload> stages = [];
         foreach (StageSpec stage in clip.Stages ?? [])
         {
+            RetakePlan retake = CompileRetake(stage.RetakeWindow);
+            if (retake is not null && context.EntryMode != ArchitectureEntryMode.InitVideo)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
+                    "retake-source-required",
+                    "Retake was ignored because the clip has no init video.",
+                    clip.Id,
+                    stage.Id));
+                retake = null;
+            }
             Ltx2StagePayload payload = new(
                 new StageCorePlan(
                     stage.Control,
@@ -42,7 +53,7 @@ internal static class Ltx2ClipPlanCompiler
                 CompileGuideReference(stage.ImageReference),
                 stage.ImageRefWasExplicit,
                 icLoras.Stages[stage.ClipStageRawIndex],
-                CompileRetake(stage.RetakeWindow),
+                retake,
                 relay,
                 ImageReferencePlanCompiler.Compile(clip, stage),
                 CompileAudioAction(audio, stage));

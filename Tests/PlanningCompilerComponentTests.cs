@@ -710,9 +710,6 @@ public class PlanningCompilerComponentTests
                 $"VideoStages: {boundaryBudget.Reason}."));
         }
         RootPlan root = RootPlanCompiler.Compile(environment, clips);
-        diagnostics.AddRange(
-            Ltx2ArchitectureModule.Instance.ValidatePlan(plans));
-
         VideoExecutionPlan plan = new(
             spec.Width,
             spec.Height,

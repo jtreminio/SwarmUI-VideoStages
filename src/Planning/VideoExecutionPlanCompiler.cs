@@ -141,25 +141,6 @@ internal static class VideoExecutionPlanCompiler
                 "boundary-frame-budget-reconciled",
                 $"{boundaryBudget.Reason}."));
         }
-        IVideoArchitectureModule[] modules = [
-            .. activeClips
-                .Select(clip => architecturePlanning.Clips.GetValueOrDefault(clip.Id)?.Module)
-                .Where(module => module is not null)
-                .Distinct()
-        ];
-        foreach (IArchitecturePlanValidator validator in modules.OfType<IArchitecturePlanValidator>())
-        {
-            HashSet<int> architectureClipIds = [
-                .. activeClips
-                    .Where(clip => ReferenceEquals(
-                        architecturePlanning.Clips.GetValueOrDefault(clip.Id)?.Module,
-                        validator))
-                    .Select(clip => clip.Id)
-            ];
-            diagnostics.AddRange(validator.ValidatePlan(
-                [.. clips.Where(clip => architectureClipIds.Contains(clip.ClipId))]));
-        }
-
         VideoExecutionPlan plan = new(
             spec.Width,
             spec.Height,
