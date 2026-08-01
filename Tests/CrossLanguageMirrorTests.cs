@@ -3,6 +3,7 @@ using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2;
@@ -13,24 +14,7 @@ using Xunit;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// Backend halves of the cross-language drift tests (map Part 3 mirrors). Each reads a JSON fixture in
-/// <c>Tests/fixtures/</c> that the matching jest test also asserts against, so a deliberate constant
-/// change on either side breaks the pair:
-/// <list type="bullet">
-/// <item>M1 — typed boundary budgeting via <see cref="BoundaryOverlapPlanner"/> vs
-/// frontend <c>boundaryPlan.crossfadePlanForClips</c>.</item>
-/// <item>M2 — resolved frame alignment: structural duration parsing plus
-/// <see cref="StaticGeneratedFrameGrid.SnapUp"/> vs frontend
-/// <c>renderUtils.framesForClip</c>.</item>
-/// <item>M4 — IC-LoRA auto-model naming: <see cref="IcLoraWeights"/> vs frontend
-/// <c>icLoraPresets</c>.</item>
-/// <item>Upscale mode classification: <see cref="StageUpscalePlanCompiler"/> vs frontend
-/// <c>upscaleModeForMethod</c>.</item>
-/// <item>Audio sources that can drive clip duration:
-/// <see cref="AudioSourceKindPolicy.CanDriveClipDuration"/> vs frontend
-/// <c>audioSource.canUseClipLengthFromAudio</c>, the shared predicate both temporal-grid
-/// applicability gates read.</item>
-/// </list>
+/// Backend checks for fixtures also asserted by frontend or Comfy-node tests.
 /// </summary>
 [Collection("VideoStagesTests")]
 public class CrossLanguageMirrorTests
@@ -109,10 +93,13 @@ public class CrossLanguageMirrorTests
     {
         foreach (JObject c in LoadFixture("dimension-snap-cases.json").OfType<JObject>())
         {
-            Assert.True(DimensionSnap.TryDimensionsFor(
+            Assert.True(T2IParamInput.ResolutionAspectReferences.TryGetValue(
                 c.Value<string>("ratio"),
-                c.Value<int>("sideLength"),
-                out (int Width, int Height) raw));
+                out (int Width, int Height) reference));
+            int sideLength = c.Value<int>("sideLength");
+            (int Width, int Height) raw = (
+                (int)Utilities.RoundToPrecision(reference.Width * (sideLength / 512.0), 16),
+                (int)Utilities.RoundToPrecision(reference.Height * (sideLength / 512.0), 16));
             Assert.Equal(c.Value<int>("rawWidth"), raw.Width);
             Assert.Equal(c.Value<int>("rawHeight"), raw.Height);
             Assert.Equal(
@@ -175,8 +162,7 @@ public class CrossLanguageMirrorTests
 
             int boundaryCount = Math.Max(0, frames.Length - 1);
             int[] actualOverlaps = plan?.BoundaryOverlap ?? new int[boundaryCount];
-            // A null plan is either "no overlap requested" or "requested but fell back"; only the latter is
-            // a fallback, matching the frontend's explicit flag.
+            // A null plan is a fallback only when an overlap was requested.
             bool anyRequested = boundaries.Take(boundaryCount).Any(
                 b => string.Equals(b, Constants.BoundaryOutCrossfade, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(b, Constants.BoundaryOutContinue, StringComparison.OrdinalIgnoreCase));

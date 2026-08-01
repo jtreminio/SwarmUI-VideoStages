@@ -1,8 +1,7 @@
 namespace VideoStages;
 
 /// <summary>
-/// Shared pixel-grid snapping. Keep this byte-for-byte equivalent in behavior to
-/// <c>frontend/dimensionSnap.ts</c>; the shared fixture pins both implementations.
+/// Pixel-grid snapping mirrored by <c>frontend/dimensionSnap.ts</c> and checked by a shared fixture.
 /// </summary>
 internal static class DimensionSnap
 {
@@ -11,37 +10,6 @@ internal static class DimensionSnap
 
     private const double AreaDriftWeight = 0.15;
     private const double ScoreEpsilon = 1e-12;
-    private static readonly IReadOnlyDictionary<string, (int Width, int Height)>
-        AspectReferences = new Dictionary<string, (int Width, int Height)>(
-            StringComparer.Ordinal)
-        {
-            ["1:1"] = (512, 512),
-            ["4:3"] = (576, 448),
-            ["3:2"] = (608, 416),
-            ["8:5"] = (608, 384),
-            ["16:9"] = (672, 384),
-            ["21:9"] = (768, 320),
-            ["2:3"] = (416, 608),
-            ["5:8"] = (384, 608),
-            ["9:16"] = (384, 672),
-            ["9:21"] = (320, 768),
-        };
-
-    internal static bool TryDimensionsFor(
-        string ratio,
-        int sideLength,
-        out (int Width, int Height) dimensions)
-    {
-        if (!AspectReferences.TryGetValue($"{ratio}", out (int Width, int Height) reference))
-        {
-            dimensions = default;
-            return false;
-        }
-        dimensions = (
-            (int)Math.Round(reference.Width * (Math.Max(1, sideLength) / 512.0) / 16) * 16,
-            (int)Math.Round(reference.Height * (Math.Max(1, sideLength) / 512.0) / 16) * 16);
-        return true;
-    }
 
     internal static (int Width, int Height) Snap(
         double width,
