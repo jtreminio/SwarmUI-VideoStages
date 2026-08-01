@@ -126,9 +126,6 @@ internal sealed record BoundaryRuleConstraints(
     bool TargetRequiresStage,
     bool TargetDisallowsInitialReference) : RuleConstraints;
 
-internal sealed record MinimumActiveStagesRuleConstraints(
-    int MinimumActiveStages) : RuleConstraints;
-
 internal sealed record RequiredEntryModesRuleConstraints(
     IReadOnlyList<ArchitectureEntryMode> RequiresAnyEntryMode) : RuleConstraints;
 
@@ -139,7 +136,6 @@ internal sealed record RequiredEntryModesRuleConstraints(
 /// </summary>
 internal enum ConditionalRuleCodeId
 {
-    AudioReuseRequiresStages,
     PromptRelayRequiresFixedLength,
     RetakeExcludesReferences,
     RetakeRequiresSource,

@@ -9,13 +9,11 @@ namespace VideoStages.Architectures.Ltx2.Planning;
 /// </summary>
 internal static class Ltx2ConditionalRulePolicySource
 {
-    internal static RuleDecision AudioReuseRequiresThreeStages { get; } =
-        RuleDecision.Conditional(
-            ArchitectureFeatureVocabulary.RuleCode(
-                ConditionalRuleCodeId.AudioReuseRequiresStages),
-            "Audio reuse needs at least three active stages: generate, capture, then reuse.",
-            RuleScope.Clip,
-            new MinimumActiveStagesRuleConstraints(3));
+    /// <summary>
+    /// Audio reuse needs generate, capture, then reuse. Falling short is not an authoring
+    /// decision to gate or report, so this stays a compile-time eligibility fact.
+    /// </summary>
+    internal const int AudioReuseMinimumActiveStages = 3;
 
     internal static RuleDecision PromptRelayRequiresFixedLength { get; } =
         RuleDecision.Conditional(
@@ -41,18 +39,14 @@ internal static class Ltx2ConditionalRulePolicySource
                 [ArchitectureEntryMode.InitVideo]));
 
     /// <summary>
-    /// Every threshold below is read back out of the published rule, so the catalog value and the
-    /// value the evaluator enforces are the same number by construction.
+    /// Read back out of the published rule, so the catalog value and the value the evaluator
+    /// enforces are the same list by construction.
     /// </summary>
-    internal static int AudioReuseMinimumActiveStages { get; } = AudioReuseRequiresThreeStages
-        .Require<MinimumActiveStagesRuleConstraints>().MinimumActiveStages;
-
     internal static IReadOnlyList<ArchitectureEntryMode> RetakeEntryModes { get; } =
         RetakeRequiresSource.Require<RequiredEntryModesRuleConstraints>().RequiresAnyEntryMode;
 
     internal static IReadOnlyList<RuleDecision> PublishedRules { get; } =
     [
-        AudioReuseRequiresThreeStages,
         PromptRelayRequiresFixedLength,
         RetakeAndReferencesAreExclusive,
         RetakeRequiresSource,

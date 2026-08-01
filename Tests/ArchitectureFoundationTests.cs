@@ -1520,10 +1520,6 @@ public class ArchitectureFoundationTests
             rules.Values<JObject>(),
             rule => rule["code"]?.ToString() == "retake-frame-references-unsupported"
                 && rule["scope"]?.ToString() == "stage");
-        Assert.Contains(
-            rules.Values<JObject>(),
-            rule => rule["code"]?.ToString() == "audio.reuse.requires_three_stages"
-                && rule["constraints"]?["minimumActiveStages"]?.Value<int>() == 3);
         JObject wan = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "wan22");

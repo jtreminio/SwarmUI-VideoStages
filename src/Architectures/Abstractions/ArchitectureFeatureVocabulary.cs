@@ -127,9 +127,6 @@ internal static class ArchitectureFeatureVocabulary
     { get; } =
     [
         new(
-            ConditionalRuleCodeId.AudioReuseRequiresStages,
-            "audio.reuse.requires_three_stages"),
-        new(
             ConditionalRuleCodeId.PromptRelayRequiresFixedLength,
             "prompt-relay-dynamic-length-unsupported"),
         new(

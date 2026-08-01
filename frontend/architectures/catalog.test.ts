@@ -306,9 +306,13 @@ describe("architecture catalog wire contract", () => {
         expect(parseVideoArchitectureCatalog(wrongScope)).toBeNull();
 
         const extraConstraint = structuredClone(dto);
-        const constraints = extraConstraint.architectures[0].rules[0]
-            .constraints as Record<string, unknown>;
-        constraints.unpublishedBehavior = true;
+        const constrained = extraConstraint.architectures[0].rules.find(
+            (rule) => rule.constraints !== null,
+        );
+        if (!constrained?.constraints) {
+            throw new Error("no rule publishes constraints");
+        }
+        constrained.constraints.unpublishedBehavior = true;
         expect(parseVideoArchitectureCatalog(extraConstraint)).toBeNull();
     });
 

@@ -99,13 +99,6 @@ const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
     }
     const constraints = value.constraints;
     switch (value.code) {
-        case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
-            return (
-                value.scope === "clip" &&
-                hasExactKeys(constraints, ["minimumActiveStages"]) &&
-                Number.isInteger(constraints.minimumActiveStages) &&
-                Number(constraints.minimumActiveStages) > 0
-            );
         case CONDITIONAL_RULE_CODES.retakeRequiresSource:
             // The listed modes are read, not assumed, so the backend can widen them.
             return (

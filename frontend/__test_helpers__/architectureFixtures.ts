@@ -93,15 +93,6 @@ export const testArchitectureCatalog = (
             rules: [
                 {
                     support: "conditional",
-                    code: "audio.reuse.requires_three_stages",
-                    reason: "Audio reuse needs at least three active stages: generate, capture, then reuse.",
-                    scope: "clip",
-                    constraints: {
-                        minimumActiveStages: 3,
-                    },
-                },
-                {
-                    support: "conditional",
                     code: "prompt-relay-dynamic-length-unsupported",
                     reason: "Prompt relay requires a fixed frame count.",
                     scope: "clip",

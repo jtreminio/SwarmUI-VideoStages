@@ -45,7 +45,6 @@ const FEATURE_RULE_CODES: Partial<
     Record<AuthoringFeature, readonly ConditionalRuleCode[]>
 > = {
     promptRelay: [CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength],
-    audioReuse: [CONDITIONAL_RULE_CODES.audioReuseRequiresStages],
     retake: [
         CONDITIONAL_RULE_CODES.retakeRequiresSource,
         CONDITIONAL_RULE_CODES.retakeExcludesReferences,

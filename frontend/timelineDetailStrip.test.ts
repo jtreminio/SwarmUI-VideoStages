@@ -2705,12 +2705,14 @@ describe("createTimelineDetailStrip", () => {
         ).toBe(false);
     });
 
-    it("disables captured-stage audio reuse until three stages are active", () => {
+    it("offers captured-stage audio reuse below three active stages", () => {
         setup([{ duration: 5, stages: [{}, {}, { skipped: true }] }]);
         setSelection({ kind: "audio", clipIdx: 0 });
         const row = fieldByLabel("Reuse Captured Stage Audio");
         const reuse = row.querySelector<HTMLInputElement>("input");
-        expect(reuse?.disabled).toBe(true);
+        // Too few stages to actually reuse; the backend drops it silently rather
+        // than the control refusing the authoring.
+        expect(reuse?.disabled).toBe(false);
         expect(row.textContent).toContain("second active stage");
         expect(row.textContent).toContain("third active stage");
     });

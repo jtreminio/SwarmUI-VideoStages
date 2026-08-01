@@ -105,7 +105,6 @@ export const AUTHORING_FEATURE_CAPABILITIES: Record<
 };
 
 export const CONDITIONAL_RULE_CODES = {
-    audioReuseRequiresStages: "audio.reuse.requires_three_stages",
     promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
     retakeExcludesReferences: "retake-frame-references-unsupported",
     retakeRequiresSource: "retake-source-required",

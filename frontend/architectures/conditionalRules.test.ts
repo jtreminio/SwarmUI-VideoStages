@@ -5,7 +5,6 @@ import {
     minimalStage,
 } from "../__test_helpers__/clipFixtures";
 import {
-    audioReuseMinimumActiveStages,
     CONDITIONAL_RULE_CODES,
     evaluateConditionalRule,
 } from "./conditionalRules";
@@ -23,34 +22,11 @@ const rule = (
 });
 
 describe("typed conditional-rule evaluator", () => {
-    it("reads the advertised audio-reuse stage minimum", () => {
-        const reuseRule = rule(
-            CONDITIONAL_RULE_CODES.audioReuseRequiresStages,
-            { minimumActiveStages: 4 },
-        );
-        expect(audioReuseMinimumActiveStages(reuseRule)).toBe(4);
-        expect(
-            evaluateConditionalRule(reuseRule, {
-                clip: minimalClip({
-                    stages: [minimalStage(), minimalStage(), minimalStage()],
-                }),
-            }),
-        ).toBe(true);
-    });
-
-    it("shares stage and dynamic-length conditions with capability views", () => {
+    it("shares the dynamic-length condition with capability views", () => {
         const clip = minimalClip({
             clipLengthFromAudio: true,
             stages: [minimalStage(), minimalStage()],
         });
-        expect(
-            evaluateConditionalRule(
-                rule(CONDITIONAL_RULE_CODES.audioReuseRequiresStages, {
-                    minimumActiveStages: 3,
-                }),
-                { clip },
-            ),
-        ).toBe(true);
         expect(
             evaluateConditionalRule(
                 rule(CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength),

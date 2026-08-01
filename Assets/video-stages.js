@@ -505,7 +505,6 @@
     icLora: [["stage", CAPABILITY_WIRE_NAMES.stage.icLora]]
   };
   var CONDITIONAL_RULE_CODES = {
-    audioReuseRequiresStages: "audio.reuse.requires_three_stages",
     promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
     retakeExcludesReferences: "retake-frame-references-unsupported",
     retakeRequiresSource: "retake-source-required"
@@ -518,10 +517,6 @@
   var isKnownConditionalRuleCode = (value) => KNOWN_CONDITIONAL_RULE_CODES.has(value);
   var clipEntryMode = (clip, generatedEntryMode = "text-to-video") => clip.initVideo !== null ? "init-video" : generatedEntryMode;
   var conditionalRule = (rules, code) => rules.find((rule) => rule.code === code) ?? null;
-  var finiteConstraint = (rule, key, fallback) => {
-    const value = Number(rule.constraints?.[key]);
-    return Number.isFinite(value) ? value : fallback;
-  };
   var DEFAULT_REQUIRED_ENTRY_MODES = [
     "init-video"
   ];
@@ -529,17 +524,9 @@
     const value = rule.constraints?.requiresAnyEntryMode;
     return Array.isArray(value) && value.length > 0 ? value : DEFAULT_REQUIRED_ENTRY_MODES;
   };
-  var DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES = 3;
-  var audioReuseMinimumActiveStages = (rule) => rule?.code === CONDITIONAL_RULE_CODES.audioReuseRequiresStages ? finiteConstraint(
-    rule,
-    "minimumActiveStages",
-    DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES
-  ) : DEFAULT_AUDIO_REUSE_MINIMUM_ACTIVE_STAGES;
   var evaluateConditionalRule = (rule, context) => {
     const clip = context.clip;
     switch (rule.code) {
-      case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
-        return clip !== void 0 && activeStageCount(clip) < audioReuseMinimumActiveStages(rule);
       case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
         return clip !== void 0 && (clip.clipLengthFromAudio || clip.clipLengthFromControlNet);
       case CONDITIONAL_RULE_CODES.retakeExcludesReferences:
@@ -894,8 +881,6 @@
     }
     const constraints = value.constraints;
     switch (value.code) {
-      case CONDITIONAL_RULE_CODES.audioReuseRequiresStages:
-        return value.scope === "clip" && hasExactKeys(constraints, ["minimumActiveStages"]) && Number.isInteger(constraints.minimumActiveStages) && Number(constraints.minimumActiveStages) > 0;
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:
         return value.scope === "clip" && hasExactKeys(constraints, ["requiresAnyEntryMode"]) && isEntryModeArray(constraints.requiresAnyEntryMode) && constraints.requiresAnyEntryMode.length > 0;
     }
@@ -1347,7 +1332,6 @@
   var UNRESOLVED_ARCHITECTURE_ID = "unsupported";
   var FEATURE_RULE_CODES = {
     promptRelay: [CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength],
-    audioReuse: [CONDITIONAL_RULE_CODES.audioReuseRequiresStages],
     retake: [
       CONDITIONAL_RULE_CODES.retakeRequiresSource,
       CONDITIONAL_RULE_CODES.retakeExcludesReferences

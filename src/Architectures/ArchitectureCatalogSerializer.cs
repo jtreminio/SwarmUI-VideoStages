@@ -67,10 +67,6 @@ internal static class ArchitectureCatalogSerializer
                 ["targetRequiresStage"] = value.TargetRequiresStage,
                 ["targetDisallowsInitialReference"] = value.TargetDisallowsInitialReference,
             },
-            MinimumActiveStagesRuleConstraints value => new()
-            {
-                ["minimumActiveStages"] = value.MinimumActiveStages,
-            },
             RequiredEntryModesRuleConstraints value => new()
             {
                 ["requiresAnyEntryMode"] = new JArray(

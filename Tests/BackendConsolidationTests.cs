@@ -292,10 +292,6 @@ public class BackendConsolidationTests
     public void Conditional_rule_thresholds_come_from_the_published_constraints()
     {
         Assert.Equal(
-            Ltx2ConditionalRulePolicySource.AudioReuseRequiresThreeStages
-                .Require<MinimumActiveStagesRuleConstraints>().MinimumActiveStages,
-            Ltx2ConditionalRulePolicySource.AudioReuseMinimumActiveStages);
-        Assert.Equal(
             [ArchitectureEntryMode.InitVideo],
             Ltx2ConditionalRulePolicySource.RetakeEntryModes);
     }
