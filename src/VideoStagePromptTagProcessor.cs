@@ -38,8 +38,14 @@ internal static class VideoStagePromptTagProcessor
             return UnmatchedSectionMarker(context);
         }
 
-        VideoClipSectionResolver.TryResolve(preData, context, out int sectionId);
+        bool resolved = VideoClipSectionResolver.TryResolve(preData, context, out int sectionId);
         context.SectionID = sectionId;
+        if (resolved && tokens.Length == 2
+            && int.TryParse(tokens[0], out int clip) && clip >= 0
+            && int.TryParse(tokens[1], out int stage) && stage >= 0)
+        {
+            return VideoClipPromptSyntax.FormatStageSectionMarker(clip, stage, sectionId);
+        }
         return $"<{VideoClipPromptSyntax.TagName}{VideoClipPromptSyntax.CidMarker}{sectionId}>";
     }
 

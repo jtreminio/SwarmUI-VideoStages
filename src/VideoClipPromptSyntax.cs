@@ -15,6 +15,10 @@ internal static class VideoClipPromptSyntax
         $@"<{TagName}:w\|(\d+)\|([0-9.]+)\|([0-9.]+){Regex.Escape(CidMarker)}-?\d+>",
         RegexOptions.Compiled);
 
+    private static readonly Regex StageSectionMarkerPattern = new(
+        $@"<{TagName}:s\|(\d+)\|(\d+){Regex.Escape(CidMarker)}-?\d+>",
+        RegexOptions.Compiled);
+
     private static readonly Regex SectionMarkerPattern = new(
         $@"<{TagName}{Regex.Escape(CidMarker)}(-?\d+)>",
         RegexOptions.Compiled);
@@ -54,6 +58,9 @@ internal static class VideoClipPromptSyntax
         prompt = WindowMarkerPattern.Replace(
             prompt,
             match => $"<{TagName}[{match.Groups[1].Value}]:{match.Groups[2].Value}-{match.Groups[3].Value}>");
+        prompt = StageSectionMarkerPattern.Replace(
+            prompt,
+            match => $"<{TagName}[{match.Groups[1].Value},{match.Groups[2].Value}]>");
         return SectionMarkerPattern.Replace(prompt, match =>
         {
             int cid = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
@@ -87,4 +94,7 @@ internal static class VideoClipPromptSyntax
 
     public static string FormatWindowBound(double value) =>
         value.ToString("0.####", CultureInfo.InvariantCulture);
+
+    public static string FormatStageSectionMarker(int clip, int stage, int sectionId) =>
+        $"<{TagName}:s|{clip}|{stage}{CidMarker}{sectionId}>";
 }
