@@ -2,36 +2,27 @@ namespace VideoStages.Architectures.Abstractions;
 
 internal enum CapabilityVocabularyScope
 {
-    Architecture,
     Clip,
     Stage,
 }
 
 internal sealed record CapabilityVocabularyEntry(
-    ArchitectureCapability Architecture,
     ClipCapability Clip,
     StageCapability Stage,
     string WireName,
     string UpscaleModeWireName = null)
 {
     internal CapabilityVocabularyScope Scope =>
-        Architecture != ArchitectureCapability.None
-            ? CapabilityVocabularyScope.Architecture
-            : Clip != ClipCapability.None
-                ? CapabilityVocabularyScope.Clip
-                : CapabilityVocabularyScope.Stage;
+        Clip != ClipCapability.None
+            ? CapabilityVocabularyScope.Clip
+            : CapabilityVocabularyScope.Stage;
 
     internal string SymbolName => Scope switch
     {
-        CapabilityVocabularyScope.Architecture => Architecture.ToString(),
         CapabilityVocabularyScope.Clip => Clip.ToString(),
         CapabilityVocabularyScope.Stage => Stage.ToString(),
         _ => throw new ArgumentOutOfRangeException(),
     };
-
-    internal bool Supports(ArchitectureCapability value) =>
-        Architecture != ArchitectureCapability.None
-        && value.HasFlag(Architecture);
 
     internal bool Supports(ClipCapability value) =>
         Clip != ClipCapability.None
@@ -64,7 +55,6 @@ internal static class ArchitectureFeatureVocabulary
 {
     internal static IReadOnlyList<CapabilityVocabularyEntry> Capabilities { get; } =
     [
-        For(ArchitectureCapability.NativeAudio, "native-audio"),
         For(ClipCapability.InitVideo, "init-video"),
         For(ClipCapability.Prompts, "prompts"),
         For(ClipCapability.PromptRelay, "prompt-relay"),
@@ -206,9 +196,6 @@ internal static class ArchitectureFeatureVocabulary
     internal static string RuleCode(ConditionalRuleCodeId id) =>
         ConditionalRuleCodes.Single(entry => entry.Id == id).Code;
 
-    internal static IEnumerable<string> WireNames(ArchitectureCapability value) =>
-        Capabilities.Where(entry => entry.Supports(value)).Select(entry => entry.WireName);
-
     internal static IEnumerable<string> WireNames(ClipCapability value) =>
         Capabilities.Where(entry => entry.Supports(value)).Select(entry => entry.WireName);
 
@@ -237,8 +224,6 @@ internal static class ArchitectureFeatureVocabulary
         bool SupportsCapability(CapabilityVocabularyEntry capability) =>
             capability.Scope switch
             {
-                CapabilityVocabularyScope.Architecture =>
-                    capability.Supports(capabilities.Architecture),
                 CapabilityVocabularyScope.Clip =>
                     capability.Supports(capabilities.Clip),
                 CapabilityVocabularyScope.Stage =>
@@ -413,25 +398,15 @@ internal static class ArchitectureFeatureVocabulary
     }
 
     private static CapabilityVocabularyEntry For(
-        ArchitectureCapability capability,
-        string wireName) =>
-        new(capability, ClipCapability.None, StageCapability.None, wireName);
-
-    private static CapabilityVocabularyEntry For(
         ClipCapability capability,
         string wireName) =>
-        new(ArchitectureCapability.None, capability, StageCapability.None, wireName);
+        new(capability, StageCapability.None, wireName);
 
     private static CapabilityVocabularyEntry For(
         StageCapability capability,
         string wireName,
         string upscaleModeWireName = null) =>
-        new(
-            ArchitectureCapability.None,
-            ClipCapability.None,
-            capability,
-            wireName,
-            upscaleModeWireName);
+        new(ClipCapability.None, capability, wireName, upscaleModeWireName);
 
     private static CapabilityVocabularyEntry Capability(ClipCapability capability) =>
         Capabilities.Single(entry => entry.Clip == capability);

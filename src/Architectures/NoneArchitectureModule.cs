@@ -26,7 +26,6 @@ internal static class NoneArchitecture
         ],
         [ArchitectureEntryMode.InitVideo],
         new(
-            ArchitectureCapability.None,
             ClipCapability.InitVideo
                 | ClipCapability.AudioSources
                 | ClipCapability.AudioSegments,

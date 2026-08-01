@@ -53,13 +53,6 @@ internal enum VideoModelEntryAbility
 }
 
 [Flags]
-internal enum ArchitectureCapability
-{
-    None = 0,
-    NativeAudio = 1 << 0,
-}
-
-[Flags]
 internal enum ClipCapability
 {
     None = 0,
@@ -92,7 +85,6 @@ internal enum StageCapability
 }
 
 internal sealed record ArchitectureCapabilityDescriptor(
-    ArchitectureCapability Architecture,
     ClipCapability Clip,
     StageCapability Stage);
 

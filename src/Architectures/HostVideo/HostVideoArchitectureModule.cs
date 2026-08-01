@@ -102,7 +102,6 @@ internal sealed class HostVideoArchitectureModule :
             ArchitectureEntryMode.InitVideo,
         ],
         new(
-            ArchitectureCapability.None,
             ClipCapability.Prompts | ClipCapability.InitVideo,
             StageCapability.ImageInput
                 | StageCapability.VideoInput

@@ -443,9 +443,6 @@
 
   // frontend/architectures/generatedFeatures.ts
   var CAPABILITY_WIRE_NAMES = {
-    architecture: {
-      nativeAudio: "native-audio"
-    },
     clip: {
       initVideo: "init-video",
       prompts: "prompts",
@@ -596,10 +593,6 @@
     return models.reduce((effective, model) => {
       const capabilities = effectiveModelCapabilities(model, architecture);
       return {
-        architecture: intersect(
-          effective.architecture,
-          capabilities.architecture
-        ),
         clip: intersect(effective.clip, capabilities.clip),
         stage: intersect(effective.stage, capabilities.stage),
         upscaleModes: intersect(
@@ -993,7 +986,6 @@
   ) && new Set(value.map((rule) => rule.code)).size === value.length;
   var isCapabilities = (value) => {
     if (!isRecord(value) || !hasExactKeys(value, [
-      "architecture",
       "clip",
       "stage",
       "upscaleModes",
@@ -1003,7 +995,6 @@
       return false;
     }
     return [
-      value.architecture,
       value.clip,
       value.stage,
       value.upscaleModes,
@@ -6340,9 +6331,7 @@
     );
     const sourceKind = audioSourceKind(clip.audioSource);
     const clipAudioCapabilitySupported = supports("clipAudio");
-    const standaloneAudioSupported = capabilities.architecture.includes(
-      CAPABILITY_WIRE_NAMES.architecture.nativeAudio
-    ) && capabilities.audioSourceKinds.includes("Native");
+    const standaloneAudioSupported = capabilities.audioSourceKinds.includes("Native");
     const selectedAudioSourceSupported = supports("clipAudio", {
       audioSource: clip.audioSource
     });

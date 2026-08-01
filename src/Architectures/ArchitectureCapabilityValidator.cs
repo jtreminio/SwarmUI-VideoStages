@@ -44,10 +44,7 @@ internal static class ArchitectureCapabilityValidator
             $"{ArchitectureFeatureVocabulary.WireName(entryMode)} entry");
         Require(
             clip.SaveAudioTrack,
-            Has(
-                capabilities.Architecture,
-                ArchitectureCapability.NativeAudio)
-                && audioSourceKinds.Contains(AudioSourceKind.Native),
+            audioSourceKinds.Contains(AudioSourceKind.Native),
             "standalone audio output");
         Require(
             clip.Stages is { Count: > 0 }

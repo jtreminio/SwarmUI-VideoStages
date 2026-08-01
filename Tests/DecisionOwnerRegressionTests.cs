@@ -588,7 +588,6 @@ public class DecisionOwnerRegressionTests
             [AudioSourceKind.Native],
             [ArchitectureEntryMode.ImageToVideo],
             new(
-                ArchitectureCapability.None,
                 ClipCapability.None,
                 StageCapability.ImageInput),
             new ArchitectureBoundaryPolicy(

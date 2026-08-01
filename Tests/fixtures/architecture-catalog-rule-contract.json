@@ -3,9 +3,6 @@
     "id": "ltx2",
     "label": "LTX Video 2.3",
     "capabilities": {
-      "architecture": [
-        "native-audio"
-      ],
       "clip": [
         "init-video",
         "prompts",

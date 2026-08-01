@@ -206,7 +206,6 @@ const isCapabilities = (value: unknown): value is ArchitectureCapabilities => {
     if (
         !isRecord(value) ||
         !hasExactKeys(value, [
-            "architecture",
             "clip",
             "stage",
             "upscaleModes",
@@ -218,7 +217,6 @@ const isCapabilities = (value: unknown): value is ArchitectureCapabilities => {
     }
     return (
         [
-            value.architecture,
             value.clip,
             value.stage,
             value.upscaleModes,

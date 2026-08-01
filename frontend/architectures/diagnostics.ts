@@ -8,10 +8,7 @@ import type { Clip } from "../types";
 import { hasArchitectureSlotSourcedIcLora } from "./behaviorRegistry";
 import { resolvedClipArchitectureId } from "./clipIdentity";
 import { CONDITIONAL_RULE_CODES } from "./conditionalRules";
-import {
-    CAPABILITY_WIRE_NAMES,
-    isIgnoredWhenUnsupportedFeature,
-} from "./generatedFeatures";
+import { isIgnoredWhenUnsupportedFeature } from "./generatedFeatures";
 import { effectiveClipCapabilities } from "./modelCapabilities";
 import { NONE_ARCHITECTURE_ID } from "./none/identity";
 import { createCapabilityViewResolver } from "./policy";
@@ -151,9 +148,7 @@ const persistedCapabilityIssues = (
     const sourceKind = audioSourceKind(clip.audioSource);
     const clipAudioCapabilitySupported = supports("clipAudio");
     const standaloneAudioSupported =
-        capabilities.architecture.includes(
-            CAPABILITY_WIRE_NAMES.architecture.nativeAudio,
-        ) && capabilities.audioSourceKinds.includes("Native");
+        capabilities.audioSourceKinds.includes("Native");
     const selectedAudioSourceSupported = supports("clipAudio", {
         audioSource: clip.audioSource,
     });

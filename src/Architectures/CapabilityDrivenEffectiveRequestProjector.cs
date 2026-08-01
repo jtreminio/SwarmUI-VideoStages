@@ -144,10 +144,7 @@ internal static class CapabilityDrivenEffectiveRequestProjector
                 UploadedAudio = null,
             };
         }
-        if ((!Has(
-                    capabilities.Architecture,
-                    ArchitectureCapability.NativeAudio)
-                || !audioSourceKinds.Contains(AudioSourceKind.Native))
+        if (!audioSourceKinds.Contains(AudioSourceKind.Native)
             && effective.SaveAudioTrack)
         {
             decisions.Add(EffectiveRequestDecision.Ignore(

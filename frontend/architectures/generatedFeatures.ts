@@ -1,9 +1,6 @@
 // Generated from ArchitectureFeatureVocabulary.cs. Do not edit by hand.
 
 export const CAPABILITY_WIRE_NAMES = {
-    architecture: {
-        nativeAudio: "native-audio",
-    },
     clip: {
         initVideo: "init-video",
         prompts: "prompts",

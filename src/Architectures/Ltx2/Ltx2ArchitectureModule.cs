@@ -40,7 +40,6 @@ internal sealed class Ltx2ArchitectureModule :
             ArchitectureEntryMode.InitVideo,
         ],
         new(
-            ArchitectureCapability.NativeAudio,
             ClipCapability.InitVideo
                 | ClipCapability.Prompts
                 | ClipCapability.PromptRelay

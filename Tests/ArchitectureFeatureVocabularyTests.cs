@@ -11,14 +11,6 @@ public class ArchitectureFeatureVocabularyTests
     public void Vocabulary_covers_every_typed_capability_and_authoring_feature()
     {
         Assert.Equal(
-            Enum.GetValues<ArchitectureCapability>()
-                .Where(value => value != ArchitectureCapability.None)
-                .OrderBy(value => value),
-            ArchitectureFeatureVocabulary.Capabilities
-                .Where(entry => entry.Architecture != ArchitectureCapability.None)
-                .Select(entry => entry.Architecture)
-                .OrderBy(value => value));
-        Assert.Equal(
             Enum.GetValues<ClipCapability>()
                 .Where(value => value != ClipCapability.None)
                 .OrderBy(value => value),
@@ -81,8 +73,7 @@ public class ArchitectureFeatureVocabularyTests
             entry =>
             {
                 int owners =
-                    (entry.Architecture == ArchitectureCapability.None ? 0 : 1)
-                    + (entry.Clip == ClipCapability.None ? 0 : 1)
+                    (entry.Clip == ClipCapability.None ? 0 : 1)
                     + (entry.Stage == StageCapability.None ? 0 : 1);
                 Assert.Equal(1, owners);
             });
@@ -113,15 +104,12 @@ public class ArchitectureFeatureVocabularyTests
     public void Frame_references_require_both_clip_and_stage_capabilities()
     {
         ArchitectureCapabilityDescriptor clipOnly = new(
-            ArchitectureCapability.None,
             ClipCapability.References,
             StageCapability.None);
         ArchitectureCapabilityDescriptor stageOnly = new(
-            ArchitectureCapability.None,
             ClipCapability.None,
             StageCapability.FrameReferences);
         ArchitectureCapabilityDescriptor complete = new(
-            ArchitectureCapability.None,
             ClipCapability.References,
             StageCapability.FrameReferences);
 
@@ -140,15 +128,12 @@ public class ArchitectureFeatureVocabularyTests
     public void Upscale_support_requires_any_published_upscale_mode()
     {
         ArchitectureCapabilityDescriptor pixelOnly = new(
-            ArchitectureCapability.None,
             ClipCapability.None,
             StageCapability.PixelUpscale);
         ArchitectureCapabilityDescriptor latentOnly = new(
-            ArchitectureCapability.None,
             ClipCapability.None,
             StageCapability.LatentUpscale);
         ArchitectureCapabilityDescriptor none = new(
-            ArchitectureCapability.None,
             ClipCapability.None,
             StageCapability.None);
 
@@ -195,7 +180,6 @@ public class ArchitectureFeatureVocabularyTests
         Assert.DoesNotContain(
             ArchitectureFeatureVocabulary.IgnoredWhenUnsupported(
                 new(
-                    ArchitectureCapability.None,
                     ClipCapability.None,
                     StageCapability.None)),
             structural.Contains);

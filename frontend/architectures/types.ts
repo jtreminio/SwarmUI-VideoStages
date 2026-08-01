@@ -21,7 +21,6 @@ export interface MinimumStageControlRuleConstraints {
 }
 
 export interface ArchitectureCapabilities {
-    architecture: string[];
     clip: string[];
     stage: string[];
     upscaleModes: string[];

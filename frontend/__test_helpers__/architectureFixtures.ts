@@ -12,7 +12,6 @@ import type { RootDefaults } from "../types";
 export const testArchitectureCapabilities = (
     overrides: Partial<ArchitectureCapabilities> = {},
 ): ArchitectureCapabilities => ({
-    architecture: [],
     clip: [
         "init-video",
         "prompts",
@@ -214,7 +213,6 @@ export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
     id: "none",
     label: "Decoded source only",
     capabilities: testArchitectureCapabilities({
-        architecture: [],
         clip: ["init-video", "audio-sources", "audio-segments"],
         stage: [],
         upscaleModes: [],

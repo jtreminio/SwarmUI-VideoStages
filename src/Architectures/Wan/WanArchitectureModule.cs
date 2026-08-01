@@ -66,7 +66,6 @@ internal sealed class WanArchitectureModule :
             ArchitectureEntryMode.InitVideo,
         ],
         new(
-            ArchitectureCapability.None,
             ClipCapability.Prompts
                 | ClipCapability.InitVideo
                 | ClipCapability.References,

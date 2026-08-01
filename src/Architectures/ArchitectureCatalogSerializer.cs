@@ -33,7 +33,6 @@ internal static class ArchitectureCatalogSerializer
     private static JObject SerializeCapabilities(VideoArchitectureDescriptor descriptor) => new()
     {
         // Authoritative, scope-preserving capability sets.
-        ["architecture"] = new JArray(ArchitectureFeatureVocabulary.WireNames(descriptor.Capabilities.Architecture)),
         ["clip"] = new JArray(ArchitectureFeatureVocabulary.WireNames(descriptor.Capabilities.Clip)),
         ["stage"] = new JArray(ArchitectureFeatureVocabulary.WireNames(descriptor.Capabilities.Stage)),
         ["upscaleModes"] = new JArray(ArchitectureFeatureVocabulary.UpscaleModeWireNames(descriptor.Capabilities.Stage)),
@@ -115,7 +114,6 @@ internal static class ArchitectureCatalogSerializer
         IReadOnlyList<AudioSourceKind> audioKinds = model.Architecture.AudioSourceKinds;
         return new()
         {
-            ["architecture"] = new JArray(ArchitectureFeatureVocabulary.WireNames(capabilities.Architecture)),
             ["clip"] = new JArray(ArchitectureFeatureVocabulary.WireNames(capabilities.Clip)),
             ["stage"] = new JArray(ArchitectureFeatureVocabulary.WireNames(capabilities.Stage)),
             ["upscaleModes"] = new JArray(ArchitectureFeatureVocabulary.UpscaleModeWireNames(capabilities.Stage)),

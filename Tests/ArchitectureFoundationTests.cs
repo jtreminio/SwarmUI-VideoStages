@@ -1562,7 +1562,6 @@ public class ArchitectureFoundationTests
         Assert.Null(none["defaultProfileId"]);
         Assert.Null(none["profiles"]);
         Assert.Null(none["extras"]);
-        Assert.Empty(none["capabilities"]["architecture"]);
         Assert.Equal(
             ["init-video", "audio-sources", "audio-segments"],
             none["capabilities"]["clip"].Values<string>());
@@ -1583,9 +1582,6 @@ public class ArchitectureFoundationTests
         Assert.Null(capabilities["boundaryModes"]);
         Assert.Null(capabilities["conditionalRules"]);
         Assert.Null(capabilities["clipAudio"]);
-        Assert.Equal(
-            ["native-audio"],
-            capabilities["architecture"].Values<string>());
         Assert.Equal(
             [
                 "init-video",
@@ -1721,7 +1717,6 @@ public class ArchitectureFoundationTests
     }
 
     private static VideoArchitectureDescriptor FakeCapabilityDescriptor(
-        ArchitectureCapability architecture = ArchitectureCapability.None,
         StageCapability stage =
             StageCapability.ImageInput | StageCapability.VideoInput,
         IReadOnlyList<ArchitectureEntryMode> entryModes = null) =>
@@ -1729,10 +1724,7 @@ public class ArchitectureFoundationTests
         {
             AudioSourceKinds = [AudioSourceKind.Native],
             EntryModes = entryModes ?? [ArchitectureEntryMode.ImageToVideo],
-            Capabilities = new(
-                architecture,
-                ClipCapability.Prompts,
-                stage),
+            Capabilities = new(ClipCapability.Prompts, stage),
         };
 
     private static Session RestrictedSession(params string[] modelPrefixes)
@@ -1905,7 +1897,6 @@ public class ArchitectureFoundationTests
                 ArchitectureEntryMode.ImageToVideo,
             ],
             new(
-                ArchitectureCapability.None,
                 ClipCapability.Prompts,
                 StageCapability.ImageInput | StageCapability.VideoInput),
             new ArchitectureBoundaryPolicy(
