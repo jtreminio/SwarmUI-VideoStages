@@ -26,8 +26,7 @@ internal sealed class LtxStageSampler(WorkflowGenerator g)
 
         g.CurrentMedia = g.CurrentMedia.AsSamplingLatent(genInfo.Vae, g.CurrentAudioVae);
         LtxAudioMaskResizer.ApplyCurrentAudioMaskDimensions(g.CurrentMedia);
-        // Windows BOTH av channels to the retake span (preserved frames + their audio stay locked, the
-        // window regenerates). No-op for plain clips with no retake window.
+        // Crop audio and video together so preserved retake media stays synchronized.
         new LtxAudioWindowMasker(g).Apply(genInfo, stageFrame);
         string samplerNode = g.CreateKSampler(
             genInfo.Model.Path,
@@ -87,6 +86,7 @@ internal sealed class LtxStageSampler(WorkflowGenerator g)
             LatentInput: replace.LATENT));
 
         g.CurrentMedia = g.CurrentMedia.WithPath(normalize.Latent);
+        genInfo.DoFirstFrameLatentSwap = null;
     }
 
     private void CropGuidesAfterSampler(
@@ -96,8 +96,7 @@ internal sealed class LtxStageSampler(WorkflowGenerator g)
         bool shouldRestoreAudioVideoLatent =
             g.CurrentMedia.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO;
 
-        // Audio-reference tokens guide the sampler, while guide cropping uses the original
-        // conditioning paths.
+        // Crop against the original conditioning; audio-reference tokens only guide sampling.
         if (stageFrame.AudioReferenceActive
             && stageFrame.AudioReferencePreWrapPosCond is not null)
         {

@@ -287,7 +287,6 @@ describe("normalization", () => {
         expect(clip.loras).not.toBe(prev.loras);
         expect(stage.loraWeights).toEqual([0.6]);
         expect(stage.loraWeights).not.toBe(prev.stages[0].loraWeights);
-        // The new clip is the trailing one — its own join stays the default.
         expect(clip.boundaryOut).toBe("cut");
         expect(clip.prompt).toBe("");
         expect(clip.refs).toEqual([]);
@@ -349,7 +348,7 @@ describe("normalization", () => {
         expect(entry.preset).toBe("water-simulation");
         expect(entry.driveSource).toBe("Upload");
         expect(entry.driveData).toBe("visual");
-        expect(entry.strength).toBe(2);
+        expect(entry.strength).toBe(5);
         expect(entry.attentionStrength).toBe(0);
         expect(entry.controlType).toBe("depth");
         expect(entry.driveMedia).toEqual({
@@ -577,8 +576,7 @@ describe("normalization", () => {
     });
 
     it("normalizeClip keeps Control 0 (passthrough) on init-video and refine stages", () => {
-        // Control 0 = passthrough (no sampler): a initVideoClip clip joining others
-        // without changes authors 0 on its stage 0, and refine stages may skip too.
+        // Control 0 means passthrough; init-video and refine stages may both skip sampling.
         const clip = normalizeClip(
             {
                 stages: [{ model: "ltx", control: 0 }, { control: 0 }],
@@ -607,7 +605,7 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
-        // Stage 0's incoming frames ARE the footage on a initVideoClip clip.
+        // Stage 0 receives the init-video footage as its incoming frames.
         expect(clip.initVideo).not.toBeNull();
         expect(clip.icLoras[0].driveSource).toBe("Incoming");
         expect(clip.icLoras[0].stage).toBe(0);
@@ -897,8 +895,7 @@ describe("normalization", () => {
             true,
         );
 
-        // A initVideoClip stage 0 refines its footage (initVideoClip img2img): authored
-        // Control/Upscale/UpscaleMethod survive, still clamped and 0.25-snapped.
+        // Init-video stage 0 is an img2img refinement, so authored settings remain active.
         expect(stage0.control).toBe(0.4);
         expect(stage0.upscale).toBe(1.25);
         expect(stage0.upscaleMethod).toBe("latentmodel-b.safetensors");
@@ -997,7 +994,6 @@ describe("appendRefToClip / removeRefAt", () => {
         expect(clip.refs[1].source).toBe(REF_SOURCE_BASE);
         expect(clip.stages[0].refStrengths).toHaveLength(2);
         expect(clip.stages[1].refStrengths).toHaveLength(2);
-        // Existing strengths preserved; the appended one uses the default 0.8.
         expect(clip.stages[0].refStrengths[0]).toBe(0.3);
         expect(clip.stages[1].refStrengths[0]).toBe(0.7);
         expect(clip.stages[0].refStrengths[1]).toBe(0.8);

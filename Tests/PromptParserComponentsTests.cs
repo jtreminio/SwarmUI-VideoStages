@@ -64,4 +64,13 @@ public class PromptParserComponentsTests
 
         Assert.Equal("global<video//cid=5>video prose", cleaned);
     }
+
+    [Fact]
+    public void Prompt_text_removal_stops_at_the_pixel_decoder_section()
+    {
+        string cleaned = VideoClipTagCanonicalizer.RemoveAllSections(
+            "global<videoclip//cid=100>clip prose<pixeldecoder//cid=5>decoder prose");
+
+        Assert.Equal("global<pixeldecoder//cid=5>decoder prose", cleaned);
+    }
 }

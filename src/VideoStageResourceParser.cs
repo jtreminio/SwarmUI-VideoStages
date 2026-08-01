@@ -4,10 +4,13 @@ using Newtonsoft.Json.Linq;
 namespace VideoStages;
 
 /// <summary>
-/// Parses model-adjacent persisted values without interpreting architecture-specific semantics.
+/// Parses persisted clip resources.
 /// </summary>
 internal static class VideoStageResourceParser
 {
+    internal const int IcLoraStrengthMin = 0;
+    internal const int IcLoraStrengthMax = 5;
+
     public static IReadOnlyList<ImageRefSpec> ParseImageReferences(
         JObject clipObject,
         int clipIndex,
@@ -123,7 +126,7 @@ internal static class VideoStageResourceParser
                     entry, "stage", -1, "Clip IcLora", warn)),
                 DriveSource: driveSource,
                 Strength: Math.Clamp(VideoStagesJsonReader.GetOptionalDouble(
-                    entry, "strength", 1, "Clip IcLora", warn), 0, 5),
+                    entry, "strength", 1, "Clip IcLora", warn), IcLoraStrengthMin, IcLoraStrengthMax),
                 AttentionStrength: Math.Clamp(VideoStagesJsonReader.GetOptionalDouble(
                     entry, "attentionStrength", 1, "Clip IcLora", warn), 0, 1),
                 ControlType: VideoStagesJsonReader.GetString(entry, "controlType")?.Trim(),

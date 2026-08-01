@@ -58,7 +58,7 @@ internal static class PromptTagScanner
     }
 
     private static readonly HashSet<string> BuiltInSectionStarters = [
-        "base", "refiner", "video", "videoswap", "edit",
+        "base", "refiner", "pixeldecoder", "video", "videoswap", "edit",
         "region", "segment", "object", "clear", "extend"
     ];
 }

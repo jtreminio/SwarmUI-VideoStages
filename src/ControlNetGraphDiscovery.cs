@@ -14,6 +14,7 @@ internal sealed class ControlNetGraphDiscovery(WorkflowGenerator g)
         (ControlNetApplyAdvancedNode.ClassType, "control_net"),
         (ControlNetInpaintingAliMamaApplyNode.ClassType, "control_net"),
         (QwenImageDiffsynthControlnetNode.ClassType, "model_patch"),
+        ("AnimaLLLiteApply", "model_patch"),
     ];
 
     public bool TryFindCoreApply(

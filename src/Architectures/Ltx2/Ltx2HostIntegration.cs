@@ -28,6 +28,14 @@ internal static class Ltx2HostIntegration
             FeatureFlag;
         ComfyUIBackendExtension.NodeToFeatureMap[LTXAddVideoICLoRAGuideAdvancedNode.ClassType] =
             FeatureFlag;
+        ComfyUIBackendExtension.NodeToFeatureMap[LTXVLaplacianPyramidBlendNode.ClassType] =
+            FeatureFlag;
+        ComfyUIBackendExtension.NodeToFeatureMap[LTXVSetAudioRefTokensNode.ClassType] =
+            FeatureFlag;
+        ComfyUIBackendExtension.NodeToFeatureMap[LTXVSetVideoLatentNoiseMasksNode.ClassType] =
+            FeatureFlag;
+        ComfyUIBackendExtension.NodeToFeatureMap[LTXVSetAudioVideoMaskByTimeNode.ClassType] =
+            FeatureFlag;
 
         if (!ComfyUISelfStartBackend.FoldersToForwardInComfyPath.Contains(
                 "geometry_estimation"))
