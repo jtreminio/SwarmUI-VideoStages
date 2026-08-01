@@ -20,7 +20,6 @@ internal static class ArchitectureCapabilityValidator
                 $"{ArchitectureFeatureVocabulary.WireName(entryMode)} entry"));
         }
         ValidateAudioDerivedDurationSource(clip, diagnostics);
-        ValidateAudioSourceKind(clip, descriptor, diagnostics);
         return diagnostics.AsReadOnly();
     }
 
@@ -45,33 +44,6 @@ internal static class ArchitectureCapabilityValidator
             $"Clip {clip.Id} configures audio-derived duration, but audio source kind "
                 + $"'{kind}' cannot determine video duration.",
             clip.Id));
-    }
-
-    private static void ValidateAudioSourceKind(
-        ClipSpec clip,
-        VideoArchitectureDescriptor descriptor,
-        ICollection<PlanDiagnostic> diagnostics)
-    {
-        IReadOnlyList<AudioSourceKind> audioSourceKinds = descriptor.AudioSourceKinds;
-        AudioSourceKind kind = AudioSourceParser.Parse(clip.AudioSource).Kind;
-        if (kind == AudioSourceKind.Unknown)
-        {
-            // Unknown sources are normalized by AudioBaseSourcePlanCompiler.
-            return;
-        }
-        if (kind == AudioSourceKind.Native
-            && !audioSourceKinds.Contains(AudioSourceKind.Native))
-        {
-            kind = AudioSourceKind.Disabled;
-        }
-        if (audioSourceKinds.Contains(kind))
-        {
-            return;
-        }
-        diagnostics.Add(Unsupported(
-            clip,
-            descriptor,
-            $"audio source kind '{kind}'"));
     }
 
     private static PlanDiagnostic Unsupported(

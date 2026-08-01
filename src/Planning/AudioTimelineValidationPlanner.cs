@@ -8,7 +8,7 @@ internal sealed record AudioTrackValidation(
     ImmutableArray<PlanDiagnostic> Diagnostics);
 
 /// <summary>
-/// Validates authored tracks and spans before projection, then validates projected windows.
+/// Validates track metadata before projection and reports overlap after projection.
 /// </summary>
 internal static class AudioTimelineValidationPlanner
 {
@@ -61,78 +61,12 @@ internal static class AudioTimelineValidationPlanner
         return new(CanProject: true, diagnostics.ToImmutable());
     }
 
-    /// <summary>Returns a diagnostic when an authored span cannot be projected.</summary>
-    internal static PlanDiagnostic ValidateSpan(
-        AudioTrackSpanSpec span,
-        string trackId,
-        int spanIndex)
-    {
-        PlanDiagnostic Error(string code, string message) => new(
-            PlanDiagnosticSeverity.Error,
-            code,
-            message,
-            TrackId: trackId,
-            SpanIndex: spanIndex);
-
-        if (span is null)
-        {
-            return Error("audio.timeline.span.null", "A null audio span was ignored.");
-        }
-        if (!span.HasClipRange && !span.HasTimelineWindow && !span.HasClipRelativeWindow)
-        {
-            return Error(
-                "audio.timeline.span.missing_owner",
-                "An audio span needs a clip range, a timeline window, or both.");
-        }
-        if (!IsFiniteNonNegative(span.SourceStartSeconds))
-        {
-            return Error(
-                "audio.timeline.span.invalid_source_start",
-                "An audio span has an invalid source start.");
-        }
-        if (span.HasTimelineWindow
-            && (!span.TimelineStartSeconds.HasValue || !span.TimelineLengthSeconds.HasValue
-                || !IsFiniteNonNegative(span.TimelineStartSeconds.Value)
-                || !IsFinitePositive(span.TimelineLengthSeconds.Value)))
-        {
-            return Error(
-                "audio.timeline.span.invalid_timeline_window",
-                "A timeline-owned audio span needs a finite non-negative start and positive length.");
-        }
-        if (span.HasClipRelativeWindow
-            && (!span.ClipStartOffsetSeconds.HasValue || !span.ClipLengthSeconds.HasValue
-                || !IsFiniteNonNegative(span.ClipStartOffsetSeconds.Value)
-                || !IsFinitePositive(span.ClipLengthSeconds.Value)))
-        {
-            return Error(
-                "audio.timeline.span.invalid_clip_relative_window",
-                "A clip-relative audio span needs a finite non-negative offset and positive length.");
-        }
-        if (span.HasTimelineWindow && span.HasClipRelativeWindow)
-        {
-            return Error(
-                "audio.timeline.span.conflicting_time_owners",
-                "An audio span cannot use timeline-relative and clip-relative timing together.");
-        }
-        if (span.HasClipRelativeWindow
-            && !(span.FirstClipId.HasValue
-                && span.LastClipId.HasValue
-                && span.FirstClipId == span.LastClipId))
-        {
-            return Error(
-                "audio.timeline.span.clip_relative_requires_one_clip",
-                "A clip-relative audio span must identify exactly one clip.");
-        }
-        return null;
-    }
-
-    /// <summary>Validates projected window partitioning and cross-track overlap.</summary>
+    /// <summary>Reports cross-track overlap between projected windows.</summary>
     internal static ImmutableArray<PlanDiagnostic> Validate(
         ImmutableArray<AudioTimelineTrackPlan> tracks)
     {
         ImmutableArray<PlanDiagnostic>.Builder diagnostics =
             ImmutableArray.CreateBuilder<PlanDiagnostic>();
-        ValidateSpanPartitions(tracks, diagnostics);
         AddOverlapDiagnostics(tracks, diagnostics);
         return diagnostics.ToImmutable();
     }
@@ -175,38 +109,4 @@ internal static class AudioTimelineValidationPlanner
         }
     }
 
-    private static void ValidateSpanPartitions(
-        ImmutableArray<AudioTimelineTrackPlan> tracks,
-        ImmutableArray<PlanDiagnostic>.Builder diagnostics)
-    {
-        foreach (IGrouping<(string TrackId, int SpanIndex), AudioTrackClipWindow> group in tracks
-            .SelectMany(track => track.Windows)
-            .GroupBy(window => (window.TrackId, window.SpanIndex)))
-        {
-            AudioTrackClipWindow[] windows = group.OrderBy(window => window.TimelineStartSeconds).ToArray();
-            for (int i = 1; i < windows.Length; i++)
-            {
-                AudioTrackClipWindow previous = windows[i - 1];
-                AudioTrackClipWindow current = windows[i];
-                bool overlaps = current.TimelineStartSeconds < previous.TimelineStartSeconds + previous.DurationSeconds;
-                bool sourceSkipsOrRepeats = Math.Abs(current.SourceStartSeconds
-                    - (previous.SourceStartSeconds + previous.DurationSeconds)) > 1e-9;
-                if (overlaps || sourceSkipsOrRepeats)
-                {
-                    diagnostics.Add(new(PlanDiagnosticSeverity.Error,
-                        "audio.timeline.span.non_partitioning_projection",
-                        "A projected track span would double-consume or skip final timeline time.",
-                        TrackId: group.Key.TrackId,
-                        SpanIndex: group.Key.SpanIndex));
-                    break;
-                }
-            }
-        }
-    }
-
-    private static bool IsFiniteNonNegative(double value) =>
-        !double.IsNaN(value) && !double.IsInfinity(value) && value >= 0;
-
-    private static bool IsFinitePositive(double value) =>
-        !double.IsNaN(value) && !double.IsInfinity(value) && value > 0;
 }

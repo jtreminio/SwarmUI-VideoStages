@@ -10,7 +10,7 @@ internal sealed record AudioTimelineCompilation(
     ImmutableArray<AudioTrackSpec> AuthoredTracks);
 
 /// <summary>
-/// Builds final clip windows, projects audio tracks, and validates the result.
+/// Builds final clip windows and projects authored audio tracks.
 /// </summary>
 internal static class AudioTimelinePlanCompiler
 {
@@ -50,11 +50,8 @@ internal static class AudioTimelinePlanCompiler
         ImmutableArray<PlanDiagnostic>.Builder diagnostics,
         ImmutableArray<AudioTrackSpec> authoredTracks)
     {
-        ImmutableArray<AudioTrackSpec> allTracks = ClipAudioTrackSpecPlanner
-            .Compile(videoPlan)
-            .AddRange(authoredTracks);
         AudioTimelineTrackProjectionResult trackPlan = AudioTimelineTrackSpanProjector.Project(
-            allTracks,
+            authoredTracks,
             clipWindows,
             IndexClipWindows(clipWindows, diagnostics));
         diagnostics.AddRange(trackPlan.Diagnostics);

@@ -41,16 +41,12 @@ internal static class TimelineAudioSegmentTrackSpecPlanner
                 continue;
             }
 
-            (double start, double length) = ResolveFinalWindow(
-                segment,
-                clipWindows);
-            if (!double.IsFinite(start)
-                || !double.IsFinite(length)
-                || start < 0
-                || length <= 0)
+            (double Start, double Length)? window = ResolveFinalWindow(segment, clipWindows);
+            if (!window.HasValue)
             {
                 continue;
             }
+            (double start, double length) = window.Value;
             tracks.Add(new(
                 segment.Id,
                 source,
@@ -63,7 +59,7 @@ internal static class TimelineAudioSegmentTrackSpecPlanner
         return tracks.ToImmutable();
     }
 
-    private static (double Start, double Length) ResolveFinalWindow(
+    private static (double Start, double Length)? ResolveFinalWindow(
         TimelineAudioSegmentSpec segment,
         IReadOnlyDictionary<int, AudioTimelineClipWindow> clipWindows)
     {
@@ -87,6 +83,12 @@ internal static class TimelineAudioSegmentTrackSpecPlanner
 
         double start = first.TimelineTimeAt(segment.FirstClipOffsetSeconds.Value);
         double end = last.TimelineTimeAt(segment.LastClipOffsetSeconds.Value);
-        return (start, end - start);
+        double length = end - start;
+        return double.IsFinite(start)
+            && double.IsFinite(length)
+            && start >= 0
+            && length > 0
+                ? (start, length)
+                : null;
     }
 }

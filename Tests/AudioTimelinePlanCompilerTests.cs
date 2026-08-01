@@ -44,7 +44,7 @@ public class AudioTimelinePlanCompilerTests
         Assert.Single(plan.Tracks.Where(track => track.TrackId == id));
 
     [Fact]
-    public void Default_projection_preserves_clip_local_base_and_clip_relative_tracks()
+    public void Default_projection_preserves_clip_relative_tracks()
     {
         VideoExecutionPlan video = Plan(Clip(10));
 
@@ -56,13 +56,7 @@ public class AudioTimelinePlanCompilerTests
                 SourceStartSeconds: 2,
                 ClipStartOffsetSeconds: 1,
                 ClipLengthSeconds: 0.5))]);
-        AudioTimelineTrackPlan baseTrack = Track(timeline, "clip-10-base");
         AudioTimelineTrackPlan overlayTrack = Track(timeline, "overlay");
-
-        AudioTrackClipWindow baseWindow = Assert.Single(baseTrack.Windows);
-        Assert.Equal(0, baseWindow.TimelineStartSeconds);
-        Assert.Equal(ClipSeconds, baseWindow.DurationSeconds, 8);
-        Assert.Equal(0, baseWindow.SourceStartSeconds);
 
         AudioTrackClipWindow overlayWindow = Assert.Single(overlayTrack.Windows);
         Assert.Equal(1, overlayWindow.TimelineStartSeconds, 8);
@@ -89,8 +83,6 @@ public class AudioTimelinePlanCompilerTests
         Assert.All(
             windows,
             window => Assert.Equal(ClipSeconds, window.DurationSeconds, 8));
-        Assert.DoesNotContain(timeline.Diagnostics, diagnostic =>
-            diagnostic.Code == "audio.timeline.span.non_partitioning_projection");
     }
 
     [Fact]
@@ -191,8 +183,6 @@ public class AudioTimelinePlanCompilerTests
         Assert.Equal(0, windows[0].SourceStartSeconds, 8);
         Assert.Equal(40d / Fps, windows[1].SourceStartSeconds, 8);
         Assert.Equal(73d / Fps, windows[2].SourceStartSeconds, 8);
-        Assert.DoesNotContain(timeline.Diagnostics, diagnostic =>
-            diagnostic.Code == "audio.timeline.span.non_partitioning_projection");
     }
 
     [Fact]
@@ -219,12 +209,10 @@ public class AudioTimelinePlanCompilerTests
         double finalSourceEnd = windows[^1].SourceStartSeconds + windows[^1].DurationSeconds;
         double finalTimelineDuration = windows.Sum(window => window.DurationSeconds);
         Assert.Equal(sourceStart + finalTimelineDuration, finalSourceEnd, 8);
-        Assert.DoesNotContain(timeline.Diagnostics, diagnostic =>
-            diagnostic.Code == "audio.timeline.span.non_partitioning_projection");
     }
 
     [Fact]
-    public void Invalid_span_ownership_and_unknown_clips_produce_stable_diagnostics()
+    public void Unknown_clips_and_unresolved_timing_produce_stable_diagnostics()
     {
         VideoExecutionPlan video = Plan(Clip(0), Clip(1, frames: null));
         AudioTimelinePlan timeline = AudioTimelinePlanCompiler.Compile(video,
@@ -236,9 +224,7 @@ public class AudioTimelinePlanCompilerTests
         ]);
 
         string[] codes = [.. timeline.Diagnostics.Select(diagnostic => diagnostic.Code)];
-        Assert.Contains("audio.timeline.span.missing_owner", codes);
         Assert.Contains("audio.timeline.span.unknown_first_clip", codes);
-        Assert.Contains("audio.timeline.span.invalid_timeline_window", codes);
         Assert.Contains("audio.timeline.clip_timing_unavailable", codes);
         Assert.Contains("audio.timeline.span.unresolved_clip_timing", codes);
         Assert.Contains(timeline.Diagnostics, diagnostic =>

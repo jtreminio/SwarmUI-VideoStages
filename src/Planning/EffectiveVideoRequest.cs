@@ -68,10 +68,7 @@ internal sealed record ArchitectureOwnedEffectiveClip(
     ClipArchitectureAssignment Assignment);
 
 /// <summary>
-/// Graph-free request facts supplied once to each active architecture module.
-/// The module sees only the request-global legacy setting it may translate and
-/// its owned clips. It returns replacements only for clips whose architecture-private
-/// semantics change; common capability projection handles the rest.
+/// Graph-free clips and request-global legacy state supplied to one architecture module.
 /// </summary>
 internal sealed record ArchitectureEffectiveRequestProjectionContext(
     LegacyVideoSwapRequestSnapshot LegacyVideoSwap,
@@ -90,10 +87,8 @@ internal sealed record ArchitectureEffectiveRequestProjection(
     IReadOnlyList<EffectiveRequestDecision> RequestDecisions);
 
 /// <summary>
-/// The only projected request values common planning is allowed to consume. Resolved architecture
-/// assignments remain the caller-owned input because projection preserves model and topology keys.
-/// The separately cached authored specification remains unchanged for authoring and prompt-tag
-/// concerns.
+/// Projected request consumed by common planning. The authored specification remains separate for
+/// authoring and prompt-tag concerns.
 /// </summary>
 internal sealed record EffectiveVideoRequest(
     VideoStagesSpec Spec,
@@ -116,16 +111,12 @@ internal sealed record EffectiveVideoRequest(
 }
 
 /// <summary>
-/// Produces one normalized effective request after actual model resolution: canonical identity,
-/// architecture-specific policy hooks, capability-driven optional-value omission, and temporal
-/// normalization all complete before validation or workflow compilation consumes the request.
+/// Normalizes architecture policy, optional features, and temporal values after model resolution.
 /// </summary>
 internal static class EffectiveVideoRequestProjector
 {
     /// <summary>
-    /// Owns the authored, canonical, and progressively projected forms of one timeline clip.
-    /// Decisions stay beside the clip they describe instead of being coordinated through
-    /// parallel arrays for each projection phase.
+    /// Tracks the authored, canonical, and projected forms of one clip with their decisions.
     /// </summary>
     private sealed class EffectiveClipPlanningContext(
         int timelineIndex,
@@ -200,11 +191,7 @@ internal static class EffectiveVideoRequestProjector
             {
                 continue;
             }
-            // Architecture hooks see the canonical authored semantics first. This matters for
-            // model-sensitive policy such as WAN's terminal-reference check, where an
-            // unsupported latent upscale is still active work until common projection removes
-            // it. Capability-driven omission then gives every module the same optional-feature
-            // behavior before temporal resolution and compilation.
+            // WAN terminal-reference policy must see latent upscale before common projection removes it.
             EffectiveClipProjection common =
                 CapabilityDrivenEffectiveRequestProjector.ProjectUnsupportedFeatures(
                     clip.Effective,
@@ -521,8 +508,7 @@ internal static class EffectiveVideoRequestProjector
                     stage.ClipStageRawIndex,
                     out ResolvedVideoModel resolved))
             {
-                // Architecture planning already reports the unresolved stage. Do not guess a grid
-                // or duplicate that admission error here.
+                // Architecture planning owns the unresolved-stage diagnostic; leave the grid unresolved.
                 return projected;
             }
             activeGrids.Add(resolved.FrameGrid);
@@ -625,9 +611,8 @@ internal static class EffectiveVideoRequestProjector
             EffectiveClipPlanningContext target = clips[toIndex];
             ClipSpec sourceClip = source.Effective;
             BoundaryJoinType requested =
-                BoundaryPolicy.ParsePlanMode(sourceClip.BoundaryOut, out bool known);
-            if (!known
-                || requested == BoundaryJoinType.Cut)
+                BoundaryPolicy.ParsePlanMode(sourceClip.BoundaryOut);
+            if (requested == BoundaryJoinType.Cut)
             {
                 continue;
             }

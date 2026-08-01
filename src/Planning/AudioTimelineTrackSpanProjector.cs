@@ -59,13 +59,6 @@ internal static class AudioTimelineTrackSpanProjector
         ImmutableArray<PlanDiagnostic>.Builder diagnostics,
         ImmutableArray<AudioTrackClipWindow>.Builder destination)
     {
-        if (AudioTimelineValidationPlanner.ValidateSpan(span, trackId, spanIndex)
-            is PlanDiagnostic invalid)
-        {
-            diagnostics.Add(invalid);
-            return;
-        }
-
         int firstIndex = 0;
         int lastIndex = clipWindows.Length - 1;
         if (span.HasClipRange)

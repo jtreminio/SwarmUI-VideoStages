@@ -1,5 +1,3 @@
-using VideoStages.Architectures.Abstractions;
-
 namespace VideoStages.Planning;
 
 /// <summary>
@@ -23,14 +21,16 @@ internal static class ClipGeometryProjection
         {
             if (clip.ArchitecturePayload is null)
             {
-                // An uncompiled clip would make the timeline minimum a guess; the plan already
-                // carries the error that blocked its compilation.
-                return [];
+                continue;
             }
             projected[clip.ClipId] = clip.ArchitecturePayload.ProjectFinalDimensions(
                 clip.Stages,
                 clip.InitVideo?.TargetWidth ?? rootWidth,
                 clip.InitVideo?.TargetHeight ?? rootHeight);
+        }
+        if (projected.Count < 2)
+        {
+            return [];
         }
 
         int targetWidth = projected.Values.Min(size => size.Width);

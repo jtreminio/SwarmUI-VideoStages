@@ -70,7 +70,6 @@ public class StageSequenceCollaboratorTests
             [
                 typeof(ClipPlan),
                 typeof(WGNodeData),
-                typeof(ClipPlan),
                 typeof(int),
                 typeof(TimelineGeometry)
             ],
@@ -100,7 +99,6 @@ public class StageSequenceCollaboratorTests
         WGNodeData guide = new ContinuityGuideBuilder(generator).TryBuild(
             previousClip,
             previousOutput,
-            nextClip,
             window: 9,
             new TimelineGeometry(plan.Width, plan.Height, plan.FramesPerSecond));
 
@@ -137,16 +135,13 @@ public class StageSequenceCollaboratorTests
         WGNodeData guide = new ContinuityGuideBuilder(generator).TryBuild(
             previousClip,
             previousOutput,
-            nextClip,
             window: 4,
             new TimelineGeometry(1024, 1024, 12));
 
         Assert.NotNull(guide);
-        // The window is 4 frames on the NEXT clip's 12fps grid, which is 8 frames of the previous
-        // clip's 24fps output — the same duration.
+        // Four frames at 12 fps span eight source frames at 24 fps.
         Assert.Equal(4, guide.Frames);
-        // The tail keeps the previous clip's resolution: the spatial conform belongs to whichever
-        // stage consumes it, so that a later stage can anchor on these frames without a downscale hop.
+        // Spatial conform happens at the consuming stage, so the tail keeps its source resolution.
         Assert.Equal(512, guide.Width);
         using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         ImageFromBatchNode tail = Assert.Single(bridge.Graph.NodesOfType<ImageFromBatchNode>());

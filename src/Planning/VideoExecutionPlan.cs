@@ -4,9 +4,8 @@ using VideoStages.Architectures.Abstractions;
 namespace VideoStages.Planning;
 
 /// <summary>
-/// An immutable, graph-independent description of the timeline that VideoStages will run.
-/// It deliberately contains no <c>WorkflowGenerator</c>, node, or media references: compiling a
-/// plan must be safe to do before the workflow graph is built.
+/// Immutable, graph-independent timeline plan. It excludes <c>WorkflowGenerator</c>, graph nodes,
+/// and runtime media so compilation can run before graph construction.
 /// </summary>
 internal sealed record VideoExecutionPlan(
     int Width,
@@ -21,9 +20,8 @@ internal sealed record VideoExecutionPlan(
     public bool HasConfiguredResolution { get; init; } = true;
 
     /// <summary>
-    /// Unified projection of clip base audio, compatibility overlays, and
-    /// root-authored timeline-wide audio segments. The executable per-clip
-    /// slices also live in each <see cref="ClipPlan.Audio"/>.
+    /// Projection of authored timeline tracks onto final clip windows. Per-clip base audio remains
+    /// in <see cref="ClipPlan.Audio"/>.
     /// </summary>
     public AudioTimelinePlan AudioTimeline { get; init; } = AudioTimelinePlan.Empty;
 }
@@ -177,8 +175,7 @@ internal sealed record BoundaryPlan(
     public int MinFrames { get; init; } = 1;
 
     /// <summary>
-    /// The next generated clip receives this boundary's outgoing audio tail as preserved opening
-    /// context. This is generation-time conditioning, not final timeline mixing.
+    /// Whether the next clip receives the outgoing audio tail as generation-time conditioning.
     /// </summary>
     public bool CarryAudio { get; init; }
 }
@@ -196,7 +193,6 @@ internal enum BoundaryFallbackReason
     TargetHasInitVideo,
     TargetHasNoStage,
     TargetHasFirstFrameReference,
-    UnknownBoundaryKind,
     InsufficientFrameBudget,
     ArchitectureRuleUnsupported,
 }

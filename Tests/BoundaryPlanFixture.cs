@@ -4,8 +4,7 @@ using VideoStages.Planning;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// Translates authored boundary strings from shared and graph fixtures into the typed plans consumed
-/// by production. String compatibility belongs to fixtures; runtime execution receives only plans.
+/// Converts authored boundary strings in test fixtures to typed production plans.
 /// </summary>
 internal static class BoundaryPlanFixture
 {
@@ -22,7 +21,7 @@ internal static class BoundaryPlanFixture
             string raw = boundaryOuts is not null && i < boundaryOuts.Count
                 ? boundaryOuts[i]
                 : Constants.BoundaryOutCut;
-            BoundaryJoinType mode = BoundaryPolicy.ParsePlanMode(raw, out bool known);
+            BoundaryJoinType mode = BoundaryPolicy.ParsePlanMode(raw);
             int overlap = boundaryOverlapPrefs is not null && i < boundaryOverlapPrefs.Count
                 ? boundaryOverlapPrefs[i]
                 : Ltx2BoundaryPolicy.DefaultFrames;
@@ -38,7 +37,7 @@ internal static class BoundaryPlanFixture
                 mode == BoundaryJoinType.Cut ? 0 : overlap,
                 mode == BoundaryJoinType.Continue ? continuityWindow : 0,
                 RequiresRuntimeMergeValidation: mode != BoundaryJoinType.Cut,
-                known ? BoundaryFallbackReason.None : BoundaryFallbackReason.UnknownBoundaryKind)
+                BoundaryFallbackReason.None)
             {
                 FrameStep = 8,
                 MinFrames = mode == BoundaryJoinType.Cut ? 0 : 8,

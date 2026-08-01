@@ -19,7 +19,7 @@ internal static class BoundaryPlanCompiler
         {
             ClipSpec from = clips[i];
             BoundaryJoinType effectiveRequested =
-                BoundaryPolicy.ParsePlanMode(from.BoundaryOut, out bool isKnown);
+                BoundaryPolicy.ParsePlanMode(from.BoundaryOut);
             BoundaryJoinType requested =
                 authoredBoundaryModes?.GetValueOrDefault(from.Id)
                 ?? effectiveRequested;
@@ -32,9 +32,7 @@ internal static class BoundaryPlanCompiler
                     out projectedFallback);
             BoundaryFallbackReason fallback = hasProjectedFallback
                 ? projectedFallback
-                : isKnown
-                    ? BoundaryFallbackReason.None
-                    : BoundaryFallbackReason.UnknownBoundaryKind;
+                : BoundaryFallbackReason.None;
             BoundaryJoinType effective = effectiveRequested;
             ClipPlan plannedFrom = plannedClips is not null && i < plannedClips.Count
                 ? plannedClips[i]
@@ -42,16 +40,11 @@ internal static class BoundaryPlanCompiler
             ClipPlan plannedTo = plannedClips is not null && i + 1 < plannedClips.Count
                 ? plannedClips[i + 1]
                 : null;
-            // One owner: the architecture's typed boundary policy. The catalog publishes the
-            // same rules, so the advertised rule is the rule compiled here.
+            // Compile the same typed rule advertised by the architecture catalog.
             RuleDecision modePolicy = plannedFrom?.Architecture?.BoundaryPolicy
                 ?.Rules.GetValueOrDefault(effectiveRequested);
             BoundaryRuleConstraints constraints = modePolicy?.Constraints;
-            if (!isKnown)
-            {
-                effective = BoundaryJoinType.Cut;
-            }
-            else if (effectiveRequested != BoundaryJoinType.Cut
+            if (effectiveRequested != BoundaryJoinType.Cut
                 && plannedFrom?.Architecture is not null
                 && plannedTo?.Architecture is not null
                 && plannedFrom.Architecture.Id != plannedTo.Architecture.Id)
@@ -180,7 +173,6 @@ internal static class BoundaryPlanCompiler
         BoundaryFallbackReason.TargetHasInitVideo => "the next clip is init-video footage",
         BoundaryFallbackReason.TargetHasNoStage => "the next clip has no stage that can consume continuity",
         BoundaryFallbackReason.TargetHasFirstFrameReference => "the next clip has an explicit first-frame reference",
-        BoundaryFallbackReason.UnknownBoundaryKind => "the requested boundary mode is unknown",
         BoundaryFallbackReason.InsufficientFrameBudget => "the adjacent clips are too short for the requested overlap",
         BoundaryFallbackReason.ArchitectureRuleUnsupported => "the clip architecture does not support the requested join",
         _ => "the boundary is not applicable",

@@ -4,10 +4,8 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Ltx2;
 
 /// <summary>
-/// Resolves every runtime artifact a non-cut boundary requires before the next clip runs. A
-/// boundary is all-or-nothing: if any requested continuity or audio-carry input cannot be built,
-/// the whole boundary degrades to a cut, so timeline assembly never trims an overlap whose
-/// conditioning was never applied.
+/// Builds runtime inputs for a non-cut boundary. If a requested input cannot be built, the boundary
+/// degrades to a cut so assembly does not trim an unconditioned overlap.
 /// </summary>
 internal sealed class BoundaryHandoffResolver(
     ContinuityGuideBuilder continuityGuideBuilder,
@@ -47,7 +45,6 @@ internal sealed class BoundaryHandoffResolver(
             clipContext.ContinuityFrame = continuityGuideBuilder.TryBuild(
                 previousClip,
                 previousOutput,
-                nextClip,
                 continuityWindow,
                 new TimelineGeometry(
                     clipContext.Dimensions.Width,
@@ -72,8 +69,7 @@ internal sealed class BoundaryHandoffResolver(
             audioWindow);
         if (carry is null)
         {
-            // The carry conditioning is part of this boundary's contract; without it the merge
-            // would still trim the overlap, shortening audio for an overlap nothing produced.
+            // Without carry conditioning, trimming the overlap would shorten audio.
             clipContext.ContinuityFrame = null;
             assembly.DegradeToCut(previousClip.ClipId);
         }

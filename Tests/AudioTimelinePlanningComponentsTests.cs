@@ -54,18 +54,6 @@ public class AudioTimelinePlanningComponentsTests
     }
 
     [Fact]
-    public void Compatibility_track_spec_planner_expands_clip_base_without_projection()
-    {
-        ImmutableArray<AudioTrackSpec> tracks =
-            ClipAudioTrackSpecPlanner.Compile(Plan(Clip(4)));
-
-        Assert.Equal(["clip-4-base"], tracks.Select(track => track.TrackId));
-        AudioTrackSpanSpec span = Assert.Single(tracks[0].Spans);
-        Assert.Equal(4, span.FirstClipId);
-        Assert.Equal(4, span.LastClipId);
-    }
-
-    [Fact]
     public void Span_projector_keeps_cross_clip_windows_and_unresolved_clip_relative_spans_atomic()
     {
         ImmutableArray<AudioTimelineClipWindow> clipWindows =
@@ -127,7 +115,7 @@ public class AudioTimelinePlanningComponentsTests
     }
 
     [Fact]
-    public void Validation_planner_reports_partition_errors_before_cross_track_overlap_information()
+    public void Validation_planner_reports_cross_track_overlap_information()
     {
         AudioTimelineTrackSource source = new(AudioSourceKind.External, "source.wav");
         ImmutableArray<AudioTimelineTrackPlan> tracks =
@@ -144,7 +132,7 @@ public class AudioTimelinePlanningComponentsTests
         ImmutableArray<PlanDiagnostic> diagnostics = AudioTimelineValidationPlanner.Validate(tracks);
 
         Assert.Equal(
-            ["audio.timeline.span.non_partitioning_projection", "audio.timeline.overlapping_tracks"],
+            ["audio.timeline.overlapping_tracks"],
             diagnostics.Select(diagnostic => diagnostic.Code));
     }
 
@@ -188,7 +176,6 @@ public class AudioTimelinePlanningComponentsTests
         Assert.Equal(
             video.Clips.Select(clip => clip.ClipId),
             actual.ClipWindows.Select(window => window.ClipId));
-        // The clip-window pass used to run twice per plan; every window diagnostic must be unique.
         Assert.All(
             actual.Diagnostics
                 .Where(diagnostic => diagnostic.Code.StartsWith("audio.timeline.clip"))
