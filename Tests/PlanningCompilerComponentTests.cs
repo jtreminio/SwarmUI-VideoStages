@@ -466,50 +466,6 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
-    public void ClipPlanCompiler_FailsClosedWhenStagePayloadArchitectureDiffers()
-    {
-        ClipSpec clip = GeneratedClip(0, Stage(10, rawIndex: 3));
-        TestClipPayload clipPayload = new(new("clip-architecture"));
-
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => ClipPlanCompiler.Compile(
-                clip,
-                Context(
-                    clipPayload,
-                    new Dictionary<int, IArchitectureStagePayload>
-                    {
-                        [3] = new TestStagePayload(new("stage-architecture")),
-                    })));
-
-        Assert.Equal(
-            "Clip stage 3 payload architecture 'stage-architecture' does not match clip "
-                + "architecture 'clip-architecture'.",
-            error.Message);
-    }
-
-    [Fact]
-    public void ClipPlanCompiler_FailsClosedWhenStagePayloadMapHasAnExtraRawIndex()
-    {
-        ClipSpec clip = GeneratedClip(0, Stage(10, rawIndex: 3));
-        ArchitectureId architectureId = new("test");
-
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => ClipPlanCompiler.Compile(
-                clip,
-                Context(
-                    new TestClipPayload(architectureId),
-                    new Dictionary<int, IArchitectureStagePayload>
-                    {
-                        [3] = new TestStagePayload(architectureId),
-                        [7] = new TestStagePayload(architectureId),
-                    })));
-
-        Assert.Equal(
-            "Clip architecture compilation has a payload for unauthored raw stage 7.",
-            error.Message);
-    }
-
-    [Fact]
     public void ClipPlanCompiler_FailsClosedWhenClipPayloadDiffersFromAssignedArchitecture()
     {
         ClipSpec clip = GeneratedClip(0, Stage(10, rawIndex: 3));

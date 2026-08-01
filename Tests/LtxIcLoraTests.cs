@@ -132,11 +132,11 @@ public sealed class LtxIcLoraTests
             workflow.SelectTokens("$..class_type"),
             token => token.Value<string>().Contains("ICLoRA", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(RequestWarnings(generator.UserInput), warning =>
-            warning.Contains("no preset", StringComparison.Ordinal));
+            warning.Contains("[unspecified preset]", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void Auto_ic_lora_with_uninstalled_weights_is_a_user_error()
+    public void Auto_ic_lora_with_uninstalled_weights_warns_and_drops_the_entry()
     {
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -148,9 +148,19 @@ public sealed class LtxIcLoraTests
 
         T2IParamInput input = BuildNativeInput(
             models.BaseModel, models.VideoModel, new JArray(clip).ToString());
-        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps()));
-        Assert.Contains("LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-deblur-0_9", ex.Message);
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildCoreVideoWorkflowSteps());
+
+        Assert.NotEmpty(workflow);
+        Assert.DoesNotContain(
+            workflow.SelectTokens("$..class_type"),
+            token => token.Value<string>().Contains("ICLoRA", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(RequestWarnings(generator.UserInput), warning =>
+            warning.Contains(
+                "LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-deblur-0_9",
+                StringComparison.Ordinal));
     }
 
     [Fact]
@@ -176,7 +186,7 @@ public sealed class LtxIcLoraTests
             workflow.SelectTokens("$..class_type"),
             token => token.Value<string>().Contains("ICLoRA", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(RequestWarnings(generator.UserInput), warning =>
-            warning.Contains("no known weights", StringComparison.Ordinal));
+            warning.Contains("unit-test-never-downloaded", StringComparison.Ordinal));
     }
 
     [Fact]

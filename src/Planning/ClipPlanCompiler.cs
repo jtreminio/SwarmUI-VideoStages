@@ -122,23 +122,6 @@ internal static class ClipPlanCompiler
                     $"Clip stage {rawStageIndex} has no architecture stage payload.");
             }
         }
-        foreach ((int rawStageIndex, IArchitectureStagePayload payload) in
-                 compilation.StagePayloads)
-        {
-            if (!authoredRawStageIndices.Contains(rawStageIndex))
-            {
-                throw new InvalidOperationException(
-                    $"Clip architecture compilation has a payload for unauthored raw stage "
-                        + $"{rawStageIndex}.");
-            }
-            if (payload.ArchitectureId != clipArchitectureId)
-            {
-                throw new InvalidOperationException(
-                    $"Clip stage {rawStageIndex} payload architecture "
-                        + $"'{payload.ArchitectureId}' does not match clip architecture "
-                        + $"'{clipArchitectureId}'.");
-            }
-        }
         return compilation;
     }
 }

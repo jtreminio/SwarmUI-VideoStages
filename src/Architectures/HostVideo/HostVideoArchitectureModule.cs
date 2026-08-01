@@ -178,17 +178,3 @@ internal sealed record HostVideoClipPayload(
         int height) =>
         HostVideoStageGeometry.ProjectFinalDimensions(stages, width, height);
 }
-
-internal static class HostVideoPlanExtensions
-{
-    internal static StockHostVideoStagePayload RequireHostVideoPayload(this StagePlan stage)
-    {
-        if (stage?.ArchitecturePayload is not StockHostVideoStagePayload payload
-            || payload.ArchitectureId != HostVideoArchitectureModule.ArchitectureId)
-        {
-            throw new InvalidOperationException(
-                $"Stage {stage?.StageId} has no generic host-video payload.");
-        }
-        return payload;
-    }
-}

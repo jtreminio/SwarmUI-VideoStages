@@ -529,8 +529,10 @@ public class WanArchitectureTests
         Assert.Equal(2, compiled.Stages.Count);
         Assert.Equal(StageInputKind.RootMedia, compiled.Stages[0].Input);
         Assert.Equal(StageInputKind.PreviousStage, compiled.Stages[1].Input);
-        StockHostVideoStagePayload firstPayload = compiled.Stages[0].RequireWanPayload();
-        StockHostVideoStagePayload secondPayload = compiled.Stages[1].RequireWanPayload();
+        StockHostVideoStagePayload firstPayload = compiled.Stages[0]
+            .RequireStockHostVideoPayload(WanArchitectureModule.ArchitectureId, "Wan");
+        StockHostVideoStagePayload secondPayload = compiled.Stages[1]
+            .RequireStockHostVideoPayload(WanArchitectureModule.ArchitectureId, "Wan");
         Assert.Equal("wan-model", compiled.Stages[0].ResolvedModel.ModelName);
         Assert.Equal(1, firstPayload.Core.Control);
         Assert.Equal(12, firstPayload.Core.Steps);
@@ -556,7 +558,7 @@ public class WanArchitectureTests
 
         StockHostVideoStagePayload payload = Assert.Single(
             Assert.Single(Compile(GeneratedClip(0, stage)).Clips).Stages)
-            .RequireWanPayload();
+            .RequireStockHostVideoPayload(WanArchitectureModule.ArchitectureId, "Wan");
 
         Assert.Equal(StageUpscaleMode.Pixel, payload.Core.Upscale.Mode);
         Assert.Equal(1.5, payload.Core.Upscale.Factor);
@@ -635,7 +637,8 @@ public class WanArchitectureTests
         };
 
         StockHostVideoStagePayload payload = Assert.Single(
-            Assert.Single(Compile(clip).Clips).Stages).RequireWanPayload();
+            Assert.Single(Compile(clip).Clips).Stages)
+            .RequireStockHostVideoPayload(WanArchitectureModule.ArchitectureId, "Wan");
 
         Assert.Collection(
             payload.Core.Loras,
@@ -705,7 +708,9 @@ public class WanArchitectureTests
             compiledFive.Stages,
             stage => Assert.Equal(
                 WanArchitectureModule.Ti2v5bModelClassId,
-                stage.RequireWanPayload().ModelClassId));
+                stage.RequireStockHostVideoPayload(
+                    WanArchitectureModule.ArchitectureId,
+                    "Wan").ModelClassId));
 
         VideoStagesSpec cutSpec = new(
             512,
@@ -889,7 +894,11 @@ public class WanArchitectureTests
         Assert.Equal(StageInputKind.EmptyLatent, Assert.Single(compiled.Stages).Input);
         Assert.Equal(
             WanArchitectureModule.Ti2v5bModelClassId,
-            Assert.Single(compiled.Stages).RequireWanPayload().ModelClassId);
+            Assert.Single(compiled.Stages)
+                .RequireStockHostVideoPayload(
+                    WanArchitectureModule.ArchitectureId,
+                    "Wan")
+                .ModelClassId);
     }
 
     [Fact]
@@ -999,10 +1008,6 @@ public class WanArchitectureTests
             stage => Assert.Equal(0, stage.Core.Control));
     }
 
-    /// <summary>
-    /// A LoRA on a samplerless passthrough has no sampler to affect, but that is not worth
-    /// refusing: it compiles, and only a no-op weight drops the LoRA from the plan.
-    /// </summary>
     [Fact]
     public void Compilation_keeps_effective_LoRAs_on_samplerless_passthrough()
     {

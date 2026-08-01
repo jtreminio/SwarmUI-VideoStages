@@ -453,8 +453,6 @@ public class IcLoraDriveMediaContractTests
     [InlineData("drive-control-unsupported", "ltx2.ic-lora.drive-control-unsupported")]
     [InlineData("drive-media-unused", "ltx2.ic-lora.drive-media-unused")]
     [InlineData("audio-controlnet-unsupported", "ltx2.ic-lora.audio-controlnet-unsupported")]
-    [InlineData("auto-preset-missing", "ltx2.ic-lora.auto-preset-missing")]
-    [InlineData("auto-preset-unknown", "ltx2.ic-lora.auto-preset-unknown")]
     public void Invalid_payload_shapes_warn_and_drop_the_entry(
         string scenario,
         string expectedCode)
@@ -481,23 +479,6 @@ public class IcLoraDriveMediaContractTests
                 Constants.IcLoraControlNone,
                 null,
                 DriveData: IcLoraDriveData.Audio),
-            "auto-preset-missing" => new(
-                IcLoraWeights.AutoModelToken,
-                Constants.IcLoraSourceUpload,
-                1,
-                1,
-                Constants.IcLoraControlNone,
-                null,
-                DriveData: IcLoraDriveData.None),
-            "auto-preset-unknown" => new(
-                IcLoraWeights.AutoModelToken,
-                Constants.IcLoraSourceUpload,
-                1,
-                1,
-                Constants.IcLoraControlNone,
-                null,
-                DriveData: IcLoraDriveData.None,
-                Preset: "unknown-preset"),
             _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
         };
         ClipSpec clip = Clip([entry]);

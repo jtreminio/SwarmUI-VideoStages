@@ -5,9 +5,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Ltx2;
 
 /// <summary>
-/// Everything LTX needs before the first workflow phase mutates anything: the custom nodes its
-/// planned stages will emit, and the IC-LoRA weights those stages name. Both are answerable from the
-/// compiled plan plus the backend feature set, so no graph state is required or touched.
+/// Verifies the custom nodes that planned LTX stages will emit before graph mutation begins.
 /// </summary>
 internal static class Ltx2RequestPreflight
 {
@@ -39,18 +37,6 @@ internal static class Ltx2RequestPreflight
                         + "or use SwarmUI's LTXVideo feature installer.",
                         clip.ClipId,
                         stage.StageId));
-                }
-                foreach (IcLoraPlan icLora in icLoras)
-                {
-                    if (IcLoraModelResolver.DescribeUnresolvable(icLora) is string unresolvable)
-                    {
-                        diagnostics.Add(new(
-                            PlanDiagnosticSeverity.Error,
-                            "ltx2.iclora.weights-unresolved",
-                            unresolvable,
-                            clip.ClipId,
-                            stage.StageId));
-                    }
                 }
             }
         }

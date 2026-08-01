@@ -356,7 +356,8 @@ public sealed class EffectiveVideoRequestTests
         Assert.Contains(
             plan.Diagnostics,
             diagnostic => diagnostic.Code == "effective-request.unsupported-ic-lora-ignored");
-        StockHostVideoStagePayload payload = plan.Clips[0].Stages[1].RequireWanPayload();
+        StockHostVideoStagePayload payload = plan.Clips[0].Stages[1]
+            .RequireStockHostVideoPayload(WanArchitectureModule.ArchitectureId, "Wan");
         Assert.Equal(StageUpscaleMode.Model, payload.Core.Upscale.Mode);
         Assert.Equal(2, payload.Core.Upscale.Factor);
     }

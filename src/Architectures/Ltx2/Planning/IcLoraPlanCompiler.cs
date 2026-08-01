@@ -125,7 +125,6 @@ internal static class IcLoraPlanCompiler
                     input)));
             }
 
-            ValidateAutoModel(clip, entry, index, entryDiagnostics);
             diagnostics.AddRange(entryDiagnostics);
             if (entryDiagnostics.Count > 0)
             {
@@ -504,34 +503,6 @@ internal static class IcLoraPlanCompiler
             return IcLoraDriveMediaKind.Audio;
         }
         return IcLoraDriveMediaKind.Unknown;
-    }
-
-    private static void ValidateAutoModel(
-        ClipSpec clip,
-        IcLoraSpec entry,
-        int index,
-        ICollection<PlanDiagnostic> diagnostics)
-    {
-        if (!StringUtils.Equals(entry.Lora, IcLoraWeights.AutoModelToken))
-        {
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(entry.Preset))
-        {
-            diagnostics.Add(Warning(
-                clip,
-                index,
-                "ltx2.ic-lora.auto-preset-missing",
-                "uses [AUTO] but has no preset"));
-        }
-        else if (string.IsNullOrWhiteSpace(IcLoraWeights.ModelNameFor(entry.Preset)))
-        {
-            diagnostics.Add(Warning(
-                clip,
-                index,
-                "ltx2.ic-lora.auto-preset-unknown",
-                $"uses [AUTO], but preset '{entry.Preset}' has no known weights"));
-        }
     }
 
     private static PlanDiagnostic Warning(
