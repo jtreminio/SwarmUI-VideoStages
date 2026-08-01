@@ -111,7 +111,7 @@ public class RuntimeArtifactTests
             },
             Vae: null);
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => DecodedClipArtifact.FromRuntime(artifact, Clip()));
 
         Assert.Contains("did not produce decoded video media", error.Message);
@@ -146,7 +146,7 @@ public class RuntimeArtifactTests
             },
             Vae: null);
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => DecodedClipArtifact.FromRuntime(artifact, Clip()));
 
         Assert.Contains("did not produce decoded attached audio", error.Message);
@@ -177,7 +177,7 @@ public class RuntimeArtifactTests
             Data(generator, "71", WGNodeData.DT_LATENT_AUDIO);
         JObject before = (JObject)workflow.DeepClone();
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => new GlobalVideoFrameTrimmer(generator).Apply());
 
         Assert.Contains("is not a decoded audio stream", error.Message);
@@ -203,7 +203,7 @@ public class RuntimeArtifactTests
         generator.CurrentMedia.FPS = 24;
         JObject before = (JObject)workflow.DeepClone();
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => new GlobalVideoFrameTrimmer(generator).Apply());
 
         Assert.Contains("no decoded output to trim", error.Message);
@@ -235,7 +235,7 @@ public class RuntimeArtifactTests
             Data(generator, "missing-audio", WGNodeData.DT_AUDIO);
         JObject before = (JObject)workflow.DeepClone();
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => new GlobalVideoFrameTrimmer(generator).Apply());
 
         Assert.Contains("attached audio stream required for global frame trim", error.Message);

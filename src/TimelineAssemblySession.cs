@@ -1,6 +1,5 @@
 using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -81,7 +80,7 @@ internal sealed class TimelineAssemblySession
         ArgumentNullException.ThrowIfNull(clipOutputs);
         if (clipOutputs.Count != _plan.Clips.Count)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 $"VideoStages: timeline assembly expected {_plan.Clips.Count} clip outputs "
                 + $"but received {clipOutputs.Count}.");
         }
@@ -99,7 +98,7 @@ internal sealed class TimelineAssemblySession
         ArgumentNullException.ThrowIfNull(clipOutput);
         if (clipOutput.HasVideo != true)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "VideoStages: timeline assembly received an invalid clip video artifact.");
         }
         using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);

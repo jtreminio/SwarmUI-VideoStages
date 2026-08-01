@@ -189,7 +189,7 @@ public class MultiClipCrossfadeMergerTests
             bridge.RemoveNode(VideoId(1));
         }
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => Merger(g).Apply(Artifacts(clips), PlansFor(clips, ["cut"])));
 
         Assert.Contains("only 1 of 2 planned clip video outputs", error.Message);
@@ -208,7 +208,7 @@ public class MultiClipCrossfadeMergerTests
         };
         JObject before = (JObject)g.Workflow.DeepClone();
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => Merger(g).Apply(artifacts, PlansFor(clips, ["cut"])));
 
         Assert.Contains("decoded audio could not be resolved", error.Message);

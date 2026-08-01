@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
@@ -62,7 +61,7 @@ internal static class VideoStagesContext
 
     private static VideoExecutionPlanContext RequireExistingContext(WorkflowGenerator g) =>
         g.GetVideoExecutionPlanContext()
-        ?? throw new SwarmUserErrorException(
+        ?? throw VideoStagesInvariant.Failure(
             "VideoStages has no executable clips in the active timeline.");
 
     private static VideoStagesSpec ParseForPromptTag(T2IParamInput input)

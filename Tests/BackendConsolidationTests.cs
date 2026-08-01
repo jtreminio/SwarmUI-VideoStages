@@ -147,7 +147,7 @@ public class BackendConsolidationTests
             UserInput = input,
         };
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => new GlobalVideoFrameTrimmer(generator).Apply());
 
         Assert.Contains("global frame trim", error.Message);

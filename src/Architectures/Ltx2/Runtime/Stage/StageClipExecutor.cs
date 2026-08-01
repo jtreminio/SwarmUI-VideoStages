@@ -1,6 +1,5 @@
 using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
 using VideoStages.Planning;
@@ -81,7 +80,7 @@ internal sealed class StageClipExecutor(
         WGNodeData initVideoMedia = _initVideoClipInstaller.TryInstall(plannedClip);
         if (initVideoMedia is null)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 $"VideoStages: clip {plannedClip.ClipId} source video could not be installed.");
         }
         return initVideoMedia;
@@ -101,7 +100,7 @@ internal sealed class StageClipExecutor(
         {
             if (clipContext.SourceMedia is null)
             {
-                throw new SwarmUserErrorException(
+                throw VideoStagesInvariant.Failure(
                     $"VideoStages: clip {context.Runtime.Clip.ClipId} requires root media before its first stage.");
             }
             g.CurrentMedia = clipContext.SourceMedia.Duplicate();

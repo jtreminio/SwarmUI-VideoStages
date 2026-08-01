@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Generated;
 using VideoStages.Planning;
@@ -186,7 +185,7 @@ internal sealed class LtxStageLatentAudioFactory(
         if (clip.ArchitecturePayload is not IArchitectureControlNetSourcePlan
             { ControlNetSourceIndex: int sourceIndex })
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "VideoStages: ControlNet owns clip length, but the compiled plan has no valid "
                 + "ControlNet 1-3 source.");
         }
@@ -204,10 +203,9 @@ internal sealed class LtxStageLatentAudioFactory(
             or AudioSourceKind.ControlNet;
 
     /// <summary>
-    /// The clip's configured timeline resolution wins over the incoming media's size: e.g. with a
-    /// initVideoClip FIRST clip, the footage conforms to the spec dims while the kept-alive root generation
-    /// stays at the core params' — sizing later clips from that root media would splinter the timeline
-    /// across resolutions (and degrade every overlap boundary merge to a hard cut).
+    /// Uses the planned timeline resolution rather than incoming media dimensions. Root media can
+    /// retain its original size after init-video conformance and would otherwise split the timeline
+    /// across resolutions.
     /// </summary>
     private (int Width, int Height) ResolveStageLatentDims(
         StageFrame stageFrame,

@@ -126,7 +126,7 @@ public class StageRunnerCollaboratorTests
         };
         StagePlan stage = MakePlan().Stage;
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => new StageRuntimeArtifactCapture(generator).Capture(stage));
 
         Assert.Contains($"stage {stage.StageId}", error.Message);

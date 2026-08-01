@@ -812,7 +812,7 @@ public class WanRuntimeFlowTests
                     };
                 };
 
-            SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
+            InvalidOperationException error = Assert.Throws<InvalidOperationException>(
                 () => WorkflowTestHarness.GenerateWithStepsAndState(
                     input,
                     WorkflowTestHarness.Template_BaseOnlyImage()
@@ -3623,7 +3623,7 @@ public class WanRuntimeFlowTests
             }
         }, Constants.WorkflowStepPriority.DropCoreImageToVideoOutput - 0.01);
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(() =>
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
             WorkflowTestHarness.GenerateWithStepsAndState(
                 WanInput(models, steps: 10),
                 WorkflowTestHarness.Template_BaseOnlyImage()
@@ -3652,7 +3652,7 @@ public class WanRuntimeFlowTests
             g.CurrentMedia = g.CurrentMedia.WithPath(new JArray("removed-root", 0));
         }, Constants.WorkflowStepPriority.CapturePreCoreVideoMedia - 0.01);
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(() =>
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
             WorkflowTestHarness.GenerateWithStepsAndState(
                 WanInput(models, steps: 10),
                 WorkflowTestHarness.Template_BaseOnlyImage()

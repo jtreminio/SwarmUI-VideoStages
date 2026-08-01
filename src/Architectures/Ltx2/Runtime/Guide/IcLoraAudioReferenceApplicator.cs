@@ -5,7 +5,6 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Generated;
 using VideoStages.Planning;
@@ -127,13 +126,13 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         }
         if (entry.MediaInput.Source != IcLoraMediaSourceKind.Upload)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 $"VideoStages: IC-LoRA entry {entry.EntryIndex} has no supported audio drive source.");
         }
         IcLoraDriveMediaPlan media = entry.DriveMedia;
         if (!media.IsConfigured)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 $"VideoStages: IC-LoRA entry {entry.EntryIndex} requires audio or video Drive Media.");
         }
         if (media.Kind == IcLoraDriveMediaKind.Audio)
@@ -147,7 +146,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         }
         if (media.Kind != IcLoraDriveMediaKind.Video)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "This IC-LoRA requires audio or video Drive Media for its speaker reference.");
         }
         SwarmLoadVideoB64Node load =

@@ -1,7 +1,6 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 using VideoStages.Planning;
 
 using VideoStages.Architectures.Ltx2.Planning;
@@ -26,7 +25,7 @@ internal sealed class StageFramePreparer(
         ArgumentNullException.ThrowIfNull(rootPolicy);
 
         WGNodeData currentMedia = g.CurrentMedia
-            ?? throw new SwarmUserErrorException(
+            ?? throw VideoStagesInvariant.Failure(
                 $"VideoStages: stage {stage.StageId} has no input media.");
         JArray priorOutputPath = CopyPath(currentMedia.Path);
         LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
@@ -41,7 +40,7 @@ internal sealed class StageFramePreparer(
             : upscaleGraphBuilder.Apply(clipContext, stage, sectionId, postVideoChain);
         if (sourceMedia is null)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 $"VideoStages: stage {stage.StageId} could not resolve its source media.");
         }
 
@@ -78,7 +77,7 @@ internal sealed class StageFramePreparer(
             sectionId: sectionId);
         if (videoModel is null)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 $"VideoStages: stage {stage.StageId} could not resolve LTX video model "
                 + $"'{stage.ResolvedModel.ModelName}'.");
         }

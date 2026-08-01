@@ -1,6 +1,5 @@
 using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -16,7 +15,7 @@ internal sealed class StageRuntimeArtifactCapture(WorkflowGenerator g)
         RuntimeArtifact output = RuntimeArtifact.Capture(g, bridge);
         if (!output.HasMedia)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 $"VideoStages: stage {stage.StageId} did not produce a video artifact.");
         }
         return output;

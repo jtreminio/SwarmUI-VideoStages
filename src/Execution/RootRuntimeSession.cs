@@ -1,7 +1,6 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Planning;
 
 namespace VideoStages.Execution;
@@ -66,7 +65,7 @@ internal sealed class RootRuntimeSession
         ArgumentNullException.ThrowIfNull(timeline);
         if (!timeline.HasMedia)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "VideoStages: the completed timeline did not produce a publishable video artifact.");
         }
 
@@ -79,7 +78,7 @@ internal sealed class RootRuntimeSession
             timeline,
             publishAudio: rootIsDisplaced || _requiresDedicatedAudioPublication))
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "VideoStages: the completed timeline could not be connected to the final output.");
         }
 

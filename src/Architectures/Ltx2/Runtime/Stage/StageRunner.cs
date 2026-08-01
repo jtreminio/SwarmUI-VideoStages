@@ -1,6 +1,5 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
 using VideoStages.Planning;
@@ -56,7 +55,7 @@ internal class StageRunner
         ArgumentNullException.ThrowIfNull(rootPolicy);
         if (_generator.CurrentMedia is null)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 $"VideoStages: stage {stage.StageId} has no input media.");
         }
 
@@ -119,9 +118,8 @@ internal class StageRunner
             || (sourceMedia?.DataType != WGNodeData.DT_VIDEO
                 && sourceMedia?.DataType != WGNodeData.DT_IMAGE))
         {
-            throw new SwarmUserErrorException(
-                "VideoStages: the LTX execution plan reached an invalid LTX stage input. "
-                + "Regenerate after updating the timeline.");
+            throw VideoStagesInvariant.Failure(
+                "VideoStages: the LTX stage input was neither decoded video nor image media.");
         }
 
         StagePlan stage = stageFrame.Stage;

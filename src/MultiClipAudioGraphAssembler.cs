@@ -1,6 +1,5 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
-using SwarmUI.Utils;
 using VideoStages.Execution;
 
 namespace VideoStages;
@@ -44,7 +43,7 @@ internal static class MultiClipAudioGraphAssembler
             INodeOutput output = clip.Audio.Resolve(bridge);
             if (output is null)
             {
-                throw new SwarmUserErrorException(
+                throw VideoStagesInvariant.Failure(
                     $"VideoStages: clip {clip.ClipId} decoded audio could not be resolved "
                     + "for timeline assembly.");
             }

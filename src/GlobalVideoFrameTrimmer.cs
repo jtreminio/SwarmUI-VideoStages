@@ -4,7 +4,6 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 using VideoStages.Execution;
 
 namespace VideoStages;
@@ -49,13 +48,13 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
         // Fail closed because publishing untrimmed video would hide an unusable output.
         if (media?.Output is not INodeOutput videoOutput)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "VideoStages: the final output uses global frame trim, but the timeline produced "
                 + "no decoded output to trim.");
         }
         if (media.DataType != WGNodeData.DT_VIDEO)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "VideoStages: the final output uses global frame trim, but it is not a decoded "
                 + "video stream.");
         }
@@ -113,14 +112,14 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
         if (audio.DataType != WGNodeData.DT_AUDIO
             || audio.Path is not JArray { Count: 2 } audioPath)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "VideoStages: the final video uses global frame trim, but its attached audio "
                 + "is not a decoded audio stream.");
         }
         if (g.CurrentMedia.Frames is not > 0
             || g.CurrentMedia.GetRawFPS() is not > 0)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "VideoStages: the final video uses global frame trim, but its frame count or "
                 + "frame rate is unavailable, so attached audio cannot be trimmed in sync.");
         }
@@ -132,7 +131,7 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
         JArray path,
         string outputKind) =>
         bridge.ResolvePath(path)
-        ?? throw new SwarmUserErrorException(
+        ?? throw VideoStagesInvariant.Failure(
             $"VideoStages: the final {outputKind} stream required for global frame trim "
             + "is unavailable in the workflow.");
 
@@ -177,13 +176,13 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
         if (audio.DataType != WGNodeData.DT_AUDIO
             || audio.Output is null)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "VideoStages: the final video uses global frame trim, but its attached audio "
                 + "is not a decoded audio stream.");
         }
         if (originalFrames is not > 0 || framesPerSecond is not > 0)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "VideoStages: the final video uses global frame trim, but its frame count or "
                 + "frame rate is unavailable, so attached audio cannot be trimmed in sync.");
         }

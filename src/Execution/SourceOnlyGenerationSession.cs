@@ -1,14 +1,12 @@
 using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages.Execution;
 
 /// <summary>
-/// Executes pre-existing footage without constructing or consuming a generation runtime, latent, VAE,
-/// stage runner, or generation-stage execution context.
+/// Publishes pre-existing footage without invoking a generation stage.
 /// </summary>
 internal sealed class SourceOnlyGenerationSession(
     WorkflowGenerator generator,
@@ -29,7 +27,7 @@ internal sealed class SourceOnlyGenerationSession(
                 $"Clip {context.Clip.ClipId} has no init-video-only architecture payload.");
         }
         WGNodeData initVideoMedia = _sourceInstaller.TryInstall(context.Clip)
-            ?? throw new SwarmUserErrorException(
+            ?? throw VideoStagesInvariant.Failure(
                 $"VideoStages: clip {context.Clip.ClipId} source video could not be installed.");
         generator.CurrentMedia = initVideoMedia;
         _audio.Prepare(context.Clip, framesPerSecond, audioSources, initVideoMedia);

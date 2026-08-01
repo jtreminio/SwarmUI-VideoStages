@@ -1,7 +1,6 @@
 using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages.HostVideo.Runtime;
@@ -127,8 +126,8 @@ internal sealed class HostVideoRootMediaHandoff
     }
 
     /// <summary>
-    /// Deliberately narrower than LTX's stage-ref marker: this handoff only intercepts host root
-    /// image media today, so it carries no frame count, frame rate, or attached audio to preserve.
+    /// This marker carries only the fields needed to restore host root image media; it does not
+    /// preserve frame count, frame rate, or attached audio.
     /// </summary>
     private string EncodeRequiredMarker(
         WorkflowBridge bridge,
@@ -226,8 +225,8 @@ internal sealed class HostVideoRootMediaHandoff
         VideoGraphHelpers.RemoveCached(_generator, _preCoreNodeIdsKey);
     }
 
-    private SwarmUserErrorException HandoffError(string detail) =>
-        new(
+    private InvalidOperationException HandoffError(string detail) =>
+        VideoStagesInvariant.Failure(
             $"VideoStages: {_architectureDisplayLabel} could not restore the host root because "
             + $"{detail}.");
 

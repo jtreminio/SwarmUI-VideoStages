@@ -2,7 +2,6 @@ using ComfyTyped.Core;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
 using VideoStages.Planning;
@@ -14,9 +13,8 @@ internal sealed record TimelineMergeResult(
     RuntimeArtifact Artifact);
 
 /// <summary>
-/// Orchestrates graph resolution and media ownership for a multi-clip timeline. Boundary planning and
-/// graph construction live in dedicated collaborators; the public adapter publishes to legacy host
-/// state while the timeline runner consumes the explicit artifact returned by <see cref="Merge"/>.
+/// Resolves clip graphs into a timeline artifact. <see cref="Apply"/> also publishes the result to
+/// host state for legacy callers.
 /// </summary>
 internal sealed class MultiClipParallelMerger(
     WorkflowGenerator g,
@@ -46,13 +44,12 @@ internal sealed class MultiClipParallelMerger(
             ResolveOutputs(bridge, clipArtifacts.Select(clip => clip.Video.ToPath()));
         if (resolvedOutputs.Count != clipArtifacts.Count)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 $"VideoStages: timeline assembly could resolve only {resolvedOutputs.Count} of "
                 + $"{clipArtifacts.Count} planned clip video outputs.");
         }
 
-        // Conforming runs before every consumer of clip geometry, so overlap merging, the concat,
-        // and the published media all see one width, height, and frame rate.
+        // Conform before overlap planning so every downstream graph uses the same geometry.
         TimelineGeometryConform.ConformResult conform = TimelineGeometryConform.Apply(
             bridge,
             clipArtifacts,

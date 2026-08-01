@@ -1,7 +1,6 @@
 using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan;
 using VideoStages.Execution;
@@ -10,9 +9,8 @@ using VideoStages.Planning;
 namespace VideoStages.HostVideo.Runtime;
 
 /// <summary>
-/// Runs architectures whose stages delegate to SwarmUI's stock video builders. The common
-/// lifecycle stays linear here; the few WAN-specific branches cover frame references, temporal
-/// snapping, native final-frame conditioning, and 5B graph cleanup.
+/// Runs architectures whose stages delegate to SwarmUI's stock video builders. WAN-specific
+/// behavior is supplied by <see cref="WanStockHostVideoBehavior"/>.
 /// </summary>
 internal sealed class StockHostVideoGenerationSession(
     WorkflowGenerator g,
@@ -54,7 +52,7 @@ internal sealed class StockHostVideoGenerationSession(
             g.CurrentMedia = _initVideoClipInstaller.TryInstall(
                 sourceInstallPlan,
                 includeSourceAudio: false)
-                ?? throw new SwarmUserErrorException(
+                ?? throw VideoStagesInvariant.Failure(
                     $"VideoStages: clip {clip.ClipId} source video could not be installed.");
             g.CurrentVae = null;
         }
@@ -80,13 +78,12 @@ internal sealed class StockHostVideoGenerationSession(
             else
             {
                 g.CurrentMedia = rootSources.Media?.Duplicate()
-                    ?? throw new SwarmUserErrorException(
+                    ?? throw VideoStagesInvariant.Failure(
                         $"VideoStages: clip {clip.ClipId} has no host image to generate from.");
                 g.CurrentVae = rootSources.Vae?.Duplicate();
             }
         }
-        // Both stock-host architecture descriptors currently declare audio disabled. A mixed
-        // timeline's shared root may still carry another architecture's attachment.
+        // Stock-host stages are video-only, but a shared root may carry another architecture's audio.
         if (g.CurrentMedia is not null)
         {
             g.CurrentMedia.AttachedAudio = null;
@@ -346,7 +343,7 @@ internal sealed class StockHostVideoGenerationSession(
             && latent.Height == height;
         if (!valid)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 $"VideoStages: clip {clip.ClipId} stage {stage.StageId} could not create a "
                     + $"valid {width}x{height}, {frames}-frame {architectureLabel} "
                     + "text-video latent.");
@@ -361,7 +358,7 @@ internal sealed class StockHostVideoGenerationSession(
         StockHostVideoStagePayload payload = ResolvePayload(stage);
         StageCorePlan core = stage.Core;
         T2IModel videoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId)
-            ?? throw new SwarmUserErrorException(
+            ?? throw VideoStagesInvariant.Failure(
                 $"VideoStages: clip {clip.ClipId} could not resolve {architectureLabel} "
                     + "video model "
                 + $"'{stage.ResolvedModel.ModelName}'.");

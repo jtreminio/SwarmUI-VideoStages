@@ -3,7 +3,6 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -59,7 +58,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
             {
                 return;
             }
-            throw new SwarmUserErrorException($"VideoStages: {error}");
+            throw VideoStagesInvariant.Failure(error);
         }
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         RuntimeArtifact current = RuntimeArtifact.Capture(
@@ -81,7 +80,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         {
             return error is null
                 ? artifact
-                : throw new SwarmUserErrorException($"VideoStages: {error}");
+                : throw VideoStagesInvariant.Failure(error);
         }
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         return Apply(artifact, config, bridge);
@@ -95,7 +94,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         {
             return error is null
                 ? artifact
-                : throw new SwarmUserErrorException($"VideoStages: {error}");
+                : throw VideoStagesInvariant.Failure(error);
         }
         if (plan.Clips.Count != 1
             || RequiredFeatures(config.Method).Any(feature => !g.Features.Contains(feature)))
@@ -115,7 +114,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         if (media?.DataType != WGNodeData.DT_VIDEO
             || media.Output is not INodeOutput videoOutput)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "VideoStages: frame interpolation requires a resolvable decoded final video.");
         }
         if (media.Frames is not int frames
@@ -123,12 +122,11 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
             || media.FPS?.Type != JTokenType.Integer
             || media.FPS.Value<int>() <= 0)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "VideoStages: frame interpolation requires literal positive final frame-count "
                 + "and frame-rate metadata.");
         }
         int fps = media.FPS.Value<int>();
-        // A single frame has no interpolation interval.
         if (frames == 1)
         {
             return artifact;
@@ -143,7 +141,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         }
         catch (OverflowException)
         {
-            throw new SwarmUserErrorException(
+            throw VideoStagesInvariant.Failure(
                 "VideoStages: frame interpolation metadata exceeds the supported integer range.");
         }
 
@@ -161,7 +159,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
             config.Multiplier);
         using WorkflowBridge outputBridge = BridgeSync.For(g);
         INodeOutput interpolatedOutput = outputBridge.ResolvePath(interpolated)
-            ?? throw new SwarmUserErrorException(
+            ?? throw VideoStagesInvariant.Failure(
                 "VideoStages: frame interpolation did not produce a resolvable video.");
         return artifact with
         {
