@@ -40,18 +40,12 @@ public class StageRunnerCollaboratorTests
             typeof(IcLoraStageInputResolver),
             nameof(IcLoraStageInputResolver.Resolve),
             typeof(StageFrame));
-        AssertTypedMethod(
-            typeof(StageRuntimeArtifactCapture),
-            nameof(StageRuntimeArtifactCapture.Capture),
-            typeof(StagePlan));
-
         Type[] collaboratorTypes =
         [
             typeof(PlannedStagePromptResolver),
             typeof(StageFramePreparer),
             typeof(StageUpscaleGraphBuilder),
             typeof(IcLoraStageInputResolver),
-            typeof(StageRuntimeArtifactCapture),
         ];
         Assert.DoesNotContain(
             collaboratorTypes.SelectMany(type => type.GetMethods(
@@ -127,7 +121,7 @@ public class StageRunnerCollaboratorTests
         StagePlan stage = MakePlan().Stage;
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => new StageRuntimeArtifactCapture(generator).Capture(stage));
+            () => StageRunner.CaptureArtifact(generator, stage));
 
         Assert.Contains($"stage {stage.StageId}", error.Message);
     }
@@ -149,8 +143,7 @@ public class StageRunnerCollaboratorTests
             WGNodeData.DT_VIDEO,
             T2IModelClassSorter.CompatLtxv2);
 
-        RuntimeArtifact artifact = new StageRuntimeArtifactCapture(generator)
-            .Capture(MakePlan().Stage);
+        RuntimeArtifact artifact = StageRunner.CaptureArtifact(generator, MakePlan().Stage);
 
         Assert.True(artifact.HasMedia);
         generator.CurrentMedia = null;

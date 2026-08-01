@@ -1,3 +1,4 @@
+using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
@@ -17,7 +18,6 @@ internal class StageRunner
     private readonly StageUpscaleGraphBuilder _upscaleGraphBuilder;
     private readonly StageFramePreparer _framePreparer;
     private readonly IcLoraStageInputResolver _icLoraStageInputResolver;
-    private readonly StageRuntimeArtifactCapture _artifactCapture;
 
     public StageRunner(
         WorkflowGenerator generator,
@@ -37,7 +37,6 @@ internal class StageRunner
             _upscaleGraphBuilder,
             new PlannedStagePromptResolver(generator));
         _icLoraStageInputResolver = new IcLoraStageInputResolver(generator);
-        _artifactCapture = new StageRuntimeArtifactCapture(generator);
     }
 
     public RuntimeArtifact RunStage(
@@ -63,7 +62,7 @@ internal class StageRunner
             && !rootPolicy.ReplacesTextToVideoRootStage(stage, clip))
         {
             RunPassthroughStage(stage, sectionId, clipContext);
-            return _artifactCapture.Capture(stage);
+            return CaptureArtifact(_generator, stage);
         }
 
         using ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
@@ -102,7 +101,20 @@ internal class StageRunner
         };
 
         RunLtxStage(guideReference, refStore, stageFrame, applyIcLora);
-        return _artifactCapture.Capture(stage);
+        return CaptureArtifact(_generator, stage);
+    }
+
+    internal static RuntimeArtifact CaptureArtifact(WorkflowGenerator generator, StagePlan stage)
+    {
+        ArgumentNullException.ThrowIfNull(stage);
+        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        RuntimeArtifact output = RuntimeArtifact.Capture(generator, bridge);
+        if (!output.HasMedia)
+        {
+            throw VideoStagesInvariant.Failure(
+                $"VideoStages: stage {stage.StageId} did not produce a video artifact.");
+        }
+        return output;
     }
 
     private void RunLtxStage(
@@ -140,9 +152,7 @@ internal class StageRunner
         bool isContinuationTail = reanchorsContinuityTail && clipContext.IsFirstStage(stage);
         if (isContinuationTail)
         {
-            // A continue boundary uses the previous clip's tail as its opening guide. Duplicate it
-            // because guide preparation changes dimensions, while later stages need the stored tail
-            // at its original resolution.
+            // Guide preparation resizes its input, so preserve the stored continuity frame.
             primaryGuideClipRef = new ResolvedClipRef(
                 clipContext.ContinuityFrame.Duplicate(),
                 new ImageReferencePlan(
@@ -158,8 +168,7 @@ internal class StageRunner
         }
         else if (reanchorsContinuityTail)
         {
-            // Later stages also re-freeze the tail at their own resolution because a latent handoff
-            // does not preserve the opening frames.
+            // A latent handoff does not preserve the opening frames at the new resolution.
             stageFrame.ContinuityAnchor = GuideMediaPreparation.Prepare(
                 _generator,
                 clipContext.ContinuityFrame.Duplicate(),
@@ -177,15 +186,12 @@ internal class StageRunner
             IsContinuationTail: isContinuationTail,
             HasOtherFrameReferences: clipRefs is { Count: > 0 },
             ReplacesTextToVideoRoot: stageFrame.ReplacesTextToVideoRoot,
-            // The first stage of an initVideoClip samples its encoded footage directly. Reinjecting
-            // that footage as an inplace guide would overwrite the noise mask of every frame it spans.
+            // Reinjection would overwrite the noise mask for the encoded footage's frame span.
             InitVideoFootageIsStageInput: clipContext.PlannedClip.HasInitVideo
                 && clipContext.IsFirstStage(stage)
                 && payload.Guide.Kind == StageGuideReferenceKind.Generated
                 && !payload.ImageReferenceWasExplicit,
-            // The host's incoming image is the implicit frame-1 guide for clip 0/stage 0 only.
-            // Later defaulted stages refine their incoming latent directly. Authored ImageReference
-            // selectors and authored frame refs remain eligible for guide construction.
+            // Only clip 0/stage 0 treats the host image as its implicit frame-1 guide.
             RefinesIncomingLatent: clipContext.Plan.Root.HostKind == HostRootKind.ImageToVideo
                 && !payload.ImageReferenceWasExplicit
                 && (clipContext.PlannedClip.ClipId != 0 || stage.ClipStageIndex != 0),
@@ -277,8 +283,7 @@ internal class StageRunner
             : _guideMediaResolver.ResolveGuideMedia(guideReference, stageFrame.PostVideoChain);
         if (guideIsStageInput && authoredGuide is not null)
         {
-            // A detached decode of the stage-input latent has the same rendered dimensions as
-            // the prepared source even when its marker still carries pre-resize metadata.
+            // The detached decode may retain stale pre-resize metadata.
             authoredGuide.Width = sourceMedia.Width;
             authoredGuide.Height = sourceMedia.Height;
         }
