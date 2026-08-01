@@ -236,6 +236,7 @@ export const getReferenceFrameMax = (
                 | "stages"
                 | "initVideo"
                 | "retake"
+                | "audioSource"
                 | "clipLengthFromAudio"
                 | "clipLengthFromControlNet"
             >
@@ -276,6 +277,7 @@ export const getKnownReferenceFrameMax = (
                 Clip,
                 | "initVideo"
                 | "retake"
+                | "audioSource"
                 | "clipLengthFromAudio"
                 | "clipLengthFromControlNet"
             >

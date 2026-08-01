@@ -27,6 +27,7 @@ import {
     readRawStageString,
     removeRefAt,
 } from "./normalization";
+import { framesForClip } from "./renderUtils";
 import {
     REF_SOURCE_BASE,
     REF_SOURCE_REFINER,
@@ -724,6 +725,7 @@ describe("normalization", () => {
         const clip = normalizeClip(
             {
                 duration: 1.05,
+                audioSource: "Upload",
                 clipLengthFromAudio: true,
                 refs: [{ source: "Base", frame: 100 }],
                 stages: [{ model: "ltx-2.3.safetensors" }],
@@ -734,6 +736,26 @@ describe("normalization", () => {
         );
 
         expect(clip.refs[0].frame).toBe(100);
+        expect(clip.clipLengthFromAudio).toBe(true);
+    });
+
+    it("normalizeClip clamps references when the audio source cannot drive the length", () => {
+        const clip = normalizeClip(
+            {
+                duration: 1.05,
+                audioSource: "Native",
+                clipLengthFromAudio: true,
+                refs: [{ source: "Base", frame: 100 }],
+                stages: [{ model: "ltx-2.3.safetensors" }],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+            24,
+        );
+
+        // The inert flag no longer suppresses grid snapping, so references clamp to the
+        // clip's grid-snapped frame count exactly as they would without the flag.
+        expect(clip.refs[0].frame).toBe(framesForClip(clip.duration, 24, 8));
         expect(clip.clipLengthFromAudio).toBe(true);
     });
 

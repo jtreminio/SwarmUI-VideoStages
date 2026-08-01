@@ -440,36 +440,6 @@
     return true;
   };
 
-  // frontend/architectures/modelCapabilities.ts
-  var intersect = (left, right) => left.filter((value) => right.includes(value));
-  var effectiveModelCapabilities = (model, architecture) => model?.capabilities ?? architecture.capabilities;
-  var effectiveClipCapabilities = (clip, architecture, modelForName) => {
-    const stages = clip.stages.slice(0, activeStageCount(clip));
-    if (stages.length === 0) {
-      return structuredClone(architecture.capabilities);
-    }
-    const models = stages.map((stage) => modelForName(stage.model));
-    if (models.some(
-      (model) => !model?.architectureId || model.architectureId !== architecture.id
-    )) {
-      return null;
-    }
-    return models.reduce((effective, model) => {
-      const capabilities = effectiveModelCapabilities(model, architecture);
-      return {
-        features: intersect(effective.features, capabilities.features),
-        entryModes: intersect(
-          effective.entryModes,
-          capabilities.entryModes
-        ),
-        audioSourceKinds: intersect(
-          effective.audioSourceKinds,
-          capabilities.audioSourceKinds
-        )
-      };
-    }, structuredClone(architecture.capabilities));
-  };
-
   // frontend/selectOption.ts
   var preserveSelectedOption = (options, selectedValue, position, build) => {
     const value = `${selectedValue || ""}`.trim();
@@ -582,6 +552,36 @@
       label: `${value} (unsupported persisted value)`
     }));
     return options;
+  };
+
+  // frontend/architectures/modelCapabilities.ts
+  var intersect = (left, right) => left.filter((value) => right.includes(value));
+  var effectiveModelCapabilities = (model, architecture) => model?.capabilities ?? architecture.capabilities;
+  var effectiveClipCapabilities = (clip, architecture, modelForName) => {
+    const stages = clip.stages.slice(0, activeStageCount(clip));
+    if (stages.length === 0) {
+      return structuredClone(architecture.capabilities);
+    }
+    const models = stages.map((stage) => modelForName(stage.model));
+    if (models.some(
+      (model) => !model?.architectureId || model.architectureId !== architecture.id
+    )) {
+      return null;
+    }
+    return models.reduce((effective, model) => {
+      const capabilities = effectiveModelCapabilities(model, architecture);
+      return {
+        features: intersect(effective.features, capabilities.features),
+        entryModes: intersect(
+          effective.entryModes,
+          capabilities.entryModes
+        ),
+        audioSourceKinds: intersect(
+          effective.audioSourceKinds,
+          capabilities.audioSourceKinds
+        )
+      };
+    }, structuredClone(architecture.capabilities));
   };
 
   // frontend/architectures/generatedFeatures.ts
@@ -700,7 +700,7 @@
     if (!capabilities) {
       return { status: "unknown" };
     }
-    if (clip.clipLengthFromAudio === true && architectureFeatureSupport("audioDerivedDuration", capabilities) || clip.clipLengthFromControlNet === true && architectureFeatureSupport("icLora", capabilities)) {
+    if (clip.clipLengthFromAudio === true && canUseClipLengthFromAudio(clip.audioSource ?? "") && architectureFeatureSupport("audioDerivedDuration", capabilities) || clip.clipLengthFromControlNet === true && architectureFeatureSupport("icLora", capabilities)) {
       return { status: "not-applicable" };
     }
     const models = effectiveGridModels(clip, modelForName, architectureForId);
@@ -3550,6 +3550,7 @@
     const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
     const clipLengthFromAudio = !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
     const retake = normalizeRetake(rawClip.retake, duration);
+    const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const refFrameMax = getKnownReferenceFrameMax(
       getRootDefaults2,
       {
@@ -3557,6 +3558,7 @@
         stages,
         initVideo,
         retake,
+        audioSource,
         clipLengthFromAudio,
         clipLengthFromControlNet
       },
@@ -3565,7 +3567,6 @@
     const refs = refsRaw.map(
       (rawRef) => normalizeRef(isRecord2(rawRef) ? rawRef : {}, refFrameMax)
     );
-    const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const stageZero = stages[0] ?? null;
     const persistedArchitecture = trimmedText(rawClip.architectureHint);
     const persistedProfile = trimmedText(rawClip.modelProfileId);

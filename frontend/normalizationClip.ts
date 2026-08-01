@@ -245,6 +245,7 @@ export const normalizeClip = (
     const clipLengthFromAudio =
         !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
     const retake = normalizeRetake(rawClip.retake, duration);
+    const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const refFrameMax = getKnownReferenceFrameMax(
         getRootDefaults,
         {
@@ -252,6 +253,7 @@ export const normalizeClip = (
             stages,
             initVideo,
             retake,
+            audioSource,
             clipLengthFromAudio,
             clipLengthFromControlNet,
         },
@@ -260,7 +262,6 @@ export const normalizeClip = (
     const refs = refsRaw.map((rawRef) =>
         normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax),
     );
-    const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const stageZero = stages[0] ?? null;
     const persistedArchitecture = trimmedText(rawClip.architectureHint);
     const persistedProfile = trimmedText(rawClip.modelProfileId);

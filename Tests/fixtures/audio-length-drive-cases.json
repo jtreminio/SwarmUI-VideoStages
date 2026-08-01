@@ -1,0 +1,10 @@
+[
+  { "source": "Native", "canDriveClipDuration": false },
+  { "source": "", "canDriveClipDuration": false },
+  { "source": "Upload", "canDriveClipDuration": true },
+  { "source": "ControlNet", "canDriveClipDuration": true },
+  { "source": "audio0", "canDriveClipDuration": true },
+  { "source": "audio3", "canDriveClipDuration": true },
+  { "source": "audio", "canDriveClipDuration": false },
+  { "source": "future-audio-source", "canDriveClipDuration": false }
+]

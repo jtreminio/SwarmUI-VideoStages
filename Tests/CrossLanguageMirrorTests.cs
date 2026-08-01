@@ -26,6 +26,10 @@ namespace VideoStages.Tests;
 /// <c>icLoraPresets</c>.</item>
 /// <item>Upscale mode classification: <see cref="StageUpscalePlanCompiler"/> vs frontend
 /// <c>upscaleModeForMethod</c>.</item>
+/// <item>Audio sources that can drive clip duration:
+/// <see cref="AudioSourceKindPolicy.CanDriveClipDuration"/> vs frontend
+/// <c>audioSource.canUseClipLengthFromAudio</c>, the shared predicate both temporal-grid
+/// applicability gates read.</item>
 /// </list>
 /// </summary>
 [Collection("VideoStagesTests")]
@@ -85,6 +89,18 @@ public class CrossLanguageMirrorTests
             int structural =
                 ClipTimelineSpecParser.CalculateStructuralFrameCount(duration, fps);
             Assert.Equal(expected, StaticGeneratedFrameGrid.SnapUp(structural, frameGrid));
+        }
+    }
+
+    [Fact]
+    public void AudioLengthDriveKinds_MatchSharedFixture()
+    {
+        foreach (JObject c in LoadFixture("audio-length-drive-cases.json").OfType<JObject>())
+        {
+            Assert.Equal(
+                c.Value<bool>("canDriveClipDuration"),
+                AudioSourceKindPolicy.CanDriveClipDuration(
+                    AudioSourceParser.Parse(c.Value<string>("source")).Kind));
         }
     }
 

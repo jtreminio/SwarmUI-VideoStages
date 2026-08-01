@@ -18,6 +18,7 @@ import {
 } from "./architectures/ltx2/icLoraPresets";
 import { upscaleModeForMethod } from "./architectures/policy";
 import type { ArchitectureCatalogEntryDto } from "./architectures/types";
+import { canUseClipLengthFromAudio } from "./audioSource";
 import { crossfadePlanForClips } from "./boundaryPlan";
 import { dimensionsFor } from "./dimensionPresets";
 import { snapDimensions } from "./dimensionSnap";
@@ -48,6 +49,23 @@ describe("cross-language mirror: upscale method classification", () => {
 
     it.each(cases)("$method -> $expectedMode", ({ method, expectedMode }) => {
         expect(upscaleModeForMethod(method)).toBe(expectedMode);
+    });
+});
+
+describe("cross-language mirror: audio sources that can drive clip duration", () => {
+    interface AudioDriveCase {
+        source: string;
+        canDriveClipDuration: boolean;
+    }
+    const cases = loadFixture<AudioDriveCase[]>(
+        "audio-length-drive-cases.json",
+    );
+
+    it.each(cases)("$source -> $canDriveClipDuration", ({
+        source,
+        canDriveClipDuration,
+    }) => {
+        expect(canUseClipLengthFromAudio(source)).toBe(canDriveClipDuration);
     });
 });
 

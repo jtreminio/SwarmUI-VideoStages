@@ -6,6 +6,7 @@ import {
     minimalClip,
     minimalStage,
 } from "../__test_helpers__/clipFixtures";
+import { framesForClip } from "../renderUtils";
 import {
     resolveClipFrameGrid,
     resolveCompatibleFrameGrid,
@@ -81,14 +82,47 @@ describe("resolved temporal grid", () => {
     });
 
     it("does not claim a static grid for runtime-derived clip lengths", () => {
+        const fromDrivingAudio = minimalClip({
+            audioSource: "Upload",
+            clipLengthFromAudio: true,
+            stages: [minimalStage({ model: "ltx" })],
+        });
+        const fromControlNet = minimalClip({
+            clipLengthFromControlNet: true,
+            stages: [minimalStage({ model: "ltx" })],
+        });
+
+        expect(
+            resolveClipFrameGrid(fromDrivingAudio, testArchitectureCatalog()),
+        ).toEqual({ status: "not-applicable" });
+        expect(
+            resolveClipFrameGrid(fromControlNet, testArchitectureCatalog()),
+        ).toEqual({ status: "not-applicable" });
+    });
+
+    // Mirrors EffectiveVideoRequestTests.Audio_length_from_a_non_driving_source_still_projects_onto_the_grid:
+    // the same authored 27 frames (1.05s at 24fps) snap up to 33 on this grid of 8.
+    it("uses the static grid when the audio source cannot drive the length", () => {
+        const catalog = testArchitectureCatalog();
         const clip = minimalClip({
+            duration: 1.05,
+            audioSource: "Native",
             clipLengthFromAudio: true,
             stages: [minimalStage({ model: "ltx" })],
         });
 
-        expect(resolveClipFrameGrid(clip, testArchitectureCatalog())).toEqual({
-            status: "not-applicable",
+        expect(resolveClipFrameGrid(clip, catalog)).toEqual({
+            status: "resolved",
+            frameGrid: 8,
         });
+        expect(framesForClip(clip.duration, 24, 1)).toBe(27);
+        expect(
+            framesForClip(
+                clip.duration,
+                24,
+                resolvedClipFrameGrid(clip, catalog),
+            ),
+        ).toBe(33);
     });
 
     it("uses the static grid when a dynamic-length capability is absent", () => {
@@ -99,6 +133,7 @@ describe("resolved temporal grid", () => {
                 (feature) => feature !== "audioDerivedDuration",
             );
         const clip = minimalClip({
+            audioSource: "Upload",
             clipLengthFromAudio: true,
             stages: [minimalStage({ model: "ltx" })],
         });

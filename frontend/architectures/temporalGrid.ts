@@ -1,3 +1,4 @@
+import { canUseClipLengthFromAudio } from "../audioSource";
 import { activeStageCount } from "../clipSemantics";
 import type { Clip } from "../types";
 import { architectureDescriptor, modelCatalogEntry } from "./catalogQueries";
@@ -96,6 +97,7 @@ type TemporalClip = Pick<Clip, "stages"> &
             Clip,
             | "initVideo"
             | "retake"
+            | "audioSource"
             | "clipLengthFromAudio"
             | "clipLengthFromControlNet"
         >
@@ -200,8 +202,12 @@ export const resolveClipFrameGridForLookup = (
     if (!capabilities) {
         return { status: "unknown" };
     }
+    // Mirrors EffectiveVideoRequestProjector: only an architecture that declares the feature
+    // derives the length at runtime, and audio only from a source that can supply one. The
+    // ControlNet half deliberately has no source check — the backend falls back downstream.
     if (
         (clip.clipLengthFromAudio === true &&
+            canUseClipLengthFromAudio(clip.audioSource ?? "") &&
             architectureFeatureSupport("audioDerivedDuration", capabilities)) ||
         (clip.clipLengthFromControlNet === true &&
             architectureFeatureSupport("icLora", capabilities))
