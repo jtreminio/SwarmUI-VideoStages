@@ -17,14 +17,6 @@ internal sealed class LtxConditioningPipeline(
 {
     private WGNodeData stageLatent;
 
-    /// <summary>
-    /// When the stage carries an active retake, its per-frame noise mask IS the base lock (the latent
-    /// already encodes the base footage). LTXVImgToVideoInplace overwrites the noise mask of every frame
-    /// it conditions (<c>mask[:, :, :F] = 1-strength</c>), so any inplace merge would clobber the retake
-    /// window — skip them all.
-    /// </summary>
-    private bool RetakeMaskActive => stageFrame.Stage.HasActiveRetakeMask();
-
     public LtxConditioningPipeline WithLatent(WGNodeData stageLatent, WGNodeData sourceMedia)
     {
         this.stageLatent = stageLatent;
@@ -97,7 +89,7 @@ internal sealed class LtxConditioningPipeline(
         WGNodeData guideMedia,
         double guideMergeStrength)
     {
-        if (RetakeMaskActive || skipGuideReinjection || guideMergeStrength <= 0)
+        if (skipGuideReinjection || guideMergeStrength <= 0)
         {
             g.CurrentMedia = stageLatent;
             return this;
@@ -125,7 +117,7 @@ internal sealed class LtxConditioningPipeline(
     /// </summary>
     public LtxConditioningPipeline WithContinuityAnchor()
     {
-        if (stageFrame.ContinuityAnchor is null || RetakeMaskActive)
+        if (stageFrame.ContinuityAnchor is null)
         {
             return this;
         }

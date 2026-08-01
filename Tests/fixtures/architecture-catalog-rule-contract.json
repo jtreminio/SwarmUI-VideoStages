@@ -76,13 +76,6 @@
     "rules": [
       {
         "support": "conditional",
-        "code": "prompt-relay-dynamic-length-unsupported",
-        "reason": "Prompt relay requires a fixed frame count and cannot be combined with audio-owned or ControlNet-owned clip length.",
-        "scope": "clip",
-        "constraints": null
-      },
-      {
-        "support": "conditional",
         "code": "retake-source-required",
         "reason": "Retake requires an init-video clip.",
         "scope": "clip",

@@ -1,9 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import {
-    minimalClip,
-    minimalRef,
-    minimalStage,
-} from "../__test_helpers__/clipFixtures";
+import { minimalClip, minimalRef } from "../__test_helpers__/clipFixtures";
 import {
     CONDITIONAL_RULE_CODES,
     evaluateConditionalRule,
@@ -22,19 +18,6 @@ const rule = (
 });
 
 describe("typed conditional-rule evaluator", () => {
-    it("shares the dynamic-length condition with capability views", () => {
-        const clip = minimalClip({
-            clipLengthFromAudio: true,
-            stages: [minimalStage(), minimalStage()],
-        });
-        expect(
-            evaluateConditionalRule(
-                rule(CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength),
-                { clip },
-            ),
-        ).toBe(true);
-    });
-
     it("reads the advertised retake entry modes instead of assuming them", () => {
         const generated = minimalClip();
         const requiring = (...modes: string[]) =>

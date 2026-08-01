@@ -84,14 +84,7 @@ const isRuleDecision = (
 };
 
 const isKnownExecutableRule = (value: CapabilityRuleDecision): boolean => {
-    if (value.support !== "conditional") {
-        return false;
-    }
-    // A conditional rule whose whole meaning is its code publishes no thresholds.
-    if (value.code === CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength) {
-        return value.scope === "clip" && value.constraints === null;
-    }
-    if (!isRecord(value.constraints)) {
+    if (value.support !== "conditional" || !isRecord(value.constraints)) {
         return false;
     }
     const constraints = value.constraints;

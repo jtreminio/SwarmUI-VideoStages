@@ -93,13 +93,6 @@ export const testArchitectureCatalog = (
             rules: [
                 {
                     support: "conditional",
-                    code: "prompt-relay-dynamic-length-unsupported",
-                    reason: "Prompt relay requires a fixed frame count.",
-                    scope: "clip",
-                    constraints: null,
-                },
-                {
-                    support: "conditional",
                     code: "retake-source-required",
                     reason: "Retake requires source footage.",
                     scope: "clip",

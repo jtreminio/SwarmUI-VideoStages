@@ -49,7 +49,7 @@ describe("backend-aligned authoring diagnostics", () => {
     it.each([
         { clipLengthFromAudio: true, clipLengthFromControlNet: false },
         { clipLengthFromAudio: false, clipLengthFromControlNet: true },
-    ])("rejects prompt relay with a dynamic duration owner", (lengthFlags) => {
+    ])("accepts prompt relay with a dynamic duration owner", (lengthFlags) => {
         expect(
             codes([
                 minimalClip({
@@ -57,7 +57,7 @@ describe("backend-aligned authoring diagnostics", () => {
                     promptWindows: [{ prompt: "move", start: 0, duration: 1 }],
                 }),
             ]),
-        ).toContain("prompt-relay-dynamic-length-unsupported");
+        ).not.toContain("prompt-relay-dynamic-length-unsupported");
     });
 
     it("evaluates the advertised retake source rule", () => {
@@ -172,10 +172,7 @@ describe("backend-aligned authoring diagnostics", () => {
         }).map((item) => item.code);
 
         expect(diagnostics).not.toEqual(
-            expect.arrayContaining([
-                "prompt-relay-dynamic-length-unsupported",
-                "retake-source-required",
-            ]),
+            expect.arrayContaining(["retake-source-required"]),
         );
     });
 });

@@ -15,13 +15,6 @@ internal static class Ltx2ConditionalRulePolicySource
     /// </summary>
     internal const int AudioReuseMinimumActiveStages = 3;
 
-    internal static RuleDecision PromptRelayRequiresFixedLength { get; } =
-        RuleDecision.Conditional(
-            ArchitectureFeatureVocabulary.RuleCode(
-                ConditionalRuleCodeId.PromptRelayRequiresFixedLength),
-            "Prompt relay requires a fixed frame count and cannot be combined with audio-owned or ControlNet-owned clip length.",
-            RuleScope.Clip);
-
     internal static RuleDecision RetakeRequiresSource { get; } =
         RuleDecision.Conditional(
             ArchitectureFeatureVocabulary.RuleCode(
@@ -40,7 +33,6 @@ internal static class Ltx2ConditionalRulePolicySource
 
     internal static IReadOnlyList<RuleDecision> PublishedRules { get; } =
     [
-        PromptRelayRequiresFixedLength,
         RetakeRequiresSource,
     ];
 
@@ -50,14 +42,6 @@ internal static class Ltx2ConditionalRulePolicySource
         List<PlanDiagnostic> diagnostics = [];
         foreach (ClipPlan clip in clips)
         {
-            if (clip.Audio.Length.Owner is AudioLengthOwner.Audio or AudioLengthOwner.ControlNet
-                && clip.Stages.Any(stage =>
-                    stage.ArchitecturePayload is Ltx2StagePayload payload
-                    && !payload.PromptRelay.AuthoredWindows.IsDefaultOrEmpty))
-            {
-                diagnostics.Add(Error(PromptRelayRequiresFixedLength, clip.ClipId));
-            }
-
             foreach (StagePlan stage in clip.Stages)
             {
                 if (stage.ArchitecturePayload is not Ltx2StagePayload payload)

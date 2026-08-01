@@ -243,40 +243,18 @@ describe("catalog-backed authoring policy", () => {
         ).toBe(true);
     });
 
-    it("evaluates the conditional prompt-relay rule and never gates audio reuse", () => {
+    it("gates neither prompt relay nor audio reuse on a dynamic clip length", () => {
         const models = catalog();
-        const descriptor = models.architectures.find(
-            (entry) => entry.id === "ltx2",
-        );
-        if (!descriptor) {
-            throw new Error("missing LTX test descriptor");
-        }
-        descriptor.rules = [
-            {
-                support: "conditional",
-                code: "prompt-relay-dynamic-length-unsupported",
-                reason: "A fixed frame count is required.",
-                scope: "clip",
-                constraints: null,
-            },
-        ];
         const clip = minimalClip({
             clipLengthFromAudio: true,
             stages: [minimalStage(), minimalStage()],
         });
         const view = createCapabilityViewResolver(models).forClip(clip);
 
-        expect(view.decision("promptRelay")).toMatchObject({
-            supported: false,
-            reason: "A fixed frame count is required.",
-        });
-        // Two active stages cannot actually reuse audio, but that is the backend's
-        // silent eligibility call, not an authoring gate.
+        // Both are the backend's runtime call now: relay re-tiles against the resolved
+        // length, and an ineligible audio reuse is dropped silently.
+        expect(view.decision("promptRelay").supported).toBe(true);
         expect(view.decision("audioReuse").supported).toBe(true);
-
-        clip.clipLengthFromAudio = false;
-        const eligible = createCapabilityViewResolver(models).forClip(clip);
-        expect(eligible.decision("promptRelay").supported).toBe(true);
     });
 
     it("disables the retake control on a text-to-video clip", () => {

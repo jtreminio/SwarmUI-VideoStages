@@ -136,7 +136,6 @@ internal sealed record RequiredEntryModesRuleConstraints(
 /// </summary>
 internal enum ConditionalRuleCodeId
 {
-    PromptRelayRequiresFixedLength,
     RetakeRequiresSource,
 }
 

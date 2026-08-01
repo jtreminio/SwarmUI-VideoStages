@@ -105,7 +105,6 @@ export const AUTHORING_FEATURE_CAPABILITIES: Record<
 };
 
 export const CONDITIONAL_RULE_CODES = {
-    promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
     retakeRequiresSource: "retake-source-required",
 } as const;
 

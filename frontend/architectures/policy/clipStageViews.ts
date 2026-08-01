@@ -44,7 +44,6 @@ const UNRESOLVED_ARCHITECTURE_ID = "unsupported";
 const FEATURE_RULE_CODES: Partial<
     Record<AuthoringFeature, readonly ConditionalRuleCode[]>
 > = {
-    promptRelay: [CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength],
     retake: [CONDITIONAL_RULE_CODES.retakeRequiresSource],
 };
 

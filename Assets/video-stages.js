@@ -505,7 +505,6 @@
     icLora: [["stage", CAPABILITY_WIRE_NAMES.stage.icLora]]
   };
   var CONDITIONAL_RULE_CODES = {
-    promptRelayRequiresFixedLength: "prompt-relay-dynamic-length-unsupported",
     retakeRequiresSource: "retake-source-required"
   };
 
@@ -526,8 +525,6 @@
   var evaluateConditionalRule = (rule, context) => {
     const clip = context.clip;
     switch (rule.code) {
-      case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
-        return clip !== void 0 && (clip.clipLengthFromAudio || clip.clipLengthFromControlNet);
       case CONDITIONAL_RULE_CODES.retakeRequiresSource:
         return clip !== void 0 && !requiredEntryModes(rule).includes(
           clipEntryMode(clip, context.generatedEntryMode)
@@ -864,13 +861,7 @@
     return true;
   };
   var isKnownExecutableRule = (value) => {
-    if (value.support !== "conditional") {
-      return false;
-    }
-    if (value.code === CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength) {
-      return value.scope === "clip" && value.constraints === null;
-    }
-    if (!isRecord(value.constraints)) {
+    if (value.support !== "conditional" || !isRecord(value.constraints)) {
       return false;
     }
     const constraints = value.constraints;
@@ -1325,7 +1316,6 @@
   // frontend/architectures/policy/clipStageViews.ts
   var UNRESOLVED_ARCHITECTURE_ID = "unsupported";
   var FEATURE_RULE_CODES = {
-    promptRelay: [CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength],
     retake: [CONDITIONAL_RULE_CODES.retakeRequiresSource]
   };
   var conditionalRuleFor = (clip, feature, descriptor) => {
@@ -6447,10 +6437,6 @@
     for (const { clip, clipIdx } of executable) {
       const view = capabilityViews?.forClip(clip);
       const conditionalFeatures = [
-        {
-          feature: "promptRelay",
-          persisted: clip.promptWindows.length > 0
-        },
         { feature: "retake", persisted: clip.retake !== null }
       ];
       for (const check of conditionalFeatures) {

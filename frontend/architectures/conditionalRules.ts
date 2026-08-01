@@ -66,11 +66,6 @@ export const evaluateConditionalRule = (
 ): boolean => {
     const clip = context.clip;
     switch (rule.code as ConditionalRuleCode) {
-        case CONDITIONAL_RULE_CODES.promptRelayRequiresFixedLength:
-            return (
-                clip !== undefined &&
-                (clip.clipLengthFromAudio || clip.clipLengthFromControlNet)
-            );
         case CONDITIONAL_RULE_CODES.retakeRequiresSource:
             return (
                 clip !== undefined &&

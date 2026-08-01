@@ -366,7 +366,8 @@ public class VideoExecutionPlanCompilerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Compile_PromptRelayWithDynamicLength_IsRejected(bool controlNetOwnsLength)
+    public void Compile_PromptRelayWithDynamicLength_DefersTilingToRuntime(
+        bool controlNetOwnsLength)
     {
         ClipSpec clip = GeneratedClip(0, Stage(10)) with
         {
@@ -390,10 +391,15 @@ public class VideoExecutionPlanCompilerTests
 
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, clip));
 
-        Assert.Contains(plan.Diagnostics, diagnostic =>
-            diagnostic.Code == "prompt-relay-dynamic-length-unsupported"
-            && diagnostic.Severity == PlanDiagnosticSeverity.Error
-            && diagnostic.ClipId == clip.Id);
+        Assert.DoesNotContain(plan.Diagnostics, diagnostic =>
+            diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        PromptRelayPlan relay = Assert.Single(plan.Clips)
+            .Stages[0].RequireLtx2Payload().PromptRelay;
+        // The frame count is only known at runtime, so the authored windows ride along
+        // unresolved and LtxModelPromptPreparer tiles them against the real length.
+        Assert.Equal(PromptRelayMode.RequiresRuntimeLength, relay.Mode);
+        Assert.Single(relay.AuthoredWindows);
+        Assert.Empty(relay.Segments);
     }
 
     [Fact]

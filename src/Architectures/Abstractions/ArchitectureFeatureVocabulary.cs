@@ -126,9 +126,6 @@ internal static class ArchitectureFeatureVocabulary
         ConditionalRuleCodes
     { get; } =
     [
-        new(
-            ConditionalRuleCodeId.PromptRelayRequiresFixedLength,
-            "prompt-relay-dynamic-length-unsupported"),
         new(ConditionalRuleCodeId.RetakeRequiresSource, "retake-source-required"),
     ];
 
