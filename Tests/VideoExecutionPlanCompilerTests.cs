@@ -527,7 +527,7 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_DuplicateClipIds_RejectsLaterOccurrenceDeterministically()
+    public void Compile_DuplicateClipIds_WarnsAndDropsLaterOccurrence()
     {
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(
             false,
@@ -538,7 +538,7 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(4, plan.Clips[0].ClipId);
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "duplicate-clip-id"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
     }
 
     [Fact]
@@ -564,7 +564,7 @@ public class VideoExecutionPlanCompilerTests
             plan.Root.NativeAudioDisposition);
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "duplicate-clip-id"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
     }
 
     [Fact]

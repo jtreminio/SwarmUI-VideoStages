@@ -10,9 +10,8 @@ using VideoStages.Planning;
 namespace VideoStages;
 
 /// <summary>
-/// Owns request-global frame interpolation for the assembled timeline. The host parameter has no
-/// per-clip selector, so preflight admits only a single clip and runtime applies the transform once
-/// to the final decoded video.
+/// Applies request-global frame interpolation to a single completed clip. Unsupported timeline or
+/// backend configurations are reported during preflight and skipped at runtime.
 /// </summary>
 internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
 {
@@ -34,7 +33,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         if (plan.Clips.Count != 1)
         {
             string boundaryLabel = plan.Boundaries.Count == 1 ? "boundary" : "boundaries";
-            diagnostics.Add(Refuse(
+            diagnostics.Add(WarnAndSkip(
                 "'Video Frame Interpolation' is request-global and can only be applied to a "
                 + $"single completed clip. This timeline has {plan.Clips.Count} clips joined by "
                 + $"{plan.Boundaries.Count} {boundaryLabel}; interpolating the assembled video "
@@ -45,7 +44,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
             .ToArray();
         if (missingFeatures.Length > 0)
         {
-            diagnostics.Add(Refuse(
+            diagnostics.Add(WarnAndSkip(
                 $"Video frame interpolation method '{config.Method}' requires backend feature(s) "
                 + $"{string.Join(", ", missingFeatures.Select(feature => $"'{feature}'"))}."));
         }
@@ -88,6 +87,25 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         return Apply(artifact, config, bridge);
     }
 
+    internal RuntimeArtifact Apply(RuntimeArtifact artifact, VideoExecutionPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(artifact);
+        ArgumentNullException.ThrowIfNull(plan);
+        if (!TryResolveConfiguration(out Configuration config, out string error))
+        {
+            return error is null
+                ? artifact
+                : throw new SwarmUserErrorException($"VideoStages: {error}");
+        }
+        if (plan.Clips.Count != 1
+            || RequiredFeatures(config.Method).Any(feature => !g.Features.Contains(feature)))
+        {
+            return artifact;
+        }
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        return Apply(artifact, config, bridge);
+    }
+
     private RuntimeArtifact Apply(
         RuntimeArtifact artifact,
         Configuration config,
@@ -110,7 +128,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
                 + "and frame-rate metadata.");
         }
         int fps = media.FPS.Value<int>();
-        // A single frame has no interval to interpolate. Preserve its path and metadata exactly.
+        // A single frame has no interpolation interval.
         if (frames == 1)
         {
             return artifact;
@@ -211,6 +229,11 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         PlanDiagnosticSeverity.Error,
         "timeline.frame-interpolation.unsupported",
         message);
+
+    private static PlanDiagnostic WarnAndSkip(string message) => new(
+        PlanDiagnosticSeverity.Warning,
+        "timeline.frame-interpolation.unsupported",
+        $"{message} Frame interpolation will be skipped.");
 
     private readonly record struct Configuration(string Method, int Multiplier);
 }

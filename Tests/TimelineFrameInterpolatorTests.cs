@@ -194,7 +194,7 @@ public sealed class TimelineFrameInterpolatorTests
     [InlineData("RIFE", "frameinterps")]
     [InlineData("FILM", "frameinterps")]
     [InlineData("GIMM-VFI", "frameinterps_gimmvfi")]
-    public void Missing_method_feature_is_refused_before_mutation(
+    public void Missing_method_feature_warns_and_skips_interpolation(
         string method,
         string expectedFeature)
     {
@@ -206,18 +206,18 @@ public sealed class TimelineFrameInterpolatorTests
             ? ["variation_seed", "frameinterps"]
             : ["variation_seed"];
 
-        AssertPreflightFailure(input, installed, expectedFeature);
+        AssertInterpolationWarningAndSkip(input, installed, expectedFeature);
     }
 
     [Fact]
-    public void Gimm_without_the_common_interpolation_feature_is_refused_before_mutation()
+    public void Gimm_without_the_common_interpolation_feature_warns_and_skips()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         T2IParamInput input = WanInput(models);
         Configure(input, "GIMM-VFI", 2);
 
-        AssertPreflightFailure(
+        AssertInterpolationWarningAndSkip(
             input,
             ["variation_seed", "frameinterps_gimmvfi"],
             "frameinterps");
@@ -269,7 +269,7 @@ public sealed class TimelineFrameInterpolatorTests
     }
 
     [Fact]
-    public void Multi_Wan_interpolation_is_refused_before_mutation()
+    public void Multi_Wan_interpolation_warns_and_skips()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
@@ -280,14 +280,14 @@ public sealed class TimelineFrameInterpolatorTests
             MakeDocument(MakeClip(stage), MakeClip(stage)).ToString());
         Configure(input, "RIFE", 2);
 
-        AssertPreflightFailure(
+        AssertInterpolationWarningAndSkip(
             input,
             ["variation_seed", "frameinterps"],
             "2 clips joined by 1 boundary");
     }
 
     [Fact]
-    public void Multi_ltx_interpolation_is_refused_before_mutation()
+    public void Multi_ltx_interpolation_warns_and_skips()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -298,7 +298,7 @@ public sealed class TimelineFrameInterpolatorTests
             MakeDocument(MakeClip(stage), MakeClip(stage)).ToString());
         Configure(input, "RIFE", 2);
 
-        AssertPreflightFailure(
+        AssertInterpolationWarningAndSkip(
             input,
             ["variation_seed", "frameinterps", Ltx2HostIntegration.FeatureFlag],
             "2 clips joined by 1 boundary");
@@ -307,7 +307,7 @@ public sealed class TimelineFrameInterpolatorTests
     [Theory]
     [InlineData("ltx2")]
     [InlineData("wan22")]
-    public void Mixed_interpolation_is_refused_before_mutation(string firstFamily)
+    public void Mixed_interpolation_warns_and_skips(string firstFamily)
     {
         using SwarmUiTestContext context = new();
         MixedVideoModelBundle models =
@@ -326,7 +326,7 @@ public sealed class TimelineFrameInterpolatorTests
                 MakeClip(MakeStage(second.Name, "Generated", steps: 9))).ToString());
         Configure(input, "RIFE", 2);
 
-        AssertPreflightFailure(
+        AssertInterpolationWarningAndSkip(
             input,
             ["variation_seed", "frameinterps", Ltx2HostIntegration.FeatureFlag],
             "2 clips joined by 1 boundary");
@@ -401,6 +401,28 @@ public sealed class TimelineFrameInterpolatorTests
                 features));
         Assert.Contains(expected, error.Message);
         snapshot.AssertUnchanged();
+    }
+
+    private static void AssertInterpolationWarningAndSkip(
+        T2IParamInput input,
+        IEnumerable<string> features,
+        string expected)
+    {
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                WorkflowTestHarness.Template_BaseOnlyImage()
+                    .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
+                    .Concat(WorkflowTestHarness.VideoStagesSteps()),
+                features);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Empty(InterpolationNodes(bridge));
+        List<string> warnings = Assert.IsType<List<string>>(
+            generator.UserInput.ExtraMeta["parser_warnings"]);
+        Assert.Contains(warnings, warning =>
+            warning.Contains(expected, StringComparison.Ordinal)
+            && warning.Contains("will be skipped", StringComparison.Ordinal));
     }
 
     private static T2IParamInput WanInput(TestModelBundle models) =>

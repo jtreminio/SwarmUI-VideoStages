@@ -637,7 +637,7 @@ public class PlanningCompilerComponentTests
             if (!seenClipIds.Add(clip.Id))
             {
                 diagnostics.Add(new PlanDiagnostic(
-                    PlanDiagnosticSeverity.Error,
+                    PlanDiagnosticSeverity.Warning,
                     "duplicate-clip-id",
                     $"Clip id {clip.Id} is duplicated; only its first occurrence is planned.",
                     clip.Id));

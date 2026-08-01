@@ -2,7 +2,7 @@ using System.Collections.Immutable;
 
 namespace VideoStages.Planning;
 
-/// <summary>Compiles only the configured lockable base audio source.</summary>
+/// <summary>Compiles a clip's selected base audio source.</summary>
 internal static class AudioBaseSourcePlanCompiler
 {
     internal const string UnknownSourceCode = "audio.source.unknown";
@@ -10,16 +10,14 @@ internal static class AudioBaseSourcePlanCompiler
     internal static AudioPlanComponentResult<AudioBaseSourcePlan> Compile(ClipSpec clip)
     {
         AudioSourceSelection selection = AudioSourceParser.Parse(clip.AudioSource);
-        // An unrecognised source is the one blocking outcome: quietly generating with native audio
-        // would publish something the author never asked for.
         if (selection.Kind == AudioSourceKind.Unknown)
         {
             return new(
-                new(selection.Kind, selection.Raw, null, HasConfiguredTrack: false, null),
+                new(AudioSourceKind.Disabled, selection.Raw, null, HasConfiguredTrack: false, null),
                 [new(
-                    PlanDiagnosticSeverity.Error,
+                    PlanDiagnosticSeverity.Warning,
                     UnknownSourceCode,
-                    $"Audio source '{selection.Raw}' is not a supported audio source.",
+                    $"Audio source '{selection.Raw}' is not supported; audio is disabled for this clip.",
                     clip.Id)]);
         }
         return Result(new(

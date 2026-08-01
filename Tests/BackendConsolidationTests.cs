@@ -189,7 +189,7 @@ public class BackendConsolidationTests
     }
 
     [Fact]
-    public void Unknown_audio_source_blocks_the_plan_exactly_once()
+    public void Unknown_audio_source_warns_once_and_falls_back_to_disabled()
     {
         VideoExecutionPlan plan = TestPlanCompiler.Compile(new VideoStagesSpec(
             512,
@@ -198,13 +198,14 @@ public class BackendConsolidationTests
             false,
             [ClipWithAudioSource(0, "not-a-real-source")]));
 
-        PlanDiagnostic error = Assert.Single(
-            PlanDiagnosticReporter.Errors(plan.Diagnostics)
-                .Where(diagnostic => diagnostic.Message.Contains("not-a-real-source")));
-        Assert.Equal(AudioBaseSourcePlanCompiler.UnknownSourceCode, error.Code);
-        Assert.Equal(0, error.ClipId);
+        PlanDiagnostic warning = Assert.Single(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Message.Contains("not-a-real-source"));
+        Assert.Equal(PlanDiagnosticSeverity.Warning, warning.Severity);
+        Assert.Equal(AudioBaseSourcePlanCompiler.UnknownSourceCode, warning.Code);
+        Assert.Equal(0, warning.ClipId);
         Assert.Equal(
-            AudioSourceKind.Unknown,
+            AudioSourceKind.Disabled,
             Assert.Single(plan.Clips).Audio.Base.Kind);
     }
 

@@ -1,16 +1,14 @@
 namespace VideoStages.Planning;
 
 /// <summary>
-/// The one vocabulary for "where does this audio come from". Clip base audio, projected segments,
-/// timeline tracks, and architecture capability declarations all name sources with this enum, so a
-/// source can no longer mean different things on either side of a bridge function.
+/// Shared vocabulary for clip and timeline audio origins.
 /// </summary>
 internal enum AudioSourceKind
 {
-    /// <summary>The authored source string matched nothing known. Always a blocking diagnostic.</summary>
+    /// <summary>The authored source string matched nothing known.</summary>
     Unknown,
 
-    /// <summary>The architecture cannot produce audio for this source at all.</summary>
+    /// <summary>Audio is disabled.</summary>
     Disabled,
 
     Native,
@@ -26,8 +24,7 @@ internal enum AudioSourceKind
 internal static class AudioSourceKindPolicy
 {
     /// <summary>
-    /// Only an external clip source can own video duration. Native audio is generated with the
-    /// video, so asking it to determine that video's duration would be circular.
+    /// Only authored external audio can set video duration; native audio is generated with video.
     /// </summary>
     internal static bool CanDriveClipDuration(AudioSourceKind kind) =>
         kind is AudioSourceKind.Upload
@@ -35,13 +32,13 @@ internal static class AudioSourceKindPolicy
             or AudioSourceKind.AceStepFun;
 }
 
-/// <summary>One parsed authored audio-source string.</summary>
+/// <summary>A parsed authored audio-source string.</summary>
 internal sealed record AudioSourceSelection(
     AudioSourceKind Kind,
     string Raw,
     int? AceStepFunTrack);
 
-/// <summary>The one parser for authored audio-source strings.</summary>
+/// <summary>Parses authored audio-source strings.</summary>
 internal static class AudioSourceParser
 {
     internal static AudioSourceSelection Parse(string raw)

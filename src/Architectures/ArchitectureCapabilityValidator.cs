@@ -37,7 +37,7 @@ internal static class ArchitectureCapabilityValidator
         if (kind == AudioSourceKind.Unknown
             || AudioSourceKindPolicy.CanDriveClipDuration(kind))
         {
-            // AudioBaseSourcePlanCompiler remains the sole owner of unknown-source diagnostics.
+            // Unknown sources are normalized by AudioBaseSourcePlanCompiler.
             return;
         }
         diagnostics.Add(new(
@@ -57,7 +57,7 @@ internal static class ArchitectureCapabilityValidator
         AudioSourceKind kind = AudioSourceParser.Parse(clip.AudioSource).Kind;
         if (kind == AudioSourceKind.Unknown)
         {
-            // AudioBaseSourcePlanCompiler owns unknown-source errors for every clip.
+            // Unknown sources are normalized by AudioBaseSourcePlanCompiler.
             return;
         }
         if (kind == AudioSourceKind.Native

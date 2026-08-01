@@ -17,8 +17,6 @@ internal sealed class VideoStagesCoordinator(
         {
             return;
         }
-        // Every active execution is plan-backed and owns the host root before any coordinator
-        // transform. Unsupported model families fail above.
         RootRuntimeSession rootSession = RootRuntimeSession.Capture(g, planContext);
 
         RootExecutionPolicy rootPolicy = new(planContext.Plan);
@@ -36,10 +34,11 @@ internal sealed class VideoStagesCoordinator(
             planContext.Plan,
             preparedAudioSources,
             rootPolicy);
-        finalArtifact = new TimelineFrameInterpolator(g).Apply(finalArtifact);
-        // Publication metadata describes decoded timeline media, not the model family that
-        // happened to produce one clip. VAE ownership remains on RuntimeArtifact for the host save
-        // adapter and never enters DecodedClipArtifact or cross-clip assembly.
+        finalArtifact = new TimelineFrameInterpolator(g).Apply(
+            finalArtifact,
+            planContext.Plan);
+        // Timeline publication metadata is architecture-neutral; VAE ownership stays on the
+        // runtime artifact for host saves.
         if (finalArtifact.Media is not null)
         {
             finalArtifact.Media.Compat = null;
@@ -48,7 +47,7 @@ internal sealed class VideoStagesCoordinator(
                 finalArtifact.Media.AttachedAudio.Compat = null;
             }
         }
-        // This is the common pipeline's only post-clip write to the host compatibility surface.
+        // The common pipeline publishes to the host only after timeline transforms finish.
         finalArtifact.PublishTo(g);
         rootSession.PublishTimeline(finalArtifact);
     }

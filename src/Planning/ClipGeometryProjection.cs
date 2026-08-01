@@ -3,9 +3,8 @@ using VideoStages.Architectures.Abstractions;
 namespace VideoStages.Planning;
 
 /// <summary>
-/// Projects, before anything runs, the dimensions each clip's authored stage chain will finish at,
-/// so the timeline can warn about conforming at plan time instead of only from the running graph.
-/// The projection is advisory: runtime conforming stays the backstop for whatever it cannot see.
+/// Projects final clip dimensions for planning diagnostics. Runtime geometry conforming remains
+/// the fallback when dimensions cannot be projected.
 /// </summary>
 internal static class ClipGeometryProjection
 {
@@ -45,7 +44,7 @@ internal static class ClipGeometryProjection
             }
             diagnostics.Add(width * targetHeight != height * targetWidth
                 ? new PlanDiagnostic(
-                    PlanDiagnosticSeverity.Error,
+                    PlanDiagnosticSeverity.Warning,
                     "clip-aspect-mismatch",
                     $"clip {clipId} is planned to finish at {width}x{height}, whose aspect ratio "
                     + $"differs from the timeline's {targetWidth}x{targetHeight}; conforming it "

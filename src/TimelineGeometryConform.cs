@@ -21,10 +21,7 @@ internal sealed record TimelineGeometry(int Width, int Height, int FramesPerSeco
 }
 
 /// <summary>
-/// Owns "every clip enters timeline assembly at one geometry". Clips can legitimately finish at
-/// different sizes (a clip that upscales twice) or frame rates, and neither the overlap merge nor
-/// the concat can reconcile that. Conforming happens before both, so downstream code never has to
-/// re-check dimension or fps compatibility.
+/// Conforms decoded clips to one geometry before overlap or concatenation.
 /// </summary>
 internal static class TimelineGeometryConform
 {
@@ -43,9 +40,8 @@ internal static class TimelineGeometryConform
             clips.Min(clip => clip.FramesPerSecond));
 
     /// <summary>
-    /// Scales and fps-resamples every clip that differs from the timeline minimum. A clip already
-    /// at the target keeps its graph untouched. Aspect-ratio divergence is not conformable — taking
-    /// the minimum of each axis independently would distort — so it is reported as blocking.
+    /// Scales and resamples clips to the timeline minimum. Aspect-ratio changes produce a warning
+    /// before width and height are conformed independently.
     /// </summary>
     internal static ConformResult Apply(
         WorkflowBridge bridge,
@@ -62,14 +58,14 @@ internal static class TimelineGeometryConform
             .. clips
                 .Where(clip => clip.Width * target.Height != clip.Height * target.Width)
                 .Select(clip => new PlanDiagnostic(
-                    PlanDiagnosticSeverity.Error,
+                    PlanDiagnosticSeverity.Warning,
                     "timeline-aspect-mismatch",
                     $"clip {clip.ClipId} finished at {clip.Width}x{clip.Height}, whose aspect ratio "
                     + $"differs from the timeline's {target.Width}x{target.Height}; conforming it "
                     + "would distort the image",
                     clip.ClipId))
         ];
-        if (diagnostics.Count > 0 || clips.All(target.Matches))
+        if (clips.All(target.Matches))
         {
             return new(target, clips, videoOutputs, sourceBoundaries, diagnostics);
         }
@@ -140,9 +136,7 @@ internal static class TimelineGeometryConform
     }
 
     /// <summary>
-    /// Re-expresses each overlap on the conformed frame grid. An overlap is a duration the incoming
-    /// clip generated at its own frame rate, so an fps-conformed neighbour changes how many frames
-    /// that same duration spans.
+    /// Re-expresses overlap durations on the conformed frame grid.
     /// </summary>
     private static IReadOnlyList<BoundaryPlan> ConformBoundaries(
         IReadOnlyList<DecodedClipArtifact> clips,

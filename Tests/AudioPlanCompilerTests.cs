@@ -228,13 +228,13 @@ public class AudioPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_unknown_source_blocks_the_plan_instead_of_falling_back()
+    public void Compile_unknown_source_warns_and_falls_back_to_disabled()
     {
         AudioPlan plan = AudioPlanCompiler.Compile(Clip(source: "not-an-audio-source"));
 
-        Assert.Equal(AudioSourceKind.Unknown, plan.Base.Kind);
+        Assert.Equal(AudioSourceKind.Disabled, plan.Base.Kind);
         PlanDiagnostic unknown = Assert.Single(
             plan.Diagnostics.Where(d => d.Code == AudioBaseSourcePlanCompiler.UnknownSourceCode));
-        Assert.Equal(PlanDiagnosticSeverity.Error, unknown.Severity);
+        Assert.Equal(PlanDiagnosticSeverity.Warning, unknown.Severity);
     }
 }

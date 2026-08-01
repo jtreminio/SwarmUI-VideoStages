@@ -6,13 +6,8 @@ using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 
 /// <summary>
-/// Compiles the parsed VideoStages specification into a deterministic architecture execution plan. This is
-/// a pure transformation: it neither inspects nor mutates the host workflow or its graph.
-/// <para>
-/// Architecture resolution is a required argument, never a default: resolving it here would mean
-/// resolving it against the unfiltered production registry, with no request session to authorize
-/// the models the plan names.
-/// </para>
+/// Compiles a parsed specification into a deterministic plan without inspecting or mutating the
+/// host workflow. Architecture assignments must be resolved for the request before compilation.
 /// </summary>
 internal static class VideoExecutionPlanCompiler
 {
@@ -51,7 +46,7 @@ internal static class VideoExecutionPlanCompiler
             if (!seenClipIds.Add(clip.Id))
             {
                 diagnostics.Add(new PlanDiagnostic(
-                    PlanDiagnosticSeverity.Error,
+                    PlanDiagnosticSeverity.Warning,
                     "duplicate-clip-id",
                     $"Clip id {clip.Id} is duplicated; only its first occurrence is planned.",
                     clip.Id));
