@@ -205,17 +205,51 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Source_only_clip_is_none_and_rejects_an_authored_generation_architecture()
+    public void Source_only_clip_warns_about_stale_generation_identity_hints()
     {
-        ClipSpec clip = InitVideoClip(0) with { AuthoredArchitectureHint = "ltx2" };
+        ClipSpec clip = InitVideoClip(0) with
+        {
+            AuthoredArchitectureHint = "ltx2",
+            AuthoredModelProfileHint = "ltx-profile",
+        };
 
         ArchitecturePlanningResult result =
             ArchitecturePlanResolver.Resolve(Spec(clip), new FakeRegistry());
 
         Assert.Equal(NoneArchitecture.Id, result.Clips[0].Architecture.Id);
+        Assert.All(
+            result.Diagnostics,
+            item => Assert.Equal(PlanDiagnosticSeverity.Warning, item.Severity));
         Assert.Contains(
             result.Diagnostics,
             item => item.Code == "architecture-source-only-identity-mismatch");
+        Assert.Contains(
+            result.Diagnostics,
+            item => item.Code == "architecture-source-only-profile-mismatch");
+        Assert.False(result.HasErrors);
+    }
+
+    [Fact]
+    public void Resolver_warns_for_an_unresolved_skipped_stage()
+    {
+        ClipSpec clip = GeneratedClip(0, Stage(10, "ltx-model")) with
+        {
+            AuthoredStages =
+            [
+                new(0, "ltx-model", "ltx-profile", Skipped: false),
+                new(1, "missing-model", null, Skipped: true),
+            ],
+        };
+
+        ArchitecturePlanningResult result =
+            ArchitecturePlanResolver.Resolve(Spec(clip), new FakeRegistry());
+
+        PlanDiagnostic diagnostic = Assert.Single(
+            result.Diagnostics,
+            item => item.Code == "architecture-authored-stage-model-unresolved");
+        Assert.Equal(PlanDiagnosticSeverity.Warning, diagnostic.Severity);
+        Assert.False(result.HasErrors);
+        Assert.True(result.Clips.ContainsKey(clip.Id));
     }
 
     [Fact]

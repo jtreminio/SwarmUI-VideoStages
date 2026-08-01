@@ -472,8 +472,8 @@ public class HostVideoRuntimeFlowTests
 
     [Theory]
     [InlineData("nvidia-cosmos-predict2-t2i-2b", "nvidia-cosmos-predict2-t2i-2b")]
-    [InlineData("invented-video-model", "invented-video-compat")]
-    public void Unproven_video_flags_are_rejected_before_graph_mutation(
+    [InlineData("nvidia-cosmos-predict2-t2i-14b", "nvidia-cosmos-predict2-t2i-14b")]
+    public void Cosmos_Predict2_text_to_image_flags_are_rejected_before_graph_mutation(
         string modelClassId,
         string compatibilityClassId)
     {

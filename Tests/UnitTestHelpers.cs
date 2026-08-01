@@ -218,6 +218,14 @@ internal static class TestModelFactory
         return CreateBaseAndVideoModels(T2IModelClassSorter.CompatSvd, "unit-video", "Unit Video");
     }
 
+    public static TestModelBundle CreateBaseAndUnsupportedVideoModels()
+    {
+        return CreateBaseAndVideoModels(
+            new T2IModelCompatClass { ID = "unit-unsupported" },
+            "unit-unsupported",
+            "Unit Unsupported");
+    }
+
     public static TestModelBundle CreateBaseAndLtxv2VideoModels()
     {
         TestModelBundle models = CreateBaseAndVideoModels(

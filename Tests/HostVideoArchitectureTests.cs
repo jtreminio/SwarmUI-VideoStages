@@ -26,7 +26,7 @@ public class HostVideoArchitectureTests
     [InlineData("nvidia-cosmos-1-14b-video2world", "nvidia-cosmos-1")]
     [InlineData("lightricks-ltx-video", "lightricks-ltx-video")]
     [InlineData("lightricks-ltx-video-2", "lightricks-ltx-video-2")]
-    public void Resolves_only_exact_proven_host_paths(
+    public void Resolves_video_compatibilities_through_the_host_fallback(
         string modelClassId,
         string compatibilityClassId)
     {
@@ -117,14 +117,12 @@ public class HostVideoArchitectureTests
     }
 
     [Theory]
-    [InlineData("nvidia-cosmos-predict2-t2i-2b", "nvidia-cosmos-predict2-t2i-2b")]
-    [InlineData("nvidia-cosmos-predict2-t2i-14b", "nvidia-cosmos-predict2-t2i-14b")]
     [InlineData("invented-video", "invented-video")]
     [InlineData("stable-video-diffusion-img2vid-v1", "stable-video-diffusion-img2vid-v1")]
     [InlineData("hunyuan-video-1_5-sr", "hunyuan-video-1_5")]
     [InlineData("hunyuan-video-1_5/lora", "hunyuan-video-1_5")]
     [InlineData("lightricks-ltx-video/vae", "lightricks-ltx-video")]
-    public void Rejects_optimistic_flags_without_a_proven_stock_video_branch(
+    public void Resolves_new_video_classes_without_an_allowlist_entry(
         string modelClassId,
         string compatibilityClassId)
     {
@@ -135,8 +133,22 @@ public class HostVideoArchitectureTests
             IsImage2Video = true,
         };
 
-        Assert.False(HostVideoArchitectureModule.Instance.TryResolveModel(
+        Assert.True(HostVideoArchitectureModule.Instance.TryResolveModel(
             Model(modelClassId, compatibility),
+            out _));
+    }
+
+    [Theory]
+    [InlineData("nvidia-cosmos-predict2-t2i-2b", "nvidia-cosmos-predict2-t2i-2b")]
+    [InlineData("nvidia-cosmos-predict2-t2i-14b", "nvidia-cosmos-predict2-t2i-14b")]
+    public void Rejects_Cosmos_Predict2_text_to_image_false_positives(
+        string modelClassId,
+        string compatibilityClassId)
+    {
+        using SwarmUiTestContext context = new();
+
+        Assert.False(HostVideoArchitectureModule.Instance.TryResolveModel(
+            Model(modelClassId, Compatibility(compatibilityClassId)),
             out _));
     }
 
@@ -157,6 +169,23 @@ public class HostVideoArchitectureTests
             out ResolvedVideoModel resolvedWan));
         Assert.Equal(WanArchitectureModule.ArchitectureId, resolvedWan.ArchitectureId);
         Assert.False(resolvedWan.LorasTargetTextEncoder);
+    }
+
+    [Theory]
+    [InlineData("wan-2_2-image2video-14b", "wan-21-14b")]
+    [InlineData("wan-2_1-image2video-14b", "wan-21-14b")]
+    [InlineData("wan-2_1-image2video-1_3b", "wan-21-1_3b")]
+    [InlineData("wan-2_2-ti2v-5b", "wan-22-5b")]
+    public void Production_Wan_module_owns_named_core_video_branches(
+        string modelClassId,
+        string compatibilityClassId)
+    {
+        using SwarmUiTestContext context = new();
+
+        Assert.True(VideoArchitectureRegistry.Production.TryResolveModel(
+            Model(modelClassId, Compatibility(compatibilityClassId)),
+            out ResolvedVideoModel resolved));
+        Assert.Equal(WanArchitectureModule.ArchitectureId, resolved.ArchitectureId);
     }
 
     [Fact]
@@ -208,6 +237,9 @@ public class HostVideoArchitectureTests
         "lightricks-ltx-video" => T2IModelClassSorter.CompatLtxv,
         "lightricks-ltx-video-2" => T2IModelClassSorter.CompatLtxv2,
         "stable-video-diffusion-img2vid-v1" => T2IModelClassSorter.CompatSvd,
+        "wan-21-14b" => T2IModelClassSorter.CompatWan21_14b,
+        "wan-21-1_3b" => T2IModelClassSorter.CompatWan21_1_3b,
+        "wan-22-5b" => T2IModelClassSorter.CompatWan22_5b,
         _ => new()
         {
             ID = id,

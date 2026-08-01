@@ -14,7 +14,7 @@ public class RootVideoStageResizerContractTests
     public void Central_preflight_rejects_invalid_plan_and_ltx_handlers_remain_inert()
     {
         using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndUnsupportedVideoModels();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,

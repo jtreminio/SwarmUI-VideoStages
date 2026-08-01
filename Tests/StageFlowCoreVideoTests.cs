@@ -6,6 +6,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Architectures.HostVideo;
 using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -231,7 +232,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Clip_controlnet_source_ignored_for_non_ltx_video_stage_model()
+    public void SVD_stage_model_uses_the_host_video_fallback()
     {
         using SwarmUiTestContext _ = new();
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
@@ -260,11 +261,16 @@ public partial class StageFlowTests
         input.Set(T2IParamTypes.Controlnets[1].Model, controlNetModel);
         input.Set(ComfyUIBackendExtension.ControlNetPreprocessorParams[1], "UnitTestPreprocessor");
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => WorkflowTestHarness.GenerateWithStepsAndState(
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
-                BuildCoreVideoWorkflowSteps()));
-        Assert.Contains("does not resolve to a registered video architecture", error.Message);
+                BuildCoreVideoWorkflowSteps());
+
+        Assert.NotEmpty(workflow);
+        Assert.Equal(
+            HostVideoArchitectureModule.ArchitectureId,
+            Assert.Single(generator.RequireVideoExecutionPlanContext().Plan.Clips)
+                .Architecture.Id);
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Architectures.HostVideo;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -13,7 +14,7 @@ namespace VideoStages.Tests;
 public partial class StageFlowTests
 {
     [Fact]
-    public void Active_unregistered_SVD_configuration_fails_before_execution()
+    public void Active_SVD_configuration_uses_the_host_video_fallback()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
@@ -22,12 +23,16 @@ public partial class StageFlowTests
             models.VideoModel,
             JsonSingleClipStages(MakeStage(models.VideoModel.Name, "Generated")));
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => WorkflowTestHarness.GenerateWithStepsAndState(
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
-                BuildNativeSteps(attachAudioToCurrentMedia: true)));
+                BuildNativeSteps(attachAudioToCurrentMedia: true));
 
-        Assert.Contains("does not resolve to a registered video architecture", error.Message);
+        Assert.NotEmpty(workflow);
+        Assert.Equal(
+            HostVideoArchitectureModule.ArchitectureId,
+            Assert.Single(generator.RequireVideoExecutionPlanContext().Plan.Clips)
+                .Architecture.Id);
     }
 
     [Fact]

@@ -6,40 +6,14 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.HostVideo;
 
-/// <summary>
-/// Last-priority baseline for model classes whose stock SwarmUI video graph is known to work.
-/// This table is intentionally proof-based: optimistic host video flags alone are not admission.
-/// </summary>
+/// <summary>Last-priority baseline for models handled by SwarmUI's stock video graph.</summary>
 internal sealed class HostVideoArchitectureModule :
     IVideoArchitectureModule,
     IArchitectureEffectiveRequestProjector
 {
-    internal sealed record ProvenHostPath(
-        string CompatibilityClassId,
-        string ModelClassId);
-
     internal static ArchitectureId ArchitectureId { get; } = new("host-video");
 
     internal static ModelProfileId ProfileId { get; } = new("host-video");
-
-    internal static IReadOnlyList<ProvenHostPath> ProvenPaths { get; } =
-    [
-        Path(T2IModelClassSorter.CompatHunyuanVideo1_5, "hunyuan-video-1_5"),
-        Path(T2IModelClassSorter.CompatHunyuanVideo, "hunyuan-video"),
-        Path(T2IModelClassSorter.CompatHunyuanVideo, "hunyuan-video-skyreels"),
-        Path(T2IModelClassSorter.CompatHunyuanVideo, "hunyuan-video-skyreels-i2v"),
-        Path(T2IModelClassSorter.CompatHunyuanVideo, "hunyuan-video-i2v"),
-        Path(T2IModelClassSorter.CompatHunyuanVideo, "hunyuan-video-i2v-v2"),
-        Path(T2IModelClassSorter.CompatGenmoMochi, "genmo-mochi-1"),
-        Path(T2IModelClassSorter.CompatKandinsky5VidLite, "kandinsky5-video-lite"),
-        Path(T2IModelClassSorter.CompatKandinsky5VidPro, "kandinsky5-video-pro"),
-        Path(T2IModelClassSorter.CompatCosmos, "nvidia-cosmos-1-7b-text2world"),
-        Path(T2IModelClassSorter.CompatCosmos, "nvidia-cosmos-1-14b-text2world"),
-        Path(T2IModelClassSorter.CompatCosmos, "nvidia-cosmos-1-7b-video2world"),
-        Path(T2IModelClassSorter.CompatCosmos, "nvidia-cosmos-1-14b-video2world"),
-        Path(T2IModelClassSorter.CompatLtxv, "lightricks-ltx-video"),
-        Path(T2IModelClassSorter.CompatLtxv2, "lightricks-ltx-video-2"),
-    ];
 
     internal static HostVideoArchitectureModule Instance { get; } = new();
 
@@ -69,20 +43,12 @@ internal sealed class HostVideoArchitectureModule :
     {
         T2IModelClass modelClass = model?.ModelClass;
         T2IModelCompatClass compatibility = modelClass?.CompatClass;
-        ProvenHostPath path = ProvenPaths.SingleOrDefault(candidate =>
-            string.Equals(
-                candidate.CompatibilityClassId,
-                compatibility?.ID,
-                StringComparison.Ordinal)
-            && string.Equals(
-                candidate.ModelClassId,
-                modelClass?.ID,
-                StringComparison.OrdinalIgnoreCase));
         if (model is null
             || modelClass is null
             || compatibility is null
-            || path is null
-            || modelClass.IsLora)
+            || modelClass.IsLora
+            || !(compatibility.IsText2Video || compatibility.IsImage2Video)
+            || IsCosmosPredict2TextToImage(compatibility.ID))
         {
             resolved = null;
             return false;
@@ -98,6 +64,16 @@ internal sealed class HostVideoArchitectureModule :
             compatibility.LorasTargetTextEnc);
         return true;
     }
+
+    private static bool IsCosmosPredict2TextToImage(string compatibilityClassId) =>
+        string.Equals(
+            compatibilityClassId,
+            T2IModelClassSorter.CompatCosmosPredict2_2b.ID,
+            StringComparison.Ordinal)
+        || string.Equals(
+            compatibilityClassId,
+            T2IModelClassSorter.CompatCosmosPredict2_14b.ID,
+            StringComparison.Ordinal);
 
     public ArchitectureEffectiveRequestProjection ProjectEffectiveRequest(
         ArchitectureEffectiveRequestProjectionContext context)
@@ -137,9 +113,7 @@ internal sealed class HostVideoArchitectureModule :
 
         List<PlanDiagnostic> diagnostics = [];
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
-        // Model facts are registry-owned and clip compatibility is resolver-owned. This compiler
-        // consumes that vetted assignment; an absent key is a caller contract violation, not
-        // another user-facing validation result.
+        // Assignments are resolver-vetted; a missing key is a caller contract violation.
         string compatibilityClassId = activeStages.Count == 0
             ? ""
             : stageModels[activeStages[0].ClipStageRawIndex].CompatibilityClassId;
@@ -203,11 +177,6 @@ internal sealed class HostVideoArchitectureModule :
             stages,
             diagnostics.AsReadOnly());
     }
-
-    private static ProvenHostPath Path(
-        T2IModelCompatClass compatibility,
-        string modelClassId) =>
-        new(compatibility.ID, modelClassId);
 
     private static PlanDiagnostic Error(
         ClipSpec clip,

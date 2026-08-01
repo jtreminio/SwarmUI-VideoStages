@@ -123,8 +123,14 @@ internal static class ArchitecturePlanResolver
         {
             if (!registry.TryResolveModel(authored.Model, out ResolvedVideoModel stageModel))
             {
-                diagnostics.Add(Error(
-                    authored.RawIndex == firstRawIndex
+                bool firstStage = authored.RawIndex == firstRawIndex;
+                diagnostics.Add(Diagnostic(
+                    firstStage
+                        ? PlanDiagnosticSeverity.Error
+                        : authored.Skipped
+                            ? PlanDiagnosticSeverity.Warning
+                            : PlanDiagnosticSeverity.Error,
+                    firstStage
                         ? "architecture-stage0-model-unresolved"
                         : "architecture-authored-stage-model-unresolved",
                     $"Clip {clip.Id} authored stage {authored.RawIndex} model '{authored.Model}' "
@@ -149,7 +155,8 @@ internal static class ArchitecturePlanResolver
                 NoneArchitecture.Id.Value,
                 StringComparison.OrdinalIgnoreCase))
         {
-            diagnostics.Add(Error(
+            diagnostics.Add(Diagnostic(
+                PlanDiagnosticSeverity.Warning,
                 "architecture-source-only-identity-mismatch",
                 $"Clip {clip.Id} has no generation stages and therefore requires architecture "
                     + $"'{NoneArchitecture.Id}', but its authored architecture hint is "
@@ -163,7 +170,8 @@ internal static class ArchitecturePlanResolver
                 NoneArchitecture.Id.Value,
                 StringComparison.OrdinalIgnoreCase))
         {
-            diagnostics.Add(Error(
+            diagnostics.Add(Diagnostic(
+                PlanDiagnosticSeverity.Warning,
                 "architecture-source-only-profile-mismatch",
                 $"Clip {clip.Id} has no generation stages and therefore requires model profile "
                     + $"'{NoneArchitecture.Id}', but its authored model profile is "
@@ -221,13 +229,28 @@ internal static class ArchitecturePlanResolver
         }
     }
 
-    private static PlanDiagnostic Error(
+    private static PlanDiagnostic Diagnostic(
+        PlanDiagnosticSeverity severity,
         string code,
         string message,
         int clipId,
         int? stageId,
         int? rawStageIndex = null) =>
         new(
+            severity,
+            code,
+            message,
+            clipId,
+            stageId,
+            rawStageIndex);
+
+    private static PlanDiagnostic Error(
+        string code,
+        string message,
+        int clipId,
+        int? stageId,
+        int? rawStageIndex = null) =>
+        Diagnostic(
             PlanDiagnosticSeverity.Error,
             code,
             message,

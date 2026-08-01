@@ -119,7 +119,7 @@ public class VideoExecutionPlanContextTests
     public void Blocking_plan_failure_is_memoized_as_failed()
     {
         using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndUnsupportedVideoModels();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
@@ -161,7 +161,7 @@ public class VideoExecutionPlanContextTests
     public void GetPlanContext_PreservesUnsupportedArchitectureDiagnostics()
     {
         using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndUnsupportedVideoModels();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
@@ -223,7 +223,7 @@ public class VideoExecutionPlanContextTests
     public void GetPlanContext_AllowsInitVideoOnlyTimelineWithNonLtxHost()
     {
         using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndUnsupportedVideoModels();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
@@ -238,7 +238,7 @@ public class VideoExecutionPlanContextTests
     public void RequirePlan_rejects_unregistered_generated_model_with_precise_error()
     {
         using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
+        TestModelBundle models = TestModelFactory.CreateBaseAndUnsupportedVideoModels();
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
