@@ -7,9 +7,7 @@ internal sealed record AudioTimelineTrackProjectionResult(
     ImmutableArray<PlanDiagnostic> Diagnostics);
 
 /// <summary>
-/// Projects each authored span onto the final clip windows. Shape validation belongs to
-/// <see cref="AudioTimelineValidationPlanner"/>; this class only does the time arithmetic and
-/// reports what projection itself could not resolve.
+/// Projects audio spans onto final clip windows and reports unresolved timing inputs.
 /// </summary>
 internal static class AudioTimelineTrackSpanProjector
 {
@@ -74,21 +72,21 @@ internal static class AudioTimelineTrackSpanProjector
         {
             if (span.FirstClipId.HasValue && !clipIndices.TryGetValue(span.FirstClipId.Value, out firstIndex))
             {
-                diagnostics.Add(new(PlanDiagnosticSeverity.Error,
+                diagnostics.Add(new(PlanDiagnosticSeverity.Warning,
                     "audio.timeline.span.unknown_first_clip", $"Audio span starts at unknown clip {span.FirstClipId.Value}.",
                     TrackId: trackId, SpanIndex: spanIndex, ClipId: span.FirstClipId));
                 return;
             }
             if (span.LastClipId.HasValue && !clipIndices.TryGetValue(span.LastClipId.Value, out lastIndex))
             {
-                diagnostics.Add(new(PlanDiagnosticSeverity.Error,
+                diagnostics.Add(new(PlanDiagnosticSeverity.Warning,
                     "audio.timeline.span.unknown_last_clip", $"Audio span ends at unknown clip {span.LastClipId.Value}.",
                     TrackId: trackId, SpanIndex: spanIndex, ClipId: span.LastClipId));
                 return;
             }
             if (firstIndex > lastIndex)
             {
-                diagnostics.Add(new(PlanDiagnosticSeverity.Error,
+                diagnostics.Add(new(PlanDiagnosticSeverity.Warning,
                     "audio.timeline.span.reversed_clip_range", "An audio span's first clip follows its last clip.",
                     TrackId: trackId, SpanIndex: spanIndex));
                 return;

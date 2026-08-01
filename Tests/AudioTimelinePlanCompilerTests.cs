@@ -241,6 +241,9 @@ public class AudioTimelinePlanCompilerTests
         Assert.Contains("audio.timeline.span.invalid_timeline_window", codes);
         Assert.Contains("audio.timeline.clip_timing_unavailable", codes);
         Assert.Contains("audio.timeline.span.unresolved_clip_timing", codes);
+        Assert.Contains(timeline.Diagnostics, diagnostic =>
+            diagnostic.Code == "audio.timeline.span.unknown_first_clip"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
     }
 
     [Fact]
@@ -263,6 +266,58 @@ public class AudioTimelinePlanCompilerTests
         Assert.Equal(0, Assert.Single(retained.Windows).SourceStartSeconds);
         Assert.Contains(timeline.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.timeline.track.duplicate_id"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
     }
+
+    [Theory]
+    [InlineData(0, 99, "audio.timeline.span.unknown_last_clip")]
+    [InlineData(1, 0, "audio.timeline.span.reversed_clip_range")]
+    public void Invalid_clip_range_anchors_warn_and_skip_the_span(
+        int firstClipId,
+        int lastClipId,
+        string expectedCode)
+    {
+        VideoExecutionPlan video = Plan(Clip(0), Clip(1));
+        AudioTimelinePlan timeline = AudioTimelinePlanCompiler.Compile(video,
+        [
+            Track("invalid-range", new AudioTrackSpanSpec(
+                FirstClipId: firstClipId,
+                LastClipId: lastClipId)),
+        ]);
+
+        Assert.Empty(Track(timeline, "invalid-range").Windows);
+        Assert.Contains(timeline.Diagnostics, diagnostic =>
+            diagnostic.Code == expectedCode
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+    }
+
+    [Fact]
+    public void Timeline_metadata_conflicts_are_warnings()
+    {
+        VideoExecutionPlan normal = Plan(Clip(0), Clip(1));
+        VideoExecutionPlan duplicateClips = normal with
+        {
+            Clips = [normal.Clips[0], normal.Clips[0]],
+        };
+        VideoExecutionPlan invalidFps = normal with { FramesPerSecond = 0 };
+        VideoExecutionPlan duplicateBoundaries = normal with
+        {
+            Boundaries = [normal.Boundaries[0], normal.Boundaries[0]],
+        };
+
+        AssertWarning(
+            AudioTimelinePlanCompiler.Compile(duplicateClips),
+            "audio.timeline.clip.duplicate_id");
+        AssertWarning(
+            AudioTimelinePlanCompiler.Compile(invalidFps),
+            "audio.timeline.invalid_fps");
+        AssertWarning(
+            AudioTimelinePlanCompiler.Compile(duplicateBoundaries),
+            "audio.timeline.boundary.duplicate_from_clip");
+    }
+
+    private static void AssertWarning(AudioTimelinePlan plan, string code) =>
+        Assert.Contains(plan.Diagnostics, diagnostic =>
+            diagnostic.Code == code
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
 }

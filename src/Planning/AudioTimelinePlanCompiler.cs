@@ -3,18 +3,14 @@ using System.Collections.Immutable;
 namespace VideoStages.Planning;
 
 /// <summary>
-/// The compiled timeline audio plan plus the authored track specs it was built from. The video
-/// plan compiler needs both: the plan for the timeline, and the authored ids so it knows which
-/// projected windows belong back on a clip.
+/// Pairs a compiled timeline plan with the authored tracks used to build it.
 /// </summary>
 internal sealed record AudioTimelineCompilation(
     AudioTimelinePlan Plan,
     ImmutableArray<AudioTrackSpec> AuthoredTracks);
 
 /// <summary>
-/// The one owner of timeline audio planning. It projects clip durations and outgoing boundary
-/// trims into final clip windows exactly once, then reuses those windows for authored segment
-/// adaptation, span projection, and validation. Runtime mixing stays outside this compiler.
+/// Builds final clip windows, projects audio tracks, and validates the result.
 /// </summary>
 internal static class AudioTimelinePlanCompiler
 {
@@ -34,7 +30,6 @@ internal static class AudioTimelinePlanCompiler
             authoredTracks);
     }
 
-    /// <summary>Compiles a timeline from already-shaped track specs.</summary>
     internal static AudioTimelinePlan Compile(
         VideoExecutionPlan videoPlan,
         ImmutableArray<AudioTrackSpec> tracks = default)
@@ -77,7 +72,7 @@ internal static class AudioTimelinePlanCompiler
             if (!indices.TryAdd(windows[i].ClipId, i))
             {
                 diagnostics.Add(new(
-                    PlanDiagnosticSeverity.Error,
+                    PlanDiagnosticSeverity.Warning,
                     "audio.timeline.clip.duplicate_id",
                     $"Timeline clip id {windows[i].ClipId} is duplicated; only the first is addressable.",
                     ClipId: windows[i].ClipId));
@@ -93,7 +88,7 @@ internal static class AudioTimelinePlanCompiler
         if (videoPlan.FramesPerSecond <= 0)
         {
             diagnostics.Add(new(
-                PlanDiagnosticSeverity.Error,
+                PlanDiagnosticSeverity.Warning,
                 "audio.timeline.invalid_fps",
                 "Timeline audio windows require a positive frames-per-second value."));
             return [.. videoPlan.Clips.Select(clip => new AudioTimelineClipWindow(
@@ -106,7 +101,7 @@ internal static class AudioTimelinePlanCompiler
             if (!outgoing.TryAdd(boundary.FromClipId, boundary))
             {
                 diagnostics.Add(new(
-                    PlanDiagnosticSeverity.Error,
+                    PlanDiagnosticSeverity.Warning,
                     "audio.timeline.boundary.duplicate_from_clip",
                     $"Clip {boundary.FromClipId} has more than one outgoing boundary; only the first is used.",
                     ClipId: boundary.FromClipId));

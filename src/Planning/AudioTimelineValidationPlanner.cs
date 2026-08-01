@@ -2,15 +2,13 @@ using System.Collections.Immutable;
 
 namespace VideoStages.Planning;
 
-/// <summary>The verdict on one authored track: whether it can be projected, and why not.</summary>
+/// <summary>Validation result for an authored audio track.</summary>
 internal sealed record AudioTrackValidation(
     bool CanProject,
     ImmutableArray<PlanDiagnostic> Diagnostics);
 
 /// <summary>
-/// The one owner of timeline audio validation. It rejects malformed authored tracks and spans
-/// before projection, and checks projected windows for non-partitioning spans and cross-track
-/// overlap afterwards, so the projector performs arithmetic only.
+/// Validates authored tracks and spans before projection, then validates projected windows.
 /// </summary>
 internal static class AudioTimelineValidationPlanner
 {
@@ -36,14 +34,12 @@ internal static class AudioTimelineValidationPlanner
         if (isDuplicateId)
         {
             return Rejected(new(
-                PlanDiagnosticSeverity.Error,
+                PlanDiagnosticSeverity.Warning,
                 "audio.timeline.track.duplicate_id",
                 $"Timeline audio track '{trackId}' is duplicated.",
                 TrackId: trackId));
         }
 
-        // A missing source and an empty span list are both reported, but neither stops projection:
-        // the track still describes real timeline time that later validation must see.
         ImmutableArray<PlanDiagnostic>.Builder diagnostics =
             ImmutableArray.CreateBuilder<PlanDiagnostic>();
         if (track.Source is null)
@@ -65,9 +61,7 @@ internal static class AudioTimelineValidationPlanner
         return new(CanProject: true, diagnostics.ToImmutable());
     }
 
-    /// <summary>
-    /// Validates one authored span's shape. A non-null result means the span cannot be projected.
-    /// </summary>
+    /// <summary>Returns a diagnostic when an authored span cannot be projected.</summary>
     internal static PlanDiagnostic ValidateSpan(
         AudioTrackSpanSpec span,
         string trackId,
@@ -132,7 +126,7 @@ internal static class AudioTimelineValidationPlanner
         return null;
     }
 
-    /// <summary>Checks the projected windows for partitioning and cross-track overlap.</summary>
+    /// <summary>Validates projected window partitioning and cross-track overlap.</summary>
     internal static ImmutableArray<PlanDiagnostic> Validate(
         ImmutableArray<AudioTimelineTrackPlan> tracks)
     {
