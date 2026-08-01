@@ -1,31 +1,32 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
+using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Text2Image;
 using VideoStages.Planning;
 
 namespace VideoStages.Execution;
 
-/// <summary>Captures the host root and publishes the completed timeline.</summary>
 internal sealed class RootRuntimeSession
 {
     private readonly WorkflowGenerator _generator;
     private readonly RootPlan _rootPlan;
-    private readonly OutputRegistry _outputs;
+    private readonly IReadOnlySet<string> _hostAnimationSaveIds;
     private readonly IReadOnlySet<string> _capturedRootComponentIds;
-    private readonly bool _requiresDedicatedAudioPublication;
+    private readonly bool _publishAudio;
 
     private RootRuntimeSession(
         WorkflowGenerator generator,
         RootPlan rootPlan,
-        OutputRegistry outputs,
+        IReadOnlySet<string> hostAnimationSaveIds,
         IReadOnlySet<string> capturedRootComponentIds,
-        bool requiresDedicatedAudioPublication)
+        bool publishAudio)
     {
         _generator = generator;
         _rootPlan = rootPlan;
-        _outputs = outputs;
+        _hostAnimationSaveIds = hostAnimationSaveIds;
         _capturedRootComponentIds = capturedRootComponentIds;
-        _requiresDedicatedAudioPublication = requiresDedicatedAudioPublication;
+        _publishAudio = publishAudio;
     }
 
     public static RootRuntimeSession Capture(
@@ -39,7 +40,7 @@ internal sealed class RootRuntimeSession
         RuntimeArtifact hostRoot = RuntimeArtifact.Capture(
             generator,
             bridge);
-        OutputRegistry outputs = OutputRegistry.Capture(bridge, hostRoot);
+        IReadOnlySet<string> hostAnimationSaveIds = CaptureHostAnimationSaveIds(bridge, hostRoot);
         HashSet<string> componentSeeds = [];
         AddArtifactNodeIds(componentSeeds, hostRoot);
         IReadOnlySet<string> rootComponentIds = componentSeeds.Count == 0
@@ -47,13 +48,13 @@ internal sealed class RootRuntimeSession
             : WorkflowGraphCleanup.CollectOwnedRootClosure(
                 bridge,
                 componentSeeds,
-                outputs.HostAnimationSaveIds);
+                hostAnimationSaveIds);
         return new RootRuntimeSession(
             generator,
             planContext.Plan.Root,
-            outputs,
+            hostAnimationSaveIds,
             rootComponentIds,
-            planContext.Plan.Clips.Count > 1);
+            planContext.Plan.Root.DiscardsRoot || planContext.Plan.Clips.Count > 1);
     }
 
     public void PublishTimeline(RuntimeArtifact timeline)
@@ -66,13 +67,7 @@ internal sealed class RootRuntimeSession
         }
 
         bool rootIsDisplaced = _rootPlan.DiscardsRoot;
-        OutputPublisher publisher = new(
-            _generator,
-            _outputs,
-            StableNodeIds.Id(_generator, StableNodeIds.FinalSave));
-        if (!publisher.Publish(
-            timeline,
-            publishAudio: rootIsDisplaced || _requiresDedicatedAudioPublication))
+        if (!Publish(timeline))
         {
             throw VideoStagesInvariant.Failure(
                 "VideoStages: the completed timeline could not be connected to the final output.");
@@ -82,6 +77,120 @@ internal sealed class RootRuntimeSession
         {
             CleanupDisplacedRoot(timeline);
         }
+    }
+
+    // Capture only saves already wired to the host root; stage-authored saves are not publication targets.
+    private static IReadOnlySet<string> CaptureHostAnimationSaveIds(
+        WorkflowBridge bridge,
+        RuntimeArtifact hostRoot)
+    {
+        INodeOutput hostMedia = hostRoot?.Media?.Output;
+        return hostMedia is null
+            ? new HashSet<string>()
+            : [
+                .. bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>()
+                    .Where(save => SameOutput(save.Images.Connection, hostMedia))
+                    .Select(save => save.Id)
+            ];
+    }
+
+    private static bool SameOutput(INodeOutput left, INodeOutput right)
+    {
+        return left is not null
+            && right is not null
+            && left.Node.Id == right.Node.Id
+            && left.SlotIndex == right.SlotIndex;
+    }
+
+    private bool Publish(RuntimeArtifact artifact)
+    {
+        if (_generator.UserInput.Get(T2IParamTypes.DoNotSave, false))
+        {
+            using WorkflowBridge suppressionBridge = WorkflowBridge.Create(_generator.Workflow);
+            foreach (string saveId in _hostAnimationSaveIds)
+            {
+                if (suppressionBridge.Graph.GetNode(saveId) is not null)
+                {
+                    VideoGraphHelpers.RemoveNode(_generator, suppressionBridge, saveId);
+                }
+            }
+            return true;
+        }
+
+        WGNodeData media = artifact.Media?.ToWGNodeData(_generator);
+        if (media?.Path is not JArray { Count: 2 } mediaPath)
+        {
+            return false;
+        }
+
+        // Retained single-clip roots keep their existing save-audio wrapper.
+        WGNodeData audio = _publishAudio ? ResolvePublishedAudio(media.AttachedAudio) : null;
+        using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+        INodeOutput videoOutput = bridge.ResolvePath(mediaPath);
+        if (videoOutput is null)
+        {
+            return false;
+        }
+
+        INodeOutput audioOutput = audio?.Path is JArray { Count: 2 } audioPath
+            ? bridge.ResolvePath(audioPath)
+            : null;
+        List<SwarmSaveAnimationWSNode> hostSaves = _hostAnimationSaveIds
+            .Select(id => bridge.Graph.GetNode(id))
+            .OfType<SwarmSaveAnimationWSNode>()
+            .ToList();
+        if (hostSaves.Count == 0)
+        {
+            WGNodeData vae = artifact.Vae?.ToWGNodeData(_generator) ?? _generator.CurrentVae;
+            media.SaveOutput(
+                vae,
+                _generator.CurrentAudioVae,
+                StableNodeIds.Id(_generator, StableNodeIds.FinalSave));
+            return true;
+        }
+
+        HashSet<string> staleAudioNodeIds = [];
+        foreach (SwarmSaveAnimationWSNode save in hostSaves)
+        {
+            save.Images.ConnectToUntyped(videoOutput);
+            if (media.GetRawFPS() is int fps && fps > 0)
+            {
+                save.Fps.Set((double)fps);
+            }
+            if (_publishAudio && save.Audio.Connection?.Node?.Id is string staleAudioId)
+            {
+                staleAudioNodeIds.Add(staleAudioId);
+            }
+            if (_publishAudio && !save.Audio.TryConnectToUntyped(audioOutput))
+            {
+                save.Audio.Clear();
+            }
+        }
+
+        HashSet<string> protectedNodeIds = [$"{mediaPath[0]}"];
+        if (audio?.Path is JArray { Count: 2 } publishedAudioPath)
+        {
+            protectedNodeIds.Add($"{publishedAudioPath[0]}");
+        }
+        foreach (string staleAudioNodeId in staleAudioNodeIds)
+        {
+            WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(
+                bridge,
+                staleAudioNodeId,
+                protectedNodeIds,
+                _generator.NodeHelpers);
+        }
+        return true;
+    }
+
+    private WGNodeData ResolvePublishedAudio(WGNodeData attachedAudio)
+    {
+        if (attachedAudio?.DataType == WGNodeData.DT_LATENT_AUDIO
+            && _generator.CurrentAudioVae is not null)
+        {
+            attachedAudio = attachedAudio.DecodeLatents(_generator.CurrentAudioVae, true);
+        }
+        return attachedAudio?.DataType == WGNodeData.DT_AUDIO ? attachedAudio : null;
     }
 
     private void CleanupDisplacedRoot(RuntimeArtifact timeline)
