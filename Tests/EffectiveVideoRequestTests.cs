@@ -602,7 +602,6 @@ public sealed class EffectiveVideoRequestTests
             RootEnvironment.FromSpec(authored),
             architectures);
         BoundaryPlan boundary = Assert.Single(plan.Boundaries);
-        Assert.Equal(BoundaryJoinType.Crossfade, boundary.Requested);
         Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
         Assert.Equal(
             BoundaryFallbackReason.ArchitectureRuleUnsupported,

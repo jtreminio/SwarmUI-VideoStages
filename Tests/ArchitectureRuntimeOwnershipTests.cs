@@ -243,10 +243,8 @@ public class ArchitectureRuntimeOwnershipTests
                 new(
                     0,
                     BoundaryJoinType.Cut,
-                    BoundaryJoinType.Cut,
                     0,
                     0,
-                    RequiresRuntimeMergeValidation: false,
                     BoundaryFallbackReason.None)
             ],
             []);

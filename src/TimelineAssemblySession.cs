@@ -96,11 +96,6 @@ internal sealed class TimelineAssemblySession
     public RuntimeArtifact FinalizeSingleClip(DecodedClipArtifact clipOutput)
     {
         ArgumentNullException.ThrowIfNull(clipOutput);
-        if (clipOutput.HasVideo != true)
-        {
-            throw VideoStagesInvariant.Failure(
-                "VideoStages: timeline assembly received an invalid clip video artifact.");
-        }
         using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
         RuntimeArtifact artifact = RuntimeArtifact.FromDecoded(
             _generator,

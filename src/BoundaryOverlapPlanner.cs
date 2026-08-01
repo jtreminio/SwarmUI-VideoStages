@@ -225,7 +225,6 @@ internal static class BoundaryOverlapPlanner
                 Effective = BoundaryJoinType.Cut,
                 OverlapFrames = 0,
                 ContinuityWindowFrames = 0,
-                RequiresRuntimeMergeValidation = false,
                 CarryAudio = false,
                 Fallback = fallback == BoundaryFallbackReason.None ? boundary.Fallback : fallback,
             }).ToArray()),
@@ -239,7 +238,6 @@ internal static class BoundaryOverlapPlanner
             Effective = BoundaryJoinType.Cut,
             OverlapFrames = 0,
             ContinuityWindowFrames = 0,
-            RequiresRuntimeMergeValidation = false,
             CarryAudio = false,
         };
 

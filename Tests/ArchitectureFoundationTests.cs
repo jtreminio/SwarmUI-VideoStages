@@ -379,7 +379,6 @@ public class ArchitectureFoundationTests
             architecture);
 
         BoundaryPlan boundary = Assert.Single(plan.Boundaries);
-        Assert.Equal(BoundaryJoinType.Crossfade, boundary.Requested);
         Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
         Assert.Equal(
             BoundaryFallbackReason.ArchitectureRuleUnsupported,
@@ -874,7 +873,6 @@ public class ArchitectureFoundationTests
 
         Assert.All(plan.Boundaries, boundary =>
         {
-            Assert.Equal(BoundaryJoinType.Cut, boundary.Requested);
             Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
         });
         Assert.Equal(ids, calls);
@@ -1526,7 +1524,6 @@ public class ArchitectureFoundationTests
             ArchitecturePlanResolver.Resolve(spec, registry));
     }
 
-    /// <summary>Compiles one clip against the real LTX descriptor, module, and frame grid.</summary>
     private static VideoExecutionPlan CompileWithLtx(ClipSpec clip, StageSpec stage)
     {
         VideoArchitectureDescriptor descriptor =

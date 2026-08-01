@@ -12,10 +12,6 @@ internal sealed record TimelineMergeResult(
     BoundaryBudgetResolution Boundaries,
     RuntimeArtifact Artifact);
 
-/// <summary>
-/// Resolves clip graphs into a timeline artifact. <see cref="Apply"/> also publishes the result to
-/// host state for legacy callers.
-/// </summary>
 internal sealed class MultiClipParallelMerger(
     WorkflowGenerator g,
     IReadOnlyDictionary<ArchitectureId, IArchitectureBoundaryAssembler> boundaryAssemblers = null)
@@ -25,15 +21,6 @@ internal sealed class MultiClipParallelMerger(
         int Length,
         IArchitectureBoundaryAssembler Assembler,
         BoundaryOverlapPlan Overlap);
-
-    public BoundaryBudgetResolution Apply(
-        IReadOnlyList<DecodedClipArtifact> clipArtifacts,
-        IReadOnlyList<BoundaryPlan> boundaries)
-    {
-        TimelineMergeResult result = Merge(clipArtifacts, boundaries);
-        result.Artifact?.PublishTo(g);
-        return result.Boundaries;
-    }
 
     internal TimelineMergeResult Merge(
         IReadOnlyList<DecodedClipArtifact> clipArtifacts,

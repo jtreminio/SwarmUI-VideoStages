@@ -162,11 +162,9 @@ internal sealed record StageOutputPlan(
 /// <summary>A normalized outgoing boundary from clip N to clip N + 1.</summary>
 internal sealed record BoundaryPlan(
     int FromClipId,
-    BoundaryJoinType Requested,
     BoundaryJoinType Effective,
     int OverlapFrames,
     int ContinuityWindowFrames,
-    bool RequiresRuntimeMergeValidation,
     BoundaryFallbackReason Fallback)
 {
     public int FrameStep { get; init; } = 1;

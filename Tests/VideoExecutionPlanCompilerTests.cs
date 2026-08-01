@@ -529,7 +529,6 @@ public class VideoExecutionPlanCompilerTests
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, source));
 
         BoundaryPlan boundary = plan.Boundaries[0];
-        Assert.Equal(BoundaryJoinType.Continue, boundary.Requested);
         Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
         Assert.Equal(
             BoundaryFallbackReason.ArchitectureRuleUnsupported,
@@ -588,7 +587,7 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_Crossfade_PreservesRequestedBoundaryForRuntimeMergeValidation()
+    public void Compile_Crossfade_PreservesEffectiveBoundaryForRuntimeAssembly()
     {
         ClipSpec first = GeneratedClip(0, Stage(10)) with
         {
@@ -601,7 +600,6 @@ public class VideoExecutionPlanCompilerTests
         BoundaryPlan boundary = plan.Boundaries[0];
         Assert.Equal(BoundaryJoinType.Crossfade, boundary.Effective);
         Assert.Equal(24, boundary.OverlapFrames);
-        Assert.True(boundary.RequiresRuntimeMergeValidation);
         Assert.Single(plan.Boundaries);
         Assert.All(
             plan.Clips.Select(clip => Assert.Single(clip.Stages).Output),

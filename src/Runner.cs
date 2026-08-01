@@ -12,7 +12,7 @@ namespace VideoStages;
 // 2  -5.9   CaptureCoreVideoControlNetPreprocessors       core ControlNet graph                          captures raw image/audio/apply facts,
 //                                                                                                        then fans out architecture interpretation
 // 3  -4.2   CaptureBase                                   —                                              architecture reference capture
-// 4   5.9   CaptureRefiner                                —                                              architecture reference capture
+// 4   5.89  CaptureRefiner                                —                                              architecture reference capture
 // 5  10.95  CapturePreCoreVideoMedia                      —                                              architecture pre-core capture,
 //                                                                                                        videostages.arch.{id}.pre-core-node-ids
 // 6  11.05  DropCoreImageToVideoOutput                    architecture pre-core state,                  clears both above
@@ -47,8 +47,7 @@ public static class Runner
 
     public static void CaptureBase(WorkflowGenerator g)
     {
-        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context)
-            || !HasConfiguredStages(context))
+        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
@@ -58,8 +57,7 @@ public static class Runner
 
     public static void CaptureRefiner(WorkflowGenerator g)
     {
-        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context)
-            || !HasConfiguredStages(context))
+        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
@@ -131,8 +129,4 @@ public static class Runner
         context.RequirePrepared();
         return true;
     }
-
-    private static bool HasConfiguredStages(VideoExecutionPlanContext context) =>
-        context.Plan.Clips.Any(
-            clip => clip.Stages.Count > 0);
 }

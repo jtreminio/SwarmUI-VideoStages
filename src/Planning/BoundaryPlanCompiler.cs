@@ -18,7 +18,6 @@ internal static class BoundaryPlanCompiler
             ClipSpec from = clips[i];
             BoundaryJoinType effectiveRequested =
                 BoundaryPolicy.ParsePlanMode(from.BoundaryOut);
-            BoundaryJoinType requested = effectiveRequested;
             ClipSpec to = clips[i + 1];
             BoundaryFallbackReason fallback = BoundaryFallbackReason.None;
             bool fallbackReported = false;
@@ -99,11 +98,9 @@ internal static class BoundaryPlanCompiler
             }
             boundaries.Add(new BoundaryPlan(
                 from.Id,
-                requested,
                 effective,
                 overlap,
                 continuityWindow,
-                RequiresRuntimeMergeValidation: effective != BoundaryJoinType.Cut,
                 fallback)
             {
                 FrameStep = constraints?.FrameStep ?? 1,

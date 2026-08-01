@@ -33,10 +33,8 @@ internal static class BoundaryPlanFixture
             boundaries.Add(new(
                 i,
                 mode,
-                mode,
                 mode == BoundaryJoinType.Cut ? 0 : overlap,
                 mode == BoundaryJoinType.Continue ? continuityWindow : 0,
-                RequiresRuntimeMergeValidation: mode != BoundaryJoinType.Cut,
                 BoundaryFallbackReason.None)
             {
                 FrameStep = 8,
