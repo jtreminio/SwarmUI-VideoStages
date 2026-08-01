@@ -78,14 +78,8 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
         if (promptRelay.Mode == PromptRelayMode.RequiresRuntimeLength)
         {
             double clipSeconds = frameCount / (double)Math.Max(1, fps);
-            segments = PromptRelayPlanResolver.Tile(promptRelay.AuthoredWindows, clipSeconds);
-            mode = segments.Count switch
-            {
-                1 when !string.IsNullOrWhiteSpace(segments[0].Prompt) =>
-                    PromptRelayMode.SinglePromptOverride,
-                >= 2 => PromptRelayMode.Relay,
-                _ => PromptRelayMode.None,
-            };
+            segments = PromptRelayPlanCompiler.Tile(promptRelay.AuthoredWindows, clipSeconds);
+            mode = PromptRelayPlanCompiler.ModeFor(segments);
         }
 
         if (mode == PromptRelayMode.SinglePromptOverride

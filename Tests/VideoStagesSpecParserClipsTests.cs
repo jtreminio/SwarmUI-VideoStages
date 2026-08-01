@@ -207,7 +207,7 @@ public class VideoStagesSpecParserClipsTests
 
         ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json, prompt)).Clips);
 
-        var tiled = PromptRelayPlanResolver.Tile(
+        var tiled = PromptRelayPlanCompiler.Tile(
             parsed.PromptWindows.Select(window => new PromptWindowPlan(
                 window.Prompt,
                 window.Start,

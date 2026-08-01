@@ -23,6 +23,9 @@ internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
 
     internal static Ltx2ArchitectureModule Instance { get; } = new();
 
+    internal static bool IsLtxV2VideoModel(T2IModel model) =>
+        Instance.TryResolveModel(model, out _);
+
     public VideoArchitectureDescriptor Descriptor { get; } = new(
         ArchitectureId,
         "LTX Video 2.3",

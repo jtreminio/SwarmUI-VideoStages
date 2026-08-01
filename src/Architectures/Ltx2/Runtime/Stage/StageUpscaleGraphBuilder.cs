@@ -43,7 +43,7 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
             T2IParamTypes.VideoModel,
             null,
             sectionId: sectionId);
-        bool isLtxv2Stage = Ltx2ModelCompatibility.IsLtxV2VideoModel(stageVideoModel);
+        bool isLtxv2Stage = Ltx2ArchitectureModule.IsLtxV2VideoModel(stageVideoModel);
         if (isLtxv2Stage
             && upscale.Mode is StageUpscaleMode.LatentModel or StageUpscaleMode.Latent)
         {
