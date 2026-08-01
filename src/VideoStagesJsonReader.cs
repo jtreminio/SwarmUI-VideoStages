@@ -93,7 +93,7 @@ internal static class VideoStagesJsonReader
     /// fixture test can observe exactly which keys the backend reads.</summary>
     private static JToken Read(JObject obj, string key)
     {
-        JToken token = JsonUtil.Get(obj, key);
+        JToken token = obj?[key];
         KeyProbe?.Invoke(obj, key, token is not null);
         return token;
     }
@@ -238,7 +238,6 @@ internal static class VideoStagesJsonReader
                 : null;
     }
 
-    /// <summary>Emits a parse fallback through its request sink when production supplied one.</summary>
     internal static void Warn(Action<string> warn, string message)
     {
         if (warn is null)

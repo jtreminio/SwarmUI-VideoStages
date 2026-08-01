@@ -61,11 +61,7 @@ internal static class LtxAudioReuseState
     internal static bool UsesCapturedAudio(StagePlan stage) =>
         stage?.RequireLtx2Payload().AudioAction == StageAudioAction.ReuseCaptured;
 
-    /// <summary>
-    /// Completes the capture transition when the latent is discoverable from the post-video chain
-    /// but was not exposed through <c>CurrentMedia.AttachedAudio</c>. All mutation of the clip-local
-    /// reuse state remains owned here.
-    /// </summary>
+    /// <summary>Captures a latent found only in the post-video chain.</summary>
     internal static void CompletePostVideoChainCapture(
         Ltx2ClipAudioReuseState audioReuse,
         StagePlan stage,
@@ -77,7 +73,7 @@ internal static class LtxAudioReuseState
         {
             return;
         }
-        audioReuse.Remember(PathUtils.Clone(captured.AudioLatentPath));
+        audioReuse.Remember(captured.AudioLatentPath?.DeepClone() as JArray);
     }
 }
 

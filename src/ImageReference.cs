@@ -17,9 +17,6 @@ public static class ImageReference
 
     public static string FormatBase2EditStageIndex(int stageIndex) => $"{Base2EditStagePrefix}{stageIndex}";
 
-    public static ImageFile MaterializeUploadedRefImage(WorkflowGenerator g, ImageRefSpec spec, string descriptor)
-        => MaterializeUploadedRefImage(g, spec.Data, spec.UploadFileName, descriptor);
-
     internal static ImageFile MaterializeUploadedRefImage(
         WorkflowGenerator g,
         string inlineData,

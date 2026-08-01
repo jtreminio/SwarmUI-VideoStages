@@ -3,7 +3,6 @@ using Newtonsoft.Json.Linq;
 
 namespace VideoStages;
 
-/// <summary>Applies validated prompt-tag scalar overrides to the authored JSON before parsing.</summary>
 internal static class PromptOverrideApplier
 {
     private enum OverrideKind { String, Int, Double, Bool }
@@ -158,7 +157,7 @@ internal static class PromptOverrideApplier
 
     private static JObject GetStage(JObject clip, int stageIndex)
     {
-        if (JsonUtil.Get(clip, "stages") is not JArray array)
+        if (VideoStagesJsonReader.GetToken(clip, "stages") is not JArray array)
         {
             return null;
         }

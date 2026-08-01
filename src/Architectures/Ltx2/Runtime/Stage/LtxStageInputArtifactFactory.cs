@@ -7,9 +7,6 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>
-/// Builds stage-facing artifacts from an immutable post-chain capture.
-/// </summary>
 internal sealed class LtxStageInputArtifactFactory
 {
     private readonly WorkflowGenerator g;
@@ -51,7 +48,7 @@ internal sealed class LtxStageInputArtifactFactory
     public WGNodeData CreateStageInputVae()
     {
         return new WGNodeData(
-            PathUtils.Clone(state.VideoVaePath),
+            state.VideoVaePath?.DeepClone() as JArray,
             g,
             WGNodeData.DT_VAE,
             ResolveVideoCompat(g, state));
@@ -109,7 +106,7 @@ internal sealed class LtxStageInputArtifactFactory
             return null;
         }
 
-        WGNodeData cloned = new(PathUtils.Clone(path), generator, media.DataType, media.Compat)
+        WGNodeData cloned = new(path?.DeepClone() as JArray, generator, media.DataType, media.Compat)
         {
             Width = media.Width,
             Height = media.Height,
@@ -119,7 +116,7 @@ internal sealed class LtxStageInputArtifactFactory
         if (media.AttachedAudio?.Path is JArray { Count: 2 } audioPath)
         {
             cloned.AttachedAudio = new WGNodeData(
-                PathUtils.Clone(audioPath),
+                audioPath?.DeepClone() as JArray,
                 generator,
                 media.AttachedAudio.DataType,
                 media.AttachedAudio.Compat)

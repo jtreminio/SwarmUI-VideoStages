@@ -14,13 +14,10 @@ internal sealed record UploadContainerPath(
     IReadOnlyList<UploadPathStep> Steps,
     string Container);
 
-/// <summary>The embedded-upload containers an authoring document can carry. Each container property
-/// holds a base64 "data" blob that <see cref="MetadataSanitizer"/> strips; the parsers read the same
-/// containers. Both derive their property names from here, and the sanitizer walks
-/// <see cref="AllPaths"/> rather than a hardcoded traversal, so adding an upload field is a single
-/// edit that cannot be missed by output metadata.</summary>
+/// <summary>Shared keys and traversal paths for parsing and sanitizing embedded uploads.</summary>
 internal static class UploadContainers
 {
+    /// <summary>Property names are part of the frontend authoring-document contract.</summary>
     public const string ClipAudio = "uploadedAudio";
     public const string ClipInitVideo = "initVideo";
     public const string IcLoraDriveMedia = "driveMedia";

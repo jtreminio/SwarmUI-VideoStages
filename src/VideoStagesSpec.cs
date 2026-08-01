@@ -58,10 +58,6 @@ public sealed record StageSpec(
         Planning.StageUpscalePlanCompiler.Classify(UpscaleMethod) == Planning.StageUpscaleMode.LatentModel;
     public bool IsLatentUpscale =>
         Planning.StageUpscalePlanCompiler.Classify(UpscaleMethod) == Planning.StageUpscaleMode.Latent;
-    public bool IsPixelUpscale =>
-        Planning.StageUpscalePlanCompiler.Classify(UpscaleMethod) == Planning.StageUpscaleMode.Pixel;
-    public bool IsModelUpscale =>
-        Planning.StageUpscalePlanCompiler.Classify(UpscaleMethod) == Planning.StageUpscaleMode.Model;
 
     /// <summary>
     /// True when the authored stage requests no generation or architecture-owned latent transform.
@@ -80,7 +76,6 @@ public sealed record ImageRefSpec(
     string Data = null
 );
 
-/// <summary>An embedded upload used by audio, video, image, or architecture-specific media fields.</summary>
 public sealed record UploadedMediaSpec(
     string Data,
     string FileName

@@ -26,9 +26,6 @@ internal static class VideoStagesContext
     public static VideoStagesSpec GetVideoStagesSpecForPromptParse(T2IParamInput input) =>
         PromptParseCache.GetValue(input, ParseForPromptTag);
 
-    /// <summary>
-    /// Gets the graph-free architecture-resolved execution plan compiled for this workflow.
-    /// </summary>
     public static VideoExecutionPlanContext? GetVideoExecutionPlanContext(this WorkflowGenerator g) =>
         PlanCache.GetValue(g, CompilePlan).Context;
 
@@ -116,11 +113,7 @@ internal enum VideoExecutionState
     Completed,
 }
 
-/// <summary>
-/// One request-scoped execution contract. The immutable plan remains inspectable before and after
-/// execution; provider binding and graph-free preflight happen once before any mutating phase.
-/// Mutable timeline factories and sessions are deliberately created only by the final run.
-/// </summary>
+/// <summary>Request-scoped plan state and runtime binding.</summary>
 internal sealed class VideoExecutionPlanContext
 {
     private readonly object _preparationLock = new();
@@ -249,23 +242,6 @@ internal sealed class VideoExecutionPlanContext
 
     internal void ExecutePrepared(Action action) =>
         ExecutePrepared(RequirePreparedExecutionHost(), action);
-
-    internal T ExecutePrepared<T>(
-        VideoArchitectureExecutionHost executionHost,
-        Func<T> action)
-    {
-        ArgumentNullException.ThrowIfNull(action);
-        RequireBoundPreparedHost(executionHost);
-        try
-        {
-            return action();
-        }
-        catch (Exception error)
-        {
-            FailExecution(error);
-            throw;
-        }
-    }
 
     internal void ExecuteToCompletion(
         VideoArchitectureExecutionHost executionHost,

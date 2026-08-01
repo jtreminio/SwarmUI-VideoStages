@@ -179,5 +179,5 @@ internal sealed class LtxStageLatentBuilder
     private static JToken FrameCountToken(JArray framesConnection, int fallbackFrames) =>
         framesConnection is null
             ? new JValue(fallbackFrames)
-            : PathUtils.Clone(framesConnection);
+            : framesConnection?.DeepClone() as JArray;
 }

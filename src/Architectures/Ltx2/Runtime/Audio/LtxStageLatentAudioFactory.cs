@@ -68,7 +68,7 @@ internal sealed class LtxStageLatentAudioFactory(
         JArray dynamicLengthFrames = controlNetLengthFrames ?? audioLengthFrames;
         JToken latentLength = dynamicLengthFrames is null
             ? new JValue(frames)
-            : PathUtils.Clone(dynamicLengthFrames);
+            : dynamicLengthFrames?.DeepClone() as JArray;
 
         EmptyLTXVLatentVideoNode emptyNode = bridge.AddNode(new EmptyLTXVLatentVideoNode());
         emptyNode.With(
@@ -202,11 +202,7 @@ internal sealed class LtxStageLatentAudioFactory(
             or AudioSourceKind.AceStepFun
             or AudioSourceKind.ControlNet;
 
-    /// <summary>
-    /// Uses the planned timeline resolution rather than incoming media dimensions. Root media can
-    /// retain its original size after init-video conformance and would otherwise split the timeline
-    /// across resolutions.
-    /// </summary>
+    /// <summary>Uses planned dimensions because root media may retain its original size.</summary>
     private (int Width, int Height) ResolveStageLatentDims(
         StageFrame stageFrame,
         WGNodeData sourceMedia)

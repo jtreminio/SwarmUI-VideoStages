@@ -6,9 +6,6 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>
-/// Selects and attaches the source audio reference that must survive stage rebuilds.
-/// </summary>
 internal sealed class LtxAudioReferenceResolver
 {
     private readonly WorkflowGenerator g;
@@ -55,7 +52,7 @@ internal sealed class LtxAudioReferenceResolver
             && audioReuse.TryGetPath(out JArray reusedAudioLatentPath))
         {
             return new WGNodeData(
-                PathUtils.Clone(reusedAudioLatentPath),
+                reusedAudioLatentPath?.DeepClone() as JArray,
                 g,
                 WGNodeData.DT_LATENT_AUDIO,
                 ResolveAudioCompat());
@@ -68,20 +65,15 @@ internal sealed class LtxAudioReferenceResolver
             } preparedAudioLatent
             && attachedType == WGNodeData.DT_LATENT_AUDIO)
         {
-            // Clip preparation may have installed a deliberately window-masked latent (audio
-            // segments over no locked base, or incoming boundary audio context). It is already the
-            // exact sampling input and must outrank the captured root chain's native audio.
+            // Prepared window masks and boundary context are already the exact sampling input.
             return CloneAudioReference(preparedAudioLatent);
         }
 
         if (ReferencesCapturedDecodedAudio(state.CurrentOutputMedia?.AttachedAudio))
         {
-            // Final publication exposes decoded audio, and that decode can still trace to an
-            // originally uploaded track. For another LTX stage, however, the captured separator's
-            // audio output is the native handoff; decoding and re-encoding it only adds a second
-            // ensure/encode/noise-mask chain.
+            // Reuse the separator's native audio latent instead of decoding and re-encoding it.
             return new WGNodeData(
-                PathUtils.Clone(state.AudioLatentPath),
+                state.AudioLatentPath?.DeepClone() as JArray,
                 g,
                 WGNodeData.DT_LATENT_AUDIO,
                 ResolveAudioCompat());
@@ -89,7 +81,7 @@ internal sealed class LtxAudioReferenceResolver
 
         if (IsExplicitUploadAudio(state.CurrentOutputMedia?.AttachedAudio))
         {
-            JArray currentAudioLatentPath = PathUtils.Clone(state.AudioLatentPath);
+            JArray currentAudioLatentPath = state.AudioLatentPath?.DeepClone() as JArray;
             if (state.CurrentOutputMedia.AttachedAudio?.Path is JArray { Count: 2 } explicitUploadPath
                 && IsAudioLatentDerivedFromUpload(currentAudioLatentPath, $"{explicitUploadPath[0]}"))
             {
@@ -103,7 +95,7 @@ internal sealed class LtxAudioReferenceResolver
         }
 
         return new WGNodeData(
-            PathUtils.Clone(state.AudioLatentPath),
+            state.AudioLatentPath?.DeepClone() as JArray,
             g,
             WGNodeData.DT_LATENT_AUDIO,
             ResolveAudioCompat());
@@ -163,7 +155,7 @@ internal sealed class LtxAudioReferenceResolver
     private WGNodeData CloneAudioReference(WGNodeData audio)
     {
         return new WGNodeData(
-            PathUtils.Clone(audio.Path),
+            audio.Path?.DeepClone() as JArray,
             g,
             audio.DataType,
             audio.Compat)
