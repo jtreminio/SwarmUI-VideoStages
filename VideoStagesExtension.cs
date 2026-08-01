@@ -45,7 +45,6 @@ public class VideoStagesExtension : Extension
         {
             Logs.Warning(coreImageToVideoDiagnostic);
         }
-        AltImageToVideoScope.RegisterDispatcher();
         VideoArchitectureManifest.RegisterProductionHostHandlers();
 
         WorkflowGenerator.AddStep(
@@ -109,9 +108,7 @@ public class VideoStagesExtension : Extension
 
     }
 
-    /// <summary>Metadata stores the PROCESSED prompt, where videoclip tags have been rewritten into internal
-    /// PromptRegion markers (<c>&lt;videoclip:w|0|0.5|4//cid=N&gt;</c>). Attach a MetadataFormat to the core
-    /// prompt params so saved metadata shows the tags as the user typed them.</summary>
+    /// <summary>Restores the user's videoclip tags before saving parsed prompt metadata.</summary>
     private static void AttachPromptMetadataRestorer(string paramId)
     {
         if (!T2IParamTypes.Types.TryGetValue(paramId, out T2IParamType type))

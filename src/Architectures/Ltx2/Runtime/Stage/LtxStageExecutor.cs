@@ -41,6 +41,7 @@ internal sealed class LtxStageExecutor
         WGNodeData guideMedia,
         bool skipGuideReinjection,
         LtxPostVideoChainCapture postVideoChain,
+        Action<WorkflowGenerator.ImageToVideoGenInfo> applyIcLora,
         IReadOnlyList<ResolvedClipRef> clipRefs = null,
         double guideMergeStrength = DefaultGuideMergeStrength)
     {
@@ -93,6 +94,7 @@ internal sealed class LtxStageExecutor
                     .WithGuideAdditions(clipRefs ?? []);
             }
             genInfo.VideoCFG ??= genInfo.DefaultCFG;
+            applyIcLora(genInfo);
 
             foreach (
                 Action<WorkflowGenerator.ImageToVideoGenInfo> handler in

@@ -8,7 +8,6 @@ using VideoStages.Architectures.Ltx2.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>Prepares and executes a single compiled LTX stage.</summary>
 internal class StageRunner
 {
     private readonly WorkflowGenerator _generator;
@@ -82,7 +81,7 @@ internal class StageRunner
             requiresDedicatedOutput,
             rootPolicy);
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
-        using IDisposable controlNetScope = AltImageToVideoScope.Post(genInfo, currentGenInfo =>
+        Action<WorkflowGenerator.ImageToVideoGenInfo> applyIcLora = currentGenInfo =>
         {
             WGNodeData incomingMedia = _icLoraStageInputResolver.Resolve(stageFrame);
             bool needsCrop = new IcLoraApplicator(_generator).ApplyIcLoras(
@@ -100,16 +99,17 @@ internal class StageRunner
                 clip,
                 stageFrame,
                 incomingMedia);
-        });
+        };
 
-        RunLtxStage(guideReference, refStore, stageFrame);
+        RunLtxStage(guideReference, refStore, stageFrame, applyIcLora);
         return _artifactCapture.Capture(stage);
     }
 
     private void RunLtxStage(
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
-        StageFrame stageFrame)
+        StageFrame stageFrame,
+        Action<WorkflowGenerator.ImageToVideoGenInfo> applyIcLora)
     {
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
         WGNodeData sourceMedia = stageFrame.SourceMedia;
@@ -177,9 +177,8 @@ internal class StageRunner
             IsContinuationTail: isContinuationTail,
             HasOtherFrameReferences: clipRefs is { Count: > 0 },
             ReplacesTextToVideoRoot: stageFrame.ReplacesTextToVideoRoot,
-            // An initVideoClip clip's first stage samples its encoded footage directly (initVideoClip
-            // img2img); reinjecting that same footage as an i2v inplace guide would overwrite the
-            // noise mask of every frame it spans. The official upscaler/V2V flows are encode-only.
+            // The first stage of an initVideoClip samples its encoded footage directly. Reinjecting
+            // that footage as an inplace guide would overwrite the noise mask of every frame it spans.
             InitVideoFootageIsStageInput: clipContext.PlannedClip.HasInitVideo
                 && clipContext.IsFirstStage(stage)
                 && payload.Guide.Kind == StageGuideReferenceKind.Generated
@@ -210,6 +209,7 @@ internal class StageRunner
                 referenceFraming),
             StageInputDispatcher.SkipsGuideReinjection(inputCase),
             postVideoChain,
+            applyIcLora,
             clipRefs,
             primaryGuideClipRef?.Strength ?? 1.0);
     }
