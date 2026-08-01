@@ -1,14 +1,12 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 using VideoStages.Planning;
 
 namespace VideoStages;
 
 /// <summary>
-/// Compiles the authored Video Stages document into its runtime specification. Detailed parsing is
-/// delegated to focused readers; this type remains the compatibility entry point used by the host.
+/// Parses an authored Video Stages document into its runtime specification.
 /// </summary>
 internal static class VideoStagesSpecParser
 {
@@ -45,7 +43,6 @@ internal static class VideoStagesSpecParser
             };
         }
 
-        ValidateClipShapes(document.Entries);
         StageParserDefaults defaults = VideoStageSpecParser.BuildDefaults(g);
         VideoClipParseContext context = new(
             defaults,
@@ -62,6 +59,13 @@ internal static class VideoStagesSpecParser
             if (VideoStagesJsonReader.GetOptionalBool(clipObject, "skipped", false))
             {
                 break;
+            }
+            if (VideoStagesJsonReader.GetArray(clipObject, "stages") is null)
+            {
+                VideoStagesJsonReader.Warn(
+                    warn,
+                    $"VideoStages: Entry {clipIndex} has no stages array and was ignored.");
+                continue;
             }
 
             ClipSpec clip = VideoClipSpecParser.Parse(clipObject, clipIndex, context);
@@ -122,18 +126,6 @@ internal static class VideoStagesSpecParser
 
     private static PromptParser.VideoStageTagData ParseTags(WorkflowGenerator g) =>
         PromptParser.ExtractTagData(g.UserInput.Get(T2IParamTypes.Prompt, ""), g.UserInput);
-
-    private static void ValidateClipShapes(IReadOnlyList<JObject> entries)
-    {
-        for (int index = 0; index < entries.Count; index++)
-        {
-            if (!VideoStagesJsonReader.HasProperty(entries[index], "stages"))
-            {
-                throw new SwarmUserErrorException(
-                    $"VideoStages: Entry {index} is not a clip object (must have a 'stages' array).");
-            }
-        }
-    }
 
     private static int ResolveWidth(WorkflowGenerator g, int? authoredWidth) =>
         authoredWidth is > 0 ? authoredWidth.Value : g.UserInput.GetImageWidth();

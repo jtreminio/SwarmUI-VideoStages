@@ -1,5 +1,4 @@
 using Newtonsoft.Json.Linq;
-using SwarmUI.Utils;
 
 namespace VideoStages;
 
@@ -10,7 +9,7 @@ internal sealed record VideoClipParseContext(
     PromptParser.VideoStageTagData Tags,
     Action<string> Warn = null);
 
-/// <summary>Assembles one clip from its scalar fields and the focused timeline/resource/stage parsers.</summary>
+/// <summary>Parses one authored clip.</summary>
 internal static class VideoClipSpecParser
 {
     public static ClipSpec Parse(JObject clipObject, int clipIndex, VideoClipParseContext context)
@@ -30,8 +29,10 @@ internal static class VideoClipSpecParser
             clipObject, "reuseAudio", false);
         if (!double.IsFinite(duration) || duration < 0)
         {
-            throw new SwarmUserErrorException(
-                $"VideoStages: {location} duration must be a finite non-negative number.");
+            VideoStagesJsonReader.Warn(
+                context.Warn,
+                $"VideoStages: {location} duration must be finite and non-negative; ignoring it.");
+            duration = 0;
         }
         double durationSeconds = duration;
         int? clipFrames = null;
@@ -45,9 +46,10 @@ internal static class VideoClipSpecParser
             }
             catch (OverflowException)
             {
-                throw new SwarmUserErrorException(
+                VideoStagesJsonReader.Warn(
+                    context.Warn,
                     $"VideoStages: {location} duration at {context.Fps} fps exceeds the "
-                        + "supported frame range.");
+                        + "supported frame range and was ignored.");
             }
         }
 
@@ -72,7 +74,7 @@ internal static class VideoClipSpecParser
             AudioSource: audioSource,
             IcLoras: icLoras,
             SaveAudioTrack: saveAudioTrack,
-            ClipLengthFromAudio: clipLengthFromAudio && !clipLengthFromControlNet,
+            ClipLengthFromAudio: clipLengthFromAudio,
             ClipLengthFromControlNet: clipLengthFromControlNet,
             ReuseAudio: reuseAudio,
             UploadedAudio: VideoStagesJsonReader.GetEmbeddedUpload(
@@ -105,8 +107,7 @@ internal static class VideoClipSpecParser
             AuthoredModelProfileHint = VideoStagesJsonReader.GetString(
                 clipObject,
                 "modelProfileId")?.Trim().ToLowerInvariant(),
-            // Prompt-tag overrides have already been applied to rawStages by the top-level parser,
-            // so architecture resolution observes exactly the authored state generation would use.
+            // The top-level parser applies prompt-tag overrides before this projection.
             AuthoredStages = ProjectAuthoredStages(rawStages),
         };
     }
@@ -124,11 +125,12 @@ internal static class VideoClipSpecParser
             {
                 firstSkipped = rawIndex;
             }
+            string model = VideoStagesJsonReader.GetString(stage, "model");
             authored.Add(new(
                 rawIndex,
-                VideoStagesJsonReader.GetString(stage, "model"),
+                model,
                 VideoStagesJsonReader.GetString(stage, "modelProfileId")?.Trim().ToLowerInvariant(),
-                firstSkipped >= 0));
+                firstSkipped >= 0 || string.IsNullOrWhiteSpace(model)));
         }
         return authored;
     }
@@ -148,15 +150,20 @@ internal static class VideoClipSpecParser
             {
                 break;
             }
-            stages.Add(VideoStageSpecParser.Parse(
+            StageSpec parsed = VideoStageSpecParser.Parse(
                 stage,
                 clipIndex,
                 stageIndex,
+                stages.Count,
                 context.StageDefaults,
                 referenceCount,
                 context.IsTextToVideoRootWorkflow,
                 initVideoClip,
-                context.Warn));
+                context.Warn);
+            if (parsed is not null)
+            {
+                stages.Add(parsed);
+            }
         }
         return stages;
     }

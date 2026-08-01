@@ -1,6 +1,5 @@
 using FreneticUtilities.FreneticExtensions;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 
 namespace VideoStages;
 
@@ -69,10 +68,6 @@ internal static class VideoClipSectionResolver
         try
         {
             spec = VideoStagesContext.GetVideoStagesSpecForPromptParse(input);
-        }
-        catch (SwarmUserErrorException)
-        {
-            throw;
         }
         catch (Exception ex)
         {

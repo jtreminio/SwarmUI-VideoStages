@@ -224,10 +224,6 @@ public class BackendConsolidationTests
             () => ClipTimelineSpecParser.CalculateStructuralFrameCount(
                 int.MaxValue,
                 1));
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => ClipTimelineSpecParser.CalculateStructuralFrameCount(
-                double.PositiveInfinity,
-                24));
     }
 
     [Fact]

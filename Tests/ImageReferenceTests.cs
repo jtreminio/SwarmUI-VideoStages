@@ -10,8 +10,7 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class ImageReferenceTests
 {
-    // Local override of Fixtures.MakeStage: imageReference is optional (tests cover both absent and explicit cases),
-    // and CfgScale=5.0 is the value these tests pin against.
+    // Unlike Fixtures.MakeStage, this helper leaves imageReference optional.
     private static JObject MakeStage(string model, string imageReference = null) =>
         new()
         {
@@ -62,28 +61,36 @@ public class ImageReferenceTests
     }
 
     [Fact]
-    public void Forward_stage_image_reference_throws_user_error()
+    public void Forward_stage_image_reference_warns_and_uses_the_default()
     {
-        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
-            ParseStages(JsonSingleClipStages(
-                MakeStage("UnitTest_Video.safetensors"),
-                MakeStage("UnitTest_Video.safetensors", "Stage9"))));
+        T2IParamInput input = BuildInput(JsonSingleClipStages(
+            MakeStage("UnitTest_Video.safetensors"),
+            MakeStage("UnitTest_Video.safetensors", "Stage9")));
 
-        Assert.Contains("invalid ImageReference 'Stage9'", ex.Message);
-        Assert.Contains("strictly previous stage", ex.Message);
-        Assert.Contains("stage 1", ex.Message);
+        List<StageSpec> stages = ParseStages(input);
+
+        Assert.Equal("PreviousStage", stages[1].ImageReference);
+        Assert.Contains(
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains("invalid ImageReference 'Stage9'")
+                && warning.Contains("strictly previous stage")
+                && warning.Contains("stage 1"));
     }
 
     [Fact]
-    public void Invalid_image_reference_throws_user_error()
+    public void Invalid_image_reference_warns_and_uses_the_default()
     {
-        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
-            ParseStages(JsonSingleClipStages(
-                MakeStage("UnitTest_Video.safetensors"),
-                MakeStage("UnitTest_Video.safetensors", "NotARealReference"))));
+        T2IParamInput input = BuildInput(JsonSingleClipStages(
+            MakeStage("UnitTest_Video.safetensors"),
+            MakeStage("UnitTest_Video.safetensors", "NotARealReference")));
 
-        Assert.Contains("invalid ImageReference 'NotARealReference'", ex.Message);
-        Assert.Contains("Valid forms are", ex.Message);
+        List<StageSpec> stages = ParseStages(input);
+
+        Assert.Equal("PreviousStage", stages[1].ImageReference);
+        Assert.Contains(
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains("invalid ImageReference 'NotARealReference'")
+                && warning.Contains("Using 'PreviousStage'"));
     }
 
     [Fact]

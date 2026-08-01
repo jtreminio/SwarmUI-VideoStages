@@ -1,5 +1,4 @@
 using Newtonsoft.Json.Linq;
-using SwarmUI.Utils;
 
 namespace VideoStages;
 
@@ -14,20 +13,6 @@ internal static class ClipTimelineSpecParser
     /// </summary>
     public static int CalculateStructuralFrameCount(double durationSeconds, int fps)
     {
-        if (!double.IsFinite(durationSeconds) || durationSeconds < 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(durationSeconds),
-                durationSeconds,
-                "An authored duration must be finite and non-negative.");
-        }
-        if (fps < 1)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(fps),
-                fps,
-                "Timeline fps must be positive.");
-        }
         double intervals = Math.Ceiling(durationSeconds * fps);
         if (!double.IsFinite(intervals) || intervals > int.MaxValue - 1d)
         {
@@ -69,9 +54,11 @@ internal static class ClipTimelineSpecParser
         double roundedStart = RoundTenth(start);
         if (!IsRepresentableNonNegativeFrame(Math.Round(roundedStart * fps)))
         {
-            throw new SwarmUserErrorException(
+            VideoStagesJsonReader.Warn(
+                warn,
                 $"VideoStages: Clip {clipIndex} InitVideo start exceeds the representable "
-                    + "frame range.");
+                    + "frame range; ignoring the source video.");
+            return null;
         }
         return new InitVideoSpec(upload.Data, upload.FileName, roundedStart);
     }

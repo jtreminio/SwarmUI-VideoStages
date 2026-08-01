@@ -15,8 +15,7 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class VideoStagesSpecParserClipsTests
 {
-    // Local override of Fixtures.MakeStage: parser tests omit ImageReference entirely (asserts absence behavior)
-    // and use lighter defaults (cfg=1, steps=8) since these tests don't exercise sampling.
+    // Parser tests omit ImageReference and use lightweight sampling defaults.
     private static JObject MakeStage(string model, double cfg = 1, int steps = 8)
     {
         return new JObject
@@ -93,8 +92,7 @@ public class VideoStagesSpecParserClipsTests
         return new() { UserInput = input };
     }
 
-    // Prose and prompt windows now arrive via <videoclip...> prompt tags. This sets the prompt and
-    // runs the late special logic so the authoring tags are normalized into markers the parser reads.
+    // ApplyLateSpecialLogic converts authoring tags into markers consumed by the parser.
     private static WorkflowGenerator BuildParser(string json, string prompt)
     {
         T2IParamInput input = BuildInputWithJson(json);
@@ -103,7 +101,6 @@ public class VideoStagesSpecParserClipsTests
         return new() { UserInput = input };
     }
 
-    // A clip-level prompt window authoring tag: <videoclip[clip]:start-end>text (seconds).
     private static string ClipWindowTag(string prompt, double start, double duration, int clip = 0)
     {
         string s = start.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -164,8 +161,7 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 4.0);
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        // The middle tag has end == start (0 duration): not a valid window, so its marker is dropped.
-        // It carries no trailing prose so nothing bleeds into a neighboring window's text.
+        // The zero-duration marker has no trailing prose to attach to another window.
         string prompt =
             ClipWindowTag("late", start: 3.0, duration: 0.5)
             + " <videoclip[0]:1-1> "
@@ -190,7 +186,6 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")], duration: 8.0);
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        // Windows are clip-level only; the [0,1] range tag is invalid and produces no window.
         string prompt =
             ClipWindowTag("clip wide", start: 4.0, duration: 1.0)
             + " <videoclip[0,1]:0-1>stage one";
@@ -206,7 +201,6 @@ public class VideoStagesSpecParserClipsTests
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 8.0);
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        // Two clip-level windows authored out of order; the executor tiles them sorted by start.
         string prompt =
             ClipWindowTag("clip late", start: 4.0, duration: 1.0)
             + " " + ClipWindowTag("clip early", start: 0.0, duration: 1.0);
@@ -257,9 +251,7 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void ParseClips_NumericOverrides_AreCultureInvariant()
     {
-        // Override VALUES are always invariant (the tag/JSON grammar is invariant). On a comma-decimal locale
-        // a culture-sensitive re-parse of "5.5" yields 55 (AllowThousands treats '.' as a group separator),
-        // silently 10x-corrupting duration/cfgscale/etc. This locks in the invariant round-trip.
+        // Culture-sensitive parsing can interpret "5.5" as 55 on comma-decimal locales.
         CultureInfo originalCulture = CultureInfo.CurrentCulture;
         CultureInfo originalUiCulture = CultureInfo.CurrentUICulture;
         try
@@ -275,9 +267,7 @@ public class VideoStagesSpecParserClipsTests
             VideoStagesSpec spec = VideoStagesSpecParser.Parse(BuildParser(json, prompt));
             ClipSpec parsed = Assert.Single(spec.Clips);
 
-            // Stage double override read as 5.5, not 55.
             Assert.Equal(5.5, parsed.Stages[0].CfgScale);
-            // Structural parse: 5.5s @ 24fps -> 133 inclusive frames (55s would be 1321).
             Assert.Equal(133, parsed.Frames);
         }
         finally
@@ -298,7 +288,6 @@ public class VideoStagesSpecParserClipsTests
         ClipSpec parsed = Assert.Single(
             VideoStagesSpecParser.Parse(parser).Clips);
 
-        // Parse still succeeds; the unknown field left the clip untouched.
         Assert.Equal(Constants.AudioSourceNative, parsed.AudioSource);
         Assert.Contains(
             Assert.IsType<List<string>>(parser.UserInput.ExtraMeta["parser_warnings"]),
@@ -313,7 +302,6 @@ public class VideoStagesSpecParserClipsTests
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: Constants.AudioSourceNative);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
-        // Clip 5 and stage 5 do not exist; both overrides are silently dropped.
         IReadOnlyList<ClipSpec> clips = VideoStagesSpecParser.Parse(
             BuildParser(json, "<videoclip[5,audiosource]:X> <videoclip[0,5,steps]:99>")).Clips;
 
@@ -365,7 +353,7 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal(0.4, entry.AttentionStrength);
         Assert.Equal(Constants.IcLoraControlCanny, entry.ControlType);
         Assert.True(clips[0].SaveAudioTrack);
-        Assert.False(clips[0].ClipLengthFromAudio);
+        Assert.True(clips[0].ClipLengthFromAudio);
         Assert.True(clips[0].ClipLengthFromControlNet);
         Assert.True(clips[0].ReuseAudio);
         Assert.Equal(2, clips[0].ImageRefs.Count);
@@ -718,7 +706,7 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseConfig_ControlNetLength_PropagatesToClipAndDisablesAudioLength()
+    public void ParseConfig_ControlNetAndAudioLength_IntentsBothReachPlanning()
     {
         string json = JsonConvert.SerializeObject(MakeRootConfig(
             width: 1280,
@@ -735,7 +723,7 @@ public class VideoStagesSpecParserClipsTests
         VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
 
         ClipSpec clip = Assert.Single(spec.Clips);
-        Assert.False(clip.ClipLengthFromAudio);
+        Assert.True(clip.ClipLengthFromAudio);
         Assert.True(clip.ClipLengthFromControlNet);
     }
 
@@ -789,7 +777,7 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseClips_StagesMissingModel_ThrowsUserError()
+    public void ParseClips_StagesMissingModel_WarnsAndSkipsTheStage()
     {
         JObject brokenStage = MakeStage("");
         brokenStage["model"] = "";
@@ -799,10 +787,16 @@ public class VideoStagesSpecParserClipsTests
         ));
         WorkflowGenerator parser = BuildParser(json);
 
-        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(
-            () => VideoStagesSpecParser.Parse(parser));
-        Assert.Contains("Clip 0 stage 0", ex.Message);
-        Assert.Contains("'model'", ex.Message);
+        ClipSpec clip = Assert.Single(VideoStagesSpecParser.Parse(parser).Clips);
+
+        StageSpec stage = Assert.Single(clip.Stages);
+        Assert.Equal("model-a", stage.Model);
+        Assert.Equal(1, stage.ClipStageRawIndex);
+        Assert.Equal(0, stage.ClipStageIndex);
+        Assert.True(clip.AuthoredStages[0].Skipped);
+        Assert.Contains(
+            Assert.IsType<List<string>>(parser.UserInput.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains("Clip 0 stage 0 has no model and was ignored"));
     }
 
     [Fact]
@@ -826,7 +820,7 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseClips_NonClipShape_ThrowsUserError()
+    public void ParseClips_NonClipShape_WarnsAndSkipsTheEntry()
     {
         string json = JsonConvert.SerializeObject(new JArray(new JObject
         {
@@ -834,10 +828,24 @@ public class VideoStagesSpecParserClipsTests
         }));
         WorkflowGenerator parser = BuildParser(json);
 
-        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(
-            () => VideoStagesSpecParser.Parse(parser));
-        Assert.Contains("Entry 0 is not a clip object", ex.Message);
-        Assert.Contains("'stages' array", ex.Message);
+        Assert.Empty(VideoStagesSpecParser.Parse(parser).Clips);
+        Assert.Contains(
+            Assert.IsType<List<string>>(parser.UserInput.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains("Entry 0 has no stages array and was ignored"));
+    }
+
+    [Fact]
+    public void ParseClips_DoesNotValidateMalformedEntriesAfterTheSkippedTail()
+    {
+        JObject skipped = new() { ["skipped"] = true };
+        JObject malformed = new() { ["model"] = "unused" };
+        WorkflowGenerator parser = BuildParser(JsonConvert.SerializeObject(
+            new JArray(MakeClip(stages: [MakeStage("model-a")]), skipped, malformed)));
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
+
+        Assert.Single(spec.Clips);
+        Assert.False(parser.UserInput.ExtraMeta.ContainsKey("parser_warnings"));
     }
 
     [Fact]
@@ -1155,10 +1163,8 @@ public class VideoStagesSpecParserClipsTests
 
         VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
 
-        // GetImageWidth/Height default to 512 when unset.
         Assert.Equal(512, spec.Width);
         Assert.Equal(512, spec.Height);
-        // FPS chain falls through to the hardcoded 24 default.
         Assert.Equal(24, spec.FPS);
     }
 
@@ -1193,15 +1199,14 @@ public class VideoStagesSpecParserClipsTests
 
         VideoStagesSpec spec = VideoStagesSpecParser.Parse(parser);
 
-        // A initVideoClip clip's stage 0 refines its footage (initVideoClip img2img), so authored
-        // Control/Upscale/UpscaleMethod survive instead of being forced to 1 / 1× / default.
+        // Stage 0 refines the source video, so its authored generation settings remain active.
         Assert.Equal(0.3, spec.Clips[0].Stages[0].Control);
         Assert.Equal(2.0, spec.Clips[0].Stages[0].Upscale);
         Assert.Equal("pixel-catmull", spec.Clips[0].Stages[0].UpscaleMethod);
     }
 
     [Fact]
-    public void ParseClip_InitVideoStartBeyondFrameRange_IsAUserError()
+    public void ParseClip_InitVideoStartBeyondFrameRange_WarnsAndDropsTheSource()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0);
         clip["initVideo"] = new JObject
@@ -1211,11 +1216,15 @@ public class VideoStagesSpecParserClipsTests
             ["startSeconds"] = 1e20,
         };
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => ParseSingleClip(clip));
+        WorkflowGenerator parser = BuildParser(JsonConvert.SerializeObject(new JArray(clip)));
 
-        Assert.Contains("InitVideo start", error.Message);
-        Assert.Contains("representable frame range", error.Message);
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(parser).Clips);
+
+        Assert.Null(parsed.InitVideo);
+        Assert.Contains(
+            Assert.IsType<List<string>>(parser.UserInput.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains("InitVideo start")
+                && warning.Contains("representable frame range"));
     }
 
     [Fact]
@@ -1286,8 +1295,7 @@ public class VideoStagesSpecParserClipsTests
         Assert.True(parsed.BoundaryOutCarryAudio);
     }
 
-    // No VideoFPS param and no top-level JSON FPS => the parser falls back to 24 fps, so seconds map to
-    // frames at 24×. Retake only activates on a initVideoClip clip, so every clip gets a source video.
+    // Adds a source video while leaving FPS unset to exercise the 24 FPS fallback.
     private static WorkflowGenerator BuildInitVideoParser(string json)
     {
         JArray clips = JArray.Parse(json);
@@ -1318,22 +1326,43 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
-    public void ParseClips_RejectsDurationBeyondTheRepresentableFrameRange()
+    public void ParseClips_DropsNegativeDuration()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["duration"] = -1;
+        WorkflowGenerator parser = BuildInitVideoParser(
+            JsonConvert.SerializeObject(new JArray(clip)));
+
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(parser).Clips);
+
+        Assert.Null(parsed.Frames);
+        Assert.Contains(
+            Assert.IsType<List<string>>(parser.UserInput.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains("duration must be finite and non-negative")
+                && warning.Contains("ignoring it"));
+    }
+
+    [Fact]
+    public void ParseClips_DropsDurationBeyondTheRepresentableFrameRange()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         clip["duration"] = int.MaxValue;
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => VideoStagesSpecParser.Parse(BuildInitVideoParser(json)));
+        WorkflowGenerator parser = BuildInitVideoParser(json);
 
-        Assert.Contains("duration at 24 fps exceeds", error.Message);
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(parser).Clips);
+
+        Assert.Null(parsed.Frames);
+        Assert.Contains(
+            Assert.IsType<List<string>>(parser.UserInput.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains("duration at 24 fps exceeds")
+                && warning.Contains("was ignored"));
     }
 
     [Fact]
     public void ParseClips_Retake_ConvertsSecondsToFramesAtFpsAndAttachesToLastStage()
     {
-        // Mid-clip window (ends at 2.5s of a 3.0s clip): plain seconds→frames conversion.
         JObject clip = MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")]);
         clip["retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 1.5, strength: 0.6);
         string json = JsonConvert.SerializeObject(new JArray(clip));
@@ -1351,8 +1380,7 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void ParseClips_Retake_ReachingClipEndExtendsToStructuralFrameCount()
     {
-        // Parsing owns only inclusive seconds-to-frames structure. The selected model grid is
-        // unknown here and is applied later by effective-request projection.
+        // Model-grid normalization occurs later, after architecture resolution.
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         clip["duration"] = 1.05;
         clip["retake"] = MakeRetake(startSeconds: 0.5, lengthSeconds: 0.55);
@@ -1402,16 +1430,15 @@ public class VideoStagesSpecParserClipsTests
         clip["retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 2.0);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
-        // BuildParser leaves the clip non-init-video, so retake never activates.
         ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildParser(json)).Clips);
 
         Assert.All(parsed.Stages, stage => Assert.Null(stage.RetakeWindow));
     }
 
     [Theory]
-    [InlineData(0.0, 0.0)]   // zero length
-    [InlineData(1.0, -1.0)]  // negative length
-    [InlineData(-1.0, 2.0)]  // negative start
+    [InlineData(0.0, 0.0)]
+    [InlineData(1.0, -1.0)]
+    [InlineData(-1.0, 2.0)]
     public void ParseClips_Retake_NullWhenInvalidWindow(double startSeconds, double lengthSeconds)
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
@@ -1518,11 +1545,7 @@ public class VideoStagesSpecParserClipsTests
         ["sourceStartSeconds"] = sourceStart,
     };
 
-    /// <summary>
-    /// The browser splits a stored multi-span track into one single-span lane per span so every
-    /// executable span is authorable. That split must be projection-preserving: both shapes have
-    /// to compile to byte-identical segments, including the "trackId:spanIndex" identity.
-    /// </summary>
+    // Browser lane splitting must preserve segment data and trackId:spanIndex identities.
     [Fact]
     public void Parse_RootTimelineAudioSegments_MultiSpanTrackMatchesSplitSingleSpanLanes()
     {

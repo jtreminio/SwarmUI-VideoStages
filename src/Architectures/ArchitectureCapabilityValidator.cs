@@ -21,7 +21,6 @@ internal static class ArchitectureCapabilityValidator
         }
         ValidateAudioDerivedDurationSource(clip, diagnostics);
         ValidateAudioSourceKind(clip, descriptor, diagnostics);
-        ValidateStageGuideReferences(clip, descriptor, diagnostics);
         return diagnostics.AsReadOnly();
     }
 
@@ -73,25 +72,6 @@ internal static class ArchitectureCapabilityValidator
             clip,
             descriptor,
             $"audio source kind '{kind}'"));
-    }
-
-    private static void ValidateStageGuideReferences(
-        ClipSpec clip,
-        VideoArchitectureDescriptor descriptor,
-        ICollection<PlanDiagnostic> diagnostics)
-    {
-        foreach (StageSpec stage in clip.Stages ?? [])
-        {
-            if (!descriptor.StageGuideReferences.Allows(
-                StageGuideReferencePolicy.Classify(stage.ImageReference)))
-            {
-                diagnostics.Add(Unsupported(
-                    clip,
-                    descriptor,
-                    $"stage image reference '{stage.ImageReference}'",
-                    stage.Id));
-            }
-        }
     }
 
     private static PlanDiagnostic Unsupported(

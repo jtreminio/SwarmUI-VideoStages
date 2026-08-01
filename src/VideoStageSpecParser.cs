@@ -1,7 +1,6 @@
 using System.Globalization;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 
 namespace VideoStages;
 
@@ -38,9 +37,10 @@ internal static class VideoStageSpecParser
             scheduler);
     }
 
-    public static StageSpec Parse(
+    public static StageSpec? Parse(
         JObject stage,
         int clipIndex,
+        int rawStageIndex,
         int stageIndex,
         StageParserDefaults defaults,
         int clipRefCount,
@@ -48,13 +48,14 @@ internal static class VideoStageSpecParser
         bool initVideoClip,
         Action<string> warn = null)
     {
-        string location = $"Clip {clipIndex} stage {stageIndex}";
-        string model = VideoStagesJsonReader.GetOptionalString(
-            stage, "model", null, location, allowEmpty: false, warn);
+        string location = $"Clip {clipIndex} stage {rawStageIndex}";
+        string model = VideoStagesJsonReader.GetString(stage, "model")?.Trim();
         if (string.IsNullOrWhiteSpace(model))
         {
-            throw new SwarmUserErrorException(
-                $"VideoStages: Clip {clipIndex} stage {stageIndex} is missing required field 'model'.");
+            VideoStagesJsonReader.Warn(
+                warn,
+                $"VideoStages: Clip {clipIndex} stage {rawStageIndex} has no model and was ignored.");
+            return null;
         }
 
         double control = NormalizeControl(VideoStagesJsonReader.GetOptionalDouble(
@@ -77,7 +78,7 @@ internal static class VideoStageSpecParser
         }
 
         return new StageSpec(
-            Id: stageIndex,
+            Id: rawStageIndex,
             Control: control,
             Upscale: upscale,
             UpscaleMethod: upscaleMethod,
@@ -93,6 +94,7 @@ internal static class VideoStageSpecParser
             ImageReference: NormalizeImageReference(
                 VideoStagesJsonReader.GetString(stage, "imageReference"),
                 clipIndex,
+                rawStageIndex,
                 stageIndex,
                 isTextToVideoRootWorkflow,
                 warn),
@@ -195,6 +197,7 @@ internal static class VideoStageSpecParser
     private static string NormalizeImageReference(
         string rawValue,
         int clipIndex,
+        int rawStageIndex,
         int stageIndex,
         bool isTextToVideoRootWorkflow,
         Action<string> warn)
@@ -206,7 +209,7 @@ internal static class VideoStageSpecParser
             {
                 VideoStagesJsonReader.Warn(
                     warn,
-                    $"VideoStages: Clip {clipIndex} stage {stageIndex} uses ImageReference '{rawValue}' on a text-to-video workflow. "
+                    $"VideoStages: Clip {clipIndex} stage {rawStageIndex} uses ImageReference '{rawValue}' on a text-to-video workflow. "
                     + $"Using '{DefaultGeneratedReference}' instead.");
             }
             return DefaultGeneratedReference;
@@ -243,18 +246,22 @@ internal static class VideoStageSpecParser
             {
                 return $"Stage{explicitStage}";
             }
-            throw new SwarmUserErrorException(
-                $"VideoStages: Clip {clipIndex} stage {stageIndex} has invalid ImageReference '{rawValue}' "
-                + "(must reference a strictly previous stage).");
+            VideoStagesJsonReader.Warn(
+                warn,
+                $"VideoStages: Clip {clipIndex} stage {rawStageIndex} has invalid ImageReference '{rawValue}' "
+                + $"(must reference a strictly previous stage). Using '{defaultReference}' instead.");
+            return defaultReference;
         }
         if (ImageReference.TryParseBase2EditStageIndex(compact, out int editStage))
         {
             return ImageReference.FormatBase2EditStageIndex(editStage);
         }
 
-        throw new SwarmUserErrorException(
-            $"VideoStages: Clip {clipIndex} stage {stageIndex} has invalid ImageReference '{rawValue}'. "
-            + "Valid forms are: Generated, Base, Refiner, PreviousStage, Stage<N>, edit<N>.");
+        VideoStagesJsonReader.Warn(
+            warn,
+            $"VideoStages: Clip {clipIndex} stage {rawStageIndex} has invalid ImageReference '{rawValue}'. "
+            + $"Using '{defaultReference}' instead.");
+        return defaultReference;
     }
 
     private static double ClampUnitOrDefault(double value, double fallback) =>

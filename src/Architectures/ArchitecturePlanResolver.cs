@@ -91,7 +91,9 @@ internal static class ArchitecturePlanResolver
                 continue;
             }
 
-            AuthoredStageModelSpec firstStage = authoredStages[0];
+            AuthoredStageModelSpec firstStage = authoredStages.FirstOrDefault(stage =>
+                stage.RawIndex == clip.Stages[0].ClipStageRawIndex)
+                ?? authoredStages.First(stage => !stage.Skipped);
             if (!stageModels.TryGetValue(firstStage.RawIndex, out ResolvedVideoModel firstModel))
             {
                 continue;
@@ -118,7 +120,9 @@ internal static class ArchitecturePlanResolver
         ICollection<PlanDiagnostic> diagnostics)
     {
         Dictionary<int, ResolvedVideoModel> stageModels = [];
-        int firstRawIndex = authoredStages.FirstOrDefault()?.RawIndex ?? 0;
+        int firstRawIndex = authoredStages.FirstOrDefault(stage => !stage.Skipped)?.RawIndex
+            ?? authoredStages.FirstOrDefault()?.RawIndex
+            ?? 0;
         foreach (AuthoredStageModelSpec authored in authoredStages)
         {
             if (!registry.TryResolveModel(authored.Model, out ResolvedVideoModel stageModel))

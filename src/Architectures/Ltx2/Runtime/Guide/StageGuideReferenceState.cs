@@ -6,7 +6,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Ltx2;
 
 /// <summary>
-/// Resolves typed guide plans and owns the stage-output reference state for one sequence run.
+/// Resolves guide references and tracks stage outputs for one sequence run.
 /// </summary>
 internal sealed class StageGuideReferenceState(
     WorkflowGenerator g,
@@ -41,10 +41,11 @@ internal sealed class StageGuideReferenceState(
             StageGuideReferenceKind.Generated => _previousStageRef ?? WarnIfMissing(
                 store.Generated,
                 "VideoStages: ImageReference 'Generated' requested, but no generated reference exists."),
-            StageGuideReferenceKind.PreviousStage => ResolvePreviousStageReference(),
-            StageGuideReferenceKind.ExplicitStage => ResolveExplicitStageReference(payload.Guide),
+            StageGuideReferenceKind.PreviousStage => _previousStageRef,
+            StageGuideReferenceKind.ExplicitStage =>
+                _stageOutputs.GetValueOrDefault(payload.Guide.ReferencedStageIndex!.Value),
             StageGuideReferenceKind.Base2Edit => ResolveBase2EditReference(payload.Guide),
-            _ => WarnUnknownGuideReference(payload.Guide.RawValue),
+            _ => null,
         };
     }
 
@@ -54,31 +55,6 @@ internal sealed class StageGuideReferenceState(
         StageRefStore.StageRef captured = store.CaptureCurrentOutputReference();
         _stageOutputs[stage.ClipStageIndex] = captured;
         _previousStageRef = captured;
-    }
-
-    private StageRefStore.StageRef ResolvePreviousStageReference()
-    {
-        if (_previousStageRef is null)
-        {
-            PlanDiagnosticReporter.TrackRequestWarning(
-                g.UserInput,
-                "VideoStages: ImageReference 'PreviousStage' cannot be used for the first stage.");
-        }
-        return _previousStageRef;
-    }
-
-    private StageRefStore.StageRef ResolveExplicitStageReference(GuideReferencePlan guide)
-    {
-        int? stageIndex = guide.ReferencedStageIndex;
-        if (stageIndex is int index
-            && _stageOutputs.TryGetValue(index, out StageRefStore.StageRef reference))
-        {
-            return reference;
-        }
-        PlanDiagnosticReporter.TrackRequestWarning(
-            g.UserInput,
-            $"VideoStages: ImageReference '{guide.RawValue}' requested, but stage {stageIndex} does not exist.");
-        return null;
     }
 
     private StageRefStore.StageRef ResolveBase2EditReference(GuideReferencePlan guide)
@@ -92,14 +68,6 @@ internal sealed class StageGuideReferenceState(
         PlanDiagnosticReporter.TrackRequestWarning(
             g.UserInput,
             $"VideoStages: ImageReference '{guide.RawValue}' requested, but Base2Edit stage {stageIndex} does not exist.");
-        return null;
-    }
-
-    private StageRefStore.StageRef WarnUnknownGuideReference(string rawValue)
-    {
-        PlanDiagnosticReporter.TrackRequestWarning(
-            g.UserInput,
-            $"VideoStages: Unknown ImageReference value '{rawValue}'.");
         return null;
     }
 
