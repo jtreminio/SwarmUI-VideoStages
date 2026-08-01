@@ -5,14 +5,8 @@ using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
-using VideoStages.Architectures.Ltx2.Planning;
-
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>
-/// LTX execution state composed from the common per-clip facts, timeline-scoped LTX collaborators,
-/// and decoded continuity media projected into host node data.
-/// </summary>
 internal sealed record StageClipExecutionContext(
     ArchitectureClipRuntimeContext Runtime,
     VideoExecutionPlan Plan,
@@ -27,7 +21,6 @@ internal sealed record StageClipExecutionContext(
         Plan.Clips.Count > 1 || HostScope.PublishesIntermediateStages;
 }
 
-/// <summary>Executes one planned clip and returns its terminal runtime artifact.</summary>
 internal sealed class StageClipExecutor(
     WorkflowGenerator g,
     StageRefStore store,
@@ -163,14 +156,6 @@ internal sealed class StageClipExecutor(
         RuntimeArtifact priorArtifact)
     {
         StageRefStore.StageRef guideRef = guideReferences.Resolve(plannedStage);
-        if (guideRef?.Media is null)
-        {
-            Ltx2StagePayload payload = plannedStage.RequireLtx2Payload();
-            throw new SwarmUserErrorException(
-                $"VideoStages: Clip {context.Runtime.Clip.ClipId} stage {plannedStage.ClipStageIndex} "
-                + $"could not resolve ImageReference '{payload.Guide.RawValue}'.");
-        }
-
         int sectionId = context.HostScope.ApplyStageOverrides(
             context.Runtime.Clip,
             plannedStage,

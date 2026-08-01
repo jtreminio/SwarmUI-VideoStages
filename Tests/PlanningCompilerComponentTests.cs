@@ -111,7 +111,7 @@ public class PlanningCompilerComponentTests
             IcLoras =
             [
                 new IcLoraSpec(
-                    IcLoraWeights.AutoModelToken,
+                    "adapter.safetensors",
                     Constants.ControlNetSourceTwo,
                     1,
                     1,
@@ -280,7 +280,7 @@ public class PlanningCompilerComponentTests
             IcLoras =
             [
                 new IcLoraSpec(
-                    IcLoraWeights.AutoModelToken,
+                    "adapter-one.safetensors",
                     Constants.ControlNetSourceOne,
                     1,
                     1,
@@ -288,7 +288,7 @@ public class PlanningCompilerComponentTests
                     null,
                     DriveData: IcLoraDriveData.Visual),
                 new IcLoraSpec(
-                    IcLoraWeights.AutoModelToken,
+                    "adapter-two.safetensors",
                     Constants.ControlNetSourceTwo,
                     1,
                     1,
@@ -318,7 +318,7 @@ public class PlanningCompilerComponentTests
         "data:application/octet-stream;base64,QQ==",
         (int)IcLoraDriveData.Visual,
         "ltx2.ic-lora.drive-media-kind-unsupported")]
-    public void LtxIcLoraStructuralErrors_AreBlockingPlanningDiagnostics(
+    public void LtxIcLoraStructuralWarnings_DropInvalidEntries(
         int targetStage,
         string source,
         string control,
@@ -350,11 +350,12 @@ public class PlanningCompilerComponentTests
         Assert.Contains(
             compilation.Diagnostics,
             diagnostic => diagnostic.Code == expectedCode
-                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.Empty(compilation.Stages[clip.Stages[0].ClipStageRawIndex].IcLoras);
     }
 
     [Fact]
-    public void LtxIcLoraStructuralError_PreventsArchitecturePayloadPublication()
+    public void LtxIcLoraStructuralWarning_PublishesPayloadWithoutInvalidEntry()
     {
         ClipSpec clip = GeneratedClip(0, Stage(10)) with
         {
@@ -380,12 +381,15 @@ public class PlanningCompilerComponentTests
             [clip]));
         ClipPlan plannedClip = Assert.Single(plan.Clips);
 
-        Assert.Null(plannedClip.ArchitecturePayload);
-        Assert.Null(Assert.Single(plannedClip.Stages).ArchitecturePayload);
+        Assert.NotNull(plannedClip.ArchitecturePayload);
+        Assert.Empty(Assert.Single(plannedClip.Stages).RequireLtx2Payload().IcLoras);
         Assert.Contains(
             plan.Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.drive-source-unsupported"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
     }
 
     [Fact]

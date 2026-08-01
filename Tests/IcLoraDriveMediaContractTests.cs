@@ -211,13 +211,11 @@ public class IcLoraDriveMediaContractTests
                 0),
         };
 
-        IcLoraPlan plan = Assert.Single(PlansFor(clip, clip.Stages[0]));
-
-        Assert.Equal(IcLoraMediaSourceKind.Upload, plan.MediaInput.Source);
-        Assert.False(plan.MediaInput.HasInput);
+        Assert.Empty(PlansFor(clip, clip.Stages[0]));
         Assert.Contains(
             CompileIcLoras(clip).Diagnostics,
-            diagnostic => diagnostic.Code == "ltx2.ic-lora.drive-media-missing");
+            diagnostic => diagnostic.Code == "ltx2.ic-lora.drive-media-missing"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
     }
 
     [Theory]
@@ -407,9 +405,14 @@ public class IcLoraDriveMediaContractTests
         Assert.DoesNotContain(
             CompileIcLoras(disjoint).Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.audio-drive-overlap");
+        IcLoraClipPlanCompilation compilation = CompileIcLoras(overlapping);
         Assert.Contains(
-            CompileIcLoras(overlapping).Diagnostics,
-            diagnostic => diagnostic.Code == "ltx2.ic-lora.audio-drive-overlap");
+            compilation.Diagnostics,
+            diagnostic => diagnostic.Code == "ltx2.ic-lora.audio-drive-overlap"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.Single(compilation.Stages[0]);
+        Assert.Single(compilation.Stages[1]);
+        Assert.Equal(0, compilation.Stages[1][0].EntryIndex);
     }
 
     [Theory]
@@ -441,7 +444,70 @@ public class IcLoraDriveMediaContractTests
 
         Assert.Contains(
             CompileIcLoras(clip).Diagnostics,
-            diagnostic => diagnostic.Code == "ltx2.ic-lora.passthrough-stage");
+            diagnostic => diagnostic.Code == "ltx2.ic-lora.passthrough-stage"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.Empty(PlansFor(clip, clip.Stages[0]));
+    }
+
+    [Theory]
+    [InlineData("drive-control-unsupported", "ltx2.ic-lora.drive-control-unsupported")]
+    [InlineData("drive-media-unused", "ltx2.ic-lora.drive-media-unused")]
+    [InlineData("audio-controlnet-unsupported", "ltx2.ic-lora.audio-controlnet-unsupported")]
+    [InlineData("auto-preset-missing", "ltx2.ic-lora.auto-preset-missing")]
+    [InlineData("auto-preset-unknown", "ltx2.ic-lora.auto-preset-unknown")]
+    public void Invalid_payload_shapes_warn_and_drop_the_entry(
+        string scenario,
+        string expectedCode)
+    {
+        IcLoraSpec entry = scenario switch
+        {
+            "drive-control-unsupported" => AudioDrive(Audio("speaker.wav")) with
+            {
+                ControlType = Constants.IcLoraControlCanny,
+            },
+            "drive-media-unused" => new(
+                "adapter.safetensors",
+                Constants.IcLoraSourceUpload,
+                1,
+                1,
+                Constants.IcLoraControlNone,
+                new UploadedMediaSpec("data:image/png;base64,QUJD", "unused.png"),
+                DriveData: IcLoraDriveData.None),
+            "audio-controlnet-unsupported" => new(
+                "adapter.safetensors",
+                Constants.ControlNetSourceOne,
+                1,
+                1,
+                Constants.IcLoraControlNone,
+                null,
+                DriveData: IcLoraDriveData.Audio),
+            "auto-preset-missing" => new(
+                IcLoraWeights.AutoModelToken,
+                Constants.IcLoraSourceUpload,
+                1,
+                1,
+                Constants.IcLoraControlNone,
+                null,
+                DriveData: IcLoraDriveData.None),
+            "auto-preset-unknown" => new(
+                IcLoraWeights.AutoModelToken,
+                Constants.IcLoraSourceUpload,
+                1,
+                1,
+                Constants.IcLoraControlNone,
+                null,
+                DriveData: IcLoraDriveData.None,
+                Preset: "unknown-preset"),
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
+        };
+        ClipSpec clip = Clip([entry]);
+        IcLoraClipPlanCompilation compilation = CompileIcLoras(clip);
+
+        Assert.Contains(
+            compilation.Diagnostics,
+            diagnostic => diagnostic.Code == expectedCode
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.Empty(compilation.Stages[clip.Stages[0].ClipStageRawIndex]);
     }
 
     private static IcLoraClipPlanCompilation CompileIcLoras(

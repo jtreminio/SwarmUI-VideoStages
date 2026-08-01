@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -84,7 +83,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Missing_base2edit_edit_stage_reference_throws_user_error()
+    public void Missing_base2edit_edit_stage_reference_warns_and_continues()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -94,11 +93,15 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
 
-        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+        (JObject workflow, WorkflowGenerator generator) =
             WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
-                BuildNativeSteps(attachAudioToCurrentMedia: false)));
-        Assert.Contains("could not resolve ImageReference 'edit0'", ex.Message);
+                BuildNativeSteps(attachAudioToCurrentMedia: false));
+
+        Assert.NotEmpty(workflow);
+        Assert.Contains(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains("Base2Edit stage 0 does not exist", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -128,6 +131,9 @@ public partial class StageFlowTests
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray("202", 0)));
     }
+
+    private static List<string> RequestWarnings(T2IParamInput input) =>
+        Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
 
     [Fact]
     public void Native_ltx_zero_trim_parameters_do_not_insert_noop_trim_wrapper()

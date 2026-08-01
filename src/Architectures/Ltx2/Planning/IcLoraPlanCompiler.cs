@@ -4,7 +4,6 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2.Planning;
 
-/// <summary>Compiled IC-LoRA plans, source selection, and diagnostics for one clip.</summary>
 internal sealed record IcLoraClipPlanCompilation(
     ImmutableDictionary<int, ImmutableArray<IcLoraPlan>> Stages,
     int? PrimaryControlNetSourceIndex,
@@ -30,9 +29,10 @@ internal static class IcLoraPlanCompiler
         for (int index = 0; index < entries.Count; index++)
         {
             IcLoraSpec entry = entries[index];
+            List<PlanDiagnostic> entryDiagnostics = [];
             if (!Enum.IsDefined(entry.DriveData))
             {
-                diagnostics.Add(Error(
+                entryDiagnostics.Add(Warning(
                     clip,
                     index,
                     "ltx2.ic-lora.drive-data-unsupported",
@@ -40,7 +40,7 @@ internal static class IcLoraPlanCompiler
             }
             if (entry.Stage >= 0 && !authoredStageIndices.Contains(entry.Stage))
             {
-                diagnostics.Add(Error(
+                entryDiagnostics.Add(Warning(
                     clip,
                     index,
                     "ltx2.ic-lora.stage-target-invalid",
@@ -49,7 +49,7 @@ internal static class IcLoraPlanCompiler
 
             IcLoraDriveMediaContract contract =
                 IcLoraDriveMediaContracts.Resolve(entry.DriveData, entry.DriveMediaKinds);
-            ValidateDriveMediaKinds(clip, entry, index, diagnostics);
+            ValidateDriveMediaKinds(clip, entry, index, entryDiagnostics);
             IcLoraDriveMediaPlan driveMedia = CompileDriveMedia(entry.DriveMedia);
             string normalizedSource = NormalizeDriveSource(entry.DriveSource);
             IcLoraMediaSourceKind authoredSource =
@@ -63,7 +63,7 @@ internal static class IcLoraPlanCompiler
             if (contract.DriveData == IcLoraDriveData.None
                 && authoredSource != IcLoraMediaSourceKind.Upload)
             {
-                diagnostics.Add(Error(
+                entryDiagnostics.Add(Warning(
                     clip,
                     index,
                     "ltx2.ic-lora.drive-source-contradictory",
@@ -71,7 +71,7 @@ internal static class IcLoraPlanCompiler
             }
             if (driveMedia.IsConfigured && authoredSource != IcLoraMediaSourceKind.Upload)
             {
-                diagnostics.Add(Error(
+                entryDiagnostics.Add(Warning(
                     clip,
                     index,
                     "ltx2.ic-lora.drive-media-source-mismatch",
@@ -79,7 +79,7 @@ internal static class IcLoraPlanCompiler
             }
             if (controlMode == IcLoraControlMode.Unknown)
             {
-                diagnostics.Add(Error(
+                entryDiagnostics.Add(Warning(
                     clip,
                     index,
                     "ltx2.ic-lora.control-mode-unsupported",
@@ -87,14 +87,24 @@ internal static class IcLoraPlanCompiler
             }
             else if (!contract.ConsumesVisual && controlMode != IcLoraControlMode.None)
             {
-                diagnostics.Add(Error(
+                entryDiagnostics.Add(Warning(
                     clip,
                     index,
                     "ltx2.ic-lora.drive-control-unsupported",
                     $"consumes {entry.DriveData} data and cannot use visual control preprocessing"));
             }
+            List<(int StageIndex, IcLoraPlan Plan)> pendingPlans = [];
             foreach (StageSpec stage in ApplicableStages(clip, entry))
             {
+                if (stage.IsPassthrough)
+                {
+                    entryDiagnostics.Add(Warning(
+                        clip,
+                        index,
+                        "ltx2.ic-lora.passthrough-stage",
+                        $"targets passthrough stage {stage.ClipStageRawIndex}, where IC-LoRA cannot run"));
+                    continue;
+                }
                 IcLoraMediaInputPlan input = CompileMediaInput(
                     clip,
                     stage,
@@ -103,8 +113,8 @@ internal static class IcLoraPlanCompiler
                     contract,
                     driveMedia,
                     context);
-                ValidateInput(clip, index, contract, driveMedia, input, diagnostics);
-                stagePlans[stage.ClipStageRawIndex].Add(CompilePlan(
+                ValidateInput(clip, index, contract, driveMedia, input, entryDiagnostics);
+                pendingPlans.Add((stage.ClipStageRawIndex, CompilePlan(
                     index,
                     entry,
                     stage,
@@ -112,10 +122,19 @@ internal static class IcLoraPlanCompiler
                     dimensionDownscaleFactor,
                     contract,
                     driveMedia,
-                    input));
+                    input)));
             }
 
-            ValidateAutoModel(clip, entry, index, diagnostics);
+            ValidateAutoModel(clip, entry, index, entryDiagnostics);
+            diagnostics.AddRange(entryDiagnostics);
+            if (entryDiagnostics.Count > 0)
+            {
+                continue;
+            }
+            foreach ((int stageIndex, IcLoraPlan plan) in pendingPlans)
+            {
+                stagePlans[stageIndex].Add(plan);
+            }
             if (primaryControlNetSourceIndex is null
                 && ControlNetSourcePlan.TryParseIndex(
                     normalizedSource,
@@ -125,42 +144,31 @@ internal static class IcLoraPlanCompiler
             }
         }
 
-        foreach (StageSpec stage in clip.Stages ?? [])
+        foreach ((int stageIndex, ImmutableArray<IcLoraPlan>.Builder plans) in stagePlans)
         {
-            List<int> applicable = [];
-            List<int> audioEntries = [];
-            for (int index = 0; index < entries.Count; index++)
+            List<int> audioEntries = plans
+                .Where(plan => plan.HasAudioReference)
+                .Select(plan => plan.EntryIndex)
+                .ToList();
+            if (audioEntries.Count <= 1)
             {
-                IcLoraSpec entry = entries[index];
-                if (entry.Stage >= 0 && entry.Stage != stage.ClipStageRawIndex)
-                {
-                    continue;
-                }
-                applicable.Add(index);
-                if (entry.DriveData == IcLoraDriveData.Audio)
-                {
-                    audioEntries.Add(index);
-                }
+                continue;
             }
 
-            if (stage.IsPassthrough && applicable.Count > 0)
+            HashSet<int> surplusEntries = [.. audioEntries.Skip(1)];
+            for (int planIndex = plans.Count - 1; planIndex >= 0; planIndex--)
             {
-                diagnostics.Add(new(
-                    PlanDiagnosticSeverity.Error,
-                    "ltx2.ic-lora.passthrough-stage",
-                    $"Clip {clip.Id} stage {stage.ClipStageRawIndex} is passthrough, so applicable "
-                        + $"IC-LoRAs ({string.Join(", ", applicable)}) cannot run; target a generating stage.",
-                    clip.Id));
+                if (surplusEntries.Contains(plans[planIndex].EntryIndex))
+                {
+                    plans.RemoveAt(planIndex);
+                }
             }
-            if (audioEntries.Count > 1)
-            {
-                diagnostics.Add(new(
-                    PlanDiagnosticSeverity.Error,
-                    "ltx2.ic-lora.audio-drive-overlap",
-                    $"Clip {clip.Id} stage {stage.ClipStageRawIndex} has overlapping audio-consuming "
-                        + $"IC-LoRAs ({string.Join(", ", audioEntries)}); use one speaker drive per stage.",
-                    clip.Id));
-            }
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Warning,
+                "ltx2.ic-lora.audio-drive-overlap",
+                $"Clip {clip.Id} stage {stageIndex} has overlapping audio-consuming IC-LoRAs "
+                    + $"({string.Join(", ", audioEntries)}); only entry {audioEntries[0]} will run.",
+                clip.Id));
         }
         return new(
             stagePlans.ToImmutableDictionary(
@@ -304,7 +312,7 @@ internal static class IcLoraPlanCompiler
         {
             if (driveMedia.IsConfigured)
             {
-                diagnostics.Add(Error(
+                diagnostics.Add(Warning(
                     clip,
                     entryIndex,
                     "ltx2.ic-lora.drive-media-unused",
@@ -314,7 +322,7 @@ internal static class IcLoraPlanCompiler
         }
         if (input.Source == IcLoraMediaSourceKind.Unknown)
         {
-            diagnostics.Add(Error(
+            diagnostics.Add(Warning(
                 clip,
                 entryIndex,
                 "ltx2.ic-lora.drive-source-unsupported",
@@ -323,7 +331,7 @@ internal static class IcLoraPlanCompiler
         }
         if (input.Source == IcLoraMediaSourceKind.Incoming && !input.HasInput)
         {
-            diagnostics.Add(Error(
+            diagnostics.Add(Warning(
                 clip,
                 entryIndex,
                 "ltx2.ic-lora.incoming-unavailable",
@@ -332,7 +340,7 @@ internal static class IcLoraPlanCompiler
         }
         if (input.Source == IcLoraMediaSourceKind.Upload && !input.HasInput)
         {
-            diagnostics.Add(Error(
+            diagnostics.Add(Warning(
                 clip,
                 entryIndex,
                 "ltx2.ic-lora.drive-media-missing",
@@ -341,7 +349,7 @@ internal static class IcLoraPlanCompiler
         }
         if (input.Source == IcLoraMediaSourceKind.ControlNet && contract.ConsumesAudio)
         {
-            diagnostics.Add(Error(
+            diagnostics.Add(Warning(
                 clip,
                 entryIndex,
                 "ltx2.ic-lora.audio-controlnet-unsupported",
@@ -350,7 +358,7 @@ internal static class IcLoraPlanCompiler
         }
         if (input.HasInput && !contract.Accepts(input.Kind))
         {
-            diagnostics.Add(Error(
+            diagnostics.Add(Warning(
                 clip,
                 entryIndex,
                 "ltx2.ic-lora.drive-media-kind-unsupported",
@@ -384,7 +392,7 @@ internal static class IcLoraPlanCompiler
         }
         if (malformed)
         {
-            diagnostics.Add(Error(
+            diagnostics.Add(Warning(
                 clip,
                 entryIndex,
                 "ltx2.ic-lora.drive-media-kinds-malformed",
@@ -397,7 +405,7 @@ internal static class IcLoraPlanCompiler
             || (generic.RequiresInput && explicitKinds.Count == 0);
         if (contradictory)
         {
-            diagnostics.Add(Error(
+            diagnostics.Add(Warning(
                 clip,
                 entryIndex,
                 "ltx2.ic-lora.drive-media-kinds-contradictory",
@@ -510,7 +518,7 @@ internal static class IcLoraPlanCompiler
         }
         if (string.IsNullOrWhiteSpace(entry.Preset))
         {
-            diagnostics.Add(Error(
+            diagnostics.Add(Warning(
                 clip,
                 index,
                 "ltx2.ic-lora.auto-preset-missing",
@@ -518,7 +526,7 @@ internal static class IcLoraPlanCompiler
         }
         else if (string.IsNullOrWhiteSpace(IcLoraWeights.ModelNameFor(entry.Preset)))
         {
-            diagnostics.Add(Error(
+            diagnostics.Add(Warning(
                 clip,
                 index,
                 "ltx2.ic-lora.auto-preset-unknown",
@@ -526,13 +534,13 @@ internal static class IcLoraPlanCompiler
         }
     }
 
-    private static PlanDiagnostic Error(
+    private static PlanDiagnostic Warning(
         ClipSpec clip,
         int entryIndex,
         string code,
         string detail) =>
         new(
-            PlanDiagnosticSeverity.Error,
+            PlanDiagnosticSeverity.Warning,
             code,
             $"Clip {clip.Id} IC-LoRA {entryIndex} {detail}.",
             clip.Id);

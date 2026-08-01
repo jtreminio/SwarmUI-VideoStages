@@ -112,7 +112,7 @@ public sealed class LtxIcLoraTests
     }
 
     [Fact]
-    public void Auto_ic_lora_without_preset_is_a_user_error()
+    public void Auto_ic_lora_without_preset_warns_and_drops_the_entry()
     {
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -122,9 +122,17 @@ public sealed class LtxIcLoraTests
 
         T2IParamInput input = BuildNativeInput(
             models.BaseModel, models.VideoModel, new JArray(clip).ToString());
-        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps()));
-        Assert.Contains("no preset", ex.Message);
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildCoreVideoWorkflowSteps());
+
+        Assert.NotEmpty(workflow);
+        Assert.DoesNotContain(
+            workflow.SelectTokens("$..class_type"),
+            token => token.Value<string>().Contains("ICLoRA", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(RequestWarnings(generator.UserInput), warning =>
+            warning.Contains("no preset", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -146,7 +154,7 @@ public sealed class LtxIcLoraTests
     }
 
     [Fact]
-    public void Auto_ic_lora_with_unknown_preset_is_a_user_error()
+    public void Auto_ic_lora_with_unknown_preset_warns_and_drops_the_entry()
     {
         using SwarmUiTestContext testContext = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -158,9 +166,17 @@ public sealed class LtxIcLoraTests
 
         T2IParamInput input = BuildNativeInput(
             models.BaseModel, models.VideoModel, new JArray(clip).ToString());
-        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps()));
-        Assert.Contains("no known weights", ex.Message);
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildCoreVideoWorkflowSteps());
+
+        Assert.NotEmpty(workflow);
+        Assert.DoesNotContain(
+            workflow.SelectTokens("$..class_type"),
+            token => token.Value<string>().Contains("ICLoRA", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(RequestWarnings(generator.UserInput), warning =>
+            warning.Contains("no known weights", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1094,7 +1110,7 @@ public sealed class LtxIcLoraTests
     [InlineData(
         "data:image/png;base64,QUJD",
         "cannot consume Audio data from Image media")]
-    public void Lipdub_rejects_missing_or_image_drive_media_during_planning(
+    public void Lipdub_invalid_drive_media_warns_and_drops_the_entry(
         string driveMediaData,
         string expectedMessage)
     {
@@ -1113,12 +1129,17 @@ public sealed class LtxIcLoraTests
             models.BaseModel,
             models.VideoModel,
             new JArray(clip).ToString());
-        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+        (JObject workflow, WorkflowGenerator generator) =
             WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
-                BuildCoreVideoWorkflowSteps()));
+                BuildCoreVideoWorkflowSteps());
 
-        Assert.Contains(expectedMessage, ex.Message);
+        Assert.NotEmpty(workflow);
+        Assert.DoesNotContain(
+            workflow.SelectTokens("$..class_type"),
+            token => token.Value<string>().Contains("ICLoRA", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(RequestWarnings(generator.UserInput), warning =>
+            warning.Contains(expectedMessage, StringComparison.Ordinal));
     }
 
     private static bool GuideImageTracesTo(WorkflowBridge bridge, ComfyNode guide, ComfyNode wanted)

@@ -109,7 +109,8 @@ public class AudioPlanCompilerTests
             Strength: 1,
             AttentionStrength: 1,
             ControlType: Constants.IcLoraControlNone,
-            DriveMedia: null);
+            DriveMedia: null,
+            DriveData: IcLoraDriveData.Visual);
         ClipSpec clip = Clip(
             source: Constants.AudioSourceUpload,
             audioLength: true,
@@ -158,8 +159,7 @@ public class AudioPlanCompilerTests
         Assert.Equal(
             AudioLengthOwner.Timeline,
             AudioPlanCompiler.Compile(nativeClip).Length.Owner);
-        // The route-dependent injection matching is LTX runtime behaviour, so it lives on the LTX
-        // plan rather than on the architecture-neutral audio plan.
+        // Native injection length matching belongs to the LTX plan, not the shared audio plan.
         Ltx2AudioInjectionPlan native = CompileLtxAudio(nativeClip).Injection;
         Ltx2AudioInjectionPlan upload = CompileLtxAudio(uploadClip).Injection;
         Assert.True(native.NonHandoffMatchesAudioLength);

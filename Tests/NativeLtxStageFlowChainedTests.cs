@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -307,7 +306,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Guide_ref_miss_throws_user_error_during_workflow_run()
+    public void Guide_ref_miss_warns_and_continues_during_workflow_run()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -324,11 +323,14 @@ public partial class StageFlowTests
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
 
-        SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(() =>
+        (JObject workflow, WorkflowGenerator generator) =
             WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
-                BuildNativeSteps(attachAudioToCurrentMedia: true)));
-        Assert.Contains("Clip 0 stage 1", ex.Message);
-        Assert.Contains("could not resolve ImageReference 'edit99'", ex.Message);
+                BuildNativeSteps(attachAudioToCurrentMedia: true));
+
+        Assert.NotEmpty(workflow);
+        Assert.Contains(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains("Base2Edit stage 99 does not exist", StringComparison.Ordinal));
     }
 }
