@@ -7,19 +7,14 @@ using SwarmUI.Builtin_ComfyUIBackend;
 namespace VideoStages.Architectures.Ltx2;
 
 /// <summary>
-/// Derives the LTX-specific ControlNet media branch from the architecture-neutral host capture.
-/// The branch is always derived from the immutable capture, never from whatever the shared apply
-/// input currently points at, so it does not depend on which architectures ran before LTX. Wrapping
-/// the host apply input down to one frame is LTX root policy, so it happens only when LTX owns the
-/// host root.
+/// Builds LTX ControlNet inputs from immutable host captures. The host apply input is rewired only
+/// when LTX owns the host root.
 /// </summary>
 internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
 {
-    private readonly LtxRuntimeKeyScope _keys = new();
-
     internal void Normalize(bool ownsHostRoot)
     {
-        if (!g.NodeHelpers.TryAdd(_keys.ControlNetNormalized, "normalized"))
+        if (!g.NodeHelpers.TryAdd(LtxRuntimeKeyScope.ControlNetNormalized, "normalized"))
         {
             return;
         }
@@ -115,8 +110,6 @@ internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
         return new JArray(imagePath[0], imagePath[1]);
     }
 
-    /// <summary>The live apply input, which is rewired in place; the caller must already have
-    /// established that LTX owns the host root.</summary>
     private bool TryGetApplyImageInput(
         WorkflowBridge bridge,
         int index,
@@ -140,9 +133,9 @@ internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
         VideoGraphHelpers.RemoveCached(g, FrameCountKey(index));
     }
 
-    private string ImageKey(int index) => _keys.ControlNetFullImage(index);
+    private static string ImageKey(int index) => LtxRuntimeKeyScope.ControlNetFullImage(index);
 
-    private string FrameCountKey(int index) => _keys.ControlNetFrameCount(index);
+    private static string FrameCountKey(int index) => LtxRuntimeKeyScope.ControlNetFrameCount(index);
 
     private static JArray EnsureResizeMultiple(
         WorkflowBridge bridge,

@@ -11,26 +11,28 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public sealed class StageRefStoreScopeTests
 {
-    // Covers key families that a representative generated workflow does not reach.
     [Fact]
     public void Every_owned_runtime_key_family_uses_the_ltx_architecture_prefix()
     {
-        LtxRuntimeKeyScope keys = new();
         List<string> runtimeKeys =
         [
-            keys.ControlNetNormalized,
-            keys.ControlNetFullImage(2),
-            keys.ControlNetFrameCount(2),
-            keys.IcLoraAudioReference(3, 4),
-            keys.IcLoraAudioReference(3, 4, 5),
-            keys.IcLoraControlSignal(3, 4),
-            keys.IcLoraUploadedDriveImages(3, 4),
+            LtxRuntimeKeyScope.ControlNetNormalized,
+            LtxRuntimeKeyScope.ControlNetFullImage(2),
+            LtxRuntimeKeyScope.ControlNetFrameCount(2),
+            LtxRuntimeKeyScope.IcLoraAudioReference(3, 4),
+            LtxRuntimeKeyScope.IcLoraAudioReference(3, 4, 5),
+            LtxRuntimeKeyScope.IcLoraControlSignal(3, 4),
+            LtxRuntimeKeyScope.IcLoraUploadedDriveImages(3, 4),
         ];
         runtimeKeys.AddRange(
             from StageRefStore.StageKind kind in Enum.GetValues<StageRefStore.StageKind>()
-            from LtxRuntimeKeyScope.StageRefComponent component
-                in Enum.GetValues<LtxRuntimeKeyScope.StageRefComponent>()
-            select keys.StageRef(kind, component));
+            from key in new[]
+            {
+                LtxRuntimeKeyScope.StageRefMedia(kind),
+                LtxRuntimeKeyScope.StageRefVae(kind),
+                LtxRuntimeKeyScope.StageRefAudio(kind),
+            }
+            select key);
 
         Assert.All(
             runtimeKeys,
@@ -72,7 +74,7 @@ public sealed class StageRefStoreScopeTests
                     .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
                     .Concat(WorkflowTestHarness.VideoStagesSteps()));
 
-        // Common orchestration owns the architecture-neutral ControlNet captures.
+        // Exclude architecture-neutral ControlNet capture keys.
         string[] videoStagesKeys = [.. generator.NodeHelpers.Keys
             .Where(key => key.StartsWith("videostages.", StringComparison.Ordinal))
             .Where(key => !key.StartsWith("videostages.controlnet.", StringComparison.Ordinal))];

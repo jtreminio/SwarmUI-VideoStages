@@ -1,31 +1,28 @@
 namespace VideoStages.Architectures.Ltx2;
 
-internal sealed class LtxRuntimeKeyScope
+internal static class LtxRuntimeKeyScope
 {
-    internal enum StageRefComponent
-    {
-        Media,
-        Vae,
-        Audio,
-    }
-
     private static string Prefix { get; } =
         $"videostages.arch.{Ltx2ArchitectureModule.ArchitectureId}";
 
-    internal string StageRef(
-        StageRefStore.StageKind kind,
-        StageRefComponent component) =>
-        $"{Prefix}.stage-ref.{StageName(kind)}.{ComponentName(component)}";
+    internal static string StageRefMedia(StageRefStore.StageKind kind) =>
+        $"{Prefix}.stage-ref.{StageName(kind)}.media";
 
-    internal string ControlNetNormalized => $"{Prefix}.controlnet.normalized";
+    internal static string StageRefVae(StageRefStore.StageKind kind) =>
+        $"{Prefix}.stage-ref.{StageName(kind)}.vae";
 
-    internal string ControlNetFullImage(int index) =>
+    internal static string StageRefAudio(StageRefStore.StageKind kind) =>
+        $"{Prefix}.stage-ref.{StageName(kind)}.audio";
+
+    internal static string ControlNetNormalized => $"{Prefix}.controlnet.normalized";
+
+    internal static string ControlNetFullImage(int index) =>
         $"{Prefix}.controlnet.fullimage.{index}";
 
-    internal string ControlNetFrameCount(int index) =>
+    internal static string ControlNetFrameCount(int index) =>
         $"{Prefix}.controlnet.framecount.{index}";
 
-    internal string IcLoraAudioReference(
+    internal static string IcLoraAudioReference(
         int clipId,
         int entryIndex,
         int? rawStageIndex = null)
@@ -37,10 +34,10 @@ internal sealed class LtxRuntimeKeyScope
             : key;
     }
 
-    internal string IcLoraControlSignal(int clipId, int entryIndex) =>
+    internal static string IcLoraControlSignal(int clipId, int entryIndex) =>
         $"{Prefix}.iclora.control.{clipId}.{entryIndex}";
 
-    internal string IcLoraUploadedDriveImages(int clipId, int entryIndex) =>
+    internal static string IcLoraUploadedDriveImages(int clipId, int entryIndex) =>
         $"{Prefix}.iclora.upload.{clipId}.{entryIndex}";
 
     private static string StageName(StageRefStore.StageKind kind) => kind switch
@@ -51,14 +48,4 @@ internal sealed class LtxRuntimeKeyScope
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 
-    private static string ComponentName(StageRefComponent component) => component switch
-    {
-        StageRefComponent.Media => "media",
-        StageRefComponent.Vae => "vae",
-        StageRefComponent.Audio => "audio",
-        _ => throw new ArgumentOutOfRangeException(
-            nameof(component),
-            component,
-            null),
-    };
 }

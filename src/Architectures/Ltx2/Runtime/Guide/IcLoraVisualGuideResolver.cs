@@ -12,11 +12,8 @@ internal sealed record ResolvedIcLoraDrive(
     int? ControlNetIndex,
     bool IsStillImage);
 
-/// <summary>Materializes planned visual guides as graph image streams.</summary>
 internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
 {
-    private readonly LtxRuntimeKeyScope _keys = new();
-
     internal bool TryResolve(
         WorkflowBridge bridge,
         ClipPlan clip,
@@ -108,7 +105,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         IcLoraDriveMediaKind mediaKind,
         string data)
     {
-        string key = _keys.IcLoraUploadedDriveImages(clipId, entryIndex);
+        string key = LtxRuntimeKeyScope.IcLoraUploadedDriveImages(clipId, entryIndex);
         if (VideoGraphHelpers.TryGetCachedPath(g, bridge, key, out JArray cached))
         {
             return cached;

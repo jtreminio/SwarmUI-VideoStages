@@ -6,11 +6,8 @@ using VideoStages.Architectures.Ltx2.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>Builds the optional Canny, depth, or normal control signal for one planned drive.</summary>
 internal sealed class IcLoraControlSignalBuilder(WorkflowGenerator g)
 {
-    private readonly LtxRuntimeKeyScope _keys = new();
-
     internal JArray Apply(
         WorkflowBridge bridge,
         int clipId,
@@ -21,7 +18,7 @@ internal sealed class IcLoraControlSignalBuilder(WorkflowGenerator g)
         {
             return driveImages;
         }
-        string key = _keys.IcLoraControlSignal(clipId, entry.EntryIndex);
+        string key = LtxRuntimeKeyScope.IcLoraControlSignal(clipId, entry.EntryIndex);
         if (VideoGraphHelpers.TryGetCachedPath(g, bridge, key, out JArray cached))
         {
             return cached;

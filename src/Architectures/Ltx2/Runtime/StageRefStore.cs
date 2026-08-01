@@ -9,7 +9,6 @@ namespace VideoStages.Architectures.Ltx2;
 internal class StageRefStore(WorkflowGenerator g)
 {
     private const string Base2EditPrefix = "b2e.published.edit.";
-    private readonly LtxRuntimeKeyScope _keys = new();
 
     public enum StageKind
     {
@@ -24,13 +23,13 @@ internal class StageRefStore(WorkflowGenerator g)
     );
 
     private string MediaKey(StageKind kind) =>
-        _keys.StageRef(kind, LtxRuntimeKeyScope.StageRefComponent.Media);
+        LtxRuntimeKeyScope.StageRefMedia(kind);
 
     private string VaeKey(StageKind kind) =>
-        _keys.StageRef(kind, LtxRuntimeKeyScope.StageRefComponent.Vae);
+        LtxRuntimeKeyScope.StageRefVae(kind);
 
     private string AudioKey(StageKind kind) =>
-        _keys.StageRef(kind, LtxRuntimeKeyScope.StageRefComponent.Audio);
+        LtxRuntimeKeyScope.StageRefAudio(kind);
 
     public StageRef Base => GetIfCaptured(StageKind.Base);
 
@@ -95,7 +94,7 @@ internal class StageRefStore(WorkflowGenerator g)
     }
 
     /// <summary>
-    /// Captures the decoded stage output before LTX post-video processing.
+    /// Returns the decoded stage output before LTX post-video processing.
     /// </summary>
     public StageRef CaptureCurrentOutputReference()
     {

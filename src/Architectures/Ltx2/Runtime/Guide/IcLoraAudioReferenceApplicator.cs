@@ -11,13 +11,8 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>
-/// Applies IC-LoRA audio conditioning without exposing drive-video frames.
-/// </summary>
 internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
 {
-    private readonly LtxRuntimeKeyScope _keys = new();
-
     internal void ApplyAudioReferenceTokens(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         ClipPlan clip,
@@ -63,7 +58,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         WGNodeData incomingMedia,
         int rawStageIndex)
     {
-        string sampleKey = _keys.IcLoraAudioReference(
+        string sampleKey = LtxRuntimeKeyScope.IcLoraAudioReference(
             clip.ClipId,
             entry.EntryIndex,
             entry.MediaInput.Source == IcLoraMediaSourceKind.Incoming
