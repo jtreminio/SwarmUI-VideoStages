@@ -5,12 +5,12 @@ using VideoStages.Planning;
 
 namespace VideoStages.HostVideo.Runtime;
 
-/// <summary>The host media a stock-video timeline snapshots before clip execution.</summary>
+/// <summary>Host media captured before clip execution.</summary>
 internal sealed record HostVideoRootSources(WGNodeData Media, WGNodeData Vae);
 
 /// <summary>
-/// Runs the stage-loop mechanics proven equivalent for WAN and generic-host video. Architecture
-/// callbacks retain model loading, conditioning, native text entry, references, and cleanup.
+/// Runs the shared stage loop for WAN and generic host video. Architecture callbacks handle
+/// model loading, conditioning, native text entry, references, and cleanup.
 /// </summary>
 internal sealed class HostVideoStageEngine : IDisposable
 {
@@ -93,6 +93,14 @@ internal sealed class HostVideoStageEngine : IDisposable
         if (_generator.CurrentMedia is null)
         {
             // Native text entry has no decoded pixels to resize.
+            return;
+        }
+        if (upscale.Mode is not (StageUpscaleMode.Pixel or StageUpscaleMode.Model))
+        {
+            PlanDiagnosticReporter.TrackRequestWarning(
+                _generator.UserInput,
+                $"VideoStages: Stage {stage.StageId} uses unsupported upscale method "
+                    + $"'{upscale.RawMethod}'. Ignoring upscale.");
             return;
         }
         int width = _generator.CurrentMedia.Width

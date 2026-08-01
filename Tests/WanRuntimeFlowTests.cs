@@ -21,8 +21,7 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// The Wan slice end to end: a real generated workflow, built through SwarmUI's own
-/// image-to-video construction, with the host's core video pass handed off to the clip.
+/// End-to-end tests for WAN workflows generated through SwarmUI's image-to-video path.
 /// </summary>
 [Collection("VideoStagesTests")]
 public class WanRuntimeFlowTests
@@ -113,29 +112,24 @@ public class WanRuntimeFlowTests
                     .Concat(WorkflowTestHarness.VideoStagesSteps()));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // The host core pass populated its six-part loader tuple. The root handoff pruned those
-        // nodes and invalidated the tuple before Wan asked the same host builder for its clip
-        // graph, so no Wan-local delete is needed to avoid reusing dangling references.
+        // The handoff prunes the host loader nodes and tuple before WAN builds its clip graph.
         Assert.NotNull(hostLoaderTuple);
         Assert.Equal(6, hostLoaderTuple.Split(':').Length);
         Assert.True(hostLoaderTupleWasInvalidated);
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
 
-        // One Wan conditioning node, not two: the host's own core pass built one first and the
-        // handoff pruned it, so only the clip's generation survives.
+        // The host conditioning node is pruned, leaving only the clip's node.
         ComfyNode imageToVideo = Assert.Single(NodesOfClass(bridge, "WanImageToVideo"));
         ComfyNode sampler = Assert.Single(bridge.Graph.FindDownstream(imageToVideo.FindOutput(2)));
         Assert.Equal(10, sampler.FindInput("steps").LiteralAsInt());
 
-        // The clip generates at the timeline resolution, from the still the host entered with
-        // rather than the video the host made out of it.
+        // The clip generates at the timeline resolution.
         Assert.Single(
             NodesOfClass(bridge, "ImageScale"),
             node => node.FindInput("width").LiteralAsInt() == 512
                 && node.FindInput("height").LiteralAsInt() == 512);
 
-        // Wan owns no runtime key past its own host phases.
         Assert.DoesNotContain(
             generator.NodeHelpers.Keys,
             key => key.StartsWith("videostages.arch.wan22.", StringComparison.Ordinal));
@@ -2013,6 +2007,51 @@ public class WanRuntimeFlowTests
         AssertAcyclic(bridge);
     }
 
+    [Theory]
+    [InlineData("latent-bislerp", "bislerp")]
+    [InlineData("latentmodel-unit-upscaler.safetensors", "unit-upscaler.safetensors")]
+    public void Wan_latent_upscale_warns_without_emitting_an_invalid_pixel_scaler(
+        string upscaleMethod,
+        string invalidPixelMethod)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        JObject first = MakeStage(
+            models.VideoModel.Name,
+            "Generated",
+            steps: 10);
+        first.Remove("imageReference");
+        JObject second = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            control: 0.5,
+            upscale: 1.5,
+            upscaleMethod: upscaleMethod,
+            steps: 12);
+        second.Remove("imageReference");
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(first, second));
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Equal(2, SamplerNodes(bridge).Count());
+        Assert.DoesNotContain(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            scale => scale.UpscaleMethod.LiteralAsString() == invalidPixelMethod);
+        Assert.Contains(
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains(
+                $"uses unsupported upscale method '{upscaleMethod}'. Ignoring upscale.",
+                StringComparison.Ordinal));
+        Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
     [Fact]
     public void Partial_init_video_Wan_stage_uses_conformed_video_for_conditioning_and_latent()
     {
@@ -2653,9 +2692,7 @@ public class WanRuntimeFlowTests
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.Equal(512, generator.CurrentMedia.Width);
         Assert.Equal(512, generator.CurrentMedia.Height);
-        // The host asked for 16 frames; Wan generates whole latent frames, so the graph makes 13
-        // according to its resolved architecture metadata, and the artifact reports what it makes
-        // rather than what was asked for.
+        // WAN snaps the requested 16 frames to its 13-frame latent grid.
         Assert.Equal(
             StaticGeneratedFrameGrid.SnapDown(
                 16,
@@ -2663,7 +2700,7 @@ public class WanRuntimeFlowTests
             generator.CurrentMedia.Frames);
         Assert.Equal(13, generator.CurrentMedia.Frames);
         Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
-        // Timeline publication is architecture-neutral, so nothing downstream can branch on Wan.
+        // Published timeline media does not retain architecture compatibility metadata.
         Assert.Null(generator.CurrentMedia.Compat);
         Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
     }
@@ -2709,16 +2746,14 @@ public class WanRuntimeFlowTests
 
         AssertNoDanglingNodeRefs(workflow);
 
-        // Both clips enter from the same still with the same prompt and length, so they share one
-        // conditioning node and differ only in the seed each samples with.
+        // Identical clip inputs share conditioning but use different sampler seeds.
         ComfyNode imageToVideo = Assert.Single(NodesOfClass(bridge, "WanImageToVideo"));
         long[] seeds = [.. bridge.Graph.FindDownstream(imageToVideo.FindOutput(2))
             .Select(node => node.FindInput("noise_seed").LiteralAsLong().Value)
             .Order()];
         Assert.Equal([1L + 42, 1L + 43], seeds);
 
-        // Two clips means clip 0's video is not the timeline's own output, so the host's
-        // intermediate-images setting has something to save alongside the merged timeline.
+        // Save clip 0 separately from the merged timeline.
         ComfyNode merged = Assert.Single(NodesOfClass(bridge, BatchImagesNodeNode.ClassType));
         ComfyNode[] saves = [.. NodesOfClass(bridge, "SwarmSaveAnimationWS")];
         Assert.Equal(2, saves.Length);
@@ -3258,10 +3293,6 @@ public class WanRuntimeFlowTests
         AssertAcyclic(bridge);
     }
 
-    /// <summary>
-    /// The host trims every image-to-video pass it builds, so a timeline that delegates to it once
-    /// per clip has to drop those and keep only the trim over the finished timeline.
-    /// </summary>
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
@@ -3289,10 +3320,6 @@ public class WanRuntimeFlowTests
         Assert.Equal(clipCount, SamplerNodes(bridge).Count());
     }
 
-    /// <summary>
-    /// These settings live in the host's video parameters rather than the authored clip document,
-    /// so preflight is the only place they can be refused rather than ignored by this slice.
-    /// </summary>
     [Fact]
     public void Global_creativity_is_refused_in_favor_of_clip_local_Wan_control()
     {

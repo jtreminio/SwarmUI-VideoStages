@@ -116,20 +116,6 @@ internal static class UnitTestStubs
             ));
         }
 
-        // Core queries this param inline at the end of the last stage. Unregistered it
-        // dereferences null; registered-but-unset it simply reports "off".
-        if (ComfyUIBackendExtension.SeedVRModel is null)
-        {
-            ComfyUIBackendExtension.SeedVRModel = T2IParamTypes.Register<T2IModel>(new T2IParamType(
-                Name: "SeedVR Model (UnitTest Stub)",
-                Description: "Stub SeedVR2 restoration model used by VideoStages unit tests.",
-                Default: "",
-                FeatureFlag: "seedvr2",
-                Subtype: "Stable-Diffusion",
-                Toggleable: true,
-                GetValues: (_) => []
-            ));
-        }
     }
 
     public static void EnsureComfyControlNetParamsRegistered()
@@ -252,9 +238,7 @@ internal static class TestModelFactory
             T2IModelClassSorter.CompatWan21_14b,
             WanArchitectureModule.ImageToVideoModelClassId,
             "Wan 2.2 Image2Video 14B");
-        // Wan's model loader resolves a VAE through the host's known-model registry, so this bundle
-        // needs the registry and a VAE folder that the shared factory deliberately leaves out: with
-        // them present but empty, an unsatisfied lookup downloads instead of failing the test.
+        // WAN resolves its CLIP and VAE support models through the host registries.
         InstallWanSupportModels();
         return models;
     }
@@ -310,7 +294,6 @@ internal static class TestModelFactory
         Install("VAE", CommonModels.Known["wan22-vae"].FileName);
     }
 
-    /// <summary>Makes a support model resolvable by name, as an on-disk install would.</summary>
     private static void Install(string modelType, string fileName)
     {
         T2IModelHandler handler = Program.T2IModelSets[modelType];
