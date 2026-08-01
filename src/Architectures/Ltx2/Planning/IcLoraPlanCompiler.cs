@@ -93,12 +93,14 @@ internal static class IcLoraPlanCompiler
                     "ltx2.ic-lora.drive-control-unsupported",
                     $"consumes {entry.DriveData} data and cannot use visual control preprocessing"));
             }
+            List<PlanDiagnostic> stageDiagnostics = [];
             List<(int StageIndex, IcLoraPlan Plan)> pendingPlans = [];
             foreach (StageSpec stage in ApplicableStages(clip, entry))
             {
+                int reportedBefore = stageDiagnostics.Count;
                 if (stage.IsPassthrough)
                 {
-                    entryDiagnostics.Add(Warning(
+                    stageDiagnostics.Add(Warning(
                         clip,
                         index,
                         "ltx2.ic-lora.passthrough-stage",
@@ -113,7 +115,11 @@ internal static class IcLoraPlanCompiler
                     contract,
                     driveMedia,
                     context);
-                ValidateInput(clip, index, contract, driveMedia, input, entryDiagnostics);
+                ValidateInput(clip, index, contract, driveMedia, input, stageDiagnostics);
+                if (stageDiagnostics.Count > reportedBefore)
+                {
+                    continue;
+                }
                 pendingPlans.Add((stage.ClipStageRawIndex, CompilePlan(
                     index,
                     entry,
@@ -126,7 +132,10 @@ internal static class IcLoraPlanCompiler
             }
 
             diagnostics.AddRange(entryDiagnostics);
-            if (entryDiagnostics.Count > 0)
+            diagnostics.AddRange(stageDiagnostics);
+            // Entry-scope conditions invalidate the entry everywhere; stage-scope ones drop only the
+            // stage that raised them, and an entry left with no stage drops exactly like a dropped one.
+            if (entryDiagnostics.Count > 0 || pendingPlans.Count == 0)
             {
                 continue;
             }

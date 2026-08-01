@@ -491,6 +491,110 @@ public class IcLoraDriveMediaContractTests
         Assert.Empty(compilation.Stages[clip.Stages[0].ClipStageRawIndex]);
     }
 
+    [Fact]
+    public void Passthrough_stage_drops_only_that_stage_from_a_clip_wide_entry()
+    {
+        ClipSpec clip = Clip(
+            [
+                new(
+                    "visual.safetensors",
+                    Constants.ControlNetSourceTwo,
+                    1,
+                    1,
+                    Constants.IcLoraControlNone,
+                    null,
+                    DriveData: IcLoraDriveData.Visual),
+            ],
+            [Stage(0), Stage(1), Stage(2) with { Control = 0 }]);
+
+        IcLoraClipPlanCompilation compilation = CompileIcLoras(clip);
+
+        Assert.Contains(
+            compilation.Diagnostics,
+            diagnostic => diagnostic.Code == "ltx2.ic-lora.passthrough-stage"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.Equal(0, Assert.Single(compilation.Stages[0]).EntryIndex);
+        Assert.Equal(0, Assert.Single(compilation.Stages[1]).EntryIndex);
+        Assert.Empty(compilation.Stages[2]);
+        Assert.Equal(1, compilation.PrimaryControlNetSourceIndex);
+    }
+
+    [Fact]
+    public void Incoming_unavailable_at_the_entry_stage_keeps_the_later_stages()
+    {
+        ClipSpec clip = Clip(
+            [Incoming(IcLoraDriveData.Visual)],
+            [Stage(0), Stage(1)]);
+        ArchitectureClipCompileContext context = new(
+            640,
+            360,
+            24,
+            ArchitectureEntryMode.TextToVideo);
+
+        IcLoraClipPlanCompilation compilation = CompileIcLoras(clip, context);
+
+        Assert.Contains(
+            compilation.Diagnostics,
+            diagnostic => diagnostic.Code == "ltx2.ic-lora.incoming-unavailable");
+        Assert.Empty(compilation.Stages[0]);
+        Assert.Equal(
+            IcLoraDriveMediaKind.Video,
+            Assert.Single(compilation.Stages[1]).MediaInput.Kind);
+    }
+
+    [Fact]
+    public void Entry_scope_diagnostic_still_drops_the_entry_from_every_stage()
+    {
+        ClipSpec clip = Clip(
+            [
+                new(
+                    "visual.safetensors",
+                    Constants.ControlNetSourceTwo,
+                    1,
+                    1,
+                    "future-control",
+                    null,
+                    DriveData: IcLoraDriveData.Visual),
+            ],
+            [Stage(0), Stage(1)]);
+
+        IcLoraClipPlanCompilation compilation = CompileIcLoras(clip);
+
+        Assert.Contains(
+            compilation.Diagnostics,
+            diagnostic => diagnostic.Code == "ltx2.ic-lora.control-mode-unsupported"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+        Assert.Empty(compilation.Stages[0]);
+        Assert.Empty(compilation.Stages[1]);
+        Assert.Null(compilation.PrimaryControlNetSourceIndex);
+    }
+
+    [Fact]
+    public void Entry_dropped_on_every_stage_withholds_its_controlnet_index()
+    {
+        ClipSpec clip = Clip(
+            [
+                new(
+                    "audio-adapter.safetensors",
+                    Constants.ControlNetSourceTwo,
+                    1,
+                    1,
+                    Constants.IcLoraControlNone,
+                    null,
+                    DriveData: IcLoraDriveData.Audio),
+            ],
+            [Stage(0), Stage(1)]);
+
+        IcLoraClipPlanCompilation compilation = CompileIcLoras(clip);
+
+        Assert.Contains(
+            compilation.Diagnostics,
+            diagnostic => diagnostic.Code == "ltx2.ic-lora.audio-controlnet-unsupported");
+        Assert.Empty(compilation.Stages[0]);
+        Assert.Empty(compilation.Stages[1]);
+        Assert.Null(compilation.PrimaryControlNetSourceIndex);
+    }
+
     private static IcLoraClipPlanCompilation CompileIcLoras(
         ClipSpec clip,
         ArchitectureClipCompileContext context = null) =>
