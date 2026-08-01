@@ -144,7 +144,7 @@ public class AudioPlanCompilerTests
             diagnostic.Code == "audio.length.controlnet_owner_has_no_source");
         Assert.Contains(ltx.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.length.controlnet_owner_has_no_source"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
     }
 
     [Fact]

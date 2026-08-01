@@ -1,15 +1,11 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>
-/// Coordinates root and per-clip audio preparation for the LTX timeline.
-/// </summary>
 internal sealed class AudioTimelineExecutor
 {
     private readonly WorkflowGenerator _generator;
@@ -76,16 +72,23 @@ internal sealed class AudioTimelineExecutor
             return;
         }
 
-        int sourceIndex = (plannedClip.ArchitecturePayload as IArchitectureControlNetSourcePlan)
-            ?.ControlNetSourceIndex
-            ?? throw new SwarmUserErrorException(
-                "VideoStages: ControlNet owns clip length, but the compiled plan has no valid "
-                + "ControlNet 1-3 source.");
-        if (!TryApplyControlNetFrameCount(sourceIndex))
+        int? sourceIndex = (plannedClip.ArchitecturePayload as IArchitectureControlNetSourcePlan)
+            ?.ControlNetSourceIndex;
+        if (!sourceIndex.HasValue)
         {
-            throw new SwarmUserErrorException(
-                $"VideoStages: ControlNet {sourceIndex + 1} owns clip {plannedClip.ClipId} length, "
-                + "but its captured video frame count is unavailable.");
+            PlanDiagnosticReporter.TrackRequestWarning(
+                _generator.UserInput,
+                "VideoStages: ControlNet owns clip length, but the compiled plan has no valid "
+                + "ControlNet 1-3 source; using the authored clip length instead.");
+            return;
+        }
+        if (!TryApplyControlNetFrameCount(sourceIndex.Value))
+        {
+            PlanDiagnosticReporter.TrackRequestWarning(
+                _generator.UserInput,
+                $"VideoStages: ControlNet {sourceIndex.Value + 1} owns clip {plannedClip.ClipId} "
+                + "length, but its captured video frame count is unavailable; using the authored "
+                + "clip length instead.");
         }
     }
 

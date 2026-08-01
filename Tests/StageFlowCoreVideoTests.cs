@@ -318,7 +318,7 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Controlnet_owned_clip_length_fails_when_captured_frame_count_is_missing()
+    public void Controlnet_owned_clip_length_warns_when_captured_frame_count_is_missing()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -335,17 +335,17 @@ public partial class StageFlowTests
             models.VideoModel,
             new JArray(clip).ToString());
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                BuildNativeSteps(attachAudioToCurrentMedia: false),
-                features: [Ltx2HostIntegration.FeatureFlag, "variation_seed"]));
+        (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildNativeSteps(attachAudioToCurrentMedia: false),
+            features: [Ltx2HostIntegration.FeatureFlag, "variation_seed"]);
 
+        Assert.NotEmpty(workflow);
+        List<string> warnings = Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
         Assert.Contains(
-            "ControlNet 1 owns clip 0 length",
-            error.Message,
-            StringComparison.Ordinal);
-        Assert.Contains("frame count is unavailable", error.Message, StringComparison.Ordinal);
+            warnings,
+            warning => warning.Contains("ControlNet 1 owns clip 0 length")
+                && warning.Contains("using the authored clip length instead"));
     }
 
     [Fact]
@@ -1500,7 +1500,6 @@ public partial class StageFlowTests
             BuildNativeTextToVideoStepsWithPreCoreVideo(attachAudioToCurrentMedia: true));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // 10 seconds at 24 fps, aligned to 8n+1, yields 241 frames.
         EmptyLTXVLatentVideoNode emptyLatentNode = Assert.Single(bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>());
         Assert.Equal(241, emptyLatentNode.Length.LiteralAsInt());
         LTXVEmptyLatentAudioNode emptyAudioNode = Assert.Single(bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());

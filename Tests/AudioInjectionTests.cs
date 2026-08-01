@@ -30,7 +30,7 @@ public class AudioInjectionTests
                     new StageRefStore(generator))))
         .TryInject(audio, matchVideoLengthToAudio, preserveWindows);
 
-    // Local override of Fixtures.MakeStage: pins Steps=10 and ImageReference="Generated" for audio-injection tests.
+    // Keep these fixture defaults stable across audio-injection tests.
     private static JObject MakeStage(string model) => new()
     {
         ["control"] = 1.0,
@@ -515,7 +515,7 @@ public class AudioInjectionTests
     }
 
     [Fact]
-    public void Missing_selected_ace_audio_track_is_a_user_error()
+    public void Missing_selected_ace_audio_track_warns_and_uses_silence()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -524,15 +524,16 @@ public class AudioInjectionTests
             models.VideoModel,
             MakeRootConfig(MakeClipConfig("audio7", MakeStage(models.VideoModel.Name))).ToString());
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps()));
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
 
-        Assert.Contains("audio7", error.Message);
-        Assert.Contains("not present", error.Message);
+        Assert.NotEmpty(workflow);
+        List<string> warnings = Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
+        Assert.Contains(warnings, warning => warning.Contains("audio7") && warning.Contains("using silence"));
     }
 
     [Fact]
-    public void Missing_selected_controlnet_audio_capture_is_a_user_error()
+    public void Missing_selected_controlnet_audio_capture_warns_and_uses_silence()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -550,11 +551,14 @@ public class AudioInjectionTests
             models.VideoModel,
             MakeRootConfig(clip).ToString());
 
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps()));
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
 
-        Assert.Contains("ControlNet 1 audio", error.Message);
-        Assert.Contains("unavailable", error.Message);
+        Assert.NotEmpty(workflow);
+        List<string> warnings = Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
+        Assert.Contains(
+            warnings,
+            warning => warning.Contains("ControlNet 1 audio") && warning.Contains("using silence"));
     }
 
     [Fact]

@@ -466,7 +466,7 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_ControlSignalDerivedDurationWithoutLtxSource_IsAPlanningError()
+    public void Compile_ControlSignalDerivedDurationWithoutLtxSource_WarnsAndKeepsThePayload()
     {
         ClipSpec clip = GeneratedClip(0, Stage(10)) with
         {
@@ -479,9 +479,9 @@ public class VideoExecutionPlanCompilerTests
             plan.Diagnostics,
             diagnostic => diagnostic.Code
                     == "audio.length.controlnet_owner_has_no_source"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Error
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning
                 && diagnostic.ClipId == clip.Id);
-        Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
+        Assert.IsType<Ltx2ClipPayload>(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
     /// <summary>

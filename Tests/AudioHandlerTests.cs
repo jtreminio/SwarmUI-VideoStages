@@ -54,6 +54,33 @@ public class AudioHandlerTests
         return generator;
     }
 
+    private static VideoExecutionPlan Plan(params ClipPlan[] clips) => new(
+        Width: 512,
+        Height: 512,
+        FramesPerSecond: 24,
+        new RootPlan(
+            HostRootKind.ImageToVideo,
+            RootUse.ClipZeroSeed,
+            HostCoreDisposition.Handoff,
+            TimelineOutputDisposition.PublishTimelineOutput,
+            NativeAudioDisposition.MakeAvailableToTimeline),
+        Clips: clips,
+        Boundaries: [],
+        Diagnostics: []);
+
+    private static List<string> RequestWarnings(WorkflowGenerator generator) =>
+        Assert.IsType<List<string>>(generator.UserInput.ExtraMeta["parser_warnings"]);
+
+    private static AudioTimelineExecutor TimelineExecutor(WorkflowGenerator generator) => new(
+        generator,
+        new LtxAudioInjector(
+            generator,
+            new RootVideoStageResizer(
+                generator,
+                new RootVideoStageHandoff(
+                    generator,
+                    new StageRefStore(generator)))));
+
     [Fact]
     public void DetectAceStepFunAudio_returns_decode_audio_for_matching_track()
     {
@@ -107,6 +134,122 @@ public class AudioHandlerTests
             .DetectAceStepFunAudio(7);
 
         Assert.Null(audio);
+    }
+
+    [Fact]
+    public void Runtime_source_resolver_warns_when_AceStepFun_track_index_is_missing()
+    {
+        WorkflowGenerator generator = CreateGenerator([]);
+        ClipPlan authored = Clip(0, "audio0", saveAudioTrack: false);
+        ClipPlan clip = authored with
+        {
+            Audio = authored.Audio with
+            {
+                Base = authored.Audio.Base with { AceStepFunTrack = null },
+            },
+        };
+
+        AudioRuntimeSources sources =
+            new AudioRuntimeSourceResolver(generator, new AudioHandler(generator))
+                .Resolve(Plan(clip));
+
+        Assert.Empty(sources.ClipAudios);
+        Assert.Contains(
+            RequestWarnings(generator),
+            warning => warning.Contains("without a valid track"));
+    }
+
+    [Fact]
+    public void Runtime_source_resolver_warns_when_AceStepFun_track_is_absent()
+    {
+        WorkflowGenerator generator = CreateGenerator([]);
+        ClipPlan clip = Clip(0, "audio7", saveAudioTrack: false);
+
+        AudioRuntimeSources sources =
+            new AudioRuntimeSourceResolver(generator, new AudioHandler(generator))
+                .Resolve(Plan(clip));
+
+        Assert.Empty(sources.ClipAudios);
+        Assert.Contains(
+            RequestWarnings(generator),
+            warning => warning.Contains("not present in the workflow"));
+    }
+
+    [Fact]
+    public void Runtime_source_resolver_warns_when_ControlNet_source_is_ambiguous()
+    {
+        WorkflowGenerator generator = CreateGenerator([]);
+        ClipPlan clip = Clip(0, Constants.AudioSourceControlNet, saveAudioTrack: false);
+
+        AudioRuntimeSources sources =
+            new AudioRuntimeSourceResolver(generator, new AudioHandler(generator))
+                .Resolve(Plan(clip));
+
+        Assert.Empty(sources.ClipAudios);
+        Assert.Contains(
+            RequestWarnings(generator),
+            warning => warning.Contains("without a unique valid ControlNet 1-3 drive source"));
+    }
+
+    [Fact]
+    public void Runtime_source_resolver_warns_when_planned_ControlNet_audio_is_missing()
+    {
+        WorkflowGenerator generator = CreateGenerator([]);
+        ClipPlan authored = Clip(0, Constants.AudioSourceControlNet, saveAudioTrack: false);
+        ClipPlan clip = authored with
+        {
+            ArchitecturePayload = authored.RequireLtx2Payload() with
+            {
+                ControlNetSourceIndex = 0,
+            },
+        };
+
+        AudioRuntimeSources sources =
+            new AudioRuntimeSourceResolver(generator, new AudioHandler(generator))
+                .Resolve(Plan(clip));
+
+        Assert.Empty(sources.ClipAudios);
+        Assert.Contains(
+            RequestWarnings(generator),
+            warning => warning.Contains("captured video audio is unavailable"));
+    }
+
+    [Fact]
+    public void ControlNet_length_without_a_source_warns_and_keeps_authored_length()
+    {
+        WorkflowGenerator generator = CreateGenerator([]);
+        ClipPlan authored = Clip(0, Constants.AudioSourceControlNet, saveAudioTrack: false);
+        ClipPlan clip = authored with
+        {
+            Audio = authored.Audio with { Length = new(AudioLengthOwner.ControlNet) },
+        };
+
+        TimelineExecutor(generator).ApplyControlNetClipLength(clip);
+
+        Assert.Contains(
+            RequestWarnings(generator),
+            warning => warning.Contains("using the authored clip length instead"));
+    }
+
+    [Fact]
+    public void ControlNet_length_without_captured_frames_warns_and_keeps_authored_length()
+    {
+        WorkflowGenerator generator = CreateGenerator([]);
+        ClipPlan authored = Clip(0, Constants.AudioSourceControlNet, saveAudioTrack: false);
+        ClipPlan clip = authored with
+        {
+            Audio = authored.Audio with { Length = new(AudioLengthOwner.ControlNet) },
+            ArchitecturePayload = authored.RequireLtx2Payload() with
+            {
+                ControlNetSourceIndex = 0,
+            },
+        };
+
+        TimelineExecutor(generator).ApplyControlNetClipLength(clip);
+
+        Assert.Contains(
+            RequestWarnings(generator),
+            warning => warning.Contains("captured video frame count is unavailable"));
     }
 
     [Fact]

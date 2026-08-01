@@ -1,13 +1,11 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
 namespace VideoStages;
 
-/// <summary>Materializes compiled clip audio sources.</summary>
 internal sealed class AudioRuntimeSourceResolver(
     WorkflowGenerator g,
     AudioHandler audioHandler)
@@ -35,26 +33,43 @@ internal sealed class AudioRuntimeSourceResolver(
             {
                 case AudioSourceKind.AceStepFun:
                 {
-                    int track = clip.Audio.Base.AceStepFunTrack
-                        ?? throw new SwarmUserErrorException(
+                    if (clip.Audio.Base.AceStepFunTrack is not int track)
+                    {
+                        PlanDiagnosticReporter.TrackRequestWarning(
+                            g.UserInput,
                             $"VideoStages: clip {clip.ClipId} selects an AceStepFun audio source "
-                            + "without a valid track.");
-                    sources[clip.ClipId] = audioHandler.DetectAceStepFunAudio(track)
-                        ?? throw new SwarmUserErrorException(
+                            + "without a valid track; using silence instead.");
+                        break;
+                    }
+                    WGNodeData audio = audioHandler.DetectAceStepFunAudio(track);
+                    if (audio is null)
+                    {
+                        PlanDiagnosticReporter.TrackRequestWarning(
+                            g.UserInput,
                             $"VideoStages: clip {clip.ClipId} selects AceStepFun audio{track}, "
-                            + "but that track is not present in the workflow.");
+                            + "but that track is not present in the workflow; using silence instead.");
+                        break;
+                    }
+                    sources[clip.ClipId] = audio;
                     break;
                 }
                 case AudioSourceKind.ControlNet:
                 {
-                    int sourceIndex = ResolveControlNetSourceIndex(
+                    int? sourceIndex = ResolveControlNetSourceIndex(
                         clip,
                         controlNet);
-                    if (!controlNet.TryGetCapturedAudio(sourceIndex, out WGNodeData audio))
+                    if (!sourceIndex.HasValue)
                     {
-                        throw new SwarmUserErrorException(
+                        break;
+                    }
+                    if (!controlNet.TryGetCapturedAudio(sourceIndex.Value, out WGNodeData audio))
+                    {
+                        PlanDiagnosticReporter.TrackRequestWarning(
+                            g.UserInput,
                             $"VideoStages: clip {clip.ClipId} selects ControlNet "
-                            + $"{sourceIndex + 1} audio, but captured video audio is unavailable.");
+                            + $"{sourceIndex.Value + 1} audio, but captured video audio is unavailable; "
+                            + "using silence instead.");
+                        break;
                     }
                     sources[clip.ClipId] = audio;
                     break;
@@ -64,7 +79,7 @@ internal sealed class AudioRuntimeSourceResolver(
         return sources;
     }
 
-    private int ResolveControlNetSourceIndex(
+    private int? ResolveControlNetSourceIndex(
         ClipPlan clip,
         ControlNetAudioCapture controlNet)
     {
@@ -87,9 +102,11 @@ internal sealed class AudioRuntimeSourceResolver(
             return capturedIndices[0];
         }
 
-        throw new SwarmUserErrorException(
+        PlanDiagnosticReporter.TrackRequestWarning(
+            g.UserInput,
             $"VideoStages: clip {clip.ClipId} selects ControlNet audio without a "
-            + "unique valid ControlNet 1-3 drive source.");
+            + "unique valid ControlNet 1-3 drive source; using silence instead.");
+        return null;
     }
 
     private Dictionary<int, WGNodeData> ResolveUploadedSources(VideoExecutionPlan plan)
