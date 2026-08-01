@@ -33,13 +33,12 @@ internal static class ArchitectureCatalogSerializer
     private static JObject SerializeCapabilities(VideoArchitectureDescriptor descriptor) => new()
     {
         // Authoritative, scope-preserving capability sets.
-        ["architecture"] = new JArray(ArchitectureCapabilities(descriptor.Capabilities.Architecture)),
-        ["clip"] = new JArray(ClipCapabilities(descriptor.Capabilities.Clip)),
-        ["stage"] = new JArray(StageCapabilities(descriptor.Capabilities.Stage)),
-        ["upscaleModes"] = new JArray(UpscaleModes(descriptor.Capabilities.Stage)),
-
+        ["architecture"] = new JArray(ArchitectureFeatureVocabulary.WireNames(descriptor.Capabilities.Architecture)),
+        ["clip"] = new JArray(ArchitectureFeatureVocabulary.WireNames(descriptor.Capabilities.Clip)),
+        ["stage"] = new JArray(ArchitectureFeatureVocabulary.WireNames(descriptor.Capabilities.Stage)),
+        ["upscaleModes"] = new JArray(ArchitectureFeatureVocabulary.UpscaleModeWireNames(descriptor.Capabilities.Stage)),
         // Exact inputs that are not representable as flag sets.
-        ["entryModes"] = new JArray(descriptor.EntryModes.Select(SerializeEntryMode)),
+        ["entryModes"] = new JArray(descriptor.EntryModes.Select(ArchitectureFeatureVocabulary.WireName)),
         ["audioSourceKinds"] = new JArray(descriptor.AudioSourceKinds.Select(
             SerializeAudioSourceKind)),
     };
@@ -81,12 +80,12 @@ internal static class ArchitectureCatalogSerializer
             MutuallyExclusiveRuleConstraints value => new()
             {
                 ["mutuallyExclusive"] = new JArray(
-                    value.MutuallyExclusive.Select(SerializeConditionalFeature)),
+                    value.MutuallyExclusive.Select(ArchitectureFeatureVocabulary.AuthoringKey)),
             },
             RequiredEntryModesRuleConstraints value => new()
             {
                 ["requiresAnyEntryMode"] = new JArray(
-                    value.RequiresAnyEntryMode.Select(SerializeEntryMode)),
+                    value.RequiresAnyEntryMode.Select(ArchitectureFeatureVocabulary.WireName)),
             },
             _ => throw new ArgumentOutOfRangeException(
                 nameof(constraints),
@@ -116,11 +115,10 @@ internal static class ArchitectureCatalogSerializer
         IReadOnlyList<AudioSourceKind> audioKinds = model.Architecture.AudioSourceKinds;
         return new()
         {
-            ["architecture"] = new JArray(
-                ArchitectureCapabilities(capabilities.Architecture)),
-            ["clip"] = new JArray(ClipCapabilities(capabilities.Clip)),
-            ["stage"] = new JArray(StageCapabilities(capabilities.Stage)),
-            ["upscaleModes"] = new JArray(UpscaleModes(capabilities.Stage)),
+            ["architecture"] = new JArray(ArchitectureFeatureVocabulary.WireNames(capabilities.Architecture)),
+            ["clip"] = new JArray(ArchitectureFeatureVocabulary.WireNames(capabilities.Clip)),
+            ["stage"] = new JArray(ArchitectureFeatureVocabulary.WireNames(capabilities.Stage)),
+            ["upscaleModes"] = new JArray(ArchitectureFeatureVocabulary.UpscaleModeWireNames(capabilities.Stage)),
             ["entryModes"] = new JArray(ModelEntryModes(model)),
             ["audioSourceKinds"] = new JArray(audioKinds.Select(SerializeAudioSourceKind)),
         };
@@ -147,28 +145,10 @@ internal static class ArchitectureCatalogSerializer
                 : VideoModelEntryAbility.ImageToVideo;
             if ((model.EntryAbilities & required) == required)
             {
-                yield return SerializeEntryMode(mode);
+                yield return ArchitectureFeatureVocabulary.WireName(mode);
             }
         }
     }
-
-    private static IEnumerable<string> ArchitectureCapabilities(ArchitectureCapability value)
-        => ArchitectureFeatureVocabulary.WireNames(value);
-
-    private static IEnumerable<string> ClipCapabilities(ClipCapability value)
-        => ArchitectureFeatureVocabulary.WireNames(value);
-
-    private static IEnumerable<string> StageCapabilities(StageCapability value)
-        => ArchitectureFeatureVocabulary.WireNames(value);
-
-    private static IEnumerable<string> UpscaleModes(StageCapability value)
-        => ArchitectureFeatureVocabulary.UpscaleModeWireNames(value);
-
-    private static string SerializeEntryMode(ArchitectureEntryMode mode) =>
-        ArchitectureFeatureVocabulary.WireName(mode);
-
-    private static string SerializeConditionalFeature(ConditionalRuleFeature feature) =>
-        ArchitectureFeatureVocabulary.AuthoringKey(feature);
 
     private static string SerializeAudioSourceKind(AudioSourceKind kind) => kind switch
     {
