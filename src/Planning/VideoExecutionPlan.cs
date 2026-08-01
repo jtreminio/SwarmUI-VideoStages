@@ -121,12 +121,11 @@ internal sealed record StagePlan(
     IArchitectureStagePayload ArchitecturePayload,
     StageOutputPlan Output)
 {
-    /// <summary>Resolved independently for every authored active stage.</summary>
     public ResolvedVideoModel ResolvedModel { get; init; }
 
     public StageCorePlan Core =>
         ArchitecturePayload?.Core
-        ?? throw new InvalidOperationException(
+        ?? throw VideoStagesInvariant.Failure(
             $"Stage {StageId} has no common execution settings.");
 }
 

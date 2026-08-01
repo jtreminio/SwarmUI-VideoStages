@@ -106,7 +106,7 @@ internal static class ClipPlanCompiler
         if (assignedArchitectureId.HasValue
             && clipArchitectureId != assignedArchitectureId.Value)
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 $"Clip payload architecture '{clipArchitectureId}' does not match assigned "
                     + $"architecture '{assignedArchitectureId.Value}'.");
         }
@@ -118,7 +118,7 @@ internal static class ClipPlanCompiler
         {
             if (!compilation.StagePayloads.ContainsKey(rawStageIndex))
             {
-                throw new InvalidOperationException(
+                throw VideoStagesInvariant.Failure(
                     $"Clip stage {rawStageIndex} has no architecture stage payload.");
             }
         }

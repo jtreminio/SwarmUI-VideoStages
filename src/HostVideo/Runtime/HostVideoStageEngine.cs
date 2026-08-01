@@ -102,10 +102,10 @@ internal sealed class HostVideoStageEngine : IDisposable
             return;
         }
         int width = _generator.CurrentMedia.Width
-            ?? throw new InvalidOperationException(
+            ?? throw VideoStagesInvariant.Failure(
                 $"Stage {stage.StageId} cannot pixel-scale media with no width.");
         int height = _generator.CurrentMedia.Height
-            ?? throw new InvalidOperationException(
+            ?? throw VideoStagesInvariant.Failure(
                 $"Stage {stage.StageId} cannot pixel-scale media with no height.");
         (int targetWidth, int targetHeight) = StageUpscaleGraph.ResolveTargetDimensions(
             width,

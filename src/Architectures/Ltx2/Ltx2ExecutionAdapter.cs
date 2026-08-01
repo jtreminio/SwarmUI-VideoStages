@@ -162,7 +162,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         {
             if (_rootSources is null)
             {
-                throw new InvalidOperationException(
+                throw VideoStagesInvariant.Failure(
                     "The LTX timeline runtime was not prepared before session creation.");
             }
             return new GenerationSession(

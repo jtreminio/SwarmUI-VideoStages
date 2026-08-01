@@ -167,7 +167,7 @@ internal sealed class VideoExecutionPlanContext
             }
             if (State != VideoExecutionState.Compiled)
             {
-                throw new InvalidOperationException(
+                throw VideoStagesInvariant.Failure(
                     $"VideoStages request preparation cannot start from state '{State}'.");
             }
 
@@ -178,7 +178,7 @@ internal sealed class VideoExecutionPlanContext
                     Plan.Diagnostics,
                     "VideoStages could not create a valid architecture execution plan");
                 _executionHost = _createExecutionHost?.Invoke(this)
-                    ?? throw new InvalidOperationException(
+                    ?? throw VideoStagesInvariant.Failure(
                         "This video execution plan context has no runtime provider binding.");
                 _executionHost.BindExecutionContext(this);
                 PreflightDiagnostics = _executionHost.CollectPreflightDiagnostics();
@@ -218,7 +218,7 @@ internal sealed class VideoExecutionPlanContext
         // Do not prepare lazily from a mutation callback: alternate host callbacks run after core
         // graph construction. The registered graph-free preflight phase is the sole preparation
         // owner, and skipping it must fail before this extension mutates anything.
-        throw new InvalidOperationException(
+        throw VideoStagesInvariant.Failure(
             $"VideoStages cannot mutate the workflow while request state is '{State}'. "
                 + "Graph-free request preflight must complete first.");
     }
@@ -257,7 +257,7 @@ internal sealed class VideoExecutionPlanContext
         ArgumentNullException.ThrowIfNull(executionHost);
         if (!ReferenceEquals(RequirePreparedExecutionHost(), executionHost))
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 "This execution host is not bound to the prepared VideoStages request.");
         }
     }
@@ -267,7 +267,7 @@ internal sealed class VideoExecutionPlanContext
         ArgumentNullException.ThrowIfNull(error);
         if (State == VideoExecutionState.Completed)
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 "A completed VideoStages execution cannot transition to failed.", error);
         }
         _failure = ExceptionDispatchInfo.Capture(error);

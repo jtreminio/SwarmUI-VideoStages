@@ -58,7 +58,7 @@ internal sealed record DecodedClipArtifact(
             || FramesPerSecond <= 0
             || Frames <= 0)
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 $"Clip {ClipId} returned an invalid decoded media artifact.");
         }
     }
@@ -123,7 +123,7 @@ internal sealed record DecodedClipArtifact(
             artifact.Media.Height.Value,
             artifact.Media.FPS.Value<int>(),
             artifact.Media.Frames.Value,
-            clip.Architecture?.Id ?? throw new InvalidOperationException(
+            clip.Architecture?.Id ?? throw VideoStagesInvariant.Failure(
                 $"Clip {clip.ClipId} has no resolved architecture identity."),
             clip.ClipId);
         return decoded;

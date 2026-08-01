@@ -70,7 +70,7 @@ internal static class MultiClipAudioGraphAssembler
         }
         if (preflight.DecodedOutputs.Count != clips.Count)
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 "Timeline audio preflight does not match the decoded clip count.");
         }
 

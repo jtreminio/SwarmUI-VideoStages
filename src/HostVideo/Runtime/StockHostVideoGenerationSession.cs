@@ -39,7 +39,7 @@ internal sealed class StockHostVideoGenerationSession(
         if (clip.HasInitVideo)
         {
             InitVideoPlan source = clip.InitVideo
-                ?? throw new InvalidOperationException(
+                ?? throw VideoStagesInvariant.Failure(
                     $"InitVideo {architectureLabel} clip {clip.ClipId} has no init-video plan.");
             ClipPlan sourceInstallPlan = clip with
             {
@@ -209,7 +209,7 @@ internal sealed class StockHostVideoGenerationSession(
             || clip.Input != ClipInputKind.EmptyLatent
             || stage.ClipStageIndex != 0)
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 $"Clip {clip.ClipId} stage {stage.StageId} has an invalid "
                     + $"{architectureLabel} text "
                     + "execution contract.");
@@ -225,7 +225,7 @@ internal sealed class StockHostVideoGenerationSession(
             }
             g.IsImageToVideo = true;
             int frames = genInfo.Frames
-                ?? throw new InvalidOperationException(
+                ?? throw VideoStagesInvariant.Failure(
                     $"Clip {clip.ClipId} stage {stage.StageId} has no "
                         + $"{architectureLabel} text-video frame count.");
             using ParamSnapshot genericFrameScope = _wanBehavior is not null
@@ -463,7 +463,7 @@ internal sealed class StockHostVideoGenerationSessionFactory(
         ArgumentNullException.ThrowIfNull(context);
         if (_rootSources is null)
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 $"The {architectureLabel} runtime was not prepared before session creation.");
         }
         return new StockHostVideoGenerationSession(

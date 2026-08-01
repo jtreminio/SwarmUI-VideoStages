@@ -1196,7 +1196,7 @@ public class WanArchitectureTests
             () => WanStaticGeneratedFrameResolver.Resolve(16, 2, 10, null));
 
         Assert.Equal(
-            "Clip 2 stage 10 has no resolved video model.",
+            "VideoStages bug: Clip 2 stage 10 has no resolved video model.",
             error.Message);
     }
 

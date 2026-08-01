@@ -37,7 +37,7 @@ internal sealed class LtxStageLatentBuilder
         StagePlan stage = stageFrame.Stage;
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
         ClipPlan clip = stageFrame.ClipContext.PlannedClip
-            ?? throw new InvalidOperationException(
+            ?? throw VideoStagesInvariant.Failure(
                 "LTX stage execution requires the compiled clip plan.");
         genInfo.StartStep = (int)Math.Floor(payload.Core.Steps * (1 - payload.Core.Control));
         // The per-frame noise mask (not StartStep) gates what regenerates, so the whole latent must

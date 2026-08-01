@@ -42,7 +42,7 @@ internal sealed class SourceOnlyGenerationSession(
         ArgumentNullException.ThrowIfNull(context);
         if (context.Clip.ArchitecturePayload is not NoneClipPayload)
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 $"Clip {context.Clip.ClipId} has no init-video-only architecture payload.");
         }
         WGNodeData initVideoMedia = _sourceInstaller.TryInstall(context.Clip)

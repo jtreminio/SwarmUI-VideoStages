@@ -16,8 +16,7 @@ internal sealed record VideoArchitectureRegistration(
     Action RegisterDependencies = null);
 
 /// <summary>
-/// One production registration list owns model resolution, catalog publication, and runtime
-/// dispatch. Adding an architecture cannot update one side while forgetting another.
+/// Production registrations for model resolution, catalog publication, and runtime dispatch.
 /// </summary>
 internal static class VideoArchitectureManifest
 {
@@ -76,7 +75,7 @@ internal static class VideoArchitectureManifest
                 architectureId,
                 out VideoArchitectureRegistration registration))
             {
-                throw new InvalidOperationException(
+                throw VideoStagesInvariant.Failure(
                     $"No generation runtime provider is registered for architecture "
                         + $"'{architectureId}'.");
             }

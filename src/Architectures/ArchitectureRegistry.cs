@@ -29,7 +29,7 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
         ];
         if (duplicates.Length > 0)
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 "Duplicate video architecture ids: "
                 + string.Join(", ", duplicates.Select(id => $"'{id}'")));
         }
@@ -37,7 +37,7 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
         {
             if (descriptor.FrameGrid < 1)
             {
-                throw new InvalidOperationException(
+                throw VideoStagesInvariant.Failure(
                     $"Video architecture '{descriptor.Id}' has invalid frame grid "
                         + $"{descriptor.FrameGrid}; grids must be positive.");
             }
@@ -52,7 +52,7 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                 || duplicateEntryModes.Length > 0
                 || entryModes.Any(mode => !Enum.IsDefined(mode)))
             {
-                throw new InvalidOperationException(
+                throw VideoStagesInvariant.Failure(
                     $"Video architecture '{descriptor.Id}' has missing, duplicate, or invalid "
                         + "entry modes.");
             }
@@ -62,7 +62,7 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
             ];
             if (missingBoundaryModes.Length > 0)
             {
-                throw new InvalidOperationException(
+                throw VideoStagesInvariant.Failure(
                     $"Video architecture '{descriptor.Id}' is missing boundary rules for: "
                     + string.Join(", ", missingBoundaryModes));
             }
@@ -113,7 +113,7 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                     || match.Architecture?.Id != module.Descriptor.Id
                     || match.FrameGrid < 1)
                 {
-                    throw new InvalidOperationException(
+                    throw VideoStagesInvariant.Failure(
                         $"Video architecture module '{module.Descriptor.Id}' returned an invalid "
                         + $"model resolution for '{model?.Name}'.");
                 }
@@ -131,7 +131,7 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
         }
         if (matches.Count > 1)
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 $"Model '{model?.Name}' ambiguously resolves within the winning architecture "
                 + "tier to "
                 + string.Join(", ", matches.Select(match => $"'{match.ArchitectureId}'")));

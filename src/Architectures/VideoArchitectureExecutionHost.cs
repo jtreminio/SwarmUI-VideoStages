@@ -6,8 +6,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures;
 
 /// <summary>
-/// Production composition root for architecture runtimes. Common workflow entry points dispatch
-/// here and do not construct an architecture implementation directly.
+/// Coordinates architecture runtime providers for one request.
 /// </summary>
 internal sealed class VideoArchitectureExecutionHost
 {
@@ -56,7 +55,7 @@ internal sealed class VideoArchitectureExecutionHost
             ArgumentNullException.ThrowIfNull(provider);
             if (!byId.TryAdd(provider.ArchitectureId, provider))
             {
-                throw new InvalidOperationException(
+                throw VideoStagesInvariant.Failure(
                     $"Duplicate generation runtime provider for architecture "
                     + $"'{provider.ArchitectureId}'.");
             }
@@ -68,9 +67,7 @@ internal sealed class VideoArchitectureExecutionHost
     }
 
     /// <summary>
-    /// The single request-preflight owner. It runs before the first VideoStages workflow phase, so
-    /// an unsatisfiable request is rejected while the host graph, media and node helpers are still
-    /// exactly as the host left them.
+    /// Runs request preflight before any VideoStages workflow phase mutates the host graph.
     /// </summary>
     internal IReadOnlyList<PlanDiagnostic> CollectPreflightDiagnostics()
     {
@@ -90,12 +87,12 @@ internal sealed class VideoArchitectureExecutionHost
         ArgumentNullException.ThrowIfNull(context);
         if (!ReferenceEquals(context.Plan, _plan))
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 "The execution host cannot bind a different video execution plan.");
         }
         if (_executionContext is not null && !ReferenceEquals(_executionContext, context))
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 "The execution host is already bound to another VideoStages request.");
         }
         _executionContext = context;
@@ -156,7 +153,7 @@ internal sealed class VideoArchitectureExecutionHost
 
     private VideoExecutionPlanContext RequireExecutionContext() =>
         _executionContext
-        ?? throw new InvalidOperationException(
+        ?? throw VideoStagesInvariant.Failure(
             "The execution host is not bound to a prepared VideoStages request.");
 
     private IEnumerable<IArchitectureGenerationSessionFactoryProvider> RootOwnerProvider()
@@ -169,7 +166,7 @@ internal sealed class VideoArchitectureExecutionHost
             _rootOwner.Value,
             out IArchitectureGenerationSessionFactoryProvider provider))
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 $"No generation runtime provider is registered for root architecture "
                     + $"'{_rootOwner.Value}'.");
         }
@@ -212,7 +209,7 @@ internal sealed class VideoArchitectureExecutionHost
         ArgumentNullException.ThrowIfNull(plan);
         return Array.AsReadOnly(plan.Clips
             .Select(clip => clip.Architecture?.Id
-                ?? throw new InvalidOperationException(
+                ?? throw VideoStagesInvariant.Failure(
                     $"Clip {clip.ClipId} has no architecture identity."))
             .Distinct()
             .ToArray());

@@ -441,7 +441,7 @@ public class PlanningCompilerComponentTests
                     new Dictionary<int, IArchitectureStagePayload>())));
 
         Assert.Equal(
-            "Clip stage 3 has no architecture stage payload.",
+            "VideoStages bug: Clip stage 3 has no architecture stage payload.",
             error.Message);
     }
 
@@ -488,7 +488,7 @@ public class PlanningCompilerComponentTests
                     assignment)));
 
         Assert.Equal(
-            "Clip payload architecture 'wrong-architecture' does not match assigned architecture "
+            "VideoStages bug: Clip payload architecture 'wrong-architecture' does not match assigned architecture "
                 + "'ltx2'.",
             error.Message);
     }

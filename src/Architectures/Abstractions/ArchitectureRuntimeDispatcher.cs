@@ -19,7 +19,7 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
                 if (!byId.TryAdd(session.ArchitectureId, session))
                 {
                     TryDispose(session);
-                    throw new InvalidOperationException(
+                    throw VideoStagesInvariant.Failure(
                         $"Duplicate runtime session for architecture '{session.ArchitectureId}'.");
                 }
             }
@@ -40,7 +40,7 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
         ArgumentNullException.ThrowIfNull(context);
         IVideoGenerationSession session = ResolveSession(context.Clip);
         DecodedClipArtifact output = session.Execute(context)
-            ?? throw new InvalidOperationException(
+            ?? throw VideoStagesInvariant.Failure(
                 $"Architecture '{session.ArchitectureId}' returned no decoded clip artifact.");
         ValidateOutput(output, session, context);
         return output;
@@ -50,11 +50,11 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
     {
         ArgumentNullException.ThrowIfNull(clip);
         ArchitectureId id = clip.Architecture?.Id
-            ?? throw new InvalidOperationException(
+            ?? throw VideoStagesInvariant.Failure(
                 $"Clip {clip.ClipId} has no architecture identity.");
         if (!_sessions.TryGetValue(id, out IVideoGenerationSession session))
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 $"No runtime session is registered for architecture '{id}'.");
         }
         return session;
@@ -72,14 +72,14 @@ internal sealed class ArchitectureRuntimeDispatcher : IDisposable
     {
         if (output.ClipId != context.Clip.ClipId)
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 $"Architecture '{session.ArchitectureId}' returned artifact for clip "
                 + $"'{output.ClipId}' instead of planned clip '{context.Clip.ClipId}'.");
         }
         ArchitectureId plannedArchitectureId = context.Clip.Architecture.Id;
         if (output.ArchitectureId != session.ArchitectureId)
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 $"Architecture '{session.ArchitectureId}' returned artifact for architecture "
                 + $"'{output.ArchitectureId}' instead of planned architecture "
                 + $"'{plannedArchitectureId}' for clip '{context.Clip.ClipId}'.");

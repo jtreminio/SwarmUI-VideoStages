@@ -21,7 +21,7 @@ internal static class WanStaticGeneratedFrameResolver
     {
         if (resolvedModel is null)
         {
-            throw new InvalidOperationException(
+            throw VideoStagesInvariant.Failure(
                 $"Clip {clipId} stage {stageId} has no resolved video model.");
         }
         int frameGrid = resolvedModel.FrameGrid;
