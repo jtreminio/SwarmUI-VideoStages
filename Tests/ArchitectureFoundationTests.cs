@@ -665,7 +665,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Ltx_rejects_native_audio_as_audio_derived_duration_source()
+    public void Ltx_warns_that_native_audio_cannot_drive_audio_derived_duration()
     {
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor;
@@ -684,11 +684,36 @@ public class ArchitectureFoundationTests
             diagnostics,
             diagnostic => diagnostic.Code
                     == "audio.length.source_cannot_drive_duration"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
         Assert.DoesNotContain(
             diagnostics,
             diagnostic => diagnostic.Code == "architecture-capability-unsupported"
                 && diagnostic.Message.Contains("audio-derived clip duration"));
+    }
+
+    [Fact]
+    public void Native_audio_derived_duration_plans_the_authored_clip_length()
+    {
+        StageSpec stage = Stage(10, "ltx-model");
+        ClipSpec authored = GeneratedClip(0, stage) with { Frames = 26 };
+
+        VideoExecutionPlan plan = CompileWithLtx(
+            authored with { ClipLengthFromAudio = true },
+            stage);
+        VideoExecutionPlan authoredLengthPlan = CompileWithLtx(authored, stage);
+
+        Assert.Empty(PlanDiagnosticReporter.Errors(plan.Diagnostics));
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code == "audio.length.source_cannot_drive_duration"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+        ClipPlan compiled = Assert.Single(plan.Clips);
+        Assert.NotNull(compiled.ArchitecturePayload);
+        Assert.Equal(AudioLengthOwner.Timeline, compiled.Audio.Length.Owner);
+        // The authored length still snaps to the model's frame grid, exactly as it does
+        // without the flag; nothing derives a length from the native source.
+        Assert.Equal(33, compiled.Frames);
+        Assert.Equal(Assert.Single(authoredLengthPlan.Clips).Frames, compiled.Frames);
     }
 
     [Fact]
@@ -717,36 +742,14 @@ public class ArchitectureFoundationTests
     [Fact]
     public void Audio_derived_duration_leaves_unknown_source_diagnostics_to_audio_planning()
     {
-        VideoArchitectureDescriptor descriptor =
-            Ltx2ArchitectureModule.Instance.Descriptor;
         StageSpec stage = Stage(10, "ltx-model");
         ClipSpec clip = GeneratedClip(0, stage) with
         {
             AudioSource = "future-audio-source",
             ClipLengthFromAudio = true,
         };
-        Dictionary<int, ResolvedVideoModel> stageModels = new()
-        {
-            [stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
-                stage.Model,
-                Ltx2ArchitectureModule.ProfileId,
-                descriptor),
-        };
 
-        VideoStagesSpec spec = Spec(clip);
-        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
-            spec,
-            RootEnvironment.FromSpec(spec),
-            new(
-                new Dictionary<int, ClipArchitectureAssignment>
-                {
-                    [clip.Id] = new(
-                        clip.Id,
-                        Ltx2ArchitectureModule.Instance,
-                        descriptor,
-                        stageModels),
-                },
-                []));
+        VideoExecutionPlan plan = CompileWithLtx(clip, stage);
 
         Assert.Single(
             plan.Diagnostics,
@@ -1521,6 +1524,33 @@ public class ArchitectureFoundationTests
             spec,
             RootEnvironment.FromSpec(spec),
             ArchitecturePlanResolver.Resolve(spec, registry));
+    }
+
+    /// <summary>Compiles one clip against the real LTX descriptor, module, and frame grid.</summary>
+    private static VideoExecutionPlan CompileWithLtx(ClipSpec clip, StageSpec stage)
+    {
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor;
+        VideoStagesSpec spec = Spec(clip);
+        return VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            new(
+                new Dictionary<int, ClipArchitectureAssignment>
+                {
+                    [clip.Id] = new(
+                        clip.Id,
+                        Ltx2ArchitectureModule.Instance,
+                        descriptor,
+                        new Dictionary<int, ResolvedVideoModel>
+                        {
+                            [stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
+                                stage.Model,
+                                Ltx2ArchitectureModule.ProfileId,
+                                descriptor),
+                        }),
+                },
+                []));
     }
 
     private static VideoArchitectureDescriptor FakeCapabilityDescriptor(

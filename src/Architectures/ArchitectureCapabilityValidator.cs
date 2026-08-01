@@ -188,10 +188,11 @@ internal static class ArchitectureCapabilityValidator
             return;
         }
         diagnostics.Add(new(
-            PlanDiagnosticSeverity.Error,
+            PlanDiagnosticSeverity.Warning,
             "audio.length.source_cannot_drive_duration",
             $"Clip {clip.Id} configures audio-derived duration, but audio source kind "
-                + $"'{kind}' cannot determine video duration.",
+                + $"'{kind}' cannot determine video duration. The authored setting remains "
+                + "saved and the authored clip length is used for this generation.",
             clip.Id));
     }
 

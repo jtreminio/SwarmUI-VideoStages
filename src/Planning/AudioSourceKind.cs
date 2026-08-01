@@ -30,6 +30,15 @@ internal static class AudioSourceKindPolicy
         kind is AudioSourceKind.Upload
             or AudioSourceKind.ControlNet
             or AudioSourceKind.AceStepFun;
+
+    /// <summary>
+    /// Whether a clip's authored audio-derived duration is usable. An authored request against a
+    /// source that cannot supply a length is warned about once by the capability pass and
+    /// normalized away here, so the clip keeps its authored length everywhere downstream.
+    /// </summary>
+    internal static bool AudioOwnsClipDuration(ClipSpec clip) =>
+        clip.ClipLengthFromAudio
+        && CanDriveClipDuration(AudioSourceParser.Parse(clip.AudioSource).Kind);
 }
 
 /// <summary>A parsed authored audio-source string.</summary>

@@ -118,16 +118,18 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
+    [InlineData(true, false, Constants.AudioSourceControlNet)]
+    [InlineData(false, true, Constants.AudioSourceNative)]
     public void Runtime_derived_lengths_are_not_projected_onto_a_static_grid(
         bool fromAudio,
-        bool fromControl)
+        bool fromControl,
+        string audioSource)
     {
         StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
         ClipSpec clip = Clip(stage) with
         {
             Frames = 27,
+            AudioSource = audioSource,
             ClipLengthFromAudio = fromAudio,
             ClipLengthFromControlNet = fromControl,
         };
@@ -141,6 +143,30 @@ public sealed class EffectiveVideoRequestTests
             Resolve(authored, _ => module, _ => descriptor));
 
         Assert.Equal(27, request.Spec.Clips[0].Frames);
+    }
+
+    [Fact]
+    public void Audio_length_from_a_non_driving_source_still_projects_onto_the_grid()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
+        ClipSpec clip = Clip(stage) with
+        {
+            Frames = 27,
+            AudioSource = Constants.AudioSourceNative,
+            ClipLengthFromAudio = true,
+        };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+        IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => module, _ => descriptor));
+
+        ClipSpec effective = Assert.Single(request.Spec.Clips);
+        Assert.Equal(33, effective.Frames);
+        Assert.True(effective.ClipLengthFromAudio);
     }
 
     [Theory]

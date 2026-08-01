@@ -25,11 +25,10 @@ internal static class AudioLengthPlanCompiler
                     "ControlNet owns clip length when both ControlNet and audio length are requested."));
             }
         }
-        else if (clip.ClipLengthFromAudio)
+        else if (AudioSourceKindPolicy.AudioOwnsClipDuration(clip))
         {
             owner = AudioLengthOwner.Audio;
-            if (baseSource.Kind != AudioSourceKind.Disabled
-                && !baseSource.HasConfiguredTrack)
+            if (!baseSource.HasConfiguredTrack)
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Warning,
