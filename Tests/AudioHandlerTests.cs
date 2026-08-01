@@ -11,7 +11,11 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class AudioHandlerTests
 {
-    private static ClipPlan Clip(int id, string audioSource, bool saveAudioTrack)
+    private static ClipPlan Clip(
+        int id,
+        string audioSource,
+        bool saveAudioTrack,
+        bool clipLengthFromControlNet = false)
     {
         StageSpec stage = new(
             Id: id,
@@ -31,7 +35,7 @@ public class AudioHandlerTests
             IcLoras: [],
             SaveAudioTrack: saveAudioTrack,
             ClipLengthFromAudio: false,
-            ClipLengthFromControlNet: false,
+            ClipLengthFromControlNet: clipLengthFromControlNet,
             ReuseAudio: false,
             UploadedAudio: null,
             ImageRefs: [],
@@ -224,6 +228,23 @@ public class AudioHandlerTests
         Assert.Contains(
             RequestWarnings(generator),
             warning => warning.Contains("using the authored clip length instead"));
+    }
+
+    [Fact]
+    public void Stage_latent_ControlNet_length_without_a_source_keeps_authored_length()
+    {
+        WorkflowGenerator generator = CreateGenerator([]);
+        ClipPlan clip = Clip(
+            0,
+            Constants.AudioSourceControlNet,
+            saveAudioTrack: false,
+            clipLengthFromControlNet: true);
+
+        Assert.Equal(AudioLengthOwner.ControlNet, clip.Audio.Length.Owner);
+        Assert.Null(clip.RequireLtx2Payload().ControlNetSourceIndex);
+        Assert.Null(
+            new LtxStageLatentAudioFactory(generator, new LtxStageRuntimeSettings(generator))
+                .TryResolveControlNetLengthFrames(clip));
     }
 
     [Fact]

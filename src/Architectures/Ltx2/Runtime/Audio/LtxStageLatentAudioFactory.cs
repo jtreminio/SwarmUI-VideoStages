@@ -185,9 +185,8 @@ internal sealed class LtxStageLatentAudioFactory(
         if (clip.ArchitecturePayload is not IArchitectureControlNetSourcePlan
             { ControlNetSourceIndex: int sourceIndex })
         {
-            throw VideoStagesInvariant.Failure(
-                "VideoStages: ControlNet owns clip length, but the compiled plan has no valid "
-                + "ControlNet 1-3 source.");
+            // ApplyControlNetClipLength already warned; keep the authored clip length.
+            return null;
         }
         return new LtxControlNetMediaNormalizer(g).TryCreateFrameCount(
             sourceIndex,
