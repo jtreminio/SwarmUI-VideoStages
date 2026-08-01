@@ -3,31 +3,21 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2.Planning;
 
-internal sealed record AudioReusePlan(
-    bool IsRequested,
-    bool IsEligible,
-    int CaptureStageIndex,
-    int ReuseFromStageIndex);
-
 /// <summary>
-/// How the LTX runtime preparers match an injected audio track to video length. The coordinator's
-/// non-handoff injection matches a native source to video length even without the checkbox; the
-/// root-handoff path only does so for an external source with the checkbox. This asymmetry is LTX
-/// runtime behaviour, so it lives with the LTX plan rather than on the generic audio plan.
+/// Controls when LTX injection matches audio length. Non-handoff native audio always matches;
+/// external audio matches only when clip-length-from-audio is enabled. Root handoff uses only the
+/// external-audio rule.
 /// </summary>
 internal sealed record Ltx2AudioInjectionPlan(
     bool NonHandoffMatchesAudioLength,
     bool RootHandoffMatchesAudioLength);
 
 internal sealed record Ltx2AudioPlan(
-    AudioReusePlan Reuse,
     Ltx2AudioInjectionPlan Injection,
     ImmutableArray<PlanDiagnostic> Diagnostics);
 
 internal static class Ltx2AudioPlanCompiler
 {
-    private const int AudioReuseMinimumActiveStages = 3;
-
     internal static Ltx2AudioPlan Compile(
         ClipSpec clip,
         int? controlNetSourceIndex)
@@ -37,7 +27,6 @@ internal static class Ltx2AudioPlanCompiler
         Ltx2AudioInjectionPlan injection = new(
             external ? clip.ClipLengthFromAudio : true,
             external && clip.ClipLengthFromAudio);
-        AudioReusePlan reuse = CompileReuse(clip);
         ImmutableArray<PlanDiagnostic>.Builder diagnostics =
             ImmutableArray.CreateBuilder<PlanDiagnostic>();
         if (clip.ClipLengthFromControlNet && controlNetSourceIndex is null)
@@ -49,20 +38,7 @@ internal static class Ltx2AudioPlanCompiler
                     + "configured; the authored clip length will be used instead."));
         }
         return new(
-            reuse,
             injection,
             diagnostics.ToImmutable());
-    }
-
-    private static AudioReusePlan CompileReuse(ClipSpec clip)
-    {
-        int stageCount = clip.Stages?.Count ?? 0;
-        bool eligible = clip.ReuseAudio
-            && stageCount >= AudioReuseMinimumActiveStages;
-        return new(
-            clip.ReuseAudio,
-            eligible,
-            CaptureStageIndex: 1,
-            ReuseFromStageIndex: 2);
     }
 }

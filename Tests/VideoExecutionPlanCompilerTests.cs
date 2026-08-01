@@ -132,7 +132,6 @@ public class VideoExecutionPlanCompilerTests
         Ltx2ClipPayload ltxClip = Assert.IsType<Ltx2ClipPayload>(
             compiled.ArchitecturePayload);
         Assert.Equal(AudioLengthOwner.Audio, compiled.Audio.Length.Owner);
-        Assert.False(ltxClip.AudioReuse.IsEligible);
         Assert.Equal(ReferenceFramingMode.FitGreen, ltxClip.ReferenceFraming);
         Assert.Equal(
             PromptRelayMode.Relay,
@@ -141,7 +140,7 @@ public class VideoExecutionPlanCompilerTests
         Assert.Single(compiled.Stages[0].RequireLtx2Payload().IcLoras);
         Assert.Single(compiled.Stages[0].RequireLtx2Payload().FrameReferences);
         Assert.Empty(compiled.Stages[1].RequireLtx2Payload().IcLoras);
-        // Ineligible audio reuse is dropped silently; the catalog rule only gates the control.
+        // Clips with fewer than three stages silently skip audio reuse.
         Assert.DoesNotContain(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.reuse.requires_three_stages");
     }
@@ -451,10 +450,8 @@ public class VideoExecutionPlanCompilerTests
         Assert.IsType<Ltx2ClipPayload>(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
-    /// <summary>
-    /// Both LTX guide nodes merge a reference into the noise mask over the reference's own latent
-    /// frames only, so a frame reference narrows a retake window instead of invalidating it.
-    /// </summary>
+    // LTX guide nodes mask only the reference's latent frames, so a frame reference narrows the
+    // retake window instead of invalidating it.
     [Fact]
     public void Compile_RetakeWithFrameReferences_IsAllowed()
     {

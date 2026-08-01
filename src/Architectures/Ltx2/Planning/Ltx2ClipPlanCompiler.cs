@@ -3,7 +3,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2.Planning;
 
-/// <summary>Compiles all LTX-owned settings before the common clip plan is assembled.</summary>
+/// <summary>Result of compiling LTX-owned clip and stage settings.</summary>
 internal sealed record Ltx2ClipPlanCompilation(
     Ltx2ClipPayload Payload,
     IReadOnlyDictionary<int, Ltx2StagePayload> Stages,
@@ -56,7 +56,7 @@ internal static class Ltx2ClipPlanCompiler
                 retake,
                 relay,
                 ImageReferencePlanCompiler.Compile(clip, stage),
-                CompileAudioAction(audio, stage));
+                CompileAudioAction(clip, stage));
             stages.Add(stage.ClipStageRawIndex, payload);
             PlanDiagnostic dimensionDiagnostic = StageDimensionRules.SnapDiagnostic(
                 clip.Id,
@@ -71,7 +71,6 @@ internal static class Ltx2ClipPlanCompiler
         }
         return new(
             new Ltx2ClipPayload(
-                audio.Reuse,
                 audio.Injection,
                 icLoras.PrimaryControlNetSourceIndex,
                 clip.ReferenceFraming),
@@ -93,17 +92,17 @@ internal static class Ltx2ClipPlanCompiler
         return new(selection.Kind, raw, selection.ReferencedStageIndex);
     }
 
-    private static StageAudioAction CompileAudioAction(Ltx2AudioPlan audio, StageSpec stage)
+    private static StageAudioAction CompileAudioAction(ClipSpec clip, StageSpec stage)
     {
-        if (!audio.Reuse.IsEligible)
+        if (!clip.ReuseAudio || (clip.Stages?.Count ?? 0) < 3)
         {
             return StageAudioAction.None;
         }
-        if (stage.ClipStageIndex == audio.Reuse.CaptureStageIndex)
+        if (stage.ClipStageIndex == 1)
         {
             return StageAudioAction.CaptureForReuse;
         }
-        return stage.ClipStageIndex >= audio.Reuse.ReuseFromStageIndex
+        return stage.ClipStageIndex >= 2
             ? StageAudioAction.ReuseCaptured
             : StageAudioAction.None;
     }

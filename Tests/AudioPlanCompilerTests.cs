@@ -212,22 +212,6 @@ public class AudioPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_audio_reuse_requires_generate_capture_and_reuse_stages()
-    {
-        Ltx2AudioPlan ineligible = CompileLtxAudio(
-            Clip(reuse: true, stages: [Stage(0), Stage(1)]));
-        Ltx2AudioPlan eligible = CompileLtxAudio(
-            Clip(reuse: true, stages: [Stage(0), Stage(1), Stage(2)]));
-
-        Assert.True(ineligible.Reuse.IsRequested);
-        Assert.False(ineligible.Reuse.IsEligible);
-        Assert.Empty(ineligible.Diagnostics);
-        Assert.True(eligible.Reuse.IsEligible);
-        Assert.Equal(1, eligible.Reuse.CaptureStageIndex);
-        Assert.Equal(2, eligible.Reuse.ReuseFromStageIndex);
-    }
-
-    [Fact]
     public void Compile_unknown_source_warns_and_falls_back_to_disabled()
     {
         AudioPlan plan = AudioPlanCompiler.Compile(Clip(source: "not-an-audio-source"));

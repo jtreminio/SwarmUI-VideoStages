@@ -59,19 +59,6 @@ public class AudioPlanCompilerComponentTests
     }
 
     [Fact]
-    public void Ltx_facade_preserves_ineligible_reuse_plan()
-    {
-        ClipSpec clip = Clip(reuse: true, stages: [Stage(0), Stage(1)]);
-
-        AudioReusePlan reuse = CompileLtxAudio(clip).Reuse;
-
-        Assert.True(reuse.IsRequested);
-        Assert.False(reuse.IsEligible);
-        Assert.Equal(1, reuse.CaptureStageIndex);
-        Assert.Equal(2, reuse.ReuseFromStageIndex);
-    }
-
-    [Fact]
     public void Facade_keeps_component_diagnostics_in_stable_order()
     {
         ClipSpec clip = Clip(

@@ -96,7 +96,6 @@ internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
 }
 
 internal sealed record Ltx2ClipPayload(
-    AudioReusePlan AudioReuse,
     Ltx2AudioInjectionPlan AudioInjection,
     int? ControlNetSourceIndex,
     ReferenceFramingMode ReferenceFraming) :
