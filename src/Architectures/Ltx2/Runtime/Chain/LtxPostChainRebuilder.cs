@@ -8,21 +8,21 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>SwarmUI's own runtime VAE-decode tiling fallbacks, mirrored so VideoStages decodes
-/// look like every other Swarm decode.</summary>
+/// <summary>VAE decode tiling defaults for explicit settings and LTX-2 generation.</summary>
 internal static class LtxDecodeDefaults
 {
     internal const int TileSize = 256;
     internal const int Overlap = 64;
     internal const int TemporalSize = 32;
     internal const int TemporalOverlap = 4;
+    internal const int Ltx2TileSize = 2048;
+    internal const int Ltx2Overlap = 256;
+    internal const int Ltx2TemporalSize = 64;
+    internal const int Ltx2TemporalOverlap = 16;
 }
 
 /// <summary>
-/// The single owner of "how does this generation decode latents". Every VideoStages decode - the
-/// spliced post-chain rebuild and the ad-hoc <see cref="VaeDecodePreference"/> path alike - reads
-/// its tiling decision from here, so a stage cannot get different tile geometry purely because of
-/// which builder produced its decode node.
+/// Shared VAE decode configuration for rebuilt and ad-hoc decode paths.
 /// </summary>
 internal sealed record LtxDecodeConfig(
     bool UseTiledDecode,
@@ -34,20 +34,33 @@ internal sealed record LtxDecodeConfig(
     internal static LtxDecodeConfig From(WorkflowGenerator generator)
     {
         ArgumentNullException.ThrowIfNull(generator);
-        if (!generator.UserInput.TryGet(T2IParamTypes.VAETileSize, out _))
+        bool hasExplicitTiling =
+            generator.UserInput.TryGet(T2IParamTypes.VAETileSize, out _)
+            || generator.UserInput.TryGet(T2IParamTypes.VAETemporalTileSize, out _);
+        if (hasExplicitTiling)
         {
-            return new LtxDecodeConfig(UseTiledDecode: false);
+            return new LtxDecodeConfig(
+                UseTiledDecode: true,
+                TileSize: generator.UserInput.Get(
+                    T2IParamTypes.VAETileSize, LtxDecodeDefaults.TileSize),
+                Overlap: generator.UserInput.Get(
+                    T2IParamTypes.VAETileOverlap, LtxDecodeDefaults.Overlap),
+                TemporalSize: generator.UserInput.Get(
+                    T2IParamTypes.VAETemporalTileSize, LtxDecodeDefaults.TemporalSize),
+                TemporalOverlap: generator.UserInput.Get(
+                    T2IParamTypes.VAETemporalTileOverlap, LtxDecodeDefaults.TemporalOverlap));
         }
-        return new LtxDecodeConfig(
-            UseTiledDecode: true,
-            TileSize: generator.UserInput.Get(
-                T2IParamTypes.VAETileSize, LtxDecodeDefaults.TileSize),
-            Overlap: generator.UserInput.Get(
-                T2IParamTypes.VAETileOverlap, LtxDecodeDefaults.Overlap),
-            TemporalSize: generator.UserInput.Get(
-                T2IParamTypes.VAETemporalTileSize, LtxDecodeDefaults.TemporalSize),
-            TemporalOverlap: generator.UserInput.Get(
-                T2IParamTypes.VAETemporalTileOverlap, LtxDecodeDefaults.TemporalOverlap));
+        if (generator.IsLTXV2()
+            && generator.UserInput.Get(T2IParamTypes.ModelSpecificEnhancements, true))
+        {
+            return new LtxDecodeConfig(
+                UseTiledDecode: true,
+                TileSize: LtxDecodeDefaults.Ltx2TileSize,
+                Overlap: LtxDecodeDefaults.Ltx2Overlap,
+                TemporalSize: LtxDecodeDefaults.Ltx2TemporalSize,
+                TemporalOverlap: LtxDecodeDefaults.Ltx2TemporalOverlap);
+        }
+        return new LtxDecodeConfig(UseTiledDecode: false);
     }
 }
 

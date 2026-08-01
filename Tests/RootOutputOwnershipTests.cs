@@ -72,9 +72,7 @@ public partial class StageFlowTests
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        // A real diffusion_models-format LTX-2 stage model resets LoadingVAE, and the arch reload
-        // that follows dedups straight back onto the root's own VAE loader — so every stage decode
-        // reads node 101. This hook pins that exact sharing without the model-download machinery.
+        // Simulate architecture reload deduplication onto the root VAE without loading a model.
         WorkflowGenerator.AddModelGenStep(
             g =>
             {
@@ -101,15 +99,13 @@ public partial class StageFlowTests
                 .Concat(WorkflowTestHarness.VideoStagesSteps()),
                 features: InitVideoClipFeatures);
 
-        // The merged video reaches the save through a BatchImagesNode autogrow list, and the root
-        // VAE loader is reachable only through it. Every clip decode still reads that loader, so the
-        // displaced-root sweep must see it as live — dropping it leaves the decodes pointing at a
-        // node Comfy no longer has ("Node 101 not found" at execution time).
+        // The displaced-root sweep must preserve the VAE shared by both clip decodes.
         AssertNoDanglingNodeRefs(workflow);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         ComfyNode rootVae = bridge.Graph.GetNode("101");
         Assert.NotNull(rootVae);
-        List<VAEDecodeNode> decodes = [.. bridge.Graph.NodesOfType<VAEDecodeNode>()];
+        List<VAEDecodeTiledNode> decodes =
+            [.. bridge.Graph.NodesOfType<VAEDecodeTiledNode>()];
         Assert.Equal(2, decodes.Count);
         Assert.All(decodes, decode => Assert.Equal("101", decode.Vae.Connection?.Node.Id));
     }

@@ -1102,7 +1102,11 @@ public partial class StageFlowTests
                 INodeInput samples = node.FindInput("samples");
                 return samples?.Connection?.Node.Id == cropGuidesNode.Id && samples.Connection.SlotIndex == 2;
             });
-        Assert.IsType<VAEDecodeNode>(finalDecode);
+        VAEDecodeTiledNode tiledDecode = Assert.IsType<VAEDecodeTiledNode>(finalDecode);
+        Assert.Equal(2048, tiledDecode.TileSize.LiteralAsInt());
+        Assert.Equal(256, tiledDecode.Overlap.LiteralAsInt());
+        Assert.Equal(64, tiledDecode.TemporalSize.LiteralAsInt());
+        Assert.Equal(16, tiledDecode.TemporalOverlap.LiteralAsInt());
     }
 
     [Fact]
@@ -1194,9 +1198,7 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // A non-latent-model method must not engage the latent upsampler.
         Assert.Empty(bridge.Graph.NodesOfType<LTXVLatentUpsamplerNode>());
-        // Instead, the upscale is applied in pixel space at the requested 1.5x (512 -> 768).
         Assert.NotEmpty(bridge.Graph.NodesOfType<ImageScaleNode>()
             .Where(node => node.Width.LiteralAsInt() == 768
                 && node.Height.LiteralAsInt() == 768
@@ -1206,8 +1208,6 @@ public partial class StageFlowTests
         Assert.Equal(768, generator.CurrentMedia.Width);
         Assert.Equal(768, generator.CurrentMedia.Height);
 
-        // The upscaled image is encoded directly — no redundant ImageFromBatch re-slice (the prior
-        // stage already fixed the frame count).
         ImageScaleNode upscaleScale = Assert.Single(
             bridge.Graph.NodesOfType<ImageScaleNode>(),
             node => node.Crop.LiteralAsString() == "disabled");
@@ -1216,8 +1216,7 @@ public partial class StageFlowTests
             bridge.Graph.FindInputsConnectedTo(upscaleScale.IMAGE),
             c => c.Node is VAEEncodeNode && c.Input.Name == "pixels");
 
-        // The prior stage's sampler output is split by a single LTXVSeparateAVLatent that feeds both
-        // the upscale decode and the reused audio latent — not a duplicate per branch.
+        // Video and reused audio must share one AV separator per sampler.
         foreach (SwarmKSamplerNode sampler in bridge.Graph.NodesOfType<SwarmKSamplerNode>())
         {
             int separateCount = bridge.Graph.NodesOfType<LTXVSeparateAVLatentNode>()
@@ -1252,10 +1251,7 @@ public partial class StageFlowTests
             BuildCoreVideoWorkflowSteps().Append(SeedAceStepFunAudioTrackStep(0)));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // A chained stage inherits its length from the prior stage and reuses that stage's audio
-        // latent directly (see the core refiner reference workflow). It must NOT re-derive clip
-        // length by decoding a separated audio latent: that decode is the captured post-video-chain
-        // node which FinalizeOutput later retargets to this stage's own output — a graph cycle.
+        // Reusing the retargeted post-chain audio decode for length would create a graph cycle.
         Assert.DoesNotContain(
             bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>(),
             node => node.AudioInput.Connection!.Node is LTXVAudioVAEDecodeNode);
@@ -1293,10 +1289,7 @@ public partial class StageFlowTests
             BuildNativeStepsWithTrimWrapper(attachAudioToCurrentMedia: true).Append(SeedAceStepFunAudioTrackStep(0)));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // The pixel-space upscale decodes the prior stage's output and re-encodes it into this stage's
-        // input. Both the video decode and the audio length-to-frames decode must use detached copies:
-        // FinalizeOutput retargets the captured post-video-chain decodes to this stage's own output, so
-        // reusing them would make the stage input reachable from the stage output — a graph cycle.
+        // Retargeted post-chain decodes must not feed the pixel-upscale stage input.
         foreach (ComfyNode node in bridge.Graph.NodesOfType<SwarmKSamplerNode>())
         {
             Assert.False(
@@ -1442,10 +1435,7 @@ public partial class StageFlowTests
         Assert.Empty(bridge.Graph.NodesOfType<LTXVAddGuideNode>());
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
 
-        // Replacing the core stage deletes the native chain the base/refiner/generated refs were
-        // captured from. Those captures must read as absent, not as dangling node references —
-        // they used to survive because the helper-cache invalidation could not decode the
-        // pipe-delimited marker encoding StageRefStore writes.
+        // References captured from the removed native chain must read as absent.
         StageRefStore store = new(generator);
         Assert.Null(store.Generated);
         Assert.Null(store.Base);
@@ -1458,11 +1448,7 @@ public partial class StageFlowTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        // The native text-to-video chain is the pre-core media at 512x512; configuring different
-        // root dimensions (via the JSON) forces the root-stage resizer. It previously inserted an
-        // ImageScale node that detached CurrentMedia from the core decode output, so
-        // RetargetExistingAnimationSaves could not find the core save node and the whole core path
-        // survived next to a second VideoStages save.
+        // Different root dimensions previously detached CurrentMedia and left a duplicate save path.
         string stagesJson = MakeRootConfig(
             384,
             512,
@@ -1476,8 +1462,6 @@ public partial class StageFlowTests
             BuildNativeTextToVideoStepsWithPreCoreVideo(attachAudioToCurrentMedia: true));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // The replacement stage must take over the single existing save node rather than the
-        // core path surviving alongside a second VideoStages save.
         Assert.Single(SamplerNodesOrdered(bridge));
         SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.False(workflow.ContainsKey("200"));
@@ -1516,8 +1500,7 @@ public partial class StageFlowTests
             BuildNativeTextToVideoStepsWithPreCoreVideo(attachAudioToCurrentMedia: true));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // duration 10s * 24fps -> 240, aligned to 8 + 1 = 241. The discarded core video's 25 frames
-        // must not override the clip's configured length for the replacement root stage.
+        // 10 seconds at 24 fps, aligned to 8n+1, yields 241 frames.
         EmptyLTXVLatentVideoNode emptyLatentNode = Assert.Single(bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>());
         Assert.Equal(241, emptyLatentNode.Length.LiteralAsInt());
         LTXVEmptyLatentAudioNode emptyAudioNode = Assert.Single(bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());

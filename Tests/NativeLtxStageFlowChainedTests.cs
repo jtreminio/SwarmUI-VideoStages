@@ -111,11 +111,8 @@ public partial class StageFlowTests
         Assert.Equal("bislerp", upscale.UpscaleMethod.LiteralAsString());
         Assert.Equal(2.0, upscale.ScaleBy.LiteralAsDouble());
 
-        // The latent method upscales in latent space, so it must not introduce the model-upscaler scaffolding.
         Assert.Empty(bridge.Graph.NodesOfType<LTXVLatentUpsamplerNode>());
 
-        // The prior stage's AV latent must be split by a single LTXVSeparateAVLatent feeding both the
-        // upscaled video branch and the reused audio latent — never two separates each using one output.
         AssertNoAvLatentSplitTwice(bridge);
     }
 
@@ -145,9 +142,7 @@ public partial class StageFlowTests
         AssertNoAvLatentSplitTwice(bridge);
     }
 
-    // A LATENT_AUDIOVIDEO tensor (e.g. a sampler output) split by more than one LTXVSeparateAVLatent is
-    // the duplicate-separate bug: one node's video and another node's audio are used, each leaving its
-    // other output dangling. Reusing a single separate (or reading a concat's pre-join tensors) avoids it.
+    // Each AV latent must be split once so its video and audio outputs share the same separator.
     private static void AssertNoAvLatentSplitTwice(WorkflowBridge bridge)
     {
         IEnumerable<IGrouping<string, LTXVSeparateAVLatentNode>> grouped = bridge.Graph
@@ -197,7 +192,9 @@ public partial class StageFlowTests
         Assert.Equal(2, samplerNodes.Count);
         Assert.True(ReachesUpstream(bridge, samplerNodes[1].LatentImage.Connection!.Node, samplerNodes[0].Id));
 
-        WorkflowNode finalVideoDecode = AsWorkflowNode(RequireTypedNode<VAEDecodeNode>(bridge, "202"), workflow);
+        WorkflowNode finalVideoDecode = AsWorkflowNode(
+            RequireTypedNode<VAEDecodeTiledNode>(bridge, "202"),
+            workflow);
         RequireRetargetedSeparateNode(workflow, finalVideoDecode);
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
@@ -242,7 +239,7 @@ public partial class StageFlowTests
 
         SwarmSaveAnimationWSNode saveNode = Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.Equal("9", saveNode.Id);
-        INodeOutput finalDecodeOutput = bridge.Graph.GetNode<VAEDecodeNode>("202")!.IMAGE;
+        INodeOutput finalDecodeOutput = bridge.Graph.GetNode<VAEDecodeTiledNode>("202")!.IMAGE;
         Assert.Same(finalDecodeOutput, saveNode.Images.Connection);
 
         IReadOnlyList<LTXVSeparateAVLatentNode> separateNodes = bridge.Graph.NodesOfType<LTXVSeparateAVLatentNode>();
@@ -250,7 +247,8 @@ public partial class StageFlowTests
         WorkflowNode originalSeparate = RequireOriginalNativeLtxSeparate(workflow);
         AssertStageLtxConcatsUseProgressiveAudio(workflow, originalSeparate);
 
-        VAEDecodeNode finalVideoDecode = RequireTypedNode<VAEDecodeNode>(bridge, "202");
+        VAEDecodeTiledNode finalVideoDecode =
+            RequireTypedNode<VAEDecodeTiledNode>(bridge, "202");
         WorkflowNode finalSeparate = RequireRetargetedSeparateNode(workflow, AsWorkflowNode(finalVideoDecode, workflow));
 
         LTXVAudioVAEDecodeNode finalAudioDecode = RequireTypedNode<LTXVAudioVAEDecodeNode>(bridge, "203");

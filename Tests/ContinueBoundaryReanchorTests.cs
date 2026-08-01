@@ -13,14 +13,13 @@ namespace VideoStages.Tests;
 
 /// <summary>
 /// A continue boundary freezes the previous clip's tail as the next clip's opening latent context.
-/// Every stage of that clip which regenerates the head has to re-apply it — at that stage's own
-/// resolution — or the seam is left to whatever the opening stage happened to be scaled to.
+/// Each stage that regenerates the clip head reapplies the tail at that stage's resolution.
 /// </summary>
 public partial class StageFlowTests
 {
     private const int ReanchorTailIndex = ContinueClipFrames - ContinueWindowFrames;
 
-    /// <summary>A 0.6s clip: 17 spec frames, which funds the default 9-frame continue window.</summary>
+    /// <summary>Creates a 0.6-second clip with 17 aligned frames.</summary>
     private static JObject ReanchorClip(params JObject[] stages)
     {
         JObject clip = MakeClip(stages);
@@ -49,8 +48,7 @@ public partial class StageFlowTests
             BuildNativeSteps(attachAudioToCurrentMedia: true));
 
     /// <summary>
-    /// The one continuity tail slice: the previous clip's last window frames. The merge's own tail
-    /// slice shares its index and length, and is told apart by feeding the blend rather than a guide.
+    /// Finds the continuity tail slice sourced from the previous clip output.
     /// </summary>
     private static ImageFromBatchNode ContinuityTailSlice(WorkflowBridge bridge, string sourceNodeId) =>
         Assert.Single(
@@ -62,8 +60,7 @@ public partial class StageFlowTests
                     consumer => consumer.Node is ImageScaleNode or LTXVPreprocessNode));
 
     /// <summary>
-    /// The image scales applied between the continuity tail and one inplace merge, or null when that
-    /// merge is not fed by the tail at all. Ordered from the merge back towards the tail.
+    /// Returns image scales from an in-place merge back to the continuity tail, or null if unconnected.
     /// </summary>
     private static List<(int Width, int Height)> TailGuideScales(
         LTXVImgToVideoInplaceNode inplace,
@@ -96,20 +93,20 @@ public partial class StageFlowTests
             .Where(node => TailGuideScales(node, tailNodeId) is not null)
             .OrderBy(node => int.Parse(node.Id))];
 
-    /// <summary>The last clip's rendered output, which the tail slice is cut from.</summary>
+    /// <summary>Finds the sampler decode that feeds a frame slice.</summary>
     private static string ClipOutputDecodeId(WorkflowBridge bridge, SwarmKSamplerNode sampler)
     {
         LTXVSeparateAVLatentNode separate = Assert.Single(
             bridge.Graph.NodesOfType<LTXVSeparateAVLatentNode>(),
             node => node.AvLatent.Connection?.Node.Id == sampler.Id);
         return Assert.Single(
-            bridge.Graph.NodesOfType<VAEDecodeNode>(),
+            bridge.Graph.NodesOfType<VAEDecodeTiledNode>(),
             node => node.Samples.Connection?.Node.Id == separate.Id
                 && bridge.Graph.FindInputsConnectedTo(node.IMAGE).Any(
                     consumer => consumer.Node is ImageFromBatchNode)).Id;
     }
 
-    /// <summary>Merge geometry: every frame slice the timeline assembly blends or concatenates.</summary>
+    /// <summary>Returns ordered geometry for slices consumed by timeline merges.</summary>
     private static List<(int Index, int Length)> MergeSlices(WorkflowBridge bridge) =>
         [.. bridge.Graph.NodesOfType<ImageFromBatchNode>()
             .Where(node => bridge.Graph.FindInputsConnectedTo(node.IMAGE).Any(
@@ -140,16 +137,13 @@ public partial class StageFlowTests
         Assert.Equal(4, samplers.Count);
         ImageFromBatchNode tail = ContinuityTailSlice(bridge, ClipOutputDecodeId(bridge, samplers[1]));
 
-        // Both of clip 1's stages regenerate the head, so both freeze the tail over it.
         List<LTXVImgToVideoInplaceNode> anchors = TailAnchors(bridge, tail.Id);
         Assert.Equal(2, anchors.Count);
         Assert.All(anchors, anchor => Assert.Equal(1.0, anchor.Strength.LiteralAsDouble()));
 
-        // The opening stage runs at 512, so its anchor is the tail scaled down to 512.
         Assert.Equal([(512, 512)], TailGuideScales(anchors[0], tail.Id));
 
-        // The upscaled stage runs at 1024 — the tail's own resolution — so its anchor is conformed
-        // straight from clip 0's native frames. No 512 hop, which is the whole point.
+        // The 1024 stage conforms directly from clip 0 without a 512 intermediate.
         List<(int Width, int Height)> finalScales = TailGuideScales(anchors[1], tail.Id);
         Assert.All(finalScales, scale => Assert.Equal((1024, 1024), scale));
         Assert.True(
@@ -182,12 +176,6 @@ public partial class StageFlowTests
         AssertWorkflowHasNoCycles(workflow);
     }
 
-    /// <summary>
-    /// The gate itself: the one predicate that decides whether a stage re-applies the boundary tail.
-    /// A retake stage is skipped whatever its window covers — its per-frame noise mask owns what
-    /// regenerates, and an inplace merge would clobber it — so a window that excludes the head, which
-    /// is the case where re-anchoring would actively contradict the author, never anchors.
-    /// </summary>
     [Fact]
     public void Only_stages_that_regenerate_the_head_reanchor_the_boundary_tail()
     {
@@ -225,7 +213,6 @@ public partial class StageFlowTests
         Assert.False(context.ReanchorsContinuityTail(stages[3]));
         Assert.True(context.ReanchorsContinuityTail(stages[4]));
 
-        // Without a boundary tail nothing anchors, at any stage.
         context.ContinuityFrame = null;
         Assert.All(stages, stage => Assert.False(context.ReanchorsContinuityTail(stage)));
     }
@@ -258,7 +245,6 @@ public partial class StageFlowTests
         string reanchoredClipZero =
             ClipOutputDecodeId(reanchoredBridge, SamplerNodesOrdered(reanchoredBridge)[0]);
 
-        // The extra stage re-anchors (one more tail-fed merge) and the merge geometry is unchanged.
         Assert.Single(TailAnchors(singleBridge, ContinuityTailSlice(singleBridge, singleClipZero).Id));
         Assert.Equal(
             2,
@@ -315,7 +301,6 @@ public partial class StageFlowTests
         (JObject workflow, WorkflowGenerator _) = RunTimeline(models, firstClip, secondClip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // A crossfade blends at merge time and freezes nothing during generation.
         string clipZeroDecode = ClipOutputDecodeId(bridge, SamplerNodesOrdered(bridge)[0]);
         Assert.All(
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>(),

@@ -14,10 +14,6 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// Regressions for defects that existed because two modules independently decided the same thing.
-/// Each test names the decision and the single owner it now belongs to.
-/// </summary>
 [Collection("VideoStagesTests")]
 public class DecisionOwnerRegressionTests
 {
@@ -31,29 +27,43 @@ public class DecisionOwnerRegressionTests
         Workflow = workflow ?? [],
     };
 
-    // ---- 4a: one owner for VAE decode tiling geometry -------------------------------------
-
-    [Fact]
-    public void Vae_decode_tiling_uses_one_owner_for_both_splice_and_adhoc_paths()
+    [Theory]
+    [InlineData(true, false, 512, 32)]
+    [InlineData(false, true, 256, 48)]
+    public void Explicit_vae_decode_tiling_uses_one_owner_for_splice_and_adhoc_paths(
+        bool setSpatialTile,
+        bool setTemporalTile,
+        int expectedTileSize,
+        int expectedTemporalSize)
     {
         WorkflowGenerator generator = Generator();
-        generator.UserInput.Set(T2IParamTypes.VAETileSize, 512);
+        if (setSpatialTile)
+        {
+            generator.UserInput.Set(T2IParamTypes.VAETileSize, 512);
+        }
+        if (setTemporalTile)
+        {
+            generator.UserInput.Set(T2IParamTypes.VAETemporalTileSize, 48);
+        }
 
-        // Only VAETileSize is set - the common case. The post-chain rebuilder used to fall back to
-        // TemporalSize 4096 ("no temporal tiling") while VaeDecodePreference used 32, so a stage's
-        // decode geometry depended purely on which builder produced it.
         LtxDecodeConfig config = LtxDecodeConfig.From(generator);
 
         Assert.True(config.UseTiledDecode);
-        Assert.Equal(512, config.TileSize);
-        Assert.Equal(LtxDecodeDefaults.TemporalSize, config.TemporalSize);
-        Assert.Equal(32, config.TemporalSize);
+        Assert.Equal(expectedTileSize, config.TileSize);
+        Assert.Equal(expectedTemporalSize, config.TemporalSize);
         Assert.Equal(64, config.Overlap);
         Assert.Equal(4, config.TemporalOverlap);
 
         JObject workflow = [];
         WorkflowGenerator decodeGenerator = Generator(workflow);
-        decodeGenerator.UserInput.Set(T2IParamTypes.VAETileSize, 512);
+        if (setSpatialTile)
+        {
+            decodeGenerator.UserInput.Set(T2IParamTypes.VAETileSize, 512);
+        }
+        if (setTemporalTile)
+        {
+            decodeGenerator.UserInput.Set(T2IParamTypes.VAETemporalTileSize, 48);
+        }
         string vaeId;
         string latentId;
         using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
@@ -80,7 +90,47 @@ public class DecisionOwnerRegressionTests
         Assert.Equal(latentId, tiled.Samples.Connection?.Node.Id);
     }
 
-    // ---- 4c: one owner for the node-helper cache -------------------------------------------
+    [Fact]
+    public void Ltx2_default_decode_uses_core_tiling_geometry()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        WorkflowGenerator generator = Generator();
+        generator.FinalLoadedModel = models.VideoModel;
+
+        LtxDecodeConfig config = LtxDecodeConfig.From(generator);
+
+        Assert.True(config.UseTiledDecode);
+        Assert.Equal(2048, config.TileSize);
+        Assert.Equal(256, config.Overlap);
+        Assert.Equal(64, config.TemporalSize);
+        Assert.Equal(16, config.TemporalOverlap);
+
+        JObject workflow = [];
+        generator.Workflow = workflow;
+        string vaeId;
+        string latentId;
+        using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
+        {
+            vaeId = bridge.AddStub("UnitTest_Vae", "900")
+                .WithOutputs(WGNodeData.DT_VAE).Id;
+            latentId = bridge.AddStub("UnitTest_Latent", "901")
+                .WithOutputs(WGNodeData.DT_LATENT_VIDEO).Id;
+        }
+        WGNodeData vae = new(new JArray(vaeId, 0), generator, WGNodeData.DT_VAE, null);
+        WGNodeData latent = new(
+            new JArray(latentId, 0), generator, WGNodeData.DT_LATENT_VIDEO, null);
+
+        _ = VaeDecodePreference.AsRawImage(generator, latent, vae);
+
+        using WorkflowBridge decoded = WorkflowBridge.Create(generator.Workflow);
+        VAEDecodeTiledNode tiled = Assert.Single(
+            decoded.Graph.NodesOfType<VAEDecodeTiledNode>());
+        Assert.Equal(2048, tiled.TileSize.LiteralAsInt());
+        Assert.Equal(256, tiled.Overlap.LiteralAsInt());
+        Assert.Equal(64, tiled.TemporalSize.LiteralAsInt());
+        Assert.Equal(16, tiled.TemporalOverlap.LiteralAsInt());
+    }
 
     [Fact]
     public void Node_helper_invalidation_understands_every_supported_reference_encoding()
@@ -182,16 +232,13 @@ public class DecisionOwnerRegressionTests
             VideoGraphHelpers.RemoveNode(generator, bridge, nodeId);
         }
 
-        // The self-check the five other readers already had: a dangling capture must not be handed
-        // out as a live node reference.
+        // Removed captures must not resolve as live node references.
         Assert.False(
             ControlNetCoreMediaCapture.TryGetCapturedControlImage(
                 generator, 0, out WGNodeData image));
         Assert.Null(image);
         Assert.False(generator.NodeHelpers.ContainsKey(ControlNetCaptureKeys.Image(0)));
     }
-
-    // ---- 4d: init-video-only timelines participate in the ControlNet capture phase ------------
 
     [Fact]
     public void InitVideo_only_timeline_runs_the_controlnet_capture_host_phase()
@@ -207,8 +254,6 @@ public class DecisionOwnerRegressionTests
 
         host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors);
 
-        // Common orchestration owns capture, so source-only execution gets its audio facts without
-        // pretending that the None adapter has architecture-specific host work.
         Assert.False(generator.NodeHelpers.ContainsKey(ControlNetCaptureKeys.Image(0)));
         Assert.False(generator.NodeHelpers.ContainsKey(ControlNetCaptureKeys.Audio(0)));
     }
@@ -320,8 +365,7 @@ public class DecisionOwnerRegressionTests
         WorkflowGenerator generator = GeneratorWithVideoControlNet();
         VideoArchitectureDescriptor foreign = ForeignArchitecture();
         VideoArchitectureDescriptor ltx = Ltx2ArchitectureModule.Instance.Descriptor;
-        // Host phases run in clip order, so LTX runs first only as a initVideoClip clip: the root belongs
-        // to the foreign generated clip either way.
+        // When LTX runs first, it is an init-video clip; the generated foreign clip owns the root.
         ClipPlan[] clips = ltxRunsFirst
             ? [InitVideoClip(0, ltx), GeneratedClip(1, foreign)]
             : [GeneratedClip(0, foreign), GeneratedClip(1, ltx)];
@@ -352,17 +396,12 @@ public class DecisionOwnerRegressionTests
         ControlNetApplyAdvancedNode apply =
             bridge.Graph.GetNode<ControlNetApplyAdvancedNode>("308");
 
-        // Both adapters read the same immutable capture, whichever ran first.
         Assert.True(JToken.DeepEquals(raw.Path, new JArray(hostResize.Id, 0)));
         Assert.Equal(hostResize.Id, ltxResize.Input.Connection?.Node.Id);
-        // LTX still caches its own normalized branch while inactive on the root.
         Assert.True(JToken.DeepEquals(normalized.Path, new JArray(ltxResize.Id, 0)));
-        // The root it does not own keeps the foreign adapter's branch and no LTX frame wrapper.
         Assert.Equal("400", apply.Image.Connection?.Node.Id);
         Assert.Empty(bridge.Graph.NodesOfType<ImageFromBatchNode>());
     }
-
-    // ---- 4f: one clip-audio bed duration rule ----------------------------------------------
 
     [Fact]
     public void Clip_audio_bed_duration_prefers_plan_fps_over_installed_media_fps()
@@ -382,8 +421,6 @@ public class DecisionOwnerRegressionTests
         };
         ClipPlan clip = new(0, 48, ClipInputKind.InitVideo, true, null, [], Audio: null);
 
-        // The initVideoClip path used to read media fps only, so a resampled initVideoClip clip placed its
-        // segments against a different bed than the same clip with stages.
         Assert.Equal(2.0, ClipAudioBedDuration.Seconds(clip, 24, media));
         Assert.Equal(1.6, ClipAudioBedDuration.Seconds(clip, 0, media), 6);
         Assert.Equal(0, ClipAudioBedDuration.Seconds(clip, 0, null));
@@ -547,8 +584,8 @@ public class DecisionOwnerRegressionTests
         Architecture = architecture,
     };
 
-    /// <summary>Root media plus a stage: the shape <see cref="ArchitectureRootOwnerResolver"/>
-    /// accepts as a host-root owner.</summary>
+    /// <summary>Creates the host-root owner shape recognized by
+    /// <see cref="ArchitectureRootOwnerResolver"/>.</summary>
     private static ClipPlan GeneratedClip(
         int id,
         VideoArchitectureDescriptor architecture) => new(
@@ -589,8 +626,7 @@ public class DecisionOwnerRegressionTests
     }
 
     /// <summary>
-    /// Stands in for a future architecture that owns the host root and normalizes the shared
-    /// ControlNet apply input its own way.
+    /// A foreign architecture that owns the host root and supplies its own ControlNet branch.
     /// </summary>
     private sealed class ForeignRootAdapter(
         WorkflowGenerator generator,
