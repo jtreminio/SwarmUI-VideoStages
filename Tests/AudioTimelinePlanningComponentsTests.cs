@@ -48,8 +48,8 @@ public class AudioTimelinePlanningComponentsTests
 
         AudioTimelinePlan result = AudioTimelinePlanCompiler.Compile(video);
 
-        Assert.Equal(40d / Fps, result.ClipWindows[0].DurationSeconds!.Value, 8);
-        Assert.Equal(40d / Fps, result.ClipWindows[1].TimelineStartSeconds!.Value, 8);
+        Assert.Equal(48d / Fps, result.ClipWindows[0].DurationSeconds!.Value, 8);
+        Assert.Equal(48d / Fps, result.ClipWindows[1].TimelineStartSeconds!.Value, 8);
         Assert.Empty(result.Diagnostics);
     }
 

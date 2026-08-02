@@ -4285,10 +4285,13 @@ describe("createTimelineDetailStrip", () => {
             expect(impact?.textContent).toContain("Clip 073f · 3.0s");
             expect(impact?.textContent).toContain("Clip 1+73f · +3.0s");
             expect(impact?.textContent).toContain(
+                "Incoming Continue handle+24f · +1.0s",
+            );
+            expect(impact?.textContent).toContain(
                 "Continue shared−25f · −1.0s",
             );
             expect(impact?.textContent).toContain(
-                "Pair after this join121f · 5.0s",
+                "Pair after this join145f · 6.0s",
             );
             expect(impact?.textContent).toContain(
                 "24f selected + 1 LTX continuation frame",

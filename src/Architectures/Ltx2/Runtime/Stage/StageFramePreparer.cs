@@ -101,7 +101,11 @@ internal sealed class StageFramePreparer(
             VideoModel = videoModel,
             VideoSwapModel = null,
             VideoSwapPercent = 0.5,
-            Frames = ResolveFrames(sourceMedia, sectionId, replacesTextToVideoRoot),
+            Frames = ResolveFrames(
+                clipContext,
+                sourceMedia,
+                sectionId,
+                replacesTextToVideoRoot),
             VideoCFG = payload.Core.CfgScale,
             VideoFPS = clipContext.Plan.FramesPerSecond,
             Width = stageWidth,
@@ -118,10 +122,15 @@ internal sealed class StageFramePreparer(
     }
 
     private int? ResolveFrames(
+        ClipContext clipContext,
         WGNodeData sourceMedia,
         int sectionId,
         bool replacesTextToVideoRoot)
     {
+        if (clipContext.IncomingContinueHandleFrames > 0)
+        {
+            return clipContext.GenerationFrames;
+        }
         if (!replacesTextToVideoRoot && sourceMedia.Frames.HasValue)
         {
             return sourceMedia.Frames;

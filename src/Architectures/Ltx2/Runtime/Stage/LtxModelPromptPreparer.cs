@@ -75,7 +75,21 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
             ?? LtxStageRuntimeSettings.DefaultFrameCount;
         IReadOnlyList<PromptRelaySegmentPlan> segments = promptRelay.Segments;
         PromptRelayMode mode = promptRelay.Mode;
-        if (promptRelay.Mode == PromptRelayMode.RequiresRuntimeLength)
+        int incomingHandleFrames = stageFrame.ClipContext.IncomingContinueHandleFrames;
+        if (incomingHandleFrames > 0)
+        {
+            double handleSeconds = incomingHandleFrames / (double)Math.Max(1, fps);
+            PromptWindowPlan[] shifted = [.. promptRelay.AuthoredWindows.Select(window =>
+                window with
+                {
+                    StartSeconds = window.StartSeconds + handleSeconds,
+                    EndSeconds = window.EndSeconds + handleSeconds,
+                })];
+            double clipSeconds = frameCount / (double)Math.Max(1, fps);
+            segments = PromptRelayPlanCompiler.Tile(shifted, clipSeconds);
+            mode = PromptRelayPlanCompiler.ModeFor(segments);
+        }
+        else if (promptRelay.Mode == PromptRelayMode.RequiresRuntimeLength)
         {
             double clipSeconds = frameCount / (double)Math.Max(1, fps);
             segments = PromptRelayPlanCompiler.Tile(promptRelay.AuthoredWindows, clipSeconds);

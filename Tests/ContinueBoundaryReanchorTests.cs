@@ -149,7 +149,9 @@ public partial class StageFlowTests
         Assert.True(
             ReachesUpstream(bridge, anchors[1], samplers[1].Id),
             "The final stage's anchor must trace back to clip 0's own output.");
-        Assert.Equal(2 * ContinueClipFrames - ContinueWindowFrames, g.CurrentMedia.Frames);
+        Assert.Equal(
+            ContinueClipFrames + ContinueTargetFrames - ContinueWindowFrames,
+            g.CurrentMedia.Frames);
         AssertWorkflowHasNoCycles(workflow);
     }
 
@@ -260,7 +262,9 @@ public partial class StageFlowTests
             Assert.Single(reanchoredBridge.Graph.NodesOfType<SwarmRampMaskBatchNode>())
                 .Frames.LiteralAsInt());
         Assert.Equal(singleG.CurrentMedia.Frames, reanchoredG.CurrentMedia.Frames);
-        Assert.Equal(2 * ContinueClipFrames - ContinueWindowFrames, reanchoredG.CurrentMedia.Frames);
+        Assert.Equal(
+            ContinueClipFrames + ContinueTargetFrames - ContinueWindowFrames,
+            reanchoredG.CurrentMedia.Frames);
     }
 
     [Fact]

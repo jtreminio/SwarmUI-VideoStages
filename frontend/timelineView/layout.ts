@@ -11,6 +11,8 @@ export interface RegionLayout {
     timelineDurationSeconds: number;
     incomingJoinSeconds: number;
     outgoingJoinSeconds: number;
+    incomingHandleSeconds: number;
+    timelineReductionSeconds: number;
     frameCount: number;
     startPx: number;
     widthPx: number;
@@ -95,17 +97,13 @@ export const computeRegionLayout = (
     const pxPerSecond = options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND;
     const timing = options?.timing;
     const useOutputGeometry = timing?.outputGeometryAvailable === true;
-    const overlapAfter = new Map(
-        timing?.boundaries.map((boundary) => [
-            boundary.leftIdx,
-            boundary.overlapSeconds,
-        ]) ?? [],
+    const boundaryAfter = new Map(
+        timing?.boundaries.map((boundary) => [boundary.leftIdx, boundary]) ??
+            [],
     );
-    const overlapBefore = new Map(
-        timing?.boundaries.map((boundary) => [
-            boundary.rightIdx,
-            boundary.overlapSeconds,
-        ]) ?? [],
+    const boundaryBefore = new Map(
+        timing?.boundaries.map((boundary) => [boundary.rightIdx, boundary]) ??
+            [],
     );
     const layouts: RegionLayout[] = [];
     let cursorSeconds = 0;
@@ -114,22 +112,38 @@ export const computeRegionLayout = (
         const clip = clips[index];
         const durationSeconds = Math.max(0, clip.duration || 0);
         const frameCount = timing?.clipFrames[index] ?? 0;
+        const incomingBoundary = boundaryBefore.get(index);
+        const generationFrameCount =
+            frameCount + (incomingBoundary?.handleFrames ?? 0);
         const generatedDurationSeconds =
-            frameCount > 0 ? frameCount / (timing?.fps ?? 1) : durationSeconds;
+            generationFrameCount > 0
+                ? generationFrameCount / (timing?.fps ?? 1)
+                : durationSeconds;
+        const outgoingBoundary = boundaryAfter.get(index);
         const incomingJoinSeconds = useOutputGeometry
-            ? (overlapBefore.get(index) ?? 0)
+            ? (incomingBoundary?.overlapSeconds ?? 0)
             : 0;
         const outgoingJoinSeconds = useOutputGeometry
-            ? (overlapAfter.get(index) ?? 0)
+            ? (outgoingBoundary?.overlapSeconds ?? 0)
+            : 0;
+        const incomingHandleSeconds = useOutputGeometry
+            ? (incomingBoundary?.handleSeconds ?? 0)
             : 0;
         const layoutDurationSeconds = useOutputGeometry
-            ? generatedDurationSeconds
+            ? frameCount / (timing?.fps ?? 1)
             : durationSeconds;
+        const trimBefore =
+            incomingBoundary?.effectiveMode === "crossfade"
+                ? incomingJoinSeconds / 2
+                : 0;
+        const trimAfter =
+            outgoingBoundary?.effectiveMode === "crossfade"
+                ? outgoingJoinSeconds / 2
+                : (outgoingBoundary?.timelineReductionSeconds ?? 0);
+        const timelineReductionSeconds = trimBefore + trimAfter;
         const timelineDurationSeconds = Math.max(
             0,
-            layoutDurationSeconds -
-                incomingJoinSeconds / 2 -
-                outgoingJoinSeconds / 2,
+            layoutDurationSeconds - timelineReductionSeconds,
         );
         const rawWidthPx = timelineDurationSeconds * pxPerSecond;
         const widthPx =
@@ -144,6 +158,8 @@ export const computeRegionLayout = (
             timelineDurationSeconds,
             incomingJoinSeconds,
             outgoingJoinSeconds,
+            incomingHandleSeconds,
+            timelineReductionSeconds,
             frameCount,
             startPx: cursorPx,
             widthPx,

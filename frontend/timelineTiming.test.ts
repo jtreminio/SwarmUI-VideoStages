@@ -24,24 +24,25 @@ describe("resolveTimelineTiming", () => {
         const timing = resolveTimelineTiming(clips, 24, capabilities());
 
         expect(timing.authoredSeconds).toBe(6);
-        expect(timing.generatedFrames).toBe(146);
+        expect(timing.generatedFrames).toBe(170);
         expect(timing.joinFrames).toBe(25);
-        expect(timing.outputFrames).toBe(121);
-        expect(timing.outputSeconds).toBeCloseTo(121 / 24);
+        expect(timing.outputFrames).toBe(145);
+        expect(timing.outputSeconds).toBeCloseTo(145 / 24);
         expect(timing.boundaries[0]).toMatchObject({
             leftIdx: 0,
             rightIdx: 1,
             requestedMode: "continue",
             effectiveMode: "continue",
             overlapFrames: 25,
+            handleFrames: 24,
+            timelineReductionFrames: 1,
         });
         const edges = timelineClipEdges(clips, timing);
-        expect(edges).toHaveLength(5);
+        expect(edges).toHaveLength(4);
         expect(edges[0]).toBeCloseTo(0);
-        expect(edges[1]).toBeCloseTo(2);
-        expect(edges[2]).toBeCloseTo(121 / 48);
-        expect(edges[3]).toBeCloseTo(73 / 24);
-        expect(edges[4]).toBeCloseTo(121 / 24);
+        expect(edges[1]).toBeCloseTo(47 / 24);
+        expect(edges[2]).toBeCloseTo(3);
+        expect(edges[3]).toBeCloseTo(145 / 24);
     });
 
     it("uses the selected 24-frame Crossfade without a continuity extra", () => {
@@ -59,6 +60,38 @@ describe("resolveTimelineTiming", () => {
         expect(timing.generatedFrames).toBe(146);
         expect(timing.joinFrames).toBe(24);
         expect(timing.outputFrames).toBe(122);
+    });
+
+    it("keeps two authored five-second clips at a 241-frame output", () => {
+        const clips = [
+            minimalClip({
+                duration: 5,
+                boundaryOut: "continue",
+                boundaryOutOverlap: 24,
+            }),
+            minimalClip({ duration: 5 }),
+        ];
+
+        const timing = resolveTimelineTiming(clips, 24, capabilities());
+
+        expect(timing.clipFrames).toEqual([121, 121]);
+        expect(timing.generatedFrames).toBe(266);
+        expect(timing.joinFrames).toBe(25);
+        expect(timing.outputFrames).toBe(241);
+    });
+
+    it("falls Continue back to Cut for a runtime-derived target length", () => {
+        const clips = [
+            minimalClip({ duration: 3, boundaryOut: "continue" }),
+            minimalClip({ duration: 3, clipLengthFromAudio: true }),
+        ];
+
+        const timing = resolveTimelineTiming(clips, 24, capabilities());
+
+        expect(timing.boundaries[0].effectiveMode).toBe("cut");
+        expect(timing.boundaries[0].handleFrames).toBe(0);
+        expect(timing.generatedFrames).toBe(146);
+        expect(timing.outputFrames).toBe(146);
     });
 
     it("truncates clips at the first skip marker", () => {

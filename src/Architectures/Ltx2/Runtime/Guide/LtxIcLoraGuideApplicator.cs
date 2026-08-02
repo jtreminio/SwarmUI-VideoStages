@@ -27,13 +27,15 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
         JArray controlImages,
         double strength,
         JToken frameCount,
-        bool stillImageDrive)
+        bool stillImageDrive,
+        int incomingContinueHandleFrames)
     {
         JArray guideImagePath = PrepareGuideFrames(
             bridge,
             controlImages,
             frameCount,
-            stillImageDrive);
+            stillImageDrive,
+            incomingContinueHandleFrames);
         ComfyNode guideNode;
         NodeInput<VaeType> vae;
         NodeInput<LatentType> latentInput;
@@ -93,7 +95,8 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
         WorkflowBridge bridge,
         JArray controlImagePath,
         JToken frames,
-        bool stillImageDrive)
+        bool stillImageDrive,
+        int incomingContinueHandleFrames)
     {
         if (frames is null)
         {
@@ -113,6 +116,22 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
             LtxControlNetMediaNormalizer.PeelSingleFrameWrap(
                 bridge,
                 controlImagePath);
+        if (incomingContinueHandleFrames > 0)
+        {
+            ImageFromBatchNode firstFrame =
+                bridge.AddNode(new ImageFromBatchNode().With(
+                    BatchIndex: 0,
+                    Length: 1));
+            firstFrame.Image.TryConnectFromPath(bridge, guideSource);
+            RepeatImageBatchNode handle = bridge.AddNode(
+                new RepeatImageBatchNode().With(
+                    Amount: incomingContinueHandleFrames));
+            handle.Image.ConnectTo(firstFrame.IMAGE);
+            BatchImagesNodeNode batch = bridge.AddNode(new BatchImagesNodeNode());
+            batch.Images.Add(handle.IMAGE);
+            batch.Images.AddFromUntyped(bridge.ResolvePath(guideSource));
+            guideSource = WorkflowBridge.ToPath(batch.IMAGE);
+        }
         ImageFromBatchNode trim =
             bridge.AddNode(new ImageFromBatchNode().With(BatchIndex: 0));
         trim.Image.TryConnectFromPath(bridge, guideSource);

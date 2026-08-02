@@ -78,29 +78,38 @@ export const timelineClipEdges = (
     timing?: TimelineTiming,
 ): number[] => {
     if (timing) {
-        const overlapAfter = new Map(
-            timing.boundaries.map((boundary) => [
-                boundary.leftIdx,
-                boundary.overlapSeconds,
-            ]),
+        const boundaryAfter = new Map(
+            timing.boundaries.map((boundary) => [boundary.leftIdx, boundary]),
         );
-        const overlapBefore = new Map(
-            timing.boundaries.map((boundary) => [
-                boundary.rightIdx,
-                boundary.overlapSeconds,
-            ]),
+        const boundaryBefore = new Map(
+            timing.boundaries.map((boundary) => [boundary.rightIdx, boundary]),
         );
         const edges: number[] = [0];
         let cursor = 0;
         for (const clipIdx of timing.executableClipIndexes) {
             const duration = (timing.clipFrames[clipIdx] ?? 0) / timing.fps;
-            const incoming = overlapBefore.get(clipIdx) ?? 0;
-            const outgoing = overlapAfter.get(clipIdx) ?? 0;
+            const incoming = boundaryBefore.get(clipIdx);
+            const outgoing = boundaryAfter.get(clipIdx);
+            const trimBefore =
+                incoming?.effectiveMode === "crossfade"
+                    ? incoming.overlapSeconds / 2
+                    : 0;
+            const trimAfter =
+                outgoing?.effectiveMode === "crossfade"
+                    ? outgoing.overlapSeconds / 2
+                    : (outgoing?.timelineReductionSeconds ?? 0);
             const editEnd =
-                cursor + Math.max(0, duration - incoming / 2 - outgoing / 2);
+                cursor + Math.max(0, duration - trimBefore - trimAfter);
             edges.push(cursor, editEnd);
-            if (outgoing > 0) {
-                edges.push(editEnd - outgoing / 2, editEnd + outgoing / 2);
+            if (outgoing && outgoing.overlapSeconds > 0) {
+                edges.push(
+                    outgoing.effectiveMode === "continue"
+                        ? editEnd - outgoing.overlapSeconds
+                        : editEnd - outgoing.overlapSeconds / 2,
+                    outgoing.effectiveMode === "continue"
+                        ? editEnd
+                        : editEnd + outgoing.overlapSeconds / 2,
+                );
             }
             cursor = editEnd;
         }

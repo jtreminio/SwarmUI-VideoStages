@@ -40,11 +40,8 @@ public class BoundaryOverlapPlannerTests
             ]);
 
         Assert.Equal(9, resolution.Boundaries[0].ContinuityWindowFrames);
-        Assert.Equal(BoundaryJoinType.Cut, resolution.Boundaries[1].Effective);
-        Assert.Equal(0, resolution.Boundaries[1].OverlapFrames);
-        Assert.Equal(
-            BoundaryFallbackReason.InsufficientFrameBudget,
-            resolution.Boundaries[1].Fallback);
+        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[1].Effective);
+        Assert.Equal(8, resolution.Boundaries[1].OverlapFrames);
     }
 
     [Fact]

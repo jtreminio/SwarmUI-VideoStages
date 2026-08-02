@@ -45,13 +45,20 @@ internal sealed class LtxStageLatentBuilder
         JArray controlNetLengthFrames =
             latentAudioFactory.TryResolveControlNetLengthFrames(clip);
 
-        if (stageFrame.ReplacesTextToVideoRoot)
+        if (stageFrame.ReplacesTextToVideoRoot
+            || (stageFrame.ClipContext.IncomingContinueHandleFrames > 0
+                && !stageFrame.ClipContext.ContinueHandleMaterialized))
         {
-            return latentAudioFactory.CreateEmpty(
+            WGNodeData empty = latentAudioFactory.CreateEmpty(
                 genInfo,
                 stageFrame,
                 sourceMedia,
                 controlNetLengthFrames);
+            if (stageFrame.ClipContext.IncomingContinueHandleFrames > 0)
+            {
+                stageFrame.ClipContext.ContinueHandleMaterialized = true;
+            }
+            return empty;
         }
 
         if (postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true)

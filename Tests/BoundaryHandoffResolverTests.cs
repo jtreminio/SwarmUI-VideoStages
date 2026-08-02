@@ -127,7 +127,7 @@ public class BoundaryHandoffResolverTests
         Assert.Null(carry);
         Assert.Null(context.ContinuityFrame);
         Assert.False(assembly.TryGetAudioCarryWindow(0, out _));
-        Assert.False(assembly.TryGetContinueWindow(0, out _));
+        Assert.False(assembly.TryGetContinueInput(0, out _, out _));
         string warning = Assert.Single(
             Assert.IsType<List<string>>(g.UserInput.ExtraMeta["parser_warnings"]));
         Assert.Contains("cannot carry audio", warning, StringComparison.Ordinal);

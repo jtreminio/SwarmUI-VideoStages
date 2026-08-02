@@ -28,6 +28,11 @@ internal static class BoundaryPlanCompiler
             ClipPlan plannedTo = plannedClips is not null && i + 1 < plannedClips.Count
                 ? plannedClips[i + 1]
                 : null;
+            bool targetHasGenerationStage = plannedTo?.Stages.Any(stage => !stage.IsPassthrough)
+                ?? to.Stages is { Count: > 0 };
+            bool targetHasDerivedDuration = plannedTo is not null
+                ? plannedTo.Audio.Length.Owner != AudioLengthOwner.Timeline
+                : to.ClipLengthFromControlNet || AudioSourceKindPolicy.AudioOwnsClipDuration(to);
             // Compile the same typed rule advertised by the architecture catalog.
             RuleDecision modePolicy = plannedFrom?.Architecture?.BoundaryPolicy
                 ?.Rules.GetValueOrDefault(effectiveRequested);
@@ -66,6 +71,18 @@ internal static class BoundaryPlanCompiler
                 effective = BoundaryJoinType.Cut;
                 fallback = targetFallback;
             }
+            else if (effectiveRequested == BoundaryJoinType.Continue
+                && !targetHasGenerationStage)
+            {
+                effective = BoundaryJoinType.Cut;
+                fallback = BoundaryFallbackReason.TargetHasNoStage;
+            }
+            else if (effectiveRequested == BoundaryJoinType.Continue
+                && targetHasDerivedDuration)
+            {
+                effective = BoundaryJoinType.Cut;
+                fallback = BoundaryFallbackReason.TargetHasDerivedDuration;
+            }
 
             int overlap = effective == BoundaryJoinType.Cut
                 ? 0
@@ -75,8 +92,6 @@ internal static class BoundaryPlanCompiler
             int continuityWindow = effective == BoundaryJoinType.Continue
                 ? overlap + (constraints?.ContinuityExtraFrames ?? 0)
                 : 0;
-            bool targetHasGenerationStage = plannedTo?.Stages is { Count: > 0 }
-                || (plannedTo is null && to.Stages is { Count: > 0 });
             if (fallback != BoundaryFallbackReason.None && !fallbackReported)
             {
                 diagnostics.Add(new PlanDiagnostic(
@@ -161,6 +176,7 @@ internal static class BoundaryPlanCompiler
         BoundaryFallbackReason.TargetHasInitVideo => "the next clip is init-video footage",
         BoundaryFallbackReason.TargetHasNoStage => "the next clip has no stage that can consume continuity",
         BoundaryFallbackReason.TargetHasFirstFrameReference => "the next clip has an explicit first-frame reference",
+        BoundaryFallbackReason.TargetHasDerivedDuration => "the next clip's duration is derived at runtime",
         BoundaryFallbackReason.InsufficientFrameBudget => "the adjacent clips are too short for the requested overlap",
         BoundaryFallbackReason.ArchitectureRuleUnsupported => "the clip architecture does not support the requested join",
         _ => "the boundary is not applicable",

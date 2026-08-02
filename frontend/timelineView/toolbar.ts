@@ -81,12 +81,22 @@ export const renderTimelineHeader = (
     const selectedHidden = selectedIndex === null ? " hidden" : "";
     const joinFrames = timing?.joinFrames ?? 0;
     const joinSeconds = timing?.joinSeconds ?? 0;
+    const handleSeconds =
+        timing?.boundaries.reduce(
+            (sum, boundary) => sum + boundary.handleSeconds,
+            0,
+        ) ?? 0;
     const joinFrameLabel = `${joinFrames > 0 ? "−" : ""}${joinFrames}f`;
     const joinSecondsLabel = `${joinSeconds > 0 ? "−" : ""}${formatSecondsTenth(joinSeconds)}`;
+    const authoredLabel = formatSecondsTenth(
+        timing?.authoredSeconds ?? totalSeconds,
+    );
     const secondary =
         unit === "frames"
             ? `${timing?.generatedFrames ?? 0}f generated · ${joinFrameLabel} shared`
-            : `${formatSecondsTenth(timing?.authoredSeconds ?? totalSeconds)} authored · ${joinSecondsLabel} joins`;
+            : handleSeconds > 0
+              ? `${authoredLabel} authored · +${formatSecondsTenth(handleSeconds)} handle · ${joinSecondsLabel} shared`
+              : `${authoredLabel} authored · ${joinSecondsLabel} joins`;
     const readout =
         `<span class="vst-readout" data-vst-readout>` +
         `<span class="vst-readout-output" title="Published sequence length">${escapeHtml(totalLabel)} output</span>` +

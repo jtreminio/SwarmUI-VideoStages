@@ -57,6 +57,90 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
+    public void BoundaryPlanCompiler_CutsContinueIntoRuntimeDerivedDuration()
+    {
+        VideoStagesSpec spec = new(640, 360, 24, false,
+        [
+            GeneratedClip(0, Stage(10)) with
+            {
+                BoundaryOut = Constants.BoundaryOutContinue,
+            },
+            GeneratedClip(1, Stage(11)) with
+            {
+                ClipLengthFromControlNet = true,
+            },
+        ]);
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+        BoundaryPlan boundary = Assert.Single(plan.Boundaries);
+
+        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
+        Assert.Equal(BoundaryFallbackReason.TargetHasDerivedDuration, boundary.Fallback);
+        Assert.Contains(plan.Diagnostics, diagnostic =>
+            diagnostic.Code == "boundary-targethasderivedduration");
+    }
+
+    [Fact]
+    public void BoundaryPlanCompiler_CutsContinueIntoAPassthroughOnlyTarget()
+    {
+        VideoStagesSpec spec = new(640, 360, 24, false,
+        [
+            GeneratedClip(0, Stage(10)) with
+            {
+                BoundaryOut = Constants.BoundaryOutContinue,
+            },
+            GeneratedClip(1, Stage(11) with { Control = 0 }),
+        ]);
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+        BoundaryPlan boundary = Assert.Single(plan.Boundaries);
+
+        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
+        Assert.Equal(BoundaryFallbackReason.TargetHasNoStage, boundary.Fallback);
+    }
+
+    [Fact]
+    public void BoundaryPlanCompiler_RawOnlyPathPreservesEligibleContinue()
+    {
+        VideoStagesSpec spec = new(640, 360, 24, false,
+        [
+            GeneratedClip(0, Stage(10)) with
+            {
+                BoundaryOut = Constants.BoundaryOutContinue,
+            },
+            GeneratedClip(1, Stage(11)),
+        ]);
+
+        BoundaryPlan boundary = Assert.Single(
+            BoundaryPlanCompiler.Compile(spec.Clips).Boundaries);
+
+        Assert.Equal(BoundaryJoinType.Continue, boundary.Effective);
+        Assert.Equal(BoundaryFallbackReason.None, boundary.Fallback);
+    }
+
+    [Fact]
+    public void BoundaryPlanCompiler_RawOnlyPathCutsRuntimeDerivedDuration()
+    {
+        VideoStagesSpec spec = new(640, 360, 24, false,
+        [
+            GeneratedClip(0, Stage(10)) with
+            {
+                BoundaryOut = Constants.BoundaryOutContinue,
+            },
+            GeneratedClip(1, Stage(11)) with
+            {
+                ClipLengthFromControlNet = true,
+            },
+        ]);
+
+        BoundaryPlan boundary = Assert.Single(
+            BoundaryPlanCompiler.Compile(spec.Clips).Boundaries);
+
+        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
+        Assert.Equal(BoundaryFallbackReason.TargetHasDerivedDuration, boundary.Fallback);
+    }
+
+    [Fact]
     public void BoundaryPlanCompiler_UsesArchitecturePolicyForRequirementsAndFrameGrid()
     {
         VideoStagesSpec spec = new(640, 360, 24, false,

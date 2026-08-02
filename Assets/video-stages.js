@@ -6630,28 +6630,27 @@
   };
   var timelineClipEdges = (clips, timing) => {
     if (timing) {
-      const overlapAfter = new Map(
-        timing.boundaries.map((boundary) => [
-          boundary.leftIdx,
-          boundary.overlapSeconds
-        ])
+      const boundaryAfter = new Map(
+        timing.boundaries.map((boundary) => [boundary.leftIdx, boundary])
       );
-      const overlapBefore = new Map(
-        timing.boundaries.map((boundary) => [
-          boundary.rightIdx,
-          boundary.overlapSeconds
-        ])
+      const boundaryBefore = new Map(
+        timing.boundaries.map((boundary) => [boundary.rightIdx, boundary])
       );
       const edges2 = [0];
       let cursor2 = 0;
       for (const clipIdx of timing.executableClipIndexes) {
         const duration = (timing.clipFrames[clipIdx] ?? 0) / timing.fps;
-        const incoming = overlapBefore.get(clipIdx) ?? 0;
-        const outgoing = overlapAfter.get(clipIdx) ?? 0;
-        const editEnd = cursor2 + Math.max(0, duration - incoming / 2 - outgoing / 2);
+        const incoming = boundaryBefore.get(clipIdx);
+        const outgoing = boundaryAfter.get(clipIdx);
+        const trimBefore = incoming?.effectiveMode === "crossfade" ? incoming.overlapSeconds / 2 : 0;
+        const trimAfter = outgoing?.effectiveMode === "crossfade" ? outgoing.overlapSeconds / 2 : outgoing?.timelineReductionSeconds ?? 0;
+        const editEnd = cursor2 + Math.max(0, duration - trimBefore - trimAfter);
         edges2.push(cursor2, editEnd);
-        if (outgoing > 0) {
-          edges2.push(editEnd - outgoing / 2, editEnd + outgoing / 2);
+        if (outgoing && outgoing.overlapSeconds > 0) {
+          edges2.push(
+            outgoing.effectiveMode === "continue" ? editEnd - outgoing.overlapSeconds : editEnd - outgoing.overlapSeconds / 2,
+            outgoing.effectiveMode === "continue" ? editEnd : editEnd + outgoing.overlapSeconds / 2
+          );
         }
         cursor2 = editEnd;
       }
@@ -6712,7 +6711,8 @@
       for (let i = 0; i < count; i++) {
         const left = i > 0 ? trim(i - 1) : 0;
         const right = i < boundaryCount ? trim(i) : 0;
-        if (left + right > frames[i] - 1) {
+        const incomingHandle = i > 0 && modes[i - 1] === "continue" ? prefs[i - 1] : 0;
+        if (left + right > frames[i] + incomingHandle - 1) {
           overBudgetClip = i;
           break;
         }
@@ -6864,7 +6864,11 @@
     const compacted = indexes.map((clipIdx, position) => {
       const clip = clips[clipIdx];
       const requested = clip.boundaryOut ?? "cut";
-      const effective = position < indexes.length - 1 ? capabilities?.forBoundaryIndex(clips, clipIdx).effective(requested) ?? requested : "cut";
+      let effective = position < indexes.length - 1 ? capabilities?.forBoundaryIndex(clips, clipIdx).effective(requested) ?? requested : "cut";
+      const target = clips[indexes[position + 1]];
+      if (effective === "continue" && (target?.clipLengthFromAudio === true || target?.clipLengthFromControlNet === true)) {
+        effective = "cut";
+      }
       return { ...clip, boundaryOut: effective };
     });
     const plan = capabilities ? crossfadePlanForClips(
@@ -6876,14 +6880,25 @@
     const seams = executableBoundaries(clips);
     const boundaries = seams.map((seam) => {
       const requestedMode = clips[seam.leftIdx].boundaryOut ?? "cut";
-      const policyEffective = capabilities?.forBoundaryIndex(clips, seam.leftIdx).effective(requestedMode) ?? requestedMode;
+      const policyEffective = compacted[seam.position].boundaryOut ?? "cut";
       const overlapFrames = Math.max(0, plan.overlaps[seam.position] ?? 0);
+      const effectiveMode = overlapFrames > 0 ? policyEffective : "cut";
+      const continuityExtraFrames = effectiveMode === "continue" ? capabilities?.forBoundaryIndex(clips, seam.leftIdx).overlapConstraints(effectiveMode).continuityExtraFrames ?? 1 : 0;
+      const handleFrames = effectiveMode === "continue" ? Math.max(0, overlapFrames - continuityExtraFrames) : 0;
+      const timelineReductionFrames = Math.max(
+        0,
+        overlapFrames - handleFrames
+      );
       return {
         ...seam,
         requestedMode,
-        effectiveMode: overlapFrames > 0 ? policyEffective : "cut",
+        effectiveMode,
         overlapFrames,
-        overlapSeconds: overlapFrames / fps
+        overlapSeconds: overlapFrames / fps,
+        handleFrames,
+        handleSeconds: handleFrames / fps,
+        timelineReductionFrames,
+        timelineReductionSeconds: timelineReductionFrames / fps
       };
     });
     const clipFrames = clips.map(
@@ -6893,10 +6908,7 @@
         capabilities?.forClip(clip).frameGrid ?? 1
       ) : 0
     );
-    const generatedFrames = indexes.reduce(
-      (sum, clipIdx) => sum + clipFrames[clipIdx],
-      0
-    );
+    const generatedFrames = indexes.reduce((sum, clipIdx) => sum + clipFrames[clipIdx], 0) + boundaries.reduce((sum, boundary) => sum + boundary.handleFrames, 0);
     const joinFrames = boundaries.reduce(
       (sum, boundary) => sum + boundary.overlapFrames,
       0
@@ -6994,17 +7006,11 @@
     const pxPerSecond = options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND;
     const timing = options?.timing;
     const useOutputGeometry = timing?.outputGeometryAvailable === true;
-    const overlapAfter = new Map(
-      timing?.boundaries.map((boundary) => [
-        boundary.leftIdx,
-        boundary.overlapSeconds
-      ]) ?? []
+    const boundaryAfter = new Map(
+      timing?.boundaries.map((boundary) => [boundary.leftIdx, boundary]) ?? []
     );
-    const overlapBefore = new Map(
-      timing?.boundaries.map((boundary) => [
-        boundary.rightIdx,
-        boundary.overlapSeconds
-      ]) ?? []
+    const boundaryBefore = new Map(
+      timing?.boundaries.map((boundary) => [boundary.rightIdx, boundary]) ?? []
     );
     const layouts = [];
     let cursorSeconds = 0;
@@ -7013,13 +7019,20 @@
       const clip = clips[index];
       const durationSeconds = Math.max(0, clip.duration || 0);
       const frameCount = timing?.clipFrames[index] ?? 0;
-      const generatedDurationSeconds = frameCount > 0 ? frameCount / (timing?.fps ?? 1) : durationSeconds;
-      const incomingJoinSeconds = useOutputGeometry ? overlapBefore.get(index) ?? 0 : 0;
-      const outgoingJoinSeconds = useOutputGeometry ? overlapAfter.get(index) ?? 0 : 0;
-      const layoutDurationSeconds = useOutputGeometry ? generatedDurationSeconds : durationSeconds;
+      const incomingBoundary = boundaryBefore.get(index);
+      const generationFrameCount = frameCount + (incomingBoundary?.handleFrames ?? 0);
+      const generatedDurationSeconds = generationFrameCount > 0 ? generationFrameCount / (timing?.fps ?? 1) : durationSeconds;
+      const outgoingBoundary = boundaryAfter.get(index);
+      const incomingJoinSeconds = useOutputGeometry ? incomingBoundary?.overlapSeconds ?? 0 : 0;
+      const outgoingJoinSeconds = useOutputGeometry ? outgoingBoundary?.overlapSeconds ?? 0 : 0;
+      const incomingHandleSeconds = useOutputGeometry ? incomingBoundary?.handleSeconds ?? 0 : 0;
+      const layoutDurationSeconds = useOutputGeometry ? frameCount / (timing?.fps ?? 1) : durationSeconds;
+      const trimBefore = incomingBoundary?.effectiveMode === "crossfade" ? incomingJoinSeconds / 2 : 0;
+      const trimAfter = outgoingBoundary?.effectiveMode === "crossfade" ? outgoingJoinSeconds / 2 : outgoingBoundary?.timelineReductionSeconds ?? 0;
+      const timelineReductionSeconds = trimBefore + trimAfter;
       const timelineDurationSeconds = Math.max(
         0,
-        layoutDurationSeconds - incomingJoinSeconds / 2 - outgoingJoinSeconds / 2
+        layoutDurationSeconds - timelineReductionSeconds
       );
       const rawWidthPx = timelineDurationSeconds * pxPerSecond;
       const widthPx = incomingJoinSeconds > 0 || outgoingJoinSeconds > 0 ? Math.max(1, rawWidthPx) : Math.max(DEFAULT_MIN_WIDTH_PX, rawWidthPx);
@@ -7031,6 +7044,8 @@
         timelineDurationSeconds,
         incomingJoinSeconds,
         outgoingJoinSeconds,
+        incomingHandleSeconds,
+        timelineReductionSeconds,
         frameCount,
         startPx: cursorPx,
         widthPx,
@@ -9721,7 +9736,7 @@
       return "";
     }
     const width = boundary.overlapSeconds * pxPerSecond;
-    const left = right.startPx - width / 2;
+    const left = boundary.effectiveMode === "continue" ? right.startPx - width : right.startPx - width / 2;
     return `<div class="vst-boundary-overlap vst-boundary-overlap-${boundary.effectiveMode}" style="left:${left}px;width:${width}px" aria-hidden="true"></div>`;
   }).join("");
   var renderRegions = (clips, layouts, fps, unit, capabilities) => layouts.map((layout) => {
@@ -9729,15 +9744,12 @@
     const skippedClass = layout.skipped ? " vst-region-skipped" : "";
     const tinyClass = layout.widthPx <= 12 ? " vst-region-tiny" : "";
     const skippedChip = layout.skipped ? `<span class="vst-chip vst-chip-skip">skipped</span>` : "";
+    const authoredDurationSeconds = layout.frameCount > 0 ? layout.frameCount / fps : layout.durationSeconds;
     const duration = escapeAttr(
-      unit === "frames" && layout.frameCount > 0 ? `${layout.frameCount}f` : formatTimeLabel(
-        layout.generatedDurationSeconds,
-        unit,
-        fps
-      )
+      unit === "frames" && layout.frameCount > 0 ? `${layout.frameCount}f` : formatTimeLabel(authoredDurationSeconds, unit, fps)
     );
-    const sharedAllocation = (layout.incomingJoinSeconds + layout.outgoingJoinSeconds) / 2;
-    const timingTitle = sharedAllocation > 0 ? ` · ${formatSecondsTenth(layout.generatedDurationSeconds)} generated · ${formatSecondsTenth(layout.timelineDurationSeconds)} unique · ${formatSecondsTenth(sharedAllocation)} shared` : ` · ${duration}`;
+    const sharedAllocation = layout.timelineReductionSeconds;
+    const timingTitle = layout.incomingHandleSeconds > 0 ? ` · ${formatSecondsTenth(layout.generatedDurationSeconds)} generated · ${formatSecondsTenth(layout.timelineDurationSeconds)} timeline · ${formatSecondsTenth(layout.incomingHandleSeconds)} handle` : sharedAllocation > 0 ? ` · ${formatSecondsTenth(layout.generatedDurationSeconds)} generated · ${formatSecondsTenth(layout.timelineDurationSeconds)} unique · ${formatSecondsTenth(sharedAllocation)} shared` : ` · ${duration}`;
     const skipLabel = skipTitle("clip", layout.skipped);
     const skipMark = skipGlyph(layout.skipped);
     const firstClip = layout.index === 0;
@@ -9751,7 +9763,7 @@
     return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" data-vst-join-trim-seconds="${sharedAllocation}" title="Clip ${layout.index}${timingTitle} · Click to edit${firstClip ? "" : " · Shift+click to delete"}">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
       clip,
       layout.index,
-      layout.generatedDurationSeconds,
+      authoredDurationSeconds,
       fps,
       unit
     ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs}${retakeSupported || clip.retake ? "" : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` + renderRetakeOverlay(
@@ -9953,7 +9965,7 @@
         const rightFrames = timing.clipFrames[impact.rightIdx] ?? 0;
         const combinedFrames = Math.max(
           0,
-          leftFrames + rightFrames - impact.overlapFrames
+          leftFrames + rightFrames + impact.handleFrames - impact.overlapFrames
         );
         const impactBlock = document.createElement("div");
         impactBlock.className = "vst-boundary-impact";
@@ -9975,6 +9987,9 @@
         };
         addRow(`Clip ${impact.leftIdx}`, leftFrames);
         addRow(`Clip ${impact.rightIdx}`, rightFrames, "+");
+        if (impact.handleFrames > 0) {
+          addRow("Incoming Continue handle", impact.handleFrames, "+");
+        }
         addRow(
           `${BOUNDARY_LABEL[impact.effectiveMode]} shared`,
           impact.overlapFrames,
@@ -9985,10 +10000,7 @@
         if (value === "continue" && impact.overlapFrames > 0 && overlapPolicy.continuityExtraFrames > 0) {
           const note = document.createElement("div");
           note.className = "vst-boundary-impact-note";
-          const selectedFrames = Math.max(
-            0,
-            impact.overlapFrames - overlapPolicy.continuityExtraFrames
-          );
+          const selectedFrames = impact.handleFrames;
           note.textContent = `${selectedFrames}f selected + ${overlapPolicy.continuityExtraFrames} LTX continuation frame = ${impact.overlapFrames}f effective shared window.`;
           impactBlock.appendChild(note);
         }
@@ -14981,9 +14993,16 @@ The conversion is one undoable change.`;
     const selectedHidden = selectedIndex === null ? " hidden" : "";
     const joinFrames = timing?.joinFrames ?? 0;
     const joinSeconds = timing?.joinSeconds ?? 0;
+    const handleSeconds = timing?.boundaries.reduce(
+      (sum, boundary) => sum + boundary.handleSeconds,
+      0
+    ) ?? 0;
     const joinFrameLabel = `${joinFrames > 0 ? "−" : ""}${joinFrames}f`;
     const joinSecondsLabel = `${joinSeconds > 0 ? "−" : ""}${formatSecondsTenth(joinSeconds)}`;
-    const secondary = unit === "frames" ? `${timing?.generatedFrames ?? 0}f generated · ${joinFrameLabel} shared` : `${formatSecondsTenth(timing?.authoredSeconds ?? totalSeconds)} authored · ${joinSecondsLabel} joins`;
+    const authoredLabel = formatSecondsTenth(
+      timing?.authoredSeconds ?? totalSeconds
+    );
+    const secondary = unit === "frames" ? `${timing?.generatedFrames ?? 0}f generated · ${joinFrameLabel} shared` : handleSeconds > 0 ? `${authoredLabel} authored · +${formatSecondsTenth(handleSeconds)} handle · ${joinSecondsLabel} shared` : `${authoredLabel} authored · ${joinSecondsLabel} joins`;
     const readout = `<span class="vst-readout" data-vst-readout><span class="vst-readout-output" title="Published sequence length">${escapeAttr(totalLabel)} output</span><span class="vst-readout-detail" title="Authored length and resolved shared joins">${escapeAttr(secondary)}</span><span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
     const width = Math.max(0, Math.round(options?.width ?? 0));
     const height = Math.max(0, Math.round(options?.height ?? 0));
@@ -15272,12 +15291,12 @@ The conversion is one undoable change.`;
         const time = keyframeTimeSeconds(
           ref.frame,
           isEnd,
-          layout.generatedDurationSeconds,
+          layout.frameCount > 0 ? layout.frameCount / fps : layout.durationSeconds,
           fps
         );
         const left = keyframeLeftPercent(
           time,
-          layout.generatedDurationSeconds
+          layout.frameCount > 0 ? layout.frameCount / fps : layout.durationSeconds
         );
         const source = refSourceLabel(ref.source ?? "");
         const image = ref.uploadedImage?.data;

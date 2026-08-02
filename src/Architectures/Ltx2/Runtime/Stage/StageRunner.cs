@@ -79,6 +79,8 @@ internal class StageRunner
             clipContext,
             requiresDedicatedOutput,
             rootPolicy);
+        bool incomingIcLoraMediaIncludesContinueHandle =
+            clipContext.ContinueHandleMaterialized;
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
         Action<WorkflowGenerator.ImageToVideoGenInfo> applyIcLora = currentGenInfo =>
         {
@@ -87,8 +89,10 @@ internal class StageRunner
                 currentGenInfo,
                 clip,
                 stage,
-                clip.Frames,
-                incomingMedia);
+                currentGenInfo.Frames,
+                incomingMedia,
+                clipContext.IncomingContinueHandleFrames,
+                incomingIcLoraMediaIncludesContinueHandle);
             if (needsCrop)
             {
                 stageFrame.NeedsCropGuidesAfterSampler = true;
@@ -145,7 +149,8 @@ internal class StageRunner
             clipContext.Plan.Root.HostKind == HostRootKind.TextToVideoRoot,
             refStore,
             postVideoChain,
-            sourceMedia);
+            sourceMedia,
+            clipContext.IncomingContinueHandleFrames);
         ResolvedClipRef primaryGuideClipRef = LtxClipRefResolver.ExtractPrimaryGuideClipRef(clipRefs);
         clipRefs = LtxClipRefResolver.RemovePrimaryGuideClipRef(clipRefs, primaryGuideClipRef);
         bool reanchorsContinuityTail = clipContext.ReanchorsContinuityTail(stage);

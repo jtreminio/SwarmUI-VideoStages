@@ -17,7 +17,9 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
         ClipPlan clip,
         StagePlan stage,
         int? frameCount,
-        WGNodeData stageInput)
+        WGNodeData stageInput,
+        int incomingContinueHandleFrames,
+        bool incomingMediaIncludesContinueHandle)
     {
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
         if (payload.IcLoras.IsDefaultOrEmpty
@@ -93,6 +95,10 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
                 frameCount,
                 clip.Audio.Length.Owner == AudioLengthOwner.ControlNet,
                 drive.ControlNetIndex);
+            int guideHandleFrames = entry.Plan.MediaInput.Source == IcLoraMediaSourceKind.Incoming
+                && incomingMediaIncludesContinueHandle
+                    ? 0
+                    : incomingContinueHandleFrames;
             guides.Apply(
                 bridge,
                 genInfo,
@@ -101,7 +107,8 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
                 controlImages,
                 strength,
                 guideFrames,
-                drive.IsStillImage);
+                drive.IsStillImage,
+                guideHandleFrames);
             anyGuide = true;
         }
         return anyGuide;

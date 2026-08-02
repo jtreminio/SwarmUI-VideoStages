@@ -45,19 +45,31 @@ internal sealed class ClipAudioPreparer(
         WGNodeData baseAudio = carryStartsGeneratedAudio
             ? null
             : selectedBaseAudio;
-        double duration = ClipAudioBedDuration.Seconds(
+        double authoredDuration = ClipAudioBedDuration.Seconds(
             context.PlannedClip,
             context.FramesPerSecond,
             g.CurrentMedia);
+        double handleDuration = context.FramesPerSecond > 0
+            ? clipContext.IncomingContinueHandleFrames / (double)context.FramesPerSecond
+            : 0;
+        double generationDuration = authoredDuration + handleDuration;
+        baseAudio = DelayAuthoredAudio(
+            baseAudio,
+            handleDuration,
+            authoredDuration);
         WGNodeData baseWithBoundaryCarry = ApplyBoundaryAudioCarry(
             baseAudio,
             boundaryAudioCarry,
-            duration);
+            generationDuration);
+        AudioSegmentPlan segments = handleDuration > 0
+            ? new([.. context.PlannedClip.Audio.Segments.Items.Select(segment =>
+                segment with { StartSeconds = segment.StartSeconds + handleDuration })])
+            : context.PlannedClip.Audio.Segments;
         WGNodeData combinedAudio = new AudioSegmentCombiner(g).Combine(
             context.PlannedClip.ClipId,
-            context.PlannedClip.Audio.Segments,
+            segments,
             baseWithBoundaryCarry,
-            duration,
+            generationDuration,
             out IReadOnlyList<(double Start, double End)> segmentWindows);
         IReadOnlyList<(double Start, double End)> preserveWindows =
             boundaryAudioCarry is null
@@ -70,8 +82,47 @@ internal sealed class ClipAudioPreparer(
             currentMedia,
             baseAudio,
             combinedAudio,
-            duration,
+            generationDuration,
             preserveWindows);
+    }
+
+    private WGNodeData DelayAuthoredAudio(
+        WGNodeData audio,
+        double handleDuration,
+        double authoredDuration)
+    {
+        if (audio?.Path is not JArray audioPath || handleDuration <= 0)
+        {
+            return audio;
+        }
+
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        INodeOutput source = bridge.ResolvePath(audioPath);
+        if (source is null)
+        {
+            return audio;
+        }
+
+        SwarmEnsureAudioNode ensure = bridge.AddNode(new SwarmEnsureAudioNode().With(
+            TargetDuration: authoredDuration));
+        ensure.Audio.ConnectToUntyped(source);
+        TrimAudioDurationNode authored = bridge.AddNode(new TrimAudioDurationNode().With(
+            StartIndex: 0.0,
+            Duration: authoredDuration));
+        authored.Audio.ConnectTo(ensure.AUDIO);
+        EmptyAudioNode silence = bridge.AddNode(new EmptyAudioNode()).With(
+            Duration: handleDuration,
+            SampleRate: SilenceSampleRate,
+            Channels: SilenceChannels);
+        AudioConcatNode concat = bridge.AddNode(
+            new AudioConcatNode().With(Direction: "after"));
+        concat.Audio1.ConnectTo(silence.AUDIO);
+        concat.Audio2.ConnectTo(authored.AUDIO);
+        return new WGNodeData(
+            WorkflowBridge.ToPath(concat.AUDIO),
+            g,
+            WGNodeData.DT_AUDIO,
+            audio.Compat ?? g.CurrentAudioVae?.Compat);
     }
 
     private void AttachClipAudio(

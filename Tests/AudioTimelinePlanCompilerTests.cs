@@ -149,16 +149,16 @@ public class AudioTimelinePlanCompilerTests
             [Track("score", new AudioTrackSpanSpec(FirstClipId: 0, LastClipId: 2))]);
 
         AudioTimelineClipWindow[] clips = timeline.ClipWindows.ToArray();
-        Assert.Equal(40d / Fps, clips[0].DurationSeconds!.Value, 8);
+        Assert.Equal(48d / Fps, clips[0].DurationSeconds!.Value, 8);
         Assert.Equal(33d / Fps, clips[1].DurationSeconds!.Value, 8);
 
         AudioTrackClipWindow[] windows = Track(timeline, "score").Windows.ToArray();
         Assert.Equal(0, windows[0].TimelineStartSeconds, 8);
-        Assert.Equal(40d / Fps, windows[1].TimelineStartSeconds, 8);
-        Assert.Equal(73d / Fps, windows[2].TimelineStartSeconds, 8);
+        Assert.Equal(48d / Fps, windows[1].TimelineStartSeconds, 8);
+        Assert.Equal(81d / Fps, windows[2].TimelineStartSeconds, 8);
         Assert.Equal(0, windows[0].SourceStartSeconds, 8);
-        Assert.Equal(40d / Fps, windows[1].SourceStartSeconds, 8);
-        Assert.Equal(73d / Fps, windows[2].SourceStartSeconds, 8);
+        Assert.Equal(48d / Fps, windows[1].SourceStartSeconds, 8);
+        Assert.Equal(81d / Fps, windows[2].SourceStartSeconds, 8);
     }
 
     [Fact]
@@ -179,8 +179,8 @@ public class AudioTimelinePlanCompilerTests
         AudioTrackClipWindow[] windows = Track(timeline, "subset").Windows.ToArray();
         Assert.Equal([1, 2, 3], windows.Select(window => window.ClipId));
         Assert.Equal(sourceStart, windows[0].SourceStartSeconds, 8);
-        Assert.Equal(sourceStart + 40d / Fps, windows[1].SourceStartSeconds, 8);
-        Assert.Equal(sourceStart + 89d / Fps, windows[2].SourceStartSeconds, 8);
+        Assert.Equal(sourceStart + 48d / Fps, windows[1].SourceStartSeconds, 8);
+        Assert.Equal(sourceStart + 97d / Fps, windows[2].SourceStartSeconds, 8);
 
         double finalSourceEnd = windows[^1].SourceStartSeconds + windows[^1].DurationSeconds;
         double finalTimelineDuration = windows.Sum(window => window.DurationSeconds);

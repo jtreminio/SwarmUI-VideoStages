@@ -186,7 +186,7 @@ internal static class AudioTimelinePlanCompiler
             if (outgoing.TryGetValue(clip.ClipId, out BoundaryPlan boundary)
                 && boundary.Effective != BoundaryJoinType.Cut)
             {
-                trimFrames = BoundaryOverlapPlanner.EffectiveOverlapFrames(boundary);
+                trimFrames = BoundaryOverlapPlanner.TimelineReductionFrames(boundary);
             }
 
             if (!canResolveFollowing || clip.Frames is not int frames || frames <= 0)

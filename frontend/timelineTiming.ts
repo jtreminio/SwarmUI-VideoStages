@@ -13,6 +13,10 @@ export interface TimelineBoundaryImpact {
     effectiveMode: BoundaryOut;
     overlapFrames: number;
     overlapSeconds: number;
+    handleFrames: number;
+    handleSeconds: number;
+    timelineReductionFrames: number;
+    timelineReductionSeconds: number;
 }
 
 export interface TimelineTiming {
@@ -33,7 +37,7 @@ export interface TimelineTiming {
 /**
  * Mirrors the compiled timeline's frame accounting:
  *
- * output = executable clip frames - resolved boundary windows.
+ * output = generated clip frames - resolved boundary windows.
  *
  * Capability views are required for architecture-specific details such as
  * LTX Continue's extra continuity frame and unsupported-mode fallbacks.
@@ -49,12 +53,20 @@ export const resolveTimelineTiming = (
     const compacted = indexes.map((clipIdx, position) => {
         const clip = clips[clipIdx];
         const requested = clip.boundaryOut ?? "cut";
-        const effective =
+        let effective =
             position < indexes.length - 1
                 ? (capabilities
                       ?.forBoundaryIndex(clips, clipIdx)
                       .effective(requested) ?? requested)
                 : "cut";
+        const target = clips[indexes[position + 1]];
+        if (
+            effective === "continue" &&
+            (target?.clipLengthFromAudio === true ||
+                target?.clipLengthFromControlNet === true)
+        ) {
+            effective = "cut";
+        }
         return { ...clip, boundaryOut: effective };
     });
     const plan = capabilities
@@ -71,18 +83,35 @@ export const resolveTimelineTiming = (
     const seams = executableBoundaries(clips);
     const boundaries = seams.map((seam) => {
         const requestedMode = clips[seam.leftIdx].boundaryOut ?? "cut";
-        const policyEffective =
-            capabilities
-                ?.forBoundaryIndex(clips, seam.leftIdx)
-                .effective(requestedMode) ?? requestedMode;
+        const policyEffective = compacted[seam.position].boundaryOut ?? "cut";
         const overlapFrames = Math.max(0, plan.overlaps[seam.position] ?? 0);
+        const effectiveMode =
+            overlapFrames > 0 ? policyEffective : ("cut" as const);
+        const continuityExtraFrames =
+            effectiveMode === "continue"
+                ? (capabilities
+                      ?.forBoundaryIndex(clips, seam.leftIdx)
+                      .overlapConstraints(effectiveMode)
+                      .continuityExtraFrames ?? 1)
+                : 0;
+        const handleFrames =
+            effectiveMode === "continue"
+                ? Math.max(0, overlapFrames - continuityExtraFrames)
+                : 0;
+        const timelineReductionFrames = Math.max(
+            0,
+            overlapFrames - handleFrames,
+        );
         return {
             ...seam,
             requestedMode,
-            effectiveMode:
-                overlapFrames > 0 ? policyEffective : ("cut" as const),
+            effectiveMode,
             overlapFrames,
             overlapSeconds: overlapFrames / fps,
+            handleFrames,
+            handleSeconds: handleFrames / fps,
+            timelineReductionFrames,
+            timelineReductionSeconds: timelineReductionFrames / fps,
         };
     });
     const clipFrames = clips.map((clip, clipIdx) =>
@@ -94,10 +123,9 @@ export const resolveTimelineTiming = (
               )
             : 0,
     );
-    const generatedFrames = indexes.reduce(
-        (sum, clipIdx) => sum + clipFrames[clipIdx],
-        0,
-    );
+    const generatedFrames =
+        indexes.reduce((sum, clipIdx) => sum + clipFrames[clipIdx], 0) +
+        boundaries.reduce((sum, boundary) => sum + boundary.handleFrames, 0);
     const joinFrames = boundaries.reduce(
         (sum, boundary) => sum + boundary.overlapFrames,
         0,

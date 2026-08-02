@@ -412,6 +412,7 @@ public class AudioInjectionTests
             MakeStage(models.VideoModel.Name));
         firstClip["duration"] = 5.0;
         firstClip["boundaryOut"] = Constants.BoundaryOutContinue;
+        firstClip["boundaryOutOverlap"] = 24;
         JObject secondClip = MakeClipConfig(
             Constants.AudioSourceNative,
             MakeStage(models.VideoModel.Name));
@@ -455,7 +456,7 @@ public class AudioInjectionTests
                 .Any(window => window.Value<double>("start") == 4.0));
         Assert.Contains(masks, mask =>
             JArray.Parse(mask.Windows.LiteralAsString())
-                .Any(window => window.Value<double>("start") == 0.0));
+                .Any(window => window.Value<double>("start") == 1.0));
 
         List<LTXVConcatAVLatentNode> conditionedInputs =
         [

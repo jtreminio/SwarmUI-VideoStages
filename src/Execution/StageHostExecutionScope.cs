@@ -37,7 +37,8 @@ internal sealed class StageHostExecutionScope : IDisposable
         ClipPlan plannedClip,
         StagePlan plannedStage,
         int? width = null,
-        int? height = null)
+        int? height = null,
+        int? frameCount = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(plannedClip);
@@ -63,7 +64,7 @@ internal sealed class StageHostExecutionScope : IDisposable
             ComfyUIBackendExtension.SchedulerParam.Type,
             core.Scheduler,
             sectionId);
-        if (plannedClip.Frames is int frames && frames > 0)
+        if ((frameCount ?? plannedClip.Frames) is int frames && frames > 0)
         {
             _generator.UserInput.Set(T2IParamTypes.VideoFrames, frames, sectionId);
         }

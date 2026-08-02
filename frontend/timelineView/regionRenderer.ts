@@ -279,7 +279,10 @@ const renderBoundaryOverlapBands = (
                 return "";
             }
             const width = boundary.overlapSeconds * pxPerSecond;
-            const left = right.startPx - width / 2;
+            const left =
+                boundary.effectiveMode === "continue"
+                    ? right.startPx - width
+                    : right.startPx - width / 2;
             return (
                 `<div class="vst-boundary-overlap vst-boundary-overlap-${boundary.effectiveMode}" ` +
                 `style="left:${left}px;width:${width}px" aria-hidden="true"></div>`
@@ -302,21 +305,22 @@ const renderRegions = (
             const skippedChip = layout.skipped
                 ? `<span class="vst-chip vst-chip-skip">skipped</span>`
                 : "";
+            const authoredDurationSeconds =
+                layout.frameCount > 0
+                    ? layout.frameCount / fps
+                    : layout.durationSeconds;
             const duration = escapeHtml(
                 unit === "frames" && layout.frameCount > 0
                     ? `${layout.frameCount}f`
-                    : formatTimeLabel(
-                          layout.generatedDurationSeconds,
-                          unit,
-                          fps,
-                      ),
+                    : formatTimeLabel(authoredDurationSeconds, unit, fps),
             );
-            const sharedAllocation =
-                (layout.incomingJoinSeconds + layout.outgoingJoinSeconds) / 2;
+            const sharedAllocation = layout.timelineReductionSeconds;
             const timingTitle =
-                sharedAllocation > 0
-                    ? ` · ${formatSecondsTenth(layout.generatedDurationSeconds)} generated · ${formatSecondsTenth(layout.timelineDurationSeconds)} unique · ${formatSecondsTenth(sharedAllocation)} shared`
-                    : ` · ${duration}`;
+                layout.incomingHandleSeconds > 0
+                    ? ` · ${formatSecondsTenth(layout.generatedDurationSeconds)} generated · ${formatSecondsTenth(layout.timelineDurationSeconds)} timeline · ${formatSecondsTenth(layout.incomingHandleSeconds)} handle`
+                    : sharedAllocation > 0
+                      ? ` · ${formatSecondsTenth(layout.generatedDurationSeconds)} generated · ${formatSecondsTenth(layout.timelineDurationSeconds)} unique · ${formatSecondsTenth(sharedAllocation)} shared`
+                      : ` · ${duration}`;
             const skipLabel = skipTitle("clip", layout.skipped);
             const skipMark = skipGlyph(layout.skipped);
             const firstClip = layout.index === 0;
@@ -350,7 +354,7 @@ const renderRegions = (
                 renderKeyframes(
                     clip,
                     layout.index,
-                    layout.generatedDurationSeconds,
+                    authoredDurationSeconds,
                     fps,
                     unit,
                 ) +

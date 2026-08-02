@@ -106,6 +106,37 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Continue_target_delays_authored_prompt_windows_behind_the_hidden_handle()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            TwoClipContinueStagesJson(models),
+            prompt: $"global words {ClipWindowTag("target opening", 0, 0.25, clip: 1)}");
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: false));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        SwarmPromptRelayEncodeNode relay = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmPromptRelayEncodeNode>());
+        JObject payload = JObject.Parse(relay.Windows.LiteralAsString());
+        JArray windows = (JArray)payload["windows"];
+
+        Assert.Equal(Ltx2ArchitectureModule.LatentFrameCount(ContinueTargetFrames),
+            payload.Value<int>("latentFrames"));
+        Assert.Equal("", windows[0].Value<string>("prompt"));
+        Assert.Equal(
+            Ltx2BoundaryPolicy.DefaultFrames / 24d,
+            windows[0].Value<double>("seconds"),
+            precision: 1);
+        Assert.Equal("target opening", windows[1].Value<string>("prompt"));
+    }
+
+    [Fact]
     public void Native_ltx_clip_with_a_single_full_span_window_uses_its_prompt_without_a_relay()
     {
         using SwarmUiTestContext _ = new();

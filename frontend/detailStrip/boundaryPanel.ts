@@ -252,7 +252,10 @@ export const buildBoundaryBody = (
             const rightFrames = timing.clipFrames[impact.rightIdx] ?? 0;
             const combinedFrames = Math.max(
                 0,
-                leftFrames + rightFrames - impact.overlapFrames,
+                leftFrames +
+                    rightFrames +
+                    impact.handleFrames -
+                    impact.overlapFrames,
             );
             const impactBlock = document.createElement("div");
             impactBlock.className = "vst-boundary-impact";
@@ -282,6 +285,9 @@ export const buildBoundaryBody = (
             };
             addRow(`Clip ${impact.leftIdx}`, leftFrames);
             addRow(`Clip ${impact.rightIdx}`, rightFrames, "+");
+            if (impact.handleFrames > 0) {
+                addRow("Incoming Continue handle", impact.handleFrames, "+");
+            }
             addRow(
                 `${BOUNDARY_LABEL[impact.effectiveMode]} shared`,
                 impact.overlapFrames,
@@ -297,10 +303,7 @@ export const buildBoundaryBody = (
             ) {
                 const note = document.createElement("div");
                 note.className = "vst-boundary-impact-note";
-                const selectedFrames = Math.max(
-                    0,
-                    impact.overlapFrames - overlapPolicy.continuityExtraFrames,
-                );
+                const selectedFrames = impact.handleFrames;
                 note.textContent =
                     `${selectedFrames}f selected + ` +
                     `${overlapPolicy.continuityExtraFrames} LTX continuation frame = ` +

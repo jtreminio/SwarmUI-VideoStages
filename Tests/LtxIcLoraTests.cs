@@ -736,6 +736,70 @@ public sealed class LtxIcLoraTests
     }
 
     [Fact]
+    public void Continue_handle_offsets_authored_drives_but_not_later_stage_output()
+    {
+        using SwarmUiTestContext testContext = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        RegisterLora("UnitTest_IcLoraA");
+        RegisterLora("UnitTest_IcLoraB");
+
+        JObject firstClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        firstClip["duration"] = 0.6;
+        firstClip["boundaryOut"] = Constants.BoundaryOutContinue;
+        JObject targetClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10),
+            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
+        targetClip["duration"] = 0.6;
+        JObject uploaded = MakeIcLora(
+            "UnitTest_IcLoraA",
+            driveMediaData: "data:video/mp4;base64,QUJD");
+        uploaded["stage"] = 0;
+        JObject incoming = MakeIcLora(
+            "UnitTest_IcLoraB",
+            source: Constants.IcLoraSourceIncoming,
+            driveData: IcLoraDriveData.Visual);
+        incoming["stage"] = 1;
+        targetClip["icLoras"] = new JArray(uploaded, incoming);
+
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            new JArray(firstClip, targetClip).ToString());
+        (JObject workflow, _) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            BuildCoreVideoWorkflowSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ImageFromBatchNode[] guideTrims =
+        [
+            .. bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>()
+                .Select(guide => Assert.IsType<ImageFromBatchNode>(
+                    guide.Image.Connection?.Node)),
+        ];
+        Assert.Equal(2, guideTrims.Length);
+        Assert.All(guideTrims, trim => Assert.Equal(25, trim.Length.LiteralAsInt()));
+        RepeatImageBatchNode handle = Assert.Single(
+            bridge.Graph.NodesOfType<RepeatImageBatchNode>());
+        Assert.Equal(Ltx2BoundaryPolicy.DefaultFrames, handle.Amount.LiteralAsInt());
+        BatchImagesNodeNode batch = Assert.IsType<BatchImagesNodeNode>(
+            Assert.Single(
+                guideTrims,
+                trim => trim.Image.Connection?.Node is BatchImagesNodeNode)
+            .Image.Connection?.Node);
+        Assert.Equal(2, batch.Images.Count);
+        Assert.Same(handle, batch.Images[0].Connection?.Node);
+        ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
+            handle.Image.Connection?.Node);
+        Assert.Equal(0, firstFrame.BatchIndex.LiteralAsInt());
+        Assert.Equal(1, firstFrame.Length.LiteralAsInt());
+        Assert.Single(
+            guideTrims,
+            trim => trim.Image.Connection?.Node is not BatchImagesNodeNode);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void Custom_audio_consuming_ic_lora_feeds_reference_tokens_without_a_visual_guide()
     {
         using SwarmUiTestContext testContext = new();

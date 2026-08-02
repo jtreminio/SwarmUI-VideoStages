@@ -95,8 +95,8 @@ internal static class MultiClipAudioGraphAssembler
     }
 
     /// <summary>
-    /// Concatenates clip audio on the resolved video-overlap timeline. The incoming clip owns each
-    /// overlap, including any audio continuation it generated from boundary context.
+    /// Concatenates clip audio on the resolved video-overlap timeline. Continue pre-roll is a hidden
+    /// incoming handle; crossfades retain their existing outgoing-trim behavior.
     /// </summary>
     public static INodeOutput Merge(
         WorkflowBridge bridge,
@@ -112,12 +112,16 @@ internal static class MultiClipAudioGraphAssembler
         List<INodeOutput> aligned = [];
         for (int i = 0; i < audioOutputs.Count; i++)
         {
-            int rightOverlap = i < audioOutputs.Count - 1 ? plan.BoundaryOverlap[i] : 0;
-            aligned.Add(rightOverlap > 0
-                ? TrimToDuration(
+            int leftHandle = i > 0 ? plan.IncomingHandleFrames[i - 1] : 0;
+            int rightReduction = i < audioOutputs.Count - 1
+                ? Math.Max(0, plan.BoundaryOverlap[i] - plan.IncomingHandleFrames[i])
+                : 0;
+            aligned.Add(leftHandle > 0 || rightReduction > 0
+                ? TrimToRange(
                     bridge,
                     audioOutputs[i],
-                    Math.Max(0, clips[i].Frames - rightOverlap) / (double)fps)
+                    leftHandle / (double)fps,
+                    Math.Max(0, clips[i].Frames - leftHandle - rightReduction) / (double)fps)
                 : audioOutputs[i]);
         }
         return CascadeConcat(bridge, aligned);
@@ -136,10 +140,14 @@ internal static class MultiClipAudioGraphAssembler
         return acc;
     }
 
-    private static INodeOutput TrimToDuration(WorkflowBridge bridge, INodeOutput audio, double durationSeconds)
+    private static INodeOutput TrimToRange(
+        WorkflowBridge bridge,
+        INodeOutput audio,
+        double startSeconds,
+        double durationSeconds)
     {
         TrimAudioDurationNode trim = bridge.AddNode(new TrimAudioDurationNode()).With(
-            StartIndex: 0.0,
+            StartIndex: startSeconds,
             Duration: durationSeconds);
         trim.Audio.ConnectToUntyped(audio);
         return trim.AUDIO;

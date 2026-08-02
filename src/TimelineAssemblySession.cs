@@ -29,16 +29,22 @@ internal sealed class TimelineAssemblySession
         _effectiveBoundaries = [.. plan.Boundaries];
     }
 
-    public bool TryGetContinueWindow(int fromClipId, out int window)
+    public bool TryGetContinueInput(
+        int fromClipId,
+        out int handleFrames,
+        out int windowFrames)
     {
         int boundaryIndex = BoundaryIndex(fromClipId);
         if (boundaryIndex >= 0
             && _effectiveBoundaries[boundaryIndex].Effective == BoundaryJoinType.Continue)
         {
-            window = _effectiveBoundaries[boundaryIndex].ContinuityWindowFrames;
+            BoundaryPlan boundary = _effectiveBoundaries[boundaryIndex];
+            handleFrames = BoundaryOverlapPlanner.IncomingHandleFrames(boundary);
+            windowFrames = boundary.ContinuityWindowFrames;
             return true;
         }
-        window = 0;
+        handleFrames = 0;
+        windowFrames = 0;
         return false;
     }
 

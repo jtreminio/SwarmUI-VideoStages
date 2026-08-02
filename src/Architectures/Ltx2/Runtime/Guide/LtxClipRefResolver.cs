@@ -18,7 +18,8 @@ internal sealed class LtxClipRefResolver(
         bool isTextToVideo,
         StageRefStore refStore,
         LtxPostVideoChainCapture postVideoChain,
-        WGNodeData sourceMedia)
+        WGNodeData sourceMedia,
+        int incomingHandleFrames = 0)
     {
         ArgumentNullException.ThrowIfNull(clip);
         IReadOnlyList<ImageReferencePlan> refs =
@@ -27,6 +28,14 @@ internal sealed class LtxClipRefResolver(
         for (int i = 0; i < refs.Count; i++)
         {
             ImageReferencePlan reference = refs[i];
+            if (incomingHandleFrames > 0
+                && reference.FrameOrigin == ImageReferenceFrameEdge.Start)
+            {
+                reference = reference with
+                {
+                    Frame = reference.Frame + incomingHandleFrames,
+                };
+            }
             if (isTextToVideo
                 && reference.SourceKind != ImageReferenceSourceKind.Upload)
             {

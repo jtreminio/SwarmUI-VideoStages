@@ -164,6 +164,7 @@ internal enum BoundaryFallbackReason
     TargetHasInitVideo,
     TargetHasNoStage,
     TargetHasFirstFrameReference,
+    TargetHasDerivedDuration,
     InsufficientFrameBudget,
     ArchitectureRuleUnsupported,
 }

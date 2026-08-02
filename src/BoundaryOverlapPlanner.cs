@@ -3,9 +3,10 @@ using VideoStages.Planning;
 
 namespace VideoStages;
 
-/// <summary>Resolved video-frame overlap at every boundary, plus its total timeline reduction.</summary>
+/// <summary>Resolved video-frame overlap at every boundary, plus total frames removed from generated clips.</summary>
 internal sealed record BoundaryOverlapPlan(
     int[] BoundaryOverlap,
+    int[] IncomingHandleFrames,
     int RemovedFrames);
 
 /// <summary>
@@ -27,7 +28,8 @@ internal static class BoundaryOverlapPlanner
     /// </summary>
     internal static BoundaryBudgetResolution ResolvePlanBudgets(
         IReadOnlyList<int?> frames,
-        IReadOnlyList<BoundaryPlan> boundaries)
+        IReadOnlyList<BoundaryPlan> boundaries,
+        bool frameCountsIncludeContinueHandles = false)
     {
         ArgumentNullException.ThrowIfNull(frames);
         IReadOnlyList<BoundaryPlan> source = boundaries ?? [];
@@ -48,6 +50,7 @@ internal static class BoundaryOverlapPlanner
             frames,
             resolved,
             boundaryCount,
+            frameCountsIncludeContinueHandles,
             out int overBudgetClip))
         {
             int rightBoundary = overBudgetClip < boundaryCount
@@ -83,13 +86,19 @@ internal static class BoundaryOverlapPlanner
         IReadOnlyList<int?> frames,
         IReadOnlyList<BoundaryPlan> boundaries,
         int boundaryCount,
+        bool frameCountsIncludeContinueHandles,
         out int clipIndex)
     {
         for (int i = 0; i <= boundaryCount; i++)
         {
             int leftTrim = i > 0 ? EffectiveOverlapFrames(boundaries[i - 1]) : 0;
             int rightTrim = i < boundaryCount ? EffectiveOverlapFrames(boundaries[i]) : 0;
-            if (leftTrim + rightTrim > frames[i]!.Value - 1)
+            long availableFrames = frames[i]!.Value;
+            if (!frameCountsIncludeContinueHandles && i > 0)
+            {
+                availableFrames += IncomingHandleFrames(boundaries[i - 1]);
+            }
+            if (leftTrim + rightTrim > availableFrames - 1)
             {
                 clipIndex = i;
                 return true;
@@ -159,7 +168,10 @@ internal static class BoundaryOverlapPlanner
                     .Take(boundaryCount + 1)
                     .Select(clip => clip?.Frames is int frames && frames > 0 ? frames : (int?)null)
             ];
-            BoundaryBudgetResolution runBudget = ResolvePlanBudgets(runFrames, runBoundaries);
+            BoundaryBudgetResolution runBudget = ResolvePlanBudgets(
+                runFrames,
+                runBoundaries,
+                frameCountsIncludeContinueHandles: true);
             if (runFrames.All(frame => frame is > 0)
                 && SameEffectiveWindows(runBoundaries, runBudget.Boundaries))
             {
@@ -210,7 +222,8 @@ internal static class BoundaryOverlapPlanner
             return null;
         }
         int[] overlaps = [.. boundaries.Select(EffectiveOverlapFrames)];
-        return new(overlaps, overlaps.Sum());
+        int[] handles = [.. boundaries.Select(IncomingHandleFrames)];
+        return new(overlaps, handles, overlaps.Sum());
     }
 
     internal static BoundaryBudgetResolution DegradeAllToCuts(
@@ -251,6 +264,14 @@ internal static class BoundaryOverlapPlanner
             BoundaryJoinType.Crossfade => Math.Max(1, boundary.OverlapFrames),
             _ => 0,
         };
+
+    internal static int IncomingHandleFrames(BoundaryPlan boundary) =>
+        boundary?.Effective == BoundaryJoinType.Continue
+            ? Math.Max(0, boundary.OverlapFrames)
+            : 0;
+
+    internal static int TimelineReductionFrames(BoundaryPlan boundary) =>
+        Math.Max(0, EffectiveOverlapFrames(boundary) - IncomingHandleFrames(boundary));
 
     private static bool SameEffectiveWindows(
         IReadOnlyList<BoundaryPlan> expected,

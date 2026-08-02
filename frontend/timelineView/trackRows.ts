@@ -372,12 +372,16 @@ export const renderReferencesTrackRow = (
                     const time = keyframeTimeSeconds(
                         ref.frame,
                         isEnd,
-                        layout.generatedDurationSeconds,
+                        layout.frameCount > 0
+                            ? layout.frameCount / fps
+                            : layout.durationSeconds,
                         fps,
                     );
                     const left = keyframeLeftPercent(
                         time,
-                        layout.generatedDurationSeconds,
+                        layout.frameCount > 0
+                            ? layout.frameCount / fps
+                            : layout.durationSeconds,
                     );
                     const source = refSourceLabel(ref.source ?? "");
                     const image = ref.uploadedImage?.data;

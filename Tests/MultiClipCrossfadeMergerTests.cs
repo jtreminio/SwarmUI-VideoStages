@@ -122,13 +122,11 @@ public class MultiClipCrossfadeMergerTests
         IReadOnlyList<int> continueWindows = null,
         IReadOnlyList<int> boundaryOverlapPrefs = null)
     {
-        IReadOnlyList<int> fixtureContinueWindows = continueWindows
-            ?? Enumerable.Repeat(1, Math.Max(0, clips.Count - 1)).ToArray();
         return BoundaryPlanFixture.Resolve(
             [.. clips.Select(clip => clip?.Frames)],
             boundaryOuts,
             boundaryOverlapPrefs,
-            fixtureContinueWindows).Boundaries;
+            continueWindows).Boundaries;
     }
 
     [Fact]
@@ -227,11 +225,10 @@ public class MultiClipCrossfadeMergerTests
     }
 
     [Fact]
-    public void Continue_WithoutWindows_DefaultsToOneFrameBlendAndAudioTrim()
+    public void Continue_WithoutExplicitWindow_UsesTheDefaultHandleAndOneFrameReduction()
     {
-        // A one-frame continue window trims the matching audio tail.
         (WorkflowGenerator g, List<WGNodeData> clips) =
-            BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2);
+            BuildClips([17, 25], T2IModelClassSorter.CompatLtxv2);
         MergeAndPublish(g, Artifacts(clips), PlansFor(clips, ["continue", "cut"]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
@@ -241,74 +238,115 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(4, CountOf<ImageFromBatchNode>(bridge));
         Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
 
-        // The ramp node emits 0.5 for a one-frame window.
         SwarmRampMaskBatchNode ramp = Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
-        Assert.Equal(1, ramp.Frames.LiteralAsInt());
+        Assert.Equal(9, ramp.Frames.LiteralAsInt());
         Assert.Equal(ramp.Id, blend.Mask.Connection!.Node.Id);
 
-        TrimAudioDurationNode trim = Assert.Single(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
-        Assert.Equal((17 - 1) / (double)Fps, trim.Duration.LiteralAsDouble()!.Value, 6);
-        Assert.Equal(AudioId(0), trim.Audio.Connection!.Node.Id);
+        List<TrimAudioDurationNode> trims =
+            [.. bridge.Graph.NodesOfType<TrimAudioDurationNode>()];
+        Assert.Equal(2, trims.Count);
+        Assert.Contains(trims, trim =>
+            trim.Audio.Connection!.Node.Id == AudioId(0)
+            && trim.StartIndex.LiteralAsDouble() == 0
+            && trim.Duration.LiteralAsDouble() == 16d / Fps);
+        Assert.Contains(trims, trim =>
+            trim.Audio.Connection!.Node.Id == AudioId(1)
+            && trim.StartIndex.LiteralAsDouble() == 8d / Fps
+            && trim.Duration.LiteralAsDouble() == 17d / Fps);
 
         Assert.Equal(33, g.CurrentMedia.Frames);
     }
 
     [Fact]
-    public void Continue_WithResolvedWindow_CollapsesTheOverlapWindow()
+    public void Continue_HiddenHandle_ProducesTheExactAuthoredTimelineLength()
     {
-        // Plan compilation resolves the default overlap of 8 to a 9-frame continuity window.
         (WorkflowGenerator g, List<WGNodeData> clips) =
-            BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2);
-        BoundaryBudgetResolution boundaries = BoundaryPlanFixture.Resolve(
-            [17, 17], ["continue", "cut"], [8, 8], [9]);
-        Assert.Equal(9, boundaries.Boundaries[0].ContinuityWindowFrames);
-        MergeAndPublish(g, Artifacts(clips), boundaries.Boundaries);
+            BuildClips([121, 145], T2IModelClassSorter.CompatLtxv2);
+        BoundaryPlan boundary = new(
+            0,
+            BoundaryJoinType.Continue,
+            OverlapFrames: 24,
+            ContinuityWindowFrames: 25,
+            BoundaryFallbackReason.None)
+        {
+            FrameStep = 8,
+            MinFrames = 8,
+        };
+
+        MergeAndPublish(g, Artifacts(clips), [boundary]);
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        const int k = 9;
-
-        LTXVLaplacianPyramidBlendNode blend =
-            Assert.Single(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
-        Assert.Equal(4, CountOf<ImageFromBatchNode>(bridge));
-        SwarmRampMaskBatchNode ramp = Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
-        Assert.Equal(k, ramp.Frames.LiteralAsInt());
-        Assert.Equal(ramp.Id, blend.Mask.Connection!.Node.Id);
-
-        TrimAudioDurationNode trim = Assert.Single(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
-        Assert.Equal((17 - k) / (double)Fps, trim.Duration.LiteralAsDouble()!.Value, 6);
-        Assert.Equal(AudioId(0), trim.Audio.Connection!.Node.Id);
-
-        Assert.Equal(34 - k, g.CurrentMedia.Frames);
+        Assert.Equal(241, g.CurrentMedia.Frames);
+        List<TrimAudioDurationNode> trims =
+            [.. bridge.Graph.NodesOfType<TrimAudioDurationNode>()];
+        Assert.Contains(trims, trim =>
+            trim.Audio.Connection!.Node.Id == AudioId(0)
+            && trim.StartIndex.LiteralAsDouble() == 0
+            && trim.Duration.LiteralAsDouble() == 5);
+        Assert.Contains(trims, trim =>
+            trim.Audio.Connection!.Node.Id == AudioId(1)
+            && trim.StartIndex.LiteralAsDouble() == 1
+            && trim.Duration.LiteralAsDouble() == 121d / Fps);
     }
 
     [Fact]
-    public void ContinueAndCrossfade_MixedBoundaries_CutOnlyTheUnderfundedCrossfade()
+    public void Continue_LateFallback_DiscardsTheGeneratedHandleBeforeCutting()
     {
-        // The adjacent crossfade cannot retain its minimum after the 9-frame continuity window.
         (WorkflowGenerator g, List<WGNodeData> clips) =
-            BuildClips([17, 17, 17], T2IModelClassSorter.CompatLtxv2);
+            BuildClips([121, 145], T2IModelClassSorter.CompatLtxv2);
+        ArchitectureId missing = new("missing");
+        BoundaryPlan boundary = new(
+            0,
+            BoundaryJoinType.Continue,
+            OverlapFrames: 24,
+            ContinuityWindowFrames: 25,
+            BoundaryFallbackReason.None)
+        {
+            FrameStep = 8,
+            MinFrames = 8,
+        };
+
+        BoundaryBudgetResolution result = MergeAndPublish(
+            g,
+            Artifacts(clips, [missing, missing]),
+            [boundary]);
+
+        Assert.True(result.Degraded);
+        Assert.Equal(242, g.CurrentMedia.Frames);
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        ImageFromBatchNode videoTrim = Assert.Single(
+            bridge.Graph.NodesOfType<ImageFromBatchNode>());
+        Assert.Equal(VideoId(1), videoTrim.Image.Connection!.Node.Id);
+        Assert.Equal(24, videoTrim.BatchIndex.LiteralAsInt());
+        Assert.Equal(121, videoTrim.Length.LiteralAsInt());
+        Assert.Contains(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
+            trim => trim.Audio.Connection!.Node.Id == AudioId(1)
+                && trim.StartIndex.LiteralAsDouble() == 1
+                && trim.Duration.LiteralAsDouble() == 121d / Fps);
+    }
+
+    [Fact]
+    public void ContinueAndCrossfade_MixedBoundaries_UseTheGeneratedHandleBudget()
+    {
+        (WorkflowGenerator g, List<WGNodeData> clips) =
+            BuildClips([17, 25, 17], T2IModelClassSorter.CompatLtxv2);
         BoundaryBudgetResolution boundaries = BoundaryPlanFixture.Resolve(
-            [17, 17, 17], ["continue", "crossfade", "cut"], [8, 8, 8], [9, 0]);
+            [17, 25, 17], ["continue", "crossfade", "cut"], [8, 8, 8], [9, 0]);
         Assert.Equal(9, boundaries.Boundaries[0].ContinuityWindowFrames);
-        Assert.Equal(BoundaryJoinType.Cut, boundaries.Boundaries[1].Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, boundaries.Boundaries[1].Effective);
         MergeAndPublish(g, Artifacts(clips), boundaries.Boundaries);
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        const int contK = 9;
-
-        Assert.Single(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
-        Assert.Equal(4, CountOf<ImageFromBatchNode>(bridge));
-
-        SwarmRampMaskBatchNode ramp =
-            Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
-        Assert.Equal(contK, ramp.Frames.LiteralAsInt());
-
-        TrimAudioDurationNode trim =
-            Assert.Single(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
-        Assert.Equal(AudioId(0), trim.Audio.Connection!.Node.Id);
-        Assert.Equal((17 - contK) / (double)Fps, trim.Duration.LiteralAsDouble()!.Value, 6);
-
-        Assert.Equal(51 - contK, g.CurrentMedia.Frames);
+        Assert.Equal(2, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        Assert.Equal(7, CountOf<ImageFromBatchNode>(bridge));
+        Assert.Equal(
+            new HashSet<int> { 8, 9 },
+            bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>()
+                .Select(ramp => ramp.Frames.LiteralAsInt()!.Value)
+                .ToHashSet());
+        Assert.Equal(2, CountOf<TrimAudioDurationNode>(bridge));
+        Assert.Equal(17 + 25 + 17 - 9 - 8, g.CurrentMedia.Frames);
     }
 
     [Fact]

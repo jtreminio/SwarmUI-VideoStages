@@ -42,6 +42,14 @@ internal sealed class ClipContext
     // the prior clip ended. Each consuming stage conforms it to its own resolution.
     public WGNodeData ContinuityFrame { get; set; }
 
+    public int IncomingContinueHandleFrames { get; set; }
+
+    public bool ContinueHandleMaterialized { get; set; }
+
+    public int? GenerationFrames => PlannedClip.Frames is int frames
+        ? frames + IncomingContinueHandleFrames
+        : null;
+
     public bool IsFirstStage(StagePlan stage) => stage?.ClipStageIndex == 0;
 
     /// <summary>

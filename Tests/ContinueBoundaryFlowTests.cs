@@ -12,11 +12,10 @@ namespace VideoStages.Tests;
 
 public partial class StageFlowTests
 {
-    // Each clip's Duration (0.6s at 24 fps) aligns to 17 spec frames, which funds the continue-window
-    // resolution: the default overlap (8) resolves to a 9-frame window (overlap+1). The refine-type
-    // stages themselves carry the native source's 16 frames through, so each RENDERED clip is 16 frames
-    // — the window's tail slice and the merge trims index off that actual output count.
+    // Each clip's Duration (0.6s at 24 fps) aligns to 17 authored frames. The native first clip
+    // renders 16 frames; the target generates 17 authored frames plus an 8-frame hidden handle.
     private const int ContinueClipFrames = 16;
+    private const int ContinueTargetFrames = 25;
     private const int ContinueWindowFrames = Ltx2BoundaryPolicy.DefaultFrames + 1;
 
     private static string TwoClipContinueStagesJson(TestModelBundle models, JObject secondClip = null)
@@ -68,8 +67,51 @@ public partial class StageFlowTests
         SwarmRampMaskBatchNode ramp = Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
         Assert.Equal(ContinueWindowFrames, ramp.Frames.LiteralAsInt());
         Assert.Equal(ramp.Id, blend.Mask.Connection!.Node.Id);
-        Assert.Equal(2 * ContinueClipFrames - ContinueWindowFrames, g.CurrentMedia.Frames);
+        Assert.Contains(
+            bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>(),
+            node => node.Length.LiteralAsInt() == ContinueTargetFrames);
+        EmptyAudioNode handleSilence = Assert.Single(
+            bridge.Graph.NodesOfType<EmptyAudioNode>(),
+            node => node.Duration.LiteralAsDouble() ==
+                Ltx2BoundaryPolicy.DefaultFrames / 24d);
+        Assert.Contains(
+            bridge.Graph.NodesOfType<AudioConcatNode>(),
+            node => ReferenceEquals(node.Audio1.Connection, handleSilence.AUDIO));
+        Assert.Equal(
+            ContinueClipFrames + ContinueTargetFrames - ContinueWindowFrames,
+            g.CurrentMedia.Frames);
         AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Continue_boundary_shifts_start_refs_but_keeps_end_refs_relative_to_the_end()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        JObject stage = MakeStage(
+            models.VideoModel.Name,
+            "Generated",
+            control: 0.5,
+            steps: 10);
+        JObject secondClip = MakeClipWithRefs(
+            [MakeRef("Base", frame: 2), MakeRef("Base", frame: 2, fromEnd: true)],
+            stage);
+
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            TwoClipContinueStagesJson(models, secondClip));
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: false));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        int[] frameIndexes = bridge.Graph.NodesOfType<LTXVAddGuideNode>()
+            .Select(node => node.FrameIdx.LiteralAsInt()!.Value)
+            .Order()
+            .ToArray();
+        Assert.Equal([-2, 10], frameIndexes);
     }
 
     [Theory]

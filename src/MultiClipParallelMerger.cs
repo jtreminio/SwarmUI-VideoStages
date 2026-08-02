@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -46,12 +47,12 @@ internal sealed class MultiClipParallelMerger(
             conform.Diagnostics,
             "VideoStages timeline assembly");
         PlanDiagnosticReporter.ReportToRequest(conform.Diagnostics, g.UserInput);
-        IReadOnlyList<DecodedClipArtifact> clips = conform.Clips;
-        IReadOnlyList<INodeOutput> videoOutputs = conform.VideoOutputs;
-        int sumFrames = clips.Sum(clip => clip.Frames);
+        IReadOnlyList<DecodedClipArtifact> generatedClips = conform.Clips;
+        IReadOnlyList<INodeOutput> generatedVideoOutputs = conform.VideoOutputs;
+        IReadOnlyList<BoundaryPlan> generatedBoundaries = conform.Boundaries;
 
         BoundaryBudgetResolution runtimeBoundaries =
-            BoundaryOverlapPlanner.ValidateRuntime(clips, conform.Boundaries);
+            BoundaryOverlapPlanner.ValidateRuntime(generatedClips, generatedBoundaries);
         if (runtimeBoundaries.Degraded)
         {
             PlanDiagnosticReporter.TrackRequestWarning(
@@ -64,7 +65,7 @@ internal sealed class MultiClipParallelMerger(
         IReadOnlyList<ArchitectureMergeRun> architectureRuns = [];
         if (overlapPlan is not null
             && !TryPreflightArchitectureRuns(
-                clips,
+                generatedClips,
                 runtimeBoundaries.Boundaries,
                 out architectureRuns,
                 out string preflightFailure))
@@ -77,10 +78,44 @@ internal sealed class MultiClipParallelMerger(
                 $"VideoStages: overlap boundaries degraded to cuts because {preflightFailure}.");
             overlapPlan = null;
         }
+        int[] discardedHandles = new int[generatedClips.Count];
+        for (int i = 0; i < generatedBoundaries.Count; i++)
+        {
+            if (generatedBoundaries[i].Effective == BoundaryJoinType.Continue
+                && runtimeBoundaries.Boundaries[i].Effective == BoundaryJoinType.Cut)
+            {
+                discardedHandles[i + 1] =
+                    BoundaryOverlapPlanner.IncomingHandleFrames(generatedBoundaries[i]);
+            }
+        }
+
+        List<DecodedClipArtifact> clips = [.. generatedClips];
+        List<INodeOutput> videoOutputs = [.. generatedVideoOutputs];
+        for (int i = 0; i < discardedHandles.Length; i++)
+        {
+            int handle = discardedHandles[i];
+            if (handle <= 0)
+            {
+                continue;
+            }
+            if (clips[i].Frames <= handle)
+            {
+                throw VideoStagesInvariant.Failure(
+                    $"VideoStages: clip {clips[i].ClipId} cannot discard its {handle}-frame "
+                    + "Continue handle after a runtime fallback.");
+            }
+            ImageFromBatchNode trim = bridge.AddNode(new ImageFromBatchNode().With(
+                BatchIndex: handle,
+                Length: clips[i].Frames - handle));
+            trim.Image.ConnectToUntyped(videoOutputs[i]);
+            videoOutputs[i] = trim.IMAGE;
+            clips[i] = clips[i] with { Frames = clips[i].Frames - handle };
+        }
+        int sumFrames = clips.Sum(clip => clip.Frames);
         MultiClipAudioGraphAssembler.TimelineAudioPreflight audioPreflight =
             MultiClipAudioGraphAssembler.PreflightTimelineAudio(
                 bridge,
-                clips);
+                generatedClips);
 
         INodeOutput mergedVideo = overlapPlan is null
             ? MultiClipVideoGraphAssembler.MergeCut(bridge, videoOutputs)
@@ -93,8 +128,27 @@ internal sealed class MultiClipParallelMerger(
         IReadOnlyList<INodeOutput> audioOutputs =
             MultiClipAudioGraphAssembler.MaterializeTimelineAudio(
                 bridge,
-                clips,
+                generatedClips,
                 audioPreflight);
+        if (audioOutputs.Count > 0 && discardedHandles.Any(handle => handle > 0))
+        {
+            List<INodeOutput> trimmedAudio = [.. audioOutputs];
+            for (int i = 0; i < discardedHandles.Length; i++)
+            {
+                int handle = discardedHandles[i];
+                if (handle <= 0)
+                {
+                    continue;
+                }
+                TrimAudioDurationNode trim = bridge.AddNode(
+                    new TrimAudioDurationNode().With(
+                        StartIndex: handle / (double)clips[i].FramesPerSecond,
+                        Duration: clips[i].Frames / (double)clips[i].FramesPerSecond));
+                trim.Audio.ConnectToUntyped(trimmedAudio[i]);
+                trimmedAudio[i] = trim.AUDIO;
+            }
+            audioOutputs = trimmedAudio;
+        }
         INodeOutput mergedAudio = audioOutputs.Count > 0
             ? MultiClipAudioGraphAssembler.Merge(
                 bridge,

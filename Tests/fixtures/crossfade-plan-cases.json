@@ -48,11 +48,11 @@
     "expectedFallback": true
   },
   {
-    "name": "back-to-back continues cut the underfunded right window",
+    "name": "back-to-back continues use each generated incoming handle",
     "frames": [17, 17, 17],
     "boundaries": ["continue", "continue", "cut"],
     "boundaryOverlaps": [8, 8, 8],
-    "expectedOverlaps": [9, 0],
+    "expectedOverlaps": [9, 9],
     "expectedFallback": false
   },
   {
@@ -64,11 +64,11 @@
     "expectedFallback": false
   },
   {
-    "name": "mixed continue then crossfade cuts the underfunded crossfade",
+    "name": "mixed continue then crossfade uses the generated incoming handle",
     "frames": [17, 17, 17],
     "boundaries": ["continue", "crossfade", "cut"],
     "boundaryOverlaps": [8, 8, 8],
-    "expectedOverlaps": [9, 0],
+    "expectedOverlaps": [9, 8],
     "expectedFallback": false
   },
   {

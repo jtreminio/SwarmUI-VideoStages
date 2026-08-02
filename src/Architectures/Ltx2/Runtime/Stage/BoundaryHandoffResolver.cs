@@ -24,8 +24,9 @@ internal sealed class BoundaryHandoffResolver(
         ArgumentNullException.ThrowIfNull(nextClip);
         ArgumentNullException.ThrowIfNull(clipContext);
 
-        bool wantsContinuity = assembly.TryGetContinueWindow(
+        bool wantsContinuity = assembly.TryGetContinueInput(
             previousClip.ClipId,
+            out int continueHandleFrames,
             out int continuityWindow);
         bool wantsAudioCarry = assembly.TryGetAudioCarryWindow(
             previousClip.ClipId,
@@ -33,6 +34,25 @@ internal sealed class BoundaryHandoffResolver(
 
         if (wantsContinuity)
         {
+            if (!nextClip.Stages.Any(stage => !stage.IsPassthrough))
+            {
+                assembly.ReportWarning(
+                    $"VideoStages: Clip {nextClip.ClipId} has no generating stage for its "
+                    + "incoming Continue handle; treating the boundary as a cut.");
+                assembly.DegradeToCut(previousClip.ClipId);
+                return null;
+            }
+            if (nextClip.Audio.Length.Owner != AudioLengthOwner.Timeline
+                || nextClip.Frames is not int targetFrames
+                || targetFrames <= 0
+                || targetFrames > int.MaxValue - continueHandleFrames)
+            {
+                assembly.ReportWarning(
+                    $"VideoStages: Clip {nextClip.ClipId} has a runtime-derived duration, so its "
+                    + "incoming Continue handle cannot be added safely; treating the boundary as a cut.");
+                assembly.DegradeToCut(previousClip.ClipId);
+                return null;
+            }
             if (nextClipHasInitVideo)
             {
                 assembly.ReportWarning(
@@ -55,6 +75,7 @@ internal sealed class BoundaryHandoffResolver(
                 assembly.DegradeToCut(previousClip.ClipId);
                 return null;
             }
+            clipContext.IncomingContinueHandleFrames = continueHandleFrames;
         }
 
         if (!wantsAudioCarry)
@@ -71,6 +92,7 @@ internal sealed class BoundaryHandoffResolver(
         {
             // Without carry conditioning, trimming the overlap would shorten audio.
             clipContext.ContinuityFrame = null;
+            clipContext.IncomingContinueHandleFrames = 0;
             assembly.DegradeToCut(previousClip.ClipId);
         }
         return carry;

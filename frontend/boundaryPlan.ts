@@ -82,7 +82,9 @@ export const crossfadePlanForClips = (
         for (let i = 0; i < count; i++) {
             const left = i > 0 ? trim(i - 1) : 0;
             const right = i < boundaryCount ? trim(i) : 0;
-            if (left + right > frames[i] - 1) {
+            const incomingHandle =
+                i > 0 && modes[i - 1] === "continue" ? prefs[i - 1] : 0;
+            if (left + right > frames[i] + incomingHandle - 1) {
                 overBudgetClip = i;
                 break;
             }

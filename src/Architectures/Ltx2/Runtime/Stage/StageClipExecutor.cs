@@ -155,7 +155,8 @@ internal sealed class StageClipExecutor(
             context.Runtime.Clip,
             plannedStage,
             clipContext.Dimensions.Width,
-            clipContext.Dimensions.Height);
+            clipContext.Dimensions.Height,
+            clipContext.GenerationFrames);
         RuntimeArtifact inputArtifact = priorArtifact ?? CaptureStageInputArtifact();
         context.HostScope.PublishStageInput(inputArtifact);
         // Multi-clip runs first fork the shared root decode. Later compatible stages retarget that

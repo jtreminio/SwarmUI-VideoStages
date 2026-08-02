@@ -793,7 +793,7 @@ describe("renderTimeline (DOM)", () => {
         );
     });
 
-    it("centers the resolved join over adjacent clip regions", () => {
+    it("places the Continue handle before the target clip", () => {
         const clips = [
             minimalClip({
                 duration: 3,
@@ -813,18 +813,18 @@ describe("renderTimeline (DOM)", () => {
         const regions = body.querySelectorAll<HTMLElement>(".vst-region");
         expect(Number.parseFloat(regions[0].style.left)).toBeCloseTo(0);
         expect(Number.parseFloat(regions[0].style.width)).toBeCloseTo(
-            (121 / 48) * 100 - 2,
+            3 * 100 - 2,
         );
-        expect(Number.parseFloat(regions[1].style.left)).toBeCloseTo(
-            (121 / 48) * 100,
-        );
+        expect(Number.parseFloat(regions[1].style.left)).toBeCloseTo(3 * 100);
         expect(Number.parseFloat(regions[1].style.width)).toBeCloseTo(
-            (121 / 48) * 100 - 2,
+            (73 / 24) * 100 - 2,
         );
         const overlap = body.querySelector<HTMLElement>(
             ".vst-boundary-overlap",
         );
-        expect(Number.parseFloat(overlap?.style.left ?? "")).toBeCloseTo(200);
+        expect(Number.parseFloat(overlap?.style.left ?? "")).toBeCloseTo(
+            (3 - 25 / 24) * 100,
+        );
         expect(Number.parseFloat(overlap?.style.width ?? "")).toBeCloseTo(
             (25 / 24) * 100,
         );
@@ -836,7 +836,7 @@ describe("renderTimeline (DOM)", () => {
         expect(
             Number.parseFloat(overlap?.style.left ?? "") +
                 Number.parseFloat(overlap?.style.width ?? ""),
-        ).toBeGreaterThan(Number.parseFloat(regions[1].style.left));
+        ).toBeCloseTo(Number.parseFloat(regions[1].style.left));
         expect(
             Number.parseFloat(regions[0].style.left) +
                 Number.parseFloat(regions[0].style.width),
@@ -846,12 +846,12 @@ describe("renderTimeline (DOM)", () => {
                 body.querySelector<HTMLElement>(".vst-tick-end")?.style.left ??
                     "",
             ),
-        ).toBeCloseTo((121 / 24) * 100);
+        ).toBeCloseTo((145 / 24) * 100);
         const boundaryChip = body.querySelector<HTMLElement>(
             "[data-vst-boundary-chip]",
         );
         expect(Number.parseFloat(boundaryChip?.style.left ?? "")).toBeCloseTo(
-            (121 / 48) * 100,
+            3 * 100,
         );
         expect(boundaryChip?.dataset.vstBoundaryDensity).toBe("full");
         expect(
@@ -861,19 +861,25 @@ describe("renderTimeline (DOM)", () => {
             boundaryChip?.querySelector(".vst-boundary-duration")?.textContent,
         ).toBe("1.0s");
         expect(boundaryChip?.textContent).not.toContain("−");
-        expect(regions[0].title).toContain(
-            "3.0s generated · 2.5s unique · 0.5s shared",
+        expect(regions[1].title).toContain(
+            "4.0s generated · 3.0s timeline · 1.0s handle",
         );
+        expect(
+            Array.from(regions).map(
+                (region) =>
+                    region.querySelector(".vst-region-dur")?.textContent,
+            ),
+        ).toEqual(["3s", "3s"]);
         expect(
             Array.from(body.querySelectorAll(".vst-tick-label")).filter(
                 (label) => label.textContent === "5s",
             ),
         ).toHaveLength(1);
         expect(body.querySelector("[data-vst-readout]")?.textContent).toContain(
-            "5.0s output",
+            "6.0s output",
         );
         expect(body.querySelector("[data-vst-readout]")?.textContent).toContain(
-            "6.0s authored · −1.0s joins",
+            "6.0s authored · +1.0s handle · −1.0s shared",
         );
     });
 
