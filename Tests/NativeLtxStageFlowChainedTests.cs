@@ -191,6 +191,19 @@ public partial class StageFlowTests
         Assert.Equal(2, samplerNodes.Count);
         Assert.True(ReachesUpstream(bridge, samplerNodes[1].LatentImage.Connection!.Node, samplerNodes[0].Id));
 
+        Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => (node is VAEDecodeNode or VAEDecodeTiledNode)
+                && ReachesUpstream(bridge, node, samplerNodes[1].Id));
+        Assert.DoesNotContain(
+            bridge.Graph.Nodes.Values,
+            node => (node is VAEDecodeNode or VAEDecodeTiledNode or VAEEncodeNode)
+                && ReachesUpstream(bridge, node, samplerNodes[0].Id)
+                && ReachesUpstream(
+                    bridge,
+                    samplerNodes[1].LatentImage.Connection!.Node,
+                    node.Id));
+
         WorkflowNode finalVideoDecode = AsWorkflowNode(
             RequireTypedNode<VAEDecodeTiledNode>(bridge, "202"),
             workflow);
@@ -198,6 +211,142 @@ public partial class StageFlowTests
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray("202", 0)));
+    }
+
+    [Fact]
+    public void Prehandler_pixel_wrapper_invalidates_the_prepared_latent_handoff()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        string stagesJson = JsonSingleClipStages(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8),
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+
+        string wrapperId = null;
+        Action<WorkflowGenerator.ImageToVideoGenInfo> wrapSecondStageSource = info =>
+        {
+            if (info.ContextID != VideoStagesExtension.SectionIdForStage(1))
+            {
+                return;
+            }
+
+            WorkflowGenerator generator = info.Generator;
+            WGNodeData priorMedia = generator.CurrentMedia;
+            using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+            ImageScaleNode wrapper = bridge.AddNode(new ImageScaleNode().With(
+                Width: priorMedia.Width ?? 512,
+                Height: priorMedia.Height ?? 512,
+                UpscaleMethod: "lanczos",
+                Crop: "disabled"));
+            wrapper.Image.TryConnectFromPath(bridge, priorMedia.Path);
+            WGNodeData wrappedMedia = priorMedia.WithPath(new JArray(wrapper.Id, 0));
+            wrappedMedia.AttachedAudio = priorMedia.AttachedAudio;
+            generator.CurrentMedia = wrappedMedia;
+            wrapperId = wrapper.Id;
+        };
+        WorkflowGenerator.AltImageToVideoPreHandlers.Add(wrapSecondStageSource);
+        JObject workflow;
+        try
+        {
+            (workflow, WorkflowGenerator unusedGenerator) =
+                WorkflowTestHarness.GenerateWithStepsAndState(
+                    input,
+                    BuildNativeSteps(attachAudioToCurrentMedia: true));
+        }
+        finally
+        {
+            Assert.True(WorkflowGenerator.AltImageToVideoPreHandlers.Remove(
+                wrapSecondStageSource));
+        }
+
+        using WorkflowBridge result = WorkflowBridge.Create(workflow);
+        Assert.NotNull(wrapperId);
+        SwarmKSamplerNode secondSampler = Assert.Single(
+            SamplerNodesOrdered(result),
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 44);
+        ComfyNode latentInput = secondSampler.LatentImage.Connection!.Node;
+        Assert.True(ReachesUpstream(result, latentInput, wrapperId));
+        SwarmKSamplerNode firstSampler = Assert.Single(
+            SamplerNodesOrdered(result),
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 43);
+        Assert.Contains(
+            result.Graph.Nodes.Values,
+            node => node is VAEEncodeNode
+                && ReachesUpstream(result, node, firstSampler.Id)
+                && ReachesUpstream(result, latentInput, node.Id));
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
+    public void Compatible_multiclip_ltx_stage_chains_decode_only_each_clip_terminal()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        JObject firstClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8),
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
+        firstClip["boundaryOut"] = Constants.BoundaryOutCut;
+        JObject secondClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 12),
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 14));
+        string stagesJson = MakeRootConfig(512, 512, firstClip, secondClip).ToString();
+
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        (JObject workflow, WorkflowGenerator unusedGenerator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: true));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
+        Assert.Equal(4, samplers.Count);
+        Assert.True(ReachesUpstream(
+            bridge,
+            samplers[1].LatentImage.Connection!.Node,
+            samplers[0].Id));
+        Assert.True(ReachesUpstream(
+            bridge,
+            samplers[3].LatentImage.Connection!.Node,
+            samplers[2].Id));
+        Assert.False(ReachesUpstream(
+            bridge,
+            samplers[2].LatentImage.Connection!.Node,
+            samplers[0].Id));
+        Assert.DoesNotContain(
+            bridge.Graph.Nodes.Values,
+            node => (node is VAEDecodeNode or VAEDecodeTiledNode or VAEEncodeNode)
+                && ReachesUpstream(bridge, node, samplers[0].Id)
+                && ReachesUpstream(
+                    bridge,
+                    samplers[1].LatentImage.Connection!.Node,
+                    node.Id));
+        Assert.DoesNotContain(
+            bridge.Graph.Nodes.Values,
+            node => (node is VAEDecodeNode or VAEDecodeTiledNode or VAEEncodeNode)
+                && ReachesUpstream(bridge, node, samplers[2].Id)
+                && ReachesUpstream(
+                    bridge,
+                    samplers[3].LatentImage.Connection!.Node,
+                    node.Id));
+
+        List<ComfyNode> samplerOutputDecodes = [
+            .. bridge.Graph.Nodes.Values.Where(node =>
+                (node is VAEDecodeNode or VAEDecodeTiledNode)
+                && samplers.Any(sampler => ReachesUpstream(bridge, node, sampler.Id)))
+        ];
+        Assert.True(
+            samplerOutputDecodes.Count == 2,
+            "Expected one sampler-output decode per clip; found "
+                + string.Join(", ", samplerOutputDecodes.Select(decode =>
+                    $"{decode.Id}<-[{string.Join(",", samplers.Where(sampler =>
+                        ReachesUpstream(bridge, decode, sampler.Id)).Select(sampler => sampler.Id))}]")));
+        Assert.All(samplerOutputDecodes, decode => Assert.True(
+            ReachesUpstream(bridge, decode, samplers[1].Id)
+            || ReachesUpstream(bridge, decode, samplers[3].Id),
+            $"Decode {decode.Id} does not consume a clip-terminal sampler."));
+        AssertWorkflowHasNoCycles(workflow);
     }
 
     [Theory]

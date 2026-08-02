@@ -150,6 +150,51 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Final_stage_retake_masks_the_previous_stage_latent_without_a_vae_round_trip()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        string stagesJson = JsonSingleClipStagesWithRetake(
+            startSeconds: 1.0,
+            lengthSeconds: 1.0,
+            strength: 0.8,
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8),
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
+        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
+        input.Set(T2IParamTypes.VideoFrames, 97);
+
+        (JObject workflow, WorkflowGenerator unusedGenerator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: true),
+                features: RetakeFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
+        Assert.Equal(2, samplers.Count);
+        LTXVSetVideoLatentNoiseMasksNode mask = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
+        Assert.True(ReachesUpstream(
+            bridge,
+            mask.Samples.Connection!.Node,
+            samplers[0].Id));
+        Assert.True(ReachesUpstream(
+            bridge,
+            samplers[1].LatentImage.Connection!.Node,
+            mask.Id));
+        Assert.DoesNotContain(
+            bridge.Graph.Nodes.Values,
+            node => (node is VAEDecodeNode or VAEDecodeTiledNode or VAEEncodeNode)
+                && ReachesUpstream(bridge, node, samplers[0].Id)
+                && ReachesUpstream(
+                    bridge,
+                    samplers[1].LatentImage.Connection!.Node,
+                    node.Id));
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
     public void Retake_latent_window_arithmetic_is_deterministic()
     {
         LtxVideoRetakeMasker.LatentWindow w =

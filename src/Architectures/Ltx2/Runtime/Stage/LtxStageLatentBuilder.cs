@@ -57,6 +57,11 @@ internal sealed class LtxStageLatentBuilder
         if (postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true)
         {
             WGNodeData nativeVideoLatent = postVideoChain.CreateStageInputVideoLatent();
+            nativeVideoLatent = retakeMasker.ApplyIfActive(
+                nativeVideoLatent,
+                genInfo,
+                payload.Retake,
+                retakeActive);
             return latentAudioFactory.EnsureHasAudio(
                 nativeVideoLatent,
                 genInfo,

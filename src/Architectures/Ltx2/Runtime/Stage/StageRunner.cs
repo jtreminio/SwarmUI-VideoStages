@@ -203,17 +203,25 @@ internal class StageRunner
                 postVideoChain),
             HasGuide: primaryGuideClipRef?.Image is not null || guideReference?.Media is not null));
 
+        WGNodeData guideMedia = ResolveGuideMedia(
+            inputCase,
+            primaryGuideClipRef,
+            guideReference,
+            stageFrame,
+            referenceFraming);
+        Func<WGNodeData> resolveFallbackGuide = inputCase == StageInputCase.PriorStageLatentReuse
+            ? () => ResolveReinjectedGuideMedia(
+                guideReference,
+                stageFrame,
+                referenceFraming)
+            : null;
         _stageExecutor.RunStage(
             genInfo,
             stageFrame,
             sourceMedia,
-            ResolveGuideMedia(
-                inputCase,
-                primaryGuideClipRef,
-                guideReference,
-                stageFrame,
-                referenceFraming),
+            guideMedia,
             StageInputDispatcher.SkipsGuideReinjection(inputCase),
+            resolveFallbackGuide,
             postVideoChain,
             applyIcLora,
             clipRefs,

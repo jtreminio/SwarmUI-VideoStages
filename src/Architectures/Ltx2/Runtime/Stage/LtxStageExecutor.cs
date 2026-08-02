@@ -1,5 +1,6 @@
+using ComfyTyped.Core;
+using ComfyTyped.Families;
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -38,6 +39,7 @@ internal sealed class LtxStageExecutor
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
         bool skipGuideReinjection,
+        Func<WGNodeData> resolveFallbackGuide,
         LtxPostVideoChainCapture postVideoChain,
         Action<WorkflowGenerator.ImageToVideoGenInfo> applyIcLora,
         IReadOnlyList<ResolvedClipRef> clipRefs = null,
@@ -57,6 +59,13 @@ internal sealed class LtxStageExecutor
 
             WGNodeData effectiveSourceMedia = g.CurrentMedia ?? sourceMedia;
             modelPromptPreparer.Prepare(genInfo, stageFrame, effectiveSourceMedia);
+            bool canReuseLatent =
+                postVideoChain?.CanReuseCurrentOutputAsStageInput(effectiveSourceMedia) == true;
+            if (!canReuseLatent && resolveFallbackGuide is not null)
+            {
+                guideMedia = resolveFallbackGuide();
+                skipGuideReinjection = false;
+            }
 
             WGNodeData stageLatent = latentBuilder.Build(
                 genInfo,
@@ -100,15 +109,26 @@ internal sealed class LtxStageExecutor
                 handler(genInfo);
             }
 
+            bool forceDedicatedOutput = false;
+            if (!canReuseLatent
+                && postVideoChain is { HasPostDecodeWrappers: false }
+                && effectiveSourceMedia?.Path is not null)
+            {
+                using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+                ComfyNode sourceNode = bridge.ResolvePath(effectiveSourceMedia.Path)?.Node;
+                forceDedicatedOutput = sourceNode is not null
+                    && bridge.Graph.FindNearestUpstream<IVaeDecode>(sourceNode)?.Id
+                        == postVideoChain.State.VideoDecodeNodeId;
+            }
+
             sampler.Execute(genInfo, stageFrame);
-            outputFinalizer.Complete(
-                genInfo,
-                stageFrame,
-                postVideoChain);
+            outputFinalizer.Complete(genInfo, stageFrame, postVideoChain,
+                stageFrame.RequiresDedicatedOutput || forceDedicatedOutput);
         }
         finally
         {
             g.IsImageToVideo = false;
         }
     }
+
 }

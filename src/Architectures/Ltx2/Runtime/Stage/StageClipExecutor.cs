@@ -14,11 +14,7 @@ internal sealed record StageClipExecutionContext(
     StageSequenceRootSources RootSources,
     TimelineAssemblySession Assembly,
     StageHostExecutionScope HostScope,
-    RootExecutionPolicy RootPolicy)
-{
-    public bool RequiresDedicatedOutput =>
-        Plan.Clips.Count > 1 || HostScope.PublishesIntermediateStages;
-}
+    RootExecutionPolicy RootPolicy);
 
 internal sealed class StageClipExecutor(
     WorkflowGenerator g,
@@ -162,13 +158,20 @@ internal sealed class StageClipExecutor(
             clipContext.Dimensions.Height);
         RuntimeArtifact inputArtifact = priorArtifact ?? CaptureStageInputArtifact();
         context.HostScope.PublishStageInput(inputArtifact);
+        // Multi-clip runs first fork the shared root decode. Later compatible stages retarget that
+        // clip-local branch, so clip sources stay independent without adding a decode per stage.
+        bool requiresDedicatedOutput = context.HostScope.PublishesIntermediateStages
+            || (context.Plan.Clips.Count > 1
+                && context.Runtime.Clip.Stages
+                    .FirstOrDefault(candidate => !candidate.IsPassthrough)?.StageId
+                    == plannedStage.StageId);
         RuntimeArtifact output = singleStageRunner.RunStage(
             plannedStage,
             sectionId,
             guideRef,
             store,
             clipContext,
-            context.RequiresDedicatedOutput,
+            requiresDedicatedOutput,
             context.RootPolicy);
         guideReferences.CaptureStageOutput(plannedStage);
         context.HostScope.PublishIntermediate(plannedStage);
