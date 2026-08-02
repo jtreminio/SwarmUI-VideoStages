@@ -18,7 +18,8 @@ internal static class LoraParams
     /// </summary>
     public static ParamSnapshot ApplyNormalLoras(
         T2IParamInput input,
-        IReadOnlyList<NormalLoraPlan> plans)
+        IReadOnlyList<NormalLoraPlan> plans,
+        int? targetSectionId = null)
     {
         if (plans is null || plans.Count == 0)
         {
@@ -39,7 +40,8 @@ internal static class LoraParams
             weights,
             tencWeights,
             confinements,
-            rows);
+            rows,
+            targetSectionId ?? T2IParamInput.SectionID_Video);
     }
 
     /// <summary>Pads weights/tencWeights/confinements up to loras.Count, appends
@@ -51,7 +53,8 @@ internal static class LoraParams
         List<string> weights,
         List<string> tencWeights,
         List<string> confinements,
-        IReadOnlyList<(string Name, string Weight, string TencWeight)> rows)
+        IReadOnlyList<(string Name, string Weight, string TencWeight)> rows,
+        int targetSectionId)
     {
         while (weights.Count < loras.Count)
         {
@@ -71,7 +74,7 @@ internal static class LoraParams
             loras.Add(name);
             weights.Add(weight);
             tencWeights.Add(tencWeight);
-            confinements.Add($"{T2IParamInput.SectionID_Video}");
+            confinements.Add($"{targetSectionId}");
         }
 
         ParamSnapshot snapshot = ParamSnapshot.Of(input,

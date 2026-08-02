@@ -14,6 +14,8 @@ internal sealed class StageHostExecutionScope : IDisposable
     private readonly VideoExecutionPlan _plan;
     private readonly HashSet<int> _sectionIds = [];
     private readonly bool _publishIntermediateStages;
+    private T2IParamSet _originalSamplingContinuationOverrides;
+    private bool _capturedSamplingContinuationOverrides;
     private bool _disposed;
 
     public StageHostExecutionScope(
@@ -80,6 +82,36 @@ internal sealed class StageHostExecutionScope : IDisposable
         return sectionId;
     }
 
+    public void ApplySamplingContinuationOverrides(StagePlan plannedStage)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(plannedStage);
+
+        int sectionId = T2IParamInput.SectionID_VideoSwap;
+        if (!_capturedSamplingContinuationOverrides)
+        {
+            _capturedSamplingContinuationOverrides = true;
+            _originalSamplingContinuationOverrides =
+                _generator.UserInput.SectionParamOverrides.TryGetValue(
+                    sectionId,
+                    out T2IParamSet original)
+                    ? original.Clone()
+                    : null;
+        }
+        _generator.UserInput.SectionParamOverrides[sectionId] = new();
+        StageCorePlan core = plannedStage.Core;
+        _generator.UserInput.Set(T2IParamTypes.Steps, core.Steps, sectionId);
+        _generator.UserInput.Set(T2IParamTypes.CFGScale, core.CfgScale, sectionId);
+        _generator.UserInput.Set(
+            ComfyUIBackendExtension.SamplerParam.Type,
+            core.Sampler,
+            sectionId);
+        _generator.UserInput.Set(
+            ComfyUIBackendExtension.SchedulerParam.Type,
+            core.Scheduler,
+            sectionId);
+    }
+
     public void PublishStageInput(RuntimeArtifact inputArtifact)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -89,6 +121,17 @@ internal sealed class StageHostExecutionScope : IDisposable
 
     public void PublishIntermediate(StagePlan stage)
     {
+        PublishIntermediate(
+            stage,
+            _generator.CurrentMedia,
+            _generator.CurrentVae);
+    }
+
+    public void PublishIntermediate(
+        StagePlan stage,
+        WGNodeData media,
+        WGNodeData vae)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(stage);
         if (!_publishIntermediateStages
@@ -96,8 +139,8 @@ internal sealed class StageHostExecutionScope : IDisposable
         {
             return;
         }
-        _generator.CurrentMedia.SaveOutput(
-            _generator.CurrentVae,
+        media.SaveOutput(
+            vae,
             _generator.CurrentAudioVae,
             StableNodeIds.Id(_generator, StableNodeIds.IntermediateStageSave, stage.StageId));
     }
@@ -111,6 +154,20 @@ internal sealed class StageHostExecutionScope : IDisposable
         foreach (int sectionId in _sectionIds)
         {
             _generator.UserInput.SectionParamOverrides.Remove(sectionId);
+        }
+        if (_capturedSamplingContinuationOverrides)
+        {
+            if (_originalSamplingContinuationOverrides is null)
+            {
+                _generator.UserInput.SectionParamOverrides.Remove(
+                    T2IParamInput.SectionID_VideoSwap);
+            }
+            else
+            {
+                _generator.UserInput.SectionParamOverrides[
+                    T2IParamInput.SectionID_VideoSwap] =
+                    _originalSamplingContinuationOverrides;
+            }
         }
         _disposed = true;
     }

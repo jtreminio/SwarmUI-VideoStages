@@ -12,7 +12,8 @@ internal static class VideoScopedLoraSelector
         int clipIndex,
         int stageSectionId,
         NormalLoraTargetPolicy targetPolicy =
-            NormalLoraTargetPolicy.ModelAndTextEncoder)
+            NormalLoraTargetPolicy.ModelAndTextEncoder,
+        int? targetSectionId = null)
     {
         if (!input.TryGet(T2IParamTypes.Loras, out List<string> loras)
             || loras is null
@@ -81,6 +82,7 @@ internal static class VideoScopedLoraSelector
             [.. weights],
             [.. textEncoderWeights],
             [.. confinements],
-            rows);
+            rows,
+            targetSectionId ?? T2IParamInput.SectionID_Video);
     }
 }

@@ -23,6 +23,13 @@ internal static class WanClipPlanCompiler
         ArgumentNullException.ThrowIfNull(clip);
         ArgumentNullException.ThrowIfNull(stageModels);
         ArgumentNullException.ThrowIfNull(context);
+        static bool HasNoiseRole(string modelName, string role)
+        {
+            string normalized = string.Concat(
+                    (modelName ?? "").Where(char.IsLetterOrDigit))
+                .ToLowerInvariant();
+            return normalized.Contains($"{role}noise", StringComparison.Ordinal);
+        }
         List<PlanDiagnostic> diagnostics = [];
         void Refuse(bool configured, string option, int? stageId = null)
         {
@@ -54,6 +61,7 @@ internal static class WanClipPlanCompiler
         Dictionary<int, StockHostVideoStagePayload> stages = [];
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
         bool initVideoEntry = clip.InitVideo is not null;
+        bool previousStageContinuesSampling = false;
         // Resolved stage models are a prerequisite; indexing asserts that planning contract.
         string clipCompatibilityClassId = activeStages.Count == 0
             ? ""
@@ -64,6 +72,39 @@ internal static class WanClipPlanCompiler
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
             bool firstStage = stageIndex == 0;
             bool decodedStageInput = initVideoEntry || !firstStage;
+            StageSpec previousStage = firstStage ? null : activeStages[stageIndex - 1];
+            ResolvedVideoModel previousModel = firstStage
+                ? null
+                : stageModels[previousStage.ClipStageRawIndex];
+            int continuationStartStep =
+                HostVideoStageSchedulePolicy.StartStep(stage.Steps, stage.Control);
+            bool continuesPreviousSampling =
+                context.EntryMode != ArchitectureEntryMode.TextToVideo
+                && !previousStageContinuesSampling
+                && previousStage is not null
+                && previousStage.Control == 1
+                && continuationStartStep > 0
+                && continuationStartStep < stage.Steps
+                && stage.Upscale == 1
+                && previousStage.Steps == stage.Steps
+                && string.Equals(
+                    previousStage.Scheduler,
+                    stage.Scheduler,
+                    StringComparison.OrdinalIgnoreCase)
+                && HasNoiseRole(previousModel.ModelName, "high")
+                && HasNoiseRole(resolved.ModelName, "low")
+                && string.Equals(
+                    previousModel.ModelClassId,
+                    WanArchitectureModule.ImageToVideoModelClassId,
+                    StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    resolved.ModelClassId,
+                    WanArchitectureModule.ImageToVideoModelClassId,
+                    StringComparison.OrdinalIgnoreCase)
+                && string.Equals(
+                    previousModel.CompatibilityClassId,
+                    resolved.CompatibilityClassId,
+                    StringComparison.Ordinal);
             ImmutableArray<NormalLoraPlan> loras =
                 NormalLoraPlanCompiler.Compile(
                     clip,
@@ -105,8 +146,12 @@ internal static class WanClipPlanCompiler
                         stage.Sampler,
                         stage.Scheduler,
                         StageUpscalePlanCompiler.Compile(stage),
-                        loras));
+                        loras))
+                {
+                    ContinuesSamplingFromPreviousStage = continuesPreviousSampling,
+                };
             stages.Add(stage.ClipStageRawIndex, payload);
+            previousStageContinuesSampling = continuesPreviousSampling;
         }
         WarnAboutReferenceStrengths(clip, activeStages, diagnostics);
         (WanFrameReferencePlan firstReference, WanFrameReferencePlan lastReference) =

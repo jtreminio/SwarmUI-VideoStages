@@ -42,14 +42,26 @@ internal sealed class HostVideoStageEngine : IDisposable
     internal DecodedClipArtifact Execute(
         ClipPlan clip,
         Func<ClipPlan, StagePlan, int?> resolvePassthroughFrames,
-        Action<ClipPlan, StagePlan, HostVideoDecodedStageInput, int> executeGeneratingStage)
+        Func<
+            ClipPlan,
+            StagePlan,
+            StagePlan,
+            HostVideoDecodedStageInput,
+            int,
+            bool> executeGeneratingStage)
     {
         ArgumentNullException.ThrowIfNull(clip);
         ArgumentNullException.ThrowIfNull(resolvePassthroughFrames);
         ArgumentNullException.ThrowIfNull(executeGeneratingStage);
 
-        foreach (StagePlan stage in clip.Stages)
+        for (int stageIndex = 0; stageIndex < clip.Stages.Count; stageIndex++)
         {
+            StagePlan stage = clip.Stages[stageIndex];
+            StagePlan continuation = !stage.IsPassthrough
+                && stageIndex + 1 < clip.Stages.Count
+                && clip.Stages[stageIndex + 1].ContinuesSamplingFromPreviousStage
+                    ? clip.Stages[stageIndex + 1]
+                    : null;
             StageCorePlan settings = stage.Core;
             ApplyUpscale(stage, settings.Upscale);
             if (stage.IsPassthrough)
@@ -62,9 +74,27 @@ internal sealed class HostVideoStageEngine : IDisposable
             else
             {
                 int sectionId = _stageScope.ApplyStageOverrides(clip, stage);
-                executeGeneratingStage(clip, stage, _decodedInput, sectionId);
+                if (continuation is not null)
+                {
+                    _stageScope.ApplyStageOverrides(clip, continuation);
+                    _stageScope.ApplySamplingContinuationOverrides(continuation);
+                }
+                bool consumedContinuation = executeGeneratingStage(
+                    clip,
+                    stage,
+                    continuation,
+                    _decodedInput,
+                    sectionId);
+                if (!consumedContinuation)
+                {
+                    continuation = null;
+                }
             }
-            _stageScope.PublishIntermediate(stage);
+            _stageScope.PublishIntermediate(continuation ?? stage);
+            if (continuation is not null)
+            {
+                stageIndex++;
+            }
         }
 
         StagePlan finalStage = clip.Stages[^1];
@@ -79,6 +109,15 @@ internal sealed class HostVideoStageEngine : IDisposable
                 bridge),
             clip);
     }
+
+    internal bool PublishesIntermediateStages =>
+        _stageScope.PublishesIntermediateStages;
+
+    internal void PublishIntermediate(
+        StagePlan stage,
+        WGNodeData media,
+        WGNodeData vae) =>
+        _stageScope.PublishIntermediate(stage, media, vae);
 
     public void Dispose() => _stageScope.Dispose();
 

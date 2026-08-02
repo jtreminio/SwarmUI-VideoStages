@@ -12,7 +12,10 @@ internal sealed record StockHostVideoStagePayload(
     string CompatibilityClassId,
     NormalLoraTargetPolicy LoraTargetPolicy,
     StageCorePlan Core) :
-    IArchitectureStagePayload;
+    IArchitectureStagePayload
+{
+    public bool ContinuesSamplingFromPreviousStage { get; init; }
+}
 
 internal static class StockHostVideoStagePayloadExtensions
 {

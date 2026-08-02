@@ -30,6 +30,12 @@ internal interface IArchitectureStagePayload
     ArchitectureId ArchitectureId { get; }
 
     StageCorePlan Core { get; }
+
+    /// <summary>
+    /// This stage consumes the previous stage's noisy sampler output instead of starting a new
+    /// refinement pass. The absence of this instruction retains ordinary stage behavior.
+    /// </summary>
+    bool ContinuesSamplingFromPreviousStage => false;
 }
 
 /// <summary>

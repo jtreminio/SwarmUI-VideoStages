@@ -65,6 +65,12 @@ internal static class PromptParser
         int clipIndex,
         int stageSectionId,
         NormalLoraTargetPolicy targetPolicy =
-            NormalLoraTargetPolicy.ModelAndTextEncoder) =>
-        VideoScopedLoraSelector.Apply(input, clipIndex, stageSectionId, targetPolicy);
+            NormalLoraTargetPolicy.ModelAndTextEncoder,
+        int? targetSectionId = null) =>
+        VideoScopedLoraSelector.Apply(
+            input,
+            clipIndex,
+            stageSectionId,
+            targetPolicy,
+            targetSectionId);
 }

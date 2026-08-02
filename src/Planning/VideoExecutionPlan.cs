@@ -98,6 +98,9 @@ internal sealed record StagePlan(
         ArchitecturePayload?.Core
         ?? throw VideoStagesInvariant.Failure(
             $"Stage {StageId} has no common execution settings.");
+
+    public bool ContinuesSamplingFromPreviousStage =>
+        ArchitecturePayload?.ContinuesSamplingFromPreviousStage == true;
 }
 
 /// <summary>Architecture-neutral settings shared by every generated stage.</summary>

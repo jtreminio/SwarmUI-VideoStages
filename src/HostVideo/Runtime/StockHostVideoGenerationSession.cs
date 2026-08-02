@@ -1,6 +1,9 @@
 using ComfyTyped.Core;
+using ComfyTyped.Families;
+using ComfyTyped.SwarmUI;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan;
 using VideoStages.Execution;
@@ -99,14 +102,43 @@ internal sealed class StockHostVideoGenerationSession(
 
     public void Dispose() => stageEngine.Dispose();
 
-    private void ExecuteGeneratingStage(
+    private bool ExecuteGeneratingStage(
         ClipPlan clip,
         StagePlan stage,
+        StagePlan continuation,
         HostVideoDecodedStageInput stageInput,
         int sectionId)
     {
+        (string positive, string negative) = _prompts.Resolve(clip, stage);
+        if (continuation is not null)
+        {
+            (string continuationPositive, string continuationNegative) =
+                _prompts.Resolve(clip, continuation);
+            if (!TryComposeSamplingContinuationPrompt(
+                    positive,
+                    continuationPositive,
+                    out string combinedPositive)
+                || !TryComposeSamplingContinuationPrompt(
+                    negative,
+                    continuationNegative,
+                    out string combinedNegative))
+            {
+                continuation = null;
+            }
+            else
+            {
+                positive = combinedPositive;
+                negative = combinedNegative;
+            }
+        }
         StockHostVideoStagePayload payload = ResolvePayload(stage);
         StageCorePlan core = stage.Core;
+        StockHostVideoStagePayload continuationPayload = continuation is null
+            ? null
+            : ResolvePayload(continuation);
+        int continuationStageSectionId = continuation is null
+            ? 0
+            : VideoStagesExtension.SectionIdForStage(continuation.StageId);
         using (ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
             g.UserInput,
             clip.ClipId,
@@ -114,6 +146,20 @@ internal sealed class StockHostVideoGenerationSession(
             payload.LoraTargetPolicy))
         using (ParamSnapshot loraScope =
             LoraParams.ApplyNormalLoras(g.UserInput, core.Loras))
+        using (ParamSnapshot continuationPromptLoraScope = continuation is null
+            ? null
+            : PromptParser.ApplyLoraScope(
+                g.UserInput,
+                clip.ClipId,
+                continuationStageSectionId,
+                continuationPayload.LoraTargetPolicy,
+                T2IParamInput.SectionID_VideoSwap))
+        using (ParamSnapshot continuationLoraScope = continuation is null
+            ? null
+            : LoraParams.ApplyNormalLoras(
+                g.UserInput,
+                continuation.Core.Loras,
+                T2IParamInput.SectionID_VideoSwap))
         using (ParamSnapshot ignoredAudioReference = _wanBehavior is not null
             ? null
             : ParamSnapshot.Of(
@@ -129,19 +175,32 @@ internal sealed class StockHostVideoGenerationSession(
             }
             string stageLoaderKey =
                 $"modelloader_{stage.ResolvedModel.ModelName}_image2video";
+            string continuationLoaderKey = continuation is null
+                ? null
+                : $"modelloader_{continuation.ResolvedModel.ModelName}_image2video";
             bool transientStageLoader =
                 promptLoraScope is not null
                 || !core.Loras.IsDefaultOrEmpty;
+            bool transientContinuationLoader = continuation is not null
+                && (continuationPromptLoraScope is not null
+                    || !continuation.Core.Loras.IsDefaultOrEmpty);
             // The host cache key does not encode the active LoRA parameter scope. Always make
             // the ordinary stage reload under its effective plan, including an
             // empty plan after a prior scoped stage. Existing graph nodes stay live.
             VideoGraphHelpers.RemoveCached(g, stageLoaderKey);
+            if (continuationLoaderKey is not null)
+            {
+                VideoGraphHelpers.RemoveCached(g, continuationLoaderKey);
+            }
             try
             {
                 WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
                     clip,
                     stage,
-                    sectionId);
+                    continuation,
+                    sectionId,
+                    positive,
+                    negative);
                 bool materializedFirstFrame =
                     _wanBehavior is not null
                     && stage.Input == StageInputKind.EmptyLatent
@@ -151,7 +210,7 @@ internal sealed class StockHostVideoGenerationSession(
                 {
                     ExecuteTextStage(clip, stage, genInfo);
                     stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
-                    return;
+                    return false;
                 }
                 int startStep = HostVideoStageSchedulePolicy.StartStep(
                     core.Steps,
@@ -163,6 +222,8 @@ internal sealed class StockHostVideoGenerationSession(
                 // SwarmUI's generic builder creates latent audio whenever CurrentAudioVae is
                 // set. Stock-host stages advertise video-only output, so isolate every pass.
                 WGNodeData ambientAudioVae = g.CurrentAudioVae;
+                bool ambientImageToVideo = g.IsImageToVideo;
+                bool ambientImageToVideoSwap = g.IsImageToVideoSwap;
                 ISet<string> preHostNodeIds =
                     _wanBehavior?.CapturePreHostNodeIds(payload, genInfo);
                 Exception hostConstructionError = null;
@@ -170,6 +231,13 @@ internal sealed class StockHostVideoGenerationSession(
                 {
                     g.CurrentAudioVae = null;
                     g.CreateImageToVideo(genInfo);
+                    if (continuation is not null
+                        && stageEngine.PublishesIntermediateStages)
+                    {
+                        PublishSamplingContinuationIntermediate(
+                            stage,
+                            genInfo);
+                    }
                 }
                 catch (Exception error)
                 {
@@ -179,11 +247,16 @@ internal sealed class StockHostVideoGenerationSession(
                 finally
                 {
                     g.CurrentAudioVae = ambientAudioVae;
+                    g.IsImageToVideo = ambientImageToVideo;
+                    g.IsImageToVideoSwap = ambientImageToVideoSwap;
                     _wanBehavior?.RunPostHostCleanup(
                         preHostNodeIds,
                         hostConstructionError);
                 }
-                stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
+                stageInput.NormalizeDecodedOutput(
+                    clip,
+                    continuation ?? stage,
+                    genInfo);
             }
             finally
             {
@@ -193,8 +266,73 @@ internal sealed class StockHostVideoGenerationSession(
                 {
                     VideoGraphHelpers.RemoveCached(g, stageLoaderKey);
                 }
+                if (transientContinuationLoader)
+                {
+                    VideoGraphHelpers.RemoveCached(g, continuationLoaderKey);
+                }
             }
         }
+        return continuation is not null;
+    }
+
+    private static bool TryComposeSamplingContinuationPrompt(
+        string first,
+        string second,
+        out string combined)
+    {
+        PromptRegion firstRegion = new(first ?? "");
+        PromptRegion secondRegion = new(second ?? "");
+        if (firstRegion.Parts.Count > 0 || secondRegion.Parts.Count > 0)
+        {
+            combined = null;
+            return false;
+        }
+        string firstVideo = string.IsNullOrWhiteSpace(firstRegion.VideoPrompt)
+            ? firstRegion.GlobalPrompt
+            : firstRegion.VideoPrompt;
+        string secondVideo = string.IsNullOrWhiteSpace(secondRegion.VideoPrompt)
+            ? secondRegion.GlobalPrompt
+            : secondRegion.VideoPrompt;
+        if (string.IsNullOrWhiteSpace(firstVideo)
+            != string.IsNullOrWhiteSpace(secondVideo))
+        {
+            combined = null;
+            return false;
+        }
+        combined = $"<video>{firstVideo}<videoswap>{secondVideo}";
+        return true;
+    }
+
+    private void PublishSamplingContinuationIntermediate(
+        StagePlan stage,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        ComfyNode outputNode = bridge.ResolvePath(g.CurrentMedia?.Path)?.Node as ComfyNode;
+        IVaeDecode decode = outputNode as IVaeDecode
+            ?? bridge.Graph.FindNearestUpstream<IVaeDecode>(outputNode);
+        if (decode?.Samples.Connection?.Node is not ComfyNode lowSampler
+            || lowSampler.FindInput("latent_image")?.Connection is not INodeOutput highLatent)
+        {
+            throw VideoStagesInvariant.Failure(
+                $"VideoStages: stage {stage.StageId} could not publish its "
+                    + "sampling-continuation intermediate.");
+        }
+        WGNodeData highMedia = new(
+            WorkflowBridge.ToPath(highLatent),
+            g,
+            WGNodeData.DT_LATENT_VIDEO,
+            genInfo.Vae.Compat)
+        {
+            Frames = genInfo.Frames,
+            FPS = genInfo.VideoFPS,
+            Width = (int?)genInfo.Width,
+            Height = (int?)genInfo.Height,
+        };
+        stageEngine.PublishIntermediate(
+            stage,
+            highMedia,
+            genInfo.Vae);
     }
 
     private void ExecuteTextStage(
@@ -341,7 +479,10 @@ internal sealed class StockHostVideoGenerationSession(
     private WorkflowGenerator.ImageToVideoGenInfo BuildGenInfo(
         ClipPlan clip,
         StagePlan stage,
-        int sectionId)
+        StagePlan continuation,
+        int sectionId,
+        string positive,
+        string negative)
     {
         StockHostVideoStagePayload payload = ResolvePayload(stage);
         StageCorePlan core = stage.Core;
@@ -350,17 +491,35 @@ internal sealed class StockHostVideoGenerationSession(
                 $"VideoStages: clip {clip.ClipId} could not resolve {architectureLabel} "
                     + "video model "
                 + $"'{stage.ResolvedModel.ModelName}'.");
-        (string positive, string negative) = _prompts.Resolve(clip, stage);
+        T2IModel continuationModel = null;
+        if (continuation is not null)
+        {
+            continuationModel = g.UserInput.Get(
+                T2IParamTypes.VideoModel,
+                null,
+                sectionId: VideoStagesExtension.SectionIdForStage(
+                    continuation.StageId));
+            if (continuationModel is null)
+            {
+                throw VideoStagesInvariant.Failure(
+                    $"VideoStages: clip {clip.ClipId} could not resolve {architectureLabel} "
+                        + $"video model '{continuation.ResolvedModel.ModelName}'.");
+            }
+        }
         int width = g.CurrentMedia?.Width ?? _dimensions.Width;
         int height = g.CurrentMedia?.Height ?? _dimensions.Height;
         return new WorkflowGenerator.ImageToVideoGenInfo
         {
             Generator = g,
             VideoModel = videoModel,
-            // Every model swap is an ordinary authored stage. Never let the host append its
-            // request-global legacy swap pass to one.
-            VideoSwapModel = null,
-            VideoSwapPercent = 0.5,
+            // Only an architecture-planned continuation reaches the host swap pass. The
+            // request-global legacy swap remains ignored.
+            VideoSwapModel = continuationModel,
+            VideoSwapPercent = continuation is null
+                ? 0.5
+                : 1d - (double)HostVideoStageSchedulePolicy.StartStep(
+                    continuation.Core.Steps,
+                    continuation.Core.Control) / continuation.Core.Steps,
             Frames = _wanBehavior is not null
                 ? _wanBehavior.ResolveGeneratedFrames(
                     clip,
@@ -376,7 +535,9 @@ internal sealed class StockHostVideoGenerationSession(
             Steps = core.Steps,
             Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.StageId,
             ContextID = sectionId,
-            VideoEndFrame = _wanBehavior?.ResolveEndFrame(clip, stage),
+            VideoEndFrame = _wanBehavior?.ResolveEndFrame(
+                clip,
+                continuation ?? stage),
         };
     }
 

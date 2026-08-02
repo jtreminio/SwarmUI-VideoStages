@@ -881,6 +881,64 @@ public class WanArchitectureTests
                 .Select(pair => pair.Value.ModelClassId));
     }
 
+    [Theory]
+    [InlineData(0.35)]
+    [InlineData(0.5)]
+    [InlineData(0.8)]
+    public void High_to_low_noise_pair_compiles_as_one_sampling_run(double control)
+    {
+        StageSpec high = Stage(
+            10,
+            "Wan2.2-I2V-A14B-HighNoise.safetensors");
+        StageSpec low = Stage(
+            11,
+            "Wan2.2-I2V-A14B-LowNoise.safetensors") with
+        {
+            Control = control,
+            ImageReference = "PreviousStage",
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+        };
+
+        WanClipPlanCompilation compiled = CompileDirect(
+            GeneratedClip(0, high, low));
+
+        Assert.False(compiled.Stages[0].ContinuesSamplingFromPreviousStage);
+        Assert.True(compiled.Stages[1].ContinuesSamplingFromPreviousStage);
+    }
+
+    [Theory]
+    [InlineData("Wan2.2-I2V-A14B-HighNoise.safetensors", 12, "euler", "normal", 0.5)]
+    [InlineData("Wan2.2-I2V-A14B-LowNoise.safetensors", 10, "euler", "normal", 0.5)]
+    [InlineData("Wan2.2-I2V-A14B-LowNoise.safetensors", 12, "euler", "karras", 0.5)]
+    [InlineData("Wan2.2-I2V-A14B-LowNoise.safetensors", 12, "euler", "normal", 1)]
+    public void Sampling_continuation_fails_closed_without_role_order_and_a_shared_schedule(
+        string nextModel,
+        int nextSteps,
+        string nextSampler,
+        string nextScheduler,
+        double nextControl)
+    {
+        StageSpec high = Stage(
+            10,
+            "Wan2.2-I2V-A14B-HighNoise.safetensors");
+        StageSpec next = Stage(11, nextModel) with
+        {
+            Control = nextControl,
+            Steps = nextSteps,
+            Sampler = nextSampler,
+            Scheduler = nextScheduler,
+            ImageReference = "PreviousStage",
+            ClipStageIndex = 1,
+            ClipStageRawIndex = 1,
+        };
+
+        WanClipPlanCompilation compiled = CompileDirect(
+            GeneratedClip(0, high, next));
+
+        Assert.False(compiled.Stages[1].ContinuesSamplingFromPreviousStage);
+    }
+
     [Fact]
     public void Production_planning_accepts_a_real_Wan_2_1_image_model()
     {
