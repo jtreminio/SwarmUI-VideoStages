@@ -32,6 +32,7 @@ internal sealed class MiniMaxGenerationSession(
 
     private WGNodeData _entryFirstFrame;
     private WGNodeData _endFrame;
+    private ReferenceFramingMode _referenceFraming;
 
     public ArchitectureId ArchitectureId => MiniMaxArchitectureModule.ArchitectureId;
 
@@ -47,6 +48,7 @@ internal sealed class MiniMaxGenerationSession(
         }
 
         MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
+        _referenceFraming = payload.ReferenceFraming;
         _entryFirstFrame = ResolveFrameReference(
             payload.FirstFrameReference,
             "MiniMax H3 first-frame reference");
@@ -282,13 +284,34 @@ internal sealed class MiniMaxGenerationSession(
         {
             return;
         }
+        int targetWidth = g.CurrentMedia?.Width ?? (int)genInfo.Width;
+        int targetHeight = g.CurrentMedia?.Height ?? (int)genInfo.Height;
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        JArray firstFramePath = firstFrame?.Path is JArray firstPath
+            ? ReferenceFramingGraph.Frame(
+                bridge,
+                firstPath,
+                targetWidth,
+                targetHeight,
+                _referenceFraming,
+                unwrapExistingFraming: false)
+            : null;
+        JArray lastFramePath = _endFrame?.Path is JArray lastPath
+            ? ReferenceFramingGraph.Frame(
+                bridge,
+                lastPath,
+                targetWidth,
+                targetHeight,
+                _referenceFraming,
+                unwrapExistingFraming: false)
+            : null;
         string keyframes = g.CreateNode("SwarmMiniMaxH3AddKeyframes", new JObject()
         {
             ["vae"] = genInfo.Vae.Path,
             ["latent"] = g.CurrentMedia.Path,
             ["conditioning"] = genInfo.PosCond,
-            ["first_frame"] = firstFrame?.Path,
-            ["last_frame"] = _endFrame?.Path,
+            ["first_frame"] = firstFramePath,
+            ["last_frame"] = lastFramePath,
         });
         genInfo.PosCond = [keyframes, 0];
     }

@@ -435,7 +435,7 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
-    public void Authored_first_and_last_frame_uploads_reach_the_keyframe_node()
+    public void Authored_first_and_last_frame_uploads_use_reference_framing()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
@@ -444,6 +444,7 @@ public class MiniMaxRuntimeFlowTests
         clip["refs"] = new JArray(
             UploadedReference("RklSU1Q=", fromEnd: false),
             UploadedReference("TEFTVA==", fromEnd: true));
+        clip["refFraming"] = Constants.ReferenceFramingFitGreen;
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
@@ -457,10 +458,21 @@ public class MiniMaxRuntimeFlowTests
 
         ComfyNode keyframes = Assert.Single(
             NodesOfClass(bridge, "SwarmMiniMaxH3AddKeyframes"));
-        SwarmLoadImageB64Node first = Assert.IsType<SwarmLoadImageB64Node>(
+        SwarmFrameImageNode firstFrame = Assert.IsType<SwarmFrameImageNode>(
             keyframes.FindInput("first_frame")?.Connection?.Node);
-        SwarmLoadImageB64Node last = Assert.IsType<SwarmLoadImageB64Node>(
+        SwarmFrameImageNode lastFrame = Assert.IsType<SwarmFrameImageNode>(
             keyframes.FindInput("last_frame")?.Connection?.Node);
+        SwarmLoadImageB64Node first = Assert.IsType<SwarmLoadImageB64Node>(
+            firstFrame.ImagesInput.Connection?.Node);
+        SwarmLoadImageB64Node last = Assert.IsType<SwarmLoadImageB64Node>(
+            lastFrame.ImagesInput.Connection?.Node);
+        ComfyNode latent = Assert.Single(NodesOfClass(bridge, "EmptyMiniMaxH3LatentAV"));
+        Assert.Equal("fit-green", firstFrame.Method.LiteralAsString());
+        Assert.Equal("fit-green", lastFrame.Method.LiteralAsString());
+        Assert.Equal(latent.FindInput("width").LiteralAsInt(), firstFrame.Width.LiteralAsInt());
+        Assert.Equal(latent.FindInput("height").LiteralAsInt(), firstFrame.Height.LiteralAsInt());
+        Assert.Equal(firstFrame.Width.LiteralAsInt(), lastFrame.Width.LiteralAsInt());
+        Assert.Equal(firstFrame.Height.LiteralAsInt(), lastFrame.Height.LiteralAsInt());
         Assert.Equal(
             "RklSU1Q=",
             first.ImageBase64.LiteralAsString());
@@ -470,6 +482,56 @@ public class MiniMaxRuntimeFlowTests
         Assert.Same(
             keyframes,
             Assert.Single(SamplerNodes(bridge)).FindInput("positive").Connection?.Node);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Final_frame_reference_is_reframed_for_each_stage_resolution()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1),
+            MakeStage(
+                models.VideoModel.Name,
+                "PreviousStage",
+                control: 0.5,
+                upscale: 1.5,
+                upscaleMethod: "pixel-lanczos",
+                steps: 8,
+                cfgScale: 1));
+        clip["refs"] = new JArray(UploadedReference("TEFTVA==", fromEnd: true));
+        clip["refFraming"] = Constants.ReferenceFramingFitGreen;
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        (JObject workflow, _) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            MiniMaxSteps(),
+            SourceFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmLoadImageB64Node upload = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+        SwarmFrameImageNode[] framed =
+            [.. bridge.Graph.NodesOfType<SwarmFrameImageNode>()
+                .Where(node => ReferenceEquals(node.ImagesInput.Connection?.Node, upload))];
+        Assert.Equal([512, 768], framed.Select(node => node.Width.LiteralAsInt()).Order());
+        Assert.All(framed, node =>
+        {
+            Assert.Equal("fit-green", node.Method.LiteralAsString());
+            Assert.Same(upload, node.ImagesInput.Connection?.Node);
+        });
+        Assert.Equal(
+            [512, 768],
+            NodesOfClass(bridge, "SwarmMiniMaxH3AddKeyframes")
+                .Select(node => Assert.IsType<SwarmFrameImageNode>(
+                    node.FindInput("last_frame")?.Connection?.Node))
+                .Select(node => node.Width.LiteralAsInt())
+                .Order());
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
     }

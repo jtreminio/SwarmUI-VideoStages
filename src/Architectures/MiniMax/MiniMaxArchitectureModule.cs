@@ -42,7 +42,8 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
         ],
         ArchitectureFeature.FrameReferences
             | ArchitectureFeature.AudioSegments
-            | ArchitectureFeature.AudioDerivedDuration,
+            | ArchitectureFeature.AudioDerivedDuration
+            | ArchitectureFeature.ReferenceFraming,
         ArchitectureBoundaryPolicy.CutOnly(
             "minimax",
             "Decoded MiniMax H3 clips can be joined with a hard cut.",
@@ -152,7 +153,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
         }
 
         return new(
-            new MiniMaxClipPayload(clip.Id, first, last),
+            new MiniMaxClipPayload(clip.Id, clip.ReferenceFraming, first, last),
             stages,
             diagnostics.AsReadOnly());
     }
@@ -160,6 +161,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
 
 internal sealed record MiniMaxClipPayload(
     int ClipId,
+    ReferenceFramingMode ReferenceFraming,
     NativeFrameReferencePlan FirstFrameReference,
     NativeFrameReferencePlan LastFrameReference) :
     IArchitectureClipPayload
