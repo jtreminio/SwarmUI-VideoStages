@@ -40,7 +40,9 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             ArchitectureEntryMode.TextToVideo,
             ArchitectureEntryMode.ImageToVideo,
         ],
-        ArchitectureFeature.FrameReferences | ArchitectureFeature.AudioSegments,
+        ArchitectureFeature.FrameReferences
+            | ArchitectureFeature.AudioSegments
+            | ArchitectureFeature.AudioDerivedDuration,
         ArchitectureBoundaryPolicy.CutOnly(
             "minimax",
             "Decoded MiniMax H3 clips can be joined with a hard cut.",

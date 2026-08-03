@@ -6,7 +6,9 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Ltx2;
+using VideoStages.Architectures.MiniMax;
 using VideoStages.Generated;
+using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -526,6 +528,7 @@ public class MiniMaxRuntimeFlowTests
             WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
         SwarmLoadAudioB64Node upload = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
         VAEEncodeAudioNode encode = Assert.Single(
@@ -544,13 +547,105 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
-    public void AceStepFun_audio_reaches_the_entry_joint_latent()
+    public void Uploaded_audio_can_drive_the_entry_joint_latent_length()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clip["duration"] = 1.0;
+        clip["audioSource"] = Constants.AudioSourceUpload;
+        clip["clipLengthFromAudio"] = true;
+        clip["uploadedAudio"] = new JObject
+        {
+            ["data"] = "data:audio/wav;base64,QUJD",
+            ["fileName"] = "clip.wav",
+        };
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmLoadAudioB64Node upload = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.Equal(24, lengthToFrames.FrameRate.LiteralAsInt());
+        Assert.Equal(17, lengthToFrames.FrameGrid.LiteralAsInt());
+        Assert.Equal(5, lengthToFrames.FrameGridOrigin.LiteralAsInt());
+        Assert.Equal(0, lengthToFrames.FrameCountOffset.LiteralAsInt());
+        Assert.True(ReachesUpstream(bridge, lengthToFrames.AudioInput.Connection!.Node, upload.Id));
+        ComfyNode emptyJoint = Assert.Single(
+            NodesOfClass(bridge, "EmptyMiniMaxH3LatentAV"));
+        Assert.Same(
+            lengthToFrames.Frames,
+            emptyJoint.FindInput("length").Connection);
+        VAEEncodeAudioNode encode = Assert.Single(
+            bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.True(ReachesUpstream(bridge, encode.Audio.Connection!.Node, lengthToFrames.Id));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Audio_derived_duration_refuses_multi_clip_and_global_trim_requests()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject dynamicClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        dynamicClip["audioSource"] = Constants.AudioSourceUpload;
+        dynamicClip["clipLengthFromAudio"] = true;
+        dynamicClip["uploadedAudio"] = new JObject
+        {
+            ["data"] = "data:audio/wav;base64,QUJD",
+            ["fileName"] = "clip.wav",
+        };
+        JObject fixedClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(dynamicClip, fixedClip).ToString());
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 1);
+        WorkflowGenerator generator = new()
+        {
+            UserInput = input,
+            Workflow = [],
+        };
+        VideoExecutionPlan plan = generator.RequireVideoExecutionPlanContext().Plan;
+
+        IReadOnlyList<PlanDiagnostic> diagnostics = new MiniMaxExecutionAdapter(generator)
+            .PreflightRequest(new(plan, MiniMaxArchitectureModule.ArchitectureId));
+
+        Assert.Contains(
+            diagnostics,
+            diagnostic => diagnostic.Code
+                == "minimax.audio-derived-duration.multi-clip-unsupported");
+        Assert.Contains(
+            diagnostics,
+            diagnostic => diagnostic.Code
+                == "minimax.audio-derived-duration.trim-unsupported");
+        Assert.All(
+            diagnostics.Where(diagnostic => diagnostic.Code.StartsWith(
+                "minimax.audio-derived-duration",
+                StringComparison.Ordinal)),
+            diagnostic => Assert.Equal(PlanDiagnosticSeverity.Error, diagnostic.Severity));
+    }
+
+    [Fact]
+    public void AceStepFun_audio_can_drive_the_entry_joint_latent_length()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
         clip["audioSource"] = "audio0";
+        clip["clipLengthFromAudio"] = true;
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
@@ -563,6 +658,17 @@ public class MiniMaxRuntimeFlowTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         string aceDecodeId = AudioHandler.MakeAceStepFunDecodeId(0);
+        SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.True(ReachesUpstream(
+            bridge,
+            lengthToFrames.AudioInput.Connection!.Node,
+            aceDecodeId));
+        ComfyNode emptyJoint = Assert.Single(
+            NodesOfClass(bridge, "EmptyMiniMaxH3LatentAV"));
+        Assert.Same(
+            lengthToFrames.Frames,
+            emptyJoint.FindInput("length").Connection);
         VAEEncodeAudioNode encode = Assert.Single(
             bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
         Assert.True(ReachesUpstream(bridge, encode.Audio.Connection!.Node, aceDecodeId));
@@ -584,6 +690,7 @@ public class MiniMaxRuntimeFlowTests
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
         clip["audioSource"] = "audio7";
+        clip["clipLengthFromAudio"] = true;
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
@@ -599,10 +706,12 @@ public class MiniMaxRuntimeFlowTests
             warnings,
             warning => warning.Contains("audio7")
                 && warning.Contains("continuing without that source"));
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
         Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
         Assert.Empty(bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
         ComfyNode emptyJoint = Assert.Single(
             NodesOfClass(bridge, "EmptyMiniMaxH3LatentAV"));
+        Assert.NotNull(emptyJoint.FindInput("length").LiteralAsInt());
         Assert.Same(
             emptyJoint,
             Assert.Single(SamplerNodes(bridge)).FindInput("latent_image").Connection?.Node);

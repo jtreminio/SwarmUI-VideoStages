@@ -5,6 +5,7 @@ using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.HostVideo;
 using VideoStages.Architectures.Ltx2;
+using VideoStages.Architectures.MiniMax;
 using VideoStages.Architectures.Wan;
 using VideoStages.Architectures.Wan.Planning;
 using VideoStages.HostVideo;
@@ -167,6 +168,27 @@ public sealed class EffectiveVideoRequestTests
         ClipSpec effective = Assert.Single(request.Spec.Clips);
         Assert.Equal(33, effective.Frames);
         Assert.True(effective.ClipLengthFromAudio);
+    }
+
+    [Fact]
+    public void Disallowed_audio_source_still_projects_onto_the_MiniMax_grid()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "minimax-model");
+        ClipSpec clip = Clip(stage) with
+        {
+            Frames = 27,
+            AudioSource = Constants.AudioSourceControlNet,
+            ClipLengthFromAudio = true,
+        };
+        VideoStagesSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            MiniMaxArchitectureModule.Instance.Descriptor;
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+            authored,
+            Resolve(authored, _ => MiniMaxArchitectureModule.Instance, _ => descriptor));
+
+        Assert.Equal(39, Assert.Single(request.Spec.Clips).Frames);
     }
 
     [Theory]

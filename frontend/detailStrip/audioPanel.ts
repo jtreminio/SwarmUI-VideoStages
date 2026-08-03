@@ -84,7 +84,8 @@ export const buildAudioBody = (
               }
             : audioCapabilityDecision;
     const canLength = canUseClipLengthFromAudio(source);
-    const canDeriveDuration = durationDecision.supported && canLength;
+    const canDeriveDuration =
+        durationDecision.supported && selectedAudioSourceAllowed && canLength;
     const durationIssueDecision =
         selectedAudioSourceAllowed && !canDeriveDuration
             ? durationDecision.supported

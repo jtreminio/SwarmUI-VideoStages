@@ -212,6 +212,10 @@ setup, audio selection, timeline-segment combination and encoding, joint
 audio-video latent construction, first/last-frame keyframes, sampling, and
 joint decode together. Without a selected base track, only authored segment
 windows are preserved; H3 remains free to generate native audio in the gaps.
+When external audio owns duration, the selected track drives the initial joint
+latent's `17k+5` frame count; refinement reuses that latent without re-deriving
+its length. That mode currently requires a single clip, refuses global frame
+trim, and skips request-global frame interpolation.
 
 ### LTX
 

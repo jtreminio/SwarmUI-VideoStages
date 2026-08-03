@@ -176,6 +176,21 @@ describe("resolved temporal grid", () => {
         ).toBe(33);
     });
 
+    it("uses the static grid when the selected audio source is disallowed", () => {
+        const catalog = testArchitectureCatalog();
+        const clip = minimalClip({
+            audioSource: "ControlNet",
+            clipLengthFromAudio: true,
+            stages: [minimalStage({ model: "ltx" })],
+        });
+
+        expect(resolveClipFrameGrid(clip, catalog)).toEqual({
+            status: "resolved",
+            frameGrid: 8,
+            frameGridOrigin: 1,
+        });
+    });
+
     it("uses the static grid when a dynamic-length capability is absent", () => {
         const catalog = testArchitectureCatalog();
         const descriptor = catalog.architectures[0];

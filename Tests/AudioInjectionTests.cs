@@ -244,6 +244,9 @@ public class AudioInjectionTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
             bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.Equal(8, lengthToFrames.FrameGrid.LiteralAsInt());
+        Assert.Equal(1, lengthToFrames.FrameGridOrigin.LiteralAsInt());
+        Assert.Equal(1, lengthToFrames.FrameCountOffset.LiteralAsInt());
         Assert.Equal("300", lengthToFrames.AudioInput.Connection!.Node.Id);
         Assert.Equal(0, lengthToFrames.AudioInput.Connection.SlotIndex);
 

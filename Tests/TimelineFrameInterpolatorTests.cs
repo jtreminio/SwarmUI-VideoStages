@@ -304,6 +304,32 @@ public sealed class TimelineFrameInterpolatorTests
             "2 clips joined by 1 boundary");
     }
 
+    [Fact]
+    public void Runtime_derived_duration_warns_and_skips_interpolation()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8));
+        clip["audioSource"] = Constants.AudioSourceUpload;
+        clip["clipLengthFromAudio"] = true;
+        clip["uploadedAudio"] = new JObject
+        {
+            ["data"] = "data:audio/wav;base64,QUJD",
+            ["fileName"] = "clip.wav",
+        };
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+        Configure(input, "RIFE", 2);
+
+        AssertInterpolationWarningAndSkip(
+            input,
+            ["variation_seed", "frameinterps", Ltx2HostIntegration.FeatureFlag],
+            "derives its duration at runtime");
+    }
+
     [Theory]
     [InlineData("ltx2")]
     [InlineData("wan22")]

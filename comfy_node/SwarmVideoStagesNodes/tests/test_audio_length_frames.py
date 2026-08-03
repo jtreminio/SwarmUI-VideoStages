@@ -31,6 +31,20 @@ def test_aligned_frames_ceils_fractional_frames_before_aligning() -> None:
 
 
 def test_aligned_frames_zero_duration_is_one() -> None:
-    # 0 raw frames -> aligns to 0 -> +1 = 1 (never below the min of 1).
     assert _aligned_frames(0.0, 24) == 1
     assert _aligned_frames(-5.0, 24) == 1
+
+
+def test_aligned_frames_uses_h3_grid_and_origin() -> None:
+    assert _aligned_frames(0.0, 24, 17, 5, 0) == 5
+    assert _aligned_frames(1.0, 24, 17, 5, 0) == 39
+    assert _aligned_frames(5.0, 24, 17, 5, 0) == 124
+
+
+def test_aligned_frames_never_rounds_below_audio_duration() -> None:
+    assert _aligned_frames(124 / 24.0 + 0.001, 24, 17, 5, 0) == 141
+
+
+def test_aligned_frames_clamps_invalid_grid_values() -> None:
+    assert _aligned_frames(1.0, 24, 0, 0, 0) == 24
+    assert _aligned_frames(1.0, 24, 17, 99, 0) == 34

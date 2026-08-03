@@ -335,7 +335,7 @@ describe("persisted-but-unsupported repair contract", () => {
             ".vst-remove-unsupported-audio",
         );
 
-        expect(duration?.disabled).toBe(false);
+        expect(duration?.disabled).toBe(true);
         repair?.click();
 
         expect(clip.audioSource).toBe("Upload");

@@ -1,4 +1,7 @@
-import { canUseClipLengthFromAudio } from "../audioSource";
+import {
+    canUseClipLengthFromAudio,
+    isAllowedAudioSource,
+} from "../audioSource";
 import { activeStageCount } from "../clipSemantics";
 import { type FrameGridSpec, NEUTRAL_FRAME_GRID } from "../renderUtils";
 import type { Clip } from "../types";
@@ -201,6 +204,10 @@ export const resolveClipFrameGridForLookup = (
     if (
         (clip.clipLengthFromAudio === true &&
             canUseClipLengthFromAudio(clip.audioSource ?? "") &&
+            isAllowedAudioSource(
+                capabilities.audioSourceKinds,
+                clip.audioSource ?? "",
+            ) &&
             architectureFeatureSupport("audioDerivedDuration", capabilities)) ||
         (clip.clipLengthFromControlNet === true &&
             architectureFeatureSupport("icLora", capabilities))

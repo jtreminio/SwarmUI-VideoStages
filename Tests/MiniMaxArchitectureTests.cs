@@ -80,7 +80,7 @@ public class MiniMaxArchitectureTests
             ["text-to-video", "image-to-video"],
             architecture["capabilities"]["entryModes"].Values<string>());
         Assert.Equal(
-            ["frameReferences", "audioSegments"],
+            ["frameReferences", "audioSegments", "audioDerivedDuration"],
             architecture["capabilities"]["features"].Values<string>());
         Assert.Equal(
             "supported",
@@ -91,6 +91,65 @@ public class MiniMaxArchitectureTests
         Assert.Equal(
             "unsupported",
             architecture["boundaryRules"]["crossfade"].Value<string>("support"));
+    }
+
+    [Theory]
+    [InlineData(Constants.AudioSourceUpload)]
+    [InlineData("audio0")]
+    public void External_audio_can_drive_MiniMax_duration(string audioSource)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clip["audioSource"] = audioSource;
+        clip["clipLengthFromAudio"] = true;
+        if (audioSource == Constants.AudioSourceUpload)
+        {
+            clip["uploadedAudio"] = new JObject
+            {
+                ["data"] = "data:audio/wav;base64,QUJD",
+                ["fileName"] = "clip.wav",
+            };
+        }
+        ClipSpec parsed = ParseClip(clip, models);
+        VideoArchitectureDescriptor descriptor = MiniMaxArchitectureModule.Instance.Descriptor;
+
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                parsed,
+                descriptor,
+                ArchitectureEntryMode.ImageToVideo);
+
+        Assert.True(descriptor.Features.HasFlag(ArchitectureFeature.AudioDerivedDuration));
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.unsupported-audio-derived-duration-ignored");
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic => diagnostic.Code
+                == "audio.length.source_cannot_drive_duration");
+    }
+
+    [Fact]
+    public void Native_H3_audio_cannot_drive_MiniMax_duration()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clip["clipLengthFromAudio"] = true;
+
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                ParseClip(clip, models),
+                MiniMaxArchitectureModule.Instance.Descriptor,
+                ArchitectureEntryMode.ImageToVideo);
+
+        Assert.Contains(
+            diagnostics,
+            diagnostic => diagnostic.Code == "audio.length.source_cannot_drive_duration");
     }
 
     [Theory]

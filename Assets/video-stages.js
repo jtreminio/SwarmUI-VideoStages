@@ -736,7 +736,10 @@
     if (!capabilities) {
       return { status: "unknown" };
     }
-    if (clip.clipLengthFromAudio === true && canUseClipLengthFromAudio(clip.audioSource ?? "") && architectureFeatureSupport("audioDerivedDuration", capabilities) || clip.clipLengthFromControlNet === true && architectureFeatureSupport("icLora", capabilities)) {
+    if (clip.clipLengthFromAudio === true && canUseClipLengthFromAudio(clip.audioSource ?? "") && isAllowedAudioSource(
+      capabilities.audioSourceKinds,
+      clip.audioSource ?? ""
+    ) && architectureFeatureSupport("audioDerivedDuration", capabilities) || clip.clipLengthFromControlNet === true && architectureFeatureSupport("icLora", capabilities)) {
       return { status: "not-applicable" };
     }
     const models = effectiveGridModels(clip, modelForName, architectureForId);
@@ -9350,7 +9353,7 @@
       reason: `Audio source '${source}' is not supported by ${capabilityView.architectureLabel}.`
     } : audioCapabilityDecision;
     const canLength = canUseClipLengthFromAudio(source);
-    const canDeriveDuration = durationDecision.supported && canLength;
+    const canDeriveDuration = durationDecision.supported && selectedAudioSourceAllowed && canLength;
     const durationIssueDecision = selectedAudioSourceAllowed && !canDeriveDuration ? durationDecision.supported ? {
       ...durationDecision,
       supported: false,

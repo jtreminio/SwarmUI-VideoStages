@@ -5,7 +5,7 @@ using ComfyTyped.Types;
 
 namespace VideoStages.Generated;
 
-/// <summary>Compute frame count from audio duration: ceil(duration * frame_rate), aligned up to a multiple of 8, then +1.</summary>
+/// <summary>Compute frame count from audio duration: ceil(duration * frame_rate) + frame_count_offset, aligned to frame_grid * k + frame_grid_origin.</summary>
 /// <remarks>Category: SwarmUI/Audio</remarks>
 public sealed class SwarmAudioLengthToFramesNode : ComfyNode
 {
@@ -20,6 +20,9 @@ public sealed class SwarmAudioLengthToFramesNode : ComfyNode
     // ── Inputs ──
     public NodeInput<AudioType> AudioInput { get; }
     public NodeInput<IntType> FrameRate { get; }
+    public NodeInput<IntType> FrameGrid { get; }
+    public NodeInput<IntType> FrameGridOrigin { get; }
+    public NodeInput<IntType> FrameCountOffset { get; }
 
     public SwarmAudioLengthToFramesNode()
     {
@@ -28,6 +31,12 @@ public sealed class SwarmAudioLengthToFramesNode : ComfyNode
         AudioInput = AddInput<AudioType>("audio");
         FrameRate = AddInput<IntType>("frame_rate");
         FrameRate.Set(24L);
+        FrameGrid = AddInput<IntType>("frame_grid");
+        FrameGrid.Set(8L);
+        FrameGridOrigin = AddInput<IntType>("frame_grid_origin");
+        FrameGridOrigin.Set(1L);
+        FrameCountOffset = AddInput<IntType>("frame_count_offset");
+        FrameCountOffset.Set(1L);
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
@@ -36,11 +45,17 @@ public sealed class SwarmAudioLengthToFramesNode : ComfyNode
     /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public SwarmAudioLengthToFramesNode With(
         In<AudioType>? AudioInput = null,
-        IntArg? FrameRate = null
+        IntArg? FrameRate = null,
+        IntArg? FrameGrid = null,
+        IntArg? FrameGridOrigin = null,
+        IntArg? FrameCountOffset = null
     )
     {
         AudioInput?.ApplyTo(this.AudioInput);
         FrameRate?.ApplyTo(this.FrameRate);
+        FrameGrid?.ApplyTo(this.FrameGrid);
+        FrameGridOrigin?.ApplyTo(this.FrameGridOrigin);
+        FrameCountOffset?.ApplyTo(this.FrameCountOffset);
         return this;
     }
 }

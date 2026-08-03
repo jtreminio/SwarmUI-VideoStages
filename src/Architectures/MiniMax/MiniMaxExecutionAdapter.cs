@@ -44,6 +44,26 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
                     + $"{context.Plan.Clips.Count}-clip timeline. Author a final-frame "
                     + "reference on the clip that needs one instead."));
         }
+        ClipPlan dynamicLengthClip = context.Plan.Clips.FirstOrDefault(
+            clip => clip.Architecture.Id == ArchitectureId
+                && clip.Audio.Length.Owner == AudioLengthOwner.Audio
+                && clip.Architecture.AudioSourceKinds.Contains(clip.Audio.Base.Kind));
+        if (dynamicLengthClip is not null && context.Plan.Clips.Count != 1)
+        {
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Error,
+                "minimax.audio-derived-duration.multi-clip-unsupported",
+                "MiniMax audio-derived duration currently requires a single-clip timeline.",
+                dynamicLengthClip.ClipId));
+        }
+        if (dynamicLengthClip is not null && new GlobalVideoFrameTrimmer(generator).IsRequested)
+        {
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Error,
+                "minimax.audio-derived-duration.trim-unsupported",
+                "MiniMax audio-derived duration cannot be combined with global frame trim.",
+                dynamicLengthClip.ClipId));
+        }
         return diagnostics;
     }
 

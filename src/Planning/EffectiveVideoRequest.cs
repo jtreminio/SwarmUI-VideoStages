@@ -178,7 +178,9 @@ internal static class EffectiveVideoRequestProjector
         if (!projected.Frames.HasValue
             || projected.Stages is not { Count: > 0 }
             || (AudioSourceKindPolicy.AudioOwnsClipDuration(projected)
-                && features.HasFlag(ArchitectureFeature.AudioDerivedDuration))
+                && features.HasFlag(ArchitectureFeature.AudioDerivedDuration)
+                && assignment.Architecture.AudioSourceKinds.Contains(
+                    AudioSourceParser.Parse(projected.AudioSource).Kind))
             || (projected.ClipLengthFromControlNet
                 && features.HasFlag(ArchitectureFeature.IcLora)))
         {

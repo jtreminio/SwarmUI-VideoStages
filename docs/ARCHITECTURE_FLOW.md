@@ -144,9 +144,10 @@ Audio capabilities remain absent. The same typed boundary/rule objects feed
 backend validation and frontend publication.
 
 MiniMax publishes text/image entry, native/uploaded/AceStepFun audio, timeline
-audio segments, first/last frame references, decoded previous-stage chaining,
-its 17-frame grid with a five-frame origin, and cut-only clip boundaries. Its
-timeline segments do not authorize boundary audio carry.
+audio segments, audio-derived duration for external tracks, first/last frame
+references, decoded previous-stage chaining, its 17-frame grid with a five-frame
+origin, and cut-only clip boundaries. Its timeline segments do not authorize
+boundary audio carry.
 
 The generic descriptor supports source entry through the same neutral
 conformance path used by WAN. Model-level
@@ -532,8 +533,8 @@ The runner owns stage iteration, decoded upscale/passthrough handling, stage
 scope, capture, validation, intermediate publication, and terminal trim. The
 MiniMax procedure owns H3 prompt/model preparation, selected/timeline audio
 combination and preserve-window encoding or native audio creation outside those
-windows, joint audio-video latent construction, first/last-frame keyframes,
-sampling, and joint decode.
+windows, audio-derived `17k+5` joint-latent length, joint audio-video latent
+construction, first/last-frame keyframes, sampling, and joint decode.
 
 ### B6c. WAN on the shared stock-host runtime
 

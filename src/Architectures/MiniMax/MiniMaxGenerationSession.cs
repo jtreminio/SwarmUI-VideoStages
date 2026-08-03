@@ -1,8 +1,11 @@
+using ComfyTyped.Core;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
+using VideoStages.Generated;
 using VideoStages.HostVideo;
 using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
@@ -251,11 +254,14 @@ internal sealed class MiniMaxGenerationSession(
 
     private WGNodeData EmptyJointLatent(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        int frames)
+        int frames,
+        JArray framesConnection = null)
     {
         string empty = g.CreateNode("EmptyMiniMaxH3LatentAV", new JObject()
         {
-            ["length"] = frames,
+            ["length"] = framesConnection is null
+                ? new JValue(frames)
+                : framesConnection,
             ["height"] = genInfo.Height,
             ["width"] = genInfo.Width,
         });
@@ -292,7 +298,6 @@ internal sealed class MiniMaxGenerationSession(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         int frames)
     {
-        WGNodeData joint = EmptyJointLatent(genInfo, frames);
         WGNodeData selectedAudio = PlannedAudioSourceSelector.Select(
             clip.ClipId,
             clip.Audio.Base,
@@ -307,6 +312,26 @@ internal sealed class MiniMaxGenerationSession(
             selectedAudio,
             duration,
             out IReadOnlyList<(double Start, double End)> preserveWindows);
+        JArray framesConnection = null;
+        if (clip.Audio.Length.Owner == AudioLengthOwner.Audio
+            && MiniMaxArchitectureModule.Instance.Descriptor.AudioSourceKinds.Contains(
+                clip.Audio.Base.Kind)
+            && selectedAudio is not null
+            && combinedAudio?.Path is JArray combinedAudioPath)
+        {
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            SwarmAudioLengthToFramesNode lengthToFrames = bridge.AddNode(
+                new SwarmAudioLengthToFramesNode().With(
+                    FrameRate: plan.FramesPerSecond,
+                    FrameGrid: MiniMaxArchitectureModule.FrameGrid,
+                    FrameGridOrigin: MiniMaxArchitectureModule.FrameGridOrigin,
+                    FrameCountOffset: 0));
+            lengthToFrames.AudioInput.TryConnectFromPath(bridge, combinedAudioPath);
+            framesConnection = WorkflowBridge.ToPath(lengthToFrames.Frames);
+            combinedAudio = combinedAudio.WithPath(
+                WorkflowBridge.ToPath(lengthToFrames.Audio));
+        }
+        WGNodeData joint = EmptyJointLatent(genInfo, frames, framesConnection);
         if (combinedAudio is null)
         {
             return joint;

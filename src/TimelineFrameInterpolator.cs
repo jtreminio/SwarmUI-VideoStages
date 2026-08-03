@@ -38,6 +38,12 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
                 + $"{plan.Boundaries.Count} {boundaryLabel}; interpolating the assembled video "
                 + "would synthesize frames across authored boundaries."));
         }
+        if (HasDynamicLength(plan))
+        {
+            diagnostics.Add(WarnAndSkip(
+                "'Video Frame Interpolation' requires a literal final frame count, but this "
+                    + "timeline derives its duration at runtime."));
+        }
         string[] missingFeatures = RequiredFeatures(config.Method)
             .Where(feature => !g.Features.Contains(feature))
             .ToArray();
@@ -97,6 +103,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
                 : throw VideoStagesInvariant.Failure(error);
         }
         if (plan.Clips.Count != 1
+            || HasDynamicLength(plan)
             || RequiredFeatures(config.Method).Any(feature => !g.Features.Contains(feature)))
         {
             return artifact;
@@ -222,6 +229,9 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         method == Gimm
             ? [FrameInterpsFeature, GimmFeature]
             : [FrameInterpsFeature];
+
+    private static bool HasDynamicLength(VideoExecutionPlan plan) =>
+        plan.Clips.Any(clip => clip.Audio.Length.Owner != AudioLengthOwner.Timeline);
 
     private static PlanDiagnostic Refuse(string message) => new(
         PlanDiagnosticSeverity.Error,
