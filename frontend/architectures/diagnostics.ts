@@ -106,12 +106,15 @@ const persistedCapabilityIssues = (
         );
     }
     unsupported(
-        !supports("latentUpscale") &&
-            activeUpscaleModes.some(
-                (mode) => mode === "latent" || mode === "latent-model",
-            ),
+        !supports("latentUpscale") && activeUpscaleModes.includes("latent"),
         "latent-upscale",
-        "Latent stage upscaling",
+        "Latent interpolation upscaling",
+    );
+    unsupported(
+        !supports("latentModelUpscale") &&
+            activeUpscaleModes.includes("latent-model"),
+        "latent-model-upscale",
+        "Latent-model upscaling",
     );
     const sourceKind = audioSourceKind(clip.audioSource);
     const clipAudioCapabilitySupported = supportsClipAudio(

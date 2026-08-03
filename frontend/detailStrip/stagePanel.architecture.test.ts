@@ -48,7 +48,8 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
     wan.id = "wan22";
     wan.label = "WAN";
     wan.capabilities.features = wan.capabilities.features.filter(
-        (feature) => feature !== "latentUpscale",
+        (feature) =>
+            feature !== "latentUpscale" && feature !== "latentModelUpscale",
     );
     models.architectures.push(wan);
     models.entries.push(
@@ -392,7 +393,7 @@ describe("stage architecture model filtering", () => {
         expect(panel.querySelector("select")).toBeNull();
     });
 
-    it("offers latent upscaling only when the architecture supports it", () => {
+    it("offers each latent upscaling mode only when the architecture supports it", () => {
         const models = catalogWithWan();
         const defaults = {
             ...testRootDefaults(models),
@@ -441,6 +442,13 @@ describe("stage architecture model filtering", () => {
         expect(
             methodsFor("wan-current.safetensors", "latent-nearest-exact"),
         ).toEqual(["latent-nearest-exact", ...pixelMethods]);
+        const wan = models.architectures.find((entry) => entry.id === "wan22");
+        if (!wan) throw new Error("missing WAN architecture");
+        wan.capabilities.features.push("latentUpscale");
+        expect(methodsFor("wan-current.safetensors")).toEqual([
+            ...pixelMethods,
+            "latent-nearest-exact",
+        ]);
     });
 
     it("offers every supported architecture model on stage 0", () => {

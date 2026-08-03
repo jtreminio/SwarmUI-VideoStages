@@ -42,7 +42,8 @@ const wanCatalog = (): ArchitectureModelCatalog => {
             capability !== "promptRelay" &&
             capability !== "referenceFraming" &&
             capability !== "audioReuse" &&
-            capability !== "latentUpscale",
+            capability !== "latentUpscale" &&
+            capability !== "latentModelUpscale",
     );
     models.architectures.push(wan);
     models.entries.push({
@@ -187,7 +188,7 @@ describe("architecture diagnostics", () => {
                 "architecture.unsupported.reference-framing",
                 "architecture.unsupported.prompt-relay",
                 "architecture.unsupported.audio-reuse",
-                "architecture.unsupported.latent-upscale",
+                "architecture.unsupported.latent-model-upscale",
             ].includes(code),
         );
 

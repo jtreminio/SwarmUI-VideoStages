@@ -11,6 +11,9 @@ internal static class ArchitectureStageActivity
         && (stage.RetakeWindow is null
             || descriptor?.Features.HasFlag(ArchitectureFeature.Retake) != true)
         && !(stage.Upscale != 1
-            && (stage.IsLatentUpscale || stage.IsLatentModelUpscale)
-            && descriptor?.Features.HasFlag(ArchitectureFeature.LatentUpscale) == true);
+            && ((stage.IsLatentUpscale
+                    && descriptor?.Features.HasFlag(ArchitectureFeature.LatentUpscale) == true)
+                || (stage.IsLatentModelUpscale
+                    && descriptor?.Features.HasFlag(
+                        ArchitectureFeature.LatentModelUpscale) == true)));
 }

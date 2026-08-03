@@ -93,7 +93,7 @@ describe("resolved temporal grid", () => {
         ).toEqual({ frameGrid: 6, frameGridOrigin: 1 });
     });
 
-    it("excludes latent-upscale handlers when the architecture cannot run them", () => {
+    it("excludes latent-model-upscale handlers when the architecture cannot run them", () => {
         const catalog = testArchitectureCatalog();
         catalog.entries.push({
             ...catalog.entries[0],
@@ -102,7 +102,7 @@ describe("resolved temporal grid", () => {
         });
         catalog.architectures[0].capabilities.features =
             catalog.architectures[0].capabilities.features.filter(
-                (feature) => feature !== "latentUpscale",
+                (feature) => feature !== "latentModelUpscale",
             );
         const clip = minimalClip({
             stages: [

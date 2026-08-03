@@ -85,6 +85,7 @@ public class MiniMaxArchitectureTests
                 "referenceFraming",
                 "audioSegments",
                 "audioBoundaryCarry",
+                "latentUpscale",
                 "audioReuse",
                 "audioDerivedDuration",
             ],
@@ -271,7 +272,7 @@ public class MiniMaxArchitectureTests
     }
 
     [Fact]
-    public void Latent_upscale_is_ignored_and_does_not_activate_a_zero_control_stage()
+    public void Latent_interpolation_activates_a_zero_control_stage()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
@@ -297,12 +298,99 @@ public class MiniMaxArchitectureTests
                 descriptor,
                 ArchitectureEntryMode.ImageToVideo);
 
-        Assert.False(descriptor.Features.HasFlag(ArchitectureFeature.LatentUpscale));
-        Assert.True(ArchitectureStageActivity.IsPassthrough(stage, descriptor));
+        Assert.True(descriptor.Features.HasFlag(ArchitectureFeature.LatentUpscale));
+        Assert.False(ArchitectureStageActivity.IsPassthrough(stage, descriptor));
+        Assert.DoesNotContain(
+            diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.unsupported-latent-upscale-ignored");
+    }
+
+    [Fact]
+    public void Latent_model_upscale_remains_unsupported()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject stageObject = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            control: 0,
+            upscale: 1.5,
+            upscaleMethod: "latentmodel-unit-upscaler.safetensors",
+            steps: 8,
+            cfgScale: 1);
+        ClipSpec clip = ParseClip(
+            MakeClip(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1),
+                stageObject),
+            models);
+        VideoArchitectureDescriptor descriptor = MiniMaxArchitectureModule.Instance.Descriptor;
+
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                clip,
+                descriptor,
+                ArchitectureEntryMode.ImageToVideo);
+
+        Assert.False(descriptor.Features.HasFlag(ArchitectureFeature.LatentModelUpscale));
+        Assert.True(ArchitectureStageActivity.IsPassthrough(clip.Stages[^1], descriptor));
         Assert.Contains(
             diagnostics,
             diagnostic => diagnostic.Code
                 == "effective-request.unsupported-latent-upscale-ignored");
+    }
+
+    [Fact]
+    public void Latent_interpolation_projects_cross_clip_geometry()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        ClipSpec authored = ParseClip(
+            MakeClip(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    control: 0.5,
+                    upscale: 1.5,
+                    upscaleMethod: "latent-bislerp",
+                    steps: 8,
+                    cfgScale: 1)),
+            models);
+        ArchitectureClipCompilation compilation = Compile(authored, models);
+        StageSpec authoredUpscale = authored.Stages[^1];
+        StagePlan upscale = new(
+            authoredUpscale.Id,
+            authoredUpscale.ClipStageIndex,
+            authoredUpscale.ClipStageRawIndex,
+            StageInputKind.PreviousStage,
+            false,
+            compilation.StagePayloads[authoredUpscale.ClipStageRawIndex],
+            new(false, IntermediateOutputEligibility.NotEligible, false));
+        ClipPlan scaled = new(
+            0,
+            49,
+            ClipInputKind.RootMedia,
+            false,
+            null,
+            [upscale],
+            AudioPlanCompiler.Compile(authored))
+        {
+            ArchitecturePayload = compilation.Payload,
+        };
+        ClipPlan plain = scaled with
+        {
+            ClipId = 1,
+            Stages = [],
+        };
+
+        PlanDiagnostic diagnostic = Assert.Single(
+            ClipGeometryProjection.Validate([scaled, plain], 512, 512),
+            entry => entry.Code == "clip-geometry-will-conform");
+
+        Assert.Equal(0, diagnostic.ClipId);
+        Assert.Contains("768x768", diagnostic.Message);
+        Assert.Contains("512x512", diagnostic.Message);
     }
 
     [Fact]

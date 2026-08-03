@@ -619,7 +619,8 @@
     retake: "Retakes",
     audioSegments: "Audio segments",
     audioBoundaryCarry: "Boundary audio carry",
-    latentUpscale: "Latent stage upscaling",
+    latentUpscale: "Latent interpolation upscaling",
+    latentModelUpscale: "Latent-model upscaling",
     audioReuse: "Captured stage audio reuse",
     audioDerivedDuration: "Audio-derived clip duration",
     icLora: "IC-LoRA"
@@ -703,7 +704,10 @@
       if ((stage.upscale ?? 1) === 1 || upscaleMode !== "latent" && upscaleMode !== "latent-model") {
         return false;
       }
-      return clipCapabilities === null || architectureFeatureSupport("latentUpscale", clipCapabilities);
+      return clipCapabilities === null || architectureFeatureSupport(
+        upscaleMode === "latent" ? "latentUpscale" : "latentModelUpscale",
+        clipCapabilities
+      );
     }).map((stage) => stage.model);
   };
   var resolveClipFrameGridForLookup = (clip, modelForName, architectureForId) => {
@@ -6030,11 +6034,14 @@
       );
     }
     unsupported(
-      !supports("latentUpscale") && activeUpscaleModes.some(
-        (mode) => mode === "latent" || mode === "latent-model"
-      ),
+      !supports("latentUpscale") && activeUpscaleModes.includes("latent"),
       "latent-upscale",
-      "Latent stage upscaling"
+      "Latent interpolation upscaling"
+    );
+    unsupported(
+      !supports("latentModelUpscale") && activeUpscaleModes.includes("latent-model"),
+      "latent-model-upscale",
+      "Latent-model upscaling"
     );
     const sourceKind = audioSourceKind(clip.audioSource);
     const clipAudioCapabilitySupported = supportsClipAudio(
@@ -12029,18 +12036,24 @@ The conversion is one undoable change.`;
 
   // frontend/detailStrip/stagePanel/upscaleSection.ts
   var UPSCALE_EPSILON = 1e-6;
-  var isLatentUpscaleMethod = (method) => ["latent", "latent-model"].includes(upscaleModeForMethod(method));
+  var latentUpscaleFeature = (method) => {
+    const mode = upscaleModeForMethod(method);
+    return mode === "latent" ? "latentUpscale" : mode === "latent-model" ? "latentModelUpscale" : null;
+  };
   var appendStageUpscaleSection = (bindings, isRefine) => {
     if (!isRefine) return;
     const { context, clip, stage, defaults, fields, slider, commit } = bindings;
-    const supportsLatentUpscale = context.authoring().capabilities.forClip(clip).decision("latentUpscale").supported;
+    const capabilities = context.authoring().capabilities.forClip(clip);
     const supportedMethods = defaults.upscaleMethodValues.flatMap(
-      (value, index) => !isLatentUpscaleMethod(value) || supportsLatentUpscale ? [
-        {
-          value,
-          label: defaults.upscaleMethodLabels[index] ?? value
-        }
-      ] : []
+      (value, index) => {
+        const feature = latentUpscaleFeature(value);
+        return feature === null || capabilities.decision(feature).supported ? [
+          {
+            value,
+            label: defaults.upscaleMethodLabels[index] ?? value
+          }
+        ] : [];
+      }
     );
     if (stage.upscaleMethod && !supportedMethods.some((option) => option.value === stage.upscaleMethod)) {
       supportedMethods.unshift({

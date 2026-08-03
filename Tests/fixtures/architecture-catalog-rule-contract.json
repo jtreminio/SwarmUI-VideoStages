@@ -11,6 +11,7 @@
         "audioSegments",
         "audioBoundaryCarry",
         "latentUpscale",
+        "latentModelUpscale",
         "audioReuse",
         "audioDerivedDuration",
         "icLora"

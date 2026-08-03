@@ -8,8 +8,16 @@ import type { StagePanelBindings } from "./types";
 
 const UPSCALE_EPSILON = 1e-6;
 
-const isLatentUpscaleMethod = (method: string): boolean =>
-    ["latent", "latent-model"].includes(upscaleModeForMethod(method));
+const latentUpscaleFeature = (
+    method: string,
+): "latentUpscale" | "latentModelUpscale" | null => {
+    const mode = upscaleModeForMethod(method);
+    return mode === "latent"
+        ? "latentUpscale"
+        : mode === "latent-model"
+          ? "latentModelUpscale"
+          : null;
+};
 
 export const appendStageUpscaleSection = (
     bindings: StagePanelBindings,
@@ -17,20 +25,19 @@ export const appendStageUpscaleSection = (
 ): void => {
     if (!isRefine) return;
     const { context, clip, stage, defaults, fields, slider, commit } = bindings;
-    const supportsLatentUpscale = context
-        .authoring()
-        .capabilities.forClip(clip)
-        .decision("latentUpscale").supported;
+    const capabilities = context.authoring().capabilities.forClip(clip);
     const supportedMethods: OptionSpec[] = defaults.upscaleMethodValues.flatMap(
-        (value, index) =>
-            !isLatentUpscaleMethod(value) || supportsLatentUpscale
+        (value, index) => {
+            const feature = latentUpscaleFeature(value);
+            return feature === null || capabilities.decision(feature).supported
                 ? [
                       {
                           value,
                           label: defaults.upscaleMethodLabels[index] ?? value,
                       },
                   ]
-                : [],
+                : [];
+        },
     );
     if (
         stage.upscaleMethod &&

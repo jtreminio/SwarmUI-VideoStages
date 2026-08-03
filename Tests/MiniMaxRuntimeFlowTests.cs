@@ -497,6 +497,56 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
+    public void Latent_interpolation_resizes_only_the_video_half_before_the_next_stage()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    control: 0.5,
+                    upscale: 1.5,
+                    upscaleMethod: "latent-bislerp",
+                    steps: 8,
+                    cfgScale: 1)));
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
+        Assert.Equal(2, samplers.Length);
+        ComfyNode firstSampler = Assert.Single(
+            samplers,
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 43);
+        ComfyNode secondSampler = Assert.Single(
+            samplers,
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 44);
+        LatentUpscaleByNode scale = Assert.Single(
+            bridge.Graph.NodesOfType<LatentUpscaleByNode>());
+        Assert.Equal("bislerp", scale.UpscaleMethod.LiteralAsString());
+        Assert.Equal(1.5, scale.ScaleBy.LiteralAsDouble());
+        Assert.True(ReachesUpstream(bridge, scale, firstSampler.Id));
+        LTXVConcatAVLatentNode joint = Assert.IsType<LTXVConcatAVLatentNode>(
+            secondSampler.FindInput("latent_image").Connection?.Node);
+        Assert.Same(scale.LATENT, joint.VideoLatent.Connection);
+        Assert.DoesNotContain(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            candidate => candidate.Width.LiteralAsInt() == 768
+                && candidate.Height.LiteralAsInt() == 768);
+        Assert.Equal(768, generator.CurrentMedia.Width);
+        Assert.Equal(768, generator.CurrentMedia.Height);
+        Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.AttachedAudio?.DataType);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void Model_upscale_resizes_the_decoded_input_before_the_next_stage()
     {
         using SwarmUiTestContext context = new();

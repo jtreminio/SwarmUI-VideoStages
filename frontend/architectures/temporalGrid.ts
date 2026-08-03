@@ -142,7 +142,12 @@ const effectiveGridModels = (
             }
             return (
                 clipCapabilities === null ||
-                architectureFeatureSupport("latentUpscale", clipCapabilities)
+                architectureFeatureSupport(
+                    upscaleMode === "latent"
+                        ? "latentUpscale"
+                        : "latentModelUpscale",
+                    clipCapabilities,
+                )
             );
         })
         .map((stage) => stage.model);

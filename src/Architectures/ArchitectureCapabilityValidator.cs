@@ -179,8 +179,10 @@ internal static class ArchitectureCapabilityValidator
                     stage.ClipStageRawIndex));
             }
             else if (stage.Upscale != 1
-                && upscaleMode is StageUpscaleMode.Latent or StageUpscaleMode.LatentModel
-                && Unsupported(ArchitectureFeature.LatentUpscale))
+                && ((upscaleMode == StageUpscaleMode.Latent
+                        && Unsupported(ArchitectureFeature.LatentUpscale))
+                    || (upscaleMode == StageUpscaleMode.LatentModel
+                        && Unsupported(ArchitectureFeature.LatentModelUpscale))))
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Warning,

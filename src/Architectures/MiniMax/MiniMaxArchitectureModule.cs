@@ -69,7 +69,8 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             | ArchitectureFeature.AudioDerivedDuration
             | ArchitectureFeature.ReferenceFraming
             | ArchitectureFeature.AudioReuse
-            | ArchitectureFeature.AudioBoundaryCarry,
+            | ArchitectureFeature.AudioBoundaryCarry
+            | ArchitectureFeature.LatentUpscale,
         BoundaryPolicy)
     {
         FrameGrid = FrameGrid,
@@ -211,8 +212,26 @@ internal sealed record MiniMaxClipPayload(
     public (int Width, int Height) ProjectFinalDimensions(
         IReadOnlyList<StagePlan> stages,
         int width,
-        int height) =>
-        HostVideoStageGeometry.ProjectFinalDimensions(stages, width, height);
+        int height)
+    {
+        foreach (StagePlan stage in stages ?? [])
+        {
+            StageUpscaleMode mode = stage.Core.Upscale.Mode;
+            if (mode != StageUpscaleMode.Latent
+                && (mode is not (StageUpscaleMode.Pixel or StageUpscaleMode.Model)
+                    || stage.Input is not (
+                        StageInputKind.InitVideo
+                        or StageInputKind.PreviousStage)))
+            {
+                continue;
+            }
+            (width, height) = StageUpscaleGraph.ResolveTargetDimensions(
+                width,
+                height,
+                stage.Core.Upscale.Factor);
+        }
+        return (width, height);
+    }
 }
 
 internal static class MiniMaxClipPayloadExtensions

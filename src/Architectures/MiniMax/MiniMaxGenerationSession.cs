@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -163,7 +164,8 @@ internal sealed class MiniMaxGenerationSession(
                 ExecuteRefineStage(
                     clip,
                     genInfo,
-                    HostVideoStageSchedulePolicy.StartStep(core.Steps, core.Control));
+                    HostVideoStageSchedulePolicy.StartStep(core.Steps, core.Control),
+                    core.Upscale);
             }
             else
             {
@@ -172,7 +174,8 @@ internal sealed class MiniMaxGenerationSession(
                     genInfo,
                     incoming: null,
                     _entryFirstFrame,
-                    startStep: 0);
+                    startStep: 0,
+                    core.Upscale);
             }
             RestoreReusableAudio(clipPayload, stage);
             if (stage.StageId == clip.Stages.Last(candidate => !candidate.IsPassthrough).StageId)
@@ -266,7 +269,8 @@ internal sealed class MiniMaxGenerationSession(
     private void ExecuteRefineStage(
         ClipPlan clip,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        int startStep)
+        int startStep,
+        StageUpscalePlan stageUpscale)
     {
         WGNodeData incoming = g.CurrentMedia
             ?? throw VideoStagesInvariant.Failure(
@@ -276,7 +280,13 @@ internal sealed class MiniMaxGenerationSession(
             throw VideoStagesInvariant.Failure(
                 "A MiniMax H3 refine stage's incoming media carries no audio input.");
         }
-        SampleNatively(clip, genInfo, incoming, firstFrame: null, startStep);
+        SampleNatively(
+            clip,
+            genInfo,
+            incoming,
+            firstFrame: null,
+            startStep,
+            stageUpscale);
     }
 
     private void SampleNatively(
@@ -284,7 +294,8 @@ internal sealed class MiniMaxGenerationSession(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData incoming,
         WGNodeData firstFrame,
-        int startStep)
+        int startStep,
+        StageUpscalePlan stageUpscale)
     {
         bool ambientImageToVideo = g.IsImageToVideo;
         try
@@ -297,6 +308,7 @@ internal sealed class MiniMaxGenerationSession(
             g.CurrentMedia = incoming is null
                 ? EntryJointLatent(clip, genInfo, frames)
                 : JointLatent(incoming, genInfo);
+            ApplyLatentInterpolation(stageUpscale);
             AttachKeyframes(genInfo, firstFrame);
             string sampled = g.CreateKSampler(
                 genInfo.Model.Path,
@@ -474,6 +486,28 @@ internal sealed class MiniMaxGenerationSession(
         return videoLatent
             .WithMaskedAudio(g.CurrentAudioVae)
             .AsSamplingLatent(genInfo.Vae, g.CurrentAudioVae);
+    }
+
+    private void ApplyLatentInterpolation(StageUpscalePlan upscale)
+    {
+        if (upscale?.Mode != StageUpscaleMode.Latent || g.CurrentMedia is null)
+        {
+            return;
+        }
+        WGNodeData video = g.CurrentMedia.AsLatentImage(g.CurrentVae);
+        (int width, int height) = StageUpscaleGraph.ResolveTargetDimensions(
+            video.Width ?? _dimensions.Width,
+            video.Height ?? _dimensions.Height,
+            upscale.Factor);
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        LatentUpscaleByNode node = bridge.AddNode(new LatentUpscaleByNode().With(
+            UpscaleMethod: upscale.MethodName,
+            ScaleBy: upscale.Factor));
+        node.Samples.ConnectFromPath(bridge, video.Path);
+        WGNodeData scaled = video.WithPath(node.LATENT, WGNodeData.DT_LATENT_VIDEO);
+        scaled.Width = width;
+        scaled.Height = height;
+        g.CurrentMedia = scaled.AsSamplingLatent(g.CurrentVae, g.CurrentAudioVae);
     }
 
     private void PrepareInitVideoAudio(ClipPlan clip)

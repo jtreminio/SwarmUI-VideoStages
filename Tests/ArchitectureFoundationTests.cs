@@ -1281,6 +1281,7 @@ public class ArchitectureFoundationTests
                 "audioSegments",
                 "audioBoundaryCarry",
                 "latentUpscale",
+                "latentModelUpscale",
                 "audioReuse",
                 "audioDerivedDuration",
                 "icLora",

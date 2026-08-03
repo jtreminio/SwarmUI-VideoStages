@@ -63,6 +63,7 @@ internal enum ArchitectureFeature
     IcLora = 1 << 7,
     AudioBoundaryCarry = 1 << 8,
     LatentUpscale = 1 << 9,
+    LatentModelUpscale = 1 << 10,
 }
 
 // --- Boundary rules: the only rule family, published with typed constraints so the backend and
