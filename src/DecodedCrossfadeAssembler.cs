@@ -3,10 +3,9 @@ using ComfyTyped.Generated;
 using VideoStages.Execution;
 using VideoStages.Generated;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages;
 
-/// <summary>LTX decoded overlap/crossfade graph.</summary>
-internal static class Ltx2BoundaryAssembler
+internal static class DecodedCrossfadeAssembler
 {
     internal static INodeOutput MergeOverlaps(
         WorkflowBridge bridge,
@@ -46,7 +45,7 @@ internal static class Ltx2BoundaryAssembler
                 INodeOutput tail =
                     SliceImageFrames(bridge, videoOutputs[i], frames - endTrim, endTrim);
                 INodeOutput head = SliceImageFrames(bridge, videoOutputs[i + 1], 0, endTrim);
-                segments.Add(AddPyramidBlend(
+                segments.Add(AddBlend(
                     bridge,
                     tail,
                     head,
@@ -82,19 +81,16 @@ internal static class Ltx2BoundaryAssembler
         return ramp.Mask;
     }
 
-    private static INodeOutput AddPyramidBlend(
+    private static INodeOutput AddBlend(
         WorkflowBridge bridge,
-        INodeOutput imageA,
-        INodeOutput imageB,
+        INodeOutput tail,
+        INodeOutput head,
         INodeOutput mask)
     {
-        LTXVLaplacianPyramidBlendNode blend = bridge.AddNode(
-            new LTXVLaplacianPyramidBlendNode().With(
-                TrimToShortest: true,
-                MaskLowResDilation: 0));
-        blend.ImageA.ConnectToUntyped(imageA);
-        blend.ImageB.ConnectToUntyped(imageB);
+        ImageCompositeMaskedNode blend = bridge.AddNode(new ImageCompositeMaskedNode());
+        blend.Destination.ConnectToUntyped(head);
+        blend.Source.ConnectToUntyped(tail);
         blend.Mask.ConnectToUntyped(mask);
-        return blend.Image;
+        return blend.IMAGE;
     }
 }

@@ -673,7 +673,7 @@ public partial class StageFlowTests
         // The join itself engaged: continue/crossfade blend at the seam, a cut must not.
         Assert.Equal(
             boundaryOut != Constants.BoundaryOutCut,
-            bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>().Any());
+            bridge.Graph.NodesOfType<ImageCompositeMaskedNode>().Any());
         AssertWorkflowHasNoCycles(workflow);
     }
 
@@ -773,7 +773,7 @@ public partial class StageFlowTests
         SwarmRampMaskBatchNode ramp = Assert.Single(
             bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
         Assert.Equal(Ltx2BoundaryPolicy.DefaultFrames + 1, ramp.Frames.LiteralAsInt());
-        Assert.NotEmpty(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        Assert.NotEmpty(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
         AssertWorkflowHasNoCycles(workflow);
     }
 
@@ -792,7 +792,7 @@ public partial class StageFlowTests
         // Fixed footage can't be conditioned on the previous clip's tail: the boundary degrades to
         // a plain cut concat, so no seam-collapse blend or ramp mask exists. (ImgToVideoInplace
         // nodes still appear from ordinary stage conditioning, so their absence is not the signal.)
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
         Assert.Empty(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
         SwarmFrameWindowNode window = Assert.Single(
             bridge.Graph.NodesOfType<SwarmFrameWindowNode>());

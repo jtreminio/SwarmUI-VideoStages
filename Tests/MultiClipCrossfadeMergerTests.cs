@@ -157,7 +157,7 @@ public class MultiClipCrossfadeMergerTests
         using WorkflowBridge bridge = WorkflowBridge.Create(gB.Workflow);
         Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
         Assert.Equal(2, CountOf<AudioConcatNode>(bridge));
-        Assert.Equal(0, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        Assert.Equal(0, CountOf<ImageCompositeMaskedNode>(bridge));
         Assert.Equal(0, CountOf<ImageFromBatchNode>(bridge));
         Assert.Equal(0, CountOf<SwarmRampMaskBatchNode>(bridge));
         Assert.Equal(0, CountOf<TrimAudioDurationNode>(bridge));
@@ -228,8 +228,8 @@ public class MultiClipCrossfadeMergerTests
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
 
-        LTXVLaplacianPyramidBlendNode blend =
-            Assert.Single(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        ImageCompositeMaskedNode blend =
+            Assert.Single(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
         Assert.Equal(4, CountOf<ImageFromBatchNode>(bridge));
         Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
 
@@ -333,7 +333,7 @@ public class MultiClipCrossfadeMergerTests
         MergeAndPublish(g, Artifacts(clips), boundaries.Boundaries);
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        Assert.Equal(2, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        Assert.Equal(2, CountOf<ImageCompositeMaskedNode>(bridge));
         Assert.Equal(7, CountOf<ImageFromBatchNode>(bridge));
         Assert.Equal(
             new HashSet<int> { 8, 9 },
@@ -345,7 +345,7 @@ public class MultiClipCrossfadeMergerTests
     }
 
     [Fact]
-    public void Crossfade_Run_IsArchitectureOwned_ThenHardCutToAnotherArchitecture()
+    public void Crossfade_Run_ThenHardCut_KeepsTheRunsSeparate()
     {
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17, 17], T2IModelClassSorter.CompatLtxv2);
@@ -362,13 +362,13 @@ public class MultiClipCrossfadeMergerTests
             PlansFor(clips, ["crossfade", "cut", "cut"]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        Assert.Single(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        Assert.Single(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
         Assert.Equal(2, CountOf<BatchImagesNodeNode>(bridge));
         Assert.Equal(51 - 8, g.CurrentMedia.Frames);
     }
 
     [Fact]
-    public void Crossfade_UnsupportedLaterRun_DegradesAllOverlapsToCuts()
+    public void Crossfade_LaterRun_UsesTheSharedDecodedImplementation()
     {
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17, 17, 17], T2IModelClassSorter.CompatLtxv2);
@@ -387,15 +387,13 @@ public class MultiClipCrossfadeMergerTests
                 clips,
                 ["crossfade", "cut", "crossfade", "cut"]));
 
-        Assert.True(resolution.Degraded);
-        Assert.Contains("no decoded overlap implementation", resolution.Reason);
-        Assert.All(
-            resolution.Boundaries,
-            boundary => Assert.Equal(BoundaryJoinType.Cut, boundary.Effective));
+        Assert.False(resolution.Degraded);
+        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[0].Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[2].Effective);
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
-        Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
-        Assert.Equal(68, g.CurrentMedia.Frames);
+        Assert.Equal(2, CountOf<ImageCompositeMaskedNode>(bridge));
+        Assert.Equal(3, CountOf<BatchImagesNodeNode>(bridge));
+        Assert.Equal(68 - 16, g.CurrentMedia.Frames);
     }
 
     [Fact]
@@ -411,7 +409,7 @@ public class MultiClipCrossfadeMergerTests
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         const int k = 8;
 
-        List<LTXVLaplacianPyramidBlendNode> blends = [.. bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>()];
+        List<ImageCompositeMaskedNode> blends = [.. bridge.Graph.NodesOfType<ImageCompositeMaskedNode>()];
         Assert.Equal(2, blends.Count);
 
         // Three cores plus a tail/head pair per boundary produce seven slices.
@@ -429,8 +427,8 @@ public class MultiClipCrossfadeMergerTests
 
         Assert.All(blends, blend =>
         {
-            Assert.IsType<ImageFromBatchNode>(blend.ImageA.Connection!.Node);
-            Assert.IsType<ImageFromBatchNode>(blend.ImageB.Connection!.Node);
+            Assert.IsType<ImageFromBatchNode>(blend.Source.Connection!.Node);
+            Assert.IsType<ImageFromBatchNode>(blend.Destination.Connection!.Node);
         });
 
         // Each outgoing track is trimmed separately to keep later clips synchronized.
@@ -464,7 +462,7 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(VideoId(1), conform.Image.Connection!.Node.Id);
         Assert.Equal(512, conform.Width.LiteralAsInt());
         Assert.Equal(512, conform.Height.LiteralAsInt());
-        Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        Assert.Equal(1, CountOf<ImageCompositeMaskedNode>(bridge));
         Assert.Equal(512, g.CurrentMedia.Width);
         Assert.Equal(34 - 8, g.CurrentMedia.Frames);
         List<string> warnings = Assert.IsType<List<string>>(
@@ -507,7 +505,16 @@ public class MultiClipCrossfadeMergerTests
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         const int k = 8;
 
-        Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        ImageCompositeMaskedNode blend = Assert.Single(
+            bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
+        ImageFromBatchNode tail = Assert.IsType<ImageFromBatchNode>(
+            blend.Source.Connection!.Node);
+        ImageFromBatchNode head = Assert.IsType<ImageFromBatchNode>(
+            blend.Destination.Connection!.Node);
+        Assert.Equal(VideoId(0), tail.Image.Connection!.Node.Id);
+        Assert.Equal(17 - k, tail.BatchIndex.LiteralAsInt());
+        Assert.Equal(VideoId(1), head.Image.Connection!.Node.Id);
+        Assert.Equal(0, head.BatchIndex.LiteralAsInt());
         TrimAudioDurationNode trim = Assert.Single(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
         Assert.Equal((17 - k) / (double)Fps, trim.Duration.LiteralAsDouble()!.Value, 6);
         Assert.Equal(AudioId(0), trim.Audio.Connection!.Node.Id);
@@ -530,7 +537,7 @@ public class MultiClipCrossfadeMergerTests
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         const int k = 24;
 
-        Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        Assert.Equal(1, CountOf<ImageCompositeMaskedNode>(bridge));
         SwarmRampMaskBatchNode ramp = Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
         Assert.Equal(k, ramp.Frames.LiteralAsInt());
         TrimAudioDurationNode trim = Assert.Single(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
@@ -553,7 +560,7 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(30.0, resample.FpsIn.LiteralAsDouble());
         Assert.Equal(24.0, resample.FpsOut.LiteralAsDouble());
         Assert.Equal(0, CountOf<ImageScaleNode>(bridge));
-        Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        Assert.Equal(1, CountOf<ImageCompositeMaskedNode>(bridge));
         // 17 frames @30 conform to 14 @24, and the 8-frame overlap to 6.
         Assert.Equal(17 + 14 - 6, g.CurrentMedia.Frames);
         Assert.Equal(24, g.CurrentMedia.GetRawFPS());
@@ -621,7 +628,7 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[0].Effective);
         Assert.Equal(BoundaryJoinType.Cut, resolution.Boundaries[2].Effective);
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        Assert.Equal(1, CountOf<ImageCompositeMaskedNode>(bridge));
     }
 
     [Fact]
@@ -639,7 +646,7 @@ public class MultiClipCrossfadeMergerTests
         Assert.False(resolution.Degraded);
         Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[0].Effective);
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        Assert.Equal(1, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        Assert.Equal(1, CountOf<ImageCompositeMaskedNode>(bridge));
         ImageScaleNode conform = Assert.Single(bridge.Graph.NodesOfType<ImageScaleNode>());
         Assert.Equal(VideoId(2), conform.Image.Connection!.Node.Id);
     }
@@ -657,7 +664,7 @@ public class MultiClipCrossfadeMergerTests
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
-        Assert.Equal(0, CountOf<LTXVLaplacianPyramidBlendNode>(bridge));
+        Assert.Equal(0, CountOf<ImageCompositeMaskedNode>(bridge));
         Assert.Equal(0, CountOf<TrimAudioDurationNode>(bridge));
         Assert.Equal(36, g.CurrentMedia.Frames);
     }

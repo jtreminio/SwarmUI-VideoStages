@@ -194,7 +194,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
                 runOutputs.Add(videoOutputs[run.Start]);
                 continue;
             }
-            runOutputs.Add(Ltx2BoundaryAssembler.MergeOverlaps(
+            runOutputs.Add(DecodedCrossfadeAssembler.MergeOverlaps(
                 bridge,
                 [.. clips.Skip(run.Start).Take(run.Length)],
                 [.. videoOutputs.Skip(run.Start).Take(run.Length)],
@@ -248,9 +248,16 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             }
             if (architectureId != Ltx2ArchitectureModule.ArchitectureId)
             {
-                runs = [];
-                failure = $"architecture '{architectureId}' has no decoded overlap implementation";
-                return false;
+                bool crossfadeOnly = boundaries
+                    .Skip(runStart)
+                    .Take(runLength - 1)
+                    .All(boundary => boundary.Effective == BoundaryJoinType.Crossfade);
+                if (!crossfadeOnly)
+                {
+                    runs = [];
+                    failure = $"architecture '{architectureId}' has no decoded overlap implementation";
+                    return false;
+                }
             }
             BoundaryOverlapPlan runPlan = BoundaryOverlapPlanner.ToOverlapPlan(
                 [.. boundaries.Skip(runStart).Take(runLength - 1)]);

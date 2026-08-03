@@ -110,7 +110,7 @@ public partial class StageFlowTests
     private static List<(int Index, int Length)> MergeSlices(WorkflowBridge bridge) =>
         [.. bridge.Graph.NodesOfType<ImageFromBatchNode>()
             .Where(node => bridge.Graph.FindInputsConnectedTo(node.IMAGE).Any(
-                consumer => consumer.Node is LTXVLaplacianPyramidBlendNode or BatchImagesNodeNode))
+                consumer => consumer.Node is ImageCompositeMaskedNode or BatchImagesNodeNode))
             .Select(node => (node.BatchIndex.LiteralAsInt()!.Value, node.Length.LiteralAsInt()!.Value))
             .OrderBy(slice => slice.Item1)
             .ThenBy(slice => slice.Item2)];
@@ -289,7 +289,7 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<ImageFromBatchNode>(),
             node => node.BatchIndex.LiteralAsInt() == ReanchorTailIndex
                 && node.Length.LiteralAsInt() == ContinueWindowFrames);
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
         Assert.Equal(2 * ContinueClipFrames, g.CurrentMedia.Frames);
     }
 
@@ -312,7 +312,7 @@ public partial class StageFlowTests
         Assert.All(
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>(),
             node => Assert.Null(TailGuideScales(node, clipZeroDecode)));
-        Assert.NotEmpty(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        Assert.NotEmpty(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
         AssertWorkflowHasNoCycles(workflow);
     }
 }

@@ -95,7 +95,7 @@ public class MiniMaxArchitectureTests
             "unsupported",
             architecture["boundaryRules"]["continue"].Value<string>("support"));
         Assert.Equal(
-            "unsupported",
+            "conditional",
             architecture["boundaryRules"]["crossfade"].Value<string>("support"));
     }
 

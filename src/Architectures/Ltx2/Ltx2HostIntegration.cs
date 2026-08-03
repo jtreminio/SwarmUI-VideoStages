@@ -28,8 +28,6 @@ internal static class Ltx2HostIntegration
             FeatureFlag;
         ComfyUIBackendExtension.NodeToFeatureMap[LTXAddVideoICLoRAGuideAdvancedNode.ClassType] =
             FeatureFlag;
-        ComfyUIBackendExtension.NodeToFeatureMap[LTXVLaplacianPyramidBlendNode.ClassType] =
-            FeatureFlag;
         ComfyUIBackendExtension.NodeToFeatureMap[LTXVSetAudioRefTokensNode.ClassType] =
             FeatureFlag;
         ComfyUIBackendExtension.NodeToFeatureMap[LTXVSetVideoLatentNoiseMasksNode.ClassType] =

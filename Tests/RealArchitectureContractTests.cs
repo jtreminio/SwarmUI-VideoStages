@@ -334,7 +334,7 @@ public class RealArchitectureContractTests
             secondFamily,
             ltxSignatureIds,
             wanSignatureId);
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
         Assert.Empty(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
         Assert.Equal(cut.Id, $"{generator.CurrentMedia.Path[0]}");
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);

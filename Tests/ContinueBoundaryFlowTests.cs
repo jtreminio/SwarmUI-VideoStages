@@ -62,8 +62,8 @@ public partial class StageFlowTests
             && tailSlices.Any(slice => ReachesUpstream(bridge, n, slice.Id)));
 
         // The merge collapses the duplicated window: one K=9 blend fed a single 9-frame ramp mask node.
-        LTXVLaplacianPyramidBlendNode blend = Assert.Single(
-            bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        ImageCompositeMaskedNode blend = Assert.Single(
+            bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
         SwarmRampMaskBatchNode ramp = Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
         Assert.Equal(ContinueWindowFrames, ramp.Frames.LiteralAsInt());
         Assert.Equal(ramp.Id, blend.Mask.Connection!.Node.Id);
@@ -246,7 +246,7 @@ public partial class StageFlowTests
             bridge.Graph.NodesOfType<ImageFromBatchNode>(),
             n => n.BatchIndex.LiteralAsInt() == ContinueClipFrames - ContinueWindowFrames
                 && n.Length.LiteralAsInt() == ContinueWindowFrames);
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVLaplacianPyramidBlendNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
         Assert.Equal(2 * ContinueClipFrames, g.CurrentMedia.Frames);
         AssertWorkflowHasNoCycles(workflow);
     }

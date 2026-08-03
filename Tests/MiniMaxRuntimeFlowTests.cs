@@ -124,6 +124,44 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
+    public void Two_clips_crossfade_through_the_shared_decoded_merge()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject firstClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        firstClip["duration"] = 0.2;
+        firstClip["boundaryOut"] = Constants.BoundaryOutCrossfade;
+        firstClip["boundaryOutOverlap"] = 8;
+        JObject secondClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        secondClip["duration"] = 1.0;
+        JObject document = MakeDocument(firstClip, secondClip);
+        document["fps"] = 24;
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            document.ToString());
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Equal(2, SamplerNodes(bridge).Count());
+        ImageCompositeMaskedNode blend = Assert.Single(
+            bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
+        SwarmRampMaskBatchNode ramp = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
+        Assert.Equal(8, ramp.Frames.LiteralAsInt());
+        Assert.Same(ramp.Mask, blend.Mask.Connection);
+        Assert.Single(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.Equal(22 + 39 - 8, generator.CurrentMedia.Frames);
+        Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.AttachedAudio?.DataType);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void A_second_stage_refines_the_decoded_clip_from_its_own_start_step()
     {
         using SwarmUiTestContext context = new();

@@ -20,7 +20,6 @@ public class PhaseADriftRegressionTests
         _ = WorkflowTestHarness.VideoStagesSteps();
         string[] nodeClasses =
         [
-            LTXVLaplacianPyramidBlendNode.ClassType,
             LTXVSetAudioRefTokensNode.ClassType,
             LTXVSetVideoLatentNoiseMasksNode.ClassType,
             LTXVSetAudioVideoMaskByTimeNode.ClassType,

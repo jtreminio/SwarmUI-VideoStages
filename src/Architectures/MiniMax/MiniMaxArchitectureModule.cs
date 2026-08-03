@@ -26,6 +26,29 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
     /// <summary>H3 is guidance-distilled; core's own path defaults it to a CFG of one.</summary>
     internal const double UnguidedCfgScale = 1;
 
+    private static ArchitectureBoundaryPolicy BoundaryPolicy { get; } =
+        new(new Dictionary<BoundaryJoinType, RuleDecision>
+        {
+            [BoundaryJoinType.Cut] = RuleDecision.Supported(
+                "minimax.boundary.cut",
+                "Decoded MiniMax H3 clips can be joined with a hard cut."),
+            [BoundaryJoinType.Continue] = RuleDecision.Unsupported(
+                "minimax.boundary.continue.unsupported",
+                "MiniMax H3 has no N-frame latent-tail continuation path."),
+            [BoundaryJoinType.Crossfade] = RuleDecision.Conditional(
+                "minimax.boundary.crossfade",
+                "Decoded MiniMax H3 clips can be crossfaded.",
+                new BoundaryRuleConstraints(
+                    FrameStep: 1,
+                    MinFrames: 1,
+                    MaxFrames: 48,
+                    DefaultFrames: 8,
+                    ContinuityExtraFrames: 0,
+                    TargetRequiresGeneratedEntry: false,
+                    TargetRequiresStage: false,
+                    TargetDisallowsInitialReference: false)),
+        });
+
     internal static MiniMaxArchitectureModule Instance { get; } = new();
 
     public VideoArchitectureDescriptor Descriptor { get; } = new(
@@ -45,11 +68,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             | ArchitectureFeature.AudioDerivedDuration
             | ArchitectureFeature.ReferenceFraming
             | ArchitectureFeature.AudioReuse,
-        ArchitectureBoundaryPolicy.CutOnly(
-            "minimax",
-            "Decoded MiniMax H3 clips can be joined with a hard cut.",
-            "MiniMax H3 conditions on keyframe images, not on a previous clip's latent tail.",
-            "MiniMax H3 has no decoded transition path."))
+        BoundaryPolicy)
     {
         FrameGrid = FrameGrid,
         FrameGridOrigin = FrameGridOrigin,
