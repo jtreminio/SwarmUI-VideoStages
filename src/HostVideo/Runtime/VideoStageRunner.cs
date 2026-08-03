@@ -55,7 +55,7 @@ internal sealed class VideoStageRunner : IDisposable
         ArgumentNullException.ThrowIfNull(resolvePassthroughFrames);
         ArgumentNullException.ThrowIfNull(executeGeneratingStage);
 
-        _ = ExecuteStages(clip, (stage, continuation) =>
+        RuntimeArtifact output = ExecuteStages(clip, (stage, continuation) =>
         {
             StageCorePlan settings = stage.Core;
             ApplyUpscale(stage, settings.Upscale);
@@ -84,15 +84,7 @@ internal sealed class VideoStageRunner : IDisposable
             }
             return consumedContinuation;
         });
-
-        StagePlan finalStage = clip.Stages[^1];
-        if (finalStage.Output.IsTimelineTerminal && _trimmer.IsRequested)
-        {
-            _trimmer.Apply();
-        }
-        return DecodedClipArtifact.FromRuntime(
-            CaptureRuntimeArtifact(),
-            clip);
+        return DecodedClipArtifact.FromRuntime(output, clip);
     }
 
     internal RuntimeArtifact ExecuteStages(
@@ -124,8 +116,14 @@ internal sealed class VideoStageRunner : IDisposable
                 throw VideoStagesInvariant.Failure(
                     $"VideoStages: stage {stage.StageId} consumed no planned continuation.");
             }
+            StagePlan outputStage = consumedContinuation ? continuation : stage;
+            if (outputStage.Output.IsTimelineTerminal && _trimmer.IsRequested)
+            {
+                _trimmer.Apply();
+                output = CaptureRuntimeArtifact();
+            }
             _stageScope.PublishIntermediate(
-                consumedContinuation ? continuation : stage,
+                outputStage,
                 _generator.CurrentMedia,
                 _generator.CurrentVae);
             if (consumedContinuation)

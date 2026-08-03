@@ -828,6 +828,42 @@ public partial class StageFlowTests
     }
 
     [Fact]
+    public void Single_passthrough_init_video_clip_trims_video_and_audio()
+    {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        JObject initVideoClip = MakeInitVideoClip(models);
+        ((JArray)initVideoClip["stages"])[0]["control"] = 0.0;
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeRootConfig(512, 512, initVideoClip).ToString());
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 2);
+        input.Set(T2IParamTypes.TrimVideoEndFrames, 3);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                BuildNativeSteps(attachAudioToCurrentMedia: true),
+                features: InitVideoClipFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Empty(SamplerNodesOrdered(bridge));
+        SwarmTrimFramesNode videoTrim = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
+        Assert.Equal(videoTrim.IMAGE.ToPath(), generator.CurrentMedia.Path);
+        Assert.Equal(InitVideoOnlyClipFrames - 5, generator.CurrentMedia.Frames);
+        TrimAudioDurationNode audioTrim = Assert.IsType<TrimAudioDurationNode>(
+            bridge.ResolvePath(generator.CurrentMedia.AttachedAudio.Path).Node);
+        Assert.Equal(2 / 24.0, audioTrim.StartIndex.LiteralAsDouble()!.Value, precision: 6);
+        Assert.Equal(
+            (InitVideoOnlyClipFrames - 5) / 24.0,
+            audioTrim.Duration.LiteralAsDouble()!.Value,
+            precision: 6);
+        AssertWorkflowHasNoCycles(workflow);
+    }
+
+    [Fact]
     public void InitVideo_clip0_in_text_to_video_flow_encodes_the_footage_not_an_empty_latent()
     {
         using SwarmUiTestContext _ = new();

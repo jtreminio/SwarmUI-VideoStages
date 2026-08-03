@@ -58,7 +58,14 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
                 "VideoStages: the final output uses global frame trim, but it is not a decoded "
                 + "video stream.");
         }
-        int? originalFrames = media.Frames;
+        bool videoAlreadyTrimmed = media.Output.Node is ComfyNode existingVideoTrim
+            && existingVideoTrim.ClassTypeName == SwarmTrimFramesNode.ClassType
+            && existingVideoTrim.FindInput("trim_start").LiteralAsInt() == trimStartFrames
+            && existingVideoTrim.FindInput("trim_end").LiteralAsInt() == trimEndFrames;
+        int removedFrames = Math.Max(0, trimStartFrames) + Math.Max(0, trimEndFrames);
+        int? originalFrames = videoAlreadyTrimmed && media.Frames is int trimmedFrames
+            ? trimmedFrames + removedFrames
+            : media.Frames;
         int? framesPerSecond = media.FPS?.Type == JTokenType.Integer
             ? media.FPS.Value<int>()
             : null;
@@ -67,6 +74,45 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
             attachedAudio,
             originalFrames,
             framesPerSecond);
+        if (videoAlreadyTrimmed)
+        {
+            if (attachedAudio is null)
+            {
+                return artifact;
+            }
+            int keptFrames = TrimmedFrameCount(
+                originalFrames,
+                trimStartFrames,
+                trimEndFrames) ?? 0;
+            double audioStart = Math.Max(0, trimStartFrames)
+                / (double)framesPerSecond.Value;
+            double audioDuration = keptFrames
+                / (double)framesPerSecond.Value;
+            if (HasEquivalentAudioTrim(attachedAudio, audioStart, audioDuration))
+            {
+                return artifact;
+            }
+            return artifact with
+            {
+                Media = new MediaRef
+                {
+                    Output = media.Output,
+                    DataType = media.DataType,
+                    Compat = media.Compat,
+                    Width = media.Width,
+                    Height = media.Height,
+                    Frames = media.Frames,
+                    FPS = media.FPS,
+                    AttachedAudio = TrimAttachedAudio(
+                        bridge,
+                        attachedAudio,
+                        originalFrames,
+                        framesPerSecond,
+                        trimStartFrames,
+                        trimEndFrames),
+                },
+            };
+        }
         SwarmTrimFramesNode trim = bridge.AddNode(new SwarmTrimFramesNode().With(
             TrimStart: trimStartFrames,
             TrimEnd: trimEndFrames));
@@ -187,6 +233,17 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
                 + "frame rate is unavailable, so attached audio cannot be trimmed in sync.");
         }
     }
+
+    private static bool HasEquivalentAudioTrim(
+        MediaRef audio,
+        double expectedStart,
+        double expectedDuration) =>
+        audio.Output?.Node is ComfyNode node
+        && node.ClassTypeName == TrimAudioDurationNode.ClassType
+        && node.FindInput("start_index").LiteralAsDouble() is double start
+        && node.FindInput("duration").LiteralAsDouble() is double duration
+        && Math.Abs(start - expectedStart) < 1e-6
+        && Math.Abs(duration - expectedDuration) < 1e-6;
 
     private static int? TrimmedFrameCount(int? frames, int trimStart, int trimEnd)
     {

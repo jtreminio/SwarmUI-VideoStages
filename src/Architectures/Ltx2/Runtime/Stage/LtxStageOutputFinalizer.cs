@@ -8,8 +8,6 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
 {
-    private readonly GlobalVideoFrameTrimmer globalVideoFrameTrimmer = new(g);
-
     internal void Complete(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         StageFrame stageFrame,
@@ -65,14 +63,6 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
                 outputHeight,
                 genInfo.Frames,
                 genInfo.VideoFPS);
-        }
-
-        bool shouldApplyTrim = stageFrame.Stage.Output.IsTimelineTerminal
-            && globalVideoFrameTrimmer.IsRequested
-            && !(splicedIntoNativeChain && !requiresDedicatedOutput && postVideoChain.HasPostDecodeWrappers);
-        if (shouldApplyTrim)
-        {
-            globalVideoFrameTrimmer.Apply();
         }
 
         g.CurrentVae = genInfo.Vae;

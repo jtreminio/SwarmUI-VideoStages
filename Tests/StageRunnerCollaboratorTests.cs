@@ -1,4 +1,7 @@
 using System.Collections.Immutable;
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
@@ -127,6 +130,49 @@ public class StageRunnerCollaboratorTests
 
         Assert.Contains($"stage {clip.Stages[0].StageId}", error.Message);
         Assert.Contains("produced no media artifact", error.Message);
+    }
+
+    [Fact]
+    public void Shared_stage_runner_trims_the_terminal_output_before_returning()
+    {
+        using SwarmUiTestContext _ = new();
+        T2IParamInput input = new(null);
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 2);
+        input.Set(T2IParamTypes.TrimVideoEndFrames, 3);
+        WorkflowGenerator generator = new()
+        {
+            Workflow = [],
+            UserInput = input
+        };
+        using (WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow))
+        {
+            UnknownNode video = bridge.AddStub("UnitTestVideo", "50")
+                .WithOutputs(WGNodeData.DT_VIDEO);
+            generator.CurrentMedia = video.GetOutput(0).ToWGMedia(
+                generator,
+                WGNodeData.DT_VIDEO,
+                width: 512,
+                height: 512,
+                frames: 25,
+                fps: 24);
+        }
+        VideoExecutionPlan plan = MakeExecutionPlan();
+        ClipPlan clip = Assert.Single(plan.Clips);
+        using VideoStageRunner stageRunner = new(generator, plan, "unit test");
+
+        RuntimeArtifact output = stageRunner.ExecuteStages(
+            clip,
+            (stage, continuation) => false);
+
+        using WorkflowBridge outputBridge = WorkflowBridge.Create(generator.Workflow);
+        ComfyNode trim = Assert.Single(
+            outputBridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == SwarmTrimFramesNode.ClassType);
+        Assert.Equal(trim.Id, $"{generator.CurrentMedia.Path[0]}");
+        Assert.Equal(2, trim.FindInput("trim_start").LiteralAsInt());
+        Assert.Equal(3, trim.FindInput("trim_end").LiteralAsInt());
+        Assert.Equal(20, output.Media.Frames);
+        Assert.Equal(20, generator.CurrentMedia.Frames);
     }
 
     [Fact]
