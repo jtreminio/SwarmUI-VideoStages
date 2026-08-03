@@ -82,11 +82,10 @@ internal sealed class LtxConditioningPipeline(
     }
 
     public LtxConditioningPipeline BindToCurrentMedia(
-        bool skipGuideReinjection,
         WGNodeData guideMedia,
         double guideMergeStrength)
     {
-        if (guideMedia is null || skipGuideReinjection || guideMergeStrength <= 0)
+        if (guideMedia is null || guideMergeStrength <= 0)
         {
             g.CurrentMedia = stageLatent;
             return this;

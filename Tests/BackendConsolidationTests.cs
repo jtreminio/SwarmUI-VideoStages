@@ -290,7 +290,6 @@ public class BackendConsolidationTests
         StageInputCase actual = StageInputDispatcher.Resolve(facts);
 
         Assert.Equal((StageInputCase)expected, actual);
-        Assert.True(StageInputDispatcher.SkipsGuideReinjection(actual));
     }
 
     [Fact]
@@ -299,7 +298,6 @@ public class BackendConsolidationTests
         StageInputCase actual = StageInputDispatcher.Resolve(Facts() with { HasGuide = true });
 
         Assert.Equal(StageInputCase.GuideReinjection, actual);
-        Assert.False(StageInputDispatcher.SkipsGuideReinjection(actual));
     }
 
     [Fact]
@@ -308,7 +306,6 @@ public class BackendConsolidationTests
         StageInputCase actual = StageInputDispatcher.Resolve(Facts());
 
         Assert.Equal(StageInputCase.NoGuide, actual);
-        Assert.True(StageInputDispatcher.SkipsGuideReinjection(actual));
     }
 
     [Fact]

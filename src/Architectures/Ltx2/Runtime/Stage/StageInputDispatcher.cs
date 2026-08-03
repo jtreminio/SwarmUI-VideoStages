@@ -70,13 +70,4 @@ internal static class StageInputDispatcher
         { HasGuide: false } => StageInputCase.NoGuide,
         _ => StageInputCase.GuideReinjection,
     };
-
-    /// <summary>Whether the case must not have a guide re-injected.</summary>
-    internal static bool SkipsGuideReinjection(StageInputCase inputCase) => inputCase
-        is StageInputCase.TextToVideoRootReplacement
-        or StageInputCase.FrameReferencesOnly
-        or StageInputCase.InitVideoFootage
-        or StageInputCase.IncomingLatentRefine
-        or StageInputCase.PriorStageLatentReuse
-        or StageInputCase.NoGuide;
 }

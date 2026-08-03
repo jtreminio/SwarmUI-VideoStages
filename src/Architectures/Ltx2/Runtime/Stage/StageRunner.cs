@@ -207,7 +207,6 @@ internal class StageRunner
             stageFrame,
             sourceMedia,
             guideMedia,
-            StageInputDispatcher.SkipsGuideReinjection(inputCase),
             resolveFallbackGuide,
             postVideoChain,
             applyIcLora,

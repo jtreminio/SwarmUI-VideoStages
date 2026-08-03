@@ -38,7 +38,6 @@ internal sealed class LtxStageExecutor
         StageFrame stageFrame,
         WGNodeData sourceMedia,
         WGNodeData guideMedia,
-        bool skipGuideReinjection,
         Func<WGNodeData> resolveFallbackGuide,
         LtxPostVideoChainCapture postVideoChain,
         Action<WorkflowGenerator.ImageToVideoGenInfo> applyIcLora,
@@ -64,7 +63,6 @@ internal sealed class LtxStageExecutor
             if (!canReuseLatent && resolveFallbackGuide is not null)
             {
                 guideMedia = resolveFallbackGuide();
-                skipGuideReinjection = false;
             }
 
             WGNodeData stageLatent = latentBuilder.Build(
@@ -92,7 +90,6 @@ internal sealed class LtxStageExecutor
                     .WithUpscaleIfNeeded(effectiveSourceMedia)
                     .WithInplaceMerges(clipRefs ?? [])
                     .BindToCurrentMedia(
-                        skipGuideReinjection,
                         guideMedia,
                         guideMergeStrength)
                     .WithContinuityAnchor()
