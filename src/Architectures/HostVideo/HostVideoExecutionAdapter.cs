@@ -7,7 +7,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.HostVideo;
 
 internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
-    IArchitectureGenerationSessionFactoryProvider,
+    IArchitectureGenerationSessionProvider,
     IArchitectureHostPhaseParticipant
 {
     private readonly RootMediaHandoff _rootHandoff = new(
@@ -74,9 +74,11 @@ internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
         }
     }
 
-    public IArchitectureGenerationSessionFactory CreateFactory() =>
-        new StockHostVideoGenerationSessionFactory(
+    public IVideoGenerationSession CreateSession(
+        ArchitectureTimelineSessionContext context) =>
+        StockHostVideoGenerationSession.Create(
             generator,
+            context,
             ArchitectureId,
             "generic host");
 

@@ -6,6 +6,7 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Execution;
 using VideoStages.Planning;
 using Xunit;
 
@@ -67,18 +68,22 @@ public class ArchitectureRuntimeOwnershipTests
     }
 
     [Fact]
-    public void Timeline_preparation_uses_the_same_init_video_aware_root_owner()
+    public void Timeline_session_creation_uses_the_same_init_video_aware_root_owner()
     {
         VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
-        RecordingFactory initVideoClip = new(new("init-video-arch"));
-        RecordingFactory future = new(new("future-arch"));
-        ArchitectureRuntimeSessionFactoryRegistry registry = new(
+        RecordingProvider initVideoClip = new(new("init-video-arch"));
+        RecordingProvider future = new(new("future-arch"));
+        ArchitectureRuntimeProviderRegistry registry = new(
             [initVideoClip, future],
             new VideoExecutionPlanContext(plan));
         AudioRuntimeSources audio = EmptyAudio();
         RootExecutionPolicy policy = new(plan);
 
-        registry.PrepareTimeline(new(plan, audio, policy));
+        using ArchitectureRuntimeDispatcher dispatcher = registry.CreateDispatcher(new(
+            plan,
+            audio,
+            policy,
+            Assembly: null));
 
         Assert.Equal([false], initVideoClip.RootOwnership);
         Assert.Equal([true], future.RootOwnership);
@@ -327,7 +332,7 @@ public class ArchitectureRuntimeOwnershipTests
     private static VideoArchitectureExecutionHost PreparedHost(
         WorkflowGenerator generator,
         VideoExecutionPlan plan,
-        IEnumerable<IArchitectureGenerationSessionFactoryProvider> providers)
+        IEnumerable<IArchitectureGenerationSessionProvider> providers)
     {
         VideoArchitectureExecutionHost host = new(generator, plan, providers);
         VideoExecutionPlanContext request = new(plan, _ => host);
@@ -347,12 +352,14 @@ public class ArchitectureRuntimeOwnershipTests
         ICollection<string> calls = null,
         string preflightError = null,
         Exception hostPhaseFailure = null) :
-        IArchitectureGenerationSessionFactoryProvider,
+        IArchitectureGenerationSessionProvider,
         IArchitectureHostPhaseParticipant
     {
         public ArchitectureId ArchitectureId => architectureId;
 
         internal List<ArchitectureHostPhaseContext> HostPhases { get; } = [];
+
+        internal List<bool> RootOwnership { get; } = [];
 
         public IReadOnlyList<PlanDiagnostic> PreflightRequest(
             ArchitectureRequestPreflightContext context)
@@ -372,26 +379,20 @@ public class ArchitectureRuntimeOwnershipTests
             }
         }
 
-        public IArchitectureGenerationSessionFactory CreateFactory() =>
-            new RecordingFactory(architectureId, calls);
+        public IVideoGenerationSession CreateSession(
+            ArchitectureTimelineSessionContext context)
+        {
+            RootOwnership.Add(context.OwnsGeneratedRoot);
+            return new RecordingSession(architectureId);
+        }
     }
 
-    private sealed class RecordingFactory(
-        ArchitectureId architectureId,
-        ICollection<string> calls = null) : IArchitectureGenerationSessionFactory
+    private sealed class RecordingSession(ArchitectureId architectureId) :
+        IVideoGenerationSession
     {
         public ArchitectureId ArchitectureId => architectureId;
 
-        internal List<bool> RootOwnership { get; } = [];
-
-        public void PrepareTimeline(ArchitectureTimelinePreparationContext context)
-        {
-            calls?.Add($"prepare:{architectureId}");
-            RootOwnership.Add(context.OwnsGeneratedRoot);
-        }
-
-        public IVideoGenerationSession CreateSession(
-            ArchitectureTimelineSessionContext context) =>
+        public DecodedClipArtifact Execute(ArchitectureClipRuntimeContext context) =>
             throw new NotSupportedException();
     }
 }

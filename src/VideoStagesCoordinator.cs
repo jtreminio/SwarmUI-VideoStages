@@ -8,7 +8,7 @@ namespace VideoStages;
 internal sealed class VideoStagesCoordinator(
     WorkflowGenerator g,
     MultiClipParallelMerger merger,
-    ArchitectureRuntimeSessionFactoryRegistry runtimeFactories)
+    ArchitectureRuntimeProviderRegistry runtimeProviders)
 {
     internal void RunConfiguredStages(VideoExecutionPlanContext planContext)
     {
@@ -25,17 +25,12 @@ internal sealed class VideoStagesCoordinator(
             new AudioHandler(g)).Resolve(planContext.Plan);
 
         g.LastID = Math.Max(g.LastID, Constants.StagedNodeIdReservationFloor);
-        runtimeFactories.PrepareTimeline(new(
-            planContext.Plan,
-            preparedAudioSources,
-            rootPolicy));
-
         VideoExecutionPlan plan = planContext.Plan;
         IReadOnlyList<ClipPlan> plannedClips = plan.Clips;
         TimelineAssemblySession assembly = new(g, merger, plan);
         RuntimeArtifact finalArtifact;
         using (ArchitectureRuntimeDispatcher runtimeDispatcher =
-            runtimeFactories.CreateDispatcher(new(
+            runtimeProviders.CreateDispatcher(new(
                 plan,
                 preparedAudioSources,
                 rootPolicy,

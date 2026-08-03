@@ -84,14 +84,6 @@ internal interface IArchitectureBoundaryAssembler
         BoundaryOverlapPlan plan);
 }
 
-internal sealed record ArchitectureTimelinePreparationContext(
-    VideoExecutionPlan Plan,
-    AudioRuntimeSources AudioSources,
-    RootExecutionPolicy RootPolicy)
-{
-    public bool OwnsGeneratedRoot { get; init; }
-}
-
 /// <summary>
 /// Graph-free request preflight input. Everything an architecture is asked here must be resolvable
 /// from the compiled plan and the host session alone, because no workflow mutation has happened yet.
@@ -104,31 +96,22 @@ internal sealed record ArchitectureTimelineSessionContext(
     VideoExecutionPlan Plan,
     AudioRuntimeSources AudioSources,
     RootExecutionPolicy RootPolicy,
-    TimelineAssemblySession Assembly);
-
-/// <summary>Creates one timeline-scoped session for one architecture.</summary>
-internal interface IArchitectureGenerationSessionFactory
+    TimelineAssemblySession Assembly)
 {
-    ArchitectureId ArchitectureId { get; }
-
-    IArchitectureBoundaryAssembler BoundaryAssembler => null;
-
-    void PrepareTimeline(ArchitectureTimelinePreparationContext context)
-    {
-    }
-
-    IVideoGenerationSession CreateSession(ArchitectureTimelineSessionContext context);
+    public bool OwnsGeneratedRoot { get; init; }
 }
 
 /// <summary>
 /// Request-scoped production registration. One provider instance is created for each active
 /// architecture after the immutable plan passes compilation, then reused sequentially for request
-/// preflight, host phases, and timeline-factory creation. Mutable timeline and clip state belongs
-/// in the factories and sessions returned below, not in the provider.
+/// preflight, host phases, and timeline-session creation. Mutable timeline and clip state belongs
+/// in the returned session, not in the provider.
 /// </summary>
-internal interface IArchitectureGenerationSessionFactoryProvider
+internal interface IArchitectureGenerationSessionProvider
 {
     ArchitectureId ArchitectureId { get; }
+
+    IArchitectureBoundaryAssembler BoundaryAssembler => null;
 
     /// <summary>
     /// Reports every dependency this architecture needs to execute the planned clips, before any
@@ -138,7 +121,7 @@ internal interface IArchitectureGenerationSessionFactoryProvider
     IReadOnlyList<PlanDiagnostic> PreflightRequest(
         ArchitectureRequestPreflightContext context) => [];
 
-    IArchitectureGenerationSessionFactory CreateFactory();
+    IVideoGenerationSession CreateSession(ArchitectureTimelineSessionContext context);
 }
 
 internal enum ArchitectureHostPhase

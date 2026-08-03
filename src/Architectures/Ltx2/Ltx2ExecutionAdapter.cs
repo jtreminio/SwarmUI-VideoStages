@@ -7,7 +7,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
-    IArchitectureGenerationSessionFactoryProvider,
+    IArchitectureGenerationSessionProvider,
     IArchitectureHostPhaseParticipant
 {
     private readonly RootMediaHandoff _rootHandoff = new(
@@ -15,6 +15,9 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         "LTX");
 
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
+
+    public IArchitectureBoundaryAssembler BoundaryAssembler { get; } =
+        new Ltx2BoundaryAssembler();
 
     public IReadOnlyList<PlanDiagnostic> PreflightRequest(
         ArchitectureRequestPreflightContext context)
@@ -57,8 +60,10 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         }
     }
 
-    public IArchitectureGenerationSessionFactory CreateFactory()
+    public IVideoGenerationSession CreateSession(
+        ArchitectureTimelineSessionContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
         Pipeline pipeline = BuildPipeline();
         AudioTimelineExecutor audioTimelineExecutor =
             new(generator, pipeline.AudioInjector);
@@ -83,11 +88,32 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             new BoundaryHandoffResolver(
                 new ContinuityGuideBuilder(generator),
                 new LtxBoundaryAudioCarryBuilder(generator)));
-        return new GenerationSessionFactory(
+        StageSequenceRootSources rootSources;
+        if (context.OwnsGeneratedRoot)
+        {
+            audioTimelineExecutor.PrepareRootAudio(
+                context.Plan,
+                context.AudioSources,
+                context.RootPolicy);
+            rootSources = rootSetup.Prepare(
+                context.AudioSources,
+                context.RootPolicy);
+        }
+        else
+        {
+            rootSources = rootSetup.Snapshot(context.AudioSources);
+        }
+        return new GenerationSession(
             generator,
-            audioTimelineExecutor,
-            rootSetup,
-            clipExecutor);
+            clipExecutor,
+            rootSources,
+            new VideoStageRunner(
+                generator,
+                context.Plan,
+                "LTX"),
+            context.Plan,
+            context.Assembly,
+            context.RootPolicy);
     }
 
     private Pipeline BuildPipeline()
@@ -119,61 +145,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         LtxStageExecutor StageExecutor,
         LtxStageGuideMediaResolver GuideMediaResolver,
         LtxClipRefResolver ClipRefResolver);
-
-    private sealed class GenerationSessionFactory(
-        WorkflowGenerator generator,
-        AudioTimelineExecutor audioTimeline,
-        StageSequenceRootSetup rootSetup,
-        StageClipExecutor clipExecutor) : IArchitectureGenerationSessionFactory
-    {
-        private StageSequenceRootSources _rootSources;
-
-        public ArchitectureId ArchitectureId =>
-            Ltx2ArchitectureModule.ArchitectureId;
-
-        public IArchitectureBoundaryAssembler BoundaryAssembler { get; } =
-            new Ltx2BoundaryAssembler();
-
-        public void PrepareTimeline(
-            ArchitectureTimelinePreparationContext context)
-        {
-            if (context.OwnsGeneratedRoot)
-            {
-                audioTimeline.PrepareRootAudio(
-                    context.Plan,
-                    context.AudioSources,
-                    context.RootPolicy);
-                _rootSources = rootSetup.Prepare(
-                    context.AudioSources,
-                    context.RootPolicy);
-            }
-            else
-            {
-                _rootSources = rootSetup.Snapshot(context.AudioSources);
-            }
-        }
-
-        public IVideoGenerationSession CreateSession(
-            ArchitectureTimelineSessionContext context)
-        {
-            if (_rootSources is null)
-            {
-                throw VideoStagesInvariant.Failure(
-                    "The LTX timeline runtime was not prepared before session creation.");
-            }
-            return new GenerationSession(
-                generator,
-                clipExecutor,
-                _rootSources,
-                new VideoStageRunner(
-                    generator,
-                    context.Plan,
-                    "LTX"),
-                context.Plan,
-                context.Assembly,
-                context.RootPolicy);
-        }
-    }
 
     private sealed class GenerationSession(
         WorkflowGenerator generator,

@@ -22,7 +22,7 @@ Every run follows the same simple path:
 5. Return one decoded, neutral video/audio artifact per clip.
 6. Assemble same-architecture non-cut runs, hard-cut those runs together, and
    apply the host's global frame trim.
-7. Publish one final timeline, then let at most one architecture finalize it.
+7. Publish one final timeline through the captured host save contract.
 
 The apparent entry points are inputs to this path, not separate executors.
 `ArchitectureEntryMode` names them, and each architecture publishes the ones
@@ -148,8 +148,7 @@ An architecture module owns:
   runtime session;
 - latent/VAE/conditioning/stage transitions;
 - non-cut joins it supports;
-- decoding its final clip; and
-- optional exclusive timeline finalization after publication.
+- decoding its final clip.
 
 Family implementations live under `VideoStages.Architectures.Ltx2` and
 `VideoStages.Architectures.Wan`. Common planning, coordination, and assembly
@@ -404,8 +403,8 @@ Adding another family should require:
    mode — the registry rejects an incomplete catalog at construction;
 4. an architecture-owned clip compiler and typed payload whose stage payload
    exposes the required common execution core;
-5. a runtime provider that answers request preflight for its dependencies, and a
-   runtime-session factory owning preparation and optional exclusive finalization;
+5. a runtime provider that answers request preflight for its dependencies and
+   creates one timeline session;
 6. same-architecture boundary assembly as soon as any non-cut join is declared
    supported or conditional;
 7. an explicit frontend owner guard only when the family has concrete custom UI

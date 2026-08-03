@@ -7,7 +7,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Wan;
 
 internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
-    IArchitectureGenerationSessionFactoryProvider,
+    IArchitectureGenerationSessionProvider,
     IArchitectureHostPhaseParticipant
 {
     private readonly RootMediaHandoff _rootHandoff = new(
@@ -80,12 +80,14 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
         }
     }
 
-    public IArchitectureGenerationSessionFactory CreateFactory() =>
-        new StockHostVideoGenerationSessionFactory(
+    public IVideoGenerationSession CreateSession(
+        ArchitectureTimelineSessionContext context) =>
+        StockHostVideoGenerationSession.Create(
             generator,
+            context,
             ArchitectureId,
             "Wan",
-            plan => new WanStockHostVideoBehavior(generator, plan));
+            new WanStockHostVideoBehavior(generator, context.Plan));
 
     private static PlanDiagnostic Warn(
         string message,

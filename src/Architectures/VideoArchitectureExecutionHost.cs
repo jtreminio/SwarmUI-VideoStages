@@ -11,9 +11,9 @@ internal sealed class VideoArchitectureExecutionHost
     private readonly VideoExecutionPlan _plan;
     private readonly IReadOnlyDictionary<
         ArchitectureId,
-        IArchitectureGenerationSessionFactoryProvider> _providers;
+        IArchitectureGenerationSessionProvider> _providers;
     private readonly IReadOnlyList<ArchitectureId> _activeArchitectureIds;
-    private readonly IReadOnlyList<IArchitectureGenerationSessionFactoryProvider>
+    private readonly IReadOnlyList<IArchitectureGenerationSessionProvider>
         _activeProviders;
     private readonly ArchitectureId? _rootOwner;
     private VideoExecutionPlanContext _executionContext;
@@ -32,7 +32,7 @@ internal sealed class VideoArchitectureExecutionHost
     internal VideoArchitectureExecutionHost(
         WorkflowGenerator generator,
         VideoExecutionPlan plan,
-        IEnumerable<IArchitectureGenerationSessionFactoryProvider> providers) : this(
+        IEnumerable<IArchitectureGenerationSessionProvider> providers) : this(
         generator,
         plan,
         CreateInjectedProviderBinding(plan, providers))
@@ -46,8 +46,8 @@ internal sealed class VideoArchitectureExecutionHost
     {
         _generator = generator ?? throw new ArgumentNullException(nameof(generator));
         _plan = plan ?? throw new ArgumentNullException(nameof(plan));
-        Dictionary<ArchitectureId, IArchitectureGenerationSessionFactoryProvider> byId = [];
-        foreach (IArchitectureGenerationSessionFactoryProvider provider in binding.Providers)
+        Dictionary<ArchitectureId, IArchitectureGenerationSessionProvider> byId = [];
+        foreach (IArchitectureGenerationSessionProvider provider in binding.Providers)
         {
             ArgumentNullException.ThrowIfNull(provider);
             if (!byId.TryAdd(provider.ArchitectureId, provider))
@@ -72,7 +72,7 @@ internal sealed class VideoArchitectureExecutionHost
             .. new TimelineFrameInterpolator(_generator).Preflight(_plan)
         ];
         ArchitectureRequestPreflightContext context = new(_plan, _rootOwner);
-        foreach (IArchitectureGenerationSessionFactoryProvider provider in _activeProviders)
+        foreach (IArchitectureGenerationSessionProvider provider in _activeProviders)
         {
             diagnostics.AddRange(provider.PreflightRequest(context));
         }
@@ -108,7 +108,7 @@ internal sealed class VideoArchitectureExecutionHost
         {
             new ControlNetCoreMediaCapture(_generator).Capture();
         }
-        IEnumerable<IArchitectureGenerationSessionFactoryProvider> providers =
+        IEnumerable<IArchitectureGenerationSessionProvider> providers =
             ArchitectureHostPhases.IsRootOwnerOnly(phase)
                 ? RootOwnerProvider()
                 : _activeProviders;
@@ -131,16 +131,16 @@ internal sealed class VideoArchitectureExecutionHost
         {
             return;
         }
-        ArchitectureRuntimeSessionFactoryRegistry runtimeFactories = new(
-            _activeProviders.Select(provider => provider.CreateFactory()),
+        ArchitectureRuntimeProviderRegistry runtimeProviders = new(
+            _activeProviders,
             context);
         MultiClipParallelMerger merger = new(
             _generator,
-            runtimeFactories.BoundaryAssemblers);
+            runtimeProviders.BoundaryAssemblers);
         new VideoStagesCoordinator(
             _generator,
             merger,
-            runtimeFactories).RunConfiguredStages(context);
+            runtimeProviders).RunConfiguredStages(context);
     }
 
     private VideoExecutionPlanContext RequireExecutionContext() =>
@@ -148,7 +148,7 @@ internal sealed class VideoArchitectureExecutionHost
         ?? throw VideoStagesInvariant.Failure(
             "The execution host is not bound to a prepared VideoStages request.");
 
-    private IEnumerable<IArchitectureGenerationSessionFactoryProvider> RootOwnerProvider()
+    private IEnumerable<IArchitectureGenerationSessionProvider> RootOwnerProvider()
     {
         if (_rootOwner is null)
         {
@@ -156,7 +156,7 @@ internal sealed class VideoArchitectureExecutionHost
         }
         if (!_providers.TryGetValue(
             _rootOwner.Value,
-            out IArchitectureGenerationSessionFactoryProvider provider))
+            out IArchitectureGenerationSessionProvider provider))
         {
             throw VideoStagesInvariant.Failure(
                 $"No generation runtime provider is registered for root architecture "
@@ -167,7 +167,7 @@ internal sealed class VideoArchitectureExecutionHost
 
     private sealed record RuntimeProviderBinding(
         IReadOnlyList<ArchitectureId> ActiveArchitectureIds,
-        IReadOnlyList<IArchitectureGenerationSessionFactoryProvider> Providers,
+        IReadOnlyList<IArchitectureGenerationSessionProvider> Providers,
         ArchitectureId? RootOwnerArchitectureId);
 
     private static RuntimeProviderBinding CreateProductionProviderBinding(
@@ -186,7 +186,7 @@ internal sealed class VideoArchitectureExecutionHost
 
     private static RuntimeProviderBinding CreateInjectedProviderBinding(
         VideoExecutionPlan plan,
-        IEnumerable<IArchitectureGenerationSessionFactoryProvider> providers)
+        IEnumerable<IArchitectureGenerationSessionProvider> providers)
     {
         ArgumentNullException.ThrowIfNull(providers);
         return new(
@@ -207,14 +207,14 @@ internal sealed class VideoArchitectureExecutionHost
             .ToArray());
     }
 
-    private static IReadOnlyList<IArchitectureGenerationSessionFactoryProvider>
+    private static IReadOnlyList<IArchitectureGenerationSessionProvider>
         ResolveActiveProviders(
             IReadOnlyList<ArchitectureId> activeArchitectureIds,
             IReadOnlyDictionary<
                 ArchitectureId,
-                IArchitectureGenerationSessionFactoryProvider> providers)
+                IArchitectureGenerationSessionProvider> providers)
     {
-        List<IArchitectureGenerationSessionFactoryProvider> active = [];
+        List<IArchitectureGenerationSessionProvider> active = [];
         foreach (ArchitectureId id in activeArchitectureIds)
         {
             active.Add(providers[id]);

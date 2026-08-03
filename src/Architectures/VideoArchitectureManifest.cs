@@ -11,7 +11,7 @@ namespace VideoStages.Architectures;
 internal sealed record VideoArchitectureRegistration(
     VideoArchitectureDescriptor Descriptor,
     IVideoArchitectureModule Module,
-    Func<WorkflowGenerator, IArchitectureGenerationSessionFactoryProvider> CreateRuntimeProvider,
+    Func<WorkflowGenerator, IArchitectureGenerationSessionProvider> CreateRuntimeProvider,
     Action RegisterHostHandlers = null,
     Action RegisterApiRoutes = null,
     Action RegisterDependencies = null);
@@ -64,7 +64,7 @@ internal static class VideoArchitectureManifest
     internal static IReadOnlyList<VideoArchitectureDescriptor> ProductionDescriptors { get; } =
         Array.AsReadOnly(Production.Select(item => item.Descriptor).ToArray());
 
-    internal static IReadOnlyList<IArchitectureGenerationSessionFactoryProvider>
+    internal static IReadOnlyList<IArchitectureGenerationSessionProvider>
         CreateProductionRuntimeProviders(
             WorkflowGenerator generator,
             IEnumerable<ArchitectureId> activeArchitectureIds)
@@ -73,7 +73,7 @@ internal static class VideoArchitectureManifest
         ArgumentNullException.ThrowIfNull(activeArchitectureIds);
         Dictionary<ArchitectureId, VideoArchitectureRegistration> registrations =
             Production.ToDictionary(item => item.Descriptor.Id);
-        List<IArchitectureGenerationSessionFactoryProvider> providers = [];
+        List<IArchitectureGenerationSessionProvider> providers = [];
         foreach (ArchitectureId architectureId in activeArchitectureIds.Distinct())
         {
             if (!registrations.TryGetValue(

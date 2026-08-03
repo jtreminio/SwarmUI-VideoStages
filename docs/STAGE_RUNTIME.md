@@ -25,7 +25,6 @@ hidden authoring document + host request
     → DecodedClipArtifact per clip
     → TimelineAssemblySession
     → OutputPublisher
-    → optional exclusive architecture finalization
 ```
 
 There is one common orchestration path. LTX, MiniMax, WAN, generic host video,
@@ -92,12 +91,12 @@ Preparation constructs one `VideoArchitectureExecutionHost`, resolves only
 providers used by active clip architectures, and runs:
 
 - common frame-interpolation preflight; then
-- `IArchitectureGenerationSessionFactoryProvider.PreflightRequest` once for
+- `IArchitectureGenerationSessionProvider.PreflightRequest` once for
   each active architecture.
 
 The provider object is request-scoped and reused sequentially by preflight,
-host phases, root-resizer lookup, and factory creation. It must remain
-stateless or hold only request-safe collaborators.
+host phases, and session creation. It may retain host-phase captures; mutable
+timeline and clip state belongs to the session it creates.
 
 ## 3. Ordered SwarmUI workflow phases
 
@@ -126,38 +125,34 @@ clip owns its own media and does not claim the host root.
 phase requires adding it to the enum and, if it is a root-media handoff, to that
 predicate; phases are not ad hoc string hooks.
 
-## 4. Provider, factory, and session lifetimes
+## 4. Provider and session lifetimes
 
-The three runtime layers are intentionally different:
+The runtime has two lifetimes:
 
 | Object | Lifetime | May own mutable generation state? |
 | --- | --- | --- |
-| `IArchitectureGenerationSessionFactoryProvider` | request | No; reused across preflight/host phases/factory creation |
-| `IArchitectureGenerationSessionFactory` | one timeline execution | Yes; timeline preparation and optional finalization |
+| `IArchitectureGenerationSessionProvider` | request | Host-phase captures only; reused across preflight, host phases, and session creation |
 | `IVideoGenerationSession` | one active architecture in one timeline | Yes; executes all clips owned by that architecture |
 
-`ArchitectureRuntimeSessionFactoryRegistry` creates active factories only after
-request preparation. Its lifecycle is:
+`ArchitectureRuntimeProviderRegistry` creates sessions only after request
+preparation. Its lifecycle is:
 
-1. `PrepareTimeline` for each active factory, with `OwnsGeneratedRoot`;
-2. `CreateSession` once per active architecture;
-3. execute clips through `ArchitectureRuntimeDispatcher`;
-4. dispose every session, including constructor rollback on partial failure.
+1. call `CreateSession` once per active provider, with `OwnsGeneratedRoot`;
+2. execute clips through `ArchitectureRuntimeDispatcher`;
+3. dispose every session, including constructor rollback on partial failure.
 
 ## 5. Common clip loop
 
 `VideoStagesCoordinator` owns the timeline-level sequence:
 
 1. capture the host root publication/save contract;
-2. install global refine source when the compiled root requires it;
-3. resolve request audio sources;
-4. reserve the staged node-ID range;
-5. prepare active architecture factories;
-6. execute and assemble the clip sequence;
-7. apply configured timeline interpolation;
-8. clear model compatibility from neutral final media;
-9. capture and publish the final artifact;
-10. invoke architecture finalization.
+2. resolve request audio sources;
+3. reserve the staged node-ID range;
+4. create active architecture sessions;
+5. execute and assemble the clip sequence;
+6. apply configured timeline interpolation;
+7. clear model compatibility from neutral final media;
+8. publish the final artifact and restore the root save contract.
 
 The coordinator loops planned clips in order. It exposes
 `PreviousClipOutput` only across a same-architecture non-cut boundary.
@@ -249,15 +244,14 @@ path, but returns the same decoded artifact contract.
 architecture's `IArchitectureBoundaryAssembler`. It joins the resulting runs
 with neutral hard cuts and assembles decoded audio.
 
-`RootRuntimeSession` and `OutputPublisher` are the only normal writers of the
-captured host save set. An exclusive finalizer runs only after publication and
-may replace that publication; no stage session may publish the whole timeline
-directly.
+`RootRuntimeSession` restores the captured host save set and publishes the final
+artifact through `OutputPublisher`. No architecture session may publish the
+whole timeline directly.
 
 ## 8. Failure boundary
 
 The first exception in a prepared host phase, alternate callback, stage run,
-assembly, publication, or finalization transitions the request to `Failed`.
+assembly, or publication transitions the request to `Failed`.
 Scopes and sessions still dispose through normal `using`/rollback paths. Later
 callbacks cannot reuse partially mutated request state.
 
@@ -331,7 +325,7 @@ When adding an architecture using the existing vocabulary:
    resolved model facts;
 3. implement graph-free projection/compilation and typed architecture payloads
    whose stage payloads expose the required common core;
-4. implement provider → factory → session lifetimes;
+4. implement provider → session lifetimes;
 5. add a boundary assembler before declaring non-cut support;
 6. return a valid neutral decoded artifact;
 7. add frontend-local behavior only for concrete bespoke UI; and

@@ -531,9 +531,9 @@ public class DecisionOwnerRegressionTests
     private static VideoArchitectureExecutionHost BoundHost(
         WorkflowGenerator generator,
         VideoExecutionPlan plan,
-        IEnumerable<IArchitectureGenerationSessionFactoryProvider> providers = null)
+        IEnumerable<IArchitectureGenerationSessionProvider> providers = null)
     {
-        IEnumerable<IArchitectureGenerationSessionFactoryProvider> innerProviders =
+        IEnumerable<IArchitectureGenerationSessionProvider> innerProviders =
             providers
             ?? VideoArchitectureManifest.CreateProductionRuntimeProviders(
                 generator,
@@ -548,11 +548,14 @@ public class DecisionOwnerRegressionTests
     }
 
     private sealed class HostPhaseTestProvider(
-        IArchitectureGenerationSessionFactoryProvider inner) :
-        IArchitectureGenerationSessionFactoryProvider,
+        IArchitectureGenerationSessionProvider inner) :
+        IArchitectureGenerationSessionProvider,
         IArchitectureHostPhaseParticipant
     {
         public ArchitectureId ArchitectureId => inner.ArchitectureId;
+
+        public IArchitectureBoundaryAssembler BoundaryAssembler =>
+            inner.BoundaryAssembler;
 
         public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
         {
@@ -562,8 +565,9 @@ public class DecisionOwnerRegressionTests
             }
         }
 
-        public IArchitectureGenerationSessionFactory CreateFactory() =>
-            inner.CreateFactory();
+        public IVideoGenerationSession CreateSession(
+            ArchitectureTimelineSessionContext context) =>
+            inner.CreateSession(context);
     }
 
     private static ClipPlan InitVideoClip(
@@ -627,7 +631,7 @@ public class DecisionOwnerRegressionTests
     private sealed class ForeignRootAdapter(
         WorkflowGenerator generator,
         ArchitectureId architectureId) :
-        IArchitectureGenerationSessionFactoryProvider,
+        IArchitectureGenerationSessionProvider,
         IArchitectureHostPhaseParticipant
     {
         public ArchitectureId ArchitectureId => architectureId;
@@ -643,7 +647,8 @@ public class DecisionOwnerRegressionTests
             apply.Image.ConnectToUntyped(branch.GetOutput(0));
         }
 
-        public IArchitectureGenerationSessionFactory CreateFactory() =>
+        public IVideoGenerationSession CreateSession(
+            ArchitectureTimelineSessionContext context) =>
             throw new NotSupportedException();
     }
 }

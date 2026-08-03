@@ -466,11 +466,11 @@ VideoArchitectureExecutionHost
     → ArchitectureRuntimeDispatcher
 ```
 
-The coordinator captures the host root, resolves audio, prepares active
-architecture factories, and creates `ArchitectureClipRuntimeContext` for each
-planned clip. It exposes previous output as continuity input only for a non-cut,
-same-architecture boundary, while separately exposing the previous timeline
-output as contextual media across cuts and architecture changes.
+The coordinator captures the host root, resolves audio, creates one session for
+each active architecture provider, and creates `ArchitectureClipRuntimeContext`
+for each planned clip. It exposes previous output as continuity input only for
+a non-cut, same-architecture boundary, while separately exposing the previous
+timeline output as contextual media across cuts and architecture changes.
 
 `ArchitectureRuntimeDispatcher.ResolveSession` selects a session solely from
 `clip.Architecture.Id`, passes the narrow per-clip context directly to that
@@ -487,9 +487,9 @@ captures only frame rate and audio sources.
 
 ### B6a. LTX graph execution
 
-`Ltx2ExecutionAdapter.CreateFactory` builds a private LTX timeline factory and
-session. The factory prepares LTX root state when LTX owns it; common
-orchestration depends only on the factory/session contracts.
+`Ltx2ExecutionAdapter.CreateSession` prepares private LTX root state when LTX
+owns it and returns the LTX timeline session. Common orchestration depends only
+on the provider/session contracts.
 
 The LTX path is:
 
@@ -537,8 +537,8 @@ sampling, and joint decode.
 
 ### B6c. WAN on the shared stock-host runtime
 
-`WanExecutionAdapter` creates `StockHostVideoGenerationSessionFactory`, which
-snapshots the host root media and VAE.
+`WanExecutionAdapter` creates `StockHostVideoGenerationSession` directly. The
+session snapshots the host root media and VAE when timeline execution begins.
 `StockHostVideoGenerationSession` prepares each hard-cut clip independently and
 uses `VideoStageRunner` for common iteration, scope restoration,
 pixel-upscale ordering, passthrough handling, intermediate publication,

@@ -1046,9 +1046,9 @@ public class ArchitectureFoundationTests
             RootEnvironment.FromSpec(spec),
             ArchitecturePlanResolver.Resolve(spec, new FakeRegistry()));
         List<string> calls = [];
-        ArchitectureRuntimeSessionFactoryRegistry runtimes = new(
+        ArchitectureRuntimeProviderRegistry runtimes = new(
         [
-            new RecordingSessionFactory(new("fake"), calls),
+            new RecordingSessionProvider(new("fake"), calls),
         ],
         new VideoExecutionPlanContext(plan));
         AudioRuntimeSources audio = new(
@@ -1056,7 +1056,6 @@ public class ArchitectureFoundationTests
             new Dictionary<int, SwarmUI.Builtin_ComfyUIBackend.WGNodeData>(),
             new Dictionary<int, SwarmUI.Builtin_ComfyUIBackend.WGNodeData>());
         RootExecutionPolicy policy = new(plan);
-        runtimes.PrepareTimeline(new(plan, audio, policy));
         using ArchitectureRuntimeDispatcher dispatcher = runtimes.CreateDispatcher(new(
             plan,
             audio,
@@ -1102,7 +1101,7 @@ public class ArchitectureFoundationTests
             Workflow = [],
         };
 
-        IReadOnlyList<IArchitectureGenerationSessionFactoryProvider> providers =
+        IReadOnlyList<IArchitectureGenerationSessionProvider> providers =
             VideoArchitectureManifest.CreateProductionRuntimeProviders(
                 generator,
                 [new("wan22"), new("none"), new("wan22")]);
@@ -1201,11 +1200,11 @@ public class ArchitectureFoundationTests
             generator,
             plan,
             [
-                new RecordingSessionFactoryProvider(
+                new RecordingSessionProvider(
                     new("ltx2"),
                     calls,
                     runtimeContexts),
-                new RecordingSessionFactoryProvider(
+                new RecordingSessionProvider(
                     new("fake"),
                     calls,
                     runtimeContexts),
@@ -1844,29 +1843,17 @@ public class ArchitectureFoundationTests
         public void Dispose() => Disposed = true;
     }
 
-    private sealed class RecordingSessionFactory(
+    private sealed class RecordingSessionProvider(
         ArchitectureId architectureId,
         ICollection<string> calls,
         ICollection<ArchitectureClipRuntimeContext> contexts = null)
-        : IArchitectureGenerationSessionFactory
+        : IArchitectureGenerationSessionProvider
     {
         public ArchitectureId ArchitectureId => architectureId;
 
         public IVideoGenerationSession CreateSession(
             ArchitectureTimelineSessionContext context) =>
             new RecordingSession(architectureId, calls, contexts);
-    }
-
-    private sealed class RecordingSessionFactoryProvider(
-        ArchitectureId architectureId,
-        ICollection<string> calls,
-        ICollection<ArchitectureClipRuntimeContext> contexts = null)
-        : IArchitectureGenerationSessionFactoryProvider
-    {
-        public ArchitectureId ArchitectureId => architectureId;
-
-        public IArchitectureGenerationSessionFactory CreateFactory() =>
-            new RecordingSessionFactory(architectureId, calls, contexts);
     }
 
 }

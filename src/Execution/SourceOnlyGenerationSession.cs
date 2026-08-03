@@ -8,16 +8,7 @@ namespace VideoStages.Execution;
 
 internal sealed class SourceOnlyExecutionAdapter(
     WorkflowGenerator generator) :
-    IArchitectureGenerationSessionFactoryProvider
-{
-    public ArchitectureId ArchitectureId => NoneArchitecture.Id;
-
-    public IArchitectureGenerationSessionFactory CreateFactory() =>
-        new SourceOnlyGenerationSessionFactory(generator);
-}
-
-internal sealed class SourceOnlyGenerationSessionFactory(
-    WorkflowGenerator generator) : IArchitectureGenerationSessionFactory
+    IArchitectureGenerationSessionProvider
 {
     public ArchitectureId ArchitectureId => NoneArchitecture.Id;
 

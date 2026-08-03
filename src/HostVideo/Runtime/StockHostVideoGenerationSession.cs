@@ -34,6 +34,30 @@ internal sealed class StockHostVideoGenerationSession(
 
     public ArchitectureId ArchitectureId => architectureId;
 
+    internal static StockHostVideoGenerationSession Create(
+        WorkflowGenerator generator,
+        ArchitectureTimelineSessionContext context,
+        ArchitectureId architectureId,
+        string architectureLabel,
+        WanStockHostVideoBehavior wanBehavior = null)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        HostVideoRootSources rootSources = new(
+            generator.CurrentMedia?.Duplicate(),
+            generator.CurrentVae?.Duplicate());
+        return new(
+            generator,
+            context.Plan,
+            rootSources,
+            new VideoStageRunner(
+                generator,
+                context.Plan,
+                architectureLabel),
+            architectureId,
+            architectureLabel,
+            wanBehavior);
+    }
+
     public DecodedClipArtifact Execute(ArchitectureClipRuntimeContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -585,46 +609,4 @@ internal sealed class StockHostVideoGenerationSession(
 
     private StockHostVideoStagePayload ResolvePayload(StagePlan stage) =>
         stage.RequireStockHostVideoPayload(ArchitectureId, architectureLabel);
-}
-
-internal sealed class StockHostVideoGenerationSessionFactory(
-    WorkflowGenerator generator,
-    ArchitectureId architectureId,
-    string architectureLabel,
-    Func<VideoExecutionPlan, WanStockHostVideoBehavior> wanBehaviorFactory = null) :
-    IArchitectureGenerationSessionFactory
-{
-    private HostVideoRootSources _rootSources;
-
-    public ArchitectureId ArchitectureId => architectureId;
-
-    public void PrepareTimeline(ArchitectureTimelinePreparationContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        _rootSources = new(
-            generator.CurrentMedia?.Duplicate(),
-            generator.CurrentVae?.Duplicate());
-    }
-
-    public IVideoGenerationSession CreateSession(
-        ArchitectureTimelineSessionContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        if (_rootSources is null)
-        {
-            throw VideoStagesInvariant.Failure(
-                $"The {architectureLabel} runtime was not prepared before session creation.");
-        }
-        return new StockHostVideoGenerationSession(
-            generator,
-            context.Plan,
-            _rootSources,
-            new VideoStageRunner(
-                generator,
-                context.Plan,
-                architectureLabel),
-            ArchitectureId,
-            architectureLabel,
-            wanBehaviorFactory?.Invoke(context.Plan));
-    }
 }

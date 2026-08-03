@@ -1,12 +1,13 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.MiniMax;
 
 internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
-    IArchitectureGenerationSessionFactoryProvider,
+    IArchitectureGenerationSessionProvider,
     IArchitectureHostPhaseParticipant
 {
     private readonly RootMediaHandoff _rootHandoff = new(
@@ -69,9 +70,24 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
         }
     }
 
-    public IArchitectureGenerationSessionFactory CreateFactory() =>
-        new MiniMaxGenerationSessionFactory(
+    public IVideoGenerationSession CreateSession(
+        ArchitectureTimelineSessionContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        HostVideoRootSources rootSources = new(
+            generator.CurrentMedia?.Duplicate(),
+            generator.CurrentVae?.Duplicate());
+        return new MiniMaxGenerationSession(
             generator,
+            context.Plan,
+            rootSources,
+            context.AudioSources,
             _baseReference,
-            _refinerReference);
+            _refinerReference,
+            new VideoStageRunner(
+                generator,
+                context.Plan,
+                MiniMaxGenerationSession.ArchitectureLabel,
+                preserveAttachedAudio: true));
+    }
 }
