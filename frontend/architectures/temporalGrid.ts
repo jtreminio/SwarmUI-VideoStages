@@ -1,5 +1,6 @@
 import { canUseClipLengthFromAudio } from "../audioSource";
 import { activeStageCount } from "../clipSemantics";
+import { type FrameGridSpec, NEUTRAL_FRAME_GRID } from "../renderUtils";
 import type { Clip } from "../types";
 import { architectureDescriptor, modelCatalogEntry } from "./catalogQueries";
 import { effectiveClipCapabilities } from "./modelCapabilities";
@@ -17,7 +18,7 @@ import type {
 export const MAX_FRAME_GRID = 2_147_483_647;
 
 export type FrameGridResolution =
-    | { status: "resolved"; frameGrid: number }
+    | ({ status: "resolved" } & FrameGridSpec)
     | { status: "not-applicable" }
     | { status: "unknown" }
     | { status: "conflict" };
@@ -29,16 +30,30 @@ const greatestCommonDivisor = (left: number, right: number): number => {
     return left;
 };
 
-/** Smallest positive grid satisfying every resolved active-stage handler. */
+/**
+ * Smallest positive grid satisfying every resolved active-stage handler. Every stage in a clip
+ * shares one architecture, so a disagreeing grid origin is a conflict rather than a merge.
+ */
 export const resolveCompatibleFrameGrid = (
-    frameGrids: readonly number[],
+    specs: readonly FrameGridSpec[],
 ): FrameGridResolution => {
     let compatible = 1;
-    for (const raw of frameGrids) {
-        const grid = Number(raw);
-        if (!Number.isInteger(grid) || grid < 1 || grid > MAX_FRAME_GRID) {
+    let origin: number | null = null;
+    for (const raw of specs) {
+        const grid = Number(raw.frameGrid);
+        const gridOrigin = Number(raw.frameGridOrigin);
+        if (
+            !Number.isInteger(grid) ||
+            grid < 1 ||
+            grid > MAX_FRAME_GRID ||
+            !Number.isInteger(gridOrigin) ||
+            gridOrigin < 1 ||
+            gridOrigin > grid ||
+            (origin !== null && origin !== gridOrigin)
+        ) {
             return { status: "conflict" };
         }
+        origin = gridOrigin;
         const next =
             (compatible / greatestCommonDivisor(compatible, grid)) * grid;
         if (!Number.isSafeInteger(next) || next > MAX_FRAME_GRID) {
@@ -46,49 +61,24 @@ export const resolveCompatibleFrameGrid = (
         }
         compatible = next;
     }
-    return { status: "resolved", frameGrid: compatible };
+    return {
+        status: "resolved",
+        frameGrid: compatible,
+        frameGridOrigin: origin ?? 1,
+    };
 };
 
 export const resolveFrameGridForModelLookup = (
     models: readonly string[],
-    frameGridForModel: (model: string) => number | null,
+    frameGridForModel: (model: string) => FrameGridSpec | null,
 ): FrameGridResolution => {
     if (models.length === 0) {
         return { status: "not-applicable" };
     }
-    const grids = models.map(frameGridForModel);
-    return grids.some((grid) => grid === null)
+    const specs = models.map(frameGridForModel);
+    return specs.some((spec) => spec === null)
         ? { status: "unknown" }
-        : resolveCompatibleFrameGrid(grids as number[]);
-};
-
-/** Neutral numeric projection for non-mutating preview geometry. */
-export const frameGridForModelLookup = (
-    models: readonly string[],
-    frameGridForModel: (model: string) => number | null,
-): number => {
-    const resolution = resolveFrameGridForModelLookup(
-        models,
-        frameGridForModel,
-    );
-    return resolution.status === "resolved" ? resolution.frameGrid : 1;
-};
-
-/**
- * Unknown model facts deliberately produce the neutral grid. Backend admission will explain an
- * unresolved stage; frontend duration math must not guess another architecture's policy.
- */
-export const frameGridForModels = (
-    models: readonly string[],
-    catalog: ArchitectureModelCatalog | null,
-): number => {
-    if (!catalog || models.length === 0) {
-        return 1;
-    }
-    return frameGridForModelLookup(
-        models,
-        (model) => modelCatalogEntry(catalog, model)?.frameGrid ?? null,
-    );
+        : resolveCompatibleFrameGrid(specs as FrameGridSpec[]);
 };
 
 type TemporalClip = Pick<Clip, "stages"> &
@@ -215,10 +205,15 @@ export const resolveClipFrameGridForLookup = (
         return { status: "not-applicable" };
     }
     const models = effectiveGridModels(clip, modelForName, architectureForId);
-    return resolveFrameGridForModelLookup(
-        models,
-        (model) => modelForName(model)?.frameGrid ?? null,
-    );
+    return resolveFrameGridForModelLookup(models, (model) => {
+        const entry = modelForName(model);
+        return entry?.frameGrid == null || entry.frameGridOrigin == null
+            ? null
+            : {
+                  frameGrid: entry.frameGrid,
+                  frameGridOrigin: entry.frameGridOrigin,
+              };
+    });
 };
 
 export const resolveClipFrameGrid = (
@@ -242,7 +237,12 @@ export const resolveClipFrameGrid = (
 export const resolvedClipFrameGrid = (
     clip: TemporalClip,
     catalog: ArchitectureModelCatalog | null,
-): number => {
+): FrameGridSpec => {
     const resolution = resolveClipFrameGrid(clip, catalog);
-    return resolution.status === "resolved" ? resolution.frameGrid : 1;
+    return resolution.status === "resolved"
+        ? {
+              frameGrid: resolution.frameGrid,
+              frameGridOrigin: resolution.frameGridOrigin,
+          }
+        : NEUTRAL_FRAME_GRID;
 };

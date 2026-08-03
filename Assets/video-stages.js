@@ -554,6 +554,33 @@
     return options;
   };
 
+  // frontend/renderUtils.ts
+  var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  var NEUTRAL_FRAME_GRID = {
+    frameGrid: 1,
+    frameGridOrigin: 1
+  };
+  var framesForClip = (durationSeconds, fps, spec) => {
+    const rawFrameGrid = spec.frameGrid;
+    const frameGrid = Number.isInteger(rawFrameGrid) && rawFrameGrid > 0 ? rawFrameGrid : 1;
+    const rawOrigin = spec.frameGridOrigin;
+    const gridOrigin = Number.isInteger(rawOrigin) && rawOrigin >= 1 && rawOrigin <= frameGrid ? rawOrigin : 1;
+    const intervals = Math.max(
+      0,
+      Math.ceil(durationSeconds * Math.max(1, fps))
+    );
+    const beyondOrigin = Math.max(0, intervals + 1 - gridOrigin);
+    return gridOrigin + Math.ceil(beyondOrigin / frameGrid) * frameGrid;
+  };
+  var snapDurationToFps = (seconds, fps) => {
+    if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
+      return seconds;
+    }
+    const frames = Math.max(1, Math.ceil(seconds * fps));
+    const aligned = frames / fps;
+    return Math.max(0.1, Math.floor(aligned * 10) / 10);
+  };
+
   // frontend/architectures/modelCapabilities.ts
   var intersect = (left, right) => left.filter((value) => right.includes(value));
   var effectiveModelCapabilities = (model, architecture) => model?.capabilities ?? architecture.capabilities;
@@ -625,27 +652,34 @@
     }
     return left;
   };
-  var resolveCompatibleFrameGrid = (frameGrids) => {
+  var resolveCompatibleFrameGrid = (specs) => {
     let compatible = 1;
-    for (const raw of frameGrids) {
-      const grid = Number(raw);
-      if (!Number.isInteger(grid) || grid < 1 || grid > MAX_FRAME_GRID) {
+    let origin = null;
+    for (const raw of specs) {
+      const grid = Number(raw.frameGrid);
+      const gridOrigin = Number(raw.frameGridOrigin);
+      if (!Number.isInteger(grid) || grid < 1 || grid > MAX_FRAME_GRID || !Number.isInteger(gridOrigin) || gridOrigin < 1 || gridOrigin > grid || origin !== null && origin !== gridOrigin) {
         return { status: "conflict" };
       }
+      origin = gridOrigin;
       const next = compatible / greatestCommonDivisor(compatible, grid) * grid;
       if (!Number.isSafeInteger(next) || next > MAX_FRAME_GRID) {
         return { status: "conflict" };
       }
       compatible = next;
     }
-    return { status: "resolved", frameGrid: compatible };
+    return {
+      status: "resolved",
+      frameGrid: compatible,
+      frameGridOrigin: origin ?? 1
+    };
   };
   var resolveFrameGridForModelLookup = (models, frameGridForModel) => {
     if (models.length === 0) {
       return { status: "not-applicable" };
     }
-    const grids = models.map(frameGridForModel);
-    return grids.some((grid) => grid === null) ? { status: "unknown" } : resolveCompatibleFrameGrid(grids);
+    const specs = models.map(frameGridForModel);
+    return specs.some((spec) => spec === null) ? { status: "unknown" } : resolveCompatibleFrameGrid(specs);
   };
   var effectiveGridModels = (clip, modelForName, architectureForId) => {
     const stages = clip.stages.slice(0, activeStageCount(clip));
@@ -704,10 +738,13 @@
       return { status: "not-applicable" };
     }
     const models = effectiveGridModels(clip, modelForName, architectureForId);
-    return resolveFrameGridForModelLookup(
-      models,
-      (model) => modelForName(model)?.frameGrid ?? null
-    );
+    return resolveFrameGridForModelLookup(models, (model) => {
+      const entry = modelForName(model);
+      return entry?.frameGrid == null || entry.frameGridOrigin == null ? null : {
+        frameGrid: entry.frameGrid,
+        frameGridOrigin: entry.frameGridOrigin
+      };
+    });
   };
   var resolveClipFrameGrid = (clip, catalog) => {
     if (!catalog) {
@@ -722,7 +759,10 @@
   };
   var resolvedClipFrameGrid = (clip, catalog) => {
     const resolution = resolveClipFrameGrid(clip, catalog);
-    return resolution.status === "resolved" ? resolution.frameGrid : 1;
+    return resolution.status === "resolved" ? {
+      frameGrid: resolution.frameGrid,
+      frameGridOrigin: resolution.frameGridOrigin
+    } : NEUTRAL_FRAME_GRID;
   };
 
   // frontend/architectures/catalogWire.ts
@@ -831,9 +871,10 @@
         "modelClassId",
         "compatibilityClassId",
         "frameGrid",
+        "frameGridOrigin",
         "capabilities",
         "enhancements"
-      ]) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !isCapabilities(raw.capabilities) || !isRecord(raw.enhancements) || !hasExactKeys(raw.enhancements, ["referencePositions"]) || !isReferencePositionArray(raw.enhancements.referencePositions)) {
+      ]) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !Number.isSafeInteger(raw.frameGridOrigin) || Number(raw.frameGridOrigin) < 1 || Number(raw.frameGridOrigin) > Number(raw.frameGrid) || !isCapabilities(raw.capabilities) || !isRecord(raw.enhancements) || !hasExactKeys(raw.enhancements, ["referencePositions"]) || !isReferencePositionArray(raw.enhancements.referencePositions)) {
         return null;
       }
       if (modelNames.has(raw.modelName)) {
@@ -847,6 +888,7 @@
         modelClassId: raw.modelClassId,
         compatibilityClassId: raw.compatibilityClassId,
         frameGrid: Number(raw.frameGrid),
+        frameGridOrigin: Number(raw.frameGridOrigin),
         capabilities: structuredClone(raw.capabilities),
         enhancements: {
           referencePositions: [
@@ -991,6 +1033,7 @@
           modelClassId: backendModel?.modelClassId ?? null,
           compatibilityClassId: backendModel?.compatibilityClassId ?? null,
           frameGrid: backendModel?.frameGrid ?? null,
+          frameGridOrigin: backendModel?.frameGridOrigin ?? null,
           ...backendModel?.capabilities === void 0 ? {} : {
             capabilities: structuredClone(
               backendModel.capabilities
@@ -1217,7 +1260,10 @@
         architectureId,
         architectureLabel: label,
         known: descriptor !== void 0,
-        frameGrid: frameGridResolution.status === "resolved" ? frameGridResolution.frameGrid : 1,
+        frameGrid: frameGridResolution.status === "resolved" ? {
+          frameGrid: frameGridResolution.frameGrid,
+          frameGridOrigin: frameGridResolution.frameGridOrigin
+        } : NEUTRAL_FRAME_GRID,
         frameGridResolution,
         audioSourceKinds: capabilities?.audioSourceKinds ?? [],
         clipAudio: {
@@ -3003,15 +3049,11 @@
 
   // frontend/architectures/identity.ts
   var normalizeClipArchitecture = (rawArchitecture, stageZeroModel, catalog) => {
-    const persisted = `${rawArchitecture ?? ""}`.trim();
-    if (persisted) {
-      return persisted;
-    }
     const fromCatalog = catalog && stageZeroModel ? architectureForModel(catalog, stageZeroModel) : null;
     if (fromCatalog) {
       return fromCatalog;
     }
-    return "unsupported";
+    return `${rawArchitecture ?? ""}`.trim() || "unsupported";
   };
 
   // frontend/clipColor.ts
@@ -3116,26 +3158,6 @@
       }
     }
     return true;
-  };
-
-  // frontend/renderUtils.ts
-  var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  var framesForClip = (durationSeconds, fps, rawFrameGrid) => {
-    const frameGrid = Number.isInteger(rawFrameGrid) && rawFrameGrid > 0 ? rawFrameGrid : 1;
-    return Math.max(
-      1,
-      Math.ceil(
-        Math.max(0, Math.ceil(durationSeconds * Math.max(1, fps))) / frameGrid
-      ) * frameGrid + 1
-    );
-  };
-  var snapDurationToFps = (seconds, fps) => {
-    if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
-      return seconds;
-    }
-    const frames = Math.max(1, Math.ceil(seconds * fps));
-    const aligned = frames / fps;
-    return Math.max(0.1, Math.floor(aligned * 10) / 10);
   };
 
   // frontend/normalizationStage.ts
@@ -3265,7 +3287,7 @@
       const frameGrid = clip.stages ? resolvedClipFrameGrid(
         { ...clip, stages: clip.stages },
         defaults.modelCatalog
-      ) : 1;
+      ) : NEUTRAL_FRAME_GRID;
       return Math.max(
         REF_FRAME_MIN,
         framesForClip(clip.duration, fps, frameGrid)
@@ -3282,7 +3304,10 @@
     const fps = typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps;
     return Math.max(
       REF_FRAME_MIN,
-      framesForClip(clip.duration, fps, resolution.frameGrid)
+      framesForClip(clip.duration, fps, {
+        frameGrid: resolution.frameGrid,
+        frameGridOrigin: resolution.frameGridOrigin
+      })
     );
   };
   var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, initVideoClip = false, clipLoras = [], clipLoraDefaultWeights = []) => {
@@ -3395,7 +3420,7 @@
       sampler: textOr(rawStage.sampler, fallback.sampler),
       scheduler: textOr(rawStage.scheduler, fallback.scheduler)
     };
-    stage.modelProfileId = trimmedText(readRawStageProp(rawStage, "modelProfileId")) || modelProfileForModel(defaults.modelCatalog, stage.model) || fallback.modelProfileId;
+    stage.modelProfileId = modelProfileForModel(defaults.modelCatalog, stage.model) || trimmedText(readRawStageProp(rawStage, "modelProfileId")) || fallback.modelProfileId;
     if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
       stage.upscaleMethod = forcedFirstStage ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
     }
@@ -3580,7 +3605,7 @@
       defaults.modelCatalog,
       stageZero?.model ?? ""
     ) ?? "unsupported";
-    const modelProfileId = isSourceOnly ? persistedProfile || (architecture === NONE_ARCHITECTURE_ID ? NONE_ARCHITECTURE_ID : "unsupported") : persistedProfile || stageZero?.modelProfileId || "unsupported";
+    const modelProfileId = isSourceOnly ? persistedProfile || (architecture === NONE_ARCHITECTURE_ID ? NONE_ARCHITECTURE_ID : "unsupported") : modelProfileForModel(defaults.modelCatalog, stageZero?.model ?? "") || persistedProfile || stageZero?.modelProfileId || "unsupported";
     const icLoras = normalizeArchitectureIcLoras(
       resolvedArchitecture,
       rawClip,
@@ -6676,7 +6701,7 @@
       ...generic,
       defaultFrames: mode === "cut" || !Number.isFinite(persisted) || persisted <= 0 ? generic.defaultFrames : persisted
     };
-  }, resolveFrameGrid = () => 1) => {
+  }, resolveFrameGrid = () => NEUTRAL_FRAME_GRID) => {
     const count = clips.length;
     const boundaryCount = Math.max(0, count - 1);
     const noOverlap = () => new Array(boundaryCount).fill(0);
@@ -6905,7 +6930,7 @@
       (clip, clipIdx) => executable.has(clipIdx) ? framesForClip(
         clip.duration,
         fps,
-        capabilities?.forClip(clip).frameGrid ?? 1
+        capabilities?.forClip(clip).frameGrid ?? NEUTRAL_FRAME_GRID
       ) : 0
     );
     const generatedFrames = indexes.reduce((sum, clipIdx) => sum + clipFrames[clipIdx], 0) + boundaries.reduce((sum, boundary) => sum + boundary.handleFrames, 0);
@@ -14510,7 +14535,7 @@ The conversion is one undoable change.`;
       frameGrid: resolvedClipFrameGrid(clip, authoring.defaults.modelCatalog),
       frameMax: getReferenceFrameMax(() => authoring.defaults, clip, fps)
     });
-    const sameDragPolicy = (left, right) => left.supported === right.supported && left.frameGrid === right.frameGrid && left.frameMax === right.frameMax && left.positions.length === right.positions.length && left.positions.every(
+    const sameDragPolicy = (left, right) => left.supported === right.supported && left.frameGrid.frameGrid === right.frameGrid.frameGrid && left.frameGrid.frameGridOrigin === right.frameGrid.frameGridOrigin && left.frameMax === right.frameMax && left.positions.length === right.positions.length && left.positions.every(
       (position, index) => position === right.positions[index]
     );
     const findArrow = (clipIdx, refIdx) => boundBody?.querySelector(

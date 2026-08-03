@@ -69,10 +69,13 @@ public class CrossLanguageMirrorTests
             double duration = c.Value<double>("durationSeconds");
             int fps = c.Value<int>("fps");
             int frameGrid = c.Value<int>("frameGrid");
+            int frameGridOrigin = c.Value<int>("frameGridOrigin");
             int expected = c.Value<int>("expectedFrames");
             int structural =
                 ClipTimelineSpecParser.CalculateStructuralFrameCount(duration, fps);
-            Assert.Equal(expected, StaticGeneratedFrameGrid.SnapUp(structural, frameGrid));
+            Assert.Equal(
+                expected,
+                StaticGeneratedFrameGrid.SnapUp(structural, frameGrid, frameGridOrigin));
         }
     }
 

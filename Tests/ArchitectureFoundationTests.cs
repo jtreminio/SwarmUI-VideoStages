@@ -1379,7 +1379,7 @@ public class ArchitectureFoundationTests
         Assert.Equal(2, catalog.Value<int>("schemaVersion"));
         JArray architectures = (JArray)catalog["architectures"];
         Assert.Equal(
-            ["none", "ltx2", "wan22", "host-video"],
+            ["none", "ltx2", "minimax", "wan22", "host-video"],
             architectures.Values<JObject>().Select(item => item["id"]?.ToString()));
         JObject none = Assert.Single(
             architectures.Values<JObject>(),

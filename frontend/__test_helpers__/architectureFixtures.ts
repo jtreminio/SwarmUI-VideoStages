@@ -87,6 +87,7 @@ export const testArchitectureCatalog = (
             modelClassId: "ltx-video",
             compatibilityClassId: "ltx-video",
             frameGrid: 8,
+            frameGridOrigin: 1,
             enhancements: { referencePositions: ["any"] },
             entryModes: ["text-to-video", "image-to-video", "init-video"],
         },
@@ -98,6 +99,7 @@ export const testArchitectureCatalog = (
             modelClassId: "ltx-video",
             compatibilityClassId: "ltx-video",
             frameGrid: 8,
+            frameGridOrigin: 1,
             enhancements: { referencePositions: ["any"] },
             entryModes: ["text-to-video", "image-to-video", "init-video"],
         },
@@ -122,6 +124,7 @@ export const testArchitectureCatalogDto = (
                           entry.compatibilityClassId ??
                           "test-compatibility-class",
                       frameGrid: entry.frameGrid ?? 1,
+                      frameGridOrigin: entry.frameGridOrigin ?? 1,
                       capabilities: structuredClone(
                           entry.capabilities ??
                               catalog.architectures.find(
@@ -213,6 +216,7 @@ export const fakeArchitectureCatalog = (
             modelClassId: "test-video",
             compatibilityClassId: "test-video",
             frameGrid: 1,
+            frameGridOrigin: 1,
             entryModes: ["text-to-video", "image-to-video", "init-video"],
         },
     ],

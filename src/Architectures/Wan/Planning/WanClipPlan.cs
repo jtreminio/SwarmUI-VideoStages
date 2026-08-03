@@ -4,15 +4,10 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan.Planning;
 
-internal sealed record WanFrameReferencePlan(
-    string Source,
-    string UploadFileName,
-    string InlineData);
-
 internal sealed record WanClipPayload(
     int ClipId,
-    WanFrameReferencePlan FirstFrameReference = null,
-    WanFrameReferencePlan LastFrameReference = null) :
+    NativeFrameReferencePlan FirstFrameReference = null,
+    NativeFrameReferencePlan LastFrameReference = null) :
     IArchitectureClipPayload
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;

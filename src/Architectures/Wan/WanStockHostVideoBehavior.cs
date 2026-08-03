@@ -1,7 +1,6 @@
 using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
@@ -22,7 +21,7 @@ internal sealed class WanStockHostVideoBehavior(
 {
     internal WGNodeData ResolveFirstFrame(ClipPlan clip)
     {
-        WanFrameReferencePlan reference =
+        NativeFrameReferencePlan reference =
             clip.RequireWanPayload().FirstFrameReference;
         Image image = MaterializeUpload(reference, "WAN first-frame reference");
         return image is null
@@ -66,7 +65,10 @@ internal sealed class WanStockHostVideoBehavior(
             return null;
         }
         int frameGrid = stage.ResolvedModel.FrameGrid;
-        int snapped = StaticGeneratedFrameGrid.SnapDown(frames, frameGrid);
+        int snapped = StaticGeneratedFrameGrid.SnapDown(
+            frames,
+            frameGrid,
+            stage.ResolvedModel.FrameGridOrigin);
         if (snapped != frames)
         {
             Logs.Info(
@@ -249,28 +251,9 @@ internal sealed class WanStockHostVideoBehavior(
     }
 
     private Image MaterializeUpload(
-        WanFrameReferencePlan reference,
-        string descriptor)
-    {
-        if (reference is null)
-        {
-            return null;
-        }
-        if (!StringUtils.Equals(reference.Source, "Upload"))
-        {
-            PlanDiagnosticReporter.TrackRequestWarning(
-                generator.UserInput,
-                $"VideoStages: {descriptor} source '{reference.Source}' cannot be materialized "
-                    + "by the native WAN image input; ignoring it for this generation.");
-            return null;
-        }
-        ImageFile image = ImageReference.MaterializeUploadedRefImage(
-            generator,
-            reference.InlineData,
-            reference.UploadFileName,
-            descriptor);
-        return image as Image;
-    }
+        NativeFrameReferencePlan reference,
+        string descriptor) =>
+        NativeFrameReferences.MaterializeUpload(generator, reference, descriptor);
 
     private void PruneUnusedWan22Latents(ISet<string> preHostNodeIds)
     {

@@ -1,4 +1,5 @@
 import { activeStageCount } from "../../clipSemantics";
+import { NEUTRAL_FRAME_GRID } from "../../renderUtils";
 import type { Clip, Stage } from "../../types";
 import { effectiveClipCapabilities } from "../modelCapabilities";
 import { NONE_ARCHITECTURE_ID } from "../none/identity";
@@ -111,8 +112,11 @@ export const createClipStageCapabilityViews = (
             known: descriptor !== undefined,
             frameGrid:
                 frameGridResolution.status === "resolved"
-                    ? frameGridResolution.frameGrid
-                    : 1,
+                    ? {
+                          frameGrid: frameGridResolution.frameGrid,
+                          frameGridOrigin: frameGridResolution.frameGridOrigin,
+                      }
+                    : NEUTRAL_FRAME_GRID,
             frameGridResolution,
             audioSourceKinds: capabilities?.audioSourceKinds ?? [],
             clipAudio: {

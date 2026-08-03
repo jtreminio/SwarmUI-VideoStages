@@ -28,6 +28,7 @@ export interface ArchitectureModelEntry {
     modelClassId: string | null;
     compatibilityClassId: string | null;
     frameGrid?: number | null;
+    frameGridOrigin?: number | null;
     /** Complete effective support for this resolved model; absent only for host-only unknowns. */
     capabilities?: ArchitectureCapabilities;
     enhancements?: ModelEnhancements;
@@ -67,6 +68,7 @@ export interface ArchitectureCatalogModelDto {
     modelClassId: string;
     compatibilityClassId: string;
     frameGrid: number;
+    frameGridOrigin: number;
     capabilities: ArchitectureCapabilities;
     enhancements: ModelEnhancements;
 }

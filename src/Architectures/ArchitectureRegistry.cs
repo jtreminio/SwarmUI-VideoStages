@@ -41,6 +41,14 @@ internal sealed class VideoArchitectureRegistry : IVideoArchitectureRegistry
                     $"Video architecture '{descriptor.Id}' has invalid frame grid "
                         + $"{descriptor.FrameGrid}; grids must be positive.");
             }
+            if (descriptor.FrameGridOrigin < 1
+                || descriptor.FrameGridOrigin > descriptor.FrameGrid)
+            {
+                throw VideoStagesInvariant.Failure(
+                    $"Video architecture '{descriptor.Id}' has invalid frame grid origin "
+                        + $"{descriptor.FrameGridOrigin}; origins must be within "
+                        + $"[1, {descriptor.FrameGrid}].");
+            }
             IReadOnlyList<ArchitectureEntryMode> entryModes = descriptor.EntryModes ?? [];
             ArchitectureEntryMode[] duplicateEntryModes = [
                 .. entryModes

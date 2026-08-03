@@ -19,12 +19,15 @@ internal sealed class HostVideoDecodedStageInput
     private readonly int _framesPerSecond;
     private readonly GlobalVideoFrameTrimmer _trimmer;
     private readonly string _architectureDisplayLabel;
+    /// <summary>Only an architecture whose own output carries decoded audio may keep it.</summary>
+    private readonly bool _preserveAttachedAudio;
 
     internal HostVideoDecodedStageInput(
         WorkflowGenerator generator,
         int framesPerSecond,
         GlobalVideoFrameTrimmer trimmer,
-        string architectureDisplayLabel)
+        string architectureDisplayLabel,
+        bool preserveAttachedAudio)
     {
         ArgumentNullException.ThrowIfNull(generator);
         ArgumentNullException.ThrowIfNull(trimmer);
@@ -33,6 +36,7 @@ internal sealed class HostVideoDecodedStageInput
         _framesPerSecond = framesPerSecond;
         _trimmer = trimmer;
         _architectureDisplayLabel = architectureDisplayLabel;
+        _preserveAttachedAudio = preserveAttachedAudio;
     }
 
     internal void Configure(
@@ -63,7 +67,10 @@ internal sealed class HostVideoDecodedStageInput
         ArgumentNullException.ThrowIfNull(clip);
         ArgumentNullException.ThrowIfNull(stage);
         ValidateDecodedInput(clip, stage, expectedFrames);
-        _generator.CurrentMedia.AttachedAudio = null;
+        if (!_preserveAttachedAudio)
+        {
+            _generator.CurrentMedia.AttachedAudio = null;
+        }
     }
 
     internal void NormalizeDecodedOutput(
@@ -82,7 +89,10 @@ internal sealed class HostVideoDecodedStageInput
             genInfo.Frames ?? _generator.CurrentMedia.Frames;
         _generator.CurrentMedia.FPS =
             genInfo.VideoFPS ?? _generator.CurrentMedia.FPS;
-        _generator.CurrentMedia.AttachedAudio = null;
+        if (!_preserveAttachedAudio)
+        {
+            _generator.CurrentMedia.AttachedAudio = null;
+        }
         _generator.CurrentVae = genInfo.Vae;
 
         using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);

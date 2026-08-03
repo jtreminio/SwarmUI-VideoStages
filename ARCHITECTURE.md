@@ -5,10 +5,11 @@ video architecture; all authored stages in that clip, including skipped
 stages, must resolve to the same architecture. Different executable clips may
 use different architectures.
 
-Production registers source-only `none`, specialized LTX Video 2.3, the WAN
-family, and a cut-only generic fallback for video models with verified SwarmUI
-graph paths. The registry, planning contracts, runtime dispatch, and timeline
-assembly host all four architectures through one top-level execution path.
+Production registers source-only `none`, specialized LTX Video 2.3, MiniMax H3,
+the WAN family, and a cut-only generic fallback for video models with verified
+SwarmUI graph paths. The registry, planning contracts, runtime dispatch, and
+timeline assembly host all five architectures through one top-level execution
+path.
 
 ## The execution model
 
@@ -189,6 +190,20 @@ Other request shapes warn and continue without the last image. VACE, transition
 expansion, arbitrary middle-frame references, and audio remain outside the WAN
 contract.
 
+MiniMax H3 samples video and audio together in one joint AV latent, so its
+session is the only stock-host path that keeps the audio VAE live and carries
+decoded audio into the clip artifact. Image entry delegates to SwarmUI's
+`CreateImageToVideo`; text entry and refinement build the `MiniMaxH3ImageToVideo`
+node directly, because H3 emits its conditioning and its latent from that one
+node rather than from a text encode plus an empty latent. A refine stage must
+also rebuild the joint latent itself: `WGNodeData.AsSamplingLatent` encodes raw
+video video-only, and its audio-concat branch fires only once the video is
+already a latent, so routing a decoded clip through the host builder would hand
+the transformer a latent missing its audio half. Its frame grid is the only one
+that does not start at a single frame: generated counts are `17k + 5`. The
+init-video entry mode is not published, because the conformed source video
+arrives without the audio track that joint re-encoding needs.
+
 ## Capability catalog
 
 The backend catalog is authoritative. It publishes stable capabilities by
@@ -198,8 +213,8 @@ table:
 - each architecture publishes its ID, label, complete descriptor capability
   set, boundary rules, and conditional rules;
 - each resolved model publishes architecture/profile identity, core model and
-  compatibility identities, frame grid, complete effective capabilities, and
-  supported frame-reference positions;
+  compatibility identities, frame grid and grid origin, complete effective
+  capabilities, and supported frame-reference positions;
 - clip: source video, prompts, relay, references, retakes, audio sources, and
   projected audio segments;
 - stage: input modes, each upscale mode (also republished as a flat
@@ -383,8 +398,8 @@ Adding another family should require:
 1. a manifest registration supplying module, runtime provider, host handlers,
    API routes, and dependency registration together;
 2. a model resolver that returns stable architecture/profile identity, core
-   model facts, frame grid, and complete effective capabilities for every
-   claimed model;
+   model facts, frame grid and grid origin, and complete effective capabilities
+   for every claimed model;
 3. descriptor capabilities and rules, including a rule for every boundary
    mode — the registry rejects an incomplete catalog at construction;
 4. an architecture-owned clip compiler and typed payload whose stage payload

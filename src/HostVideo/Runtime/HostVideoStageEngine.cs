@@ -23,7 +23,8 @@ internal sealed class HostVideoStageEngine : IDisposable
     internal HostVideoStageEngine(
         WorkflowGenerator generator,
         VideoExecutionPlan plan,
-        string architectureDisplayLabel)
+        string architectureDisplayLabel,
+        bool preserveAttachedAudio = false)
     {
         ArgumentNullException.ThrowIfNull(generator);
         ArgumentNullException.ThrowIfNull(plan);
@@ -35,7 +36,8 @@ internal sealed class HostVideoStageEngine : IDisposable
             generator,
             plan.FramesPerSecond,
             _trimmer,
-            architectureDisplayLabel);
+            architectureDisplayLabel,
+            preserveAttachedAudio);
         _stageScope = new(generator, plan);
     }
 

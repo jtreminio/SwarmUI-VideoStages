@@ -5,6 +5,7 @@ using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using SwarmUI.WebAPI;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.MiniMax;
 using VideoStages.Architectures.Wan;
 
 namespace VideoStages.Tests;
@@ -238,6 +239,33 @@ internal static class TestModelFactory
             Name = "LTX Video 2.3",
         };
         return models;
+    }
+
+    public static TestModelBundle CreateBaseAndMiniMaxH3Models()
+    {
+        TestModelBundle models = CreateBaseAndVideoModels(
+            T2IModelClassSorter.CompatMiniMaxH3,
+            MiniMaxArchitectureModule.ModelClassId,
+            "MiniMax H3");
+        models.VideoModel.ModelClass = models.VideoModel.ModelClass with
+        {
+            StandardWidth = 1344,
+            StandardHeight = 768,
+        };
+        InstallMiniMaxSupportModels();
+        return models;
+    }
+
+    private static void InstallMiniMaxSupportModels()
+    {
+        Program.T2IModelSets["VAE"] = new() { ModelType = "VAE" };
+        if (CommonModels.Known.IsEmpty)
+        {
+            CommonModels.RegisterCoreSet();
+        }
+        Install("Clip", "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors");
+        Install("VAE", CommonModels.Known["minimax-h3-video-vae"].FileName);
+        Install("VAE", CommonModels.Known["minimax-h3-audio-vae"].FileName);
     }
 
     public static TestModelBundle CreateBaseAndWan22ImageToVideoModels()

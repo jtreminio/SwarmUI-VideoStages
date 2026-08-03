@@ -1,7 +1,7 @@
 import type { CapabilityViewResolver } from "./architectures/policy";
 import { crossfadePlanForClips } from "./boundaryPlan";
 import { executableBoundaries, executableClipIndexes } from "./clipSemantics";
-import { framesForClip } from "./renderUtils";
+import { framesForClip, NEUTRAL_FRAME_GRID } from "./renderUtils";
 import { safeFps } from "./timelineDetail";
 import type { BoundaryOut, Clip } from "./types";
 
@@ -119,7 +119,7 @@ export const resolveTimelineTiming = (
             ? framesForClip(
                   clip.duration,
                   fps,
-                  capabilities?.forClip(clip).frameGrid ?? 1,
+                  capabilities?.forClip(clip).frameGrid ?? NEUTRAL_FRAME_GRID,
               )
             : 0,
     );

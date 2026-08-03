@@ -154,8 +154,14 @@ internal static class WanClipPlanCompiler
             previousStageContinuesSampling = continuesPreviousSampling;
         }
         WarnAboutReferenceStrengths(clip, activeStages, diagnostics);
-        (WanFrameReferencePlan firstReference, WanFrameReferencePlan lastReference) =
-            CompileFrameReferences(clip, activeStages, stageModels, diagnostics);
+        (NativeFrameReferencePlan firstReference, NativeFrameReferencePlan lastReference) =
+            NativeFrameReferences.Compile(
+                clip,
+                activeStages,
+                stageModels,
+                diagnostics,
+                "wan",
+                "WAN");
         return new(
             new WanClipPayload(
                 clip.Id,
@@ -192,117 +198,4 @@ internal static class WanClipPlanCompiler
         }
     }
 
-    /// <summary>
-    /// Wan native conditioning accepts one uploaded first frame and one uploaded final frame, and
-    /// only where the governing stage model declares that reference position. Every other authored
-    /// reference stays saved and is reported as dropped for this generation.
-    /// </summary>
-    private static (WanFrameReferencePlan First, WanFrameReferencePlan Last) CompileFrameReferences(
-        ClipSpec clip,
-        IReadOnlyList<StageSpec> activeStages,
-        IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
-        ICollection<PlanDiagnostic> diagnostics)
-    {
-        WanFrameReferencePlan first = null;
-        WanFrameReferencePlan last = null;
-        void Ignore(string code, string message) =>
-            diagnostics.Add(new(
-                PlanDiagnosticSeverity.Warning,
-                code,
-                message,
-                clip.Id));
-        bool Declares(StageSpec stage, string position, out string modelName)
-        {
-            ResolvedVideoModel model = stage is null
-                ? null
-                : stageModels.GetValueOrDefault(stage.ClipStageRawIndex);
-            modelName = model?.ModelName ?? "<missing>";
-            return model?.ReferencePositions?.Contains(position, StringComparer.Ordinal) == true;
-        }
-
-        foreach (ImageRefSpec reference in clip.ImageRefs ?? [])
-        {
-            bool isFirst = !reference.FromEnd && reference.Frame == 1;
-            bool isLast = reference.FromEnd && reference.Frame == 1;
-            if (!isFirst && !isLast)
-            {
-                Ignore(
-                    "effective-request.wan-middle-frame-reference-ignored",
-                    $"Clip {clip.Id} has a WAN image reference at "
-                        + $"{(reference.FromEnd ? "end-relative" : "start-relative")} frame "
-                        + $"{reference.Frame}. WAN native conditioning accepts only the first "
-                        + "and final frame. The authored reference remains saved and is ignored "
-                        + "for this generation.");
-                continue;
-            }
-            if (isFirst && clip.InitVideo is not null)
-            {
-                Ignore(
-                    "effective-request.wan-init-video-first-frame-reference-ignored",
-                    $"Clip {clip.Id} already enters from init-video video, so its separate "
-                        + "first-frame reference remains saved and is ignored for this "
-                        + "generation.");
-                continue;
-            }
-            if (isFirst
-                && !Declares(activeStages.FirstOrDefault(), "first", out string firstModel))
-            {
-                Ignore(
-                    "effective-request.wan-first-frame-reference-ignored",
-                    $"Clip {clip.Id}'s first-frame reference is not supported by the selected "
-                        + $"first WAN model '{firstModel}'. The authored reference remains saved "
-                        + "and is ignored for this generation.");
-                continue;
-            }
-            if (!StringUtils.Equals(reference.Source, "Upload"))
-            {
-                Ignore(
-                    "effective-request.wan-frame-reference-source-ignored",
-                    $"Clip {clip.Id}'s WAN {(isFirst ? "first" : "final")}-frame reference uses "
-                        + $"source '{reference.Source}', but the native WAN bounded-reference "
-                        + "path currently accepts uploaded images. The authored reference "
-                        + "remains saved and is ignored for this generation.");
-                continue;
-            }
-            if (isFirst ? first is not null : last is not null)
-            {
-                Ignore(
-                    "effective-request.wan-duplicate-frame-reference-ignored",
-                    $"Clip {clip.Id} has more than one WAN {(isFirst ? "first" : "last")} frame "
-                        + "reference. The first authored reference remains active; later "
-                        + "references remain saved and are ignored for this generation.");
-                continue;
-            }
-            if (isLast
-                && !Declares(
-                    activeStages.LastOrDefault(stage => !stage.IsPassthrough),
-                    "last",
-                    out string terminalModel))
-            {
-                Ignore(
-                    "effective-request.wan-last-frame-reference-ignored",
-                    $"Clip {clip.Id}'s final-frame reference is not supported by the selected "
-                        + $"terminal WAN model '{terminalModel}'. The authored reference remains "
-                        + "saved and is ignored for this generation.");
-                continue;
-            }
-            if (isFirst)
-            {
-                first = CompileReference(reference);
-            }
-            else
-            {
-                last = CompileReference(reference);
-            }
-        }
-        return (first, last);
-    }
-
-    private static WanFrameReferencePlan CompileReference(ImageRefSpec reference) =>
-        reference is null
-            ? null
-            : new(
-                reference.Source?.Trim() ?? "",
-                reference.UploadFileName,
-                reference.Data);
 }

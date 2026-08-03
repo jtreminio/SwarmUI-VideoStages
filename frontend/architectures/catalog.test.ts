@@ -31,6 +31,7 @@ const dto: VideoArchitectureCatalogDto = {
             modelClassId: "ltx-video",
             compatibilityClassId: "ltx-video",
             frameGrid: 8,
+            frameGridOrigin: 1,
             capabilities:
                 testArchitectureCatalog().architectures[0].capabilities,
             enhancements: { referencePositions: ["any"] },
@@ -42,6 +43,7 @@ const dto: VideoArchitectureCatalogDto = {
             modelClassId: "ltx-image-video",
             compatibilityClassId: "ltx-video",
             frameGrid: 8,
+            frameGridOrigin: 1,
             capabilities: {
                 ...testArchitectureCatalog().architectures[0].capabilities,
                 entryModes: ["image-to-video"],

@@ -16,6 +16,7 @@ import {
 } from "./normalization";
 import { getClips, getState, getTimelineStore } from "./persistence/repository";
 import { nextAllowedReferencePosition } from "./referenceAuthoring";
+import type { FrameGridSpec } from "./renderUtils";
 import { activateSelection, setSelection } from "./selection";
 import { getTimelineAuthoringSettings } from "./timelineAuthoringSettings";
 import { keyframeTimeSeconds } from "./timelineDetail";
@@ -59,7 +60,7 @@ interface RefDragState {
 interface ReferenceDragPolicy {
     supported: boolean;
     positions: string[];
-    frameGrid: number;
+    frameGrid: FrameGridSpec;
     frameMax: number;
 }
 
@@ -95,7 +96,8 @@ export const createTimelineReferencesTrack = (
         right: ReferenceDragPolicy,
     ): boolean =>
         left.supported === right.supported &&
-        left.frameGrid === right.frameGrid &&
+        left.frameGrid.frameGrid === right.frameGrid.frameGrid &&
+        left.frameGrid.frameGridOrigin === right.frameGrid.frameGridOrigin &&
         left.frameMax === right.frameMax &&
         left.positions.length === right.positions.length &&
         left.positions.every(

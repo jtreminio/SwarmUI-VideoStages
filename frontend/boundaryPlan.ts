@@ -3,7 +3,11 @@ import {
     boundaryOverlapConstraints,
     normalizeBoundaryOverlap,
 } from "./architectures/boundaryConstraints";
-import { framesForClip } from "./renderUtils";
+import {
+    type FrameGridSpec,
+    framesForClip,
+    NEUTRAL_FRAME_GRID,
+} from "./renderUtils";
 import type { BoundaryOut, Clip } from "./types";
 
 export type BoundaryConstraintResolver = (
@@ -12,7 +16,10 @@ export type BoundaryConstraintResolver = (
     mode: BoundaryOut,
 ) => BoundaryOverlapConstraints;
 
-export type ClipFrameGridResolver = (clip: Clip, clipIndex: number) => number;
+export type ClipFrameGridResolver = (
+    clip: Clip,
+    clipIndex: number,
+) => FrameGridSpec;
 
 export interface BoundaryPlan {
     /** Overlap frames removed at each interior boundary i (between clip i and i+1). */
@@ -40,7 +47,7 @@ export const crossfadePlanForClips = (
                     : persisted,
         };
     },
-    resolveFrameGrid: ClipFrameGridResolver = () => 1,
+    resolveFrameGrid: ClipFrameGridResolver = () => NEUTRAL_FRAME_GRID,
 ): BoundaryPlan => {
     const count = clips.length;
     const boundaryCount = Math.max(0, count - 1);

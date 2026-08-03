@@ -64,35 +64,100 @@ describe("pxToFrame", () => {
     const WIDTH = 100;
 
     it("maps x across the region to frame = round(time*fps) from the start", () => {
-        expect(pxToFrame(50, WIDTH, DUR, FPS, false, 8)).toBe(61);
-        expect(pxToFrame(25, WIDTH, DUR, FPS, false, 8)).toBe(30); // quarter → 1.25s → 30f
+        expect(
+            pxToFrame(50, WIDTH, DUR, FPS, false, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(61);
+        expect(
+            pxToFrame(25, WIDTH, DUR, FPS, false, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(30); // quarter → 1.25s → 30f
     });
 
     it("measures from the clip end when fromEnd", () => {
         // Same x, but the frame is the distance from the end: 50% → 2.5s from end → 60f.
-        expect(pxToFrame(50, WIDTH, DUR, FPS, true, 8)).toBe(61);
+        expect(
+            pxToFrame(50, WIDTH, DUR, FPS, true, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(61);
         // Region left edge with fromEnd = the full clip away from the end.
-        expect(pxToFrame(0, WIDTH, DUR, FPS, true, 8)).toBe(121);
+        expect(
+            pxToFrame(0, WIDTH, DUR, FPS, true, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(121);
     });
 
     it("clamps at the low end to REF_FRAME_MIN", () => {
         // Region left edge, start-relative → frame 0 → floored to REF_FRAME_MIN (1).
-        expect(pxToFrame(0, WIDTH, DUR, FPS, false, 8)).toBe(1);
+        expect(
+            pxToFrame(0, WIDTH, DUR, FPS, false, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(1);
         // Region right edge, fromEnd → 0 frames from the end → floored to REF_FRAME_MIN (1).
-        expect(pxToFrame(WIDTH, WIDTH, DUR, FPS, true, 8)).toBe(1);
-        expect(pxToFrame(-40, WIDTH, DUR, FPS, false, 8)).toBe(1);
+        expect(
+            pxToFrame(WIDTH, WIDTH, DUR, FPS, true, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(1);
+        expect(
+            pxToFrame(-40, WIDTH, DUR, FPS, false, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(1);
     });
 
     it("clamps at the high end to framesForClip's max", () => {
-        expect(pxToFrame(WIDTH, WIDTH, DUR, FPS, false, 8)).toBe(121);
-        expect(pxToFrame(400, WIDTH, DUR, FPS, false, 8)).toBe(121);
-        expect(pxToFrame(WIDTH, WIDTH, 1.05, FPS, false, 8)).toBe(33);
+        expect(
+            pxToFrame(WIDTH, WIDTH, DUR, FPS, false, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(121);
+        expect(
+            pxToFrame(400, WIDTH, DUR, FPS, false, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(121);
+        expect(
+            pxToFrame(WIDTH, WIDTH, 1.05, FPS, false, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(33);
     });
 
     it("collapses degenerate width/px to REF_FRAME_MIN", () => {
-        expect(pxToFrame(50, 0, DUR, FPS, false, 8)).toBe(1);
-        expect(pxToFrame(Number.NaN, WIDTH, DUR, FPS, false, 8)).toBe(1);
-        expect(pxToFrame(50, Number.NaN, DUR, FPS, false, 8)).toBe(1);
+        expect(
+            pxToFrame(50, 0, DUR, FPS, false, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(1);
+        expect(
+            pxToFrame(Number.NaN, WIDTH, DUR, FPS, false, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(1);
+        expect(
+            pxToFrame(50, Number.NaN, DUR, FPS, false, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(1);
     });
 });
 

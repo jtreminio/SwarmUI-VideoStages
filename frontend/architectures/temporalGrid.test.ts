@@ -28,11 +28,20 @@ describe("resolved temporal grid", () => {
             ],
         });
 
-        expect(resolveCompatibleFrameGrid([6, 8])).toEqual({
+        expect(
+            resolveCompatibleFrameGrid([
+                { frameGrid: 6, frameGridOrigin: 1 },
+                { frameGrid: 8, frameGridOrigin: 1 },
+            ]),
+        ).toEqual({
             status: "resolved",
             frameGrid: 24,
+            frameGridOrigin: 1,
         });
-        expect(resolvedClipFrameGrid(clip, catalog)).toBe(24);
+        expect(resolvedClipFrameGrid(clip, catalog)).toEqual({
+            frameGrid: 24,
+            frameGridOrigin: 1,
+        });
     });
 
     it("ignores dormant stages after the first skip marker", () => {
@@ -49,7 +58,10 @@ describe("resolved temporal grid", () => {
             ],
         });
 
-        expect(resolvedClipFrameGrid(clip, catalog)).toBe(6);
+        expect(resolvedClipFrameGrid(clip, catalog)).toEqual({
+            frameGrid: 6,
+            frameGridOrigin: 1,
+        });
     });
 
     it("excludes init-video and trailing passthrough handlers from the compatible grid", () => {
@@ -76,9 +88,9 @@ describe("resolved temporal grid", () => {
         expect(resolveClipFrameGrid(initVideoPassthrough, catalog)).toEqual({
             status: "not-applicable",
         });
-        expect(resolvedClipFrameGrid(generatedThenPassthrough, catalog)).toBe(
-            6,
-        );
+        expect(
+            resolvedClipFrameGrid(generatedThenPassthrough, catalog),
+        ).toEqual({ frameGrid: 6, frameGridOrigin: 1 });
     });
 
     it("does not claim a static grid for runtime-derived clip lengths", () => {
@@ -114,8 +126,14 @@ describe("resolved temporal grid", () => {
         expect(resolveClipFrameGrid(clip, catalog)).toEqual({
             status: "resolved",
             frameGrid: 8,
+            frameGridOrigin: 1,
         });
-        expect(framesForClip(clip.duration, 24, 1)).toBe(27);
+        expect(
+            framesForClip(clip.duration, 24, {
+                frameGrid: 1,
+                frameGridOrigin: 1,
+            }),
+        ).toBe(27);
         expect(
             framesForClip(
                 clip.duration,
@@ -141,6 +159,7 @@ describe("resolved temporal grid", () => {
         expect(resolveClipFrameGrid(clip, catalog)).toEqual({
             status: "resolved",
             frameGrid: 8,
+            frameGridOrigin: 1,
         });
     });
 
@@ -179,6 +198,7 @@ describe("resolved temporal grid", () => {
         expect(resolveClipFrameGrid(clip, catalog)).toEqual({
             status: "resolved",
             frameGrid: 50_000,
+            frameGridOrigin: 1,
         });
     });
 
@@ -219,14 +239,22 @@ describe("resolved temporal grid", () => {
             ],
         });
 
-        expect(resolvedClipFrameGrid(clip, testArchitectureCatalog())).toBe(1);
+        expect(resolvedClipFrameGrid(clip, testArchitectureCatalog())).toEqual({
+            frameGrid: 1,
+            frameGridOrigin: 1,
+        });
         expect(resolveClipFrameGrid(clip, testArchitectureCatalog())).toEqual({
             status: "unknown",
         });
     });
 
     it("reports combinations beyond the backend Int32 grid as conflicts", () => {
-        expect(resolveCompatibleFrameGrid([50_000, 50_001])).toEqual({
+        expect(
+            resolveCompatibleFrameGrid([
+                { frameGrid: 50_000, frameGridOrigin: 1 },
+                { frameGrid: 50_001, frameGridOrigin: 1 },
+            ]),
+        ).toEqual({
             status: "conflict",
         });
     });

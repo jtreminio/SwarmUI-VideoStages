@@ -2,6 +2,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.HostVideo;
 using VideoStages.Architectures.Ltx2;
+using VideoStages.Architectures.MiniMax;
 using VideoStages.Architectures.Wan;
 using VideoStages.Execution;
 
@@ -33,6 +34,10 @@ internal static class VideoArchitectureManifest
             RootVideoStageResizer.RegisterHandlers,
             Ltx2ApiRoutes.Register,
             Ltx2HostIntegration.RegisterDependencies),
+        new(
+            MiniMaxArchitectureModule.Instance.Descriptor,
+            MiniMaxArchitectureModule.Instance,
+            generator => new MiniMaxExecutionAdapter(generator)),
         // Wan's graph is built by SwarmUI's stock image-to-video path. Narrow host callbacks keep
         // request-global options out of the discarded core pass; the authored session applies the
         // supported values itself.

@@ -8,13 +8,14 @@ internal static class StaticGeneratedFrameGrid
 {
     /// <summary>
     /// Whether a positive static generated pixel-frame request is exactly representable on the
-    /// architecture grid, whose first pixel frame occupies the grid origin.
+    /// architecture grid. <paramref name="gridOrigin"/> is the smallest frame count the grid can
+    /// express, so counts are <c>k * frameGrid + gridOrigin</c>.
     /// </summary>
-    internal static bool IsAligned(int requestedPixelFrames, int frameGrid)
+    internal static bool IsAligned(int requestedPixelFrames, int frameGrid, int gridOrigin = 1)
     {
-        ValidateGrid(frameGrid);
-        return requestedPixelFrames >= 1
-            && (requestedPixelFrames - 1) % frameGrid == 0;
+        ValidateGrid(frameGrid, gridOrigin);
+        return requestedPixelFrames >= gridOrigin
+            && (requestedPixelFrames - gridOrigin) % frameGrid == 0;
     }
 
     /// <summary>
@@ -22,22 +23,23 @@ internal static class StaticGeneratedFrameGrid
     /// count.
     /// Non-positive requests retain Wan's existing minimum-one-frame behavior.
     /// </summary>
-    internal static int SnapDown(int requestedPixelFrames, int frameGrid)
+    internal static int SnapDown(int requestedPixelFrames, int frameGrid, int gridOrigin = 1)
     {
-        ValidateGrid(frameGrid);
-        return 1 + (Math.Max(1, requestedPixelFrames) - 1) / frameGrid * frameGrid;
+        ValidateGrid(frameGrid, gridOrigin);
+        int intervals = Math.Max(gridOrigin, requestedPixelFrames) - gridOrigin;
+        return gridOrigin + intervals / frameGrid * frameGrid;
     }
 
     /// <summary>
     /// Snaps a known static generated request up so the effective duration never becomes shorter
     /// than the authored duration.
     /// </summary>
-    internal static int SnapUp(int requestedPixelFrames, int frameGrid)
+    internal static int SnapUp(int requestedPixelFrames, int frameGrid, int gridOrigin = 1)
     {
-        ValidateGrid(frameGrid);
-        int intervals = Math.Max(1, requestedPixelFrames) - 1;
+        ValidateGrid(frameGrid, gridOrigin);
+        int intervals = Math.Max(gridOrigin, requestedPixelFrames) - gridOrigin;
         int blocks = intervals / frameGrid + (intervals % frameGrid == 0 ? 0 : 1);
-        return checked(1 + checked(blocks * frameGrid));
+        return checked(gridOrigin + checked(blocks * frameGrid));
     }
 
     /// <summary>
@@ -65,7 +67,7 @@ internal static class StaticGeneratedFrameGrid
         return left;
     }
 
-    private static void ValidateGrid(int frameGrid)
+    private static void ValidateGrid(int frameGrid, int gridOrigin = 1)
     {
         if (frameGrid < 1)
         {
@@ -73,6 +75,13 @@ internal static class StaticGeneratedFrameGrid
                 nameof(frameGrid),
                 frameGrid,
                 "A static generated frame grid must be at least one.");
+        }
+        if (gridOrigin < 1 || gridOrigin > frameGrid)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(gridOrigin),
+                gridOrigin,
+                "A static generated frame grid origin must be within [1, frameGrid].");
         }
     }
 }

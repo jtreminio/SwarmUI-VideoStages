@@ -69,6 +69,7 @@ internal static class ArchitectureCatalogSerializer
         ["modelClassId"] = model.ModelClassId,
         ["compatibilityClassId"] = model.CompatibilityClassId,
         ["frameGrid"] = model.FrameGrid,
+        ["frameGridOrigin"] = model.FrameGridOrigin,
         ["capabilities"] = SerializeCapabilities(model.Architecture),
         ["enhancements"] = new JObject
         {

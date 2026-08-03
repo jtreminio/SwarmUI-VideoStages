@@ -1,6 +1,10 @@
 import { CLIP_DURATION_MIN, clamp, REF_FRAME_MIN } from "./constants";
 import { getKnownReferenceFrameMax } from "./normalizationStage";
-import { framesForClip, snapDurationToFps } from "./renderUtils";
+import {
+    type FrameGridSpec,
+    framesForClip,
+    snapDurationToFps,
+} from "./renderUtils";
 import type { Clip, RootDefaults } from "./types";
 
 export const pxToDuration = (
@@ -25,7 +29,7 @@ export const pxToFrame = (
     durationSeconds: number,
     fps: number,
     fromEnd: boolean,
-    frameGrid: number,
+    frameGrid: FrameGridSpec,
 ): number => {
     const safeFps = Number.isFinite(fps) && fps > 0 ? fps : 1;
     const authoredDuration =

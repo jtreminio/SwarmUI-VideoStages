@@ -285,7 +285,10 @@ export const normalizeClip = (
           (architecture === NONE_ARCHITECTURE_ID
               ? NONE_ARCHITECTURE_ID
               : "unsupported")
-        : persistedProfile || stageZero?.modelProfileId || "unsupported";
+        : modelProfileForModel(defaults.modelCatalog, stageZero?.model ?? "") ||
+          persistedProfile ||
+          stageZero?.modelProfileId ||
+          "unsupported";
     const icLoras = normalizeArchitectureIcLoras(
         resolvedArchitecture,
         rawClip,

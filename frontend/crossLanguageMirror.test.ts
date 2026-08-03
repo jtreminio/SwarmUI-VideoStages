@@ -105,6 +105,7 @@ describe("cross-language mirror: M2 frame alignment (renderUtils.framesForClip)"
         durationSeconds: number;
         fps: number;
         frameGrid: number;
+        frameGridOrigin: number;
         expectedFrames: number;
     }
     const cases = loadFixture<FrameCase[]>("frame-align-cases.json");
@@ -115,11 +116,12 @@ describe("cross-language mirror: M2 frame alignment (renderUtils.framesForClip)"
         durationSeconds,
         fps,
         frameGrid,
+        frameGridOrigin,
         expectedFrames,
     }) => {
-        expect(framesForClip(durationSeconds, fps, frameGrid)).toBe(
-            expectedFrames,
-        );
+        expect(
+            framesForClip(durationSeconds, fps, { frameGrid, frameGridOrigin }),
+        ).toBe(expectedFrames);
     });
 });
 
@@ -157,7 +159,9 @@ describe("cross-language mirror: M1 crossfade plan (boundaryPlan.crossfadePlanFo
         expectedFallback,
     }) => {
         for (const f of frames) {
-            expect(framesForClip(f - 1, 1, 8)).toBe(f);
+            expect(
+                framesForClip(f - 1, 1, { frameGrid: 8, frameGridOrigin: 1 }),
+            ).toBe(f);
         }
         const clips = frames.map((f, i) =>
             clipFor(f, boundaries[i], boundaryOverlaps[i]),
@@ -166,7 +170,7 @@ describe("cross-language mirror: M1 crossfade plan (boundaryPlan.crossfadePlanFo
             clips,
             1,
             ltxBoundaryConstraints,
-            () => 8,
+            () => ({ frameGrid: 8, frameGridOrigin: 1 }),
         );
         expect(plan.overlaps).toEqual(expectedOverlaps);
         expect(plan.fallback).toBe(expectedFallback);

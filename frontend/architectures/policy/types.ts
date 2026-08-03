@@ -1,3 +1,4 @@
+import type { FrameGridSpec } from "../../renderUtils";
 import type { BoundaryOut, Clip, Stage } from "../../types";
 import type { BoundaryOverlapConstraints } from "../boundaryConstraints";
 import type { FrameGridResolution } from "../temporalGrid";
@@ -25,7 +26,7 @@ export interface ClipCapabilityView {
     architectureLabel: string;
     known: boolean;
     /** Compatible temporal grid of every resolved active-stage model. */
-    frameGrid: number;
+    frameGrid: FrameGridSpec;
     /** Distinguishes a neutral grid from missing facts or an unrepresentable combination. */
     frameGridResolution: FrameGridResolution;
     audioSourceKinds: readonly string[];

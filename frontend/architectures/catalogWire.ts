@@ -194,6 +194,7 @@ export const parseVideoArchitectureCatalog = (
                 "modelClassId",
                 "compatibilityClassId",
                 "frameGrid",
+                "frameGridOrigin",
                 "capabilities",
                 "enhancements",
             ]) ||
@@ -206,6 +207,9 @@ export const parseVideoArchitectureCatalog = (
             !Number.isSafeInteger(raw.frameGrid) ||
             Number(raw.frameGrid) < 1 ||
             Number(raw.frameGrid) > MAX_FRAME_GRID ||
+            !Number.isSafeInteger(raw.frameGridOrigin) ||
+            Number(raw.frameGridOrigin) < 1 ||
+            Number(raw.frameGridOrigin) > Number(raw.frameGrid) ||
             !isCapabilities(raw.capabilities) ||
             !isRecord(raw.enhancements) ||
             !hasExactKeys(raw.enhancements, ["referencePositions"]) ||
@@ -224,6 +228,7 @@ export const parseVideoArchitectureCatalog = (
             modelClassId: raw.modelClassId,
             compatibilityClassId: raw.compatibilityClassId,
             frameGrid: Number(raw.frameGrid),
+            frameGridOrigin: Number(raw.frameGridOrigin),
             capabilities: structuredClone(raw.capabilities),
             enhancements: {
                 referencePositions: [

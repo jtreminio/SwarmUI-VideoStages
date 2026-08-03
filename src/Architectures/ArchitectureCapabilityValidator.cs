@@ -126,8 +126,10 @@ internal static class ArchitectureCapabilityValidator
                     + "saved and is ignored for this generation.",
                 clip.Id));
         }
+        // Carry audio only ever acts on a non-cut join, so a cut boundary has nothing to refuse.
         if (Unsupported(ArchitectureFeature.AudioSegments)
-            && clip.BoundaryOutCarryAudio)
+            && clip.BoundaryOutCarryAudio
+            && !StringUtils.Equals(clip.BoundaryOut, Constants.BoundaryOutCut))
         {
             diagnostics.Add(new(
                 PlanDiagnosticSeverity.Warning,

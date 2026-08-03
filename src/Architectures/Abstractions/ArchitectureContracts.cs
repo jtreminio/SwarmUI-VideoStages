@@ -153,6 +153,12 @@ internal sealed record VideoArchitectureDescriptor(
     public int FrameGrid { get; init; } = 1;
 
     /// <summary>
+    /// The smallest generated frame count this architecture can express: counts are
+    /// <c>k * <see cref="FrameGrid"/> + FrameGridOrigin</c>.
+    /// </summary>
+    public int FrameGridOrigin { get; init; } = 1;
+
+    /// <summary>
     /// The effective stage guide selectors this architecture can execute. Fail closed so a new
     /// architecture must opt into every selector beyond the generated root.
     /// </summary>
@@ -186,6 +192,8 @@ internal sealed record ResolvedVideoModel(
     public ArchitectureId ArchitectureId => Architecture.Id;
 
     public int FrameGrid => Architecture.FrameGrid;
+
+    public int FrameGridOrigin => Architecture.FrameGridOrigin;
 }
 
 // --- Behavior contracts: backend-only, never serialized ---

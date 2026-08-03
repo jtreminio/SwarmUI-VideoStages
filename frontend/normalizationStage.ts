@@ -29,7 +29,7 @@ import {
     textOr,
     trimmedText,
 } from "./normalizationShared";
-import { framesForClip } from "./renderUtils";
+import { framesForClip, NEUTRAL_FRAME_GRID } from "./renderUtils";
 import {
     type Clip,
     type ClipLora,
@@ -256,7 +256,7 @@ export const getReferenceFrameMax = (
                   { ...clip, stages: clip.stages },
                   defaults.modelCatalog,
               )
-            : 1;
+            : NEUTRAL_FRAME_GRID;
         return Math.max(
             REF_FRAME_MIN,
             framesForClip(clip.duration, fps, frameGrid),
@@ -297,7 +297,10 @@ export const getKnownReferenceFrameMax = (
             : defaults.fps;
     return Math.max(
         REF_FRAME_MIN,
-        framesForClip(clip.duration, fps, resolution.frameGrid),
+        framesForClip(clip.duration, fps, {
+            frameGrid: resolution.frameGrid,
+            frameGridOrigin: resolution.frameGridOrigin,
+        }),
     );
 };
 
@@ -428,9 +431,11 @@ export const normalizeStage = (
         sampler: textOr(rawStage.sampler, fallback.sampler),
         scheduler: textOr(rawStage.scheduler, fallback.scheduler),
     };
+    // Catalog first: a persisted hint is repair information for an unresolvable model, not a
+    // pin that outlives the model changing hands between architectures.
     stage.modelProfileId =
-        trimmedText(readRawStageProp(rawStage, "modelProfileId")) ||
         modelProfileForModel(defaults.modelCatalog, stage.model) ||
+        trimmedText(readRawStageProp(rawStage, "modelProfileId")) ||
         fallback.modelProfileId;
 
     if (

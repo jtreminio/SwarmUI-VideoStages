@@ -226,8 +226,10 @@ internal static class EffectiveVideoRequestProjector
         int effectiveFrames;
         try
         {
-            effectiveFrames =
-                StaticGeneratedFrameGrid.SnapUp(projected.Frames.Value, frameGrid);
+            effectiveFrames = StaticGeneratedFrameGrid.SnapUp(
+                projected.Frames.Value,
+                frameGrid,
+                assignment.Architecture.FrameGridOrigin);
         }
         catch (OverflowException)
         {

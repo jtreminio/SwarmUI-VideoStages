@@ -169,6 +169,26 @@ describe("normalization", () => {
         });
     });
 
+    it("re-resolves a stale architecture hint when the model still resolves", () => {
+        // A model can change hands between architectures between saves; the persisted hint is
+        // repair information for an unresolvable model, not a pin.
+        const clip = normalizeClip(
+            {
+                architectureHint: "host-video",
+                modelProfileId: "host-video",
+                stages: [{ model: "ltx", modelProfileId: "host-video" }],
+            },
+            getRootDefaults,
+            getDefaultStageModel,
+        );
+
+        expect(clip).toMatchObject({
+            architectureHint: "ltx2",
+            modelProfileId: "ltx-2.3",
+        });
+        expect(clip.stages[0].modelProfileId).toBe("ltx-2.3");
+    });
+
     it.each([
         ["continue", "continue"],
         ["crossfade", "crossfade"],
@@ -755,7 +775,12 @@ describe("normalization", () => {
 
         // The inert flag no longer suppresses grid snapping, so references clamp to the
         // clip's grid-snapped frame count exactly as they would without the flag.
-        expect(clip.refs[0].frame).toBe(framesForClip(clip.duration, 24, 8));
+        expect(clip.refs[0].frame).toBe(
+            framesForClip(clip.duration, 24, {
+                frameGrid: 8,
+                frameGridOrigin: 1,
+            }),
+        );
         expect(clip.clipLengthFromAudio).toBe(true);
     });
 
