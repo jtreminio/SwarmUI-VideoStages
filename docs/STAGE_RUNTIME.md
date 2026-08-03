@@ -183,6 +183,8 @@ WAN, and generic host video. It owns:
 
 Each architecture keeps one cohesive stage procedure for its model-specific
 references, audio, conditioning, latent construction, sampling, and decode.
+Generating procedures use `StageModelLoadScope` for the shared prompt/planned
+LoRA order and host model-loader cache lifetime.
 
 ### WAN and generic host video
 

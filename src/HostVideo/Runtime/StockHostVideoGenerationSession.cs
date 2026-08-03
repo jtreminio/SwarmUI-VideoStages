@@ -163,26 +163,20 @@ internal sealed class StockHostVideoGenerationSession(
         int continuationStageSectionId = continuation is null
             ? 0
             : VideoStagesExtension.SectionIdForStage(continuation.StageId);
-        using (ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
-            g.UserInput,
-            clip.ClipId,
+        using (StageModelLoadScope modelScope = new(
+            g,
+            clip,
+            stage,
             sectionId,
             payload.LoraTargetPolicy))
-        using (ParamSnapshot loraScope =
-            LoraParams.ApplyNormalLoras(g.UserInput, core.Loras))
-        using (ParamSnapshot continuationPromptLoraScope = continuation is null
+        using (StageModelLoadScope continuationModelScope = continuation is null
             ? null
-            : PromptParser.ApplyLoraScope(
-                g.UserInput,
-                clip.ClipId,
+            : new(
+                g,
+                clip,
+                continuation,
                 continuationStageSectionId,
                 continuationPayload.LoraTargetPolicy,
-                T2IParamInput.SectionID_VideoSwap))
-        using (ParamSnapshot continuationLoraScope = continuation is null
-            ? null
-            : LoraParams.ApplyNormalLoras(
-                g.UserInput,
-                continuation.Core.Loras,
                 T2IParamInput.SectionID_VideoSwap))
         using (ParamSnapshot ignoredAudioReference = _wanBehavior is not null
             ? null
@@ -197,104 +191,69 @@ internal sealed class StockHostVideoGenerationSession(
                 g.UserInput.InternalSet.ValuesInput.Remove(
                     T2IParamTypes.VideoAudioReference.Type.ID);
             }
-            string stageLoaderKey =
-                $"modelloader_{stage.ResolvedModel.ModelName}_image2video";
-            string continuationLoaderKey = continuation is null
-                ? null
-                : $"modelloader_{continuation.ResolvedModel.ModelName}_image2video";
-            bool transientStageLoader =
-                promptLoraScope is not null
-                || !core.Loras.IsDefaultOrEmpty;
-            bool transientContinuationLoader = continuation is not null
-                && (continuationPromptLoraScope is not null
-                    || !continuation.Core.Loras.IsDefaultOrEmpty);
-            // The host cache key does not encode the active LoRA parameter scope. Always make
-            // the ordinary stage reload under its effective plan, including an
-            // empty plan after a prior scoped stage. Existing graph nodes stay live.
-            VideoGraphHelpers.RemoveCached(g, stageLoaderKey);
-            if (continuationLoaderKey is not null)
+            WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
+                clip,
+                stage,
+                continuation,
+                sectionId,
+                positive,
+                negative);
+            bool materializedFirstFrame =
+                _wanBehavior is not null
+                && stage.Input == StageInputKind.EmptyLatent
+                && g.CurrentMedia is not null;
+            if (stage.Input == StageInputKind.EmptyLatent
+                && !materializedFirstFrame)
             {
-                VideoGraphHelpers.RemoveCached(g, continuationLoaderKey);
+                ExecuteTextStage(clip, stage, genInfo);
+                stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
+                return false;
             }
+            int startStep = HostVideoStageSchedulePolicy.StartStep(
+                core.Steps,
+                core.Control);
+            if (!materializedFirstFrame)
+            {
+                stageInput.Configure(clip, stage, genInfo, startStep);
+            }
+            // SwarmUI's generic builder creates latent audio whenever CurrentAudioVae is
+            // set. Stock-host stages advertise video-only output, so isolate every pass.
+            WGNodeData ambientAudioVae = g.CurrentAudioVae;
+            bool ambientImageToVideo = g.IsImageToVideo;
+            bool ambientImageToVideoSwap = g.IsImageToVideoSwap;
+            ISet<string> preHostNodeIds =
+                _wanBehavior?.CapturePreHostNodeIds(payload, genInfo);
+            Exception hostConstructionError = null;
             try
             {
-                WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
-                    clip,
-                    stage,
-                    continuation,
-                    sectionId,
-                    positive,
-                    negative);
-                bool materializedFirstFrame =
-                    _wanBehavior is not null
-                    && stage.Input == StageInputKind.EmptyLatent
-                    && g.CurrentMedia is not null;
-                if (stage.Input == StageInputKind.EmptyLatent
-                    && !materializedFirstFrame)
+                g.CurrentAudioVae = null;
+                g.CreateImageToVideo(genInfo);
+                if (continuation is not null
+                    && stageRunner.PublishesIntermediateStages)
                 {
-                    ExecuteTextStage(clip, stage, genInfo);
-                    stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
-                    return false;
+                    PublishSamplingContinuationIntermediate(
+                        stage,
+                        genInfo);
                 }
-                int startStep = HostVideoStageSchedulePolicy.StartStep(
-                    core.Steps,
-                    core.Control);
-                if (!materializedFirstFrame)
-                {
-                    stageInput.Configure(clip, stage, genInfo, startStep);
-                }
-                // SwarmUI's generic builder creates latent audio whenever CurrentAudioVae is
-                // set. Stock-host stages advertise video-only output, so isolate every pass.
-                WGNodeData ambientAudioVae = g.CurrentAudioVae;
-                bool ambientImageToVideo = g.IsImageToVideo;
-                bool ambientImageToVideoSwap = g.IsImageToVideoSwap;
-                ISet<string> preHostNodeIds =
-                    _wanBehavior?.CapturePreHostNodeIds(payload, genInfo);
-                Exception hostConstructionError = null;
-                try
-                {
-                    g.CurrentAudioVae = null;
-                    g.CreateImageToVideo(genInfo);
-                    if (continuation is not null
-                        && stageRunner.PublishesIntermediateStages)
-                    {
-                        PublishSamplingContinuationIntermediate(
-                            stage,
-                            genInfo);
-                    }
-                }
-                catch (Exception error)
-                {
-                    hostConstructionError = error;
-                    throw;
-                }
-                finally
-                {
-                    g.CurrentAudioVae = ambientAudioVae;
-                    g.IsImageToVideo = ambientImageToVideo;
-                    g.IsImageToVideoSwap = ambientImageToVideoSwap;
-                    _wanBehavior?.RunPostHostCleanup(
-                        preHostNodeIds,
-                        hostConstructionError);
-                }
-                stageInput.NormalizeDecodedOutput(
-                    clip,
-                    continuation ?? stage,
-                    genInfo);
+            }
+            catch (Exception error)
+            {
+                hostConstructionError = error;
+                throw;
             }
             finally
             {
-                // A tuple built under temporary stage LoRAs cannot outlive their ParamSnapshot.
-                // Removing the marker never prunes live nodes.
-                if (transientStageLoader)
-                {
-                    VideoGraphHelpers.RemoveCached(g, stageLoaderKey);
-                }
-                if (transientContinuationLoader)
-                {
-                    VideoGraphHelpers.RemoveCached(g, continuationLoaderKey);
-                }
+                g.CurrentAudioVae = ambientAudioVae;
+                g.IsImageToVideo = ambientImageToVideo;
+                g.IsImageToVideoSwap = ambientImageToVideoSwap;
+                _wanBehavior?.RunPostHostCleanup(
+                    preHostNodeIds,
+                    hostConstructionError);
             }
+            stageInput.NormalizeDecodedOutput(
+                clip,
+                continuation ?? stage,
+                genInfo);
         }
         return continuation is not null;
     }

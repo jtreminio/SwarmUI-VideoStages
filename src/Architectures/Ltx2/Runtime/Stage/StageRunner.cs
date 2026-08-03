@@ -63,13 +63,11 @@ internal class StageRunner
             return;
         }
 
-        using ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
-            _generator.UserInput,
-            clip.ClipId,
+        using StageModelLoadScope modelScope = new(
+            _generator,
+            clip,
+            stage,
             sectionId);
-        using ParamSnapshot loraScope = LoraParams.ApplyNormalLoras(
-            _generator.UserInput,
-            stage.Core.Loras);
 
         StageFrame stageFrame = _framePreparer.Prepare(
             stage,

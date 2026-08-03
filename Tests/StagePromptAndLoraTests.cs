@@ -145,13 +145,15 @@ public partial class StageFlowTests
         string stagesJson = JsonSingleClipStages(stage);
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson, prompt: "global prompt");
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
+        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(input, BuildCoreVideoWorkflowSteps());
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         ComfyNode loraLoader = Assert.Single(LoraLoaderNodesOf(bridge));
         Assert.Contains(
             bridge.Graph.NodesOfType<LoraLoaderNode>(),
             n => n.LoraName.LiteralAsString().Contains("UnitTest_VideoClipStageLora"));
+        Assert.False(generator.NodeHelpers.ContainsKey(
+            $"modelloader_{models.VideoModel.Name}_image2video"));
     }
 
     [Fact]

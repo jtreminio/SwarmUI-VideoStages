@@ -592,21 +592,20 @@ steps, CFG, sampler, scheduler, and intermediate output. Any future direct
 latent reuse must be a benchmarked, architecture-neutral optimization based on
 compatible adjacent-stage facts, with decoded handoff as the safe fallback.
 
-For every generating pass, `PromptParser.ApplyLoraScope` first projects the
-matching bare, clip, and stage prompt-section rows into host
-`SectionID_Video`; nested inside it, `LoraParams.ApplyNormalLoras` appends the
-compiled persisted rows. WAN's model-only projection omits prompt rows whose
+For every LTX, MiniMax, WAN, and generic-host generating pass,
+`StageModelLoadScope` projects the matching prompt-section rows, then appends
+the compiled persisted rows. WAN's model-only projection omits prompt rows whose
 model weight is zero while retaining the stored text-encoder weight on every
 nonzero-model row. That prompt-before-persisted order is deterministic.
-Both scopes are absent for passthrough stages and restore the original four
-host LoRA parameter lists in reverse nesting order on success or failure.
-Before the host builder runs, Wan evicts the stage
+The model-load scope is absent for passthrough stages and restores the original
+four host LoRA parameter lists in reverse nesting order on success or failure.
+Before model construction, the scope evicts the stage
 `modelloader_{model}_image2video` cache marker even when the compiled list is
 empty, because that marker does not encode scoped LoRA state; existing live
 graph nodes are not pruned. A loader tuple built under nonempty planned LoRAs
 is transient. A tuple built under a nonempty prompt scope is transient too:
-Wan removes its marker in a `finally` before either parameter snapshot is
-restored, including when construction or normalization fails. An unscoped
+the scope removes its marker before either parameter snapshot is restored,
+including when construction or normalization fails. An unscoped
 stage may keep its durable tuple. Marker eviction never removes live graph
 nodes.
 

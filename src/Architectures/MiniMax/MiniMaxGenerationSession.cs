@@ -110,13 +110,12 @@ internal sealed class MiniMaxGenerationSession(
             ArchitectureId,
             ArchitectureLabel);
         StageCorePlan core = stage.Core;
-        using (ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
-            g.UserInput,
-            clip.ClipId,
+        using (StageModelLoadScope modelScope = new(
+            g,
+            clip,
+            stage,
             sectionId,
             payload.LoraTargetPolicy))
-        using (ParamSnapshot loraScope =
-            LoraParams.ApplyNormalLoras(g.UserInput, core.Loras))
         using (ParamSnapshot ignoredAudioReference = ParamSnapshot.Of(
             g.UserInput,
             T2IParamTypes.VideoAudioReference.Type))
@@ -125,50 +124,34 @@ internal sealed class MiniMaxGenerationSession(
             // enhancement in metadata only.
             g.UserInput.InternalSet.ValuesInput.Remove(
                 T2IParamTypes.VideoAudioReference.Type.ID);
-            string stageLoaderKey =
-                $"modelloader_{stage.ResolvedModel.ModelName}_image2video";
-            bool transientStageLoader =
-                promptLoraScope is not null || !core.Loras.IsDefaultOrEmpty;
-            // The host cache key does not encode the active LoRA parameter scope.
-            VideoGraphHelpers.RemoveCached(g, stageLoaderKey);
-            try
+            WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
+                clip,
+                stage,
+                sectionId,
+                positive,
+                negative);
+            if (stage.Input is StageInputKind.PreviousStage or StageInputKind.InitVideo)
             {
-                WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
+                stageInput.Configure(clip, stage, genInfo, startStep: 0);
+                ExecuteRefineStage(
                     clip,
-                    stage,
-                    sectionId,
-                    positive,
-                    negative);
-                if (stage.Input is StageInputKind.PreviousStage or StageInputKind.InitVideo)
-                {
-                    stageInput.Configure(clip, stage, genInfo, startStep: 0);
-                    ExecuteRefineStage(
-                        clip,
-                        genInfo,
-                        HostVideoStageSchedulePolicy.StartStep(core.Steps, core.Control));
-                }
-                else
-                {
-                    SampleNatively(
-                        clip,
-                        genInfo,
-                        incoming: null,
-                        _entryFirstFrame,
-                        startStep: 0);
-                }
-                if (stage.StageId == clip.Stages.Last(candidate => !candidate.IsPassthrough).StageId)
-                {
-                    AttachDecodedAudio();
-                }
-                stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
+                    genInfo,
+                    HostVideoStageSchedulePolicy.StartStep(core.Steps, core.Control));
             }
-            finally
+            else
             {
-                if (transientStageLoader)
-                {
-                    VideoGraphHelpers.RemoveCached(g, stageLoaderKey);
-                }
+                SampleNatively(
+                    clip,
+                    genInfo,
+                    incoming: null,
+                    _entryFirstFrame,
+                    startStep: 0);
             }
+            if (stage.StageId == clip.Stages.Last(candidate => !candidate.IsPassthrough).StageId)
+            {
+                AttachDecodedAudio();
+            }
+            stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
         }
         return false;
     }
