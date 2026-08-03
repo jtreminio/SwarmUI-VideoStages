@@ -544,6 +544,73 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
+    public void AceStepFun_audio_reaches_the_entry_joint_latent()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clip["audioSource"] = "audio0";
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                MiniMaxSteps().Append(SeedAceStepFunAudioTrackStep(0)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        string aceDecodeId = AudioHandler.MakeAceStepFunDecodeId(0);
+        VAEEncodeAudioNode encode = Assert.Single(
+            bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.True(ReachesUpstream(bridge, encode.Audio.Connection!.Node, aceDecodeId));
+        LTXVConcatAVLatentNode joint = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        Assert.Same(
+            joint,
+            Assert.Single(SamplerNodes(bridge)).FindInput("latent_image").Connection?.Node);
+        Assert.True(ReachesUpstream(bridge, joint, aceDecodeId));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Missing_AceStepFun_audio_warns_and_keeps_native_H3_audio_generation()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clip["audioSource"] = "audio7";
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        List<string> warnings = Assert.IsType<List<string>>(
+            input.ExtraMeta["parser_warnings"]);
+        Assert.Contains(
+            warnings,
+            warning => warning.Contains("audio7")
+                && warning.Contains("continuing without that source"));
+        Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        ComfyNode emptyJoint = Assert.Single(
+            NodesOfClass(bridge, "EmptyMiniMaxH3LatentAV"));
+        Assert.Same(
+            emptyJoint,
+            Assert.Single(SamplerNodes(bridge)).FindInput("latent_image").Connection?.Node);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void Timeline_audio_uses_aligned_clip_windows_and_reaches_the_entry_joint_latent()
     {
         using SwarmUiTestContext context = new();
@@ -654,6 +721,16 @@ public class MiniMaxRuntimeFlowTests
         WorkflowTestHarness.Template_BaseOnlyImage()
             .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
+
+    private static WorkflowGenerator.WorkflowGenStep SeedAceStepFunAudioTrackStep(
+        int trackIndex) =>
+        new(g =>
+        {
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            bridge.AddNode(
+                new VAEDecodeAudioNode(),
+                AudioHandler.MakeAceStepFunDecodeId(trackIndex));
+        }, 11.05);
 
     private static IEnumerable<ComfyNode> NodesOfClass(
         WorkflowBridge bridge,

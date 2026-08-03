@@ -37,7 +37,7 @@ internal sealed class AudioRuntimeSourceResolver(
                         PlanDiagnosticReporter.TrackRequestWarning(
                             g.UserInput,
                             $"VideoStages: clip {clip.ClipId} selects an AceStepFun audio source "
-                            + "without a valid track; using silence instead.");
+                            + "without a valid track; continuing without that source.");
                         break;
                     }
                     WGNodeData audio = audioHandler.DetectAceStepFunAudio(track);
@@ -46,7 +46,7 @@ internal sealed class AudioRuntimeSourceResolver(
                         PlanDiagnosticReporter.TrackRequestWarning(
                             g.UserInput,
                             $"VideoStages: clip {clip.ClipId} selects AceStepFun audio{track}, "
-                            + "but that track is not present in the workflow; using silence instead.");
+                            + "but that track is not present in the workflow; continuing without that source.");
                         break;
                     }
                     sources[clip.ClipId] = audio;

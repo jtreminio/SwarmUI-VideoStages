@@ -511,7 +511,7 @@ public class AudioInjectionTests
     }
 
     [Fact]
-    public void Missing_selected_ace_audio_track_warns_and_uses_silence()
+    public void Missing_selected_ace_audio_track_warns_and_continues_without_it()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -525,7 +525,10 @@ public class AudioInjectionTests
 
         Assert.NotEmpty(workflow);
         List<string> warnings = Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
-        Assert.Contains(warnings, warning => warning.Contains("audio7") && warning.Contains("using silence"));
+        Assert.Contains(
+            warnings,
+            warning => warning.Contains("audio7")
+                && warning.Contains("continuing without that source"));
     }
 
     [Fact]
