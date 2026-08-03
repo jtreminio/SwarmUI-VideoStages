@@ -120,6 +120,40 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
             baseAudio?.Compat ?? g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
     }
 
+    internal WGNodeData OverlayOpeningWindow(
+        WGNodeData baseAudio,
+        WGNodeData overlayAudio,
+        double sourceStartSeconds,
+        double overlayDurationSeconds,
+        double clipDurationSeconds)
+    {
+        if (overlayAudio?.Path is not JArray overlayPath
+            || overlayDurationSeconds <= 0
+            || clipDurationSeconds <= 0)
+        {
+            return baseAudio;
+        }
+
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        INodeOutput source = bridge.ResolvePath(overlayPath);
+        if (source is null)
+        {
+            return baseAudio;
+        }
+        TrimAudioDurationNode trim = bridge.AddNode(new TrimAudioDurationNode()).With(
+            StartIndex: sourceStartSeconds,
+            Duration: overlayDurationSeconds);
+        trim.Audio.ConnectToUntyped(source);
+
+        INodeOutput bed = bridge.ResolvePath(baseAudio?.Path)
+            ?? Silence(bridge, clipDurationSeconds);
+        return new WGNodeData(
+            WorkflowBridge.ToPath(Merge(bridge, bed, trim.AUDIO)),
+            g,
+            WGNodeData.DT_AUDIO,
+            baseAudio?.Compat ?? g.CurrentAudioVae?.Compat ?? overlayAudio.Compat);
+    }
+
     private static INodeOutput PlaceSegment(
         WorkflowBridge bridge,
         INodeOutput source,

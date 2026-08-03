@@ -67,7 +67,8 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             | ArchitectureFeature.AudioSegments
             | ArchitectureFeature.AudioDerivedDuration
             | ArchitectureFeature.ReferenceFraming
-            | ArchitectureFeature.AudioReuse,
+            | ArchitectureFeature.AudioReuse
+            | ArchitectureFeature.AudioBoundaryCarry,
         BoundaryPolicy)
     {
         FrameGrid = FrameGrid,

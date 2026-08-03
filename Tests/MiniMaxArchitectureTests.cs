@@ -84,6 +84,7 @@ public class MiniMaxArchitectureTests
                 "frameReferences",
                 "referenceFraming",
                 "audioSegments",
+                "audioBoundaryCarry",
                 "audioReuse",
                 "audioDerivedDuration",
             ],
@@ -211,13 +212,13 @@ public class MiniMaxArchitectureTests
     }
 
     [Fact]
-    public void Timeline_audio_segments_do_not_authorize_boundary_audio_carry()
+    public void Crossfade_can_carry_audio_into_the_next_MiniMax_clip()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
-        clip["boundaryOut"] = Constants.BoundaryOutContinue;
+        clip["boundaryOut"] = Constants.BoundaryOutCrossfade;
         clip["boundaryOutCarryAudio"] = true;
         ClipSpec parsed = ParseClip(clip, models);
         VideoArchitectureDescriptor descriptor = MiniMaxArchitectureModule.Instance.Descriptor;
@@ -229,8 +230,8 @@ public class MiniMaxArchitectureTests
                 ArchitectureEntryMode.ImageToVideo);
 
         Assert.True(descriptor.Features.HasFlag(ArchitectureFeature.AudioSegments));
-        Assert.False(descriptor.Features.HasFlag(ArchitectureFeature.AudioBoundaryCarry));
-        Assert.Contains(
+        Assert.True(descriptor.Features.HasFlag(ArchitectureFeature.AudioBoundaryCarry));
+        Assert.DoesNotContain(
             diagnostics,
             diagnostic => diagnostic.Code
                 == "effective-request.unsupported-audio-boundary-ignored");

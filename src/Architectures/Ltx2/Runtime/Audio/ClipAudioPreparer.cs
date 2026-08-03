@@ -14,7 +14,6 @@ internal sealed class ClipAudioPreparer(
     WorkflowGenerator g,
     LtxAudioInjector audioInjector)
 {
-    private const string MergeMethodAdd = "add";
     private const long SilenceSampleRate = 44100;
     private const long SilenceChannels = 2;
 
@@ -97,11 +96,16 @@ internal sealed class ClipAudioPreparer(
             }
         }
 
-        WGNodeData baseWithBoundaryCarry = ApplyBoundaryAudioCarry(
-            baseAudio,
-            boundaryAudioCarry,
-            generationDuration);
-        WGNodeData combinedAudio = new AudioSegmentCombiner(g).Combine(
+        AudioSegmentCombiner combiner = new(g);
+        WGNodeData baseWithBoundaryCarry = boundaryAudioCarry is null
+            ? baseAudio
+            : combiner.OverlayOpeningWindow(
+                baseAudio,
+                boundaryAudioCarry.DecodedSource,
+                boundaryAudioCarry.SourceStartSeconds,
+                boundaryAudioCarry.DurationSeconds,
+                generationDuration);
+        WGNodeData combinedAudio = combiner.Combine(
             context.PlannedClip.ClipId,
             segments,
             baseWithBoundaryCarry,
@@ -226,49 +230,4 @@ internal sealed class ClipAudioPreparer(
         }
     }
 
-    private WGNodeData ApplyBoundaryAudioCarry(
-        WGNodeData baseAudio,
-        LtxBoundaryAudioCarry carry,
-        double clipDurationSeconds)
-    {
-        if (carry is null || clipDurationSeconds <= 0)
-        {
-            return baseAudio;
-        }
-
-        if (carry.DecodedSource?.Path is not JArray decodedPath)
-        {
-            return baseAudio;
-        }
-
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        if (bridge.ResolvePath(decodedPath) is not INodeOutput decodedSource)
-        {
-            return baseAudio;
-        }
-        TrimAudioDurationNode trim = bridge.AddNode(new TrimAudioDurationNode()).With(
-            StartIndex: carry.SourceStartSeconds,
-            Duration: carry.DurationSeconds);
-        trim.Audio.ConnectToUntyped(decodedSource);
-
-        INodeOutput bed = bridge.ResolvePath(baseAudio?.Path);
-        if (bed is null)
-        {
-            EmptyAudioNode silence = bridge.AddNode(new EmptyAudioNode()).With(
-                Duration: clipDurationSeconds,
-                SampleRate: SilenceSampleRate,
-                Channels: SilenceChannels);
-            bed = silence.AUDIO;
-        }
-
-        AudioMergeNode merge = bridge.AddNode(
-            new AudioMergeNode().With(MergeMethod: MergeMethodAdd));
-        merge.Audio1.ConnectToUntyped(bed);
-        merge.Audio2.ConnectToUntyped(trim.AUDIO);
-        return new WGNodeData(
-            WorkflowBridge.ToPath(merge.AUDIO),
-            g,
-            WGNodeData.DT_AUDIO,
-            baseAudio?.Compat ?? g.CurrentAudioVae?.Compat ?? carry.DecodedSource.Compat);
-    }
 }

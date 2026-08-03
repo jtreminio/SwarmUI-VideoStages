@@ -19,6 +19,7 @@ internal sealed class MiniMaxGenerationSession(
     VideoExecutionPlan plan,
     HostVideoRootSources rootSources,
     AudioRuntimeSources audioSources,
+    TimelineAssemblySession assembly,
     WGNodeData baseReference,
     WGNodeData refinerReference,
     VideoStageRunner stageRunner) : IVideoGenerationSession
@@ -33,6 +34,9 @@ internal sealed class MiniMaxGenerationSession(
     private WGNodeData _entryFirstFrame;
     private WGNodeData _endFrame;
     private WGNodeData _reusedAudio;
+    private WGNodeData _boundaryCarryAudio;
+    private double _boundaryCarryDuration;
+    private double _boundaryCarrySourceStart;
     private ReferenceFramingMode _referenceFraming;
 
     public ArchitectureId ArchitectureId => MiniMaxArchitectureModule.ArchitectureId;
@@ -50,6 +54,7 @@ internal sealed class MiniMaxGenerationSession(
 
         MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
         _reusedAudio = null;
+        PrepareBoundaryAudioCarry(context);
         _referenceFraming = payload.ReferenceFraming;
         _entryFirstFrame = ResolveFrameReference(
             payload.FirstFrameReference,
@@ -192,6 +197,52 @@ internal sealed class MiniMaxGenerationSession(
         WGNodeData current = g.CurrentMedia.Duplicate();
         current.AttachedAudio = _reusedAudio.Duplicate();
         g.CurrentMedia = current;
+    }
+
+    private void PrepareBoundaryAudioCarry(ArchitectureClipRuntimeContext context)
+    {
+        _boundaryCarryAudio = null;
+        _boundaryCarryDuration = 0;
+        _boundaryCarrySourceStart = 0;
+        if (context.PreviousClip is null
+            || !assembly.TryGetAudioCarryWindow(
+                context.PreviousClip.ClipId,
+                out int windowFrames))
+        {
+            return;
+        }
+        if (!context.Clip.Stages.Any(stage => !stage.IsPassthrough))
+        {
+            assembly.ReportWarning(
+                $"VideoStages: Clip {context.Clip.ClipId} has no generating stage for its "
+                    + "incoming audio carry; treating the boundary as a cut.");
+            assembly.DegradeToCut(context.PreviousClip.ClipId);
+            return;
+        }
+
+        DecodedClipArtifact previous = context.PreviousClipOutput;
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        if (previous?.Audio?.Resolve(bridge) is null
+            || previous.FramesPerSecond <= 0
+            || windowFrames <= 0
+            || windowFrames > previous.Frames)
+        {
+            assembly.ReportWarning(
+                $"VideoStages: Clip {context.PreviousClip.ClipId} cannot carry audio into "
+                    + $"Clip {context.Clip.ClipId} because its decoded audio timing is unavailable; "
+                    + "treating the boundary as a cut.");
+            assembly.DegradeToCut(context.PreviousClip.ClipId);
+            return;
+        }
+
+        _boundaryCarryAudio = new WGNodeData(
+            previous.Audio.ToPath(),
+            g,
+            WGNodeData.DT_AUDIO,
+            null);
+        _boundaryCarryDuration = windowFrames / (double)previous.FramesPerSecond;
+        _boundaryCarrySourceStart =
+            (previous.Frames - windowFrames) / (double)previous.FramesPerSecond;
     }
 
     /// <summary>
@@ -362,12 +413,23 @@ internal sealed class MiniMaxGenerationSession(
         double duration = plan.FramesPerSecond > 0
             ? frames / (double)plan.FramesPerSecond
             : 0;
-        WGNodeData combinedAudio = new AudioSegmentCombiner(g).Combine(
+        AudioSegmentCombiner combiner = new(g);
+        WGNodeData combinedAudio = combiner.Combine(
             clip.ClipId,
             clip.Audio.Segments,
             selectedAudio,
             duration,
-            out IReadOnlyList<(double Start, double End)> preserveWindows);
+            out IReadOnlyList<(double Start, double End)> segmentWindows);
+        combinedAudio = combiner.OverlayOpeningWindow(
+            combinedAudio,
+            _boundaryCarryAudio,
+            _boundaryCarrySourceStart,
+            _boundaryCarryDuration,
+            duration);
+        IReadOnlyList<(double Start, double End)> preserveWindows =
+            _boundaryCarryAudio is null
+                ? segmentWindows
+                : [(0, _boundaryCarryDuration), .. segmentWindows];
         JArray framesConnection = null;
         if (clip.Audio.Length.Owner == AudioLengthOwner.Audio
             && MiniMaxArchitectureModule.Instance.Descriptor.AudioSourceKinds.Contains(

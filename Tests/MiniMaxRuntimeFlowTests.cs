@@ -162,6 +162,62 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
+    public void Crossfade_audio_carry_conditions_the_next_clip_from_the_previous_tail()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject firstClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        firstClip["duration"] = 0.2;
+        firstClip["boundaryOut"] = Constants.BoundaryOutCrossfade;
+        firstClip["boundaryOutOverlap"] = 8;
+        firstClip["boundaryOutCarryAudio"] = true;
+        JObject secondClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        secondClip["duration"] = 1.0;
+        JObject document = MakeDocument(firstClip, secondClip);
+        document["fps"] = 24;
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            document.ToString());
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmSetAudioMaskWindowsNode carryMask = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>());
+        JObject window = Assert.IsType<JObject>(Assert.Single(
+            JArray.Parse(carryMask.Windows.LiteralAsString())));
+        Assert.Equal(0, window.Value<double>("start"));
+        Assert.Equal(0.33, window.Value<double>("end"), 6);
+
+        TrimAudioDurationNode carryTrim = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
+            node => node.StartIndex.LiteralAsDouble() == (22 - 8) / 24.0
+                && node.Duration.LiteralAsDouble() == 8 / 24.0);
+        ComfyNode conditionedSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => ReachesUpstream(bridge, sampler, carryMask.Id));
+        ComfyNode previousSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => !ReferenceEquals(sampler, conditionedSampler));
+        Assert.True(ReachesUpstream(
+            bridge,
+            carryTrim.Audio.Connection!.Node,
+            previousSampler.Id));
+        Assert.True(ReachesUpstream(
+            bridge,
+            carryMask.Samples.Connection!.Node,
+            carryTrim.Id));
+        Assert.Single(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
+        Assert.NotEmpty(bridge.Graph.NodesOfType<AudioConcatNode>());
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void A_second_stage_refines_the_decoded_clip_from_its_own_start_step()
     {
         using SwarmUiTestContext context = new();
