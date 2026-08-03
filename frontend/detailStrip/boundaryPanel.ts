@@ -53,8 +53,13 @@ export const buildBoundaryBody = (
     const carryTargetHasStage =
         capability.rightClipIdx !== null &&
         activeStageCount(clips[capability.rightClipIdx]) > 0;
+    const carryAudioSupported =
+        clip !== undefined &&
+        capabilities.forClip(clip).decision("audioBoundaryCarry").supported;
     const carryAudioActive =
-        clip?.boundaryOutCarryAudio === true && carryTargetHasStage;
+        carryAudioSupported &&
+        clip?.boundaryOutCarryAudio === true &&
+        carryTargetHasStage;
 
     const joinSpecs: OptionSpec[] = capability.modes.map((mode) => ({
         value: mode,
@@ -144,27 +149,29 @@ export const buildBoundaryBody = (
                     "short for the overlap falls back to a cut.",
             ),
         );
-        fields.appendChild(
-            buildCheckbox(
-                "Continue outgoing audio into next clip",
-                clip?.boundaryOutCarryAudio === true,
-                (enabled) => {
-                    ctx.commit((cs) => {
-                        const c = cs[leftClipIdx];
-                        if (c) {
-                            c.boundaryOutCarryAudio = enabled;
-                        }
-                    });
-                    ctx.render();
-                },
-                {
-                    disabled: !carryTargetHasStage,
-                    help:
-                        "Preserve this clip's audio tail at the start of the next clip's LTX generation, " +
-                        "then let LTX generate its continuation. The next clip needs an active stage.",
-                },
-            ),
-        );
+        if (carryAudioSupported) {
+            fields.appendChild(
+                buildCheckbox(
+                    "Continue outgoing audio into next clip",
+                    clip?.boundaryOutCarryAudio === true,
+                    (enabled) => {
+                        ctx.commit((cs) => {
+                            const c = cs[leftClipIdx];
+                            if (c) {
+                                c.boundaryOutCarryAudio = enabled;
+                            }
+                        });
+                        ctx.render();
+                    },
+                    {
+                        disabled: !carryTargetHasStage,
+                        help:
+                            "Preserve this clip's audio tail at the start of the next clip's generation, " +
+                            "then let its model generate the continuation. The next clip needs an active stage.",
+                    },
+                ),
+            );
+        }
     }
 
     // The preview budgets exactly what execution budgets: the compacted

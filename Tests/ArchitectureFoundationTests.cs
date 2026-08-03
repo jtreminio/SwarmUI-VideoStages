@@ -1412,6 +1412,7 @@ public class ArchitectureFoundationTests
                 "referenceFraming",
                 "retake",
                 "audioSegments",
+                "audioBoundaryCarry",
                 "audioReuse",
                 "audioDerivedDuration",
                 "icLora",

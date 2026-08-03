@@ -45,6 +45,7 @@ internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
             | ArchitectureFeature.Retake
             | ArchitectureFeature.AudioReuse
             | ArchitectureFeature.AudioSegments
+            | ArchitectureFeature.AudioBoundaryCarry
             | ArchitectureFeature.AudioDerivedDuration
             | ArchitectureFeature.ReferenceFraming
             | ArchitectureFeature.IcLora,

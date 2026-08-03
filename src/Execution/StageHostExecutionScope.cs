@@ -120,14 +120,6 @@ internal sealed class StageHostExecutionScope : IDisposable
         inputArtifact.PublishTo(_generator);
     }
 
-    public void PublishIntermediate(StagePlan stage)
-    {
-        PublishIntermediate(
-            stage,
-            _generator.CurrentMedia,
-            _generator.CurrentVae);
-    }
-
     public void PublishIntermediate(
         StagePlan stage,
         WGNodeData media,

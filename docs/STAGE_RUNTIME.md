@@ -212,8 +212,10 @@ rule.
 `StockHostVideoGenerationSession`. The shared wrapper owns decoded upscale and
 passthrough handling, host parameter sections, intermediate publication, output
 validation, and terminal trim. `MiniMaxGenerationSession` keeps H3 model/prompt
-setup, audio selection and encoding, joint audio-video latent construction,
-first/last-frame keyframes, sampling, and joint decode together.
+setup, audio selection, timeline-segment combination and encoding, joint
+audio-video latent construction, first/last-frame keyframes, sampling, and
+joint decode together. Without a selected base track, only authored segment
+windows are preserved; H3 remains free to generate native audio in the gaps.
 
 ### LTX
 

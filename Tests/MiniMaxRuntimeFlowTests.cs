@@ -3,8 +3,10 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Ltx2;
+using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -279,6 +281,104 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
+    public void Persisted_and_prompt_LoRAs_are_stage_scoped_and_replace_the_loader_cache()
+    {
+        using SwarmUiTestContext context = new();
+        EnableHostLoraLoading();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        AddLoraModel("UnitTest_MiniMax_Prompt.safetensors");
+        AddLoraModel("UnitTest_MiniMax_Persisted.safetensors");
+        JObject first = MakeStage(
+            models.VideoModel.Name,
+            "Generated",
+            steps: 8,
+            cfgScale: 1);
+        first["loras"] = new JArray(new JObject
+        {
+            ["name"] = "UnitTest_MiniMax_Persisted",
+            ["weight"] = 0.6,
+            ["textEncoderWeight"] = 0.7,
+        });
+        JObject second = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            control: 0.5,
+            steps: 9,
+            cfgScale: 1);
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(first, second),
+            prompt: "global <videoclip[0,0]><lora:UnitTest_MiniMax_Prompt:0.4:0.8>");
+        string[] originalLoras = null;
+        string[] originalWeights = null;
+        string[] originalTextEncoderWeights = null;
+        string[] originalConfinements = null;
+        WorkflowGenerator.WorkflowGenStep snapshot = new(
+            g =>
+            {
+                originalLoras = [.. g.UserInput.Get(T2IParamTypes.Loras) ?? []];
+                originalWeights = [.. g.UserInput.Get(T2IParamTypes.LoraWeights) ?? []];
+                originalTextEncoderWeights =
+                    [.. g.UserInput.Get(T2IParamTypes.LoraTencWeights) ?? []];
+                originalConfinements =
+                    [.. g.UserInput.Get(T2IParamTypes.LoraSectionConfinement) ?? []];
+            },
+            Constants.WorkflowStepPriority.RunConfiguredStages - 0.01);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                MiniMaxSteps().Append(snapshot));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode firstSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 8);
+        ComfyNode secondSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("steps").LiteralAsInt() == 9);
+        ComfyNode[] loras = [.. LoraLoaderNodesOf(bridge)];
+        Assert.Equal(2, loras.Length);
+        Assert.All(
+            loras,
+            lora =>
+            {
+                Assert.True(ReachesUpstream(
+                    bridge,
+                    firstSampler.FindInput("model").Connection?.Node,
+                    lora.Id));
+                Assert.False(ReachesUpstream(
+                    bridge,
+                    secondSampler.FindInput("model").Connection?.Node,
+                    lora.Id));
+            });
+        Assert.Contains(
+            loras,
+            lora => lora.FindInput("lora_name").LiteralAsString()
+                == "UnitTest_MiniMax_Prompt.safetensors");
+        Assert.Contains(
+            loras,
+            lora => lora.FindInput("lora_name").LiteralAsString()
+                == "UnitTest_MiniMax_Persisted.safetensors");
+        Assert.Equal(originalLoras, input.Get(T2IParamTypes.Loras) ?? []);
+        Assert.Equal(originalWeights, input.Get(T2IParamTypes.LoraWeights) ?? []);
+        Assert.Equal(
+            originalTextEncoderWeights,
+            input.Get(T2IParamTypes.LoraTencWeights) ?? []);
+        Assert.Equal(
+            originalConfinements,
+            input.Get(T2IParamTypes.LoraSectionConfinement) ?? []);
+        string loaderKey = $"modelloader_{models.VideoModel.Name}_image2video";
+        Assert.True(generator.NodeHelpers.TryGetValue(loaderKey, out string cachedLoader));
+        Assert.Equal(
+            secondSampler.FindInput("model").Connection?.Node?.Id,
+            cachedLoader.Split(':')[0]);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void Authored_first_and_last_frame_uploads_reach_the_keyframe_node()
     {
         using SwarmUiTestContext context = new();
@@ -389,6 +489,92 @@ public class MiniMaxRuntimeFlowTests
         AssertAcyclic(bridge);
     }
 
+    [Fact]
+    public void Timeline_audio_uses_aligned_clip_windows_and_reaches_the_entry_joint_latent()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject firstClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        firstClip["duration"] = 1.0;
+        JObject secondClip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        secondClip["duration"] = 1.0;
+        JObject document = MakeDocument(firstClip, secondClip);
+        document["fps"] = 24;
+        document["audioTracks"] = new JArray(new JObject
+        {
+            ["id"] = "timeline-segment",
+            ["volume"] = 0.5,
+            ["source"] = new JObject
+            {
+                ["kind"] = "Upload",
+                ["reference"] = "timeline.wav",
+                ["uploadedAudio"] = new JObject
+                {
+                    ["data"] = "data:audio/wav;base64,QUJD",
+                    ["fileName"] = "timeline.wav",
+                },
+            },
+            ["spans"] = new JArray(new JObject
+            {
+                ["timelineStartSeconds"] = 39.0 / 24.0 + 0.1,
+                ["timelineLengthSeconds"] = 0.2,
+                ["sourceStartSeconds"] = 0.1,
+            }),
+        });
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            document.ToString());
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmLoadAudioB64Node upload = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        TrimAudioDurationNode trim = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.Equal(0.1, trim.StartIndex.LiteralAsDouble());
+        Assert.Equal(0.2, trim.Duration.LiteralAsDouble().Value, 8);
+        double?[] silenceDurations = bridge.Graph.NodesOfType<EmptyAudioNode>()
+            .Select(node => node.Duration.LiteralAsDouble())
+            .Order()
+            .ToArray();
+        Assert.Equal(2, silenceDurations.Length);
+        Assert.Equal(0.1, silenceDurations[0].Value, 8);
+        Assert.Equal(39.0 / 24.0, silenceDurations[1].Value, 8);
+        VAEEncodeAudioNode encode = Assert.Single(
+            bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.True(ReachesUpstream(bridge, encode.Audio.Connection!.Node, upload.Id));
+        Assert.Empty(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+        SwarmSetAudioMaskWindowsNode mask = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>());
+        Assert.Equal(1.0, mask.GapMaskValue.LiteralAsDouble());
+        JArray windows = JArray.Parse(mask.Windows.LiteralAsString());
+        JObject window = Assert.IsType<JObject>(Assert.Single(windows));
+        Assert.Equal(0.1, window.Value<double>("start"));
+        Assert.Equal(0.3, window.Value<double>("end"));
+        LTXVConcatAVLatentNode joint = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        Assert.Same(mask.Latent, joint.AudioLatent.Connection);
+        ComfyNode conditionedSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => ReferenceEquals(
+                joint,
+                sampler.FindInput("latent_image").Connection?.Node));
+        ComfyNode unconditionedSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => !ReferenceEquals(
+                joint,
+                sampler.FindInput("latent_image").Connection?.Node));
+        Assert.True(ReachesUpstream(bridge, conditionedSampler, upload.Id));
+        Assert.False(ReachesUpstream(bridge, unconditionedSampler, upload.Id));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
     private static JObject UploadedReference(string payload, bool fromEnd) =>
         new()
         {
@@ -424,4 +610,26 @@ public class MiniMaxRuntimeFlowTests
         NodesOfClass(bridge, "SwarmKSampler")
             .Concat(NodesOfClass(bridge, "KSamplerAdvanced"))
             .ToArray();
+
+    private static void EnableHostLoraLoading()
+    {
+        WorkflowGenerator.AddModelGenStep(g =>
+        {
+            (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(
+                T2IParamInput.SectionID_Video,
+                g.LoadingModel,
+                g.LoadingClip);
+        }, -10);
+    }
+
+    private static void AddLoraModel(string name)
+    {
+        if (!Program.T2IModelSets.TryGetValue("LoRA", out T2IModelHandler handler))
+        {
+            handler = new() { ModelType = "LoRA" };
+            Program.T2IModelSets["LoRA"] = handler;
+        }
+        T2IModel model = new(handler, "/tmp", $"/tmp/{name}", name);
+        handler.Models[model.Name] = model;
+    }
 }

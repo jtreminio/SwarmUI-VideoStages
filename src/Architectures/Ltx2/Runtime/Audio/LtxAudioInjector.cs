@@ -62,7 +62,7 @@ internal sealed class LtxAudioInjector(
         WGNodeData encodedAudio = adjustedAudio.EncodeToLatent(g.CurrentAudioVae);
         bridge = WorkflowBridge.Create(g.Workflow);
         NodeOutput<LatentType> maskedLatent = preserveWindows is { Count: > 0 }
-            ? LtxAudioPreserveWindowBuilder.AddMask(
+            ? AudioPreserveWindowBuilder.AddMask(
                 g,
                 bridge,
                 encodedAudio.Path,
@@ -93,7 +93,7 @@ internal sealed class LtxAudioInjector(
         {
             return null;
         }
-        return LtxAudioPreserveWindowBuilder.TryBuild(
+        return AudioPreserveWindowBuilder.TryBuild(
             g,
             audio,
             preserveWindows,

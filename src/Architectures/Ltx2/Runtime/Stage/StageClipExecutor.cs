@@ -1,4 +1,3 @@
-using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
@@ -53,11 +52,6 @@ internal sealed class StageClipExecutor(
         }
 
         PrepareClipAudio(context, clipContext, initVideoMedia, boundaryAudioCarry);
-        if (plannedClip.Stages.Count == 0)
-        {
-            return CaptureStageInputArtifact();
-        }
-
         return stageRunner.ExecuteStages(plannedClip, (stage, continuation) =>
         {
             if (continuation is not null)
@@ -179,9 +173,4 @@ internal sealed class StageClipExecutor(
         guideReferences.CaptureStageOutput(plannedStage);
     }
 
-    private RuntimeArtifact CaptureStageInputArtifact()
-    {
-        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        return RuntimeArtifact.Capture(g, bridge);
-    }
 }

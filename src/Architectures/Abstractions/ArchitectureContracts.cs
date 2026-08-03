@@ -61,6 +61,7 @@ internal enum ArchitectureFeature
     AudioReuse = 1 << 5,
     AudioDerivedDuration = 1 << 6,
     IcLora = 1 << 7,
+    AudioBoundaryCarry = 1 << 8,
 }
 
 // --- Boundary rules: the only rule family, published with typed constraints so the backend and

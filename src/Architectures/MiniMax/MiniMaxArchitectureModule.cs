@@ -5,10 +5,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.MiniMax;
 
-/// <summary>
-/// MiniMax H3: one sampling pass over a joint audio+video latent. The model writes its own
-/// native stereo audio, so a clip's audio is generated rather than sourced.
-/// </summary>
+/// <summary>MiniMax H3: one sampling pass over a joint audio-video latent.</summary>
 internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
 {
     internal static ArchitectureId ArchitectureId { get; } = new("minimax");
@@ -43,7 +40,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             ArchitectureEntryMode.TextToVideo,
             ArchitectureEntryMode.ImageToVideo,
         ],
-        ArchitectureFeature.FrameReferences,
+        ArchitectureFeature.FrameReferences | ArchitectureFeature.AudioSegments,
         ArchitectureBoundaryPolicy.CutOnly(
             "minimax",
             "Decoded MiniMax H3 clips can be joined with a hard cut.",

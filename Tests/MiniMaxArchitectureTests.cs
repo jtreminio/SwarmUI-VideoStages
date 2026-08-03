@@ -80,7 +80,7 @@ public class MiniMaxArchitectureTests
             ["text-to-video", "image-to-video"],
             architecture["capabilities"]["entryModes"].Values<string>());
         Assert.Equal(
-            ["frameReferences"],
+            ["frameReferences", "audioSegments"],
             architecture["capabilities"]["features"].Values<string>());
         Assert.Equal(
             "supported",
@@ -145,38 +145,8 @@ public class MiniMaxArchitectureTests
         Assert.Equal("minimax.stage.cfg-scale.non-unity", warning.Code);
     }
 
-    [Theory]
-    [InlineData("cut", false)]
-    [InlineData("continue", true)]
-    public void Carry_audio_is_only_refused_where_a_join_could_have_used_it(
-        string boundaryOut,
-        bool expectWarning)
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
-        JObject clip = MakeClip(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
-        clip["boundaryOut"] = boundaryOut;
-        clip["boundaryOutCarryAudio"] = true;
-        ClipSpec parsed = ParseClip(clip, models);
-
-        Assert.True(VideoArchitectureRegistry.Production.TryResolveModel(
-            models.VideoModel,
-            out ResolvedVideoModel resolved));
-        IReadOnlyList<PlanDiagnostic> diagnostics =
-            ArchitectureCapabilityValidator.Validate(
-                parsed,
-                resolved.Architecture,
-                ArchitectureEntryMode.ImageToVideo);
-
-        Assert.Equal(
-            expectWarning,
-            diagnostics.Any(diagnostic => diagnostic.Code
-                == "effective-request.unsupported-audio-boundary-ignored"));
-    }
-
     [Fact]
-    public void A_single_clip_does_not_warn_about_inert_saved_audio_boundary_carry()
+    public void Timeline_audio_segments_do_not_authorize_boundary_audio_carry()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
@@ -184,21 +154,19 @@ public class MiniMaxArchitectureTests
             MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
         clip["boundaryOut"] = Constants.BoundaryOutContinue;
         clip["boundaryOutCarryAudio"] = true;
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            MakeDocument(clip).ToString());
-        VideoStagesSpec spec = VideoStagesContext.GetVideoStagesSpecForPromptParse(input);
-        ArchitecturePlanningResult architecturePlanning =
-            ArchitecturePlanResolver.Resolve(spec, VideoArchitectureRegistry.Production);
+        ClipSpec parsed = ParseClip(clip, models);
+        VideoArchitectureDescriptor descriptor = MiniMaxArchitectureModule.Instance.Descriptor;
 
-        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
-            spec,
-            RootEnvironment.FromSpec(spec),
-            architecturePlanning);
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                parsed,
+                descriptor,
+                ArchitectureEntryMode.ImageToVideo);
 
-        Assert.DoesNotContain(
-            plan.Diagnostics,
+        Assert.True(descriptor.Features.HasFlag(ArchitectureFeature.AudioSegments));
+        Assert.False(descriptor.Features.HasFlag(ArchitectureFeature.AudioBoundaryCarry));
+        Assert.Contains(
+            diagnostics,
             diagnostic => diagnostic.Code
                 == "effective-request.unsupported-audio-boundary-ignored");
     }

@@ -159,7 +159,7 @@ internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
             return attachedAudio;
         }
 
-        WGNodeData conditioned = LtxAudioPreserveWindowBuilder.TryBuild(
+        WGNodeData conditioned = AudioPreserveWindowBuilder.TryBuild(
             g,
             pendingAudio,
             pending.PreserveWindows,

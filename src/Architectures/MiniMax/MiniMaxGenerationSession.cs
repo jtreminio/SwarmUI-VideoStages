@@ -315,13 +315,32 @@ internal sealed class MiniMaxGenerationSession(
             clip.Audio.Base,
             audioSources,
             suppressNative: true);
-        if (selectedAudio is null)
+        double duration = plan.FramesPerSecond > 0
+            ? frames / (double)plan.FramesPerSecond
+            : 0;
+        WGNodeData combinedAudio = new AudioSegmentCombiner(g).Combine(
+            clip.ClipId,
+            clip.Audio.Segments,
+            selectedAudio,
+            duration,
+            out IReadOnlyList<(double Start, double End)> preserveWindows);
+        if (combinedAudio is null)
         {
             return joint;
         }
 
+        WGNodeData samplingAudio = selectedAudio is null && preserveWindows.Count > 0
+            ? AudioPreserveWindowBuilder.TryBuild(
+                g,
+                combinedAudio,
+                preserveWindows,
+                clip.Stages[0].StageId)
+                ?? throw VideoStagesInvariant.Failure(
+                    $"MiniMax H3 clip {clip.ClipId} could not preserve its timeline audio windows.")
+            : combinedAudio;
+
         WGNodeData videoLatent = joint.AsLatentImage(genInfo.Vae);
-        videoLatent.AttachedAudio = selectedAudio;
+        videoLatent.AttachedAudio = samplingAudio;
         return videoLatent.AsSamplingLatent(genInfo.Vae, g.CurrentAudioVae);
     }
 

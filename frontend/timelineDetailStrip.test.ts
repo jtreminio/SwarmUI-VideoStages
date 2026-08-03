@@ -4355,6 +4355,29 @@ describe("createTimelineDetailStrip", () => {
             );
         });
 
+        it("hides audio carry when the architecture does not support it", async () => {
+            const catalog = testArchitectureCatalog();
+            catalog.architectures[0].capabilities.features =
+                catalog.architectures[0].capabilities.features.filter(
+                    (feature) => feature !== "audioBoundaryCarry",
+                );
+            resetArchitectureCatalogForTests();
+            setVideoStagesHostBridgeForTests({
+                ...createDefaultVideoStagesHostBridge(),
+                requestJson: async () => testArchitectureCatalogDto(catalog),
+            });
+            await loadAuthoritativeArchitectureCatalog();
+
+            setup([
+                { duration: 4, boundaryOut: "continue", stages: [{}] },
+                { duration: 4, stages: [{}] },
+            ]);
+            setSelection({ kind: "boundary", leftClipIdx: 0 });
+
+            expect(overlapSelect()).not.toBeNull();
+            expect(carryAudioCheckbox()).toBeNull();
+        });
+
         it("disables audio continuation when the next clip has no generation stage", () => {
             setup([
                 { duration: 4, boundaryOut: "crossfade", stages: [{}] },

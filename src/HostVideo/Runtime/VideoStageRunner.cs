@@ -102,7 +102,7 @@ internal sealed class VideoStageRunner : IDisposable
         ArgumentNullException.ThrowIfNull(clip);
         ArgumentNullException.ThrowIfNull(executeStage);
 
-        RuntimeArtifact output = null;
+        RuntimeArtifact output = CaptureRuntimeArtifact();
         for (int stageIndex = 0; stageIndex < clip.Stages.Count; stageIndex++)
         {
             StagePlan stage = clip.Stages[stageIndex];
@@ -111,8 +111,7 @@ internal sealed class VideoStageRunner : IDisposable
                 && clip.Stages[stageIndex + 1].ContinuesSamplingFromPreviousStage
                     ? clip.Stages[stageIndex + 1]
                     : null;
-            RuntimeArtifact input = output ?? CaptureRuntimeArtifact();
-            _stageScope.PublishStageInput(input);
+            _stageScope.PublishStageInput(output);
             bool consumedContinuation = executeStage(stage, continuation);
             output = CaptureRuntimeArtifact();
             if (!output.HasMedia)
@@ -126,7 +125,9 @@ internal sealed class VideoStageRunner : IDisposable
                     $"VideoStages: stage {stage.StageId} consumed no planned continuation.");
             }
             _stageScope.PublishIntermediate(
-                consumedContinuation ? continuation : stage);
+                consumedContinuation ? continuation : stage,
+                _generator.CurrentMedia,
+                _generator.CurrentVae);
             if (consumedContinuation)
             {
                 stageIndex++;

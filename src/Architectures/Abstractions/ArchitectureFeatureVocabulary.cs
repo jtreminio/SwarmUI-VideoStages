@@ -18,6 +18,10 @@ internal static class ArchitectureFeatureVocabulary
         new(ArchitectureFeature.ReferenceFraming, "referenceFraming", "Reference framing"),
         new(ArchitectureFeature.Retake, "retake", "Retakes"),
         new(ArchitectureFeature.AudioSegments, "audioSegments", "Audio segments"),
+        new(
+            ArchitectureFeature.AudioBoundaryCarry,
+            "audioBoundaryCarry",
+            "Boundary audio carry"),
         new(ArchitectureFeature.AudioReuse, "audioReuse", "Captured stage audio reuse"),
         new(
             ArchitectureFeature.AudioDerivedDuration,
