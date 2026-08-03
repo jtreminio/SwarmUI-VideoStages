@@ -63,3 +63,32 @@ def build_windowed_audio_mask(
         if end_idx > start_idx:
             mask[:, start_idx:end_idx, :] = 0.0
     return mask
+
+
+def copy_audio_windows(
+    source: torch.Tensor,
+    target: torch.Tensor,
+    windows: Iterable[tuple[float, float]],
+    latents_per_second: float,
+    source_start_seconds: float,
+) -> torch.Tensor:
+    """Copy selected source windows into a target latent using a source-time offset."""
+    if source.ndim != 4 or target.ndim != 4:
+        raise ValueError("Audio latent window copies require [B, C, F, H] tensors.")
+    if source.shape[:2] != target.shape[:2] or source.shape[3] != target.shape[3]:
+        raise ValueError(
+            "Source and target audio latents must have matching batch, channel, and height dimensions."
+        )
+
+    result = target.clone()
+    source_offset = max(0, math.floor(source_start_seconds * latents_per_second))
+    for start, end in windows:
+        target_start = max(0, math.floor(start * latents_per_second))
+        target_end = min(target.shape[2], math.ceil(end * latents_per_second))
+        source_start = source_offset + target_start
+        count = min(target_end - target_start, source.shape[2] - source_start)
+        if count > 0:
+            result[:, :, target_start : target_start + count, :] = source[
+                :, :, source_start : source_start + count, :
+            ]
+    return result

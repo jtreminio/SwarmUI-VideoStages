@@ -1,5 +1,4 @@
 using ComfyTyped.Core;
-using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -7,10 +6,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>
-/// Extracts the previous generated clip's decoded audio tail for use as the next clip's opening
-/// generation context. Final timeline assembly never consumes this artifact directly.
-/// </summary>
+/// <summary>Captures the previous clip's audio sources for boundary carry.</summary>
 internal sealed class LtxBoundaryAudioCarryBuilder(WorkflowGenerator g)
 {
     internal LtxBoundaryAudioCarry TryBuild(
@@ -37,8 +33,7 @@ internal sealed class LtxBoundaryAudioCarryBuilder(WorkflowGenerator g)
         }
 
         using WorkflowBridge bridge = BridgeSync.For(g);
-        INodeOutput previousAudio = bridge.ResolvePath(previousAudioPath);
-        if (previousAudio is null)
+        if (bridge.ResolvePath(previousAudioPath) is null)
         {
             PlanDiagnosticReporter.TrackRequestWarning(
                 g.UserInput,
@@ -49,21 +44,29 @@ internal sealed class LtxBoundaryAudioCarryBuilder(WorkflowGenerator g)
         }
 
         double durationSeconds = windowFrames / (double)fps;
-        TrimAudioDurationNode tail = bridge.AddNode(new TrimAudioDurationNode()).With(
-            StartIndex: (previousFrames - windowFrames) / (double)fps,
-            Duration: durationSeconds);
-        tail.Audio.ConnectToUntyped(previousAudio);
-
-        return new(
-            new WGNodeData(
-                WorkflowBridge.ToPath(tail.AUDIO),
+        double sourceStartSeconds = (previousFrames - windowFrames) / (double)fps;
+        WGNodeData nativeLatent = null;
+        if (LtxDecodedAudioHandoff.TryResolveNativeLatent(
                 g,
-                WGNodeData.DT_AUDIO,
-                g.CurrentAudioVae?.Compat ?? previousOutput.AttachedAudio.Compat),
-            durationSeconds);
+                previousOutput.AttachedAudio,
+                out JArray nativeAudioPath))
+        {
+            nativeLatent = new WGNodeData(
+                nativeAudioPath,
+                g,
+                WGNodeData.DT_LATENT_AUDIO,
+                g.CurrentAudioVae?.Compat ?? previousOutput.AttachedAudio.Compat);
+        }
+        return new(
+            previousOutput.AttachedAudio,
+            durationSeconds,
+            sourceStartSeconds,
+            nativeLatent);
     }
 }
 
 internal sealed record LtxBoundaryAudioCarry(
-    WGNodeData Tail,
-    double DurationSeconds);
+    WGNodeData DecodedSource,
+    double DurationSeconds,
+    double SourceStartSeconds = 0,
+    WGNodeData NativeLatent = null);

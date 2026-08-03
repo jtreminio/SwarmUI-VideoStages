@@ -1,10 +1,12 @@
 """Unit tests for the SwarmSetAudioMaskWindows pure helpers (no ComfyUI / GPU required)."""
 
+import pytest
 import torch
 
 from SwarmVideoStagesNodes.audio_mask_windows import (
     audio_latents_per_second,
     build_windowed_audio_mask,
+    copy_audio_windows,
     parse_mask_windows,
 )
 
@@ -89,3 +91,21 @@ def test_build_windowed_audio_mask_clamps_to_latent_length() -> None:
 def test_build_windowed_audio_mask_gap_value_zero_preserves_everything() -> None:
     mask = build_windowed_audio_mask((2, 128, 10, 8), [(0.0, 0.1)], 20.0, 0.0)
     assert torch.all(mask == 0.0)
+
+
+def test_copy_audio_windows_moves_a_source_tail_to_the_target_opening() -> None:
+    source = torch.arange(10, dtype=torch.float32).reshape(1, 1, 10, 1)
+    target = torch.full((1, 1, 8, 1), -1.0)
+
+    copied = copy_audio_windows(source, target, [(0.0, 0.3)], 10.0, 0.7)
+
+    assert copied[:, :, :3, :].flatten().tolist() == [7.0, 8.0, 9.0]
+    assert torch.all(copied[:, :, 3:, :] == -1.0)
+
+
+def test_copy_audio_windows_rejects_incompatible_latent_geometry() -> None:
+    source = torch.zeros((1, 2, 10, 1))
+    target = torch.zeros((1, 1, 10, 1))
+
+    with pytest.raises(ValueError, match="matching batch, channel, and height"):
+        copy_audio_windows(source, target, [(0.0, 0.3)], 10.0, 0.0)

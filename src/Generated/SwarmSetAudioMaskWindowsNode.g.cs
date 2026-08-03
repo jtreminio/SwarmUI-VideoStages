@@ -21,6 +21,8 @@ public sealed class SwarmSetAudioMaskWindowsNode : ComfyNode
     public NodeInput<VaeType> AudioVae { get; }
     public NodeInput<StringType> Windows { get; }
     public NodeInput<FloatType> GapMaskValue { get; }
+    public NodeInput<FloatType> SourceStartSeconds { get; }
+    public NodeInput<LatentType> TargetSamples { get; } // optional
 
     public SwarmSetAudioMaskWindowsNode()
     {
@@ -31,6 +33,9 @@ public sealed class SwarmSetAudioMaskWindowsNode : ComfyNode
         Windows.Set("");
         GapMaskValue = AddInput<FloatType>("gap_mask_value");
         GapMaskValue.Set(1.0);
+        SourceStartSeconds = AddInput<FloatType>("source_start_seconds");
+        SourceStartSeconds.Set(0.0);
+        TargetSamples = AddInput<LatentType>("target_samples");
     }
 
     /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
@@ -41,13 +46,17 @@ public sealed class SwarmSetAudioMaskWindowsNode : ComfyNode
         In<LatentType>? Samples = null,
         In<VaeType>? AudioVae = null,
         StringArg? Windows = null,
-        FloatArg? GapMaskValue = null
+        FloatArg? GapMaskValue = null,
+        FloatArg? SourceStartSeconds = null,
+        In<LatentType>? TargetSamples = null
     )
     {
         Samples?.ApplyTo(this.Samples);
         AudioVae?.ApplyTo(this.AudioVae);
         Windows?.ApplyTo(this.Windows);
         GapMaskValue?.ApplyTo(this.GapMaskValue);
+        SourceStartSeconds?.ApplyTo(this.SourceStartSeconds);
+        TargetSamples?.ApplyTo(this.TargetSamples);
         return this;
     }
 }

@@ -57,14 +57,35 @@ internal sealed class ClipAudioPreparer(
             baseAudio,
             handleDuration,
             authoredDuration);
-        WGNodeData baseWithBoundaryCarry = ApplyBoundaryAudioCarry(
-            baseAudio,
-            boundaryAudioCarry,
-            generationDuration);
         AudioSegmentPlan segments = handleDuration > 0
             ? new([.. context.PlannedClip.Audio.Segments.Items.Select(segment =>
                 segment with { StartSeconds = segment.StartSeconds + handleDuration })])
             : context.PlannedClip.Audio.Segments;
+
+        if (baseAudio is null
+            && segments.Items.IsDefaultOrEmpty
+            && boundaryAudioCarry?.NativeLatent is not null)
+        {
+            int targetFrames = (context.PlannedClip.Frames ?? 0)
+                + clipContext.IncomingContinueHandleFrames;
+            WGNodeData latentCarry = LtxAudioPreserveWindowBuilder.TryBuildCarry(
+                g,
+                boundaryAudioCarry,
+                targetFrames,
+                context.FramesPerSecond,
+                context.PlannedClip.ClipId + 1);
+            if (latentCarry is not null)
+            {
+                currentMedia.AttachedAudio = latentCarry;
+                g.CurrentMedia = currentMedia;
+                return;
+            }
+        }
+
+        WGNodeData baseWithBoundaryCarry = ApplyBoundaryAudioCarry(
+            baseAudio,
+            boundaryAudioCarry,
+            generationDuration);
         WGNodeData combinedAudio = new AudioSegmentCombiner(g).Combine(
             context.PlannedClip.ClipId,
             segments,
@@ -195,18 +216,25 @@ internal sealed class ClipAudioPreparer(
         LtxBoundaryAudioCarry carry,
         double clipDurationSeconds)
     {
-        if (carry?.Tail?.Path is not JArray carryPath
-            || clipDurationSeconds <= 0)
+        if (carry is null || clipDurationSeconds <= 0)
+        {
+            return baseAudio;
+        }
+
+        if (carry.DecodedSource?.Path is not JArray decodedPath)
         {
             return baseAudio;
         }
 
         using WorkflowBridge bridge = BridgeSync.For(g);
-        INodeOutput carryTail = bridge.ResolvePath(carryPath);
-        if (carryTail is null)
+        if (bridge.ResolvePath(decodedPath) is not INodeOutput decodedSource)
         {
             return baseAudio;
         }
+        TrimAudioDurationNode trim = bridge.AddNode(new TrimAudioDurationNode()).With(
+            StartIndex: carry.SourceStartSeconds,
+            Duration: carry.DurationSeconds);
+        trim.Audio.ConnectToUntyped(decodedSource);
 
         INodeOutput bed = bridge.ResolvePath(baseAudio?.Path);
         if (bed is null)
@@ -221,11 +249,11 @@ internal sealed class ClipAudioPreparer(
         AudioMergeNode merge = bridge.AddNode(
             new AudioMergeNode().With(MergeMethod: MergeMethodAdd));
         merge.Audio1.ConnectToUntyped(bed);
-        merge.Audio2.ConnectToUntyped(carryTail);
+        merge.Audio2.ConnectToUntyped(trim.AUDIO);
         return new WGNodeData(
             WorkflowBridge.ToPath(merge.AUDIO),
             g,
             WGNodeData.DT_AUDIO,
-            baseAudio?.Compat ?? g.CurrentAudioVae?.Compat ?? carry.Tail.Compat);
+            baseAudio?.Compat ?? g.CurrentAudioVae?.Compat ?? carry.DecodedSource.Compat);
     }
 }

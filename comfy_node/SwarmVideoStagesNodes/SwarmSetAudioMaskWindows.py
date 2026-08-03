@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 from .audio_mask_windows import (
     audio_latents_per_second,
     build_windowed_audio_mask,
+    copy_audio_windows,
     parse_mask_windows,
 )
 
@@ -57,6 +58,14 @@ class SwarmSetAudioMaskWindows(io.ComfyNode):
                     "gap_mask_value", default=1.0, min=0.0, max=1.0, step=0.01,
                     tooltip="Mask value outside the windows: 1.0 regenerates gaps, 0.0 preserves them.",
                 ),
+                io.Float.Input(
+                    "source_start_seconds", default=0.0, min=0.0, step=0.01,
+                    tooltip="Source time corresponding to target time zero when target_samples is connected.",
+                ),
+                io.Latent.Input(
+                    "target_samples", optional=True,
+                    tooltip="Optional target latent to receive the preserved source windows.",
+                ),
             ],
             outputs=[
                 io.Latent.Output(display_name="latent"),
@@ -70,6 +79,8 @@ class SwarmSetAudioMaskWindows(io.ComfyNode):
         audio_vae: VAE,
         windows: str = "",
         gap_mask_value: float = 1.0,
+        source_start_seconds: float = 0.0,
+        target_samples: dict[str, torch.Tensor] | None = None,
     ) -> io.NodeOutput:
         latent_samples = samples["samples"]
         if latent_samples.ndim != 4:
@@ -79,6 +90,17 @@ class SwarmSetAudioMaskWindows(io.ComfyNode):
             )
         parsed = parse_mask_windows(windows)
         lps = audio_latents_per_second(audio_vae, LATENT_DOWNSAMPLE_FACTOR)
+        out = dict(samples if target_samples is None else target_samples)
+        if target_samples is not None:
+            target = target_samples["samples"]
+            latent_samples = copy_audio_windows(
+                latent_samples,
+                target,
+                parsed,
+                lps,
+                source_start_seconds,
+            )
+            out["samples"] = latent_samples
         mask = build_windowed_audio_mask(latent_samples.shape, parsed, lps, gap_mask_value)
         log.info(
             "[SwarmSetAudioMaskWindows] %d preserve windows, %.3f latents/sec, "
@@ -86,6 +108,5 @@ class SwarmSetAudioMaskWindows(io.ComfyNode):
             len(parsed), lps,
             int((mask[0, :, 0] == 0).sum().item()), mask.shape[1],
         )
-        out = dict(samples)
         out["noise_mask"] = mask
         return io.NodeOutput(out)
