@@ -161,30 +161,23 @@ public partial class StageFlowTests
             carryWindow.Value<double>("end"),
             6);
 
-        LTXVAudioVAEEncodeNode encodedCarry =
-            Assert.IsType<LTXVAudioVAEEncodeNode>(
-                carryMask.Samples.Connection!.Node);
-        AudioMergeNode conditioningTrack = Assert.IsType<AudioMergeNode>(
-            encodedCarry.Audio.Connection!.Node);
-        TrimAudioDurationNode previousTail =
-            Assert.IsType<TrimAudioDurationNode>(
-                conditioningTrack.Audio2.Connection!.Node);
+        Assert.IsType<LTXVSeparateAVLatentNode>(
+            carryMask.Samples.Connection!.Node);
+        Assert.IsType<LTXVEmptyLatentAudioNode>(
+            carryMask.TargetSamples.Connection!.Node);
         Assert.Equal(
             (ContinueClipFrames - carryFrames) / 24.0,
-            previousTail.StartIndex.LiteralAsDouble()!.Value,
-            6);
-        Assert.Equal(
-            carryFrames / 24.0,
-            previousTail.Duration.LiteralAsDouble()!.Value,
+            carryMask.SourceStartSeconds.LiteralAsDouble()!.Value,
             6);
         Assert.True(ReachesUpstream(
             bridge,
-            previousTail.Audio.Connection!.Node,
+            carryMask.Samples.Connection.Node,
             samplers[0].Id));
-        Assert.True(ReachesUpstream(bridge, samplers[1], conditioningTrack.Id));
+        Assert.True(ReachesUpstream(bridge, samplers[1], carryMask.Id));
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
 
         // Carry is generation-time context. There is no second AudioMerge near final publication.
-        Assert.Single(bridge.Graph.NodesOfType<AudioMergeNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<AudioMergeNode>());
         SwarmSaveAnimationWSNode save =
             Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.IsType<AudioConcatNode>(save.Audio.Connection!.Node);
@@ -223,13 +216,11 @@ public partial class StageFlowTests
             consumer => consumer.Node is SwarmKSamplerNode
                 && consumer.Input.Name == "latent_image");
 
-        AudioMergeNode conditioningTrack = Assert.IsType<AudioMergeNode>(
-            Assert.IsType<LTXVAudioVAEEncodeNode>(
-                carryMask.Samples.Connection!.Node)
-            .Audio.Connection!.Node);
-        TrimAudioDurationNode previousTail = Assert.IsType<TrimAudioDurationNode>(
-            conditioningTrack.Audio2.Connection!.Node);
-        Assert.NotEmpty(bridge.Graph.FindInputsConnectedTo(previousTail.AUDIO));
+        Assert.IsType<LTXVSeparateAVLatentNode>(
+            carryMask.Samples.Connection!.Node);
+        Assert.IsType<LTXVEmptyLatentAudioNode>(
+            carryMask.TargetSamples.Connection!.Node);
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
         AssertWorkflowHasNoCycles(workflow);
     }
 

@@ -74,7 +74,7 @@ public class MiniMaxArchitectureTests
             MiniMaxArchitectureModule.FrameGridOrigin,
             model.Value<int>("frameGridOrigin"));
         Assert.Equal(
-            ["Native"],
+            ["Native", "Upload", "AceStepFun"],
             architecture["capabilities"]["audioSourceKinds"].Values<string>());
         Assert.Equal(
             ["text-to-video", "image-to-video"],
@@ -173,6 +173,34 @@ public class MiniMaxArchitectureTests
             expectWarning,
             diagnostics.Any(diagnostic => diagnostic.Code
                 == "effective-request.unsupported-audio-boundary-ignored"));
+    }
+
+    [Fact]
+    public void A_single_clip_does_not_warn_about_inert_saved_audio_boundary_carry()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clip["boundaryOut"] = Constants.BoundaryOutContinue;
+        clip["boundaryOutCarryAudio"] = true;
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+        VideoStagesSpec spec = VideoStagesContext.GetVideoStagesSpecForPromptParse(input);
+        ArchitecturePlanningResult architecturePlanning =
+            ArchitecturePlanResolver.Resolve(spec, VideoArchitectureRegistry.Production);
+
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            architecturePlanning);
+
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.unsupported-audio-boundary-ignored");
     }
 
     [Fact]

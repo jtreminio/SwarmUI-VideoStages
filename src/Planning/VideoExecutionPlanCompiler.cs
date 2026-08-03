@@ -91,7 +91,8 @@ internal static class VideoExecutionPlanCompiler
                     ArchitectureCapabilityValidator.Validate(
                         activeClips[i],
                         assignment.Architecture,
-                        entryMode);
+                        entryMode,
+                        hasOutgoingBoundary: i < activeClips.Count - 1);
                 diagnostics.AddRange(capabilityDiagnostics);
                 if (!capabilityDiagnostics.Any(diagnostic =>
                     diagnostic.Severity == PlanDiagnosticSeverity.Error))

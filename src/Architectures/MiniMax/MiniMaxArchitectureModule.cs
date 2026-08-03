@@ -34,7 +34,11 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
     public VideoArchitectureDescriptor Descriptor { get; } = new(
         ArchitectureId,
         "MiniMax H3",
-        [AudioSourceKind.Native],
+        [
+            AudioSourceKind.Native,
+            AudioSourceKind.Upload,
+            AudioSourceKind.AceStepFun,
+        ],
         [
             ArchitectureEntryMode.TextToVideo,
             ArchitectureEntryMode.ImageToVideo,

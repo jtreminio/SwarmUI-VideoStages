@@ -9,7 +9,8 @@ internal static class ArchitectureCapabilityValidator
     internal static IReadOnlyList<PlanDiagnostic> Validate(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,
-        ArchitectureEntryMode entryMode)
+        ArchitectureEntryMode entryMode,
+        bool hasOutgoingBoundary = true)
     {
         List<PlanDiagnostic> diagnostics = [];
         if (!descriptor.EntryModes.Contains(entryMode))
@@ -19,7 +20,11 @@ internal static class ArchitectureCapabilityValidator
                 descriptor,
                 $"{ArchitectureFeatureVocabulary.WireName(entryMode)} entry"));
         }
-        WarnAboutUnsupportedFeatures(clip, descriptor, diagnostics);
+        WarnAboutUnsupportedFeatures(
+            clip,
+            descriptor,
+            diagnostics,
+            hasOutgoingBoundary);
         if (descriptor.Features.HasFlag(ArchitectureFeature.AudioDerivedDuration))
         {
             ValidateAudioDerivedDurationSource(clip, diagnostics);
@@ -30,7 +35,8 @@ internal static class ArchitectureCapabilityValidator
     private static void WarnAboutUnsupportedFeatures(
         ClipSpec clip,
         VideoArchitectureDescriptor descriptor,
-        ICollection<PlanDiagnostic> diagnostics)
+        ICollection<PlanDiagnostic> diagnostics,
+        bool hasOutgoingBoundary)
     {
         IReadOnlyList<StageSpec> stages = clip.Stages ?? [];
         bool Unsupported(ArchitectureFeature feature) =>
@@ -127,7 +133,8 @@ internal static class ArchitectureCapabilityValidator
                 clip.Id));
         }
         // Carry audio only ever acts on a non-cut join, so a cut boundary has nothing to refuse.
-        if (Unsupported(ArchitectureFeature.AudioSegments)
+        if (hasOutgoingBoundary
+            && Unsupported(ArchitectureFeature.AudioSegments)
             && clip.BoundaryOutCarryAudio
             && !StringUtils.Equals(clip.BoundaryOut, Constants.BoundaryOutCut))
         {

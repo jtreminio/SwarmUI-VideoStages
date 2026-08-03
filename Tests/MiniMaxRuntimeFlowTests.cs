@@ -1,4 +1,6 @@
 using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -143,8 +145,24 @@ public class MiniMaxRuntimeFlowTests
             SamplerNodes(bridge)
                 .Select(node => node.FindInput("start_at_step").LiteralAsInt())
                 .Order());
-        // The refine pass re-encodes the decoded video and its audio back into a joint latent.
-        Assert.Single(NodesOfClass(bridge, "LTXVConcatAVLatent"));
+        ComfyNode joint = Assert.Single(NodesOfClass(bridge, "LTXVConcatAVLatent"));
+        ComfyNode audioMask = Assert.Single(
+            NodesOfClass(bridge, "SetLatentNoiseMask"));
+        ComfyNode solidMask = Assert.IsType<SolidMaskNode>(
+            audioMask.FindInput("mask").Connection?.Node);
+        Assert.Equal(0, solidMask.FindInput("value").LiteralAsDouble());
+        Assert.Same(
+            audioMask,
+            joint.FindInput("audio_latent").Connection?.Node);
+        ComfyNode refineSampler = Assert.Single(
+            SamplerNodes(bridge),
+            node => node.FindInput("start_at_step").LiteralAsInt() == 4);
+        Assert.Same(
+            joint,
+            refineSampler.FindInput("latent_image").Connection?.Node);
+        Assert.Empty(NodesOfClass(bridge, "VAEEncodeAudio"));
+        Assert.Single(NodesOfClass(bridge, "SolidMask"));
+        Assert.Single(NodesOfClass(bridge, "VAEDecodeAudio"));
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.Equal(
             WGNodeData.DT_AUDIO,
@@ -176,8 +194,58 @@ public class MiniMaxRuntimeFlowTests
 
         ComfyNode keyframes = Assert.Single(
             NodesOfClass(bridge, "SwarmMiniMaxH3AddKeyframes"));
-        Assert.NotNull(keyframes.FindInput("first_frame")?.Connection);
-        Assert.NotNull(keyframes.FindInput("last_frame")?.Connection);
+        SwarmLoadImageB64Node first = Assert.IsType<SwarmLoadImageB64Node>(
+            keyframes.FindInput("first_frame")?.Connection?.Node);
+        SwarmLoadImageB64Node last = Assert.IsType<SwarmLoadImageB64Node>(
+            keyframes.FindInput("last_frame")?.Connection?.Node);
+        Assert.Equal(
+            "RklSU1Q=",
+            first.ImageBase64.LiteralAsString());
+        Assert.Equal(
+            "TEFTVA==",
+            last.ImageBase64.LiteralAsString());
+        Assert.Same(
+            keyframes,
+            Assert.Single(SamplerNodes(bridge)).FindInput("positive").Connection?.Node);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Uploaded_audio_is_preserved_in_the_entry_joint_latent()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clip["audioSource"] = Constants.AudioSourceUpload;
+        clip["uploadedAudio"] = new JObject
+        {
+            ["data"] = "data:audio/wav;base64,QUJD",
+            ["fileName"] = "clip.wav",
+        };
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmLoadAudioB64Node upload = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        VAEEncodeAudioNode encode = Assert.Single(
+            bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.True(ReachesUpstream(bridge, encode.Audio.Connection!.Node, upload.Id));
+        SetLatentNoiseMaskNode mask = Assert.Single(
+            bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+        LTXVConcatAVLatentNode joint = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        Assert.Same(mask.LATENT, joint.AudioLatent.Connection);
+        Assert.Same(
+            joint,
+            Assert.Single(SamplerNodes(bridge)).FindInput("latent_image").Connection?.Node);
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
     }

@@ -153,7 +153,10 @@ public class BoundaryHandoffResolverTests
         Assert.NotNull(carry);
         Assert.True(assembly.TryGetAudioCarryWindow(0, out int window));
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        TrimAudioDurationNode tail = Assert.Single(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
-        Assert.Equal(window / 24.0, tail.Duration.LiteralAsDouble()!.Value, precision: 6);
+        Assert.Equal(window / 24.0, carry.DurationSeconds, precision: 6);
+        Assert.Equal((ClipFrames - window) / 24.0, carry.SourceStartSeconds, precision: 6);
+        Assert.True(JToken.DeepEquals(carry.DecodedSource.Path, new JArray(AudioNodeId, 0)));
+        Assert.Null(carry.NativeLatent);
+        Assert.Empty(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
     }
 }
