@@ -12,6 +12,8 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
     private readonly RootMediaHandoff _rootHandoff = new(
         generator,
         MiniMaxGenerationSession.ArchitectureLabel);
+    private WGNodeData _baseReference;
+    private WGNodeData _refinerReference;
 
     public ArchitectureId ArchitectureId => MiniMaxArchitectureModule.ArchitectureId;
 
@@ -55,14 +57,21 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
             case ArchitectureHostPhase.DropCoreOutput:
                 _rootHandoff.DropCoreOutput();
                 break;
-            case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
             case ArchitectureHostPhase.CaptureBaseReference:
+                _baseReference = generator.CurrentMedia?.Duplicate();
+                break;
             case ArchitectureHostPhase.CaptureRefinerReference:
+                _refinerReference = generator.CurrentMedia?.Duplicate();
+                break;
+            case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
             case ArchitectureHostPhase.CaptureControlNetPreprocessors:
                 break;
         }
     }
 
     public IArchitectureGenerationSessionFactory CreateFactory() =>
-        new MiniMaxGenerationSessionFactory(generator);
+        new MiniMaxGenerationSessionFactory(
+            generator,
+            _baseReference,
+            _refinerReference);
 }

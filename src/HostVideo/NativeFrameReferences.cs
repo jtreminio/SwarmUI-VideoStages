@@ -24,7 +24,8 @@ internal static class NativeFrameReferences
         IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
         ICollection<PlanDiagnostic> diagnostics,
         string codeToken,
-        string label)
+        string label,
+        bool allowHostStageSources = false)
     {
         NativeFrameReferencePlan first = null;
         NativeFrameReferencePlan last = null;
@@ -77,7 +78,11 @@ internal static class NativeFrameReferences
                         + "saved and is ignored for this generation.");
                 continue;
             }
-            if (!StringUtils.Equals(reference.Source, "Upload"))
+            bool supportedSource = StringUtils.Equals(reference.Source, "Upload")
+                || allowHostStageSources
+                    && (StringUtils.Equals(reference.Source, "Base")
+                        || StringUtils.Equals(reference.Source, "Refiner"));
+            if (!supportedSource)
             {
                 Ignore(
                     "frame-reference-source-ignored",

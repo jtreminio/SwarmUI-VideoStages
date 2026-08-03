@@ -16,6 +16,8 @@ internal sealed class MiniMaxGenerationSession(
     VideoExecutionPlan plan,
     HostVideoRootSources rootSources,
     AudioRuntimeSources audioSources,
+    WGNodeData baseReference,
+    WGNodeData refinerReference,
     HostVideoStageEngine stageEngine) : IVideoGenerationSession
 {
     internal const string ArchitectureLabel = "MiniMax H3";
@@ -26,6 +28,7 @@ internal sealed class MiniMaxGenerationSession(
         DimensionSnap.Snap(plan.Width, plan.Height);
 
     private WGNodeData _entryFirstFrame;
+    private WGNodeData _endFrame;
 
     public ArchitectureId ArchitectureId => MiniMaxArchitectureModule.ArchitectureId;
 
@@ -40,7 +43,11 @@ internal sealed class MiniMaxGenerationSession(
                 $"MiniMax H3 clip {clip.ClipId} cannot enter from an init video.");
         }
 
-        _entryFirstFrame = ResolveAuthoredFirstFrame(clip);
+        MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
+        _entryFirstFrame = ResolveFrameReference(
+            payload.FirstFrameReference,
+            "MiniMax H3 first-frame reference");
+        _endFrame = ResolveEndFrame(payload.LastFrameReference);
         if (_entryFirstFrame is not null)
         {
             g.CurrentMedia = _entryFirstFrame;
@@ -282,7 +289,7 @@ internal sealed class MiniMaxGenerationSession(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData firstFrame)
     {
-        if (firstFrame is null && genInfo.VideoEndFrame is null)
+        if (firstFrame is null && _endFrame is null)
         {
             return;
         }
@@ -292,12 +299,7 @@ internal sealed class MiniMaxGenerationSession(
             ["latent"] = g.CurrentMedia.Path,
             ["conditioning"] = genInfo.PosCond,
             ["first_frame"] = firstFrame?.Path,
-            ["last_frame"] = genInfo.VideoEndFrame is null
-                ? null
-                : g.LoadImage(
-                    genInfo.VideoEndFrame,
-                    "${videostagesminimaxlastframe}",
-                    false).Path,
+            ["last_frame"] = _endFrame?.Path,
         });
         genInfo.PosCond = [keyframes, 0];
     }
@@ -353,15 +355,31 @@ internal sealed class MiniMaxGenerationSession(
         g.CurrentMedia.AttachedAudio = attached.DecodeLatents(g.CurrentAudioVae, true);
     }
 
-    private WGNodeData ResolveAuthoredFirstFrame(ClipPlan clip)
+    private WGNodeData ResolveFrameReference(
+        NativeFrameReferencePlan reference,
+        string descriptor)
     {
-        Image image = NativeFrameReferences.MaterializeUpload(
-            g,
-            clip.RequireMiniMaxPayload().FirstFrameReference,
-            "MiniMax H3 first-frame reference");
-        return image is null
-            ? null
-            : g.LoadImage(image, "${videostagesminimaxfirstframe}", false);
+        if (StringUtils.Equals(reference?.Source, "Upload"))
+        {
+            Image image = NativeFrameReferences.MaterializeUpload(g, reference, descriptor);
+            return image is null
+                ? null
+                : g.LoadImage(image, "${videostagesminimaxreference}", false);
+        }
+        WGNodeData captured = reference?.Source?.Trim() switch
+        {
+            string source when StringUtils.Equals(source, "Base") => baseReference,
+            string source when StringUtils.Equals(source, "Refiner") => refinerReference,
+            _ => null,
+        };
+        if (reference is not null && captured is null)
+        {
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
+                $"VideoStages: {descriptor} source '{reference.Source}' was not captured; "
+                    + "ignoring it for this generation.");
+        }
+        return captured?.Duplicate();
     }
 
     /// <summary>
@@ -369,15 +387,18 @@ internal sealed class MiniMaxGenerationSession(
     /// has no unambiguous target once a timeline has more than one clip, so it only applies to a
     /// lone MiniMax clip that did not author its own.
     /// </summary>
-    private Image ResolveEndFrame(ClipPlan clip)
+    private WGNodeData ResolveEndFrame(NativeFrameReferencePlan authored)
     {
-        Image authored = NativeFrameReferences.MaterializeUpload(
-            g,
-            clip.RequireMiniMaxPayload().LastFrameReference,
-            "MiniMax H3 final-frame reference");
-        return authored is not null || plan.Clips.Count != 1
-            ? authored
-            : g.UserInput.Get(T2IParamTypes.VideoEndFrame, null);
+        if (authored is not null)
+        {
+            return ResolveFrameReference(authored, "MiniMax H3 final-frame reference");
+        }
+        Image global = plan.Clips.Count == 1
+            ? g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
+            : null;
+        return global is null
+            ? null
+            : g.LoadImage(global, "${videostagesminimaxlastframe}", false);
     }
 
     private WorkflowGenerator.ImageToVideoGenInfo BuildGenInfo(
@@ -408,12 +429,14 @@ internal sealed class MiniMaxGenerationSession(
             Steps = stage.Core.Steps,
             Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.StageId,
             ContextID = sectionId,
-            VideoEndFrame = ResolveEndFrame(clip),
         };
     }
 }
 
-internal sealed class MiniMaxGenerationSessionFactory(WorkflowGenerator generator) :
+internal sealed class MiniMaxGenerationSessionFactory(
+    WorkflowGenerator generator,
+    WGNodeData baseReference,
+    WGNodeData refinerReference) :
     IArchitectureGenerationSessionFactory
 {
     private HostVideoRootSources _rootSources;
@@ -443,6 +466,8 @@ internal sealed class MiniMaxGenerationSessionFactory(WorkflowGenerator generato
             context.Plan,
             _rootSources,
             _audioSources,
+            baseReference,
+            refinerReference,
             new HostVideoStageEngine(
                 generator,
                 context.Plan,

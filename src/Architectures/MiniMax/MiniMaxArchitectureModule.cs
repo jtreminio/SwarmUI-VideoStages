@@ -97,7 +97,8 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                 stageModels,
                 diagnostics,
                 "minimax",
-                "MiniMax H3");
+                "MiniMax H3",
+                allowHostStageSources: true);
         foreach (StageSpec stage in activeStages)
         {
             // Assignments are resolver-vetted; a missing key is a caller contract violation.

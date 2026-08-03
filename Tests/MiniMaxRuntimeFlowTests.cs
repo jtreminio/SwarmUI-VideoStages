@@ -212,6 +212,38 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
+    public void Refiner_first_and_last_frame_references_reach_the_keyframe_node()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clip["refs"] = new JArray(
+            HostReference("Refiner", fromEnd: false),
+            HostReference("Refiner", fromEnd: true));
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        (JObject workflow, _) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            MiniMaxSteps(),
+            SourceFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode keyframes = Assert.Single(
+            NodesOfClass(bridge, "SwarmMiniMaxH3AddKeyframes"));
+        Assert.NotNull(keyframes.FindInput("first_frame")?.Connection);
+        Assert.NotNull(keyframes.FindInput("last_frame")?.Connection);
+        Assert.Same(
+            keyframes.FindInput("first_frame").Connection,
+            keyframes.FindInput("last_frame").Connection);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void Uploaded_audio_is_preserved_in_the_entry_joint_latent()
     {
         using SwarmUiTestContext context = new();
@@ -261,6 +293,14 @@ public class MiniMaxRuntimeFlowTests
                 ["data"] = $"data:image/png;base64,{payload}",
                 ["fileName"] = fromEnd ? "last.png" : "first.png",
             },
+        };
+
+    private static JObject HostReference(string source, bool fromEnd) =>
+        new()
+        {
+            ["source"] = source,
+            ["frame"] = 1,
+            ["fromEnd"] = fromEnd,
         };
 
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> MiniMaxSteps() =>
