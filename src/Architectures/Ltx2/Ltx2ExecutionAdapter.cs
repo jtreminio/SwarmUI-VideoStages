@@ -45,17 +45,19 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
                 ownsHostRoot: context.RootOwnerArchitectureId == ArchitectureId);
             return;
         }
-        Pipeline pipeline = BuildPipeline();
         switch (context.Phase)
         {
             case ArchitectureHostPhase.CaptureBaseReference:
-                pipeline.StageRefStore.Capture(StageRefStore.StageKind.Base);
+                new StageRefStore(generator).Capture(StageRefStore.StageKind.Base);
                 break;
             case ArchitectureHostPhase.CaptureRefinerReference:
-                pipeline.StageRefStore.Capture(StageRefStore.StageKind.Refiner);
+                new StageRefStore(generator).Capture(StageRefStore.StageKind.Refiner);
                 break;
             case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
-                pipeline.AudioMaskResizer.ApplyRootAudioMaskDimensionsAfterNativeVideo();
+                new LtxAudioMaskResizer(
+                    generator,
+                    new RootVideoStageResizer(generator))
+                    .ApplyRootAudioMaskDimensionsAfterNativeVideo();
                 break;
         }
     }
@@ -64,24 +66,27 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         ArchitectureTimelineSessionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        Pipeline pipeline = BuildPipeline();
+        StageRefStore stageRefStore = new(generator);
+        RootVideoStageResizer resizer = new(generator);
+        LtxAudioInjector audioInjector = new(generator, resizer);
+        LtxStageGuideMediaResolver guideMediaResolver = new(generator);
         AudioTimelineExecutor audioTimelineExecutor =
-            new(generator, pipeline.AudioInjector);
+            new(generator, audioInjector);
         StageRunner stageRunner = new(
             generator,
-            pipeline.StageExecutor,
-            pipeline.GuideMediaResolver,
-            pipeline.ClipRefResolver);
+            new LtxStageExecutor(generator, resizer),
+            guideMediaResolver,
+            new LtxClipRefResolver(generator, guideMediaResolver));
         StageSequenceRootSetup rootSetup = new(
             generator,
-            pipeline.StageRefStore,
-            pipeline.Resizer);
+            stageRefStore,
+            resizer);
         StageGuideReferenceState guideReferences = new(
             generator,
-            pipeline.StageRefStore);
+            stageRefStore);
         StageClipExecutor clipExecutor = new(
             generator,
-            pipeline.StageRefStore,
+            stageRefStore,
             stageRunner,
             audioTimelineExecutor,
             guideReferences,
@@ -115,36 +120,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             context.Assembly,
             context.RootPolicy);
     }
-
-    private Pipeline BuildPipeline()
-    {
-        StageRefStore stageRefStore = new(generator);
-        RootVideoStageResizer resizer = new(generator);
-        LtxStageGuideMediaResolver guideMediaResolver = new(generator);
-        LtxAudioInjector audioInjector = new(generator, resizer);
-        LtxAudioMaskResizer audioMaskResizer = new(generator, resizer);
-        LtxStageExecutor stageExecutor = new(generator, resizer);
-        LtxClipRefResolver clipRefResolver = new(
-            generator,
-            guideMediaResolver);
-        return new(
-            stageRefStore,
-            resizer,
-            audioInjector,
-            audioMaskResizer,
-            stageExecutor,
-            guideMediaResolver,
-            clipRefResolver);
-    }
-
-    private readonly record struct Pipeline(
-        StageRefStore StageRefStore,
-        RootVideoStageResizer Resizer,
-        LtxAudioInjector AudioInjector,
-        LtxAudioMaskResizer AudioMaskResizer,
-        LtxStageExecutor StageExecutor,
-        LtxStageGuideMediaResolver GuideMediaResolver,
-        LtxClipRefResolver ClipRefResolver);
 
     private sealed class GenerationSession(
         WorkflowGenerator generator,
