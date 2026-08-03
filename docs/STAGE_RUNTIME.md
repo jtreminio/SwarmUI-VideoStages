@@ -242,9 +242,9 @@ path, but returns the same decoded artifact contract.
 
 ## 7. Assembly and publication
 
-`TimelineAssemblySession` delegates a same-architecture non-cut run to that
-architecture's `IArchitectureBoundaryAssembler`. It joins the resulting runs
-with neutral hard cuts and assembles decoded audio.
+`TimelineAssemblySession` routes LTX non-cut runs directly to
+`Ltx2BoundaryAssembler`. It degrades other decoded overlap runs to cuts, joins
+the resulting runs with neutral hard cuts, and assembles decoded audio.
 
 `RootRuntimeSession` restores the captured host save set and publishes the final
 artifact through `OutputPublisher`. No architecture session may publish the
@@ -328,7 +328,7 @@ When adding an architecture using the existing vocabulary:
 3. implement graph-free projection/compilation and typed architecture payloads
    whose stage payloads expose the required common core;
 4. implement provider → session lifetimes;
-5. add a boundary assembler before declaring non-cut support;
+5. add a fail-closed decoded-overlap branch before declaring non-cut support;
 6. return a valid neutral decoded artifact;
 7. add frontend-local behavior only for concrete bespoke UI; and
 8. test mixed clips, failure cleanup, and prepared-state enforcement.

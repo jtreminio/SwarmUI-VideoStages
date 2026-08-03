@@ -662,8 +662,8 @@ compatibility, or architecture payload.
 `ArchitectureRuntimeDispatcher` verifies returned identity and calls
 `ValidateDecoded`. `TimelineAssemblySession` then:
 
-- delegates same-architecture non-cut runs to the registered
-  `IArchitectureBoundaryAssembler` (currently `Ltx2BoundaryAssembler`);
+- routes LTX non-cut runs directly to `Ltx2BoundaryAssembler` and degrades any
+  other architecture without a decoded overlap implementation to cuts;
 - joins architecture runs with neutral hard cuts;
 - assembles decoded audio;
 - installs the final decoded media.

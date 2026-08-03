@@ -4,6 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.Ltx2;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -13,14 +14,11 @@ internal sealed record TimelineMergeResult(
     BoundaryBudgetResolution Boundaries,
     RuntimeArtifact Artifact);
 
-internal sealed class MultiClipParallelMerger(
-    WorkflowGenerator g,
-    IReadOnlyDictionary<ArchitectureId, IArchitectureBoundaryAssembler> boundaryAssemblers = null)
+internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
 {
     private sealed record ArchitectureMergeRun(
         int Start,
         int Length,
-        IArchitectureBoundaryAssembler Assembler,
         BoundaryOverlapPlan Overlap);
 
     internal TimelineMergeResult Merge(
@@ -196,7 +194,7 @@ internal sealed class MultiClipParallelMerger(
                 runOutputs.Add(videoOutputs[run.Start]);
                 continue;
             }
-            runOutputs.Add(run.Assembler.MergeOverlaps(
+            runOutputs.Add(Ltx2BoundaryAssembler.MergeOverlaps(
                 bridge,
                 [.. clips.Skip(run.Start).Take(run.Length)],
                 [.. videoOutputs.Skip(run.Start).Take(run.Length)],
@@ -233,7 +231,7 @@ internal sealed class MultiClipParallelMerger(
             int runLength = runEndExclusive - runStart;
             if (runLength == 1)
             {
-                resolved.Add(new(runStart, runLength, null, null));
+                resolved.Add(new(runStart, runLength, null));
                 runStart = runEndExclusive;
                 continue;
             }
@@ -248,13 +246,10 @@ internal sealed class MultiClipParallelMerger(
                 failure = "an overlap crosses architecture ownership";
                 return false;
             }
-            if (boundaryAssemblers is null
-                || !boundaryAssemblers.TryGetValue(
-                    architectureId,
-                    out IArchitectureBoundaryAssembler assembler))
+            if (architectureId != Ltx2ArchitectureModule.ArchitectureId)
             {
                 runs = [];
-                failure = $"architecture '{architectureId}' has no boundary assembler";
+                failure = $"architecture '{architectureId}' has no decoded overlap implementation";
                 return false;
             }
             BoundaryOverlapPlan runPlan = BoundaryOverlapPlanner.ToOverlapPlan(
@@ -265,7 +260,7 @@ internal sealed class MultiClipParallelMerger(
                 failure = "an overlap run has no overlap plan";
                 return false;
             }
-            resolved.Add(new(runStart, runLength, assembler, runPlan));
+            resolved.Add(new(runStart, runLength, runPlan));
             runStart = runEndExclusive;
         }
         runs = resolved;

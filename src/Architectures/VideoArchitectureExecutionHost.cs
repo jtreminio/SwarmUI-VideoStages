@@ -131,14 +131,7 @@ internal sealed class VideoArchitectureExecutionHost
         {
             return;
         }
-        IReadOnlyDictionary<ArchitectureId, IArchitectureBoundaryAssembler>
-            boundaryAssemblers = _activeProviders
-                .Select(provider => (provider.ArchitectureId, provider.BoundaryAssembler))
-                .Where(pair => pair.BoundaryAssembler is not null)
-                .ToDictionary(pair => pair.ArchitectureId, pair => pair.BoundaryAssembler);
-        MultiClipParallelMerger merger = new(
-            _generator,
-            boundaryAssemblers);
+        MultiClipParallelMerger merger = new(_generator);
         new VideoStagesCoordinator(
             _generator,
             merger,

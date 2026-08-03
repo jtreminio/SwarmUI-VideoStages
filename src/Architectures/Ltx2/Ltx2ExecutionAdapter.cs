@@ -16,9 +16,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
 
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
 
-    public IArchitectureBoundaryAssembler BoundaryAssembler { get; } =
-        new Ltx2BoundaryAssembler();
-
     public IReadOnlyList<PlanDiagnostic> PreflightRequest(
         ArchitectureRequestPreflightContext context)
     {

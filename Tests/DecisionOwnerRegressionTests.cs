@@ -554,9 +554,6 @@ public class DecisionOwnerRegressionTests
     {
         public ArchitectureId ArchitectureId => inner.ArchitectureId;
 
-        public IArchitectureBoundaryAssembler BoundaryAssembler =>
-            inner.BoundaryAssembler;
-
         public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
         {
             if (inner is IArchitectureHostPhaseParticipant participant)

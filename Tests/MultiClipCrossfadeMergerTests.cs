@@ -74,12 +74,7 @@ public class MultiClipCrossfadeMergerTests
         bridge.Graph.NodesOfType<T>().Count;
 
     private static MultiClipParallelMerger Merger(WorkflowGenerator generator) =>
-        new(
-            generator,
-            new Dictionary<ArchitectureId, IArchitectureBoundaryAssembler>
-            {
-                [Ltx2ArchitectureModule.ArchitectureId] = new Ltx2BoundaryAssembler(),
-            });
+        new(generator);
 
     private static BoundaryBudgetResolution MergeAndPublish(
         WorkflowGenerator generator,
@@ -373,7 +368,7 @@ public class MultiClipCrossfadeMergerTests
     }
 
     [Fact]
-    public void Crossfade_MissingLaterRunAssembler_DegradesAllOverlapsToCuts()
+    public void Crossfade_UnsupportedLaterRun_DegradesAllOverlapsToCuts()
     {
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17, 17, 17], T2IModelClassSorter.CompatLtxv2);
@@ -393,7 +388,7 @@ public class MultiClipCrossfadeMergerTests
                 ["crossfade", "cut", "crossfade", "cut"]));
 
         Assert.True(resolution.Degraded);
-        Assert.Contains("no boundary assembler", resolution.Reason);
+        Assert.Contains("no decoded overlap implementation", resolution.Reason);
         Assert.All(
             resolution.Boundaries,
             boundary => Assert.Equal(BoundaryJoinType.Cut, boundary.Effective));

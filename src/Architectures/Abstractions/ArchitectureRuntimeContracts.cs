@@ -1,4 +1,3 @@
-using ComfyTyped.Core;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -74,16 +73,6 @@ internal sealed record ArchitectureClipRuntimeContext(
     DecodedClipArtifact PreviousClipOutput,
     DecodedClipArtifact PreviousTimelineClipOutput);
 
-/// <summary>Architecture-owned graph construction for non-cut boundaries.</summary>
-internal interface IArchitectureBoundaryAssembler
-{
-    INodeOutput MergeOverlaps(
-        WorkflowBridge bridge,
-        IReadOnlyList<DecodedClipArtifact> clips,
-        IReadOnlyList<INodeOutput> videoOutputs,
-        BoundaryOverlapPlan plan);
-}
-
 /// <summary>
 /// Graph-free request preflight input. Everything an architecture is asked here must be resolvable
 /// from the compiled plan and the host session alone, because no workflow mutation has happened yet.
@@ -110,8 +99,6 @@ internal sealed record ArchitectureTimelineSessionContext(
 internal interface IArchitectureGenerationSessionProvider
 {
     ArchitectureId ArchitectureId { get; }
-
-    IArchitectureBoundaryAssembler BoundaryAssembler => null;
 
     /// <summary>
     /// Reports every dependency this architecture needs to execute the planned clips, before any

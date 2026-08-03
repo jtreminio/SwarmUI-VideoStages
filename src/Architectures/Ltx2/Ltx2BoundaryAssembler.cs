@@ -1,15 +1,14 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
-using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
 using VideoStages.Generated;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>The existing LTX-owned decoded overlap/crossfade graph.</summary>
-internal sealed class Ltx2BoundaryAssembler : IArchitectureBoundaryAssembler
+/// <summary>LTX decoded overlap/crossfade graph.</summary>
+internal static class Ltx2BoundaryAssembler
 {
-    public INodeOutput MergeOverlaps(
+    internal static INodeOutput MergeOverlaps(
         WorkflowBridge bridge,
         IReadOnlyList<DecodedClipArtifact> clips,
         IReadOnlyList<INodeOutput> videoOutputs,
