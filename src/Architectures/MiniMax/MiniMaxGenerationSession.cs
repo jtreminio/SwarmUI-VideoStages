@@ -27,6 +27,7 @@ internal sealed class MiniMaxGenerationSession(
     internal const string ArchitectureLabel = "MiniMax H3";
 
     private readonly PlannedStagePromptResolver _prompts = new(g);
+    private readonly InitVideoClipInstaller _initVideoClipInstaller = new(g);
 
     private readonly (int Width, int Height) _dimensions =
         DimensionSnap.Snap(plan.Width, plan.Height);
@@ -45,13 +46,6 @@ internal sealed class MiniMaxGenerationSession(
     {
         ArgumentNullException.ThrowIfNull(context);
         ClipPlan clip = context.Clip;
-        if (clip.HasInitVideo)
-        {
-            // The descriptor never publishes the init-video entry mode, so planning rejects it.
-            throw VideoStagesInvariant.Failure(
-                $"MiniMax H3 clip {clip.ClipId} cannot enter from an init video.");
-        }
-
         MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
         _reusedAudio = null;
         PrepareBoundaryAudioCarry(context);
@@ -60,7 +54,26 @@ internal sealed class MiniMaxGenerationSession(
             payload.FirstFrameReference,
             "MiniMax H3 first-frame reference");
         _endFrame = ResolveEndFrame(payload.LastFrameReference);
-        if (_entryFirstFrame is not null)
+        if (clip.HasInitVideo)
+        {
+            InitVideoPlan source = clip.InitVideo
+                ?? throw VideoStagesInvariant.Failure(
+                    $"MiniMax H3 clip {clip.ClipId} has no init-video plan.");
+            ClipPlan sourceInstallPlan = clip with
+            {
+                InitVideo = source with
+                {
+                    TargetWidth = _dimensions.Width,
+                    TargetHeight = _dimensions.Height,
+                },
+            };
+            g.CurrentMedia = _initVideoClipInstaller.TryInstall(sourceInstallPlan)
+                ?? throw VideoStagesInvariant.Failure(
+                    $"VideoStages: clip {clip.ClipId} source video could not be installed.");
+            PrepareInitVideoAudio(clip);
+            g.CurrentVae = null;
+        }
+        else if (_entryFirstFrame is not null)
         {
             g.CurrentMedia = _entryFirstFrame;
             // The selected model supplies its own VAE during host preparation. Do not attach an
@@ -80,7 +93,7 @@ internal sealed class MiniMaxGenerationSession(
             g.CurrentVae = rootSources.Vae?.Duplicate();
             _entryFirstFrame = g.CurrentMedia;
         }
-        if (g.CurrentMedia is not null)
+        if (!clip.HasInitVideo && g.CurrentMedia is not null)
         {
             // Incoming audio belongs to whichever architecture owns the shared root, not to H3.
             g.CurrentMedia.AttachedAudio = null;
@@ -92,7 +105,7 @@ internal sealed class MiniMaxGenerationSession(
     public void Dispose() => stageRunner.Dispose();
 
     private int? ResolvePassthroughFrames(ClipPlan clip, StagePlan stage) =>
-        stage.Input == StageInputKind.PreviousStage
+        stage.Input is StageInputKind.PreviousStage or StageInputKind.InitVideo
             ? g.CurrentMedia?.Frames
             : ResolveFrames(clip);
 
@@ -261,7 +274,7 @@ internal sealed class MiniMaxGenerationSession(
         if (incoming.AttachedAudio is null)
         {
             throw VideoStagesInvariant.Failure(
-                "A MiniMax H3 refine stage's incoming media carries no audio latent.");
+                "A MiniMax H3 refine stage's incoming media carries no audio input.");
         }
         SampleNatively(clip, genInfo, incoming, firstFrame: null, startStep);
     }
@@ -405,31 +418,13 @@ internal sealed class MiniMaxGenerationSession(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         int frames)
     {
-        WGNodeData selectedAudio = PlannedAudioSourceSelector.Select(
-            clip.ClipId,
-            clip.Audio.Base,
-            audioSources,
-            suppressNative: true);
-        double duration = plan.FramesPerSecond > 0
-            ? frames / (double)plan.FramesPerSecond
-            : 0;
-        AudioSegmentCombiner combiner = new(g);
-        WGNodeData combinedAudio = combiner.Combine(
-            clip.ClipId,
-            clip.Audio.Segments,
-            selectedAudio,
-            duration,
-            out IReadOnlyList<(double Start, double End)> segmentWindows);
-        combinedAudio = combiner.OverlayOpeningWindow(
-            combinedAudio,
-            _boundaryCarryAudio,
-            _boundaryCarrySourceStart,
-            _boundaryCarryDuration,
-            duration);
-        IReadOnlyList<(double Start, double End)> preserveWindows =
-            _boundaryCarryAudio is null
-                ? segmentWindows
-                : [(0, _boundaryCarryDuration), .. segmentWindows];
+        WGNodeData combinedAudio = CombineClipAudio(
+            clip,
+            frames,
+            nativeAudio: null,
+            suppressNative: true,
+            out WGNodeData selectedAudio,
+            out IReadOnlyList<(double Start, double End)> preserveWindows);
         JArray framesConnection = null;
         if (clip.Audio.Length.Owner == AudioLengthOwner.Audio
             && MiniMaxArchitectureModule.Instance.Descriptor.AudioSourceKinds.Contains(
@@ -479,6 +474,61 @@ internal sealed class MiniMaxGenerationSession(
         return videoLatent
             .WithMaskedAudio(g.CurrentAudioVae)
             .AsSamplingLatent(genInfo.Vae, g.CurrentAudioVae);
+    }
+
+    private void PrepareInitVideoAudio(ClipPlan clip)
+    {
+        WGNodeData current = g.CurrentMedia
+            ?? throw VideoStagesInvariant.Failure(
+                $"MiniMax H3 clip {clip.ClipId} has no installed init video.");
+        WGNodeData combinedAudio = CombineClipAudio(
+            clip,
+            current.Frames ?? ResolveFrames(clip),
+            current.AttachedAudio,
+            suppressNative: false,
+            out _,
+            out _);
+        WGNodeData withAudio = current.Duplicate();
+        withAudio.AttachedAudio = combinedAudio;
+        g.CurrentMedia = withAudio;
+    }
+
+    private WGNodeData CombineClipAudio(
+        ClipPlan clip,
+        int frames,
+        WGNodeData nativeAudio,
+        bool suppressNative,
+        out WGNodeData selectedAudio,
+        out IReadOnlyList<(double Start, double End)> preserveWindows)
+    {
+        AudioRuntimeSources sources = nativeAudio is null
+            ? audioSources
+            : audioSources with { NativeAudio = nativeAudio };
+        selectedAudio = PlannedAudioSourceSelector.Select(
+            clip.ClipId,
+            clip.Audio.Base,
+            sources,
+            suppressNative);
+        double duration = plan.FramesPerSecond > 0
+            ? frames / (double)plan.FramesPerSecond
+            : 0;
+        AudioSegmentCombiner combiner = new(g);
+        WGNodeData combinedAudio = combiner.Combine(
+            clip.ClipId,
+            clip.Audio.Segments,
+            selectedAudio,
+            duration,
+            out IReadOnlyList<(double Start, double End)> segmentWindows);
+        combinedAudio = combiner.OverlayOpeningWindow(
+            combinedAudio,
+            _boundaryCarryAudio,
+            _boundaryCarrySourceStart,
+            _boundaryCarryDuration,
+            duration);
+        preserveWindows = _boundaryCarryAudio is null
+            ? segmentWindows
+            : [(0, _boundaryCarryDuration), .. segmentWindows];
+        return combinedAudio;
     }
 
     /// <summary>

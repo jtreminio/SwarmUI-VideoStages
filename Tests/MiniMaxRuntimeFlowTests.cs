@@ -218,6 +218,147 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
+    public void Init_video_refines_conformed_footage_and_its_audio()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MiniMaxInitVideoClip(
+            MakeStage(
+                models.VideoModel.Name,
+                "Generated",
+                control: 0.5,
+                steps: 8,
+                cfgScale: 1),
+            MakeStage(
+                models.VideoModel.Name,
+                "PreviousStage",
+                control: 0.5,
+                steps: 8,
+                cfgScale: 1));
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                MiniMaxSteps(),
+                SourceFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmFrameWindowNode window = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+        Assert.Equal(24, window.StartFrame.LiteralAsInt());
+        Assert.Equal(39, window.FrameCount.LiteralAsInt());
+        ImageScaleNode scale = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            node => node.Image.Connection?.Node.Id == window.Id);
+        Assert.Equal(512, scale.Width.LiteralAsInt());
+        Assert.Equal(512, scale.Height.LiteralAsInt());
+        TrimAudioDurationNode sourceAudio = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
+            node => node.StartIndex.LiteralAsDouble() == 1);
+        Assert.Equal(39 / 24.0, sourceAudio.Duration.LiteralAsDouble().Value, 6);
+
+        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
+        Assert.Equal(2, samplers.Length);
+        Assert.All(samplers, sampler =>
+        {
+            Assert.Equal(4, sampler.FindInput("start_at_step").LiteralAsInt());
+            Assert.True(ReachesUpstream(bridge, sampler, window.Id));
+            Assert.True(ReachesUpstream(bridge, sampler, sourceAudio.Id));
+        });
+        Assert.Single(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.Equal(2, bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>().Count());
+        Assert.Equal(2, bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>().Count());
+        Assert.Equal(39, generator.CurrentMedia.Frames);
+        Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.AttachedAudio?.DataType);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Init_video_passthrough_keeps_conformed_footage_and_source_audio()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MiniMaxInitVideoClip(
+            MakeStage(
+                models.VideoModel.Name,
+                "Generated",
+                control: 0,
+                steps: 8,
+                cfgScale: 1));
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                MiniMaxSteps(),
+                SourceFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmFrameWindowNode window = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+        Assert.Empty(SamplerNodes(bridge));
+        Assert.True(ReachesUpstream(
+            bridge,
+            bridge.ResolvePath((JArray)generator.CurrentMedia.Path)?.Node,
+            window.Id));
+        Assert.Equal(25, generator.CurrentMedia.Frames);
+        Assert.IsType<TrimAudioDurationNode>(
+            bridge.ResolvePath((JArray)generator.CurrentMedia.AttachedAudio.Path)?.Node);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Init_video_can_replace_source_audio_with_an_upload()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MiniMaxInitVideoClip(
+            MakeStage(
+                models.VideoModel.Name,
+                "Generated",
+                control: 0.5,
+                steps: 8,
+                cfgScale: 1));
+        clip["audioSource"] = Constants.AudioSourceUpload;
+        clip["uploadedAudio"] = new JObject
+        {
+            ["data"] = "data:audio/wav;base64,QUJD",
+            ["fileName"] = "replacement.wav",
+        };
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                MiniMaxSteps(),
+                SourceFeatures);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmLoadAudioB64Node upload = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        ComfyNode sampler = Assert.Single(SamplerNodes(bridge));
+        Assert.True(ReachesUpstream(bridge, sampler, upload.Id));
+        TrimAudioDurationNode sourceAudio = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
+            node => node.StartIndex.LiteralAsDouble() == 1);
+        Assert.False(ReachesUpstream(bridge, sampler, sourceAudio.Id));
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void A_second_stage_refines_the_decoded_clip_from_its_own_start_step()
     {
         using SwarmUiTestContext context = new();
@@ -1014,6 +1155,19 @@ public class MiniMaxRuntimeFlowTests
                 ["fileName"] = fromEnd ? "last.png" : "first.png",
             },
         };
+
+    private static JObject MiniMaxInitVideoClip(params JObject[] stages)
+    {
+        JObject clip = MakeClip(stages);
+        clip["duration"] = 1.0;
+        clip["initVideo"] = new JObject
+        {
+            ["data"] = "data:video/mp4;base64,ESIz",
+            ["fileName"] = "source.mp4",
+            ["startSeconds"] = 1.0,
+        };
+        return clip;
+    }
 
     private static JObject HostReference(string source, bool fromEnd) =>
         new()

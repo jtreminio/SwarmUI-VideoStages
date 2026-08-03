@@ -62,6 +62,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
         [
             ArchitectureEntryMode.TextToVideo,
             ArchitectureEntryMode.ImageToVideo,
+            ArchitectureEntryMode.InitVideo,
         ],
         ArchitectureFeature.FrameReferences
             | ArchitectureFeature.AudioSegments
@@ -110,6 +111,18 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
 
         List<PlanDiagnostic> diagnostics = [];
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
+        AudioSourceKind audioKind = AudioSourceParser.Parse(clip.AudioSource).Kind;
+        if (context.EntryMode == ArchitectureEntryMode.InitVideo
+            && AudioSourceKindPolicy.AudioOwnsClipDuration(clip)
+            && Descriptor.AudioSourceKinds.Contains(audioKind))
+        {
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Error,
+                "minimax.init-video.audio-derived-duration-unsupported",
+                $"Clip {clip.Id}: MiniMax H3 init-video refinement requires a fixed frame "
+                    + "count and cannot derive it from audio.",
+                clip.Id));
+        }
         Dictionary<int, IArchitectureStagePayload> stages = [];
         (NativeFrameReferencePlan first, NativeFrameReferencePlan last) =
             NativeFrameReferences.Compile(
@@ -130,7 +143,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                     ? NormalLoraTargetPolicy.ModelOnly
                     : NormalLoraTargetPolicy.ModelAndTextEncoder;
             bool passthrough = ArchitectureStageActivity.IsPassthrough(stage, Descriptor);
-            if (stage.ClipStageIndex > 0
+            if ((clip.InitVideo is not null || stage.ClipStageIndex > 0)
                 && !passthrough
                 && HostVideoStageSchedulePolicy.IsQuantizedZeroPartial(
                     stage.Steps,

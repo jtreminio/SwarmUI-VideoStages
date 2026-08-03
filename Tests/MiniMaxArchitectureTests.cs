@@ -77,7 +77,7 @@ public class MiniMaxArchitectureTests
             ["Native", "Upload", "AceStepFun"],
             architecture["capabilities"]["audioSourceKinds"].Values<string>());
         Assert.Equal(
-            ["text-to-video", "image-to-video"],
+            ["text-to-video", "image-to-video", "init-video"],
             architecture["capabilities"]["entryModes"].Values<string>());
         Assert.Equal(
             [
@@ -238,6 +238,39 @@ public class MiniMaxArchitectureTests
     }
 
     [Fact]
+    public void Init_video_rejects_audio_derived_duration()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clipObject = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8, cfgScale: 1));
+        clipObject["initVideo"] = new JObject
+        {
+            ["data"] = "data:video/mp4;base64,ESIz",
+            ["fileName"] = "source.mp4",
+            ["startSeconds"] = 0,
+        };
+        clipObject["audioSource"] = Constants.AudioSourceUpload;
+        clipObject["clipLengthFromAudio"] = true;
+        clipObject["uploadedAudio"] = new JObject
+        {
+            ["data"] = "data:audio/wav;base64,QUJD",
+            ["fileName"] = "source.wav",
+        };
+
+        ArchitectureClipCompilation compilation = Compile(
+            ParseClip(clipObject, models),
+            models,
+            ArchitectureEntryMode.InitVideo);
+
+        Assert.Contains(
+            compilation.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "minimax.init-video.audio-derived-duration-unsupported"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void Latent_upscale_is_ignored_and_does_not_activate_a_zero_control_stage()
     {
         using SwarmUiTestContext context = new();
@@ -323,7 +356,8 @@ public class MiniMaxArchitectureTests
 
     private static ArchitectureClipCompilation Compile(
         ClipSpec clip,
-        TestModelBundle models)
+        TestModelBundle models,
+        ArchitectureEntryMode entryMode = ArchitectureEntryMode.ImageToVideo)
     {
         Assert.True(VideoArchitectureRegistry.Production.TryResolveModel(
             models.VideoModel,
@@ -333,7 +367,7 @@ public class MiniMaxArchitectureTests
         return MiniMaxArchitectureModule.Instance.ValidateAndCompileClip(
             clip,
             stageModels,
-            new(1344, 768, 24));
+            new(1344, 768, 24, entryMode));
     }
 
     private static ClipSpec ParseClip(JObject clip, TestModelBundle models)
