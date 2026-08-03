@@ -9336,17 +9336,17 @@
       ...icLoraDecision,
       reason: `Control-signal-derived clip duration is not supported by ${capabilityView.architectureLabel}.`
     };
-    const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
+    const controlSignalEnabled = hasArchitectureSlotSourcedIcLora(
       capabilityView.architectureId,
       clip.icLoras
     );
-    const controlDurationIssueDecision = clip.clipLengthFromControlNet && !controlDurationDecision.supported ? controlDurationDecision : clip.clipLengthFromControlNet && !controlNetEnabled ? {
+    const controlDurationIssueDecision = clip.clipLengthFromControlNet && !controlDurationDecision.supported ? controlDurationDecision : clip.clipLengthFromControlNet && !controlSignalEnabled ? {
       ...controlDurationDecision,
       supported: false,
       reason: "No IC-LoRA supplies a ControlNet 1-3 drive source for clip duration."
     } : null;
     const options = buildAudioSourceOptions(clip.audioSource ?? "", {
-      controlNetEnabled,
+      controlNetEnabled: capabilityView.audioSourceKinds.includes("ControlNet"),
       allowedKinds: capabilityView.audioSourceKinds
     });
     const source = options.find((option) => option.value === clip.audioSource)?.value ?? clip.audioSource ?? "";

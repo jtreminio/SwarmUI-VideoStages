@@ -353,6 +353,27 @@ describe("persisted-but-unsupported repair contract", () => {
         ).toMatchObject({ checked: true, disabled: false });
     });
 
+    it("offers ControlNet audio without requiring an IC-LoRA", () => {
+        const models = testArchitectureCatalog();
+        models.architectures[0].capabilities = testArchitectureCapabilities({
+            features: ["audioDerivedDuration"],
+            audioSourceKinds: ["Native", "ControlNet"],
+        });
+        const clip = minimalClip();
+
+        const body = buildAudioBody(
+            context(models, [clip]),
+            { kind: "audio", clipIdx: 0 },
+            documentFor([clip]),
+        );
+        const options = Array.from(
+            body.querySelectorAll<HTMLSelectElement>("select")[0]?.options ??
+                [],
+        ).map((option) => option.value);
+
+        expect(options).toEqual(["Native", "ControlNet"]);
+    });
+
     it("repairs an unknown source before offering duration repair", () => {
         const models = testArchitectureCatalog();
         const clip = minimalClip({

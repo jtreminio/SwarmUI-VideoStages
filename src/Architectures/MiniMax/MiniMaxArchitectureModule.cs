@@ -57,6 +57,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
         [
             AudioSourceKind.Native,
             AudioSourceKind.Upload,
+            AudioSourceKind.ControlNet,
             AudioSourceKind.AceStepFun,
         ],
         [

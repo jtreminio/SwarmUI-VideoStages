@@ -177,7 +177,7 @@ public sealed class EffectiveVideoRequestTests
         ClipSpec clip = Clip(stage) with
         {
             Frames = 27,
-            AudioSource = Constants.AudioSourceControlNet,
+            AudioSource = "future-audio-source",
             ClipLengthFromAudio = true,
         };
         VideoStagesSpec authored = Spec(clip);

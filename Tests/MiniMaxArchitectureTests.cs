@@ -74,7 +74,7 @@ public class MiniMaxArchitectureTests
             MiniMaxArchitectureModule.FrameGridOrigin,
             model.Value<int>("frameGridOrigin"));
         Assert.Equal(
-            ["Native", "Upload", "AceStepFun"],
+            ["Native", "Upload", "ControlNet", "AceStepFun"],
             architecture["capabilities"]["audioSourceKinds"].Values<string>());
         Assert.Equal(
             ["text-to-video", "image-to-video", "init-video"],
@@ -103,6 +103,7 @@ public class MiniMaxArchitectureTests
 
     [Theory]
     [InlineData(Constants.AudioSourceUpload)]
+    [InlineData(Constants.AudioSourceControlNet)]
     [InlineData("audio0")]
     public void External_audio_can_drive_MiniMax_duration(string audioSource)
     {

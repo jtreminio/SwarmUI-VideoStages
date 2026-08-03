@@ -49,14 +49,14 @@ export const buildAudioBody = (
               ...icLoraDecision,
               reason: `Control-signal-derived clip duration is not supported by ${capabilityView.architectureLabel}.`,
           };
-    const controlNetEnabled = hasArchitectureSlotSourcedIcLora(
+    const controlSignalEnabled = hasArchitectureSlotSourcedIcLora(
         capabilityView.architectureId,
         clip.icLoras,
     );
     const controlDurationIssueDecision =
         clip.clipLengthFromControlNet && !controlDurationDecision.supported
             ? controlDurationDecision
-            : clip.clipLengthFromControlNet && !controlNetEnabled
+            : clip.clipLengthFromControlNet && !controlSignalEnabled
               ? {
                     ...controlDurationDecision,
                     supported: false,
@@ -64,7 +64,8 @@ export const buildAudioBody = (
                 }
               : null;
     const options = buildAudioSourceOptions(clip.audioSource ?? "", {
-        controlNetEnabled,
+        controlNetEnabled:
+            capabilityView.audioSourceKinds.includes("ControlNet"),
         allowedKinds: capabilityView.audioSourceKinds,
     });
     const source =

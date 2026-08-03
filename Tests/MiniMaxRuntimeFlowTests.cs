@@ -980,6 +980,93 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
+    public void ControlNet_audio_can_drive_the_entry_joint_latent_length()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clip["audioSource"] = Constants.AudioSourceControlNet;
+        clip["clipLengthFromAudio"] = true;
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(
+                input,
+                MiniMaxSteps().Append(SeedControlNetAudioTracksStep(1)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        GetVideoComponentsNode source = Assert.Single(
+            bridge.Graph.NodesOfType<GetVideoComponentsNode>());
+        SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.Same(source.Audio, lengthToFrames.AudioInput.Connection);
+        ComfyNode emptyJoint = Assert.Single(
+            NodesOfClass(bridge, "EmptyMiniMaxH3LatentAV"));
+        Assert.Same(
+            lengthToFrames.Frames,
+            emptyJoint.FindInput("length").Connection);
+        VAEEncodeAudioNode encode = Assert.Single(
+            bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.True(ReachesUpstream(bridge, encode, source.Id));
+        LTXVConcatAVLatentNode joint = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        Assert.Same(
+            joint,
+            Assert.Single(SamplerNodes(bridge)).FindInput("latent_image").Connection?.Node);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public void Unusable_ControlNet_audio_warns_and_keeps_native_H3_audio_generation(
+        int capturedTracks)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clip["audioSource"] = Constants.AudioSourceControlNet;
+        clip["clipLengthFromAudio"] = true;
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        IEnumerable<WorkflowGenerator.WorkflowGenStep> steps = capturedTracks == 0
+            ? MiniMaxSteps()
+            : MiniMaxSteps().Append(SeedControlNetAudioTracksStep(capturedTracks));
+        (JObject workflow, WorkflowGenerator _) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, steps);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Equal(
+            capturedTracks,
+            bridge.Graph.NodesOfType<GetVideoComponentsNode>().Count());
+        List<string> warnings = Assert.IsType<List<string>>(
+            input.ExtraMeta["parser_warnings"]);
+        Assert.Contains(
+            warnings,
+            warning => warning.Contains("ControlNet audio")
+                && warning.Contains("using silence"));
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        ComfyNode emptyJoint = Assert.Single(
+            NodesOfClass(bridge, "EmptyMiniMaxH3LatentAV"));
+        Assert.Same(
+            emptyJoint,
+            Assert.Single(SamplerNodes(bridge)).FindInput("latent_image").Connection?.Node);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void Audio_derived_duration_refuses_multi_clip_and_global_trim_requests()
     {
         using SwarmUiTestContext context = new();
@@ -1240,6 +1327,20 @@ public class MiniMaxRuntimeFlowTests
             bridge.AddNode(
                 new VAEDecodeAudioNode(),
                 AudioHandler.MakeAceStepFunDecodeId(trackIndex));
+        }, 11.05);
+
+    private static WorkflowGenerator.WorkflowGenStep SeedControlNetAudioTracksStep(
+        int count) =>
+        new(g =>
+        {
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            for (int index = 0; index < count; index++)
+            {
+                string nodeId = $"90{index + 1}";
+                bridge.AddNode(new GetVideoComponentsNode(), nodeId);
+                g.NodeHelpers[ControlNetCaptureKeys.Audio(index)] =
+                    new JArray(nodeId, 1).ToString(Newtonsoft.Json.Formatting.None);
+            }
         }, 11.05);
 
     private static IEnumerable<ComfyNode> NodesOfClass(
