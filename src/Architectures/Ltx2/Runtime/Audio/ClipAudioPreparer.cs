@@ -4,6 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Ltx2.Planning;
+using VideoStages.Generated;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -64,19 +65,33 @@ internal sealed class ClipAudioPreparer(
 
         if (baseAudio is null
             && segments.Items.IsDefaultOrEmpty
-            && boundaryAudioCarry?.NativeLatent is not null)
+            && boundaryAudioCarry?.NativeLatent?.Path is JArray carryPath
+            && g.CurrentAudioVae is not null)
         {
             int targetFrames = (context.PlannedClip.Frames ?? 0)
                 + clipContext.IncomingContinueHandleFrames;
-            WGNodeData latentCarry = LtxAudioPreserveWindowBuilder.TryBuildCarry(
-                g,
-                boundaryAudioCarry,
-                targetFrames,
-                context.FramesPerSecond,
-                context.PlannedClip.ClipId + 1);
-            if (latentCarry is not null)
+            if (targetFrames > 0 && context.FramesPerSecond > 0)
             {
-                currentMedia.AttachedAudio = latentCarry;
+                using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+                LTXVEmptyLatentAudioNode target = bridge.AddNode(
+                    new LTXVEmptyLatentAudioNode().With(
+                        FramesNumber: targetFrames,
+                        FrameRate: $"{context.FramesPerSecond}",
+                        BatchSize: 1));
+                target.AudioVae.ConnectFromPath(bridge, g.CurrentAudioVae.Path);
+                SwarmSetAudioMaskWindowsNode mask = AudioPreserveWindowBuilder.AddMask(
+                    g,
+                    bridge,
+                    carryPath,
+                    [(0, boundaryAudioCarry.DurationSeconds)],
+                    context.PlannedClip.ClipId + 1,
+                    target.Latent.ToPath(),
+                    boundaryAudioCarry.SourceStartSeconds);
+                currentMedia.AttachedAudio = new WGNodeData(
+                    mask.Latent.ToPath(),
+                    g,
+                    WGNodeData.DT_LATENT_AUDIO,
+                    g.CurrentAudioVae.Compat);
                 g.CurrentMedia = currentMedia;
                 return;
             }
