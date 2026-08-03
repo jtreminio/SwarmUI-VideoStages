@@ -20,7 +20,7 @@ hidden authoring document + host request
     → cached VideoExecutionPlanContext
     → graph-free request preparation
     → ordered host phases
-    → VideoStagesCoordinator
+    → VideoArchitectureExecutionHost
     → one session per active architecture, selected for each clip
     → DecodedClipArtifact per clip
     → TimelineAssemblySession
@@ -134,16 +134,16 @@ The runtime has two lifetimes:
 | `IArchitectureGenerationSessionProvider` | request | Host-phase captures only; reused across preflight, host phases, and session creation |
 | `IVideoGenerationSession` | one active architecture in one timeline | Yes; executes all clips owned by that architecture |
 
-`VideoStagesCoordinator` creates sessions only after request preparation. Its
+`VideoArchitectureExecutionHost` creates sessions only after request preparation. Its
 lifecycle is:
 
 1. call `CreateSession` once per active provider, with `OwnsGeneratedRoot`;
-2. execute clips through the coordinator's architecture-keyed session map;
+2. execute clips through the execution host's architecture-keyed session map;
 3. dispose every session, including constructor rollback on partial failure.
 
 ## 5. Common clip loop
 
-`VideoStagesCoordinator` owns the timeline-level sequence:
+`VideoArchitectureExecutionHost` owns the timeline-level sequence:
 
 1. capture the host root publication/save contract;
 2. resolve request audio sources;
@@ -154,10 +154,10 @@ lifecycle is:
 7. clear model compatibility from neutral final media;
 8. publish the final artifact and restore the root save contract.
 
-The coordinator loops planned clips in order. It exposes
+The execution host loops planned clips in order. It exposes
 `PreviousClipOutput` only across a same-architecture non-cut boundary.
 `PreviousTimelineClipOutput` remains available as contextual decoded media
-across cuts. The dispatcher selects a session solely by the planned
+across cuts. The execution host selects a session solely by the planned
 `ArchitectureId`, verifies that the returned architecture matches both the
 selected session and planned clip, then verifies clip identity and decoded
 shape.
@@ -246,9 +246,9 @@ path, but returns the same decoded artifact contract.
 
 ## 7. Assembly and publication
 
-`TimelineAssemblySession` routes LTX non-cut runs directly to
-`Ltx2BoundaryAssembler`. It degrades other decoded overlap runs to cuts, joins
-the resulting runs with neutral hard cuts, and assembles decoded audio.
+`TimelineAssemblySession` routes descriptor-supported crossfades through
+`DecodedCrossfadeAssembler`, joins architecture runs with neutral hard cuts,
+and assembles decoded audio.
 
 `RootRuntimeSession` restores the captured host save set and publishes the final
 artifact through `OutputPublisher`. No architecture session may publish the
@@ -278,7 +278,7 @@ Diagnostics divide responsibility:
 | Architecture-specific options and semantic conflicts | Selected module's graph-free projector/compiler |
 | Architecture dependencies | Active runtime provider during request preparation |
 | Ordinary model-path validity already owned by a supported SwarmUI primitive | SwarmUI core during graph construction |
-| Returned identity and decoded media shape | `VideoStagesCoordinator` |
+| Returned identity and decoded media shape | `VideoArchitectureExecutionHost` |
 | Cross-clip run validity and final publication contract | `TimelineAssemblySession` / `OutputPublisher` |
 
 ## 9. Generated binding retention audit

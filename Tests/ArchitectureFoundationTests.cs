@@ -824,7 +824,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Common_coordinator_rejects_mismatched_session_result_clip()
+    public void Execution_host_rejects_mismatched_session_result_clip()
     {
         VideoExecutionPlan plan = Plan(GeneratedClip(7, Stage(10, "ltx-model")));
         ProjectingSession session = new(
@@ -839,7 +839,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Common_coordinator_rejects_mismatched_session_result_architecture()
+    public void Execution_host_rejects_mismatched_session_result_architecture()
     {
         VideoExecutionPlan plan = Plan(GeneratedClip(7, Stage(10, "ltx-model")));
         ProjectingSession session = new(
@@ -864,7 +864,7 @@ public class ArchitectureFoundationTests
     [InlineData((int)DecodedMediaKind.Video, 512, 0, 24, 25)]
     [InlineData((int)DecodedMediaKind.Video, 512, 512, 0, 25)]
     [InlineData((int)DecodedMediaKind.Video, 512, 512, 24, 0)]
-    public void Common_coordinator_rejects_mistyped_or_non_positive_video_artifact(
+    public void Execution_host_rejects_mistyped_or_non_positive_video_artifact(
         int rawVideoKind,
         int width,
         int height,
@@ -890,7 +890,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Common_coordinator_rejects_mistyped_attached_audio_artifact()
+    public void Execution_host_rejects_mistyped_attached_audio_artifact()
     {
         VideoExecutionPlan plan = Plan(GeneratedClip(7, Stage(10, "ltx-model")));
         ProjectingSession session = new(
@@ -907,7 +907,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Common_coordinator_rejects_null_session_result()
+    public void Execution_host_rejects_null_session_result()
     {
         VideoExecutionPlan plan = Plan(GeneratedClip(7, Stage(10, "ltx-model")));
         ProjectingSession session = new(new("ltx2"), _ => null);
@@ -989,7 +989,7 @@ public class ArchitectureFoundationTests
     [Theory]
     [InlineData("ltx2,fake,ltx2,fake")]
     [InlineData("fake,ltx2,fake,ltx2")]
-    public void Common_coordinator_dispatches_alternating_generated_architectures_and_assembles(
+    public void Execution_host_dispatches_alternating_generated_architectures_and_assembles(
         string architectureOrder)
     {
         string[] ids = architectureOrder.Split(',');
@@ -1086,7 +1086,7 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Common_coordinator_disposes_partial_sessions_when_construction_fails()
+    public void Execution_host_disposes_partial_sessions_when_construction_fails()
     {
         VideoStagesSpec spec = Spec(
             GeneratedClip(0, Stage(0, "ltx-model")),

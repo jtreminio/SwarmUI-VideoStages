@@ -31,7 +31,7 @@ classes whose stock video graph branches have been verified.
 | Curated IC-LoRA download route | LTX backend adapter + SwarmUI core | `Ltx2ApiRoutes`, `ModelsAPI.DoModelDownloadWS` |
 | Document parsing and product planning | Common backend | `VideoStagesSpecParser`, `ArchitecturePlanResolver`, `VideoExecutionPlanCompiler` |
 | Model-family planning and execution | Selected backend module | `IVideoArchitectureModule.ValidateAndCompileClip`, `IVideoGenerationSession` |
-| Runtime dispatch and timeline assembly | Common backend | `VideoStagesCoordinator`, `TimelineAssemblySession` |
+| Runtime dispatch and timeline assembly | Common backend | `VideoArchitectureExecutionHost`, `TimelineAssemblySession` |
 | Final host publication | SwarmUI adapter | `RootRuntimeSession`, `OutputPublisher` |
 
 The boundary in one sentence:
@@ -459,20 +459,15 @@ control-signal, and uploaded-drive caches.
 
 ### B5. Dispatch a clip by architecture
 
-`Runner.RunConfiguredStages` enters:
+`Runner.RunConfiguredStages` enters `VideoArchitectureExecutionHost`.
 
-```text
-VideoArchitectureExecutionHost
-    → VideoStagesCoordinator
-```
-
-The coordinator captures the host root, resolves audio, creates one session for
+The execution host captures the host root, resolves audio, creates one session for
 each active architecture provider, and creates `ArchitectureClipRuntimeContext`
 for each planned clip. It exposes previous output as continuity input only for
 a non-cut, same-architecture boundary, while separately exposing the previous
 timeline output as contextual media across cuts and architecture changes.
 
-`VideoStagesCoordinator` selects a session solely from `clip.Architecture.Id`,
+`VideoArchitectureExecutionHost` selects a session solely from `clip.Architecture.Id`,
 passes the narrow per-clip context directly to that session, and validates that
 the returned architecture matches both the selected session and planned clip
 before validating clip identity and decoded-media shape. It does not repeat
@@ -659,16 +654,15 @@ video, optional decoded audio, literal dimensions/FPS/frames, and
 architecture/clip provenance. It cannot carry a latent, VAE, model
 compatibility, or architecture payload.
 
-`VideoStagesCoordinator` verifies returned identity and calls `ValidateDecoded`.
+`VideoArchitectureExecutionHost` verifies returned identity and calls `ValidateDecoded`.
 `TimelineAssemblySession` then:
 
-- routes LTX non-cut runs directly to `Ltx2BoundaryAssembler` and degrades any
-  other architecture without a decoded overlap implementation to cuts;
+- routes supported crossfades through `DecodedCrossfadeAssembler`;
 - joins architecture runs with neutral hard cuts;
 - assembles decoded audio;
 - installs the final decoded media.
 
-`VideoStagesCoordinator` clears model compatibility from final media and
+`VideoArchitectureExecutionHost` clears model compatibility from final media and
 publishes through `RootRuntimeSession.PublishTimeline` / `OutputPublisher`.
 Publication ends the timeline; no architecture finalization step follows it.
 
@@ -684,8 +678,8 @@ Publication ends the timeline; no architecture finalization step follows it.
 | Invalid common geometry, boundary, or audio plan | Common compiler diagnostics |
 | Missing IC-LoRA dependencies | `Ltx2RequestPreflight` before later VideoStages mutation |
 | Missing or corrupt Wan root handoff | `HostVideoRootMediaHandoff` with complete key cleanup |
-| Missing provider/session | `VideoArchitectureExecutionHost` / `VideoStagesCoordinator` |
-| Wrong returned identity or decoded media | Coordinator identity checks / `DecodedClipArtifact.ValidateDecoded` |
+| Missing provider/session | `VideoArchitectureExecutionHost` |
+| Wrong returned identity or decoded media | Execution-host identity checks / `DecodedClipArtifact.ValidateDecoded` |
 | Invalid cross-architecture non-cut run | `MultiClipParallelMerger` |
 | Unpublishable final media | `RootRuntimeSession` / `OutputPublisher` |
 
