@@ -131,16 +131,18 @@ internal sealed class VideoArchitectureExecutionHost
         {
             return;
         }
-        ArchitectureRuntimeProviderRegistry runtimeProviders = new(
-            _activeProviders,
-            context);
+        IReadOnlyDictionary<ArchitectureId, IArchitectureBoundaryAssembler>
+            boundaryAssemblers = _activeProviders
+                .Select(provider => (provider.ArchitectureId, provider.BoundaryAssembler))
+                .Where(pair => pair.BoundaryAssembler is not null)
+                .ToDictionary(pair => pair.ArchitectureId, pair => pair.BoundaryAssembler);
         MultiClipParallelMerger merger = new(
             _generator,
-            runtimeProviders.BoundaryAssemblers);
+            boundaryAssemblers);
         new VideoStagesCoordinator(
             _generator,
             merger,
-            runtimeProviders).RunConfiguredStages(context);
+            _activeProviders).RunConfiguredStages(context);
     }
 
     private VideoExecutionPlanContext RequireExecutionContext() =>

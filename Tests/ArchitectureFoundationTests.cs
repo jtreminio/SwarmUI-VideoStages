@@ -1033,46 +1033,6 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Runtime_registry_builds_an_injected_architecture_session()
-    {
-        ClipSpec clip = GeneratedClip(0, Stage(10, "fake-model")) with
-        {
-            AuthoredArchitectureHint = "fake",
-            AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
-        };
-        VideoStagesSpec spec = Spec(clip);
-        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
-            spec,
-            RootEnvironment.FromSpec(spec),
-            ArchitecturePlanResolver.Resolve(spec, new FakeRegistry()));
-        List<string> calls = [];
-        ArchitectureRuntimeProviderRegistry runtimes = new(
-        [
-            new RecordingSessionProvider(new("fake"), calls),
-        ],
-        new VideoExecutionPlanContext(plan));
-        AudioRuntimeSources audio = new(
-            null,
-            new Dictionary<int, SwarmUI.Builtin_ComfyUIBackend.WGNodeData>(),
-            new Dictionary<int, SwarmUI.Builtin_ComfyUIBackend.WGNodeData>());
-        RootExecutionPolicy policy = new(plan);
-        using ArchitectureRuntimeDispatcher dispatcher = runtimes.CreateDispatcher(new(
-            plan,
-            audio,
-            policy,
-            Assembly: null));
-
-        _ = dispatcher.Execute(new ArchitectureClipRuntimeContext(
-            plan.Clips[0],
-            0,
-            PreviousClip: null,
-            PreviousClipOutput: null,
-            PreviousTimelineClipOutput: null));
-
-        Assert.Equal(["fake"], calls);
-    }
-
-    [Fact]
     public void Production_manifest_keeps_module_and_runtime_registration_in_lockstep()
     {
         WorkflowGenerator generator = new()
@@ -1196,25 +1156,26 @@ public class ArchitectureFoundationTests
 
         List<string> calls = [];
         List<ArchitectureClipRuntimeContext> runtimeContexts = [];
+        RecordingSessionProvider ltx = new(
+            new("ltx2"),
+            calls,
+            runtimeContexts);
+        RecordingSessionProvider fake = new(
+            new("fake"),
+            calls,
+            runtimeContexts);
         VideoArchitectureExecutionHost host = new(
             generator,
             plan,
-            [
-                new RecordingSessionProvider(
-                    new("ltx2"),
-                    calls,
-                    runtimeContexts),
-                new RecordingSessionProvider(
-                    new("fake"),
-                    calls,
-                    runtimeContexts),
-            ]);
+            [ltx, fake]);
         VideoExecutionPlanContext request = new(plan, _ => host);
         request.PrepareRequest();
 
         host.RunConfiguredStages();
 
         Assert.Equal(ids, calls);
+        Assert.Equal([ids[0] == "ltx2"], ltx.RootOwnership);
+        Assert.Equal([ids[0] == "fake"], fake.RootOwnership);
         Assert.All(runtimeContexts.Skip(1), context =>
         {
             Assert.NotNull(context.PreviousTimelineClipOutput);
@@ -1851,9 +1812,14 @@ public class ArchitectureFoundationTests
     {
         public ArchitectureId ArchitectureId => architectureId;
 
+        internal List<bool> RootOwnership { get; } = [];
+
         public IVideoGenerationSession CreateSession(
-            ArchitectureTimelineSessionContext context) =>
-            new RecordingSession(architectureId, calls, contexts);
+            ArchitectureTimelineSessionContext context)
+        {
+            RootOwnership.Add(context.OwnsGeneratedRoot);
+            return new RecordingSession(architectureId, calls, contexts);
+        }
     }
 
 }

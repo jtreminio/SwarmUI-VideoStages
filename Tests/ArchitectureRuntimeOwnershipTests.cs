@@ -73,17 +73,12 @@ public class ArchitectureRuntimeOwnershipTests
         VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         RecordingProvider initVideoClip = new(new("init-video-arch"));
         RecordingProvider future = new(new("future-arch"));
-        ArchitectureRuntimeProviderRegistry registry = new(
-            [initVideoClip, future],
-            new VideoExecutionPlanContext(plan));
-        AudioRuntimeSources audio = EmptyAudio();
-        RootExecutionPolicy policy = new(plan);
-
-        using ArchitectureRuntimeDispatcher dispatcher = registry.CreateDispatcher(new(
+        VideoArchitectureExecutionHost host = PreparedHost(
+            Generator(),
             plan,
-            audio,
-            policy,
-            Assembly: null));
+            [initVideoClip, future]);
+
+        Assert.Throws<NotSupportedException>(() => host.RunConfiguredStages());
 
         Assert.Equal([false], initVideoClip.RootOwnership);
         Assert.Equal([true], future.RootOwnership);
@@ -281,7 +276,11 @@ public class ArchitectureRuntimeOwnershipTests
             hasInitVideo,
             hasInitVideo ? new("data", "source.mp4", 0, 512, 512, 24) : null,
             [stage],
-            Audio: null)
+            Audio: new(
+                new(AudioSourceKind.Disabled, "", null, false, null),
+                new(AudioLengthOwner.Timeline),
+                new([]),
+                []))
         {
             Architecture = architecture,
             ArchitecturePayload = payload,
@@ -323,11 +322,6 @@ public class ArchitectureRuntimeOwnershipTests
             null);
         return generator;
     }
-
-    private static AudioRuntimeSources EmptyAudio() => new(
-        null,
-        new Dictionary<int, WGNodeData>(),
-        new Dictionary<int, WGNodeData>());
 
     private static VideoArchitectureExecutionHost PreparedHost(
         WorkflowGenerator generator,

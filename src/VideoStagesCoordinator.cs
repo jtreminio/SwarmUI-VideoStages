@@ -8,7 +8,7 @@ namespace VideoStages;
 internal sealed class VideoStagesCoordinator(
     WorkflowGenerator g,
     MultiClipParallelMerger merger,
-    ArchitectureRuntimeProviderRegistry runtimeProviders)
+    IReadOnlyList<IArchitectureGenerationSessionProvider> runtimeProviders)
 {
     internal void RunConfiguredStages(VideoExecutionPlanContext planContext)
     {
@@ -28,13 +28,19 @@ internal sealed class VideoStagesCoordinator(
         VideoExecutionPlan plan = planContext.Plan;
         IReadOnlyList<ClipPlan> plannedClips = plan.Clips;
         TimelineAssemblySession assembly = new(g, merger, plan);
+        ArchitectureTimelineSessionContext sessionContext = new(
+            plan,
+            preparedAudioSources,
+            rootPolicy,
+            assembly);
         RuntimeArtifact finalArtifact;
         using (ArchitectureRuntimeDispatcher runtimeDispatcher =
-            runtimeProviders.CreateDispatcher(new(
-                plan,
-                preparedAudioSources,
-                rootPolicy,
-                assembly)))
+            new(runtimeProviders.Select(provider => provider.CreateSession(
+                sessionContext with
+                {
+                    OwnsGeneratedRoot =
+                        planContext.RootOwnerArchitectureId == provider.ArchitectureId,
+                }))))
         {
             ClipPlan previousClip = null;
             DecodedClipArtifact previousClipOutput = null;

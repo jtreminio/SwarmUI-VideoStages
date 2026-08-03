@@ -134,8 +134,8 @@ The runtime has two lifetimes:
 | `IArchitectureGenerationSessionProvider` | request | Host-phase captures only; reused across preflight, host phases, and session creation |
 | `IVideoGenerationSession` | one active architecture in one timeline | Yes; executes all clips owned by that architecture |
 
-`ArchitectureRuntimeProviderRegistry` creates sessions only after request
-preparation. Its lifecycle is:
+`VideoStagesCoordinator` creates sessions only after request preparation. Its
+lifecycle is:
 
 1. call `CreateSession` once per active provider, with `OwnsGeneratedRoot`;
 2. execute clips through `ArchitectureRuntimeDispatcher`;
