@@ -34,14 +34,28 @@ internal sealed class VideoStagesCoordinator(
             rootPolicy,
             assembly);
         RuntimeArtifact finalArtifact;
-        using (ArchitectureRuntimeDispatcher runtimeDispatcher =
-            new(runtimeProviders.Select(provider => provider.CreateSession(
+        Dictionary<ArchitectureId, IVideoGenerationSession> sessions = [];
+        bool sessionConstructionCompleted = false;
+        try
+        {
+            foreach (IArchitectureGenerationSessionProvider provider in runtimeProviders)
+            {
+                IVideoGenerationSession session = provider.CreateSession(
                 sessionContext with
                 {
                     OwnsGeneratedRoot =
                         planContext.RootOwnerArchitectureId == provider.ArchitectureId,
-                }))))
-        {
+                });
+                ArgumentNullException.ThrowIfNull(session);
+                if (!sessions.TryAdd(session.ArchitectureId, session))
+                {
+                    TryDispose(session);
+                    throw VideoStagesInvariant.Failure(
+                        $"Duplicate runtime session for architecture "
+                            + $"'{session.ArchitectureId}'.");
+                }
+            }
+            sessionConstructionCompleted = true;
             ClipPlan previousClip = null;
             DecodedClipArtifact previousClipOutput = null;
             List<DecodedClipArtifact> clipOutputs = [];
@@ -57,7 +71,22 @@ internal sealed class VideoStagesCoordinator(
                     PreviousClip: exposesPrevious ? previousClip : null,
                     PreviousClipOutput: exposesPrevious ? previousClipOutput : null,
                     PreviousTimelineClipOutput: clipIndex > 0 ? previousClipOutput : null);
-                DecodedClipArtifact output = runtimeDispatcher.Execute(runtimeContext);
+                ArchitectureId architectureId = plannedClip.Architecture?.Id
+                    ?? throw VideoStagesInvariant.Failure(
+                        $"Clip {plannedClip.ClipId} has no architecture identity.");
+                if (!sessions.TryGetValue(
+                        architectureId,
+                        out IVideoGenerationSession session))
+                {
+                    throw VideoStagesInvariant.Failure(
+                        $"No runtime session is registered for architecture "
+                            + $"'{architectureId}'.");
+                }
+                DecodedClipArtifact output = session.Execute(runtimeContext)
+                    ?? throw VideoStagesInvariant.Failure(
+                        $"Architecture '{session.ArchitectureId}' returned no decoded clip "
+                            + "artifact.");
+                ValidateOutput(output, session, runtimeContext);
                 clipOutputs.Add(output);
                 previousClipOutput = output;
                 previousClip = plannedClip;
@@ -66,6 +95,20 @@ internal sealed class VideoStagesCoordinator(
             finalArtifact = plannedClips.Count > 1
                 ? assembly.Assemble(clipOutputs)
                 : assembly.FinalizeSingleClip(clipOutputs[0]);
+        }
+        finally
+        {
+            foreach (IVideoGenerationSession session in sessions.Values)
+            {
+                if (sessionConstructionCompleted)
+                {
+                    session.Dispose();
+                }
+                else
+                {
+                    TryDispose(session);
+                }
+            }
         }
         finalArtifact = new TimelineFrameInterpolator(g).Apply(
             finalArtifact,
@@ -81,5 +124,39 @@ internal sealed class VideoStagesCoordinator(
         }
         finalArtifact.PublishTo(g);
         rootSession.PublishTimeline(finalArtifact);
+    }
+
+    private static void ValidateOutput(
+        DecodedClipArtifact output,
+        IVideoGenerationSession session,
+        ArchitectureClipRuntimeContext context)
+    {
+        if (output.ClipId != context.Clip.ClipId)
+        {
+            throw VideoStagesInvariant.Failure(
+                $"Architecture '{session.ArchitectureId}' returned artifact for clip "
+                    + $"'{output.ClipId}' instead of planned clip '{context.Clip.ClipId}'.");
+        }
+        ArchitectureId plannedArchitectureId = context.Clip.Architecture.Id;
+        if (output.ArchitectureId != session.ArchitectureId)
+        {
+            throw VideoStagesInvariant.Failure(
+                $"Architecture '{session.ArchitectureId}' returned artifact for architecture "
+                    + $"'{output.ArchitectureId}' instead of planned architecture "
+                    + $"'{plannedArchitectureId}' for clip '{context.Clip.ClipId}'.");
+        }
+        output.ValidateDecoded();
+    }
+
+    private static void TryDispose(IVideoGenerationSession session)
+    {
+        try
+        {
+            session.Dispose();
+        }
+        catch
+        {
+            // Preserve the session-construction failure.
+        }
     }
 }

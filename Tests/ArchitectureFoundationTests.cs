@@ -823,110 +823,34 @@ public class ArchitectureFoundationTests
         Assert.Equal(0, registry.CompileCounts[new("fake")]);
     }
 
-    [Theory]
-    [InlineData("ltx2,fake")]
-    [InlineData("fake,ltx2")]
-    [InlineData("ltx2,fake,ltx2,fake")]
-    public void Runtime_dispatches_each_clip_session_across_alternating_cut_boundaries(
-        string architectureOrder)
-    {
-        string[] ids = architectureOrder.Split(',');
-        ClipSpec[] clips = [
-            .. ids.Select((id, index) => GeneratedClip(
-                index,
-                Stage(index, id == "ltx2" ? "ltx-model" : "fake-model")) with
-            {
-                AuthoredArchitectureHint = id,
-                AuthoredModelProfileHint = $"{(id == "ltx2" ? "ltx" : "fake")}-profile",
-                AuthoredStages =
-                [
-                    new(
-                        index * 2,
-                        id == "ltx2" ? "ltx-model" : "fake-model",
-                        $"{(id == "ltx2" ? "ltx" : "fake")}-profile",
-                        false),
-                ],
-                BoundaryOut = Constants.BoundaryOutCut,
-            })
-        ];
-        VideoStagesSpec spec = Spec(clips);
-        FakeRegistry registry = new();
-        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
-            spec,
-            RootEnvironment.FromSpec(spec),
-            ArchitecturePlanResolver.Resolve(spec, registry));
-        List<string> calls = [];
-        using ArchitectureRuntimeDispatcher dispatcher = new(
-        [
-            new RecordingSession(new("ltx2"), calls),
-            new RecordingSession(new("fake"), calls),
-        ]);
-
-        DecodedClipArtifact[] outputs = [
-            .. plan.Clips.Select((clip, index) => dispatcher.Execute(new ArchitectureClipRuntimeContext(
-                clip,
-                index,
-                PreviousClip: null,
-                PreviousClipOutput: null,
-                PreviousTimelineClipOutput: null)))
-        ];
-
-        Assert.All(plan.Boundaries, boundary =>
-        {
-            Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
-        });
-        Assert.Equal(ids, calls);
-        Assert.Equal(
-            ids,
-            outputs.Select(output => output.ArchitectureId.Value).ToArray());
-    }
-
     [Fact]
-    public void Runtime_dispatcher_rejects_mismatched_session_result_clip()
+    public void Common_coordinator_rejects_mismatched_session_result_clip()
     {
         VideoExecutionPlan plan = Plan(GeneratedClip(7, Stage(10, "ltx-model")));
-        ClipPlan clip = Assert.Single(plan.Clips);
-        using ArchitectureRuntimeDispatcher dispatcher = new(
-        [
-            new ProjectingSession(
-                new("ltx2"),
-                context => ValidArtifact(context.Clip) with { ClipId = 88 }),
-        ]);
+        ProjectingSession session = new(
+            new("ltx2"),
+            context => ValidArtifact(context.Clip) with { ClipId = 88 });
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            dispatcher.Execute(new ArchitectureClipRuntimeContext(
-                clip,
-                0,
-                PreviousClip: null,
-                PreviousClipOutput: null,
-                PreviousTimelineClipOutput: null)));
+            RunSessions(plan, [new SessionProvider(session.ArchitectureId, () => session)]));
 
         Assert.Contains("artifact for clip '88'", error.Message);
         Assert.Contains("planned clip '7'", error.Message);
     }
 
     [Fact]
-    public void Runtime_dispatcher_rejects_mismatched_session_result_architecture()
+    public void Common_coordinator_rejects_mismatched_session_result_architecture()
     {
         VideoExecutionPlan plan = Plan(GeneratedClip(7, Stage(10, "ltx-model")));
-        ClipPlan clip = Assert.Single(plan.Clips);
-        using ArchitectureRuntimeDispatcher dispatcher = new(
-        [
-            new ProjectingSession(
-                new("ltx2"),
-                context => ValidArtifact(context.Clip) with
-                {
-                    ArchitectureId = new("fake"),
-                }),
-        ]);
+        ProjectingSession session = new(
+            new("ltx2"),
+            context => ValidArtifact(context.Clip) with
+            {
+                ArchitectureId = new("fake"),
+            });
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            dispatcher.Execute(new ArchitectureClipRuntimeContext(
-                clip,
-                0,
-                PreviousClip: null,
-                PreviousClipOutput: null,
-                PreviousTimelineClipOutput: null)));
+            RunSessions(plan, [new SessionProvider(session.ArchitectureId, () => session)]));
 
         Assert.Contains("Architecture 'ltx2'", error.Message);
         Assert.Contains("artifact for architecture 'fake'", error.Message);
@@ -940,7 +864,7 @@ public class ArchitectureFoundationTests
     [InlineData((int)DecodedMediaKind.Video, 512, 0, 24, 25)]
     [InlineData((int)DecodedMediaKind.Video, 512, 512, 0, 25)]
     [InlineData((int)DecodedMediaKind.Video, 512, 512, 24, 0)]
-    public void Runtime_dispatcher_rejects_mistyped_or_non_positive_video_artifact(
+    public void Common_coordinator_rejects_mistyped_or_non_positive_video_artifact(
         int rawVideoKind,
         int width,
         int height,
@@ -948,75 +872,48 @@ public class ArchitectureFoundationTests
         int frames)
     {
         VideoExecutionPlan plan = Plan(GeneratedClip(7, Stage(10, "ltx-model")));
-        ClipPlan clip = Assert.Single(plan.Clips);
-        using ArchitectureRuntimeDispatcher dispatcher = new(
-        [
-            new ProjectingSession(
-                new("ltx2"),
-                context => ValidArtifact(context.Clip) with
-                {
-                    Video = new("invalid", 0, (DecodedMediaKind)rawVideoKind),
-                    Width = width,
-                    Height = height,
-                    FramesPerSecond = framesPerSecond,
-                    Frames = frames,
-                }),
-        ]);
+        ProjectingSession session = new(
+            new("ltx2"),
+            context => ValidArtifact(context.Clip) with
+            {
+                Video = new("invalid", 0, (DecodedMediaKind)rawVideoKind),
+                Width = width,
+                Height = height,
+                FramesPerSecond = framesPerSecond,
+                Frames = frames,
+            });
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            dispatcher.Execute(new ArchitectureClipRuntimeContext(
-                clip,
-                0,
-                PreviousClip: null,
-                PreviousClipOutput: null,
-                PreviousTimelineClipOutput: null)));
+            RunSessions(plan, [new SessionProvider(session.ArchitectureId, () => session)]));
 
         Assert.Contains("invalid decoded media artifact", error.Message);
     }
 
     [Fact]
-    public void Runtime_dispatcher_rejects_mistyped_attached_audio_artifact()
+    public void Common_coordinator_rejects_mistyped_attached_audio_artifact()
     {
         VideoExecutionPlan plan = Plan(GeneratedClip(7, Stage(10, "ltx-model")));
-        ClipPlan clip = Assert.Single(plan.Clips);
-        using ArchitectureRuntimeDispatcher dispatcher = new(
-        [
-            new ProjectingSession(
-                new("ltx2"),
-                context => ValidArtifact(context.Clip) with
-                {
-                    Audio = new("mistyped-audio", 0, DecodedMediaKind.Video),
-                }),
-        ]);
+        ProjectingSession session = new(
+            new("ltx2"),
+            context => ValidArtifact(context.Clip) with
+            {
+                Audio = new("mistyped-audio", 0, DecodedMediaKind.Video),
+            });
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            dispatcher.Execute(new ArchitectureClipRuntimeContext(
-                clip,
-                0,
-                PreviousClip: null,
-                PreviousClipOutput: null,
-                PreviousTimelineClipOutput: null)));
+            RunSessions(plan, [new SessionProvider(session.ArchitectureId, () => session)]));
 
         Assert.Contains("invalid decoded media artifact", error.Message);
     }
 
     [Fact]
-    public void Runtime_dispatcher_rejects_null_session_result()
+    public void Common_coordinator_rejects_null_session_result()
     {
         VideoExecutionPlan plan = Plan(GeneratedClip(7, Stage(10, "ltx-model")));
-        ClipPlan clip = Assert.Single(plan.Clips);
-        using ArchitectureRuntimeDispatcher dispatcher = new(
-        [
-            new ProjectingSession(new("ltx2"), _ => null),
-        ]);
+        ProjectingSession session = new(new("ltx2"), _ => null);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            dispatcher.Execute(new ArchitectureClipRuntimeContext(
-                clip,
-                0,
-                PreviousClip: null,
-                PreviousClipOutput: null,
-                PreviousTimelineClipOutput: null)));
+            RunSessions(plan, [new SessionProvider(session.ArchitectureId, () => session)]));
 
         Assert.Contains("returned no decoded clip artifact", error.Message);
     }
@@ -1189,21 +1086,31 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
-    public void Runtime_dispatcher_disposes_partial_sessions_when_construction_fails()
+    public void Common_coordinator_disposes_partial_sessions_when_construction_fails()
     {
-        TrackingSession first = new(new("first"));
+        VideoStagesSpec spec = Spec(
+            GeneratedClip(0, Stage(0, "ltx-model")),
+            GeneratedClip(1, Stage(1, "fake-model")));
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            ArchitecturePlanResolver.Resolve(spec, new FakeRegistry()));
+        TrackingSession first = new(
+            new("ltx2"),
+            new InvalidOperationException("session disposal failed"));
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            new ArchitectureRuntimeDispatcher(FailingSessions()));
+            RunSessions(
+                plan,
+                [
+                    new SessionProvider(new("ltx2"), () => first),
+                    new SessionProvider(
+                        new("fake"),
+                        () => throw new InvalidOperationException("session construction failed")),
+                ]));
 
         Assert.Equal("session construction failed", error.Message);
         Assert.True(first.Disposed);
-
-        IEnumerable<IVideoGenerationSession> FailingSessions()
-        {
-            yield return first;
-            throw new InvalidOperationException("session construction failed");
-        }
     }
 
     [Fact]
@@ -1568,6 +1475,41 @@ public class ArchitectureFoundationTests
             clip.Architecture.Id,
             clip.ClipId);
 
+    private static void RunSessions(
+        VideoExecutionPlan plan,
+        IEnumerable<IArchitectureGenerationSessionProvider> providers)
+    {
+        JObject workflow = [];
+        using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
+        {
+            bridge.AddStub("UnitTest_RootVideo", "root")
+                .WithOutputs(WGNodeData.DT_IMAGE);
+        }
+        T2IParamInput input = new(null);
+        input.Set(T2IParamTypes.DoNotSave, true);
+        WorkflowGenerator generator = new()
+        {
+            UserInput = input,
+            Features = [],
+            Workflow = workflow,
+        };
+        generator.CurrentMedia = new(
+            new JArray("root", 0),
+            generator,
+            WGNodeData.DT_VIDEO,
+            null)
+        {
+            Width = 512,
+            Height = 512,
+            Frames = 25,
+            FPS = 24,
+        };
+        VideoArchitectureExecutionHost host = new(generator, plan, providers);
+        VideoExecutionPlanContext request = new(plan, _ => host);
+        request.PrepareRequest();
+        host.RunConfiguredStages();
+    }
+
     private sealed class FakeRegistry : IVideoArchitectureRegistry
     {
         private readonly Dictionary<string, ResolvedVideoModel> _models;
@@ -1791,7 +1733,9 @@ public class ArchitectureFoundationTests
         }
     }
 
-    private sealed class TrackingSession(ArchitectureId architectureId) :
+    private sealed class TrackingSession(
+        ArchitectureId architectureId,
+        Exception disposalFailure = null) :
         IVideoGenerationSession
     {
         public ArchitectureId ArchitectureId => architectureId;
@@ -1801,7 +1745,25 @@ public class ArchitectureFoundationTests
         public DecodedClipArtifact Execute(ArchitectureClipRuntimeContext context) =>
             throw new NotSupportedException();
 
-        public void Dispose() => Disposed = true;
+        public void Dispose()
+        {
+            Disposed = true;
+            if (disposalFailure is not null)
+            {
+                throw disposalFailure;
+            }
+        }
+    }
+
+    private sealed class SessionProvider(
+        ArchitectureId architectureId,
+        Func<IVideoGenerationSession> createSession)
+        : IArchitectureGenerationSessionProvider
+    {
+        public ArchitectureId ArchitectureId => architectureId;
+
+        public IVideoGenerationSession CreateSession(
+            ArchitectureTimelineSessionContext context) => createSession();
     }
 
     private sealed class RecordingSessionProvider(

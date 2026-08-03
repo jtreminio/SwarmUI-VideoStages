@@ -138,7 +138,7 @@ The runtime has two lifetimes:
 lifecycle is:
 
 1. call `CreateSession` once per active provider, with `OwnsGeneratedRoot`;
-2. execute clips through `ArchitectureRuntimeDispatcher`;
+2. execute clips through the coordinator's architecture-keyed session map;
 3. dispose every session, including constructor rollback on partial failure.
 
 ## 5. Common clip loop
@@ -278,7 +278,7 @@ Diagnostics divide responsibility:
 | Architecture-specific options and semantic conflicts | Selected module's graph-free projector/compiler |
 | Architecture dependencies | Active runtime provider during request preparation |
 | Ordinary model-path validity already owned by a supported SwarmUI primitive | SwarmUI core during graph construction |
-| Returned identity and decoded media shape | `ArchitectureRuntimeDispatcher` |
+| Returned identity and decoded media shape | `VideoStagesCoordinator` |
 | Cross-clip run validity and final publication contract | `TimelineAssemblySession` / `OutputPublisher` |
 
 ## 9. Generated binding retention audit
