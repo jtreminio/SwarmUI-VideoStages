@@ -31,7 +31,7 @@ classes whose stock video graph branches have been verified.
 | Curated IC-LoRA download route | LTX backend adapter + SwarmUI core | `Ltx2ApiRoutes`, `ModelsAPI.DoModelDownloadWS` |
 | Document parsing and product planning | Common backend | `VideoStagesSpecParser`, `ArchitecturePlanResolver`, `VideoExecutionPlanCompiler` |
 | Model-family planning and execution | Selected backend module | `IVideoArchitectureModule.ValidateAndCompileClip`, `IVideoGenerationSession` |
-| Runtime dispatch and timeline assembly | Common backend | `StageSequenceRunner`, `ArchitectureRuntimeDispatcher`, `TimelineAssemblySession` |
+| Runtime dispatch and timeline assembly | Common backend | `VideoStagesCoordinator`, `ArchitectureRuntimeDispatcher`, `TimelineAssemblySession` |
 | Final host publication | SwarmUI adapter | `RootRuntimeSession`, `OutputPublisher` |
 
 The boundary in one sentence:
@@ -463,14 +463,12 @@ control-signal, and uploaded-drive caches.
 ```text
 VideoArchitectureExecutionHost
     → VideoStagesCoordinator
-    → StageSequenceRunner
     → ArchitectureRuntimeDispatcher
 ```
 
 The coordinator captures the host root, resolves audio, prepares active
-architecture factories, and begins the clip sequence.
-`StageSequenceRunner` creates `ArchitectureClipRuntimeContext` for each planned
-clip. It exposes previous output as continuity input only for a non-cut,
+architecture factories, and creates `ArchitectureClipRuntimeContext` for each
+planned clip. It exposes previous output as continuity input only for a non-cut,
 same-architecture boundary, while separately exposing the previous timeline
 output as contextual media across cuts and architecture changes.
 

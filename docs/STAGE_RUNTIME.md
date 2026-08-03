@@ -21,7 +21,6 @@ hidden authoring document + host request
     → graph-free request preparation
     → ordered host phases
     → VideoStagesCoordinator
-    → StageSequenceRunner
     → one session per active architecture, selected for each clip
     → DecodedClipArtifact per clip
     → TimelineAssemblySession
@@ -154,13 +153,13 @@ request preparation. Its lifecycle is:
 3. resolve request audio sources;
 4. reserve the staged node-ID range;
 5. prepare active architecture factories;
-6. execute the clip sequence;
+6. execute and assemble the clip sequence;
 7. apply configured timeline interpolation;
 8. clear model compatibility from neutral final media;
 9. capture and publish the final artifact;
 10. invoke architecture finalization.
 
-`StageSequenceRunner` loops planned clips in order. It exposes
+The coordinator loops planned clips in order. It exposes
 `PreviousClipOutput` only across a same-architecture non-cut boundary.
 `PreviousTimelineClipOutput` remains available as contextual decoded media
 across cuts. The dispatcher selects a session solely by the planned

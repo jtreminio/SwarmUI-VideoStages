@@ -1,12 +1,13 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
+using VideoStages.Planning;
 
 namespace VideoStages;
 
 internal sealed class VideoStagesCoordinator(
     WorkflowGenerator g,
-    StageSequenceRunner stageSequenceRunner,
+    MultiClipParallelMerger merger,
     ArchitectureRuntimeSessionFactoryRegistry runtimeFactories)
 {
     internal void RunConfiguredStages(VideoExecutionPlanContext planContext)
@@ -29,13 +30,45 @@ internal sealed class VideoStagesCoordinator(
             preparedAudioSources,
             rootPolicy));
 
-        RuntimeArtifact finalArtifact = stageSequenceRunner.Run(
-            planContext.Plan,
-            preparedAudioSources,
-            rootPolicy);
+        VideoExecutionPlan plan = planContext.Plan;
+        IReadOnlyList<ClipPlan> plannedClips = plan.Clips;
+        TimelineAssemblySession assembly = new(g, merger, plan);
+        RuntimeArtifact finalArtifact;
+        using (ArchitectureRuntimeDispatcher runtimeDispatcher =
+            runtimeFactories.CreateDispatcher(new(
+                plan,
+                preparedAudioSources,
+                rootPolicy,
+                assembly)))
+        {
+            ClipPlan previousClip = null;
+            DecodedClipArtifact previousClipOutput = null;
+            List<DecodedClipArtifact> clipOutputs = [];
+            for (int clipIndex = 0; clipIndex < plannedClips.Count; clipIndex++)
+            {
+                ClipPlan plannedClip = plannedClips[clipIndex];
+                bool exposesPrevious = clipIndex > 0
+                    && plan.Boundaries[clipIndex - 1].Effective != BoundaryJoinType.Cut
+                    && previousClip?.Architecture.Id == plannedClip.Architecture.Id;
+                ArchitectureClipRuntimeContext runtimeContext = new(
+                    plannedClip,
+                    clipIndex,
+                    PreviousClip: exposesPrevious ? previousClip : null,
+                    PreviousClipOutput: exposesPrevious ? previousClipOutput : null,
+                    PreviousTimelineClipOutput: clipIndex > 0 ? previousClipOutput : null);
+                DecodedClipArtifact output = runtimeDispatcher.Execute(runtimeContext);
+                clipOutputs.Add(output);
+                previousClipOutput = output;
+                previousClip = plannedClip;
+            }
+
+            finalArtifact = plannedClips.Count > 1
+                ? assembly.Assemble(clipOutputs)
+                : assembly.FinalizeSingleClip(clipOutputs[0]);
+        }
         finalArtifact = new TimelineFrameInterpolator(g).Apply(
             finalArtifact,
-            planContext.Plan);
+            plan);
         // Compat metadata is architecture-neutral; the runtime artifact retains VAE ownership.
         if (finalArtifact.Media is not null)
         {

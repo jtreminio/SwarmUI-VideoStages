@@ -137,13 +137,9 @@ internal sealed class VideoArchitectureExecutionHost
         MultiClipParallelMerger merger = new(
             _generator,
             runtimeFactories.BoundaryAssemblers);
-        StageSequenceRunner sequence = new(
-            _generator,
-            merger,
-            runtimeFactories);
         new VideoStagesCoordinator(
             _generator,
-            sequence,
+            merger,
             runtimeFactories).RunConfiguredStages(context);
     }
 

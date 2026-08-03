@@ -15,9 +15,9 @@ namespace VideoStages;
 /// (<see cref="AudioAdjustVolumeNode"/>), then mixed additively over the running base with
 /// <see cref="AudioMergeNode"/> (<c>merge_method="add"</c>, which pads/trims the overlay to the base
 /// length). A clip with no segments returns its base audio untouched — the pure existing graph is
-/// preserved (regression lock). The combined result is used both as the mux-time audio track and, via
-/// <see cref="StageSequenceRunner"/>, as generation-time conditioning audio (segments baked into the
-/// preserved track, or preserve-windowed over a silent bed when there is no locked base).
+/// preserved (regression lock). The combined result is used both as the mux-time audio track and as
+/// generation-time conditioning audio (segments baked into the preserved track, or preserve-windowed
+/// over a silent bed when there is no locked base).
 /// </summary>
 internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
 {
