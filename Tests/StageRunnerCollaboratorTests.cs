@@ -39,16 +39,11 @@ public class StageRunnerCollaboratorTests
             typeof(StagePlan),
             typeof(int),
             typeof(LtxPostVideoChainCapture));
-        AssertTypedMethod(
-            typeof(IcLoraStageInputResolver),
-            nameof(IcLoraStageInputResolver.Resolve),
-            typeof(StageFrame));
         Type[] collaboratorTypes =
         [
             typeof(PlannedStagePromptResolver),
             typeof(StageFramePreparer),
             typeof(StageUpscaleGraphBuilder),
-            typeof(IcLoraStageInputResolver),
         ];
         Assert.DoesNotContain(
             collaboratorTypes.SelectMany(type => type.GetMethods(

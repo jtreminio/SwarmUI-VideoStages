@@ -15,7 +15,6 @@ internal class StageRunner
     private readonly LtxClipRefResolver _clipRefResolver;
     private readonly StageUpscaleGraphBuilder _upscaleGraphBuilder;
     private readonly StageFramePreparer _framePreparer;
-    private readonly IcLoraStageInputResolver _icLoraStageInputResolver;
 
     public StageRunner(
         WorkflowGenerator generator,
@@ -34,7 +33,6 @@ internal class StageRunner
             generator,
             _upscaleGraphBuilder,
             new PlannedStagePromptResolver(generator));
-        _icLoraStageInputResolver = new IcLoraStageInputResolver(generator);
     }
 
     public void RunStage(
@@ -80,7 +78,7 @@ internal class StageRunner
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
         Action<WorkflowGenerator.ImageToVideoGenInfo> applyIcLora = currentGenInfo =>
         {
-            WGNodeData incomingMedia = _icLoraStageInputResolver.Resolve(stageFrame);
+            WGNodeData incomingMedia = ResolveIcLoraStageInput(stageFrame);
             bool needsCrop = new IcLoraApplicator(_generator).ApplyIcLoras(
                 currentGenInfo,
                 clip,
@@ -101,6 +99,31 @@ internal class StageRunner
         };
 
         RunLtxStage(guideReference, refStore, stageFrame, applyIcLora);
+    }
+
+    private WGNodeData ResolveIcLoraStageInput(StageFrame stageFrame)
+    {
+        bool wantsIncoming = stageFrame.Stage.RequireLtx2Payload().IcLoras.Any(entry =>
+            entry.MediaInput.Source == IcLoraMediaSourceKind.Incoming);
+        if (!wantsIncoming)
+        {
+            return null;
+        }
+        WGNodeData source = stageFrame.ClipContext.IsFirstStage(stageFrame.Stage)
+            ? stageFrame.ClipContext.IcLoraEntryIncomingMedia
+            : stageFrame.SourceMedia;
+        LtxPostVideoChainCapture postVideoChain = stageFrame.PostVideoChain;
+        if (postVideoChain is null || !postVideoChain.ReferencesOutput(source))
+        {
+            return source;
+        }
+        WGNodeData detached = postVideoChain.CreateDetachedGuideMedia(_generator.CurrentVae);
+        if (detached is null)
+        {
+            return source;
+        }
+        detached.AttachedAudio = source?.AttachedAudio;
+        return detached;
     }
 
     private void RunLtxStage(
