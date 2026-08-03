@@ -7,6 +7,7 @@ export const AUTHORING_FEATURE_LABELS = {
     retake: "Retakes",
     audioSegments: "Audio segments",
     audioBoundaryCarry: "Boundary audio carry",
+    latentUpscale: "Latent stage upscaling",
     audioReuse: "Captured stage audio reuse",
     audioDerivedDuration: "Audio-derived clip duration",
     icLora: "IC-LoRA",

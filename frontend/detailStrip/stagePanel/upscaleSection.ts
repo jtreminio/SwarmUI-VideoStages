@@ -1,3 +1,4 @@
+import { upscaleModeForMethod } from "../../architectures/policy";
 import {
     buildField,
     buildOptionSelect,
@@ -7,19 +8,22 @@ import type { StagePanelBindings } from "./types";
 
 const UPSCALE_EPSILON = 1e-6;
 
-/** Plain latent scaling is never offered; nothing in the pipeline consumes it. */
 const isLatentUpscaleMethod = (method: string): boolean =>
-    method.trim().toLowerCase().startsWith("latent-");
+    ["latent", "latent-model"].includes(upscaleModeForMethod(method));
 
 export const appendStageUpscaleSection = (
     bindings: StagePanelBindings,
     isRefine: boolean,
 ): void => {
     if (!isRefine) return;
-    const { stage, defaults, fields, slider, commit } = bindings;
+    const { context, clip, stage, defaults, fields, slider, commit } = bindings;
+    const supportsLatentUpscale = context
+        .authoring()
+        .capabilities.forClip(clip)
+        .decision("latentUpscale").supported;
     const supportedMethods: OptionSpec[] = defaults.upscaleMethodValues.flatMap(
         (value, index) =>
-            !isLatentUpscaleMethod(value)
+            !isLatentUpscaleMethod(value) || supportsLatentUpscale
                 ? [
                       {
                           value,

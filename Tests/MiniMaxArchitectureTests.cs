@@ -172,6 +172,41 @@ public class MiniMaxArchitectureTests
     }
 
     [Fact]
+    public void Latent_upscale_is_ignored_and_does_not_activate_a_zero_control_stage()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject stageObject = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            control: 0,
+            upscale: 1.5,
+            upscaleMethod: "latent-bislerp",
+            steps: 8,
+            cfgScale: 1);
+        ClipSpec clip = ParseClip(
+            MakeClip(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1),
+                stageObject),
+            models);
+        StageSpec stage = clip.Stages[^1];
+        VideoArchitectureDescriptor descriptor = MiniMaxArchitectureModule.Instance.Descriptor;
+
+        IReadOnlyList<PlanDiagnostic> diagnostics =
+            ArchitectureCapabilityValidator.Validate(
+                clip,
+                descriptor,
+                ArchitectureEntryMode.ImageToVideo);
+
+        Assert.False(descriptor.Features.HasFlag(ArchitectureFeature.LatentUpscale));
+        Assert.True(ArchitectureStageActivity.IsPassthrough(stage, descriptor));
+        Assert.Contains(
+            diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.unsupported-latent-upscale-ignored");
+    }
+
+    [Fact]
     public void Bounded_first_and_last_frame_references_compile_and_others_are_dropped()
     {
         using SwarmUiTestContext context = new();

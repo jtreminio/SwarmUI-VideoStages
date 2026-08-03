@@ -92,6 +92,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                 clip,
                 activeStages,
                 stageModels,
+                Descriptor,
                 diagnostics,
                 "minimax",
                 "MiniMax H3",

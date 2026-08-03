@@ -93,6 +93,39 @@ describe("resolved temporal grid", () => {
         ).toEqual({ frameGrid: 6, frameGridOrigin: 1 });
     });
 
+    it("excludes latent-upscale handlers when the architecture cannot run them", () => {
+        const catalog = testArchitectureCatalog();
+        catalog.entries.push({
+            ...catalog.entries[0],
+            value: "six-grid.safetensors",
+            frameGrid: 6,
+        });
+        catalog.architectures[0].capabilities.features =
+            catalog.architectures[0].capabilities.features.filter(
+                (feature) => feature !== "latentUpscale",
+            );
+        const clip = minimalClip({
+            stages: [
+                minimalStage({
+                    model: "six-grid.safetensors",
+                    control: 1,
+                }),
+                minimalStage({
+                    model: "ltx",
+                    control: 0,
+                    upscale: 2,
+                    upscaleMethod: "latentmodel-detail.safetensors",
+                }),
+            ],
+        });
+
+        expect(resolveClipFrameGrid(clip, catalog)).toEqual({
+            status: "resolved",
+            frameGrid: 6,
+            frameGridOrigin: 1,
+        });
+    });
+
     it("does not claim a static grid for runtime-derived clip lengths", () => {
         const fromDrivingAudio = minimalClip({
             audioSource: "Upload",

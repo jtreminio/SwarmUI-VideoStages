@@ -165,15 +165,30 @@ internal static class ArchitectureCapabilityValidator
                     stage.Id,
                     stage.ClipStageRawIndex));
             }
-            if (stage.Upscale != 1
-                && StageUpscalePlanCompiler.Classify(stage.UpscaleMethod)
-                    == StageUpscaleMode.Unsupported)
+            StageUpscaleMode upscaleMode =
+                StageUpscalePlanCompiler.Classify(stage.UpscaleMethod);
+            if (stage.Upscale != 1 && upscaleMode == StageUpscaleMode.Unsupported)
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Warning,
                     "effective-request.unknown-upscale",
                     $"Clip {clip.Id} Stage {stage.Id} uses unknown upscale mode "
                         + $"'{stage.UpscaleMethod}', which is ignored for this generation.",
+                    clip.Id,
+                    stage.Id,
+                    stage.ClipStageRawIndex));
+            }
+            else if (stage.Upscale != 1
+                && upscaleMode is StageUpscaleMode.Latent or StageUpscaleMode.LatentModel
+                && Unsupported(ArchitectureFeature.LatentUpscale))
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
+                    "effective-request.unsupported-latent-upscale-ignored",
+                    $"Clip {clip.Id} Stage {stage.Id} uses latent upscale mode "
+                        + $"'{stage.UpscaleMethod}', which {descriptor.DisplayName} does not "
+                        + "support. The authored value remains saved and is ignored for this "
+                        + "generation.",
                     clip.Id,
                     stage.Id,
                     stage.ClipStageRawIndex));

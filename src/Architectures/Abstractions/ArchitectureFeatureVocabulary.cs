@@ -22,6 +22,10 @@ internal static class ArchitectureFeatureVocabulary
             ArchitectureFeature.AudioBoundaryCarry,
             "audioBoundaryCarry",
             "Boundary audio carry"),
+        new(
+            ArchitectureFeature.LatentUpscale,
+            "latentUpscale",
+            "Latent stage upscaling"),
         new(ArchitectureFeature.AudioReuse, "audioReuse", "Captured stage audio reuse"),
         new(
             ArchitectureFeature.AudioDerivedDuration,

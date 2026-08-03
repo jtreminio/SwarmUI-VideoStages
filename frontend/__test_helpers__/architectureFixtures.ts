@@ -19,6 +19,7 @@ export const testArchitectureCapabilities = (
         "retake",
         "audioSegments",
         "audioBoundaryCarry",
+        "latentUpscale",
         "audioReuse",
         "audioDerivedDuration",
         "icLora",

@@ -2559,7 +2559,7 @@ public class WanRuntimeFlowTests
     [Theory]
     [InlineData("latent-bislerp", "bislerp")]
     [InlineData("latentmodel-unit-upscaler.safetensors", "unit-upscaler.safetensors")]
-    public void Wan_latent_upscale_warns_without_emitting_an_invalid_pixel_scaler(
+    public void Wan_latent_upscale_is_ignored_without_emitting_an_invalid_pixel_scaler(
         string upscaleMethod,
         string invalidPixelMethod)
     {
@@ -2594,7 +2594,7 @@ public class WanRuntimeFlowTests
         Assert.Contains(
             Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
             warning => warning.Contains(
-                $"uses unsupported upscale method '{upscaleMethod}'. Ignoring upscale.",
+                $"uses latent upscale mode '{upscaleMethod}'",
                 StringComparison.Ordinal));
         Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
         AssertNoDanglingNodeRefs(workflow);

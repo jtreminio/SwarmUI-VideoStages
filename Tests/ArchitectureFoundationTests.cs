@@ -1413,6 +1413,7 @@ public class ArchitectureFoundationTests
                 "retake",
                 "audioSegments",
                 "audioBoundaryCarry",
+                "latentUpscale",
                 "audioReuse",
                 "audioDerivedDuration",
                 "icLora",

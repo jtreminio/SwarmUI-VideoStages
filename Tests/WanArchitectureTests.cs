@@ -488,7 +488,7 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Effective_request_checks_Wan_terminal_reference_before_ignoring_latent_upscale()
+    public void Unsupported_latent_tail_does_not_steal_Wan_terminal_reference()
     {
         StageSpec first = Stage(10, "wan-last") with
         {
@@ -522,11 +522,15 @@ public class WanArchitectureTests
                         [latentTail.Model] = ["first"],
                     }));
 
-        Assert.Null(Assert.Single(plan.Clips).RequireWanPayload().LastFrameReference);
-        Assert.Contains(
+        Assert.NotNull(Assert.Single(plan.Clips).RequireWanPayload().LastFrameReference);
+        Assert.DoesNotContain(
             plan.Diagnostics,
             diagnostic => diagnostic.Code
                 == "effective-request.wan-last-frame-reference-ignored");
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.unsupported-latent-upscale-ignored");
     }
 
     [Fact]

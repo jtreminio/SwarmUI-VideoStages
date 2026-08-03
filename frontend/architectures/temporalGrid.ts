@@ -137,7 +137,10 @@ const effectiveGridModels = (
             ) {
                 return false;
             }
-            return true;
+            return (
+                clipCapabilities === null ||
+                architectureFeatureSupport("latentUpscale", clipCapabilities)
+            );
         })
         .map((stage) => stage.model);
 };

@@ -41,7 +41,8 @@ const wanCatalog = (): ArchitectureModelCatalog => {
             capability !== "icLora" &&
             capability !== "promptRelay" &&
             capability !== "referenceFraming" &&
-            capability !== "audioReuse",
+            capability !== "audioReuse" &&
+            capability !== "latentUpscale",
     );
     models.architectures.push(wan);
     models.entries.push({
@@ -186,10 +187,11 @@ describe("architecture diagnostics", () => {
                 "architecture.unsupported.reference-framing",
                 "architecture.unsupported.prompt-relay",
                 "architecture.unsupported.audio-reuse",
+                "architecture.unsupported.latent-upscale",
             ].includes(code),
         );
 
-        expect(matching).toHaveLength(4);
+        expect(matching).toHaveLength(5);
         expect(matching.every(({ severity }) => severity === "warning")).toBe(
             true,
         );

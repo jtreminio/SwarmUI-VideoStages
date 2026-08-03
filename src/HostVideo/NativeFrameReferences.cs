@@ -22,6 +22,7 @@ internal static class NativeFrameReferences
         ClipSpec clip,
         IReadOnlyList<StageSpec> activeStages,
         IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
+        VideoArchitectureDescriptor architecture,
         ICollection<PlanDiagnostic> diagnostics,
         string codeToken,
         string label,
@@ -69,7 +70,11 @@ internal static class NativeFrameReferences
                 continue;
             }
             if (isFirst
-                && !Declares(activeStages.FirstOrDefault(), "first", out string firstModel))
+                && !Declares(
+                    activeStages.FirstOrDefault(stage =>
+                        !ArchitectureStageActivity.IsPassthrough(stage, architecture)),
+                    "first",
+                    out string firstModel))
             {
                 Ignore(
                     "first-frame-reference-ignored",
@@ -103,7 +108,8 @@ internal static class NativeFrameReferences
             }
             if (isLast
                 && !Declares(
-                    activeStages.LastOrDefault(stage => !stage.IsPassthrough),
+                    activeStages.LastOrDefault(stage =>
+                        !ArchitectureStageActivity.IsPassthrough(stage, architecture)),
                     "last",
                     out string terminalModel))
             {

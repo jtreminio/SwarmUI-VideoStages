@@ -47,6 +47,9 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
     const wan = structuredClone(models.architectures[0]);
     wan.id = "wan22";
     wan.label = "WAN";
+    wan.capabilities.features = wan.capabilities.features.filter(
+        (feature) => feature !== "latentUpscale",
+    );
     models.architectures.push(wan);
     models.entries.push(
         {
@@ -389,7 +392,7 @@ describe("stage architecture model filtering", () => {
         expect(panel.querySelector("select")).toBeNull();
     });
 
-    it("never offers plain latent upscaling and leaves latent-model alone", () => {
+    it("offers latent upscaling only when the architecture supports it", () => {
         const models = catalogWithWan();
         const defaults = {
             ...testRootDefaults(models),
@@ -428,21 +431,16 @@ describe("stage architecture model filtering", () => {
             );
         };
 
-        const withoutPlainLatent = [
-            "pixel-lanczos",
-            "model-ultrasharp.safetensors",
-            "latentmodel-detail.safetensors",
-        ];
-        expect(methodsFor("ltx")).toEqual(withoutPlainLatent);
-        expect(methodsFor("wan-current.safetensors")).toEqual(
-            withoutPlainLatent,
-        );
-        // A latent method persisted before the option was withdrawn stays visible so it can
-        // be changed.
-        expect(methodsFor("ltx", "latent-nearest-exact")).toEqual([
+        const pixelMethods = ["pixel-lanczos", "model-ultrasharp.safetensors"];
+        expect(methodsFor("ltx")).toEqual([
+            ...pixelMethods,
             "latent-nearest-exact",
-            ...withoutPlainLatent,
+            "latentmodel-detail.safetensors",
         ]);
+        expect(methodsFor("wan-current.safetensors")).toEqual(pixelMethods);
+        expect(
+            methodsFor("wan-current.safetensors", "latent-nearest-exact"),
+        ).toEqual(["latent-nearest-exact", ...pixelMethods]);
     });
 
     it("offers every supported architecture model on stage 0", () => {

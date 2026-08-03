@@ -619,6 +619,7 @@
     retake: "Retakes",
     audioSegments: "Audio segments",
     audioBoundaryCarry: "Boundary audio carry",
+    latentUpscale: "Latent stage upscaling",
     audioReuse: "Captured stage audio reuse",
     audioDerivedDuration: "Audio-derived clip duration",
     icLora: "IC-LoRA"
@@ -702,7 +703,7 @@
       if ((stage.upscale ?? 1) === 1 || upscaleMode !== "latent" && upscaleMode !== "latent-model") {
         return false;
       }
-      return true;
+      return clipCapabilities === null || architectureFeatureSupport("latentUpscale", clipCapabilities);
     }).map((stage) => stage.model);
   };
   var resolveClipFrameGridForLookup = (clip, modelForName, architectureForId) => {
@@ -6015,9 +6016,8 @@
       "prompt-relay",
       "Prompt relay"
     );
-    if (clip.stages.some(
-      (stage) => stage.upscale !== 1 && upscaleModeForMethod(stage.upscaleMethod) === "unsupported"
-    )) {
+    const activeUpscaleModes = clip.stages.filter((stage) => stage.upscale !== 1).map((stage) => upscaleModeForMethod(stage.upscaleMethod));
+    if (activeUpscaleModes.includes("unsupported")) {
       diagnostics.push(
         issue(
           "architecture.unsupported.upscale",
@@ -6026,6 +6026,13 @@
         )
       );
     }
+    unsupported(
+      !supports("latentUpscale") && activeUpscaleModes.some(
+        (mode) => mode === "latent" || mode === "latent-model"
+      ),
+      "latent-upscale",
+      "Latent stage upscaling"
+    );
     const sourceKind = audioSourceKind(clip.audioSource);
     const clipAudioCapabilitySupported = supportsClipAudio(
       capabilities.audioSourceKinds
@@ -12019,12 +12026,13 @@ The conversion is one undoable change.`;
 
   // frontend/detailStrip/stagePanel/upscaleSection.ts
   var UPSCALE_EPSILON = 1e-6;
-  var isLatentUpscaleMethod = (method) => method.trim().toLowerCase().startsWith("latent-");
+  var isLatentUpscaleMethod = (method) => ["latent", "latent-model"].includes(upscaleModeForMethod(method));
   var appendStageUpscaleSection = (bindings, isRefine) => {
     if (!isRefine) return;
-    const { stage, defaults, fields, slider, commit } = bindings;
+    const { context, clip, stage, defaults, fields, slider, commit } = bindings;
+    const supportsLatentUpscale = context.authoring().capabilities.forClip(clip).decision("latentUpscale").supported;
     const supportedMethods = defaults.upscaleMethodValues.flatMap(
-      (value, index) => !isLatentUpscaleMethod(value) ? [
+      (value, index) => !isLatentUpscaleMethod(value) || supportsLatentUpscale ? [
         {
           value,
           label: defaults.upscaleMethodLabels[index] ?? value

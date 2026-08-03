@@ -159,6 +159,7 @@ internal static class WanClipPlanCompiler
                 clip,
                 activeStages,
                 stageModels,
+                WanArchitectureModule.Instance.Descriptor,
                 diagnostics,
                 "wan",
                 "WAN");

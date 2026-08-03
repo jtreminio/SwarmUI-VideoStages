@@ -179,10 +179,6 @@ internal sealed class VideoStageRunner : IDisposable
         }
         if (upscale.Mode is not (StageUpscaleMode.Pixel or StageUpscaleMode.Model))
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
-                _generator.UserInput,
-                $"VideoStages: Stage {stage.StageId} uses unsupported upscale method "
-                    + $"'{upscale.RawMethod}'. Ignoring upscale.");
             return;
         }
         int width = _generator.CurrentMedia.Width

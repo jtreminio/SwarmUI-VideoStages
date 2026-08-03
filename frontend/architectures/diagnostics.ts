@@ -93,14 +93,10 @@ const persistedCapabilityIssues = (
         "prompt-relay",
         "Prompt relay",
     );
-    // Upscale methods are architecture-neutral, so only an unclassifiable one is a defect.
-    if (
-        clip.stages.some(
-            (stage) =>
-                stage.upscale !== 1 &&
-                upscaleModeForMethod(stage.upscaleMethod) === "unsupported",
-        )
-    ) {
+    const activeUpscaleModes = clip.stages
+        .filter((stage) => stage.upscale !== 1)
+        .map((stage) => upscaleModeForMethod(stage.upscaleMethod));
+    if (activeUpscaleModes.includes("unsupported")) {
         diagnostics.push(
             issue(
                 "architecture.unsupported.upscale",
@@ -109,6 +105,14 @@ const persistedCapabilityIssues = (
             ),
         );
     }
+    unsupported(
+        !supports("latentUpscale") &&
+            activeUpscaleModes.some(
+                (mode) => mode === "latent" || mode === "latent-model",
+            ),
+        "latent-upscale",
+        "Latent stage upscaling",
+    );
     const sourceKind = audioSourceKind(clip.audioSource);
     const clipAudioCapabilitySupported = supportsClipAudio(
         capabilities.audioSourceKinds,

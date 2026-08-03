@@ -10,6 +10,7 @@
         "retake",
         "audioSegments",
         "audioBoundaryCarry",
+        "latentUpscale",
         "audioReuse",
         "audioDerivedDuration",
         "icLora"
