@@ -29,8 +29,8 @@ hidden authoring document + host request
     → optional exclusive architecture finalization
 ```
 
-There is one common orchestration path. LTX, WAN, generic host video, and the
-source-only `none` path do not receive separate top-level runners.
+There is one common orchestration path. LTX, MiniMax, WAN, generic host video,
+and the source-only `none` path do not receive separate top-level runners.
 
 ## 1. Parse, resolve, project, compile
 
@@ -175,38 +175,56 @@ this common boundary.
 
 ## 6. Stage loops
 
-### WAN and generic host video
+### Shared stage loop
 
-`HostVideoStageEngine` is the proven common intersection. It owns:
+`VideoStageRunner.ExecuteStages` is the common outer loop used by LTX, MiniMax,
+WAN, and generic host video. It owns:
 
 - stage iteration;
-- pixel-upscale ordering;
-- passthrough decoded-input configuration;
-- reversible per-stage host parameter sections;
+- adjacent sampling-continuation selection;
+- stage-input publication;
+- stage-output capture and validation;
 - intermediate publication;
-- terminal global trim; and
-- capture of the final neutral artifact.
+- and advancing past a consumed continuation.
+
+Each architecture keeps one cohesive stage procedure for its model-specific
+references, audio, conditioning, latent construction, sampling, and decode.
+
+### WAN and generic host video
 
 `StockHostVideoGenerationSession` owns the common stock-host execution path and
-uses `HostVideoStageEngine` for stage iteration. Generic host video uses that
-session directly. WAN supplies one optional concrete
+uses `VideoStageRunner` for stage iteration, decoded pixel/model upscale,
+passthrough input, host parameter sections, and terminal trim. Generic host video
+uses that session directly. WAN supplies one optional concrete
 `WanStockHostVideoBehavior` collaborator for first/final-frame materialization,
 temporal snapping, native final-frame conditioning, and 5B cleanup. This is not
 a generic callback or policy interface: it is the bounded WAN addition to the
 otherwise shared stock path.
 
-Both paths delegate supported graph construction to SwarmUI's stock video
-primitives. VideoStages validates its own document topology and added
-features; it does not try to reproduce every core model-path validity rule.
+The WAN and generic paths delegate supported graph construction to SwarmUI's
+stock video primitives. VideoStages validates its own document topology and
+added features; it does not try to reproduce every core model-path validity
+rule.
+
+### MiniMax
+
+`MiniMaxGenerationSession` uses `VideoStageRunner.Execute`, but does not use
+`StockHostVideoGenerationSession`. The shared wrapper owns decoded upscale and
+passthrough handling, host parameter sections, intermediate publication, output
+validation, and terminal trim. `MiniMaxGenerationSession` keeps H3 model/prompt
+setup, audio selection and encoding, joint audio-video latent construction,
+first/last-frame keyframes, sampling, and joint decode together.
 
 ### LTX
 
-LTX does not use `HostVideoStageEngine`. Its runtime has different latent,
-conditioning, audio, IC-LoRA, guide, retake, and post-video-chain semantics:
+LTX uses `VideoStageRunner.ExecuteStages` for the outer lifecycle. Its latent,
+conditioning, audio, IC-LoRA, guide, retake, and post-video-chain semantics
+remain inside the LTX path:
 
 ```text
 LTX private generation session
     → StageClipExecutor
+    → VideoStageRunner.ExecuteStages
     → StageRunner
     → LtxStageExecutor
     → LtxStageOutputFinalizer

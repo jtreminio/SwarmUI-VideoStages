@@ -19,7 +19,7 @@ internal sealed class StockHostVideoGenerationSession(
     WorkflowGenerator g,
     VideoExecutionPlan plan,
     HostVideoRootSources rootSources,
-    HostVideoStageEngine stageEngine,
+    VideoStageRunner stageRunner,
     ArchitectureId architectureId,
     string architectureLabel,
     WanStockHostVideoBehavior wanBehavior = null) : IVideoGenerationSession
@@ -92,7 +92,7 @@ internal sealed class StockHostVideoGenerationSession(
             g.CurrentMedia.AttachedAudio = null;
         }
 
-        return stageEngine.Execute(
+        return stageRunner.Execute(
             clip,
             _wanBehavior is not null
                 ? _wanBehavior.ResolvePassthroughFrames
@@ -100,7 +100,7 @@ internal sealed class StockHostVideoGenerationSession(
             ExecuteGeneratingStage);
     }
 
-    public void Dispose() => stageEngine.Dispose();
+    public void Dispose() => stageRunner.Dispose();
 
     private bool ExecuteGeneratingStage(
         ClipPlan clip,
@@ -232,7 +232,7 @@ internal sealed class StockHostVideoGenerationSession(
                     g.CurrentAudioVae = null;
                     g.CreateImageToVideo(genInfo);
                     if (continuation is not null
-                        && stageEngine.PublishesIntermediateStages)
+                        && stageRunner.PublishesIntermediateStages)
                     {
                         PublishSamplingContinuationIntermediate(
                             stage,
@@ -329,7 +329,7 @@ internal sealed class StockHostVideoGenerationSession(
             Width = (int?)genInfo.Width,
             Height = (int?)genInfo.Height,
         };
-        stageEngine.PublishIntermediate(
+        stageRunner.PublishIntermediate(
             stage,
             highMedia,
             genInfo.Vae);
@@ -619,7 +619,7 @@ internal sealed class StockHostVideoGenerationSessionFactory(
             generator,
             context.Plan,
             _rootSources,
-            new HostVideoStageEngine(
+            new VideoStageRunner(
                 generator,
                 context.Plan,
                 architectureLabel),

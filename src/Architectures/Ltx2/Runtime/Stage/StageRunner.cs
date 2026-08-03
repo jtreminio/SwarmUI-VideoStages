@@ -1,8 +1,6 @@
-using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Execution;
 using VideoStages.Planning;
 
 using VideoStages.Architectures.Ltx2.Planning;
@@ -39,7 +37,7 @@ internal class StageRunner
         _icLoraStageInputResolver = new IcLoraStageInputResolver(generator);
     }
 
-    public RuntimeArtifact RunStage(
+    public void RunStage(
         StagePlan stage,
         int sectionId,
         StageRefStore.StageRef guideReference,
@@ -62,7 +60,7 @@ internal class StageRunner
             && !rootPolicy.ReplacesTextToVideoRootStage(stage, clip))
         {
             RunPassthroughStage(stage, sectionId, clipContext);
-            return CaptureArtifact(_generator, stage);
+            return;
         }
 
         using ParamSnapshot promptLoraScope = PromptParser.ApplyLoraScope(
@@ -105,20 +103,6 @@ internal class StageRunner
         };
 
         RunLtxStage(guideReference, refStore, stageFrame, applyIcLora);
-        return CaptureArtifact(_generator, stage);
-    }
-
-    internal static RuntimeArtifact CaptureArtifact(WorkflowGenerator generator, StagePlan stage)
-    {
-        ArgumentNullException.ThrowIfNull(stage);
-        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
-        RuntimeArtifact output = RuntimeArtifact.Capture(generator, bridge);
-        if (!output.HasMedia)
-        {
-            throw VideoStagesInvariant.Failure(
-                $"VideoStages: stage {stage.StageId} did not produce a video artifact.");
-        }
-        return output;
     }
 
     private void RunLtxStage(

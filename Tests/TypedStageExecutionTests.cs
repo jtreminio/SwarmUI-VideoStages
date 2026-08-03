@@ -1,5 +1,4 @@
 using VideoStages.Planning;
-using VideoStages.Execution;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -17,14 +16,6 @@ public class TypedStageExecutionTests
         Assert.DoesNotContain(
             typeof(StageRunner).GetMethods(),
             method => method.Name == "RunLegacyStage");
-    }
-
-    [Fact]
-    public void Stage_execution_returns_a_validatable_runtime_artifact_contract()
-    {
-        Assert.Equal(
-            typeof(RuntimeArtifact),
-            typeof(StageRunner).GetMethod(nameof(StageRunner.RunStage))?.ReturnType);
     }
 
     [Fact]

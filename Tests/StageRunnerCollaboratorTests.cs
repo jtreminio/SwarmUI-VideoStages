@@ -1,11 +1,10 @@
 using System.Collections.Immutable;
-using ComfyTyped.Core;
-using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
+using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
 using Xunit;
 
@@ -111,44 +110,22 @@ public class StageRunnerCollaboratorTests
     }
 
     [Fact]
-    public void Runtime_artifact_capture_rejects_a_missing_stage_output()
+    public void Shared_stage_runner_rejects_a_missing_stage_output()
     {
         WorkflowGenerator generator = new()
         {
-            Workflow = new JObject(),
+            Workflow = [],
             UserInput = new(null)
         };
-        StagePlan stage = MakePlan().Stage;
+        VideoExecutionPlan plan = MakeExecutionPlan();
+        ClipPlan clip = Assert.Single(plan.Clips);
+        using VideoStageRunner stageRunner = new(generator, plan, "unit test");
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => StageRunner.CaptureArtifact(generator, stage));
+            () => stageRunner.ExecuteStages(clip, (stage, continuation) => false));
 
-        Assert.Contains($"stage {stage.StageId}", error.Message);
-    }
-
-    [Fact]
-    public void Runtime_artifact_capture_preserves_stage_output_media()
-    {
-        JObject workflow = [];
-        WorkflowGenerator generator = new()
-        {
-            Workflow = workflow,
-            UserInput = new(null)
-        };
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        _ = bridge.AddStub("UnitTestVideo", "901").WithOutputs(WGNodeData.DT_VIDEO);
-        generator.CurrentMedia = new WGNodeData(
-            new JArray("901", 0),
-            generator,
-            WGNodeData.DT_VIDEO,
-            T2IModelClassSorter.CompatLtxv2);
-
-        RuntimeArtifact artifact = StageRunner.CaptureArtifact(generator, MakePlan().Stage);
-
-        Assert.True(artifact.HasMedia);
-        generator.CurrentMedia = null;
-        artifact.PublishTo(generator);
-        Assert.Equal("901", $"{generator.CurrentMedia.Path[0]}");
+        Assert.Contains($"stage {clip.Stages[0].StageId}", error.Message);
+        Assert.Contains("produced no media artifact", error.Message);
     }
 
     [Fact]
@@ -220,6 +197,12 @@ public class StageRunnerCollaboratorTests
 
     private static (ClipPlan Clip, StagePlan Stage) MakePlan()
     {
+        ClipPlan plannedClip = Assert.Single(MakeExecutionPlan().Clips);
+        return (plannedClip, Assert.Single(plannedClip.Stages));
+    }
+
+    private static VideoExecutionPlan MakeExecutionPlan()
+    {
         StageSpec stage = new(
             Id: 31,
             Control: 1,
@@ -243,10 +226,7 @@ public class StageRunnerCollaboratorTests
             UploadedAudio: null,
             ImageRefs: [],
             Stages: [stage]);
-        ClipPlan plannedClip = Assert.Single(
-            TestPlanCompiler.Compile(
-                new VideoStagesSpec(512, 512, 24, false, [clip]))
-            .Clips);
-        return (plannedClip, Assert.Single(plannedClip.Stages));
+        return TestPlanCompiler.Compile(
+            new VideoStagesSpec(512, 512, 24, false, [clip]));
     }
 }

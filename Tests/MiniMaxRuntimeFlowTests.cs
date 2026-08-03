@@ -172,6 +172,113 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
+    public void Pixel_upscale_resizes_the_decoded_input_before_the_next_stage()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    control: 0.5,
+                    upscale: 1.5,
+                    upscaleMethod: "pixel-lanczos",
+                    steps: 8,
+                    cfgScale: 1)));
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
+        Assert.Equal(2, samplers.Length);
+        ComfyNode firstSampler = Assert.Single(
+            samplers,
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 43);
+        ComfyNode secondSampler = Assert.Single(
+            samplers,
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 44);
+        ImageScaleNode scale = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            candidate => candidate.Width.LiteralAsInt() == 768
+                && candidate.Height.LiteralAsInt() == 768
+                && candidate.UpscaleMethod.LiteralAsString() == "lanczos"
+                && ReachesUpstream(bridge, candidate, firstSampler.Id));
+        ComfyNode joint = secondSampler.FindInput("latent_image").Connection?.Node;
+        Assert.True(ReachesUpstream(bridge, joint, scale.Id));
+        Assert.Equal(768, generator.CurrentMedia.Width);
+        Assert.Equal(768, generator.CurrentMedia.Height);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public void Three_stages_publish_intermediates_and_trim_only_the_final_output()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    control: 0.5,
+                    steps: 8,
+                    cfgScale: 1),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    control: 0.25,
+                    steps: 8,
+                    cfgScale: 1)));
+        input.Set(T2IParamTypes.OutputIntermediateImages, true);
+        input.Set(T2IParamTypes.TrimVideoStartFrames, 4);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
+        Assert.Equal(3, samplers.Length);
+        ComfyNode first = Assert.Single(
+            samplers,
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 43);
+        ComfyNode second = Assert.Single(
+            samplers,
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 44);
+        ComfyNode third = Assert.Single(
+            samplers,
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 45);
+        SwarmTrimFramesNode trim = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
+        Assert.Equal(4, trim.TrimStart.LiteralAsInt());
+        SwarmSaveAnimationWSNode[] saves =
+            [.. bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>()];
+        Assert.Equal(3, saves.Length);
+        Assert.Single(saves, save => ReferenceEquals(trim, save.Images.Connection?.Node));
+        Assert.Single(
+            saves,
+            save => ReachesUpstream(bridge, save.Images.Connection?.Node, first.Id)
+                && !ReachesUpstream(bridge, save.Images.Connection?.Node, second.Id));
+        Assert.Single(
+            saves,
+            save => ReachesUpstream(bridge, save.Images.Connection?.Node, second.Id)
+                && !ReachesUpstream(bridge, save.Images.Connection?.Node, third.Id));
+        Assert.True(ReachesUpstream(bridge, trim, third.Id));
+        Assert.Equal(new JArray(trim.Id, 0), generator.CurrentMedia.Path);
+        Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.AttachedAudio?.DataType);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void Authored_first_and_last_frame_uploads_reach_the_keyframe_node()
     {
         using SwarmUiTestContext context = new();

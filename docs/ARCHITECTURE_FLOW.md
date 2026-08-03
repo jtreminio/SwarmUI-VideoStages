@@ -14,17 +14,17 @@ priorities, runtime lifetimes, and stage-loop ownership, use
 
 VideoStages is a modular monolith with specialized overlays and a conservative
 host-video fallback. Production registers the source-only `none` architecture,
-specialized LTX Video 2.3 (`ltx2`), the WAN family (`wan22`), and a cut-only
-generic profile (`host-video`) for exact SwarmUI model classes whose stock video
-graph branches have been verified.
+specialized LTX Video 2.3 (`ltx2`), MiniMax H3 (`minimax`), the WAN family
+(`wan22`), and a cut-only generic profile (`host-video`) for exact SwarmUI model
+classes whose stock video graph branches have been verified.
 
 ## Ownership
 
 | Concern | Owner | Concrete entry points |
 |---|---|---|
 | Production registration | SwarmUI adapter | `VideoStagesExtension.OnInit`, `VideoArchitectureManifest` |
-| Exact model recognition | Backend architecture module | `VideoArchitectureRegistry.TryResolveModel`, `Ltx2ArchitectureModule.TryResolveModel`, `WanArchitectureModule.TryResolveModel`, `HostVideoArchitectureModule.TryResolveModel` |
-| Capabilities and rules | Backend architecture module | `Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`, `HostVideoArchitectureModule.Descriptor`, `NoneArchitecture.Descriptor` |
+| Exact model recognition | Backend architecture module | `VideoArchitectureRegistry.TryResolveModel`, `Ltx2ArchitectureModule.TryResolveModel`, `MiniMaxArchitectureModule.TryResolveModel`, `WanArchitectureModule.TryResolveModel`, `HostVideoArchitectureModule.TryResolveModel` |
+| Capabilities and rules | Backend architecture module | `Ltx2ArchitectureModule.Descriptor`, `MiniMaxArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`, `HostVideoArchitectureModule.Descriptor`, `NoneArchitecture.Descriptor` |
 | Catalog transport | Common backend + SwarmUI authorization | `VideoStagesApi.VideoStagesGetArchitectureCatalog`, `AuthorizedArchitectureRegistry`, `ArchitectureCatalogSerializer.Serialize` |
 | Catalog loading and feature policy | Common frontend | `getArchitectureCatalogSnapshot`, `loadAuthoritativeArchitectureCatalog`, `refreshAuthoritativeArchitectureCatalog`, `parseVideoArchitectureCatalog`, `createCapabilityViewResolver` |
 | Architecture-specific authoring behavior | Frontend architecture-gated helpers | `behaviorRegistry.ts`, `authoringPanels.ts`, architecture ID identity modules |
@@ -70,7 +70,7 @@ together.
 The registry rejects duplicate architecture/profile IDs, invalid module
 results, ambiguous model matches within the winning resolution tier, and
 invalid default profiles. Specialized matches win over fallback matches, so a
-generic registration cannot steal an LTX or WAN model. API projection
+generic registration cannot steal an LTX, MiniMax, or WAN model. API projection
 and planning wrap that registry in `AuthorizedArchitectureRegistry`, which
 removes models the requesting SwarmUI session is not allowed to see. It
 authorizes the canonical resolved model name rather than the authored spelling,
@@ -88,6 +88,9 @@ plan compilation, always carry a request session.
   (case-insensitive).
 
 It returns `ArchitectureId("ltx2")` and `ModelProfileId("ltx-2.3")`.
+`MiniMaxArchitectureModule.TryResolveModel` accepts only the `minimax-h3` model
+class under core's MiniMax H3 compatibility class. It returns
+`ArchitectureId("minimax")` and `ModelProfileId("minimax-h3")`.
 `WanArchitectureModule.TryResolveModel` accepts ordinary WAN 2.1/2.2 video
 models and gives the family text and image entry. It explicitly rejects VACE,
 LoRA, and VAE component classes. Two exact legacy pairs retain special profile
@@ -118,9 +121,9 @@ or frontend classification cannot authorize an unsupported model.
 
 ### A2. Capability declaration and transport
 
-`Ltx2ArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`,
-`HostVideoArchitectureModule.Descriptor`, and `NoneArchitecture.Descriptor`
-are typed `VideoArchitectureDescriptor` values.
+`Ltx2ArchitectureModule.Descriptor`, `MiniMaxArchitectureModule.Descriptor`,
+`WanArchitectureModule.Descriptor`, `HostVideoArchitectureModule.Descriptor`,
+and `NoneArchitecture.Descriptor` are typed `VideoArchitectureDescriptor` values.
 Each resolved model owns its complete effective capabilities. The descriptor
 publishes architecture defaults; model selection,
 diagnostics, conversion, planning, and runtime authorization use the exact
@@ -139,6 +142,10 @@ samplerless decoded-video passthrough for those two decoded inputs, while
 positive partial control still must quantize to a nonzero start step.
 Audio capabilities remain absent. The same typed boundary/rule objects feed
 backend validation and frontend publication.
+
+MiniMax publishes text/image entry, native/uploaded/AceStepFun audio, first/last
+frame references, decoded previous-stage chaining, its 17-frame grid with a
+five-frame origin, and cut-only clip boundaries.
 
 The generic descriptor supports source entry through the same neutral
 conformance path used by WAN. Model-level
@@ -347,8 +354,8 @@ For LTX, `Ltx2ClipPlanCompiler.Compile` produces `Ltx2ClipPayload` and
 LoRA, IC-LoRA, retake, frame references, and stage audio actions. Common
 orchestration reads the required stage core and otherwise carries these values;
 it must not interpret their graph meaning.
-`NormalLoraPlanCompiler` is common graph-free planning shared by LTX, WAN, and
-generic host video:
+`NormalLoraPlanCompiler` is common graph-free planning shared by LTX, MiniMax,
+WAN, and generic host video:
 it resolves each stage's effective clip rows, keeps clip-before-stage ordering,
 and leaves the resulting immutable array inside the selected architecture's
 stage payload rather than common `StagePlan`. Its default model-and-text target
@@ -374,6 +381,11 @@ are both zero are omitted by the default policy. Under WAN's model-only policy,
 every model-zero row is omitted even when its stored text-encoder weight is
 nonzero; the samplerless-stage rule therefore sees the same effective plan the
 WAN runtime can apply.
+
+For MiniMax, `MiniMaxArchitectureModule.ValidateAndCompileClip` produces
+`MiniMaxClipPayload` plus the shared `StockHostVideoStagePayload`. It compiles
+first/last references, normal LoRAs, stage controls, and the shared stage core;
+the H3 runtime owns the joint audio-video graph meaning.
 
 Blocking `PlanDiagnostic` values are thrown by
 `RequireVideoExecutionPlanContext` before a VideoStages mutation phase.
@@ -426,6 +438,8 @@ LTX root policy, so it happens only when LTX owns the host root; the source-only
 path retains the raw capture.
 The remaining LTX host phases handle base/refiner references, pre-core handoff,
 core-output drop, and root audio-mask sizing.
+`MiniMaxExecutionAdapter` captures the same base/refiner host reference points
+and uses `RootMediaHandoff` for pre-core capture and discarded-core cleanup.
 When WAN owns the generated host root, `HostVideoRootMediaHandoff` captures the
 resolvable root image, its VAE state (which may be explicitly absent), and a
 node snapshot, then restores them and prunes the host core video pass. Missing
@@ -468,8 +482,9 @@ shape. It does not repeat model-name checks.
 Timeline state such as the plan, prepared audio, assembly session, and root
 policy is captured when each architecture session is created. LTX composes the
 per-clip context with its private root and host state in
-`StageClipExecutionContext`; the init-video-only session captures only frame rate
-and audio sources.
+`StageClipExecutionContext`; MiniMax captures its root, audio sources, and base/
+refiner references in `MiniMaxGenerationSession`; the init-video-only session
+captures only frame rate and audio sources.
 
 ### B6a. LTX graph execution
 
@@ -482,16 +497,19 @@ The LTX path is:
 ```text
 LTX private generation session
     → StageClipExecutor.Execute
+    → VideoStageRunner.ExecuteStages
     → StageRunner.RunStage
     → LtxStageExecutor.RunStage
     → LtxStageOutputFinalizer.Complete
-    → StageRuntimeArtifactCapture
+    → RuntimeArtifact.Capture
     → DecodedClipArtifact.FromRuntime
 ```
 
 `StageClipExecutor` installs source media if planned, prepares LTX boundary and
-audio state, and loops stages. `StageRunner` owns passthrough versus generated
-execution and prepares guides, references, upscale, and IC-LoRA input.
+audio state, then hands stage advancement to `VideoStageRunner`.
+`VideoStageRunner` publishes each stage input, captures and validates each stage
+output, and publishes intermediates. `StageRunner` owns passthrough versus
+generated execution and prepares guides, references, upscale, and IC-LoRA input.
 `LtxStageExecutor` builds LTX model/prompt state, latent, conditioning, sampler,
 and decoded video/audio output. LTX node choices, latent/VAE handling, audio
 splitting, IC-LoRA, and post-video-chain behavior remain under
@@ -500,12 +518,29 @@ splitting, IC-LoRA, and post-video-chain behavior remain under
 The `none` path uses `SourceOnlyGenerationSession` and
 `InitVideoClipInstaller`; it builds no generation latent, VAE, or stage runtime.
 
-### B6b. WAN on the shared stock-host runtime
+### B6b. MiniMax H3 graph execution
+
+`MiniMaxExecutionAdapter` creates `MiniMaxGenerationSession`, which delegates
+the common host-style stage lifecycle to the shared runner:
+
+```text
+MiniMaxGenerationSession.Execute
+    → VideoStageRunner.Execute
+    → MiniMaxGenerationSession.ExecuteGeneratingStage
+```
+
+The runner owns stage iteration, decoded upscale/passthrough handling, stage
+scope, capture, validation, intermediate publication, and terminal trim. The
+MiniMax procedure owns H3 prompt/model preparation, source audio encoding or
+native audio creation, joint audio-video latent construction, first/last-frame
+keyframes, sampling, and joint decode.
+
+### B6c. WAN on the shared stock-host runtime
 
 `WanExecutionAdapter` creates `StockHostVideoGenerationSessionFactory`, which
 snapshots the host root media and VAE.
 `StockHostVideoGenerationSession` prepares each hard-cut clip independently and
-uses `HostVideoStageEngine` for common iteration, scope restoration,
+uses `VideoStageRunner` for common iteration, scope restoration,
 pixel-upscale ordering, passthrough handling, intermediate publication,
 terminal trim, and artifact capture. Its optional concrete
 `WanStockHostVideoBehavior` collaborator owns only WAN first/final-frame
@@ -588,15 +623,15 @@ models are accepted from host facts and can use text, first-image, or source
 entry as request inputs. Legacy swap controls are warned and ignored; two noise
 models are two authored stages.
 
-The shared engine publishes authored intermediates and removes every host
+The shared runner publishes authored intermediates and removes every host
 per-pass trim. For a terminal single-clip session it applies the global trim
 after the final stage; for a multi-clip timeline, common assembly applies that
 trim once over the joined timeline. It returns the final decoded video-only
 artifact. A new generated hard-cut clip resets to the captured root rather than
-consuming the previous clip. LTX/WAN boundaries are neutral hard cuts; no
-family assembler crosses the architecture boundary.
+consuming the previous clip. LTX, MiniMax, and WAN boundaries are neutral hard
+cuts; no family assembler crosses the architecture boundary.
 
-### B6c. Generic host-video runtime execution
+### B6d. Generic host-video runtime execution
 
 The same `StockHostVideoGenerationSession`, without the WAN collaborator, calls
 the proven stock `WorkflowGenerator.CreateImageToVideo` branch that SwarmUI uses
@@ -610,7 +645,7 @@ clip-authored frame references.
 Text entry prepares the selected host model and conditioning, then calls the
 host's family-specific `EmptyImage` video-latent primitive before sampling and
 decoding. `HostVideoRootMediaHandoff`, `HostVideoDecodedStageInput`, and
-`HostVideoStageEngine` contain the root restoration, decoded-media boundary,
+`VideoStageRunner` contain the root restoration, decoded-media boundary,
 and stage-loop mechanics shared with WAN. Generic host video retains direct
 stock-path scheduling and request isolation. Generic passes clear ambient
 audio, native audio-reference input, swap, and end-frame values inside

@@ -9,10 +9,9 @@ namespace VideoStages.HostVideo.Runtime;
 internal sealed record HostVideoRootSources(WGNodeData Media, WGNodeData Vae);
 
 /// <summary>
-/// Runs the shared stage loop for WAN and generic host video. Architecture callbacks handle
-/// model loading, conditioning, native text entry, references, and cleanup.
+/// Runs the shared authored-stage loop.
 /// </summary>
-internal sealed class HostVideoStageEngine : IDisposable
+internal sealed class VideoStageRunner : IDisposable
 {
     private readonly WorkflowGenerator _generator;
     private readonly GlobalVideoFrameTrimmer _trimmer;
@@ -20,7 +19,7 @@ internal sealed class HostVideoStageEngine : IDisposable
     private readonly HostVideoDecodedStageInput _decodedInput;
     private readonly StageHostExecutionScope _stageScope;
 
-    internal HostVideoStageEngine(
+    internal VideoStageRunner(
         WorkflowGenerator generator,
         VideoExecutionPlan plan,
         string architectureDisplayLabel,
@@ -56,16 +55,11 @@ internal sealed class HostVideoStageEngine : IDisposable
         ArgumentNullException.ThrowIfNull(resolvePassthroughFrames);
         ArgumentNullException.ThrowIfNull(executeGeneratingStage);
 
-        for (int stageIndex = 0; stageIndex < clip.Stages.Count; stageIndex++)
+        _ = ExecuteStages(clip, (stage, continuation) =>
         {
-            StagePlan stage = clip.Stages[stageIndex];
-            StagePlan continuation = !stage.IsPassthrough
-                && stageIndex + 1 < clip.Stages.Count
-                && clip.Stages[stageIndex + 1].ContinuesSamplingFromPreviousStage
-                    ? clip.Stages[stageIndex + 1]
-                    : null;
             StageCorePlan settings = stage.Core;
             ApplyUpscale(stage, settings.Upscale);
+            bool consumedContinuation = false;
             if (stage.IsPassthrough)
             {
                 _decodedInput.ConfigurePassthrough(
@@ -81,39 +75,81 @@ internal sealed class HostVideoStageEngine : IDisposable
                     _stageScope.ApplyStageOverrides(clip, continuation);
                     _stageScope.ApplySamplingContinuationOverrides(continuation);
                 }
-                bool consumedContinuation = executeGeneratingStage(
+                consumedContinuation = executeGeneratingStage(
                     clip,
                     stage,
                     continuation,
                     _decodedInput,
                     sectionId);
-                if (!consumedContinuation)
-                {
-                    continuation = null;
-                }
             }
-            _stageScope.PublishIntermediate(continuation ?? stage);
-            if (continuation is not null)
-            {
-                stageIndex++;
-            }
-        }
+            return consumedContinuation;
+        });
 
         StagePlan finalStage = clip.Stages[^1];
         if (finalStage.Output.IsTimelineTerminal && _trimmer.IsRequested)
         {
             _trimmer.Apply();
         }
-        using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
         return DecodedClipArtifact.FromRuntime(
-            RuntimeArtifact.Capture(
-                _generator,
-                bridge),
+            CaptureRuntimeArtifact(),
             clip);
+    }
+
+    internal RuntimeArtifact ExecuteStages(
+        ClipPlan clip,
+        Func<StagePlan, StagePlan, bool> executeStage)
+    {
+        ArgumentNullException.ThrowIfNull(clip);
+        ArgumentNullException.ThrowIfNull(executeStage);
+
+        RuntimeArtifact output = null;
+        for (int stageIndex = 0; stageIndex < clip.Stages.Count; stageIndex++)
+        {
+            StagePlan stage = clip.Stages[stageIndex];
+            StagePlan continuation = !stage.IsPassthrough
+                && stageIndex + 1 < clip.Stages.Count
+                && clip.Stages[stageIndex + 1].ContinuesSamplingFromPreviousStage
+                    ? clip.Stages[stageIndex + 1]
+                    : null;
+            RuntimeArtifact input = output ?? CaptureRuntimeArtifact();
+            _stageScope.PublishStageInput(input);
+            bool consumedContinuation = executeStage(stage, continuation);
+            output = CaptureRuntimeArtifact();
+            if (!output.HasMedia)
+            {
+                throw VideoStagesInvariant.Failure(
+                    $"VideoStages: stage {stage.StageId} produced no media artifact.");
+            }
+            if (consumedContinuation && continuation is null)
+            {
+                throw VideoStagesInvariant.Failure(
+                    $"VideoStages: stage {stage.StageId} consumed no planned continuation.");
+            }
+            _stageScope.PublishIntermediate(
+                consumedContinuation ? continuation : stage);
+            if (consumedContinuation)
+            {
+                stageIndex++;
+            }
+        }
+        return output;
     }
 
     internal bool PublishesIntermediateStages =>
         _stageScope.PublishesIntermediateStages;
+
+    internal int ApplyStageOverrides(
+        ClipPlan clip,
+        StagePlan stage,
+        int? width,
+        int? height,
+        int? frameCount) =>
+        _stageScope.ApplyStageOverrides(
+            clip,
+            stage,
+            width,
+            height,
+            frameCount);
 
     internal void PublishIntermediate(
         StagePlan stage,
@@ -122,6 +158,12 @@ internal sealed class HostVideoStageEngine : IDisposable
         _stageScope.PublishIntermediate(stage, media, vae);
 
     public void Dispose() => _stageScope.Dispose();
+
+    private RuntimeArtifact CaptureRuntimeArtifact()
+    {
+        using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+        return RuntimeArtifact.Capture(_generator, bridge);
+    }
 
     private void ApplyUpscale(StagePlan stage, StageUpscalePlan upscale)
     {

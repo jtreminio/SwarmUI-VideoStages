@@ -18,7 +18,7 @@ internal sealed class MiniMaxGenerationSession(
     AudioRuntimeSources audioSources,
     WGNodeData baseReference,
     WGNodeData refinerReference,
-    HostVideoStageEngine stageEngine) : IVideoGenerationSession
+    VideoStageRunner stageRunner) : IVideoGenerationSession
 {
     internal const string ArchitectureLabel = "MiniMax H3";
 
@@ -74,10 +74,10 @@ internal sealed class MiniMaxGenerationSession(
             g.CurrentMedia.AttachedAudio = null;
         }
 
-        return stageEngine.Execute(clip, ResolvePassthroughFrames, ExecuteGeneratingStage);
+        return stageRunner.Execute(clip, ResolvePassthroughFrames, ExecuteGeneratingStage);
     }
 
-    public void Dispose() => stageEngine.Dispose();
+    public void Dispose() => stageRunner.Dispose();
 
     private int? ResolvePassthroughFrames(ClipPlan clip, StagePlan stage) =>
         stage.Input == StageInputKind.PreviousStage
@@ -468,7 +468,7 @@ internal sealed class MiniMaxGenerationSessionFactory(
             _audioSources,
             baseReference,
             refinerReference,
-            new HostVideoStageEngine(
+            new VideoStageRunner(
                 generator,
                 context.Plan,
                 MiniMaxGenerationSession.ArchitectureLabel,

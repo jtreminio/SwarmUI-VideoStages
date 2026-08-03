@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
+using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -13,7 +14,6 @@ internal sealed record StageClipExecutionContext(
     WGNodeData PreviousTimelineClipOutput,
     StageSequenceRootSources RootSources,
     TimelineAssemblySession Assembly,
-    StageHostExecutionScope HostScope,
     RootExecutionPolicy RootPolicy);
 
 internal sealed class StageClipExecutor(
@@ -26,9 +26,12 @@ internal sealed class StageClipExecutor(
 {
     private readonly InitVideoClipInstaller _initVideoClipInstaller = new(g);
 
-    public RuntimeArtifact Execute(StageClipExecutionContext context)
+    public RuntimeArtifact Execute(
+        StageClipExecutionContext context,
+        VideoStageRunner stageRunner)
     {
         ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(stageRunner);
         guideReferences.BeginClip();
         ClipPlan plannedClip = context.Runtime.Clip;
         ClipContext clipContext = new(
@@ -55,16 +58,17 @@ internal sealed class StageClipExecutor(
             return CaptureStageInputArtifact();
         }
 
-        RuntimeArtifact clipArtifact = null;
-        foreach (StagePlan plannedStage in plannedClip.Stages)
+        return stageRunner.ExecuteStages(plannedClip, (stage, continuation) =>
         {
-            clipArtifact = ExecuteStage(
-                context,
-                plannedStage,
-                clipContext,
-                clipArtifact);
-        }
-        return clipArtifact;
+            if (continuation is not null)
+            {
+                throw VideoStagesInvariant.Failure(
+                    $"LTX stage {stage.StageId} cannot consume sampling continuation stage "
+                        + $"{continuation.StageId}.");
+            }
+            ExecuteStage(context, stage, clipContext, stageRunner);
+            return false;
+        });
     }
 
     private WGNodeData InstallSourceIfPlanned(ClipPlan plannedClip)
@@ -144,29 +148,27 @@ internal sealed class StageClipExecutor(
             boundaryAudioCarry);
     }
 
-    private RuntimeArtifact ExecuteStage(
+    private void ExecuteStage(
         StageClipExecutionContext context,
         StagePlan plannedStage,
         ClipContext clipContext,
-        RuntimeArtifact priorArtifact)
+        VideoStageRunner stageRunner)
     {
         StageRefStore.StageRef guideRef = guideReferences.Resolve(plannedStage);
-        int sectionId = context.HostScope.ApplyStageOverrides(
+        int sectionId = stageRunner.ApplyStageOverrides(
             context.Runtime.Clip,
             plannedStage,
             clipContext.Dimensions.Width,
             clipContext.Dimensions.Height,
             clipContext.GenerationFrames);
-        RuntimeArtifact inputArtifact = priorArtifact ?? CaptureStageInputArtifact();
-        context.HostScope.PublishStageInput(inputArtifact);
         // Multi-clip runs first fork the shared root decode. Later compatible stages retarget that
         // clip-local branch, so clip sources stay independent without adding a decode per stage.
-        bool requiresDedicatedOutput = context.HostScope.PublishesIntermediateStages
+        bool requiresDedicatedOutput = stageRunner.PublishesIntermediateStages
             || (context.Plan.Clips.Count > 1
                 && context.Runtime.Clip.Stages
                     .FirstOrDefault(candidate => !candidate.IsPassthrough)?.StageId
                     == plannedStage.StageId);
-        RuntimeArtifact output = singleStageRunner.RunStage(
+        singleStageRunner.RunStage(
             plannedStage,
             sectionId,
             guideRef,
@@ -175,8 +177,6 @@ internal sealed class StageClipExecutor(
             requiresDedicatedOutput,
             context.RootPolicy);
         guideReferences.CaptureStageOutput(plannedStage);
-        context.HostScope.PublishIntermediate(plannedStage);
-        return output;
     }
 
     private RuntimeArtifact CaptureStageInputArtifact()

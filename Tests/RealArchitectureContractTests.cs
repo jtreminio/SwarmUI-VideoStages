@@ -7,8 +7,8 @@ using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2;
+using VideoStages.Architectures.MiniMax;
 using VideoStages.Architectures.Wan;
-using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Generated;
 using VideoStages.Planning;
 using Xunit;
@@ -71,6 +71,7 @@ public class RealArchitectureContractTests
 
     [Theory]
     [InlineData("ltx2")]
+    [InlineData("minimax")]
     [InlineData("wan22")]
     [InlineData("wan22-5b")]
     public void Model_recognition_is_exact_and_returns_the_declared_identity(string family)
@@ -111,6 +112,7 @@ public class RealArchitectureContractTests
 
     [Theory]
     [InlineData("ltx2")]
+    [InlineData("minimax")]
     [InlineData("wan22")]
     [InlineData("wan22-5b")]
     public void Descriptor_publishes_the_common_executable_contract(string family)
@@ -130,7 +132,7 @@ public class RealArchitectureContractTests
     }
 
     [Fact]
-    public void Registry_accepts_both_real_architecture_modules()
+    public void Registry_accepts_all_real_architecture_modules()
     {
         VideoArchitectureRegistry registry = RealRegistry();
 
@@ -138,12 +140,16 @@ public class RealArchitectureContractTests
             Ltx2ArchitectureModule.Instance,
             registry.GetModule(Ltx2ArchitectureModule.ArchitectureId));
         Assert.Same(
+            MiniMaxArchitectureModule.Instance,
+            registry.GetModule(MiniMaxArchitectureModule.ArchitectureId));
+        Assert.Same(
             WanArchitectureModule.Instance,
             registry.GetModule(WanArchitectureModule.ArchitectureId));
     }
 
     [Theory]
     [InlineData("ltx2")]
+    [InlineData("minimax")]
     [InlineData("wan22")]
     [InlineData("wan22-5b")]
     public void Minimal_generated_image_to_video_clip_compiles_the_shared_payload_contract(
@@ -164,9 +170,10 @@ public class RealArchitectureContractTests
         KeyValuePair<int, IArchitectureStagePayload> compiledEntry =
             Assert.Single(architectureCompilation.StagePayloads);
         Assert.Equal(0, compiledEntry.Key);
-        Assert.True(
-            architectureCompilation.Payload is Ltx2ClipPayload or WanClipPayload,
-            $"Unexpected real payload type '{architectureCompilation.Payload.GetType()}'.");
+        Assert.NotNull(architectureCompilation.Payload);
+        Assert.Equal(
+            fixture.Descriptor.Id,
+            architectureCompilation.Payload.ArchitectureId);
         ClipPlan directlyCompiledClip = ClipPlanCompiler.Compile(
             clip,
             new(
@@ -200,9 +207,6 @@ public class RealArchitectureContractTests
         Assert.NotNull(compiledStage.ArchitecturePayload);
         Assert.Equal(compiledClip.Architecture.Id, compiledClip.ArchitecturePayload.ArchitectureId);
         Assert.Equal(compiledClip.Architecture.Id, compiledStage.ArchitecturePayload.ArchitectureId);
-        Assert.True(
-            compiledClip.ArchitecturePayload is Ltx2ClipPayload or WanClipPayload,
-            $"Unexpected real payload type '{compiledClip.ArchitecturePayload.GetType()}'.");
     }
 
     [Theory]
@@ -350,6 +354,7 @@ public class RealArchitectureContractTests
     private static FamilyFixture CreateFixture(string family) => family switch
     {
         "ltx2" => CreateLtxFixture(),
+        "minimax" => CreateMiniMaxFixture(),
         "wan22" => CreateWanFixture(),
         "wan22-5b" => CreateWan5bFixture(),
         _ => throw new ArgumentOutOfRangeException(nameof(family), family, null),
@@ -377,6 +382,17 @@ public class RealArchitectureContractTests
             "wan-2_1-image2video-14b");
     }
 
+    private static FamilyFixture CreateMiniMaxFixture()
+    {
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        return new(
+            MiniMaxArchitectureModule.Instance,
+            models.BaseModel,
+            models.VideoModel,
+            MiniMaxArchitectureModule.ProfileId,
+            "minimax-h3-refiner");
+    }
+
     private static FamilyFixture CreateWan5bFixture()
     {
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
@@ -391,6 +407,7 @@ public class RealArchitectureContractTests
     private static VideoArchitectureRegistry RealRegistry() =>
         new([
             Ltx2ArchitectureModule.Instance,
+            MiniMaxArchitectureModule.Instance,
             WanArchitectureModule.Instance,
         ]);
 

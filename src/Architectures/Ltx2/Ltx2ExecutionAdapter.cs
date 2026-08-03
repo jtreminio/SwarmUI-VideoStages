@@ -1,6 +1,7 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
+using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -164,9 +165,10 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
                 generator,
                 clipExecutor,
                 _rootSources,
-                new StageHostExecutionScope(
+                new VideoStageRunner(
                     generator,
-                    context.Plan),
+                    context.Plan,
+                    "LTX"),
                 context.Plan,
                 context.Assembly,
                 context.RootPolicy);
@@ -177,7 +179,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         WorkflowGenerator generator,
         StageClipExecutor executor,
         StageSequenceRootSources rootSources,
-        StageHostExecutionScope hostScope,
+        VideoStageRunner stageRunner,
         VideoExecutionPlan plan,
         TimelineAssemblySession assembly,
         RootExecutionPolicy rootPolicy) : IVideoGenerationSession
@@ -196,15 +198,14 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
                 context.PreviousTimelineClipOutput?.ToHostMedia(generator),
                 rootSources,
                 assembly,
-                hostScope,
                 rootPolicy);
-            RuntimeArtifact output = executor.Execute(stageContext);
+            RuntimeArtifact output = executor.Execute(stageContext, stageRunner);
             return DecodedClipArtifact.FromRuntime(output, context.Clip);
         }
 
         public void Dispose()
         {
-            hostScope.Dispose();
+            stageRunner.Dispose();
         }
     }
 }
