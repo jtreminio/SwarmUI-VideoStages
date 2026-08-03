@@ -46,25 +46,37 @@ public class LtxPostVideoChainComponentsTests
     }
 
     [Fact]
-    public void ArtifactFactoryCreatesStageInputWithCapturedMetadataAndAudio()
+    public void CaptureCreatesStageInputWithCapturedMetadataAndAudio()
     {
-        WorkflowGenerator generator = CreateGenerator(new JObject());
-        LtxPostVideoChainState state = CreateState(generator);
-        LtxAudioReferenceResolver audio =
-            new(generator, audioReuse: null, state);
-        LtxStageInputArtifactFactory artifacts = new(generator, state, audio);
+        JObject workflow = BuildLtxWorkflow();
+        WorkflowGenerator generator = CreateGenerator(workflow);
+        generator.CurrentMedia = new(
+            new JArray("5", 0),
+            generator,
+            WGNodeData.DT_VIDEO,
+            null)
+        {
+            Width = 1280,
+            Height = 720,
+            Frames = 97,
+            FPS = 24,
+        };
+        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        Assert.NotNull(capture);
 
-        WGNodeData result = artifacts.CreateStageInput();
+        WGNodeData result = capture.CreateStageInput();
 
         Assert.Equal(WGNodeData.DT_LATENT_AUDIOVIDEO, result.DataType);
-        Assert.True(JToken.DeepEquals(state.AvLatentPath, result.Path));
+        Assert.True(JToken.DeepEquals(capture.State.AvLatentPath, result.Path));
         Assert.Equal(1280, result.Width);
         Assert.Equal(720, result.Height);
         Assert.Equal(97, result.Frames);
         Assert.Equal(24, result.FPS);
         Assert.NotNull(result.AttachedAudio);
         Assert.Equal(WGNodeData.DT_LATENT_AUDIO, result.AttachedAudio.DataType);
-        Assert.True(JToken.DeepEquals(state.AudioLatentPath, result.AttachedAudio.Path));
+        Assert.True(JToken.DeepEquals(capture.State.AudioLatentPath, result.AttachedAudio.Path));
+        Assert.Null(typeof(LtxPostVideoChainCapture).Assembly.GetType(
+            "VideoStages.Architectures.Ltx2.LtxStageInputArtifactFactory"));
     }
 
     [Fact]

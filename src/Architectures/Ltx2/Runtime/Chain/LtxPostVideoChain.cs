@@ -4,6 +4,7 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Text2Image;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -72,7 +73,7 @@ internal static class LtxPostVideoChainInspector
         }
 
         return new LtxPostVideoChainState(
-            LtxStageInputArtifactFactory.CloneMedia(generator, generator.CurrentMedia),
+            LtxPostVideoChainCapture.CloneMedia(generator, generator.CurrentMedia),
             avLatentPath,
             new JArray(capture.SeparateId, 1),
             videoVaePath,
@@ -149,7 +150,7 @@ internal static class LtxPostVideoChainInspector
 /// </summary>
 internal sealed class LtxPostVideoChainCapture
 {
-    private readonly LtxStageInputArtifactFactory artifacts;
+    private readonly WorkflowGenerator generator;
     private readonly LtxAudioReferenceResolver audioReferences;
 
     public LtxPostVideoChainState State { get; }
@@ -164,9 +165,9 @@ internal sealed class LtxPostVideoChainCapture
         Ltx2ClipAudioReuseState audioReuse,
         LtxPostVideoChainState state)
     {
+        this.generator = generator;
         State = state;
         audioReferences = new LtxAudioReferenceResolver(generator, audioReuse, state);
-        artifacts = new LtxStageInputArtifactFactory(generator, state, audioReferences);
     }
 
     public static LtxPostVideoChainCapture TryCapture(WorkflowGenerator generator) =>
@@ -199,24 +200,143 @@ internal sealed class LtxPostVideoChainCapture
         return new LtxPostVideoChainCapture(generator, audioReuse, state);
     }
 
-    public WGNodeData CreateStageInput() => artifacts.CreateStageInput();
+    public WGNodeData CreateStageInput()
+    {
+        WGNodeData stageInput = WithCurrentMediaDimensions(new WGNodeData(
+            State.AvLatentPath,
+            generator,
+            WGNodeData.DT_LATENT_AUDIOVIDEO,
+            T2IModelClassSorter.CompatLtxv2));
+        audioReferences.AttachSourceAudio(stageInput);
+        return stageInput;
+    }
 
-    public WGNodeData CreateStageInputVideoLatent() => artifacts.CreateStageInputVideoLatent();
+    public WGNodeData CreateStageInputVideoLatent()
+    {
+        WGNodeData videoLatent = WithCurrentMediaDimensions(new WGNodeData(
+            ResolveReusableVideoLatentRoute(),
+            generator,
+            WGNodeData.DT_LATENT_VIDEO,
+            T2IModelClassSorter.CompatLtxv2));
+        audioReferences.AttachSourceAudio(videoLatent);
+        return videoLatent;
+    }
 
-    public WGNodeData CreateStageInputVae() => artifacts.CreateStageInputVae();
+    public WGNodeData CreateStageInputVae() => new(
+        State.VideoVaePath?.DeepClone() as JArray,
+        generator,
+        WGNodeData.DT_VAE,
+        T2IModelClassSorter.CompatLtxv2);
 
     public bool CanReuseCurrentOutputAsStageInput(WGNodeData sourceMedia) =>
-        artifacts.CanReuseCurrentOutputAsStageInput(sourceMedia);
+        !State.HasPostDecodeWrappers
+        && sourceMedia?.Path is JArray sourcePath
+        && JToken.DeepEquals(sourcePath, State.CurrentOutputMedia.Path);
 
     public bool ReferencesOutput(WGNodeData media) =>
         media?.Path is JArray mediaPath
         && (JToken.DeepEquals(mediaPath, CurrentOutputMedia?.Path)
             || JToken.DeepEquals(mediaPath, DecodeOutputPath));
 
-    public WGNodeData CreateDetachedGuideMedia(WGNodeData vae) =>
-        artifacts.CreateDetachedGuideMedia(vae);
+    public WGNodeData CreateDetachedGuideMedia(WGNodeData vae)
+    {
+        if (vae?.Path is not JArray { Count: 2 } vaePath)
+        {
+            return CloneCurrentOutputWithAttachedAudio();
+        }
+
+        using WorkflowBridge bridge = BridgeSync.For(generator);
+        INodeOutput avLatentSource = bridge.ResolvePath(State.AvLatentPath);
+        INodeOutput vaeSource = bridge.ResolvePath(vaePath);
+        if (avLatentSource is null || vaeSource is null)
+        {
+            return CloneCurrentOutputWithAttachedAudio();
+        }
+
+        LTXVSeparateAVLatentNode separate =
+            bridge.NodeAt<LTXVSeparateAVLatentNode>(State.AudioLatentPath);
+        if (separate is null)
+        {
+            separate = bridge.AddNode(new LTXVSeparateAVLatentNode());
+            separate.AvLatent.ConnectToUntyped(avLatentSource);
+        }
+
+        string decodeNodeId = LtxPostChainRebuilder.AddDecode(
+            bridge,
+            vaeSource,
+            separate.VideoLatent,
+            LtxDecodeConfig.From(generator)).Id;
+
+        WGNodeData detachedGuide = WithCurrentMediaDimensions(new WGNodeData(
+            new JArray(decodeNodeId, 0),
+            generator,
+            WGNodeData.DT_VIDEO,
+            vae.Compat));
+        audioReferences.AttachSourceAudio(detachedGuide);
+        return detachedGuide;
+    }
 
     public void AttachSourceAudio(WGNodeData media) => audioReferences.AttachSourceAudio(media);
+
+    internal static WGNodeData CloneMedia(
+        WorkflowGenerator generator,
+        WGNodeData media)
+    {
+        if (media?.Path is not JArray { Count: 2 } path)
+        {
+            return null;
+        }
+
+        WGNodeData cloned = new(path.DeepClone() as JArray, generator, media.DataType, media.Compat)
+        {
+            Width = media.Width,
+            Height = media.Height,
+            Frames = media.Frames,
+            FPS = media.FPS,
+        };
+        if (media.AttachedAudio?.Path is JArray { Count: 2 } audioPath)
+        {
+            cloned.AttachedAudio = new WGNodeData(
+                audioPath.DeepClone() as JArray,
+                generator,
+                media.AttachedAudio.DataType,
+                media.AttachedAudio.Compat)
+            {
+                Width = media.AttachedAudio.Width,
+                Height = media.AttachedAudio.Height,
+                Frames = media.AttachedAudio.Frames,
+                FPS = media.AttachedAudio.FPS,
+            };
+        }
+        return cloned;
+    }
+
+    private JArray ResolveReusableVideoLatentRoute()
+    {
+        WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        if (bridge.ResolvePath(State.AvLatentPath)?.Node is LTXVConcatAVLatentNode concat
+            && concat.VideoLatent.Connection is INodeOutput concatVideo)
+        {
+            return WorkflowBridge.ToPath(concatVideo);
+        }
+        return new JArray(State.AudioLatentPath[0], 0);
+    }
+
+    private WGNodeData CloneCurrentOutputWithAttachedAudio()
+    {
+        WGNodeData copy = CloneMedia(generator, State.CurrentOutputMedia);
+        audioReferences.AttachSourceAudio(copy);
+        return copy;
+    }
+
+    private WGNodeData WithCurrentMediaDimensions(WGNodeData media)
+    {
+        media.Width = State.CurrentOutputMedia.Width;
+        media.Height = State.CurrentOutputMedia.Height;
+        media.Frames = State.CurrentOutputMedia.Frames;
+        media.FPS = State.CurrentOutputMedia.FPS;
+        return media;
+    }
 }
 
 internal static class LtxPostVideoChainSplicer
