@@ -21,6 +21,8 @@ internal sealed class HostVideoDecodedStageInput
     private readonly string _architectureDisplayLabel;
     /// <summary>Only an architecture whose own output carries decoded audio may keep it.</summary>
     private readonly bool _preserveAttachedAudio;
+    private JArray _hostSourcePath;
+    private int? _hostSourceFrames;
 
     internal HostVideoDecodedStageInput(
         WorkflowGenerator generator,
@@ -54,6 +56,8 @@ internal sealed class HostVideoDecodedStageInput
         }
 
         ValidateDecodedInput(clip, stage, genInfo.Frames);
+        _hostSourcePath = _generator.CurrentMedia.Path;
+        _hostSourceFrames = genInfo.Frames;
         genInfo.BatchIndex = 0;
         genInfo.BatchLen = 1;
         genInfo.StartStep = startStep;
@@ -79,6 +83,7 @@ internal sealed class HostVideoDecodedStageInput
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
         DropHostStageTrim();
+        WidenHostSourceClamp();
         if (_generator.CurrentMedia is null)
         {
             throw VideoStagesInvariant.Failure(
@@ -105,6 +110,44 @@ internal sealed class HostVideoDecodedStageInput
                 + $"resolvable decoded {_architectureDisplayLabel} video.");
         }
     }
+
+    /// <summary>
+    /// The host builds its sampling latent from a still, so it wraps its source media in an
+    /// <c>ImageFromBatch</c> that keeps one frame. This stage handed it a whole video already
+    /// conformed to the stage length, which that wrapper would decimate, so the kept length is
+    /// widened back. The host reaches its own start image through a second <c>ImageFromBatch</c>
+    /// downstream of this one, so conditioning still sees frame 0 alone.
+    /// </summary>
+    private void WidenHostSourceClamp()
+    {
+        JArray sourcePath = _hostSourcePath;
+        int? frames = _hostSourceFrames;
+        _hostSourcePath = null;
+        _hostSourceFrames = null;
+        if (sourcePath is null
+            || frames is not > 1
+            || FindNodeReading("ImageScale", sourcePath) is not string scaled
+            || FindNodeReading("ImageFromBatch", [scaled, 0]) is not string clamp
+            || _generator.Workflow[clamp]?["inputs"] is not JObject inputs
+            || inputs["length"]?.Value<int>() != 1)
+        {
+            return;
+        }
+        inputs["length"] = frames;
+        // The host caches generic nodes by their inputs, which no longer describe this one.
+        VideoGraphHelpers.InvalidateForRemovedNodes(_generator.NodeHelpers, [clamp]);
+    }
+
+    /// <summary>The id of the node of <paramref name="classType"/> whose 'image' input is
+    /// <paramref name="imagePath"/>, or null when the host built no such node.</summary>
+    private string FindNodeReading(string classType, JArray imagePath) =>
+        _generator.Workflow.Properties()
+            .FirstOrDefault(property =>
+                property.Value is JObject node
+                && $"{node["class_type"]}" == classType
+                && VideoGraphHelpers.TryGetInputRef(node, "image", out JArray image)
+                && JToken.DeepEquals(image, imagePath))
+            ?.Name;
 
     private void ValidateDecodedInput(ClipPlan clip, StagePlan stage, int? expectedFrames)
     {

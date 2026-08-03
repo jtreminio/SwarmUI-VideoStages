@@ -1,6 +1,6 @@
+using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
 using VideoStages.HostVideo;
@@ -11,9 +11,9 @@ using Image = SwarmUI.Utils.Image;
 namespace VideoStages.Architectures.MiniMax;
 
 /// <summary>
-/// Runs one MiniMax H3 clip. H3 emits its conditioning and its joint audio+video latent from the
-/// same node, so image entry delegates to SwarmUI's stock image-to-video builder while text entry
-/// builds that node directly. Either way the sampled latent decodes to video plus native audio.
+/// Runs one MiniMax H3 clip. H3 samples a joint audio+video latent and keyframes it through
+/// conditioning, so image entry delegates to SwarmUI's stock image-to-video builder while text
+/// entry and refines build that latent here. Either way the result decodes to video plus audio.
 /// </summary>
 internal sealed class MiniMaxGenerationSession(
     WorkflowGenerator g,
@@ -148,6 +148,7 @@ internal sealed class MiniMaxGenerationSession(
                     g.CreateImageToVideo(genInfo);
                 }
                 AttachDecodedAudio();
+                RestoreLiteralDimensions();
                 stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
             }
             finally
@@ -159,6 +160,20 @@ internal sealed class MiniMaxGenerationSession(
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// The stock H3 builder allocates its joint latent fresh, so the sampled media carries no
+    /// literal dimensions; the clip artifact contract requires them.
+    /// </summary>
+    private void RestoreLiteralDimensions()
+    {
+        if (g.CurrentMedia is not WGNodeData media)
+        {
+            return;
+        }
+        media.Width ??= _dimensions.Width;
+        media.Height ??= _dimensions.Height;
     }
 
     private void ExecuteEntryStage(WorkflowGenerator.ImageToVideoGenInfo genInfo) =>
@@ -193,38 +208,14 @@ internal sealed class MiniMaxGenerationSession(
         try
         {
             g.IsImageToVideo = true;
-            genInfo.PrepModelAndCond(g);
+            PrepModelAndPrompt(genInfo);
             int frames = genInfo.Frames
                 ?? throw VideoStagesInvariant.Failure(
                     "A MiniMax H3 stage has no resolved frame count.");
-            string conditioned = g.CreateMiniMaxH3ImageToVideo(
-                genInfo.Clip,
-                genInfo.Vae,
-                VideoPromptText(genInfo.Prompt),
-                genInfo.Width,
-                genInfo.Height,
-                frames,
-                null,
-                genInfo.VideoEndFrame is null
-                    ? null
-                    : g.LoadImage(
-                        genInfo.VideoEndFrame,
-                        "${videostagesminimaxlastframe}",
-                        false).Path);
-            genInfo.PosCond = [conditioned, 0];
             g.CurrentMedia = incoming is null
-                ? new WGNodeData(
-                    [conditioned, 1],
-                    g,
-                    WGNodeData.DT_LATENT_AUDIOVIDEO,
-                    genInfo.Model.Compat)
-                {
-                    Width = (int)genInfo.Width,
-                    Height = (int)genInfo.Height,
-                    Frames = frames,
-                    FPS = genInfo.VideoFPS,
-                }
+                ? EmptyJointLatent(genInfo, frames)
                 : JointLatent(incoming, genInfo);
+            AttachEndFrameKeyframe(genInfo);
             string sampled = g.CreateKSampler(
                 genInfo.Model.Path,
                 genInfo.PosCond,
@@ -254,6 +245,72 @@ internal sealed class MiniMaxGenerationSession(
         }
     }
 
+    /// <summary>
+    /// Mirrors <c>ImageToVideoGenInfo.PrepModelAndCond</c> minus its H3 keyframe attach, which
+    /// reads the host's current media: absent on text entry, and a whole decoded video on refine.
+    /// Keyframes are attached to the sampling latent instead.
+    /// </summary>
+    private void PrepModelAndPrompt(WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        g.FinalLoadedModel = genInfo.VideoModel;
+        (genInfo.VideoModel, genInfo.Model, WGNodeData clip, genInfo.Vae) = g.CreateModelLoader(
+            genInfo.VideoModel,
+            "image2video",
+            null,
+            true,
+            sectionId: genInfo.ContextID);
+        genInfo.Clip = clip;
+        // H3's reference conditioning reads the host VAE, which this session leaves unset so no
+        // foreign root VAE binds to an uploaded frame. The model just loaded its own.
+        g.CurrentVae = genInfo.Vae;
+        genInfo.PosCond = g.CreateConditioning(
+            genInfo.Prompt, clip.Path, genInfo.VideoModel, true, isVideo: true);
+        genInfo.NegCond = g.CreateConditioning(
+            genInfo.NegativePrompt, clip.Path, genInfo.VideoModel, false, isVideo: true);
+    }
+
+    private WGNodeData EmptyJointLatent(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        int frames)
+    {
+        string empty = g.CreateNode("EmptyMiniMaxH3LatentAV", new JObject()
+        {
+            ["length"] = frames,
+            ["height"] = genInfo.Height,
+            ["width"] = genInfo.Width,
+        });
+        return new WGNodeData([empty, 0], g, WGNodeData.DT_LATENT_AUDIOVIDEO, genInfo.Model.Compat)
+        {
+            Width = (int)genInfo.Width,
+            Height = (int)genInfo.Height,
+            Frames = frames,
+            FPS = genInfo.VideoFPS,
+        };
+    }
+
+    /// <summary>
+    /// H3 conditions on keyframes rather than on an init latent. Only the final frame applies here:
+    /// a first frame would have taken the stock image-entry builder.
+    /// </summary>
+    private void AttachEndFrameKeyframe(WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        if (genInfo.VideoEndFrame is null)
+        {
+            return;
+        }
+        string keyframes = g.CreateNode("SwarmMiniMaxH3AddKeyframes", new JObject()
+        {
+            ["vae"] = genInfo.Vae.Path,
+            ["latent"] = g.CurrentMedia.Path,
+            ["conditioning"] = genInfo.PosCond,
+            ["last_frame"] = g.LoadImage(
+                genInfo.VideoEndFrame,
+                "${videostagesminimaxlastframe}",
+                false).Path,
+        });
+        genInfo.PosCond = [keyframes, 0];
+    }
+
     private WGNodeData JointLatent(
         WGNodeData incoming,
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
@@ -261,14 +318,6 @@ internal sealed class MiniMaxGenerationSession(
         WGNodeData videoLatent = incoming.EncodeToLatent(genInfo.Vae);
         videoLatent.AttachedAudio = incoming.AttachedAudio;
         return videoLatent.AsSamplingLatent(genInfo.Vae, g.CurrentAudioVae);
-    }
-
-    private static string VideoPromptText(string prompt)
-    {
-        PromptRegion regions = new(prompt ?? "");
-        return string.IsNullOrWhiteSpace(regions.VideoPrompt)
-            ? regions.GlobalPrompt
-            : regions.VideoPrompt;
     }
 
     /// <summary>

@@ -30,13 +30,16 @@ public class MiniMaxRuntimeFlowTests
             WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        ComfyNode imageToVideo = Assert.Single(
-            NodesOfClass(bridge, "MiniMaxH3ImageToVideo"));
+        ComfyNode latent = Assert.Single(
+            NodesOfClass(bridge, "EmptyMiniMaxH3LatentAV"));
         ComfyNode sampler = Assert.Single(SamplerNodes(bridge));
         Assert.Equal(8, sampler.FindInput("steps").LiteralAsInt());
         Assert.Same(
-            imageToVideo,
+            latent,
             sampler.FindInput("latent_image").Connection?.Node);
+        Assert.NotNull(
+            Assert.Single(NodesOfClass(bridge, "SwarmMiniMaxH3AddKeyframes"))
+                .FindInput("first_frame")?.Connection);
         Assert.Single(NodesOfClass(bridge, "VAEDecodeAudio"));
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
@@ -48,7 +51,7 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
-    public void Text_entry_builds_the_conditioning_node_with_no_first_frame()
+    public void Text_entry_samples_an_empty_joint_latent_with_no_keyframes()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
@@ -64,16 +67,13 @@ public class MiniMaxRuntimeFlowTests
                 SourceFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        ComfyNode imageToVideo = Assert.Single(
-            NodesOfClass(bridge, "MiniMaxH3ImageToVideo"));
-        Assert.Null(imageToVideo.FindInput("first_frame")?.Connection);
+        Assert.Empty(NodesOfClass(bridge, "SwarmMiniMaxH3AddKeyframes"));
+        ComfyNode latent = Assert.Single(
+            NodesOfClass(bridge, "EmptyMiniMaxH3LatentAV"));
         ComfyNode sampler = Assert.Single(SamplerNodes(bridge));
         Assert.Same(
-            imageToVideo,
+            latent,
             sampler.FindInput("latent_image").Connection?.Node);
-        Assert.Same(
-            imageToVideo,
-            sampler.FindInput("positive").Connection?.Node);
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.Equal(
@@ -108,7 +108,7 @@ public class MiniMaxRuntimeFlowTests
 
         Assert.Equal(
             [22, 39],
-            NodesOfClass(bridge, "MiniMaxH3ImageToVideo")
+            NodesOfClass(bridge, "EmptyMiniMaxH3LatentAV")
                 .Select(node => node.FindInput("length").LiteralAsInt())
                 .Order());
         Assert.Equal(2, SamplerNodes(bridge).Count());
@@ -154,7 +154,7 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
-    public void Authored_first_and_last_frame_uploads_reach_the_conditioning_node()
+    public void Authored_first_and_last_frame_uploads_reach_the_keyframe_node()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
@@ -174,10 +174,10 @@ public class MiniMaxRuntimeFlowTests
             SourceFeatures);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        ComfyNode imageToVideo = Assert.Single(
-            NodesOfClass(bridge, "MiniMaxH3ImageToVideo"));
-        Assert.NotNull(imageToVideo.FindInput("first_frame")?.Connection);
-        Assert.NotNull(imageToVideo.FindInput("last_frame")?.Connection);
+        ComfyNode keyframes = Assert.Single(
+            NodesOfClass(bridge, "SwarmMiniMaxH3AddKeyframes"));
+        Assert.NotNull(keyframes.FindInput("first_frame")?.Connection);
+        Assert.NotNull(keyframes.FindInput("last_frame")?.Connection);
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
     }
