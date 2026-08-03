@@ -32,6 +32,7 @@ internal sealed class MiniMaxGenerationSession(
 
     private WGNodeData _entryFirstFrame;
     private WGNodeData _endFrame;
+    private WGNodeData _reusedAudio;
     private ReferenceFramingMode _referenceFraming;
 
     public ArchitectureId ArchitectureId => MiniMaxArchitectureModule.ArchitectureId;
@@ -48,6 +49,7 @@ internal sealed class MiniMaxGenerationSession(
         }
 
         MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
+        _reusedAudio = null;
         _referenceFraming = payload.ReferenceFraming;
         _entryFirstFrame = ResolveFrameReference(
             payload.FirstFrameReference,
@@ -114,6 +116,8 @@ internal sealed class MiniMaxGenerationSession(
         StockHostVideoStagePayload payload = stage.RequireStockHostVideoPayload(
             ArchitectureId,
             ArchitectureLabel);
+        MiniMaxClipPayload clipPayload = clip.RequireMiniMaxPayload();
+        PrepareReusableAudio(clipPayload, stage);
         StageCorePlan core = stage.Core;
         using (StageModelLoadScope modelScope = new(
             g,
@@ -152,6 +156,7 @@ internal sealed class MiniMaxGenerationSession(
                     _entryFirstFrame,
                     startStep: 0);
             }
+            RestoreReusableAudio(clipPayload, stage);
             if (stage.StageId == clip.Stages.Last(candidate => !candidate.IsPassthrough).StageId)
             {
                 AttachDecodedAudio();
@@ -159,6 +164,34 @@ internal sealed class MiniMaxGenerationSession(
             stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
         }
         return false;
+    }
+
+    private void PrepareReusableAudio(MiniMaxClipPayload payload, StagePlan stage)
+    {
+        if (!payload.ReuseAudio
+            || stage.ClipStageIndex < 2
+            || _reusedAudio is not null
+            || g.CurrentMedia?.AttachedAudio is not WGNodeData audio
+            || audio.DataType != WGNodeData.DT_LATENT_AUDIO
+            || audio.Path is not JArray { Count: 2 })
+        {
+            return;
+        }
+        _reusedAudio = audio.Duplicate();
+    }
+
+    private void RestoreReusableAudio(MiniMaxClipPayload payload, StagePlan stage)
+    {
+        if (!payload.ReuseAudio
+            || stage.ClipStageIndex < 2
+            || _reusedAudio is null
+            || g.CurrentMedia is null)
+        {
+            return;
+        }
+        WGNodeData current = g.CurrentMedia.Duplicate();
+        current.AttachedAudio = _reusedAudio.Duplicate();
+        g.CurrentMedia = current;
     }
 
     /// <summary>

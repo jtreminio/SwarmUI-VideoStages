@@ -80,7 +80,13 @@ public class MiniMaxArchitectureTests
             ["text-to-video", "image-to-video"],
             architecture["capabilities"]["entryModes"].Values<string>());
         Assert.Equal(
-            ["frameReferences", "referenceFraming", "audioSegments", "audioDerivedDuration"],
+            [
+                "frameReferences",
+                "referenceFraming",
+                "audioSegments",
+                "audioReuse",
+                "audioDerivedDuration",
+            ],
             architecture["capabilities"]["features"].Values<string>());
         Assert.Equal(
             "supported",
@@ -287,6 +293,7 @@ public class MiniMaxArchitectureTests
         Assert.NotNull(payload.FirstFrameReference);
         Assert.NotNull(payload.LastFrameReference);
         Assert.Equal(ReferenceFramingMode.Crop, payload.ReferenceFraming);
+        Assert.False(payload.ReuseAudio);
         Assert.True(MiniMaxArchitectureModule.Instance.Descriptor.Features.HasFlag(
             ArchitectureFeature.ReferenceFraming));
         Assert.Single(

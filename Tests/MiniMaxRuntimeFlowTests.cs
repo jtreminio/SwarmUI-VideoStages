@@ -176,6 +176,47 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
+    public void Reuse_audio_preserves_the_second_stage_output_for_later_stages()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clip = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1),
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8, cfgScale: 1),
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8, cfgScale: 1),
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8, cfgScale: 1));
+        clip["reuseAudio"] = true;
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            MakeDocument(clip).ToString());
+
+        (JObject workflow, _) = WorkflowTestHarness.GenerateWithStepsAndState(
+            input,
+            MiniMaxSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode thirdSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 45);
+        ComfyNode fourthSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 46);
+        ComfyNode thirdJoint = thirdSampler.FindInput("latent_image").Connection?.Node;
+        ComfyNode fourthJoint = fourthSampler.FindInput("latent_image").Connection?.Node;
+        ComfyNode thirdMask = thirdJoint?.FindInput("audio_latent").Connection?.Node;
+        ComfyNode fourthMask = fourthJoint?.FindInput("audio_latent").Connection?.Node;
+        INodeOutput capturedAudio = thirdMask?.FindInput("samples").Connection;
+        Assert.NotNull(capturedAudio);
+        Assert.Same(capturedAudio, fourthMask?.FindInput("samples").Connection);
+        VAEDecodeAudioNode decode = Assert.Single(
+            bridge.Graph.NodesOfType<VAEDecodeAudioNode>());
+        Assert.Same(capturedAudio, decode.Samples.Connection);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void Pixel_upscale_resizes_the_decoded_input_before_the_next_stage()
     {
         using SwarmUiTestContext context = new();
