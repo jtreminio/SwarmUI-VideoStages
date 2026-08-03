@@ -219,6 +219,60 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
+    public void Model_upscale_resizes_the_decoded_input_before_the_next_stage()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1),
+                MakeStage(
+                    models.VideoModel.Name,
+                    "PreviousStage",
+                    control: 0.5,
+                    upscale: 1.5,
+                    upscaleMethod: "model-unit-test-upscaler.pth",
+                    steps: 8,
+                    cfgScale: 1)));
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode firstSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 43);
+        ComfyNode secondSampler = Assert.Single(
+            SamplerNodes(bridge),
+            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 44);
+        ComfyNode loader = Assert.Single(NodesOfClass(bridge, "UpscaleModelLoader"));
+        Assert.Equal(
+            "unit-test-upscaler.pth",
+            loader.FindInput("model_name").LiteralAsString());
+        ComfyNode modelUpscale = Assert.Single(
+            NodesOfClass(bridge, "ImageUpscaleWithModel"));
+        Assert.Same(
+            loader,
+            modelUpscale.FindInput("upscale_model").Connection?.Node);
+        Assert.True(ReachesUpstream(bridge, modelUpscale, firstSampler.Id));
+        ImageScaleNode scale = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            candidate => candidate.Width.LiteralAsInt() == 768
+                && candidate.Height.LiteralAsInt() == 768
+                && candidate.UpscaleMethod.LiteralAsString() == "lanczos"
+                && ReferenceEquals(candidate.Image.Connection?.Node, modelUpscale));
+        ComfyNode joint = secondSampler.FindInput("latent_image").Connection?.Node;
+        Assert.True(ReachesUpstream(bridge, joint, scale.Id));
+        Assert.Equal(768, generator.CurrentMedia.Width);
+        Assert.Equal(768, generator.CurrentMedia.Height);
+        Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.AttachedAudio?.DataType);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
     public void Three_stages_publish_intermediates_and_trim_only_the_final_output()
     {
         using SwarmUiTestContext context = new();

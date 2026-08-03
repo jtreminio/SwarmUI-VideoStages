@@ -187,10 +187,10 @@ internal sealed class VideoStageRunner : IDisposable
         }
         int width = _generator.CurrentMedia.Width
             ?? throw VideoStagesInvariant.Failure(
-                $"Stage {stage.StageId} cannot pixel-scale media with no width.");
+                $"Stage {stage.StageId} cannot upscale media with no width.");
         int height = _generator.CurrentMedia.Height
             ?? throw VideoStagesInvariant.Failure(
-                $"Stage {stage.StageId} cannot pixel-scale media with no height.");
+                $"Stage {stage.StageId} cannot upscale media with no height.");
         (int targetWidth, int targetHeight) = StageUpscaleGraph.ResolveTargetDimensions(
             width,
             height,

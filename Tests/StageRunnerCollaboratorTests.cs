@@ -4,6 +4,7 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
+using VideoStages.HostVideo;
 using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
 using Xunit;
@@ -171,6 +172,37 @@ public class StageRunnerCollaboratorTests
         Assert.Equal(
             (288, 448),
             StageUpscaleGraph.ResolveTargetDimensions(256, 416, 1.1));
+    }
+
+    [Theory]
+    [InlineData((int)StageUpscaleMode.Pixel, 768)]
+    [InlineData((int)StageUpscaleMode.Model, 768)]
+    [InlineData((int)StageUpscaleMode.Latent, 512)]
+    [InlineData((int)StageUpscaleMode.LatentModel, 512)]
+    [InlineData((int)StageUpscaleMode.Unsupported, 512)]
+    public void Host_video_geometry_projects_only_executable_decoded_upscales(
+        int modeValue,
+        int expected)
+    {
+        StageUpscaleMode mode = (StageUpscaleMode)modeValue;
+        StagePlan template = MakePlan().Stage;
+        StagePlan stage = template with
+        {
+            Input = StageInputKind.PreviousStage,
+            ArchitecturePayload = new StockHostVideoStagePayload(
+                new("unit-test"),
+                "unit-test-model",
+                "unit-test-compatibility",
+                NormalLoraTargetPolicy.ModelOnly,
+                template.Core with
+                {
+                    Upscale = new(mode, 1.5, "unit-test", "unit-test"),
+                }),
+        };
+
+        Assert.Equal(
+            (expected, expected),
+            HostVideoStageGeometry.ProjectFinalDimensions([stage], 512, 512));
     }
 
     [Fact]

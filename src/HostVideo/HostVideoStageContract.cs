@@ -57,7 +57,8 @@ internal static class HostVideoStageGeometry
         foreach (StagePlan stage in stages ?? [])
         {
             StageUpscalePlan upscale = stage.Core.Upscale;
-            if (upscale is null or { Mode: StageUpscaleMode.None }
+            if (upscale is null
+                || upscale.Mode is not (StageUpscaleMode.Pixel or StageUpscaleMode.Model)
                 || stage.Input is not (
                     StageInputKind.InitVideo
                     or StageInputKind.PreviousStage))
