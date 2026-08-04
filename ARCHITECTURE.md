@@ -45,7 +45,7 @@ encoding, or decoding, and is still an ordinary stage in the plan.
 
 VideoStages registers eight priority-ordered host workflow steps. The first
 compiles and prepares the request without VideoStages graph mutation. Six named
-lifecycle methods then capture ControlNet preprocessors and references, preserve
+context lifecycle methods then capture ControlNet preprocessors and references, preserve
 and restore the host root, and size the root audio mask. The last step runs the
 configured stages. Mutation requires prepared state, so nothing runs against an
 invalid or partially preflighted document.
@@ -113,8 +113,8 @@ a stable machine code, a user-facing message, and whichever of clip, stage, raw
 stage index, audio track, or span it knows about. `PlanDiagnosticReporter` is
 the only place that decides what a diagnostic does — errors block,
 warnings reach the host warning channel, info goes to the debug log, and
-duplicate lines collapse. `RequireVideoExecutionPlanContext` is the single gate
-that raises the blocking error, and it runs at the head of every host step.
+duplicate lines collapse. The prepared execution context is the single mutation
+gate and retains the first lifecycle failure.
 
 ## Architecture module boundary
 

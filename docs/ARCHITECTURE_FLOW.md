@@ -305,8 +305,7 @@ The frontend writes the versioned document to
 the prompt carrier. `VideoStagesPromptSection.IsActive` requires an enabled
 group and non-empty Data JSON.
 
-Every `Runner` phase calls `RequireVideoExecutionPlanContext`. The first lookup
-builds and caches one plan per `WorkflowGenerator` through
+The first `Runner` lookup builds and caches one plan per `WorkflowGenerator` through
 `VideoStagesContext`:
 
 ```text
@@ -424,9 +423,10 @@ The full prepared-state machine and exact eight-step priority table are in
 ### B4. Host phases prepare selected architecture state
 
 Each later `Runner` callback invokes its matching lifecycle method on
-`VideoArchitectureExecutionHost`. ControlNet and reference capture visit every
-active provider; root-media operations visit only the provider selected by
-`ArchitectureRootOwnerResolver`.
+`VideoExecutionPlanContext`. The context enforces prepared state and sticky failure,
+then its execution host performs the graph work. ControlNet and reference capture visit every
+active provider. Root capture and restoration are common host work, while audio-mask sizing
+visits only the provider selected by `ArchitectureRootOwnerResolver`.
 
 For the ControlNet preprocessor phase,
 `VideoArchitectureExecutionHost` invokes common
@@ -455,7 +455,8 @@ control-signal, and uploaded-drive caches.
 
 ### B5. Dispatch a clip by architecture
 
-`Runner.RunConfiguredStages` enters `VideoArchitectureExecutionHost`.
+`Runner.RunConfiguredStages` enters `VideoExecutionPlanContext`, which guards the
+call and marks completion after `VideoArchitectureExecutionHost` returns.
 
 The execution host captures the host root, resolves audio, creates one session for
 each active architecture provider, and creates `ArchitectureClipRuntimeContext`

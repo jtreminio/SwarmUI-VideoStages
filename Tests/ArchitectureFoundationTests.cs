@@ -1061,10 +1061,10 @@ public class ArchitectureFoundationTests
             generator,
             plan,
             [ltx, fake]);
-        VideoExecutionPlanContext request = new(plan, _ => host);
+        VideoExecutionPlanContext request = new(plan, () => host);
         request.PrepareRequest();
 
-        host.RunConfiguredStages();
+        request.RunConfiguredStages();
 
         Assert.Equal(ids, calls);
         Assert.Equal([ids[0] == "ltx2"], ltx.RootOwnership);
@@ -1543,9 +1543,9 @@ public class ArchitectureFoundationTests
             FPS = 24,
         };
         VideoArchitectureExecutionHost host = new(generator, plan, providers);
-        VideoExecutionPlanContext request = new(plan, _ => host);
+        VideoExecutionPlanContext request = new(plan, () => host);
         request.PrepareRequest();
-        host.RunConfiguredStages();
+        request.RunConfiguredStages();
     }
 
     private sealed class FakeRegistry : IVideoArchitectureRegistry

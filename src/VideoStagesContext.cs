@@ -98,7 +98,7 @@ internal static class VideoStagesContext
         PlanDiagnosticReporter.ReportToRequest(plan.Diagnostics, g.UserInput);
         return new VideoExecutionPlanContext(
             plan,
-            context => new VideoArchitectureExecutionHost(g, context));
+            () => new VideoArchitectureExecutionHost(g, plan));
     }
 }
 
@@ -115,8 +115,7 @@ internal enum VideoExecutionState
 internal sealed class VideoExecutionPlanContext
 {
     private readonly object _preparationLock = new();
-    private readonly Func<VideoExecutionPlanContext, VideoArchitectureExecutionHost>
-        _createExecutionHost;
+    private readonly Func<VideoArchitectureExecutionHost> _createExecutionHost;
     private VideoArchitectureExecutionHost _executionHost;
     private ExceptionDispatchInfo _failure;
 
@@ -126,14 +125,9 @@ internal sealed class VideoExecutionPlanContext
 
     internal VideoExecutionPlanContext(
         VideoExecutionPlan plan,
-        Func<VideoExecutionPlanContext, VideoArchitectureExecutionHost> createExecutionHost)
+        Func<VideoArchitectureExecutionHost> createExecutionHost)
     {
         Plan = plan ?? throw new ArgumentNullException(nameof(plan));
-        ActiveArchitectureIds = Array.AsReadOnly(plan.Clips
-            .Where(clip => clip.Architecture is not null)
-            .Select(clip => clip.Architecture.Id)
-            .Distinct()
-            .ToArray());
         RootOwnerArchitectureId = ArchitectureRootOwnerResolver.TryResolve(
             plan,
             out ArchitectureId? rootOwner)
@@ -143,7 +137,6 @@ internal sealed class VideoExecutionPlanContext
     }
 
     public VideoExecutionPlan Plan { get; }
-    public IReadOnlyList<ArchitectureId> ActiveArchitectureIds { get; }
     public ArchitectureId? RootOwnerArchitectureId { get; }
 
     public VideoExecutionState State { get; private set; } =
@@ -175,10 +168,14 @@ internal sealed class VideoExecutionPlanContext
                 PlanDiagnosticReporter.ThrowIfBlocking(
                     Plan.Diagnostics,
                     "VideoStages could not create a valid architecture execution plan");
-                _executionHost = _createExecutionHost?.Invoke(this)
+                _executionHost = _createExecutionHost?.Invoke()
                     ?? throw VideoStagesInvariant.Failure(
                         "This video execution plan context has no runtime provider binding.");
-                _executionHost.BindExecutionContext(this);
+                if (!ReferenceEquals(Plan, _executionHost.Plan))
+                {
+                    throw VideoStagesInvariant.Failure(
+                        "The execution host was created for a different video execution plan.");
+                }
                 PreflightDiagnostics = _executionHost.CollectPreflightDiagnostics();
                 PlanDiagnosticReporter.ReportToRequest(
                     PreflightDiagnostics,
@@ -195,12 +192,6 @@ internal sealed class VideoExecutionPlanContext
                 throw;
             }
         }
-    }
-
-    internal VideoArchitectureExecutionHost RequirePreparedExecutionHost()
-    {
-        RequirePrepared();
-        return _executionHost;
     }
 
     internal void RequirePrepared()
@@ -221,12 +212,34 @@ internal sealed class VideoExecutionPlanContext
                 + "Graph-free request preflight must complete first.");
     }
 
-    internal void ExecutePrepared(
-        VideoArchitectureExecutionHost executionHost,
-        Action action)
+    internal void CaptureControlNetPreprocessors() => ExecutePrepared(() =>
+        _executionHost.CaptureControlNetPreprocessors());
+
+    internal void CaptureBaseReference() => ExecutePrepared(() =>
+        _executionHost.CaptureBaseReference());
+
+    internal void CaptureRefinerReference() => ExecutePrepared(() =>
+        _executionHost.CaptureRefinerReference());
+
+    internal void CapturePreCoreMedia() => ExecutePrepared(() =>
+        _executionHost.CapturePreCoreMedia());
+
+    internal void DropCoreOutput() => ExecutePrepared(() =>
+        _executionHost.DropCoreOutput());
+
+    internal void ApplyRootAudioMaskDimensions() => ExecutePrepared(() =>
+        _executionHost.ApplyRootAudioMaskDimensions());
+
+    internal void RunConfiguredStages()
+    {
+        ExecutePrepared(() => _executionHost.RunConfiguredStages());
+        State = VideoExecutionState.Completed;
+    }
+
+    internal void ExecutePrepared(Action action)
     {
         ArgumentNullException.ThrowIfNull(action);
-        RequireBoundPreparedHost(executionHost);
+        RequirePrepared();
         try
         {
             action();
@@ -235,28 +248,6 @@ internal sealed class VideoExecutionPlanContext
         {
             FailExecution(error);
             throw;
-        }
-    }
-
-    internal void ExecutePrepared(Action action) =>
-        ExecutePrepared(RequirePreparedExecutionHost(), action);
-
-    internal void ExecuteToCompletion(
-        VideoArchitectureExecutionHost executionHost,
-        Action action)
-    {
-        ExecutePrepared(executionHost, action);
-        State = VideoExecutionState.Completed;
-    }
-
-    private void RequireBoundPreparedHost(
-        VideoArchitectureExecutionHost executionHost)
-    {
-        ArgumentNullException.ThrowIfNull(executionHost);
-        if (!ReferenceEquals(RequirePreparedExecutionHost(), executionHost))
-        {
-            throw VideoStagesInvariant.Failure(
-                "This execution host is not bound to the prepared VideoStages request.");
         }
     }
 

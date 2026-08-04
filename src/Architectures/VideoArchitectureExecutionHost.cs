@@ -16,21 +16,20 @@ internal sealed class VideoArchitectureExecutionHost
     private readonly IReadOnlyDictionary<
         ArchitectureId,
         IArchitectureGenerationSessionProvider> _providers;
-    private readonly IReadOnlyList<ArchitectureId> _activeArchitectureIds;
     private readonly IReadOnlyList<IArchitectureGenerationSessionProvider>
         _activeProviders;
     private readonly ArchitectureId? _rootOwner;
-    private VideoExecutionPlanContext _executionContext;
     private RootSnapshot _rootSnapshot;
 
     internal T2IParamInput RequestInput => _generator.UserInput;
+    internal VideoExecutionPlan Plan => _plan;
 
     internal VideoArchitectureExecutionHost(
         WorkflowGenerator generator,
-        VideoExecutionPlanContext context) : this(
+        VideoExecutionPlan plan) : this(
         generator,
-        context?.Plan,
-        CreateProductionProviderBinding(generator, context))
+        plan,
+        CreateProductionProviderBinding(generator, plan))
     {
     }
 
@@ -63,8 +62,7 @@ internal sealed class VideoArchitectureExecutionHost
             }
         }
         _providers = byId;
-        _activeArchitectureIds = binding.ActiveArchitectureIds;
-        _activeProviders = ResolveActiveProviders(_activeArchitectureIds, byId);
+        _activeProviders = ResolveActiveProviders(binding.ActiveArchitectureIds, byId);
         _rootOwner = binding.RootOwnerArchitectureId;
     }
 
@@ -84,70 +82,45 @@ internal sealed class VideoArchitectureExecutionHost
         return diagnostics.AsReadOnly();
     }
 
-    internal void BindExecutionContext(VideoExecutionPlanContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        if (!ReferenceEquals(context.Plan, _plan))
-        {
-            throw VideoStagesInvariant.Failure(
-                "The execution host cannot bind a different video execution plan.");
-        }
-        if (_executionContext is not null && !ReferenceEquals(_executionContext, context))
-        {
-            throw VideoStagesInvariant.Failure(
-                "The execution host is already bound to another VideoStages request.");
-        }
-        _executionContext = context;
-    }
-
-    internal void CaptureControlNetPreprocessors() => ExecutePrepared(() =>
+    internal void CaptureControlNetPreprocessors()
     {
         new ControlNetCoreMediaCapture(_generator).Capture();
         foreach (IArchitectureGenerationSessionProvider provider in _activeProviders)
         {
             provider.CaptureControlNetPreprocessors(provider.ArchitectureId == _rootOwner);
         }
-    });
+    }
 
-    internal void CaptureBaseReference() => ExecutePrepared(() =>
+    internal void CaptureBaseReference()
     {
         foreach (IArchitectureGenerationSessionProvider provider in _activeProviders)
         {
             provider.CaptureBaseReference(_plan);
         }
-    });
+    }
 
-    internal void CaptureRefinerReference() => ExecutePrepared(() =>
+    internal void CaptureRefinerReference()
     {
         foreach (IArchitectureGenerationSessionProvider provider in _activeProviders)
         {
             provider.CaptureRefinerReference(_plan);
         }
-    });
-
-    internal void CapturePreCoreMedia() => ExecutePrepared(CapturePreCoreMediaCore);
-
-    internal void DropCoreOutput() => ExecutePrepared(DropCoreOutputCore);
-
-    internal void ApplyRootAudioMaskDimensions() => ExecutePrepared(() =>
-        RootOwnerProvider()?.ApplyRootAudioMaskDimensions());
-
-    private void ExecutePrepared(Action action) =>
-        RequireExecutionContext().ExecutePrepared(this, action);
-
-    internal void RunConfiguredStages()
-    {
-        VideoExecutionPlanContext context = RequireExecutionContext();
-        context.ExecuteToCompletion(this, () => RunConfiguredStagesCore(context));
     }
 
-    private void RunConfiguredStagesCore(VideoExecutionPlanContext context)
+    internal void CapturePreCoreMedia() => CapturePreCoreMediaCore();
+
+    internal void DropCoreOutput() => DropCoreOutputCore();
+
+    internal void ApplyRootAudioMaskDimensions() =>
+        RootOwnerProvider()?.ApplyRootAudioMaskDimensions();
+
+    internal void RunConfiguredStages()
     {
         if (_plan.Clips.Count == 0)
         {
             return;
         }
-        RootRuntimeSession rootSession = RootRuntimeSession.Capture(_generator, context);
+        RootRuntimeSession rootSession = RootRuntimeSession.Capture(_generator, _plan);
         MultiClipParallelMerger merger = new(_generator);
         RootExecutionPolicy rootPolicy = new(_plan);
         AudioRuntimeSources preparedAudioSources = new AudioRuntimeSourceResolver(
@@ -179,8 +152,7 @@ internal sealed class VideoArchitectureExecutionHost
                 IVideoGenerationSession session = provider.CreateSession(
                     sessionContext with
                     {
-                        OwnsGeneratedRoot =
-                            context.RootOwnerArchitectureId == provider.ArchitectureId,
+                        OwnsGeneratedRoot = _rootOwner == provider.ArchitectureId,
                     });
                 ArgumentNullException.ThrowIfNull(session);
                 if (!sessions.TryAdd(session.ArchitectureId, session))
@@ -462,11 +434,6 @@ internal sealed class VideoArchitectureExecutionHost
     private bool ShouldHandoffRoot() =>
         _rootOwner is not null && _plan.Root.InterceptsHostCore;
 
-    private VideoExecutionPlanContext RequireExecutionContext() =>
-        _executionContext
-        ?? throw VideoStagesInvariant.Failure(
-            "The execution host is not bound to a prepared VideoStages request.");
-
     private IArchitectureGenerationSessionProvider? RootOwnerProvider()
     {
         if (_rootOwner is null)
@@ -496,16 +463,17 @@ internal sealed class VideoArchitectureExecutionHost
 
     private static RuntimeProviderBinding CreateProductionProviderBinding(
         WorkflowGenerator generator,
-        VideoExecutionPlanContext context)
+        VideoExecutionPlan plan)
     {
         ArgumentNullException.ThrowIfNull(generator);
-        ArgumentNullException.ThrowIfNull(context);
+        IReadOnlyList<ArchitectureId> activeArchitectureIds =
+            ResolveActiveArchitectureIds(plan);
         return new(
-            context.ActiveArchitectureIds,
+            activeArchitectureIds,
             VideoArchitectureManifest.CreateProductionRuntimeProviders(
                 generator,
-                context.ActiveArchitectureIds),
-            context.RootOwnerArchitectureId);
+                activeArchitectureIds),
+            ArchitectureRootOwnerResolver.Resolve(plan));
     }
 
     private static RuntimeProviderBinding CreateInjectedProviderBinding(

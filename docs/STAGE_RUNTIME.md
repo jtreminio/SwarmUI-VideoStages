@@ -83,9 +83,9 @@ Prepared ─────────────────→ Failed
   callbacks rethrow the same failure.
 
 `Runner.PreflightRequest` is the only method allowed to call
-`PrepareRequest`. Mutation callbacks call `RequirePrepared`; they never lazily
-prepare. This matters for alternate host callbacks that can occur after core
-has begun graph construction.
+`PrepareRequest`. Later Runner callbacks enter named lifecycle methods on the
+context, while alternate host callbacks call `ExecutePrepared`. Neither path
+prepares lazily after core has begun graph construction.
 
 Preparation constructs one `VideoArchitectureExecutionHost`, resolves only
 providers used by active clip architectures, and runs:
@@ -121,9 +121,10 @@ or ambiguous.
 clip whose planned input consumes host root media or an empty latent. A init-video
 clip owns its own media and does not claim the host root.
 
-`VideoArchitectureExecutionHost` exposes one method for each fixed lifecycle
-step. ControlNet and reference capture call every active provider in plan order;
-root-media steps call only the resolved root owner.
+`VideoExecutionPlanContext` exposes one guarded method for each fixed lifecycle
+step. `VideoArchitectureExecutionHost` implements the graph work: ControlNet and
+reference capture call every active provider in plan order. Root capture and
+restoration are common host work; audio-mask sizing calls only the root owner.
 
 ## 4. Provider and session lifetimes
 

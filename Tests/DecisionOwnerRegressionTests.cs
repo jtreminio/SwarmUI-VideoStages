@@ -243,9 +243,9 @@ public class DecisionOwnerRegressionTests
         generator.NodeHelpers[ControlNetCaptureKeys.Audio(0)] = new JArray("1", 1).ToString(
             Formatting.None);
         VideoExecutionPlan plan = InitVideoOnlyPlan();
-        VideoArchitectureExecutionHost host = BoundHost(generator, plan);
+        VideoExecutionPlanContext request = BoundContext(generator, plan);
 
-        host.CaptureControlNetPreprocessors();
+        request.CaptureControlNetPreprocessors();
 
         Assert.False(generator.NodeHelpers.ContainsKey(ControlNetCaptureKeys.Image(0)));
         Assert.False(generator.NodeHelpers.ContainsKey(ControlNetCaptureKeys.Audio(0)));
@@ -258,7 +258,7 @@ public class DecisionOwnerRegressionTests
         WorkflowGenerator generator = GeneratorWithVideoControlNet();
 
         VideoExecutionPlan plan = PlanWithArchitectures(NoneArchitecture.Descriptor);
-        BoundHost(generator, plan).CaptureControlNetPreprocessors();
+        BoundContext(generator, plan).CaptureControlNetPreprocessors();
 
         using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         ResizeImageMaskNodeNode hostResize =
@@ -302,10 +302,10 @@ public class DecisionOwnerRegressionTests
             ? [Ltx2ArchitectureModule.Instance.Descriptor, NoneArchitecture.Descriptor]
             : [NoneArchitecture.Descriptor, Ltx2ArchitectureModule.Instance.Descriptor];
         VideoExecutionPlan plan = PlanWithArchitectures(architectures);
-        VideoArchitectureExecutionHost host = BoundHost(generator, plan);
+        VideoExecutionPlanContext request = BoundContext(generator, plan);
 
-        host.CaptureControlNetPreprocessors();
-        host.CaptureControlNetPreprocessors();
+        request.CaptureControlNetPreprocessors();
+        request.CaptureControlNetPreprocessors();
 
         Assert.True(
             ControlNetCoreMediaCapture.TryGetCapturedControlImage(
@@ -365,12 +365,12 @@ public class DecisionOwnerRegressionTests
             ? [InitVideoClip(0, ltx), GeneratedClip(1, foreign)]
             : [GeneratedClip(0, foreign), GeneratedClip(1, ltx)];
         VideoExecutionPlan plan = Plan(clips);
-        VideoArchitectureExecutionHost host = BoundHost(
+        VideoExecutionPlanContext request = BoundContext(
             generator,
             plan,
             [new ForeignRootAdapter(generator, foreign.Id), new Ltx2ExecutionAdapter(generator)]);
 
-        host.CaptureControlNetPreprocessors();
+        request.CaptureControlNetPreprocessors();
 
         Assert.True(
             ControlNetCoreMediaCapture.TryGetCapturedControlImage(
@@ -521,7 +521,7 @@ public class DecisionOwnerRegressionTests
         [],
         []);
 
-    private static VideoArchitectureExecutionHost BoundHost(
+    private static VideoExecutionPlanContext BoundContext(
         WorkflowGenerator generator,
         VideoExecutionPlan plan,
         IEnumerable<IArchitectureGenerationSessionProvider> providers = null)
@@ -535,9 +535,9 @@ public class DecisionOwnerRegressionTests
             generator,
             plan,
             innerProviders.Select(provider => new LifecycleTestProvider(provider)));
-        VideoExecutionPlanContext request = new(plan, _ => host);
+        VideoExecutionPlanContext request = new(plan, () => host);
         request.PrepareRequest();
-        return request.RequirePreparedExecutionHost();
+        return request;
     }
 
     private sealed class LifecycleTestProvider(

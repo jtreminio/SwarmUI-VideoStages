@@ -31,10 +31,10 @@ internal sealed class RootRuntimeSession
 
     public static RootRuntimeSession Capture(
         WorkflowGenerator generator,
-        VideoExecutionPlanContext planContext)
+        VideoExecutionPlan plan)
     {
         ArgumentNullException.ThrowIfNull(generator);
-        ArgumentNullException.ThrowIfNull(planContext);
+        ArgumentNullException.ThrowIfNull(plan);
 
         using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         RuntimeArtifact hostRoot = RuntimeArtifact.Capture(
@@ -51,10 +51,10 @@ internal sealed class RootRuntimeSession
                 hostAnimationSaveIds);
         return new RootRuntimeSession(
             generator,
-            planContext.Plan.Root,
+            plan.Root,
             hostAnimationSaveIds,
             rootComponentIds,
-            planContext.Plan.Root.DiscardsRoot || planContext.Plan.Clips.Count > 1);
+            plan.Root.DiscardsRoot || plan.Clips.Count > 1);
     }
 
     /// <summary>

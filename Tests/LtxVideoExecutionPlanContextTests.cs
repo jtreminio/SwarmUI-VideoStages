@@ -35,7 +35,7 @@ public class VideoExecutionPlanContextTests
     }
 
     [Fact]
-    public void PrepareRequest_is_idempotent_and_reuses_one_runtime_binding()
+    public void PrepareRequest_is_idempotent()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -48,11 +48,9 @@ public class VideoExecutionPlanContextTests
 
         Assert.Equal(VideoExecutionState.Compiled, context.State);
         context.PrepareRequest();
-        VideoArchitectureExecutionHost first = context.RequirePreparedExecutionHost();
         context.PrepareRequest();
 
         Assert.Equal(VideoExecutionState.Prepared, context.State);
-        Assert.Same(first, context.RequirePreparedExecutionHost());
     }
 
     [Fact]
@@ -92,11 +90,6 @@ public class VideoExecutionPlanContextTests
         Assert.Equal(VideoExecutionState.Compiled, context.State);
     }
 
-    /// <summary>
-    /// After a real generation the context is spent: it still answers for the plan it compiled, but
-    /// the prepared execution host it handed to the runner is gone, so a late caller gets a refusal
-    /// rather than a stale host.
-    /// </summary>
     [Fact]
     public async Task Successful_production_execution_completes_and_preserves_plan_access()
     {

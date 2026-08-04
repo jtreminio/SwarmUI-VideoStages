@@ -16,13 +16,10 @@ namespace VideoStages.Tests;
 public class ArchitectureRuntimeOwnershipTests
 {
     [Fact]
-    public void Request_context_caches_active_architectures_and_root_owner()
+    public void Request_context_caches_root_owner()
     {
         VideoExecutionPlanContext context = new(MixedInitVideoLeadingPlan());
 
-        Assert.Equal(
-            [new ArchitectureId("init-video-arch"), new ArchitectureId("future-arch")],
-            context.ActiveArchitectureIds);
         Assert.Equal(
             new ArchitectureId("future-arch"),
             context.RootOwnerArchitectureId);
@@ -35,12 +32,12 @@ public class ArchitectureRuntimeOwnershipTests
         WorkflowGenerator generator = Generator();
         RecordingProvider initVideoClip = new(new("init-video-arch"));
         RecordingProvider future = new(new("future-arch"));
-        VideoArchitectureExecutionHost host = PreparedHost(
+        VideoExecutionPlanContext request = PreparedContext(
             generator,
             plan,
             [initVideoClip, future]);
 
-        host.ApplyRootAudioMaskDimensions();
+        request.ApplyRootAudioMaskDimensions();
 
         Assert.Empty(initVideoClip.LifecycleCalls);
         Assert.Equal(["audio-mask"], future.LifecycleCalls);
@@ -53,12 +50,12 @@ public class ArchitectureRuntimeOwnershipTests
         WorkflowGenerator generator = Generator();
         RecordingProvider initVideoClip = new(new("init-video-arch"));
         RecordingProvider future = new(new("future-arch"));
-        VideoArchitectureExecutionHost host = PreparedHost(
+        VideoExecutionPlanContext request = PreparedContext(
             generator,
             plan,
             [initVideoClip, future]);
 
-        host.CaptureControlNetPreprocessors();
+        request.CaptureControlNetPreprocessors();
 
         Assert.Equal(["control-net"], initVideoClip.LifecycleCalls);
         Assert.Equal(["control-net"], future.LifecycleCalls);
@@ -72,12 +69,12 @@ public class ArchitectureRuntimeOwnershipTests
         VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         RecordingProvider initVideoClip = new(new("init-video-arch"));
         RecordingProvider future = new(new("future-arch"));
-        VideoArchitectureExecutionHost host = PreparedHost(
+        VideoExecutionPlanContext request = PreparedContext(
             Generator(),
             plan,
             [initVideoClip, future]);
 
-        Assert.Throws<NotSupportedException>(() => host.RunConfiguredStages());
+        Assert.Throws<NotSupportedException>(() => request.RunConfiguredStages());
 
         Assert.Equal([false], initVideoClip.RootOwnership);
         Assert.Equal([true], future.RootOwnership);
@@ -97,7 +94,7 @@ public class ArchitectureRuntimeOwnershipTests
         JObject before = (JObject)generator.Workflow.DeepClone();
         WGNodeData beforeMedia = generator.CurrentMedia;
         VideoArchitectureExecutionHost host = new(generator, plan, [initVideoClip, future]);
-        VideoExecutionPlanContext request = new(plan, _ => host);
+        VideoExecutionPlanContext request = new(plan, () => host);
 
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(() =>
             request.PrepareRequest());
@@ -128,7 +125,7 @@ public class ArchitectureRuntimeOwnershipTests
         int bindingCount = 0;
         VideoExecutionPlanContext request = new(
             plan,
-            _ =>
+            () =>
             {
                 bindingCount++;
                 return new(generator, plan, [initVideoClip, future]);
@@ -136,9 +133,8 @@ public class ArchitectureRuntimeOwnershipTests
 
         request.PrepareRequest();
         request.PrepareRequest();
-        VideoArchitectureExecutionHost host = request.RequirePreparedExecutionHost();
-        host.CaptureBaseReference();
-        host.CaptureRefinerReference();
+        request.CaptureBaseReference();
+        request.CaptureRefinerReference();
 
         Assert.Equal(1, bindingCount);
         Assert.Equal(
@@ -149,7 +145,7 @@ public class ArchitectureRuntimeOwnershipTests
     }
 
     [Fact]
-    public void Unprepared_host_rejects_mutation_at_the_host_boundary()
+    public void Unprepared_context_rejects_mutation_at_the_context_boundary()
     {
         VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         RecordingProvider initVideoClip = new(new("init-video-arch"));
@@ -159,12 +155,35 @@ public class ArchitectureRuntimeOwnershipTests
             plan,
             [initVideoClip, future]);
 
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            host.CaptureBaseReference());
+        VideoExecutionPlanContext request = new(plan, () => host);
 
-        Assert.Contains("not bound to a prepared", error.Message);
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            request.CaptureBaseReference());
+
+        Assert.Contains("preflight must complete first", error.Message);
         Assert.Empty(initVideoClip.LifecycleCalls);
         Assert.Empty(future.LifecycleCalls);
+    }
+
+    [Fact]
+    public void PrepareRequest_rejects_an_execution_host_for_a_different_plan()
+    {
+        VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
+        VideoExecutionPlan otherPlan = MixedInitVideoLeadingPlan();
+        VideoArchitectureExecutionHost host = new(
+            Generator(),
+            otherPlan,
+            [
+                new RecordingProvider(new("init-video-arch")),
+                new RecordingProvider(new("future-arch")),
+            ]);
+        VideoExecutionPlanContext request = new(plan, () => host);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            request.PrepareRequest);
+
+        Assert.Contains("different video execution plan", error.Message);
+        Assert.Equal(VideoExecutionState.Failed, request.State);
     }
 
     [Fact]
@@ -197,13 +216,13 @@ public class ArchitectureRuntimeOwnershipTests
             generator,
             plan,
             [initVideoClip, future]);
-        VideoExecutionPlanContext request = new(plan, _ => host);
+        VideoExecutionPlanContext request = new(plan, () => host);
         request.PrepareRequest();
 
         InvalidOperationException first = Assert.Throws<InvalidOperationException>(() =>
-            host.CaptureBaseReference());
+            request.CaptureBaseReference());
         InvalidOperationException repeated = Assert.Throws<InvalidOperationException>(() =>
-            host.CaptureRefinerReference());
+            request.CaptureRefinerReference());
 
         Assert.Same(phaseFailure, first);
         Assert.Same(first, repeated);
@@ -322,15 +341,15 @@ public class ArchitectureRuntimeOwnershipTests
         return generator;
     }
 
-    private static VideoArchitectureExecutionHost PreparedHost(
+    private static VideoExecutionPlanContext PreparedContext(
         WorkflowGenerator generator,
         VideoExecutionPlan plan,
         IEnumerable<IArchitectureGenerationSessionProvider> providers)
     {
         VideoArchitectureExecutionHost host = new(generator, plan, providers);
-        VideoExecutionPlanContext request = new(plan, _ => host);
+        VideoExecutionPlanContext request = new(plan, () => host);
         request.PrepareRequest();
-        return request.RequirePreparedExecutionHost();
+        return request;
     }
 
     private sealed record TestPayload(ArchitectureId ArchitectureId) :

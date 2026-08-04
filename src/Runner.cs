@@ -34,77 +34,77 @@ public static class Runner
 
     public static void CaptureCoreVideoControlNetPreprocessors(WorkflowGenerator g)
     {
-        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
+        if (!TryGetActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        context.RequirePreparedExecutionHost().CaptureControlNetPreprocessors();
+        context.CaptureControlNetPreprocessors();
     }
 
     public static void CaptureBase(WorkflowGenerator g)
     {
-        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
+        if (!TryGetActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        context.RequirePreparedExecutionHost().CaptureBaseReference();
+        context.CaptureBaseReference();
     }
 
     public static void CaptureRefiner(WorkflowGenerator g)
     {
-        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
+        if (!TryGetActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        context.RequirePreparedExecutionHost().CaptureRefinerReference();
+        context.CaptureRefinerReference();
     }
 
     public static void CapturePreCoreVideoMedia(WorkflowGenerator g)
     {
-        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
+        if (!TryGetActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        context.RequirePreparedExecutionHost().CapturePreCoreMedia();
+        context.CapturePreCoreMedia();
     }
 
     public static void DropCoreImageToVideoOutput(WorkflowGenerator g)
     {
-        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
+        if (!TryGetActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        context.RequirePreparedExecutionHost().DropCoreOutput();
+        context.DropCoreOutput();
     }
 
     public static void ApplyRootAudioMaskDimensionsAfterNativeVideo(WorkflowGenerator g)
     {
-        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
+        if (!TryGetActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        context.RequirePreparedExecutionHost().ApplyRootAudioMaskDimensions();
+        context.ApplyRootAudioMaskDimensions();
     }
 
     public static void RunConfiguredStages(WorkflowGenerator g)
     {
-        if (!TryGetPreparedActiveExecution(g, out VideoExecutionPlanContext context))
+        if (!TryGetActiveExecution(g, out VideoExecutionPlanContext context))
         {
             return;
         }
 
-        context.RequirePreparedExecutionHost().RunConfiguredStages();
+        context.RunConfiguredStages();
     }
 
     private static bool IsExtensionActive(WorkflowGenerator g) => VideoStagesPromptSection.IsActive(g);
 
-    private static bool TryGetPreparedActiveExecution(
+    private static bool TryGetActiveExecution(
         WorkflowGenerator g,
         out VideoExecutionPlanContext context)
     {
@@ -118,7 +118,6 @@ public static class Runner
         {
             return false;
         }
-        context.RequirePrepared();
         return true;
     }
 }
