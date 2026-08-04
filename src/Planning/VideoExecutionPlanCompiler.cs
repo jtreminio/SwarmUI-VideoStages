@@ -157,24 +157,16 @@ internal static class VideoExecutionPlanCompiler
             Array.AsReadOnly(diagnostics.ToArray()));
         // Every architecture carries timeline audio: one that does not consume it during
         // generation gets the decoded overlay instead (DecodedTimelineAudioOverlay).
-        AudioTimelineCompilation audio = AudioTimelinePlanCompiler.Compile(
+        TimelineAudioSegmentCompilation audio = TimelineAudioSegmentPlanCompiler.Compile(
             plan,
             spec.TimelineAudioSegments);
-        AudioTimelinePlan audioTimeline = audio.Plan;
-        HashSet<string> authoredTrackIds = audio.AuthoredTracks
-            .Select(track => track.TrackId)
-            .ToHashSet(StringComparer.Ordinal);
-        IReadOnlyList<ClipPlan> clipsWithTimelineAudio =
-            TimelineAudioSegmentPlanProjector.Apply(
-                plan.Clips,
-                audioTimeline,
-                authoredTrackIds);
+        IReadOnlyList<ClipPlan> clipsWithTimelineAudio = audio.Clips;
         foreach (ClipPlan clipPlan in clipsWithTimelineAudio)
         {
             diagnostics.AddRange(clipPlan.Audio.Diagnostics.Select(audioDiagnostic =>
                 audioDiagnostic with { ClipId = audioDiagnostic.ClipId ?? clipPlan.ClipId }));
         }
-        diagnostics.AddRange(audioTimeline.Diagnostics);
+        diagnostics.AddRange(audio.Diagnostics);
         return plan with
         {
             HasConfiguredResolution = spec.HasConfiguredResolution,

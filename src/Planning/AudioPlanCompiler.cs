@@ -16,8 +16,7 @@ internal static class AudioPlanCompiler
         AudioPlanComponentResult<AudioBaseSourcePlan> baseSource = AudioBaseSourcePlanCompiler.Compile(clip);
         AudioPlanComponentResult<AudioLengthPlan> length = AudioLengthPlanCompiler.Compile(clip, baseSource.Plan);
 
-        // Segments are no longer authored per clip: the root timeline audio tracks are projected
-        // onto each clip after the plan exists (see TimelineAudioSegmentPlanProjector).
+        // Root timeline segments are added after boundary planning.
         return new(
             baseSource.Plan,
             length.Plan,
