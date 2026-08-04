@@ -3,9 +3,6 @@ using VideoStages.Planning;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// Converts authored boundary strings in test fixtures to typed production plans.
-/// </summary>
 internal static class BoundaryPlanFixture
 {
     internal static BoundaryBudgetResolution Resolve(
@@ -41,6 +38,6 @@ internal static class BoundaryPlanFixture
                 MinFrames = mode == BoundaryJoinType.Cut ? 0 : 8,
             });
         }
-        return BoundaryOverlapPlanner.ResolvePlanBudgets(frames ?? [], boundaries);
+        return BoundaryOverlapPlanner.FitPlanToFrameBudgets(frames ?? [], boundaries);
     }
 }

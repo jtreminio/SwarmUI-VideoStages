@@ -135,7 +135,7 @@ internal static class VideoExecutionPlanCompiler
             activeClips,
             clips);
         diagnostics.AddRange(boundaryResult.Diagnostics);
-        BoundaryBudgetResolution boundaryBudget = BoundaryOverlapPlanner.ResolvePlanBudgets(
+        BoundaryBudgetResolution boundaryBudget = BoundaryOverlapPlanner.FitPlanToFrameBudgets(
             [.. activeClips.Select(clip => clip.Frames)],
             boundaryResult.Boundaries);
         IReadOnlyList<BoundaryPlan> resolvedBoundaries = boundaryBudget.Boundaries;

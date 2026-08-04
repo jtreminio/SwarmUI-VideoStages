@@ -30,9 +30,9 @@ public class BoundaryOverlapPlannerTests
         };
 
     [Fact]
-    public void ResolvePlanBudgets_UsesTypedModesAndReservesNeighborBudget()
+    public void FitPlanToFrameBudgets_UsesTypedModesAndReservesNeighborBudget()
     {
-        BoundaryBudgetResolution resolution = BoundaryOverlapPlanner.ResolvePlanBudgets(
+        BoundaryBudgetResolution resolution = BoundaryOverlapPlanner.FitPlanToFrameBudgets(
             [17, 17, 17],
             [
                 Boundary(0, BoundaryJoinType.Continue, continuityWindow: 9),
@@ -45,9 +45,9 @@ public class BoundaryOverlapPlannerTests
     }
 
     [Fact]
-    public void ResolvePlanBudgets_CutsWhenShortContinueCannotPreserveArchitectureMinimum()
+    public void FitPlanToFrameBudgets_CutsWhenShortContinueCannotPreserveArchitectureMinimum()
     {
-        BoundaryBudgetResolution resolution = BoundaryOverlapPlanner.ResolvePlanBudgets(
+        BoundaryBudgetResolution resolution = BoundaryOverlapPlanner.FitPlanToFrameBudgets(
             [5, 5],
             [Boundary(0, BoundaryJoinType.Continue, continuityWindow: 9)]);
         BoundaryPlan boundary = Assert.Single(resolution.Boundaries);
@@ -60,9 +60,9 @@ public class BoundaryOverlapPlannerTests
     }
 
     [Fact]
-    public void ResolvePlanBudgets_ReducesOnlyOnTheArchitectureMinimumRelativeGrid()
+    public void FitPlanToFrameBudgets_ReducesOnlyOnTheArchitectureMinimumRelativeGrid()
     {
-        BoundaryBudgetResolution resolution = BoundaryOverlapPlanner.ResolvePlanBudgets(
+        BoundaryBudgetResolution resolution = BoundaryOverlapPlanner.FitPlanToFrameBudgets(
             [10, 10],
             [
                 Boundary(
@@ -77,6 +77,23 @@ public class BoundaryOverlapPlannerTests
         Assert.Equal(BoundaryJoinType.Crossfade, boundary.Effective);
         Assert.Equal(9, boundary.OverlapFrames);
         Assert.Equal(0, (boundary.OverlapFrames - boundary.MinFrames) % boundary.FrameStep);
+    }
+
+    [Fact]
+    public void FitPlanToFrameBudgets_LeavesUnknownLengthsProvisional()
+    {
+        BoundaryPlan boundary = Boundary(
+            0,
+            BoundaryJoinType.Crossfade,
+            overlap: 13,
+            frameStep: 4,
+            minFrames: 5);
+
+        BoundaryBudgetResolution resolution =
+            BoundaryOverlapPlanner.FitPlanToFrameBudgets([null, 10], [boundary]);
+
+        Assert.False(resolution.Degraded);
+        Assert.Equal(13, Assert.Single(resolution.Boundaries).OverlapFrames);
     }
 
     [Fact]
@@ -110,21 +127,59 @@ public class BoundaryOverlapPlannerTests
             BoundaryJoinType.Continue,
             overlap: 8,
             continuityWindow: 9);
-        static DecodedClipArtifact Clip(int id) => new(
-            new DecodedOutputHandle($"{id}", 0, DecodedMediaKind.Video),
-            Audio: null,
-            Width: 512,
-            Height: 512,
-            FramesPerSecond: 24,
-            Frames: 5,
-            new("test-arch"),
-            id);
-
         BoundaryBudgetResolution resolution =
-            BoundaryOverlapPlanner.ValidateRuntime([Clip(1), Clip(2)], [compiled]);
+            BoundaryOverlapPlanner.ValidateRuntime([Clip(1, 5), Clip(2, 5)], [compiled]);
 
         Assert.True(resolution.Degraded);
         Assert.Equal(BoundaryJoinType.Cut, Assert.Single(resolution.Boundaries).Effective);
         Assert.Contains("runtime clip lengths", resolution.Reason);
     }
+
+    [Fact]
+    public void ValidateRuntime_CutsInsteadOfShrinkingOnThePolicyGrid()
+    {
+        BoundaryPlan compiled = Boundary(
+            0,
+            BoundaryJoinType.Crossfade,
+            overlap: 13,
+            frameStep: 4,
+            minFrames: 5);
+
+        BoundaryBudgetResolution resolution =
+            BoundaryOverlapPlanner.ValidateRuntime([Clip(1, 10), Clip(2, 10)], [compiled]);
+
+        Assert.True(resolution.Degraded);
+        Assert.Equal(BoundaryJoinType.Cut, Assert.Single(resolution.Boundaries).Effective);
+    }
+
+    [Fact]
+    public void ValidateRuntime_CutsOnlyTheFailingOverlapRun()
+    {
+        BoundaryBudgetResolution resolution = BoundaryOverlapPlanner.ValidateRuntime(
+            [Clip(1, 20), Clip(2, 20), Clip(3, 5), Clip(4, 5)],
+            [
+                Boundary(0, BoundaryJoinType.Crossfade),
+                Boundary(1, BoundaryJoinType.Cut),
+                Boundary(2, BoundaryJoinType.Crossfade),
+            ]);
+
+        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[0].Effective);
+        Assert.Equal(BoundaryJoinType.Cut, resolution.Boundaries[1].Effective);
+        Assert.Equal(BoundaryJoinType.Cut, resolution.Boundaries[2].Effective);
+        Assert.Equal(
+            BoundaryFallbackReason.InsufficientFrameBudget,
+            resolution.Boundaries[2].Fallback);
+        Assert.DoesNotContain("clips 0-1", resolution.Reason);
+        Assert.Contains("clips 2-3", resolution.Reason);
+    }
+
+    private static DecodedClipArtifact Clip(int id, int frames) => new(
+        new DecodedOutputHandle($"{id}", 0, DecodedMediaKind.Video),
+        Audio: null,
+        Width: 512,
+        Height: 512,
+        FramesPerSecond: 24,
+        Frames: frames,
+        new("test-arch"),
+        id);
 }

@@ -60,6 +60,23 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
+    public void BoundaryPlanCompiler_RejectsMisalignedCompiledClips()
+    {
+        VideoStagesSpec spec = new(640, 360, 24, false,
+        [
+            GeneratedClip(0, Stage(10)),
+            GeneratedClip(1, Stage(11)),
+        ]);
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+        ClipPlan[] misaligned = [plan.Clips[0], plan.Clips[1] with { ClipId = 9 }];
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => BoundaryPlanCompiler.Compile(spec.Clips, misaligned));
+
+        Assert.Contains("requires aligned authored and compiled clips", error.Message);
+    }
+
+    [Fact]
     public void BoundaryPlanCompiler_CutsContinueIntoRuntimeDerivedDuration()
     {
         VideoStagesSpec spec = new(640, 360, 24, false,
@@ -100,47 +117,6 @@ public class PlanningCompilerComponentTests
 
         Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
         Assert.Equal(BoundaryFallbackReason.TargetHasNoStage, boundary.Fallback);
-    }
-
-    [Fact]
-    public void BoundaryPlanCompiler_RawOnlyPathPreservesEligibleContinue()
-    {
-        VideoStagesSpec spec = new(640, 360, 24, false,
-        [
-            GeneratedClip(0, Stage(10)) with
-            {
-                BoundaryOut = Constants.BoundaryOutContinue,
-            },
-            GeneratedClip(1, Stage(11)),
-        ]);
-
-        BoundaryPlan boundary = Assert.Single(
-            BoundaryPlanCompiler.Compile(spec.Clips).Boundaries);
-
-        Assert.Equal(BoundaryJoinType.Continue, boundary.Effective);
-        Assert.Equal(BoundaryFallbackReason.None, boundary.Fallback);
-    }
-
-    [Fact]
-    public void BoundaryPlanCompiler_RawOnlyPathCutsRuntimeDerivedDuration()
-    {
-        VideoStagesSpec spec = new(640, 360, 24, false,
-        [
-            GeneratedClip(0, Stage(10)) with
-            {
-                BoundaryOut = Constants.BoundaryOutContinue,
-            },
-            GeneratedClip(1, Stage(11)) with
-            {
-                ClipLengthFromControlNet = true,
-            },
-        ]);
-
-        BoundaryPlan boundary = Assert.Single(
-            BoundaryPlanCompiler.Compile(spec.Clips).Boundaries);
-
-        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
-        Assert.Equal(BoundaryFallbackReason.TargetHasDerivedDuration, boundary.Fallback);
     }
 
     [Fact]
@@ -688,9 +664,7 @@ public class PlanningCompilerComponentTests
             new RootEnvironment(HostRootKind.ImageToVideo),
         ];
 
-        // Frame counts too small to fund the authored crossfade, so the budget resolver degrades
-        // and emits "boundary-frame-budget-reconciled". Keeps the facade's exact message text
-        // (no "VideoStages: " prefix) falsifiable.
+        // Keep the budget diagnostic's exact unprefixed text falsifiable.
         yield return
         [
             new VideoStagesSpec(512, 512, 24, false,
@@ -706,9 +680,7 @@ public class PlanningCompilerComponentTests
             new RootEnvironment(HostRootKind.ImageToVideo),
         ];
 
-        // Emits a capability warning (unknown upscale mode), a boundary fallback warning, and a
-        // per-clip audio warning at once, so a dropped validator call or a clip-audio diagnostic
-        // appended at the wrong point in the list is visible as an ordering difference.
+        // Multiple warnings make validator and diagnostic ordering observable.
         yield return
         [
             new VideoStagesSpec(512, 512, 24, false,
@@ -852,7 +824,7 @@ public class PlanningCompilerComponentTests
             clips,
             plans);
         diagnostics.AddRange(boundaries.Diagnostics);
-        BoundaryBudgetResolution boundaryBudget = BoundaryOverlapPlanner.ResolvePlanBudgets(
+        BoundaryBudgetResolution boundaryBudget = BoundaryOverlapPlanner.FitPlanToFrameBudgets(
             [.. clips.Select(clip => clip.Frames)],
             boundaries.Boundaries);
         if (boundaryBudget.Degraded)
