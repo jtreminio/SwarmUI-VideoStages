@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
+using SwarmUI.Utils;
 using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -803,7 +804,7 @@ public class MiniMaxGeneratedWorkflowContractTests
             ["fileName"] = "clip.wav",
         };
 
-        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
+        SwarmReadableErrorException error = await Assert.ThrowsAsync<SwarmReadableErrorException>(
             () => fixture.GenerateAsync(MakeDocument(clip)));
         Assert.Contains("audio", error.Message, StringComparison.OrdinalIgnoreCase);
     }

@@ -64,10 +64,21 @@ public partial class StageFlowTests
         }
     }
 
+    /// <summary>
+    /// The manufactured half of the "Node 101 not found" regression, kept on the stub harness
+    /// because a POST cannot build this shape: the root VAE must be a node the model-gen step
+    /// deduplicated onto (<c>LoadingVAE = ["101", 0]</c>) while the root is still a raw, undecoded
+    /// AV latent. Core's <c>automaticvae</c> path shares a loader too, but by producing one loader —
+    /// not by aliasing a seeded id — so it cannot fail the way the shipped bug did.
+    /// <para>
+    /// <see cref="ArchitectureContractGraphTests.Multi_clip_merge_keeps_the_shared_root_vae_loader_the_clip_decodes_read"/>
+    /// is the end-to-end half.
+    /// </para>
+    /// </summary>
     [Theory]
     [InlineData("cut")]
     [InlineData("crossfade")]
-    public void Multi_clip_merge_keeps_the_shared_root_vae_loader_the_clip_decodes_read(
+    public void Multi_clip_merge_keeps_the_seeded_root_vae_loader_the_clip_decodes_read(
         string boundaryOut)
     {
         using SwarmUiTestContext _ = new();
@@ -88,7 +99,7 @@ public partial class StageFlowTests
             models.VideoModel,
             MakeRootConfig(512, 512, first, MakeGeneratedClip(models)).ToString());
 
-        (JObject workflow, WorkflowGenerator _generator) =
+        (JObject workflow, WorkflowGenerator _) =
             WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
                 new[]

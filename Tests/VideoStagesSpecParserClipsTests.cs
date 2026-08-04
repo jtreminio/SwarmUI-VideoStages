@@ -543,6 +543,34 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal(Constants.AudioSourceUpload, config.Clips[0].AudioSource);
     }
 
+    /// <summary>
+    /// The gate lives in the reader, below the parser: with the group's Enabled flag absent the
+    /// document is never read at all, so the root dimensions the JSON declares are not merely
+    /// overridden later — they are never produced. Asserted on a clipless document, which no
+    /// generated workflow can express because a timeline with no clips builds nothing to look at.
+    /// </summary>
+    [Fact]
+    public void ReadDocument_GroupToggleOff_YieldsNoRootDimensionsOrEntries()
+    {
+        string json = JsonConvert.SerializeObject(MakeRootConfig(800, 600));
+        T2IParamInput enabled = BuildInputWithJson(json);
+        VideoStagesJsonDocument enabledDocument =
+            VideoStagesJsonReader.ReadDocument(new() { UserInput = enabled });
+        Assert.Equal(800, enabledDocument.Width);
+        Assert.Equal(600, enabledDocument.Height);
+
+        T2IParamInput disabled = BuildInputWithJson(json);
+        disabled.Remove(VideoStagesExtension.Enabled);
+
+        VideoStagesJsonDocument document =
+            VideoStagesJsonReader.ReadDocument(new() { UserInput = disabled });
+
+        Assert.Null(document.Width);
+        Assert.Null(document.Height);
+        Assert.Null(document.Fps);
+        Assert.Empty(document.Entries);
+    }
+
     [Fact]
     public void ParseClips_PerClipUploadedAudio_IsParsed()
     {

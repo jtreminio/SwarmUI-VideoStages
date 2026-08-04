@@ -12,6 +12,12 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
+/// <summary>
+/// What the frame interpolator does that a real generated graph cannot show: refuse a request
+/// before any phase mutates the workflow (asserted against a cloned pre-mutation snapshot), preserve
+/// the attached-audio object identity, and warn on timeline shapes whose architectures the POST path
+/// cannot mix. The graph-level contracts live in <see cref="FrameInterpolationContractTests"/>.
+/// </summary>
 [Collection("VideoStagesTests")]
 public sealed class TimelineFrameInterpolatorTests
 {
@@ -38,135 +44,6 @@ public sealed class TimelineFrameInterpolatorTests
         }
     }
 
-    [Fact]
-    public void Rife_interpolates_the_final_trim_once_before_publication()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        T2IParamInput input = WanInput(models);
-        input.Set(T2IParamTypes.TrimVideoStartFrames, 4);
-        input.Set(T2IParamTypes.OutputIntermediateImages, true);
-        Configure(input, "RIFE", 2);
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                WanSteps(),
-                features: ["variation_seed", "frameinterps"]);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        ComfyNode rife = Assert.Single(NodesOfClass(bridge, "RIFE VFI"));
-        SwarmTrimFramesNode trim = Assert.IsType<SwarmTrimFramesNode>(
-            rife.FindInput("frames").Connection?.Node);
-        Assert.Equal(4, trim.TrimStart.LiteralAsInt());
-        SwarmSaveAnimationWSNode[] saves =
-            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().ToArray();
-        Assert.Equal(2, saves.Length);
-        SwarmSaveAnimationWSNode preInterpolationSave = Assert.Single(
-            saves,
-            save => ReferenceEquals(trim, save.Images.Connection?.Node));
-        Assert.Equal(24.0, preInterpolationSave.Fps.LiteralAsDouble());
-        SwarmSaveAnimationWSNode finalSave = Assert.Single(
-            saves,
-            save => ReferenceEquals(rife, save.Images.Connection?.Node));
-        Assert.Equal(48.0, finalSave.Fps.LiteralAsDouble());
-        Assert.Equal(17, generator.CurrentMedia.Frames);
-        Assert.Equal(48, generator.CurrentMedia.GetRawFPS());
-        Assert.Equal(512, generator.CurrentMedia.Width);
-        Assert.Equal(512, generator.CurrentMedia.Height);
-        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
-        Assert.Null(generator.CurrentMedia.Compat);
-        Assert.Equal(rife.Id, $"{generator.CurrentMedia.Path[0]}");
-        Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
-    }
-
-    [Fact]
-    public void Do_not_save_suppresses_both_outputs_without_suppressing_interpolation()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        T2IParamInput input = WanInput(models);
-        input.Set(T2IParamTypes.TrimVideoStartFrames, 4);
-        input.Set(T2IParamTypes.OutputIntermediateImages, true);
-        input.Set(T2IParamTypes.DoNotSave, true);
-        Configure(input, "RIFE", 2);
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                WanSteps(),
-                features: ["variation_seed", "frameinterps"]);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        ComfyNode rife = Assert.Single(NodesOfClass(bridge, "RIFE VFI"));
-        SwarmTrimFramesNode trim = Assert.IsType<SwarmTrimFramesNode>(
-            rife.FindInput("frames").Connection?.Node);
-        Assert.Equal(4, trim.TrimStart.LiteralAsInt());
-        Assert.Empty(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
-        Assert.Equal(17, generator.CurrentMedia.Frames);
-        Assert.Equal(48, generator.CurrentMedia.GetRawFPS());
-        Assert.Equal(rife.Id, $"{generator.CurrentMedia.Path[0]}");
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
-    }
-
-    [Fact]
-    public void Film_routes_the_final_video_and_uses_endpoint_frame_arithmetic()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        T2IParamInput input = WanInput(models);
-        Configure(input, "FILM", 3);
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                WanSteps(),
-                features: ["variation_seed", "frameinterps"]);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        ComfyNode film = Assert.Single(NodesOfClass(bridge, "FILM VFI"));
-        Assert.Equal(3, film.FindInput("multiplier").LiteralAsInt());
-        Assert.Equal(37, generator.CurrentMedia.Frames);
-        Assert.Equal(72, generator.CurrentMedia.GetRawFPS());
-        Assert.Equal(film.Id, $"{generator.CurrentMedia.Path[0]}");
-        Assert.Empty(NodesOfClass(bridge, "RIFE VFI"));
-        AssertNoDanglingNodeRefs(workflow);
-    }
-
-    [Fact]
-    public void Gimm_routes_through_its_model_loader_and_uses_endpoint_frame_arithmetic()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        T2IParamInput input = WanInput(models);
-        Configure(input, "GIMM-VFI", 3);
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                WanSteps(),
-                features:
-                [
-                    "variation_seed",
-                    "frameinterps",
-                    "frameinterps_gimmvfi",
-                ]);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        ComfyNode loader = Assert.Single(NodesOfClass(bridge, "DownloadAndLoadGIMMVFIModel"));
-        ComfyNode gimm = Assert.Single(NodesOfClass(bridge, "GIMMVFI_interpolate"));
-        Assert.Same(loader, gimm.FindInput("gimmvfi_model").Connection?.Node);
-        Assert.Equal("VAEDecode", gimm.FindInput("images").Connection?.Node?.ClassTypeName);
-        Assert.Equal(3, gimm.FindInput("interpolation_factor").LiteralAsInt());
-        Assert.Equal(37, generator.CurrentMedia.Frames);
-        Assert.Equal(72, generator.CurrentMedia.GetRawFPS());
-        Assert.Equal(gimm.Id, $"{generator.CurrentMedia.Path[0]}");
-        AssertNoDanglingNodeRefs(workflow);
-    }
-
     [Theory]
     [InlineData("missing-method", null, 2, "explicitly selected")]
     [InlineData("unknown-method", "Unknown-VFI", 2, "is not supported")]
@@ -188,107 +65,6 @@ public sealed class TimelineFrameInterpolatorTests
         }
 
         AssertPreflightFailure(input, ["variation_seed", "frameinterps"], expected);
-    }
-
-    [Theory]
-    [InlineData("RIFE", "frameinterps")]
-    [InlineData("FILM", "frameinterps")]
-    [InlineData("GIMM-VFI", "frameinterps_gimmvfi")]
-    public void Missing_method_feature_warns_and_skips_interpolation(
-        string method,
-        string expectedFeature)
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        T2IParamInput input = WanInput(models);
-        Configure(input, method, 2);
-        string[] installed = method == "GIMM-VFI"
-            ? ["variation_seed", "frameinterps"]
-            : ["variation_seed"];
-
-        AssertInterpolationWarningAndSkip(input, installed, expectedFeature);
-    }
-
-    [Fact]
-    public void Gimm_without_the_common_interpolation_feature_warns_and_skips()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        T2IParamInput input = WanInput(models);
-        Configure(input, "GIMM-VFI", 2);
-
-        AssertInterpolationWarningAndSkip(
-            input,
-            ["variation_seed", "frameinterps_gimmvfi"],
-            "frameinterps");
-    }
-
-    /// <summary>
-    /// A multiplier of 1 is the param's <c>IgnoreIf</c> value, so setting it removes the param
-    /// rather than storing it — interpolation is skipped for want of a request, not by the
-    /// <c>multiplier == 1</c> guard, which no caller can reach.
-    /// </summary>
-    [Fact]
-    public void Multiplier_one_leaves_the_request_without_an_interpolation_setting()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        T2IParamInput input = WanInput(models);
-        input.Set(ComfyUIBackendExtension.VideoFrameInterpolationMultiplier, 1);
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                WanSteps(),
-                features: ["variation_seed"]);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        Assert.Empty(InterpolationNodes(bridge));
-        Assert.Equal(13, generator.CurrentMedia.Frames);
-        Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
-    }
-
-    [Fact]
-    public void One_frame_timeline_does_not_change_the_final_save_rate()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        T2IParamInput input = WanInput(models);
-        input.Set(T2IParamTypes.VideoFrames, 1);
-        input.Set(T2IParamTypes.OutputIntermediateImages, true);
-        Configure(input, "RIFE", 2);
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                WanSteps(),
-                features: ["variation_seed", "frameinterps"]);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        Assert.Empty(InterpolationNodes(bridge));
-        Assert.Equal(1, generator.CurrentMedia.Frames);
-        Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
-        SwarmSaveAnimationWSNode save =
-            Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
-        Assert.Equal(24.0, save.Fps.LiteralAsDouble());
-    }
-
-    [Fact]
-    public void Multi_Wan_interpolation_warns_and_skips()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 8);
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            MakeDocument(MakeClip(stage), MakeClip(stage)).ToString());
-        Configure(input, "RIFE", 2);
-
-        AssertInterpolationWarningAndSkip(
-            input,
-            ["variation_seed", "frameinterps"],
-            "2 clips joined by 1 boundary");
     }
 
     [Fact]
@@ -409,11 +185,16 @@ public sealed class TimelineFrameInterpolatorTests
         Assert.Equal(expectedFps, generator.CurrentMedia.GetRawFPS());
         Assert.Equal(512, generator.CurrentMedia.Width);
         Assert.Equal(512, generator.CurrentMedia.Height);
+        using WorkflowBridge resultBridge = WorkflowBridge.Create(workflow);
         if (sourceFrames == 1)
         {
             Assert.Same(videoPath, generator.CurrentMedia.Path);
-            using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-            Assert.Empty(NodesOfClass(bridge, "RIFE VFI"));
+            Assert.Empty(NodesOfClass(resultBridge, "RIFE VFI"));
+        }
+        else
+        {
+            ComfyNode rife = Assert.Single(NodesOfClass(resultBridge, "RIFE VFI"));
+            Assert.Equal(rife.Id, $"{generator.CurrentMedia.Path[0]}");
         }
     }
 
@@ -462,11 +243,6 @@ public sealed class TimelineFrameInterpolatorTests
             models.VideoModel,
             JsonSingleClipStages(
                 MakeStage(models.VideoModel.Name, "Generated", steps: 8)));
-
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> WanSteps() =>
-        WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
-            .Concat(WorkflowTestHarness.VideoStagesSteps());
 
     private static void Configure(T2IParamInput input, string method, int multiplier)
     {

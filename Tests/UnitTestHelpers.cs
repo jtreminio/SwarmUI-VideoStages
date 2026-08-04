@@ -85,7 +85,7 @@ internal static class UnitTestStubs
                 FeatureFlag: "comfyui",
                 Group: T2IParamTypes.GroupAdvancedVideo,
                 Toggleable: true,
-                GetValues: (_) => ["RIFE"]
+                GetValues: (_) => ["RIFE", "FILM", "GIMM-VFI"]
             ));
         }
 
@@ -345,7 +345,10 @@ internal static class TestModelFactory
     {
         EnsureModelSet("Stable-Diffusion");
         EnsureModelSet("Clip");
-        Program.T2IModelSets["VAE"] = new() { ModelType = "VAE" };
+        // EnsureModelSet, not a fresh handler: the per-architecture installers are chained by
+        // cross-family fixtures, and replacing the set would drop the previous one's VAE stubs —
+        // which does not fail, it falls through to a multi-gigabyte DownloadNow().Wait().
+        EnsureModelSet("VAE");
         if (CommonModels.Known.IsEmpty)
         {
             CommonModels.RegisterCoreSet();
@@ -363,7 +366,10 @@ internal static class TestModelFactory
     {
         EnsureModelSet("Stable-Diffusion");
         EnsureModelSet("Clip");
-        Program.T2IModelSets["VAE"] = new() { ModelType = "VAE" };
+        // EnsureModelSet, not a fresh handler: the per-architecture installers are chained by
+        // cross-family fixtures, and replacing the set would drop the previous one's VAE stubs —
+        // which does not fail, it falls through to a multi-gigabyte DownloadNow().Wait().
+        EnsureModelSet("VAE");
         if (CommonModels.Known.IsEmpty)
         {
             CommonModels.RegisterCoreSet();
@@ -465,7 +471,10 @@ internal static class TestModelFactory
         EnsureModelSet("Stable-Diffusion");
         EnsureModelSet("Clip");
         EnsureModelSet("ClipVision");
-        Program.T2IModelSets["VAE"] = new() { ModelType = "VAE" };
+        // EnsureModelSet, not a fresh handler: the per-architecture installers are chained by
+        // cross-family fixtures, and replacing the set would drop the previous one's VAE stubs —
+        // which does not fail, it falls through to a multi-gigabyte DownloadNow().Wait().
+        EnsureModelSet("VAE");
         if (CommonModels.Known.IsEmpty)
         {
             CommonModels.RegisterCoreSet();

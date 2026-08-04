@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Utils;
 using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -1165,7 +1166,9 @@ public class Ltx2CoreVideoContractTests
     {
         using Ltx2WorkflowFixture fixture = WithControlNetStubs(Ltx2WorkflowFixture.Create());
 
-        InvalidOperationException refusal = await Assert.ThrowsAsync<InvalidOperationException>(
+        // The exact type is the claim: an internal crash escaping the route is also an
+        // InvalidOperationException, and only a readable refusal reaches the user as a message.
+        SwarmReadableErrorException refusal = await Assert.ThrowsAsync<SwarmReadableErrorException>(
             () => ComfyWorkflowApiTestHarness.GenerateAsync(
                 fixture.Post(
                     MakeDocument(IcLoraClip(fixture.Stage(control: 0.5))),

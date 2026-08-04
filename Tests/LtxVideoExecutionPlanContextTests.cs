@@ -268,22 +268,6 @@ public class VideoExecutionPlanContextTests
         Assert.Contains("does not resolve to a registered video architecture", error.Message);
     }
 
-    [Fact]
-    public void RequirePlan_returns_the_cached_canonical_plan()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            JsonSingleClipStages(MakeStage(models.VideoModel.Name, "Generated")));
-        WorkflowGenerator generator = CreateGenerator(input);
-
-        Assert.Same(
-            generator.GetVideoExecutionPlanContext(),
-            generator.RequireVideoExecutionPlanContext());
-    }
-
     private static string InitVideoOnlyConfig() => MakeRootConfig(new JObject
     {
         ["duration"] = 0.6,

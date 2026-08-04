@@ -3,6 +3,7 @@ using SwarmUI.Accounts;
 using SwarmUI.Backends;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
+using SwarmUI.Utils;
 using System.Runtime.CompilerServices;
 using VideoStages.Architectures.Ltx2;
 
@@ -49,8 +50,13 @@ internal static class ComfyWorkflowApiTestHarness
                 postParameters);
             if (response["error"] is JToken error)
             {
-                throw new InvalidOperationException(
-                    $"ComfyGetGeneratedWorkflow rejected the test POST: {error}");
+                // The route turns SwarmReadableErrorException — and nothing else — into this
+                // payload; anything else escapes it uncaught. Rethrowing the base
+                // InvalidOperationException would make a clean user-facing refusal
+                // indistinguishable from an internal crash, since both refusal types derive
+                // from it.
+                throw new SwarmReadableErrorException(
+                    error.Type == JTokenType.String ? error.Value<string>() : error.ToString());
             }
             string workflow = response.Value<string>("workflow")
                 ?? throw new InvalidOperationException(
@@ -74,13 +80,14 @@ internal static class ComfyWorkflowApiTestHarness
     /// </summary>
     public static async Task<(JObject Workflow, WorkflowGenerator Generator)> GenerateWithStateAsync(
         JObject postParameters,
-        IEnumerable<string> extraFeatures = null)
+        IEnumerable<string> extraFeatures = null,
+        IEnumerable<WorkflowGenerator.WorkflowGenStep> extraSteps = null)
     {
         WorkflowGenerator generator = null;
         JObject workflow = await GenerateAsync(
             postParameters,
             extraFeatures,
-            [new(g => generator = g, double.MaxValue)]);
+            [.. extraSteps ?? [], new(g => generator = g, double.MaxValue)]);
         return (workflow, generator ?? throw new InvalidOperationException(
             "The capture step never ran, so a step set SkipFurtherSteps before it."));
     }

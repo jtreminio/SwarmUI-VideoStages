@@ -12,9 +12,15 @@ using static VideoStages.Tests.Fixtures;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// Pins the request-preflight phase: a request whose architecture dependencies cannot be resolved is
-/// rejected before any VideoStages phase touches the host graph, and the gate stays inert when the
-/// extension is toggled off.
+/// Pins the half of the request-preflight phase a generated workflow cannot show: a request whose
+/// architecture dependencies cannot be resolved is rejected before any VideoStages phase touches the
+/// host graph, asserted against a snapshot cloned at the phase boundary. The passing half is
+/// generated end-to-end in <see cref="ArchitectureContractGraphTests"/>.
+/// <para>
+/// The toggled-off half stays here too: it must withhold the LTX-2 node feature, and
+/// <see cref="ComfyWorkflowApiTestHarness"/> unions that flag into every POST unconditionally, so a
+/// generated workflow can only show a gate that was never armed.
+/// </para>
 /// </summary>
 [Collection("VideoStagesTests")]
 public sealed class RequestPreflightPhaseTests
@@ -105,30 +111,10 @@ public sealed class RequestPreflightPhaseTests
         snapshot.AssertUnmutated();
     }
 
-    // The same request is a normal generation once the custom nodes are present, so preflight must
-    // not be a blanket rejection of IC-LoRA timelines.
-    [Fact]
-    public void Preflight_passes_the_same_request_when_the_ic_lora_nodes_are_installed()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        RegisterPreflightIcLora();
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            new JArray(IcLoraClip(models)).ToString());
-        PhaseBoundarySnapshot snapshot = new();
-
-        JObject workflow = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            FullPhaseSequence(snapshot)).Workflow;
-
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        Assert.NotEmpty(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
-    }
-
     // A toggled-off VideoStages group must not start rejecting other people's generations: the
-    // identical config JSON is still sent, but the Enabled gate flag is absent.
+    // identical config JSON is still sent, but the Enabled gate flag is absent. The IC-LoRA is
+    // deliberately not registered, so the gate is armed twice over — unresolvable LoRA and missing
+    // custom nodes — and still must not fire.
     [Fact]
     public void Preflight_does_not_fire_when_the_video_stages_group_is_disabled()
     {

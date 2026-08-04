@@ -1,19 +1,10 @@
-using ComfyTyped.Core;
-using ComfyTyped.Generated;
-using ComfyTyped.SwarmUI;
-using Newtonsoft.Json.Linq;
-using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.MiniMax;
 using VideoStages.Architectures.Wan;
-using VideoStages.Generated;
 using VideoStages.Planning;
 using Xunit;
-using static VideoStages.Tests.Fixtures;
-using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
@@ -24,15 +15,6 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class RealArchitectureContractTests
 {
-    // At 24 fps, 0.6 seconds is 16 inclusive structural source frames. A resolved LTX or WAN
-    // generated stage raises that request to 17 on its own grid.
-    private const double CrossFamilyClipDuration = 0.6;
-    private const int CrossFamilySourceFrames = 16;
-    private const int CrossFamilyGeneratedFrames = 17;
-
-    private static readonly string[] InitVideoClipFeatures =
-        [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
-
     private sealed record FamilyFixture(
         IVideoArchitectureModule Module,
         T2IModel BaseModel,
@@ -120,12 +102,9 @@ public class RealArchitectureContractTests
         using SwarmUiTestContext context = new();
         VideoArchitectureDescriptor descriptor = CreateFixture(family).Descriptor;
 
-        Assert.NotEmpty(descriptor.EntryModes);
-        Assert.All(descriptor.EntryModes, mode => Assert.True(Enum.IsDefined(mode)));
-        Assert.True(descriptor.FrameGrid > 0);
-        Assert.All(
-            Enum.GetValues<BoundaryJoinType>(),
-            mode => Assert.True(descriptor.BoundaryRules.ContainsKey(mode)));
+        // The registry's constructor invariants (non-empty entry modes, a positive frame grid, a
+        // rule per boundary join) are pinned in ArchitectureFoundationTests; the only claim left
+        // here is that every family can be entered by something other than uploaded footage.
         Assert.Contains(
             descriptor.EntryModes,
             mode => mode != ArchitectureEntryMode.InitVideo);
@@ -209,218 +188,6 @@ public class RealArchitectureContractTests
         Assert.Equal(compiledClip.Architecture.Id, compiledStage.ArchitecturePayload.ArchitectureId);
     }
 
-    [Theory]
-    [InlineData("ltx2")]
-    [InlineData("wan22")]
-    public void Source_only_clip_can_lead_a_real_generated_clip_through_a_neutral_cut(
-        string generatedFamily)
-    {
-        using SwarmUiTestContext context = new();
-        FamilyFixture fixture = CreateFixture(generatedFamily);
-        JObject initVideoClip = MakeClip();
-        initVideoClip["duration"] = CrossFamilyClipDuration;
-        initVideoClip["initVideo"] = new JObject
-        {
-            ["data"] = "data:video/mp4;base64,ESIz",
-            ["fileName"] = "source.mp4",
-            ["startSeconds"] = 1.0,
-        };
-        JObject generated = MakeClip(
-            MakeStage(fixture.Model.Name, "Generated", steps: 9));
-        generated["duration"] = CrossFamilyClipDuration;
-        T2IParamInput input = BuildNativeInput(
-            fixture.BaseModel,
-            fixture.Model,
-            MakeDocument(initVideoClip, generated).ToString());
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                MixedArchitectureSteps(),
-                features: InitVideoClipFeatures);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
-        SwarmFrameWindowNode sourceWindow = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
-        string[] generatedSignatureIds = generatedFamily == "wan22"
-            ? [Assert.Single(NodesOfClass(bridge, "WanImageToVideo")).Id]
-            : [.. bridge.Graph.NodesOfType<LTXVConditioningNode>().Select(node => node.Id)];
-        Assert.NotEmpty(generatedSignatureIds);
-        BatchImagesNodeNode cut = Assert.Single(
-            bridge.Graph.NodesOfType<BatchImagesNodeNode>());
-        ComfyNode[] cutInputs = [
-            .. Enumerable.Range(0, cut.Images.Count)
-                .Select(index => cut.Images[index].Connection?.Node)
-        ];
-        Assert.Equal(2, cutInputs.Length);
-        Assert.True(ReachesUpstream(bridge, cutInputs[0], sourceWindow.Id));
-        Assert.False(ReachesUpstream(bridge, cutInputs[1], sourceWindow.Id));
-        Assert.DoesNotContain(
-            generatedSignatureIds,
-            signatureId => ReachesUpstream(bridge, cutInputs[0], signatureId));
-        Assert.Contains(
-            generatedSignatureIds,
-            signatureId => ReachesUpstream(bridge, cutInputs[1], signatureId));
-
-        Assert.Equal(cut.Id, $"{generator.CurrentMedia.Path[0]}");
-        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
-        Assert.Equal(512, generator.CurrentMedia.Width);
-        Assert.Equal(512, generator.CurrentMedia.Height);
-        Assert.Equal(
-            CrossFamilySourceFrames + CrossFamilyGeneratedFrames,
-            generator.CurrentMedia.Frames);
-        Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
-        Assert.Null(generator.CurrentMedia.Compat);
-        Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
-        Assert.NotNull(generator.CurrentMedia.AttachedAudio);
-        Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.AttachedAudio.DataType);
-        Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.AttachedAudio.Path));
-    }
-
-    [Theory]
-    [InlineData("ltx2")]
-    [InlineData("wan22")]
-    public void Mixed_real_architectures_hard_cut_through_one_neutral_decoded_join(
-        string firstFamily)
-    {
-        using SwarmUiTestContext context = new();
-        MixedVideoModelBundle models =
-            TestModelFactory.CreateBaseLtxv2AndWan22ImageToVideoModels();
-        T2IModel first = firstFamily == "wan22"
-            ? models.WanVideoModel
-            : models.LtxVideoModel;
-        T2IModel second = firstFamily == "wan22"
-            ? models.LtxVideoModel
-            : models.WanVideoModel;
-        string secondFamily = firstFamily == "wan22" ? "ltx2" : "wan22";
-        JObject document = MakeDocument(
-            MakeClip(MakeStage(first.Name, "Generated", steps: 7)),
-            MakeClip(MakeStage(second.Name, "Generated", steps: 9)));
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            first,
-            document.ToString());
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, MixedArchitectureSteps());
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
-        string[] ltxSignatureIds = [
-            .. bridge.Graph.NodesOfType<LTXVConditioningNode>().Select(node => node.Id)
-        ];
-        Assert.NotEmpty(ltxSignatureIds);
-        string wanSignatureId = Assert.Single(
-            NodesOfClass(bridge, "WanImageToVideo")).Id;
-        BatchImagesNodeNode cut = Assert.Single(
-            bridge.Graph.NodesOfType<BatchImagesNodeNode>());
-        ComfyNode[] cutInputs = [
-            .. Enumerable.Range(0, cut.Images.Count)
-                .Select(index => cut.Images[index].Connection?.Node)
-        ];
-        Assert.Equal(2, cutInputs.Length);
-        AssertInputComesFromFamily(
-            bridge,
-            cutInputs[0],
-            firstFamily,
-            ltxSignatureIds,
-            wanSignatureId);
-        AssertInputComesFromFamily(
-            bridge,
-            cutInputs[1],
-            secondFamily,
-            ltxSignatureIds,
-            wanSignatureId);
-        Assert.Empty(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
-        Assert.Empty(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
-        Assert.Equal(cut.Id, $"{generator.CurrentMedia.Path[0]}");
-        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
-        Assert.Equal(512, generator.CurrentMedia.Width);
-        Assert.Equal(512, generator.CurrentMedia.Height);
-        Assert.Equal(29, generator.CurrentMedia.Frames);
-        Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
-        Assert.Null(generator.CurrentMedia.Compat);
-        Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.Path));
-        Assert.NotNull(generator.CurrentMedia.AttachedAudio);
-        Assert.Equal(
-            WGNodeData.DT_AUDIO,
-            generator.CurrentMedia.AttachedAudio.DataType);
-        Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.AttachedAudio.Path));
-    }
-
-    [Theory]
-    [InlineData("ltx2")]
-    [InlineData("minimax")]
-    public void Ltx_and_MiniMax_hard_cut_through_one_neutral_decoded_join(
-        string firstFamily)
-    {
-        using SwarmUiTestContext context = new();
-        (T2IModel baseModel, T2IModel ltxModel, T2IModel miniMaxModel) =
-            TestModelFactory.CreateBaseLtxv2AndMiniMaxH3Models();
-        T2IModel first = firstFamily == "minimax" ? miniMaxModel : ltxModel;
-        T2IModel second = firstFamily == "minimax" ? ltxModel : miniMaxModel;
-        JObject firstClip = MakeClip(MakeStage(
-            first.Name,
-            "Generated",
-            steps: 7,
-            cfgScale: firstFamily == "minimax" ? 1 : 4.5));
-        firstClip["duration"] = CrossFamilyClipDuration;
-        JObject secondClip = MakeClip(MakeStage(
-            second.Name,
-            "Generated",
-            steps: 9,
-            cfgScale: firstFamily == "minimax" ? 4.5 : 1));
-        secondClip["duration"] = CrossFamilyClipDuration;
-        T2IParamInput input = BuildNativeInput(
-            baseModel,
-            first,
-            MakeDocument(firstClip, secondClip).ToString());
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, MixedArchitectureSteps());
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
-        string[] ltxSignatureIds = [
-            .. bridge.Graph.NodesOfType<LTXVConditioningNode>().Select(node => node.Id)
-        ];
-        string[] miniMaxSignatureIds = [
-            .. NodesOfClass(bridge, "EmptyMiniMaxH3LatentAV").Select(node => node.Id)
-        ];
-        Assert.NotEmpty(ltxSignatureIds);
-        Assert.NotEmpty(miniMaxSignatureIds);
-        BatchImagesNodeNode cut = Assert.Single(
-            bridge.Graph.NodesOfType<BatchImagesNodeNode>());
-        ComfyNode[] cutInputs = [
-            .. Enumerable.Range(0, cut.Images.Count)
-                .Select(index => cut.Images[index].Connection?.Node)
-        ];
-        Assert.Equal(2, cutInputs.Length);
-        Assert.Equal(
-            firstFamily == "ltx2",
-            ltxSignatureIds.Any(id => ReachesUpstream(bridge, cutInputs[0], id)));
-        Assert.Equal(
-            firstFamily == "minimax",
-            miniMaxSignatureIds.Any(id => ReachesUpstream(bridge, cutInputs[0], id)));
-        Assert.Equal(
-            firstFamily == "minimax",
-            ltxSignatureIds.Any(id => ReachesUpstream(bridge, cutInputs[1], id)));
-        Assert.Equal(
-            firstFamily == "ltx2",
-            miniMaxSignatureIds.Any(id => ReachesUpstream(bridge, cutInputs[1], id)));
-        Assert.Empty(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
-        Assert.Empty(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
-        Assert.Equal(cut.Id, $"{generator.CurrentMedia.Path[0]}");
-        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
-        Assert.Equal(39, generator.CurrentMedia.Frames);
-        Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.AttachedAudio?.DataType);
-        Assert.Null(generator.CurrentMedia.Compat);
-    }
-
     private static FamilyFixture CreateFixture(string family) => family switch
     {
         "ltx2" => CreateLtxFixture(),
@@ -480,29 +247,4 @@ public class RealArchitectureContractTests
             MiniMaxArchitectureModule.Instance,
             WanArchitectureModule.Instance,
         ]);
-
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> MixedArchitectureSteps() =>
-        WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
-            .Concat(WorkflowTestHarness.VideoStagesSteps());
-
-    private static void AssertInputComesFromFamily(
-        WorkflowBridge bridge,
-        ComfyNode input,
-        string expectedFamily,
-        IReadOnlyList<string> ltxSignatureIds,
-        string wanSignatureId)
-    {
-        bool reachesLtx = ltxSignatureIds.Any(
-            signatureId => ReachesUpstream(bridge, input, signatureId));
-        bool reachesWan = ReachesUpstream(bridge, input, wanSignatureId);
-
-        Assert.Equal(expectedFamily == "ltx2", reachesLtx);
-        Assert.Equal(expectedFamily == "wan22", reachesWan);
-    }
-
-    private static IEnumerable<ComfyNode> NodesOfClass(
-        WorkflowBridge bridge,
-        string classType) =>
-        bridge.Graph.Nodes.Values.Where(node => node.ClassTypeName == classType);
 }
