@@ -405,9 +405,12 @@ describe("catalog-backed authoring policy", () => {
         expect(body.querySelector(".vst-minor-lane")?.className).not.toContain(
             "vst-capability-disabled",
         );
-        // LTX offers retake; this clip has no init video, so it keeps a disabled lane.
-        expect(body.querySelector(".vst-retake-lane")?.className).toContain(
-            "vst-capability-disabled",
+        // LTX offers retake; this clip has no init video, so it keeps a disabled
+        // lane — and says what is missing rather than blaming the architecture.
+        const retakeLane = body.querySelector(".vst-retake-lane");
+        expect(retakeLane?.className).toContain("vst-capability-disabled");
+        expect(retakeLane?.getAttribute("title")).toBe(
+            "Retake requires an init-video clip.",
         );
     });
 

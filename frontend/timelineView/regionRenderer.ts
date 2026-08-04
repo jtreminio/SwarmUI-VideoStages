@@ -341,20 +341,25 @@ const renderRegions = (
                 ? ""
                 : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
             const width = clipInnerWidth(layout.widthPx);
-            const retakeSupported =
-                capabilities?.forClip(clip).decision("retake").supported ??
-                true;
+            const retakeDecision = capabilities
+                ?.forClip(clip)
+                .decision("retake");
+            const retakeSupported = retakeDecision?.supported ?? true;
             const canAddRetake = retakeSupported && !clip.retake;
             const retakeLaneAttrs = canAddRetake
                 ? " data-vst-retake-add"
                 : retakeSupported
                   ? " data-vst-retake-full"
                   : ' data-vst-capability-disabled="retake"';
+            // The policy already says WHY a lane is closed — an architecture
+            // that lacks retakes reads differently from a clip still missing
+            // its init video, so quote it rather than guess.
             const retakeLaneTitle = canAddRetake
                 ? "Click empty space to add a retake window"
                 : retakeSupported
                   ? "This clip already has a retake window"
-                  : "Retakes are not supported by this clip architecture";
+                  : (retakeDecision?.reason ??
+                    "Retake is unavailable for this clip");
             return (
                 `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" data-vst-join-trim-seconds="${sharedAllocation}" title="Clip ${layout.index}${timingTitle} · Click to edit${firstClip ? "" : " · Shift+click to delete"}">` +
                 renderRegionThumb(clip) +
@@ -378,7 +383,7 @@ const renderRegions = (
                 resizeGrip +
                 `</div>` +
                 (retakeLaneVisible(clip, capabilities)
-                    ? `<div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs}${retakeSupported || clip.retake ? "" : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` +
+                    ? `<div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs}${retakeSupported || clip.retake ? "" : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(retakeLaneTitle)}">` +
                       renderRetakeOverlay(
                           clip,
                           layout.index,

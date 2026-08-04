@@ -4,7 +4,7 @@ export const AUTHORING_FEATURE_LABELS = {
     promptRelay: "Relay prompts",
     frameReferences: "Frame references",
     referenceFraming: "Reference framing",
-    retake: "Retakes",
+    retake: "Retake",
     audioBoundaryCarry: "Boundary audio carry",
     latentUpscale: "Latent interpolation upscaling",
     latentModelUpscale: "Latent-model upscaling",
