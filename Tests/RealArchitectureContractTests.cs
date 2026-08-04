@@ -351,6 +351,76 @@ public class RealArchitectureContractTests
         Assert.NotNull(bridge.ResolvePath(generator.CurrentMedia.AttachedAudio.Path));
     }
 
+    [Theory]
+    [InlineData("ltx2")]
+    [InlineData("minimax")]
+    public void Ltx_and_MiniMax_hard_cut_through_one_neutral_decoded_join(
+        string firstFamily)
+    {
+        using SwarmUiTestContext context = new();
+        (T2IModel baseModel, T2IModel ltxModel, T2IModel miniMaxModel) =
+            TestModelFactory.CreateBaseLtxv2AndMiniMaxH3Models();
+        T2IModel first = firstFamily == "minimax" ? miniMaxModel : ltxModel;
+        T2IModel second = firstFamily == "minimax" ? ltxModel : miniMaxModel;
+        JObject firstClip = MakeClip(MakeStage(
+            first.Name,
+            "Generated",
+            steps: 7,
+            cfgScale: firstFamily == "minimax" ? 1 : 4.5));
+        firstClip["duration"] = CrossFamilyClipDuration;
+        JObject secondClip = MakeClip(MakeStage(
+            second.Name,
+            "Generated",
+            steps: 9,
+            cfgScale: firstFamily == "minimax" ? 4.5 : 1));
+        secondClip["duration"] = CrossFamilyClipDuration;
+        T2IParamInput input = BuildNativeInput(
+            baseModel,
+            first,
+            MakeDocument(firstClip, secondClip).ToString());
+
+        (JObject workflow, WorkflowGenerator generator) =
+            WorkflowTestHarness.GenerateWithStepsAndState(input, MixedArchitectureSteps());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+        string[] ltxSignatureIds = [
+            .. bridge.Graph.NodesOfType<LTXVConditioningNode>().Select(node => node.Id)
+        ];
+        string[] miniMaxSignatureIds = [
+            .. NodesOfClass(bridge, "EmptyMiniMaxH3LatentAV").Select(node => node.Id)
+        ];
+        Assert.NotEmpty(ltxSignatureIds);
+        Assert.NotEmpty(miniMaxSignatureIds);
+        BatchImagesNodeNode cut = Assert.Single(
+            bridge.Graph.NodesOfType<BatchImagesNodeNode>());
+        ComfyNode[] cutInputs = [
+            .. Enumerable.Range(0, cut.Images.Count)
+                .Select(index => cut.Images[index].Connection?.Node)
+        ];
+        Assert.Equal(2, cutInputs.Length);
+        Assert.Equal(
+            firstFamily == "ltx2",
+            ltxSignatureIds.Any(id => ReachesUpstream(bridge, cutInputs[0], id)));
+        Assert.Equal(
+            firstFamily == "minimax",
+            miniMaxSignatureIds.Any(id => ReachesUpstream(bridge, cutInputs[0], id)));
+        Assert.Equal(
+            firstFamily == "minimax",
+            ltxSignatureIds.Any(id => ReachesUpstream(bridge, cutInputs[1], id)));
+        Assert.Equal(
+            firstFamily == "ltx2",
+            miniMaxSignatureIds.Any(id => ReachesUpstream(bridge, cutInputs[1], id)));
+        Assert.Empty(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
+        Assert.Equal(cut.Id, $"{generator.CurrentMedia.Path[0]}");
+        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
+        Assert.Equal(39, generator.CurrentMedia.Frames);
+        Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.AttachedAudio?.DataType);
+        Assert.Null(generator.CurrentMedia.Compat);
+    }
+
     private static FamilyFixture CreateFixture(string family) => family switch
     {
         "ltx2" => CreateLtxFixture(),

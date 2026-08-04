@@ -318,6 +318,33 @@ internal static class TestModelFactory
         return new(ltx.BaseModel, ltx.VideoModel, wan, ltx.GemmaModel);
     }
 
+    public static (
+        T2IModel BaseModel,
+        T2IModel LtxVideoModel,
+        T2IModel MiniMaxVideoModel) CreateBaseLtxv2AndMiniMaxH3Models()
+    {
+        TestModelBundle ltx = CreateBaseAndLtxv2VideoModels();
+        T2IModelHandler handler = Program.T2IModelSets["Stable-Diffusion"];
+        T2IModel miniMax = new(
+            handler,
+            "/tmp",
+            "/tmp/UnitTest_MiniMaxH3.safetensors",
+            "UnitTest_MiniMaxH3.safetensors")
+        {
+            ModelClass = new T2IModelClass
+            {
+                ID = MiniMaxArchitectureModule.ModelClassId,
+                Name = "MiniMax H3",
+                CompatClass = T2IModelClassSorter.CompatMiniMaxH3,
+                StandardWidth = 1344,
+                StandardHeight = 768,
+            },
+        };
+        handler.Models[miniMax.Name] = miniMax;
+        InstallMiniMaxSupportModels();
+        return (ltx.BaseModel, ltx.VideoModel, miniMax);
+    }
+
     private static void InstallWanSupportModels()
     {
         Program.T2IModelSets["VAE"] = new() { ModelType = "VAE" };

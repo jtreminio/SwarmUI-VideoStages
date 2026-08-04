@@ -190,18 +190,14 @@ expansion, arbitrary middle-frame references, and audio remain outside the WAN
 contract.
 
 MiniMax H3 samples video and audio together in one joint AV latent, so its
-session is the only stock-host path that keeps the audio VAE live and carries
-decoded audio into the clip artifact. Image entry delegates to SwarmUI's
-`CreateImageToVideo`; text entry and refinement build the `MiniMaxH3ImageToVideo`
-node directly, because H3 emits its conditioning and its latent from that one
-node rather than from a text encode plus an empty latent. A refine stage must
-also rebuild the joint latent itself: `WGNodeData.AsSamplingLatent` encodes raw
-video video-only, and its audio-concat branch fires only once the video is
-already a latent, so routing a decoded clip through the host builder would hand
-the transformer a latent missing its audio half. Its frame grid is the only one
-that does not start at a single frame: generated counts are `17k + 5`. The
-init-video entry mode is not published, because the conformed source video
-arrives without the audio track that joint re-encoding needs.
+session keeps the audio VAE live and carries decoded audio into the clip
+artifact. Text, image, init-video, and later refinement stages build the H3
+joint latent directly after reusing SwarmUI's model loader, conditioning, and
+sampler builders. Refinement must rebuild both halves together:
+`WGNodeData.AsSamplingLatent` encodes raw video without audio, so routing a
+decoded clip through the stock host builder would hand the transformer a latent
+missing its audio half. Init-video installation preserves its source audio for
+that joint re-encoding. H3's generated counts use the `17k + 5` frame grid.
 
 ## Capability catalog
 
