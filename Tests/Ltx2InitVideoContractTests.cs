@@ -14,10 +14,12 @@ namespace VideoStages.Tests;
 /// do with it, how it joins generated clips, and what a clip that only publishes footage produces —
 /// all generated through the real Comfy API POST path.
 /// <para>
-/// A sourced clip 0 makes the request abandon its own video root. Under image-to-video core's base
-/// image pass survives only if some later clip guides from it — with a lone sourced clip the base
-/// checkpoint is never even loaded, which is why "no sampler at all" in the passthrough tests means
-/// the whole host pass is gone. Core's LTX video root never survives, which is what keeps
+/// A sourced clip 0 makes the request abandon its own video root, but not core's base image pass:
+/// core saves that image itself (node <c>30</c>, because the request has a follow-up video model),
+/// and an output node protects its whole upstream from the extension's displaced-root cleanup. So
+/// even a timeline that samples nothing still ships core's base pass, and "the timeline samples
+/// nothing" is asserted as "the only sampler is core's". Core's LTX video root never survives,
+/// which is what keeps
 /// <see cref="TypedWorkflowAssertions.StageSampler"/> unambiguous here despite core's
 /// image-to-video sampler sharing stage 0's seed. The one shape where it does survive is a sourced
 /// stage 0 with an explicit <c>Generated</c> reference, covered in
@@ -53,17 +55,8 @@ public class Ltx2InitVideoContractTests
     /// A clip driven by uploaded footage. Its stages carry no image reference: an explicit one would
     /// keep core's own video root alive as a guide donor, which is a different subject.
     /// </summary>
-    private static JObject SourcedClip(params JObject[] stages)
-    {
-        JObject clip = MakeClip(ClipDuration, stages);
-        clip["initVideo"] = new JObject
-        {
-            ["data"] = "data:video/mp4;base64," + Convert.ToBase64String([0x11, 0x22, 0x33]),
-            ["fileName"] = "footage.mp4",
-            ["startSeconds"] = StartSeconds,
-        };
-        return clip;
-    }
+    private static JObject SourcedClip(params JObject[] stages) =>
+        SourceClip(ClipDuration, StartSeconds, stages);
 
     private static JObject SourcedStage(Ltx2WorkflowFixture fixture, double control = 0.5)
     {
@@ -128,26 +121,10 @@ public class Ltx2InitVideoContractTests
         int expectedWidth = VideoStagesWorkflowFixture.Width,
         int expectedHeight = VideoStagesWorkflowFixture.Height)
     {
-        SwarmLoadVideoB64Node load = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        SwarmFrameWindowNode window = AssertSourceConformChain(
+            bridge, StartFrame, expectedFrames, expectedWidth, expectedHeight);
         GetVideoComponentsNode components = Assert.Single(
             bridge.Graph.NodesOfType<GetVideoComponentsNode>());
-        Assert.Same(load.VIDEO, components.Video.Connection);
-
-        SwarmVideoResampleFPSNode resample = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmVideoResampleFPSNode>());
-        Assert.Equal(Fps, resample.FpsOut.LiteralAsDouble());
-        Assert.Same(components.Images, resample.ImagesInput.Connection);
-        // The source fps is wired, not literal — the upload's real rate is only known at runtime.
-        Assert.Same(components.Fps, resample.FpsIn.Connection);
-
-        SwarmFrameWindowNode window = Assert.Single(bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
-        Assert.Equal(StartFrame, window.StartFrame.LiteralAsInt());
-        Assert.Equal(expectedFrames, window.FrameCount.LiteralAsInt());
-        Assert.Same(resample.Images, window.ImagesInput.Connection);
-
-        ImageScaleNode scale = ConformScaleOf(bridge, window);
-        Assert.Equal(expectedWidth, scale.Width.LiteralAsInt());
-        Assert.Equal(expectedHeight, scale.Height.LiteralAsInt());
 
         TrimAudioDurationNode trim = Assert.Single(
             bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
@@ -160,6 +137,17 @@ public class Ltx2InitVideoContractTests
 
         return window;
     }
+
+    /// <summary>
+    /// The timeline contributed no sampler of its own. Core's base image pass is still there — its
+    /// image save protects it — so "nothing sampled" is one sampler, not none.
+    /// </summary>
+    private static void AssertOnlyCoresBasePassSamples(
+        Ltx2WorkflowFixture fixture,
+        WorkflowBridge bridge) =>
+        Assert.Same(
+            fixture.BaseSampler(bridge),
+            Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>()));
 
     /// <summary>
     /// The footage encode a sourced stage samples. A stage that also carries an image guide reaches
@@ -266,7 +254,8 @@ public class Ltx2InitVideoContractTests
         SwarmFrameWindowNode window = AssertConformChain(bridge, SampledFrames);
         SwarmKSamplerNode first = StageSampler(bridge, 0);
         SwarmKSamplerNode second = StageSampler(bridge, 1);
-        Assert.Equal(2, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
+        // The two stages plus core's base image pass.
+        Assert.Equal(3, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
         Assert.Equal(5, first.StartAtStep.LiteralAsInt());
         Assert.Equal(6, second.StartAtStep.LiteralAsInt());
 
@@ -335,9 +324,10 @@ public class Ltx2InitVideoContractTests
         Assert.Equal(1024, conform.Height.LiteralAsInt());
         Assert.Equal("center", conform.Crop.LiteralAsString());
 
-        // The passthrough stage contributes no sampler, so the refine stage is the only one.
+        // The passthrough stage contributes no sampler, so the refine stage is the only video one
+        // alongside core's base image pass.
         SwarmKSamplerNode refine = StageSampler(bridge, 1);
-        Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        Assert.Equal(2, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
 
         live.AssertAllLive(conform, refine);
         AssertShippable(bridge, workflow, live);
@@ -920,8 +910,7 @@ public class Ltx2InitVideoContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         SwarmFrameWindowNode window = AssertConformChain(bridge, PassthroughFrames);
-        // Nothing samples at all — not even core's base image pass, which is never built.
-        Assert.Empty(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        AssertOnlyCoresBasePassSamples(fixture, bridge);
 
         SwarmSaveAnimationWSNode save = live.FinalVideoSave();
         Assert.Same(ConformScaleOf(bridge, window), save.Images.Connection?.Node);
@@ -963,7 +952,7 @@ public class Ltx2InitVideoContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         SwarmFrameWindowNode window = AssertConformChain(bridge, PassthroughFrames);
-        Assert.Empty(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        AssertOnlyCoresBasePassSamples(fixture, bridge);
 
         SwarmTrimFramesNode videoTrim = Assert.Single(
             bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
@@ -1006,7 +995,7 @@ public class Ltx2InitVideoContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        Assert.Empty(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        AssertOnlyCoresBasePassSamples(fixture, bridge);
         // One upload, windowed twice — the clips share the decode.
         Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
         Assert.Equal(2, bridge.Graph.NodesOfType<SwarmFrameWindowNode>().Count);
@@ -1070,7 +1059,7 @@ public class Ltx2InitVideoContractTests
         // Interpolation is a video-only wrapper: the audio is still the footage's own trim.
         Assert.IsType<TrimAudioDurationNode>(live.PublishedAudio());
 
-        Assert.Empty(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        AssertOnlyCoresBasePassSamples(fixture, bridge);
         AssertShippable(bridge, workflow, live);
     }
 
@@ -1092,7 +1081,7 @@ public class Ltx2InitVideoContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        Assert.Empty(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        AssertOnlyCoresBasePassSamples(fixture, bridge);
         SwarmLoadAudioB64Node overlay = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
         AudioMergeNode merge = Assert.Single(bridge.Graph.NodesOfType<AudioMergeNode>());
@@ -1258,9 +1247,10 @@ public class Ltx2InitVideoContractTests
     /// <summary>
     /// <c>donotsave</c> strips every output node, which is the one state
     /// <see cref="WorkflowLivePath.AssertNoOrphanNodes"/> and <c>FinalVideoSave</c> cannot describe —
-    /// with nothing to reach, "orphaned" has no meaning, so those two are inapplicable here by
-    /// design. What must still hold is that the discarded root left nothing behind and the graph is
-    /// executable.
+    /// with nothing to reach, "orphaned" has no meaning. Pinned as today's behaviour, not as intent:
+    /// ComfyUI rejects an output-less prompt with <c>prompt_no_outputs</c>, so this request fails at
+    /// the backend (P5 in <c>nonversioned/20260804-production-findings.md</c>). What the graph must
+    /// still get right is that the discarded root left nothing behind.
     /// </summary>
     [Fact]
     public async Task A_do_not_save_request_publishes_nothing_and_still_prunes_the_root()

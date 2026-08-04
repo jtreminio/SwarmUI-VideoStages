@@ -105,98 +105,11 @@ public class LtxControlNetAudioSourceTests
         Assert.True(JToken.DeepEquals(a2.Path, new JArray("701", 1)));
     }
 
-    [Fact]
-    public void TryGetCapturedControlNetAudio_typed_index_resolves_without_source_text()
-    {
-        JObject workflow = [];
-        AddGetVideoComponentsStub(workflow, "301");
-        WorkflowGenerator generator = CreateGenerator(workflow);
-        generator.NodeHelpers["videostages.controlnet.audio.0"] =
-            new JArray("301", 1).ToString(Formatting.None);
-
-        bool ok = new ControlNetAudioCapture(generator).TryGetCapturedAudio(0, out WGNodeData audio);
-
-        Assert.True(ok);
-        Assert.True(JToken.DeepEquals(audio.Path, new JArray("301", 1)));
-    }
-
-    [Fact]
-    public void Capture_records_audio_path_when_GetVideoComponents_is_upstream_of_controlnet()
-    {
-        using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfyControlNetParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
-        {
-            ModelClass = new T2IModelClass()
-            {
-                ID = "unit/controlnet",
-                Name = "Unit ControlNet",
-                CompatClass = models.VideoModel.ModelClass.CompatClass,
-            },
-        };
-
-        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["audioSource"] = Constants.AudioSourceControlNet;
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
-        input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
-        input.Set(T2IParamTypes.Controlnets[0].Model, controlNetModel);
-        input.Set(ComfyUIBackendExtension.ControlNetPreprocessorParams[0], "UnitTestPreprocessor");
-
-        (JObject _, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildCoreVideoWorkflowStepsWithVideoControlNet(controlNetModel));
-
-        Assert.True(
-            generator.NodeHelpers.TryGetValue("videostages.controlnet.audio.0", out string encoded),
-            "Expected ControlNet 1 audio capture to be recorded.");
-        JArray path = Assert.IsType<JArray>(JToken.Parse(encoded));
-        Assert.Equal(2, path.Count);
-        Assert.Equal("301", $"{path[0]}");
-        Assert.Equal(1, (int)path[1]);
-    }
-
-    [Fact]
-    public void Capture_records_audio_path_for_second_controlnet_index()
-    {
-        using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfyControlNetParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
-        {
-            ModelClass = new T2IModelClass()
-            {
-                ID = "unit/controlnet",
-                Name = "Unit ControlNet",
-                CompatClass = models.VideoModel.ModelClass.CompatClass,
-            },
-        };
-
-        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["audioSource"] = Constants.AudioSourceControlNet;
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
-        input.Set(T2IParamTypes.Controlnets[1].Strength, 0.8);
-        input.Set(T2IParamTypes.Controlnets[1].Model, controlNetModel);
-        input.Set(ComfyUIBackendExtension.ControlNetPreprocessorParams[1], "UnitTestPreprocessor");
-
-        (JObject _, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildCoreVideoWorkflowStepsWithVideoControlNet(controlNetModel));
-
-        Assert.True(
-            generator.NodeHelpers.TryGetValue("videostages.controlnet.audio.1", out string encoded),
-            "Expected ControlNet 2 audio capture to be recorded under index 1.");
-        JArray path = Assert.IsType<JArray>(JToken.Parse(encoded));
-        Assert.Equal("301", $"{path[0]}");
-        Assert.Equal(1, (int)path[1]);
-
-        Assert.False(
-            generator.NodeHelpers.ContainsKey("videostages.controlnet.audio.0"),
-            "ControlNet 1 audio should not be recorded when only ControlNet 2 is configured.");
-    }
-
+    /// <summary>
+    /// The video-upstream gate is what declines the audio, not the capture loop giving up on this
+    /// ControlNet: the image and apply captures for the same index are still recorded. Asserting
+    /// only the audio key's absence would pass under a pipeline that never ran at all.
+    /// </summary>
     [Fact]
     public void Capture_omits_audio_when_no_GetVideoComponents_upstream_of_controlnet()
     {
@@ -226,13 +139,13 @@ public class LtxControlNetAudioSourceTests
         Assert.False(
             generator.NodeHelpers.ContainsKey("videostages.controlnet.audio.0"),
             "Expected no ControlNet audio capture when no GetVideoComponents node is upstream.");
+        Assert.True(
+            generator.NodeHelpers.ContainsKey("videostages.controlnet.apply.0"),
+            "The capture loop never reached this ControlNet, so declining its audio proves nothing.");
+        Assert.True(
+            generator.NodeHelpers.ContainsKey("videostages.controlnet.fullimage.0"),
+            "The capture loop never reached this ControlNet, so declining its audio proves nothing.");
     }
-
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithVideoControlNet(
-        T2IModel controlNetModel) =>
-        WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([SeedVideoControlNetBranchWithGetVideoComponents(controlNetModel), SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
-            .Concat(WorkflowTestHarness.VideoStagesSteps());
 
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNoGetVideoComponentsControlNetSteps(
         T2IModel controlNetModel) =>
@@ -249,53 +162,6 @@ public class LtxControlNetAudioSourceTests
             g.CurrentMedia = refinerImage.GetOutput(0).ToWGMedia(g, WGNodeData.DT_IMAGE,
                 width: 512, height: 512);
         }, 4.0);
-
-    private static WorkflowGenerator.WorkflowGenStep SeedVideoControlNetBranchWithGetVideoComponents(
-        T2IModel controlNetModel) =>
-        new(g =>
-        {
-            using WorkflowBridge bridge = BridgeSync.For(g);
-
-            SwarmLoadVideoB64Node videoLoad = new SwarmLoadVideoB64Node().With(VideoBase64: "unit-test-video");
-            bridge.AddNode(videoLoad, "300");
-
-            GetVideoComponentsNode videoComponents = new();
-            videoComponents.Video.ConnectTo(videoLoad.VIDEO);
-            bridge.AddNode(videoComponents, "301");
-
-            ImageScaleNode scaled = new ImageScaleNode()
-                .With(Width: 512, Height: 512, UpscaleMethod: "lanczos", Crop: "disabled");
-            scaled.Image.ConnectTo(videoComponents.Images);
-            bridge.AddNode(scaled, "302");
-
-            UnknownNode preprocessor = bridge.AddStub("UnitTestPreprocessor", "303").WithOutputs(WGNodeData.DT_IMAGE);
-            preprocessor.GetInput("image").ConnectToUntyped(scaled.IMAGE);
-
-            ResizeImageMaskNodeNode resize = new ResizeImageMaskNodeNode
-            {
-                ExtraInputs = new JObject { ["resize_type.multiple"] = 8 },
-            }.With(ResizeType: "scale to multiple", ScaleMethod: "lanczos");
-            resize.Input.ConnectToUntyped(preprocessor.GetOutput(0));
-            bridge.AddNode(resize, "304");
-
-            ControlNetLoaderNode controlNetLoader = new ControlNetLoaderNode()
-                .With(ControlNetName: controlNetModel.ToString(g.ModelFolderFormat));
-            bridge.AddNode(controlNetLoader, "305");
-
-            UnknownNode positive = bridge.AddStub("UnitTest_PositiveCond", "306").WithOutputs("CONDITIONING");
-            UnknownNode negative = bridge.AddStub("UnitTest_NegativeCond", "307").WithOutputs("CONDITIONING");
-
-            ControlNetApplyAdvancedNode controlApply = new ControlNetApplyAdvancedNode()
-                .With(Strength: 0.8, StartPercent: 0.0, EndPercent: 1.0);
-            controlApply.PositiveInput.ConnectToUntyped(positive.GetOutput(0));
-            controlApply.NegativeInput.ConnectToUntyped(negative.GetOutput(0));
-            controlApply.ControlNet.ConnectTo(controlNetLoader.CONTROLNET);
-            controlApply.Image.ConnectToUntyped(resize.Resized);
-            bridge.AddNode(controlApply, "308");
-
-            g.FinalPrompt = new JArray("308", 0);
-            g.FinalNegativePrompt = new JArray("308", 1);
-        }, -6.1);
 
     private static WorkflowGenerator.WorkflowGenStep SeedVideoControlNetBranchWithoutGetVideoComponents(
         T2IModel controlNetModel) =>

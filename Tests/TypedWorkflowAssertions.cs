@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Text2Image;
+using VideoStages.Generated;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -122,6 +123,45 @@ internal static class TypedWorkflowAssertions
         StageSampler(
             bridge.Graph.NodesOfType<SwarmKSamplerNode>(),
             VideoStagesWorkflowFixture.StageSeed(stageId));
+
+    /// <summary>
+    /// The conform chain any architecture's source clip is refined from: load, split, resample to
+    /// the timeline fps, window to the clip's span, scale to the timeline resolution. Returns the
+    /// frame window, which is what everything downstream measures its length against.
+    /// </summary>
+    public static SwarmFrameWindowNode AssertSourceConformChain(
+        WorkflowBridge bridge,
+        int startFrame,
+        int frames,
+        int width,
+        int height)
+    {
+        SwarmLoadVideoB64Node load = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        GetVideoComponentsNode components = Assert.Single(
+            bridge.Graph.NodesOfType<GetVideoComponentsNode>());
+        Assert.Same(load.VIDEO, components.Video.Connection);
+
+        SwarmVideoResampleFPSNode resample = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmVideoResampleFPSNode>());
+        Assert.Same(components.Images, resample.ImagesInput.Connection);
+        // The source fps is wired, not literal — the upload's real rate is only known at runtime.
+        Assert.Same(components.Fps, resample.FpsIn.Connection);
+        Assert.Equal((double)VideoStagesWorkflowFixture.Fps, resample.FpsOut.LiteralAsDouble());
+
+        SwarmFrameWindowNode window = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+        Assert.Same(resample.Images, window.ImagesInput.Connection);
+        Assert.Equal(startFrame, window.StartFrame.LiteralAsInt());
+        Assert.Equal(frames, window.FrameCount.LiteralAsInt());
+
+        ImageScaleNode scale = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            node => ReferenceEquals(node.Image.Connection?.Node, window));
+        Assert.Equal(width, scale.Width.LiteralAsInt());
+        Assert.Equal(height, scale.Height.LiteralAsInt());
+        return window;
+    }
 
     /// <summary>
     /// For architectures whose compat class sets <c>LorasTargetTextEnc</c> false: the authored

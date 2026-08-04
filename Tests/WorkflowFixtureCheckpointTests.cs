@@ -21,8 +21,8 @@ public class WorkflowFixtureCheckpointTests
     [InlineData(WanWorkflowFixture.Wan22Ti2v5bFixturePath, "wan-2_2-ti2v-5b")]
     [InlineData(WanWorkflowFixture.Wan21I2v14bFixturePath, "wan-2_1-image2video-14b")]
     [InlineData(WanWorkflowFixture.Wan21T2v14bFixturePath, "wan-2_1-text2video-14b")]
-    [InlineData("models/diffusion_models/Hunyuan15-Workflow-Test.safetensors", "hunyuan-video-1_5")]
-    [InlineData("models/diffusion_models/Mochi-Workflow-Test.safetensors", "genmo-mochi-1")]
+    [InlineData(Hunyuan15WorkflowFixture.ModelFixturePath, "hunyuan-video-1_5")]
+    [InlineData(MochiWorkflowFixture.ModelFixturePath, "genmo-mochi-1")]
     public void Fixture_checkpoint_classifies_as_its_declared_architecture(
         string fixturePath,
         string expectedClassId)

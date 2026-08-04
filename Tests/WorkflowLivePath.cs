@@ -139,9 +139,11 @@ internal sealed class WorkflowLivePath
     }
 
     /// <summary>
-    /// The counterpart for <c>donotsave</c> requests, which by design produce a graph with no
-    /// output node at all — the state <see cref="FinalVideoSave"/> and
-    /// <see cref="AssertNoOrphanNodes"/> both hard-fail on.
+    /// The counterpart for <c>donotsave</c> requests, which produce a graph with no output node at
+    /// all — the state <see cref="FinalVideoSave"/> and <see cref="AssertNoOrphanNodes"/> both
+    /// hard-fail on. That state is what ships today, not what was intended: ComfyUI rejects an
+    /// output-less prompt with <c>prompt_no_outputs</c>. See P5 in
+    /// <c>nonversioned/20260804-production-findings.md</c>.
     /// </summary>
     public void AssertNoPublishedOutput()
     {

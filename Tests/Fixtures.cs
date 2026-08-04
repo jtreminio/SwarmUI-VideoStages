@@ -54,6 +54,24 @@ internal static class Fixtures
         ["startSeconds"] = 0.0,
     };
 
+    /// <summary>
+    /// A clip that refines uploaded footage instead of generating from noise, opening
+    /// <paramref name="startSeconds"/> into that footage. Stage 0's default <c>Generated</c>
+    /// reference is stripped: it would pull in a root donor alongside the source.
+    /// </summary>
+    public static JObject SourceClip(double duration, double startSeconds, params JObject[] stages)
+    {
+        if (stages.Length > 0)
+        {
+            stages[0].Remove("imageReference");
+        }
+        JObject clip = MakeClip(duration, stages);
+        JObject source = SourceVideo();
+        source["startSeconds"] = startSeconds;
+        clip["initVideo"] = source;
+        return clip;
+    }
+
     /// <summary>A retake is only honoured on a sourced clip with a usable duration; 4.0s is the
     /// length <see cref="Ltx2WorkflowFixture.RetakeClipFrames"/> is derived from.</summary>
     public static JObject RetakeClip(JObject retake, params JObject[] stages)

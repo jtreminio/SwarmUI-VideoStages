@@ -2,6 +2,8 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Core;
+using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
 using Xunit;
@@ -27,11 +29,12 @@ namespace VideoStages.Tests;
 /// Every test closes with <see cref="TypedWorkflowAssertions.AssertShippable"/>, the ControlNet
 /// ones included. That is only safe here because of the shapes chosen: core's
 /// <c>AutoCleanupNodeTypes</c> does not cover <c>ControlNetLoader</c>,
-/// <c>ControlNetApplyAdvanced</c>, <c>SwarmLoadVideoB64</c> or <c>GetVideoComponents</c>, and under
-/// image-to-video <c>DiscardsRoot</c> is false, so nothing sweeps a dead host root. All three
-/// image-to-video ControlNet clips guide stage 0 from core's decoded base image, which keeps the
-/// base pass — and its apply chain — live. A ControlNet test whose timeline never consumes the base
-/// image would need targeted <c>AssertLive</c> calls instead.
+/// <c>ControlNetApplyAdvanced</c>, <c>ModelPatchLoader</c>, <c>QwenImageDiffsynthControlnet</c>,
+/// <c>SwarmLoadVideoB64</c> or <c>GetVideoComponents</c>, and under
+/// image-to-video <c>DiscardsRoot</c> is false, so nothing sweeps a dead host root. Every
+/// image-to-video ControlNet clip here guides stage 0 from core's decoded base image, which keeps
+/// the base pass — and its apply chain — live. A ControlNet test whose timeline never consumes the
+/// base image would need targeted <c>AssertLive</c> calls instead.
 /// </para>
 /// </summary>
 [Collection("VideoStagesTests")]
@@ -46,6 +49,18 @@ public class Ltx2CoreVideoContractTests
     /// <summary>The stub preprocessor <see cref="UnitTestStubs"/> registers with core.</summary>
     private const string PreprocessorClass = "UnitTestPreprocessor";
 
+    /// <summary>A second ControlNet, for the apply branches core picks by model class.</summary>
+    private const string DiffpatchControlNet = "UnitTest_ControlNetDiffpatch";
+
+    /// <summary>A third, for the branch core picks by safetensors metadata.</summary>
+    private const string AliMamaControlNet = "UnitTest_ControlNetAliMama";
+
+    /// <summary>A 1x1 PNG, for the init/mask pair core needs before it will build an AliMama
+    /// apply.</summary>
+    private const string ImagePayload =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+        + "AAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
     /// <summary>Enables ControlNet 1 on the request with a video guide payload.</summary>
     private static void RequestControlNet(JObject post)
     {
@@ -55,26 +70,57 @@ public class Ltx2CoreVideoContractTests
         post["controlnetimageinput"] = VideoPayload;
     }
 
+    /// <summary>The same, on slot 2.</summary>
+    private static void RequestControlNetTwo(JObject post)
+    {
+        post["controlnettwostrength"] = 0.8;
+        post["controlnettwomodel"] = "UnitTest_ControlNet";
+        post["controlnettwopreprocessor"] = PreprocessorClass;
+        post["controlnettwoimageinput"] = VideoPayload;
+    }
+
     private static Ltx2WorkflowFixture WithControlNetStubs(Ltx2WorkflowFixture fixture)
     {
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         fixture.InstallModel("ControlNet", "UnitTest_ControlNet.safetensors");
+        fixture.InstallModel("ControlNet", $"{DiffpatchControlNet}.safetensors");
+        fixture.InstallModel("ControlNet", $"{AliMamaControlNet}.safetensors");
         fixture.InstallModel("LoRA", "UnitTest_ControlNetLora.safetensors");
         return fixture;
     }
 
-    /// <summary>A clip whose IC-LoRA drives its guide from ControlNet 1's captured media.</summary>
-    private static JObject IcLoraClip(params JObject[] stages)
+    /// <summary>
+    /// Gives an installed ControlNet a model class. Core dispatches its apply branch off
+    /// <c>ModelClass.ID</c>, and installed stubs carry none — which is the default apply path.
+    /// </summary>
+    private static void ClassifyControlNet(string name, string modelClassId) =>
+        Program.T2IModelSets["ControlNet"].Models[$"{name}.safetensors"].ModelClass =
+            new T2IModelClass { ID = modelClassId, Name = modelClassId };
+
+    /// <summary>
+    /// Gives an installed ControlNet the safetensors architecture core reads for its AliMama
+    /// branch. <c>T2IModel.Metadata</c> is a plain public field on a settable record, and core's
+    /// only writer is the metadata scan, which no generation goes through.
+    /// </summary>
+    private static void SetControlNetArchitecture(string name, string modelClassType) =>
+        Program.T2IModelSets["ControlNet"].Models[$"{name}.safetensors"].Metadata =
+            new T2IModelHandler.ModelMetadataStore { ModelClassType = modelClassType };
+
+    /// <summary>A clip whose IC-LoRA drives its guide from a ControlNet slot's captured media.</summary>
+    private static JObject IcLoraClip(string driveSource, params JObject[] stages)
     {
         JObject clip = MakeClip(1.0, stages);
         clip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = "UnitTest_ControlNetLora",
-            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveSource"] = driveSource,
             ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
         return clip;
     }
+
+    private static JObject IcLoraClip(params JObject[] stages) =>
+        IcLoraClip(Constants.ControlNetSourceOne, stages);
 
     /// <summary>
     /// The two resize nodes in a ControlNet chain are told apart by their multiple, not their id:
@@ -99,6 +145,23 @@ public class Ltx2CoreVideoContractTests
         ResizeImageMaskNodeNode guideResize = ResizeToMultiple(bridge, 64);
         Assert.Same(coreResize.Resized, guideResize.Input.Connection);
         return guideResize;
+    }
+
+    /// <summary>
+    /// The audio encode, asserted to read the captured ControlNet source's audio slot. Every audio
+    /// source is normalised through a <c>SwarmEnsureAudio</c> before it is encoded.
+    /// </summary>
+    private static LTXVAudioVAEEncodeNode EncodeOfCapturedControlNetAudio(WorkflowBridge bridge)
+    {
+        GetVideoComponentsNode components = Assert.Single(
+            bridge.Graph.NodesOfType<GetVideoComponentsNode>());
+        LTXVAudioVAEEncodeNode encode = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
+        SwarmEnsureAudioNode ensure = Assert.IsType<SwarmEnsureAudioNode>(
+            encode.Audio.Connection?.Node);
+        // Slot 1 is the audio stream; slot 0 is the frames the ControlNet apply takes.
+        Assert.Same(components.Audio, ensure.Audio.Connection);
+        return encode;
     }
 
     /// <summary>The IC-LoRA guide's frame batch, whatever drives its length.</summary>
@@ -152,7 +215,7 @@ public class Ltx2CoreVideoContractTests
         Assert.IsType<CheckpointLoaderSimpleNode>(baseSampler.Model.Connection?.Node);
         Assert.IsType<UNETLoaderNode>(stage.Model.Connection?.Node);
 
-        Assert.Single(bridge.Graph.NodesOfType<SaveImageNode>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmSaveImageWSNode>());
         AssertPublishesGeneratorMedia(bridge, generator);
 
         live.AssertAllLive(baseSampler, stage);
@@ -1179,6 +1242,305 @@ public class Ltx2CoreVideoContractTests
 
         // The bare repo name would also match the install URL the message quotes.
         Assert.Contains("IC-LoRAs require the ComfyUI-LTXVideo custom nodes", refusal.Message);
+    }
+
+    /// <summary>
+    /// A clip whose audio source is ControlNet 1 plays the source video's own soundtrack: the
+    /// capture is the <c>GetVideoComponents</c> audio slot, and the graph has to carry that slot all
+    /// the way to the save's audio. Image-to-video, because clip 0 of a text-to-video request hits
+    /// the P1 audio defect.
+    /// </summary>
+    [Fact]
+    public async Task A_controlnet_audio_source_publishes_the_captured_source_audio()
+    {
+        using Ltx2WorkflowFixture fixture = WithControlNetStubs(
+            Ltx2WorkflowFixture.CreateWithBaseModel());
+        JObject clip = MakeClip(1.0, fixture.Stage(control: 0.5));
+        clip["audioSource"] = Constants.AudioSourceControlNet;
+
+        JObject workflow = await fixture.GenerateImageToVideoAsync(
+            MakeDocument(clip), RequestControlNet);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        LTXVAudioVAEEncodeNode encode = EncodeOfCapturedControlNetAudio(bridge);
+        Assert.True(
+            ReachesUpstream(bridge, live.PublishedAudio(), encode.Id),
+            "The captured ControlNet audio does not reach the published save's audio.");
+        // Positive control: an unresolved capture falls back to a generated silent track.
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());
+
+        live.AssertAllLive(encode, StageSampler(bridge, 0));
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// Captures are bookkept per ControlNet slot. A clip whose IC-LoRA names ControlNet 2 plans
+    /// index 1 outright rather than scanning for the one captured slot. Both slots are configured
+    /// so the scan cannot stand in for the plan: two captured indices are ambiguous, which the
+    /// resolver answers with silence, so only the planned index produces audio at all.
+    /// </summary>
+    [Fact]
+    public async Task A_second_slot_controlnet_audio_source_is_captured_under_its_own_index()
+    {
+        using Ltx2WorkflowFixture fixture = WithControlNetStubs(
+            Ltx2WorkflowFixture.CreateWithBaseModel());
+        JObject clip = IcLoraClip(Constants.ControlNetSourceTwo, fixture.Stage(control: 0.5));
+        clip["audioSource"] = Constants.AudioSourceControlNet;
+
+        JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip), post =>
+        {
+            RequestControlNet(post);
+            RequestControlNetTwo(post);
+        });
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        // Both slots ran, so a scan for "the one captured index" would find two and give up.
+        IReadOnlyList<ControlNetApplyAdvancedNode> applies =
+            [.. bridge.Graph.NodesOfType<ControlNetApplyAdvancedNode>()];
+        Assert.Equal(2, applies.Count);
+        LTXVAudioVAEEncodeNode encode = EncodeOfCapturedControlNetAudio(bridge);
+        Assert.True(
+            ReachesUpstream(bridge, live.PublishedAudio(), encode.Id),
+            "The captured ControlNet 2 audio does not reach the published save's audio.");
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());
+
+        // The same slot drives the visual guide. Core chains the slots in order, so slot 2's apply
+        // is the one conditioning slot 1's output — the only handle on which chain is which here,
+        // since both slots load the same model off the same upload.
+        ControlNetApplyAdvancedNode slotTwo = Assert.Single(
+            applies,
+            apply => apply.PositiveInput.Connection?.Node is ControlNetApplyAdvancedNode);
+        ResizeImageMaskNodeNode guideResize = Assert.IsType<ResizeImageMaskNodeNode>(
+            Assert.IsType<ImageFromBatchNode>(slotTwo.Image.Connection?.Node)
+                .Image.Connection?.Node);
+        Assert.Same(guideResize.Resized, GuideFramesOf(bridge).Image.Connection);
+
+        live.AssertAllLive(encode, StageSampler(bridge, 0));
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// A ControlNet whose model class ends in <c>/control-diffpatch</c> takes core's Qwen branch:
+    /// no <c>ControlNetLoader</c>, no apply node, a model patch instead. The timeline has to capture
+    /// its guide off that shape too — and off the full-length source, not core's first-frame unwrap.
+    /// </summary>
+    [Fact]
+    public async Task Image_to_video_captures_a_guide_from_cores_qwen_diffsynth_patch()
+    {
+        using Ltx2WorkflowFixture fixture = WithControlNetStubs(
+            Ltx2WorkflowFixture.CreateWithBaseModel());
+        ClassifyControlNet(DiffpatchControlNet, "unit/control-diffpatch");
+
+        JObject workflow = await fixture.GenerateImageToVideoAsync(
+            MakeDocument(IcLoraClip(
+                fixture.Stage(control: 0.5),
+                fixture.Stage("PreviousStage", control: 0.5))),
+            post =>
+            {
+                RequestControlNet(post);
+                post["controlnetmodel"] = DiffpatchControlNet;
+            });
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        ModelPatchLoaderNode patch = Assert.Single(
+            bridge.Graph.NodesOfType<ModelPatchLoaderNode>());
+        QwenImageDiffsynthControlnetNode apply = Assert.Single(
+            bridge.Graph.NodesOfType<QwenImageDiffsynthControlnetNode>());
+        Assert.Same(patch.MODELPATCH, apply.ModelPatch.Connection);
+        // Positive control: the model class really did divert core off its default branch.
+        Assert.Empty(bridge.Graph.NodesOfType<ControlNetApplyAdvancedNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<ControlNetLoaderNode>());
+
+        ResizeImageMaskNodeNode guideResize = GuideResizeOverCorePreprocessor(bridge);
+        ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
+            apply.Image.Connection?.Node);
+        Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
+        Assert.Equal(1, firstFrame.Length.LiteralAsInt());
+
+        // Each stage guides off the full-length resize, which only holds because the normalizer
+        // peels core's single-frame wrap before inserting it.
+        IReadOnlyList<LTXAddVideoICLoRAGuideNode> guides =
+            [.. bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>()];
+        Assert.Equal(2, guides.Count);
+        foreach (LTXAddVideoICLoRAGuideNode guide in guides)
+        {
+            ImageFromBatchNode frames = Assert.IsType<ImageFromBatchNode>(
+                guide.Image.Connection?.Node);
+            Assert.Same(guideResize.Resized, frames.Image.Connection);
+            Assert.Equal(fixture.ExpectedGeneratedFrames, frames.Length.LiteralAsInt());
+        }
+
+        live.AssertAllLive([.. guides, patch, apply, guideResize,
+            StageSampler(bridge, 0), StageSampler(bridge, 1)]);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// A ControlNet whose safetensors architecture names Alimama inpainting takes core's mask
+    /// branch: a <c>ControlNetInpaintingAliMamaApply</c> instead of the default apply, which core
+    /// refuses outright without a <c>FinalMask</c> — so the request carries an init image and a mask
+    /// image. The timeline captures its guide off that shape too. The union-type wrapper core
+    /// optionally inserts between loader and apply must not hide the loader from the capture.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("auto")]
+    public async Task Image_to_video_captures_a_guide_from_cores_alimama_inpainting_apply(
+        string unionType)
+    {
+        using Ltx2WorkflowFixture fixture = WithControlNetStubs(
+            Ltx2WorkflowFixture.CreateWithBaseModel());
+        SetControlNetArchitecture(AliMamaControlNet, "flux.1-dev/controlnet-alimamainpaint");
+
+        JObject workflow = await fixture.GenerateImageToVideoAsync(
+            MakeDocument(IcLoraClip(fixture.Stage(control: 0.5))),
+            post =>
+            {
+                RequestControlNet(post);
+                post["controlnetmodel"] = AliMamaControlNet;
+                post["initimage"] = ImagePayload;
+                post["maskimage"] = ImagePayload;
+                if (unionType is not null)
+                {
+                    post["controlnetuniontype"] = unionType;
+                }
+            });
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        ControlNetLoaderNode loader = Assert.Single(
+            bridge.Graph.NodesOfType<ControlNetLoaderNode>());
+        ControlNetInpaintingAliMamaApplyNode apply = Assert.Single(
+            bridge.Graph.NodesOfType<ControlNetInpaintingAliMamaApplyNode>());
+        // Positive control: the metadata really did divert core off its default branch.
+        Assert.Empty(bridge.Graph.NodesOfType<ControlNetApplyAdvancedNode>());
+        Assert.NotNull(apply.Mask.Connection);
+        if (unionType is null)
+        {
+            Assert.Empty(bridge.Graph.NodesOfType<SetUnionControlNetTypeNode>());
+            Assert.Same(loader.CONTROLNET, apply.ControlNet.Connection);
+        }
+        else
+        {
+            SetUnionControlNetTypeNode union = Assert.Single(
+                bridge.Graph.NodesOfType<SetUnionControlNetTypeNode>());
+            Assert.Same(loader.CONTROLNET, union.ControlNet.Connection);
+            Assert.Same(union.CONTROLNET, apply.ControlNet.Connection);
+        }
+
+        ResizeImageMaskNodeNode guideResize = GuideResizeOverCorePreprocessor(bridge);
+        ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
+            apply.Image.Connection?.Node);
+        Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
+        Assert.Equal(1, firstFrame.Length.LiteralAsInt());
+
+        ImageFromBatchNode guideFrames = GuideFramesOf(bridge);
+        Assert.Same(guideResize.Resized, guideFrames.Image.Connection);
+        Assert.Equal(fixture.ExpectedGeneratedFrames, guideFrames.Length.LiteralAsInt());
+
+        live.AssertAllLive(
+            loader, apply, guideResize, guideFrames, StageSampler(bridge, 0));
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// Two stages sharing one clip's IC-LoRA still get a patch loader each, because each stage's
+    /// sampler runs its own model chain, and each carries the guide at that stage's own authored
+    /// strength. Sharing a loader would make one of the two strengths unreachable.
+    /// </summary>
+    [Fact]
+    public async Task Each_stage_of_a_clip_gets_its_own_ic_lora_loader_and_guide()
+    {
+        using Ltx2WorkflowFixture fixture = WithControlNetStubs(
+            Ltx2WorkflowFixture.CreateWithBaseModel());
+        JObject first = fixture.Stage(control: 0.5);
+        JObject second = fixture.Stage("PreviousStage", control: 0.5);
+        first["controlNetStrength"] = 0.7;
+        second["controlNetStrength"] = 0.3;
+
+        JObject workflow = await fixture.GenerateImageToVideoAsync(
+            MakeDocument(IcLoraClip(first, second)), RequestControlNet);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Equal(2, bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>().Count);
+        Assert.Equal(2, bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count);
+
+        double[] strengths = [0.7, 0.3];
+        HashSet<string> loaders = [];
+        for (int stage = 0; stage < strengths.Length; stage++)
+        {
+            SwarmKSamplerNode sampler = StageSampler(bridge, stage);
+            LTXICLoRALoaderModelOnlyNode loader = Assert.IsType<LTXICLoRALoaderModelOnlyNode>(
+                sampler.Model.Connection?.Node);
+            Assert.True(
+                loaders.Add(loader.Id),
+                $"Stage {stage} reuses IC-LoRA loader {loader.Id} that an earlier stage claimed.");
+            LTXAddVideoICLoRAGuideNode guide = Assert.IsType<LTXAddVideoICLoRAGuideNode>(
+                sampler.Positive.Connection?.Node);
+            Assert.Equal(strengths[stage], guide.Strength.LiteralAsDouble());
+            live.AssertAllLive(loader, guide, sampler);
+        }
+
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// A stage-scoped LoRA is loaded per stage at that stage's own weight, threaded through the
+    /// stage's IC-LoRA chain rather than into a shared one. Core's real confinement step does the
+    /// scoping, so this only holds under the production step list.
+    /// </summary>
+    [Fact]
+    public async Task Stage_scoped_lora_weights_load_once_per_stage_alongside_the_ic_lora()
+    {
+        using Ltx2WorkflowFixture fixture = WithControlNetStubs(
+            Ltx2WorkflowFixture.CreateWithBaseModel());
+        fixture.InstallModel("LoRA", "UnitTest_ScopedStageLora.safetensors");
+        JObject first = fixture.Stage(control: 0.5);
+        JObject second = fixture.Stage("PreviousStage", control: 0.5);
+        first["loras"] = new JArray(new JObject
+        {
+            ["name"] = "UnitTest_ScopedStageLora",
+            ["weight"] = 1.0,
+        });
+        second["loras"] = new JArray(new JObject
+        {
+            ["name"] = "UnitTest_ScopedStageLora",
+            ["weight"] = 0.4,
+        });
+
+        JObject workflow = await fixture.GenerateImageToVideoAsync(
+            MakeDocument(IcLoraClip(first, second)), RequestControlNet);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        IReadOnlyList<LoraLoaderNode> loaders =
+            [.. bridge.Graph.NodesOfType<LoraLoaderNode>()];
+        Assert.Equal(2, loaders.Count);
+        Assert.All(
+            loaders,
+            loader => Assert.Equal(
+                "UnitTest_ScopedStageLora.safetensors", loader.LoraName.LiteralAsString()));
+
+        double[] weights = [1.0, 0.4];
+        HashSet<string> claimed = [];
+        for (int stage = 0; stage < weights.Length; stage++)
+        {
+            SwarmKSamplerNode sampler = StageSampler(bridge, stage);
+            LoraLoaderNode loader = Assert.Single(
+                loaders,
+                candidate => ReachesUpstream(bridge, sampler.Model.Connection?.Node, candidate.Id));
+            Assert.True(
+                claimed.Add(loader.Id),
+                $"Stage {stage} reuses LoraLoader {loader.Id} that an earlier stage claimed.");
+            Assert.Equal(weights[stage], loader.StrengthModel.LiteralAsDouble());
+            live.AssertAllLive(loader, sampler);
+        }
+
+        AssertShippable(bridge, workflow, live);
     }
 
     // ---- text-to-video root replacement --------------------------------------------------

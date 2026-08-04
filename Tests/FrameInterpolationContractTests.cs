@@ -144,7 +144,7 @@ public sealed class FrameInterpolationContractTests
 
         Assert.Empty(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         // Core's base-image save is not the timeline's to suppress, and it still ships.
-        Assert.Single(bridge.Graph.NodesOfType<SaveImageNode>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmSaveImageWSNode>());
 
         RIFEVFINode rife = Assert.Single(bridge.Graph.NodesOfType<RIFEVFINode>());
         SwarmTrimFramesNode trim = Assert.IsType<SwarmTrimFramesNode>(rife.Frames.Connection?.Node);

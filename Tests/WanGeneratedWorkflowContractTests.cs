@@ -56,49 +56,23 @@ public class WanGeneratedWorkflowContractTests
     /// <summary>The file name is optional metadata; the inline payload is what materializes.</summary>
     private static JObject SourceClip(bool withFileName, params JObject[] stages)
     {
-        stages[0].Remove("imageReference");
-        JObject clip = MakeClip(0.6, stages);
-        JObject source = SourceVideo();
-        source["startSeconds"] = 1.0;
+        JObject clip = Fixtures.SourceClip(0.6, 1.0, stages);
         if (!withFileName)
         {
-            source.Remove("fileName");
+            ((JObject)clip["initVideo"]).Remove("fileName");
         }
-        clip["initVideo"] = source;
         return clip;
     }
 
-    /// <summary>
-    /// The conform chain a source clip is refined from: load, split, resample to the timeline fps,
-    /// window to the clip's span, then scale to the timeline resolution. Returns the frame window,
-    /// which is what everything downstream measures its length against.
-    /// </summary>
     private static SwarmFrameWindowNode AssertSourceConformChain(
         WorkflowBridge bridge,
-        int expectedFrames = SourceClipFrames)
-    {
-        SwarmLoadVideoB64Node load = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
-        GetVideoComponentsNode components = Assert.Single(
-            bridge.Graph.NodesOfType<GetVideoComponentsNode>());
-        Assert.Same(load, components.Video.Connection?.Node);
-        SwarmVideoResampleFPSNode resample = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmVideoResampleFPSNode>());
-        Assert.Same(components, resample.ImagesInput.Connection?.Node);
-        Assert.Same(components, resample.FpsIn.Connection?.Node);
-        Assert.Equal(24.0, resample.FpsOut.LiteralAsDouble());
-        SwarmFrameWindowNode window = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
-        Assert.Same(resample, window.ImagesInput.Connection?.Node);
-        Assert.Equal(SourceClipStartFrame, window.StartFrame.LiteralAsInt());
-        Assert.Equal(expectedFrames, window.FrameCount.LiteralAsInt());
-        ImageScaleNode scale = Assert.Single(
-            bridge.Graph.NodesOfType<ImageScaleNode>(),
-            node => node.Image.Connection?.Node == window);
-        Assert.Equal(512, scale.Width.LiteralAsInt());
-        Assert.Equal(512, scale.Height.LiteralAsInt());
-        return window;
-    }
+        int expectedFrames = SourceClipFrames) =>
+        TypedWorkflowAssertions.AssertSourceConformChain(
+            bridge,
+            SourceClipStartFrame,
+            expectedFrames,
+            VideoStagesWorkflowFixture.Width,
+            VideoStagesWorkflowFixture.Height);
 
     /// <summary>The single-frame donor WAN conditions from, and the framing scale behind it.</summary>
     private static ImageScaleNode FirstFrameFraming(ComfyNode startImage)
@@ -804,8 +778,9 @@ public class WanGeneratedWorkflowContractTests
         SwarmFrameWindowNode window = AssertSourceConformChain(bridge);
         SwarmKSamplerNode first = StageSampler(bridge, 0);
         SwarmKSamplerNode second = StageSampler(bridge, 1);
-        // The source replaces the host root entirely, so core's base pass is gone too.
-        Assert.Equal(2, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
+        // The source replaces core's video root; core's base image pass survives it, protected by
+        // core's own image save.
+        Assert.Equal(3, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
 
         Wan22ImageToVideoLatentNode latent = Assert.Single(
             bridge.Graph.NodesOfType<Wan22ImageToVideoLatentNode>());
@@ -1391,11 +1366,11 @@ public class WanGeneratedWorkflowContractTests
         SwarmFrameWindowNode window = AssertSourceConformChain(bridge);
         SwarmKSamplerNode high = StageSampler(bridge, 0);
         SwarmKSamplerNode low = StageSampler(bridge, 1);
-        Assert.Equal(2, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
+        // The pair plus core's base image pass.
+        Assert.Equal(3, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
         Assert.Same(high, low.LatentImage.Connection?.Node);
         Assert.True(ReachesUpstream(bridge, high.LatentImage.Connection?.Node, window.Id));
-        VAEDecodeNode decode = Assert.Single(bridge.Graph.NodesOfType<VAEDecodeNode>());
-        Assert.Same(low, decode.Samples.Connection?.Node);
+        VAEDecodeNode decode = BaseImage(bridge, low);
         Assert.Equal(SourceClipFrames, generator.CurrentMedia.Frames);
 
         live.AssertAllLive(window, high, low, decode);
@@ -1675,7 +1650,8 @@ public class WanGeneratedWorkflowContractTests
 
         SwarmFrameWindowNode window = AssertSourceConformChain(bridge);
         SwarmKSamplerNode stage = StageSampler(bridge, 0);
-        Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        // The stage plus core's base image pass.
+        Assert.Equal(2, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
         // control 0.5 over 10 steps.
         Assert.Equal(5, stage.StartAtStep.LiteralAsInt());
 
@@ -1798,8 +1774,8 @@ public class WanGeneratedWorkflowContractTests
     }
 
     /// <summary>
-    /// A source clip whose only stage is a passthrough runs no sampler at all: the conformed,
-    /// trimmed footage is the output. Its window is 16 frames rather than the
+    /// A source clip whose only stage is a passthrough contributes no sampler of its own: the
+    /// conformed, trimmed footage is the output. Its window is 16 frames rather than the
     /// <see cref="SourceClipFrames"/> a generating stage takes — nothing generates, so WAN's 4k+1
     /// grid does not apply.
     /// </summary>
@@ -1817,7 +1793,10 @@ public class WanGeneratedWorkflowContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         SwarmFrameWindowNode window = AssertSourceConformChain(bridge, expectedFrames: 16);
-        Assert.Empty(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        // Nothing in the timeline samples; core's base image pass is all that is left.
+        Assert.Same(
+            fixture.BaseSampler(bridge),
+            Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>()));
         Assert.Empty(bridge.Graph.NodesOfType<WanImageToVideoNode>());
         Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeNode>());
         SwarmTrimFramesNode trim = Assert.Single(bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
@@ -1854,7 +1833,8 @@ public class WanGeneratedWorkflowContractTests
 
         SwarmFrameWindowNode window = AssertSourceConformChain(bridge);
         SwarmKSamplerNode stage = StageSampler(bridge, 1);
-        Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        // The refining stage plus core's base image pass.
+        Assert.Equal(2, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
         VAEEncodeNode encode = Assert.IsType<VAEEncodeNode>(stage.LatentImage.Connection?.Node);
         Assert.True(ReachesUpstream(bridge, encode, window.Id));
 
@@ -2832,10 +2812,12 @@ public class WanGeneratedWorkflowContractTests
     }
 
     /// <summary>
-    /// <c>donotsave</c> strips every output node, so a graph that publishes nothing is the correct
-    /// result — the state <see cref="WorkflowLivePath.AssertNoOrphanNodes"/> and
-    /// <c>FinalVideoSave</c> cannot describe, since with nothing to reach "orphaned" has no
-    /// meaning. What must still hold is that nothing dangles behind the removal.
+    /// <c>donotsave</c> strips every output node — the state
+    /// <see cref="WorkflowLivePath.AssertNoOrphanNodes"/> and <c>FinalVideoSave</c> cannot describe,
+    /// since with nothing to reach "orphaned" has no meaning. Pinned as today's behaviour, not as
+    /// intent: ComfyUI rejects an output-less prompt with <c>prompt_no_outputs</c> (P5 in
+    /// <c>nonversioned/20260804-production-findings.md</c>). What must still hold is that nothing
+    /// dangles behind the removal.
     /// <para>
     /// Text-to-video is the only shape where this can be asserted at all: core saves the
     /// image-to-video base pass regardless of <c>donotsave</c>, so an image-to-video request always

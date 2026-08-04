@@ -11,50 +11,21 @@ namespace VideoStages.Tests;
 
 /// <summary>
 /// What is left of the init-video stub-harness suite after its tests moved to
-/// <see cref="Ltx2InitVideoContractTests"/>: the clip shapes and the seeded raw text-to-video host
-/// state that <c>TypedExecutionFlowTests</c> and <c>RootOutputOwnershipTests</c> still build on.
-/// Delete this file when those two convert.
+/// <see cref="Ltx2InitVideoContractTests"/> and <see cref="HostVideoContractTests"/>: the clip
+/// shape and the seeded raw text-to-video host state that <c>RootOutputOwnershipTests</c> still
+/// builds on. Delete this file when that one converts.
 /// </summary>
 public partial class StageFlowTests
 {
-    private const double InitVideoClipDuration = 0.6;
-    private const double InitVideoStartSeconds = 1.0;
-
     private static readonly string[] InitVideoClipFeatures =
         [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
-
-    private static JObject MakeInitVideoClip(TestModelBundle models)
-    {
-        JObject clip = MakeClip(
-            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-        ((JObject)((JArray)clip["stages"])[0]).Remove("imageReference");
-        clip["duration"] = InitVideoClipDuration;
-        clip["initVideo"] = new JObject
-        {
-            ["data"] = "data:video/mp4;base64," + Convert.ToBase64String([0x11, 0x22, 0x33]),
-            ["fileName"] = "footage.mp4",
-            ["startSeconds"] = InitVideoStartSeconds
-        };
-        return clip;
-    }
 
     private static JObject MakeGeneratedClip(TestModelBundle models)
     {
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-        clip["duration"] = InitVideoClipDuration;
+        clip["duration"] = 0.6;
         return clip;
-    }
-
-    private static (JObject Workflow, WorkflowGenerator Generator) GenerateInitVideoFlow(
-        TestModelBundle models, params JObject[] clips)
-    {
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel, models.VideoModel, MakeRootConfig(512, 512, clips).ToString());
-        return WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildNativeSteps(attachAudioToCurrentMedia: true),
-            features: InitVideoClipFeatures);
     }
 
     // Mirrors the REAL host graph at VideoStages time for a text-to-video root: the raw AV latent

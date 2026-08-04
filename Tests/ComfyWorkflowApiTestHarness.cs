@@ -21,10 +21,12 @@ internal static class ComfyWorkflowApiTestHarness
     /// Features a real ComfyUI backend reports once Swarm's own custom nodes are installed, but
     /// which <see cref="ComfyUIBackendExtension.FeaturesSupported"/> only gains at backend init.
     /// Without <c>comfy_loadimage_b64</c>, <see cref="WorkflowGenerator.LoadImage"/> falls back to
-    /// a bare <c>LoadImage</c> node carrying neither attached audio nor an FPS reference.
+    /// a bare <c>LoadImage</c> node carrying neither attached audio nor an FPS reference; without
+    /// <c>comfy_saveimage_ws</c>, image saves emit <c>SaveImage</c> rather than the
+    /// <c>SwarmSaveImageWS</c> a real backend always produces.
     /// </summary>
     public static readonly string[] SwarmNodeFeatures =
-        ["comfy_loadimage_b64", Ltx2HostIntegration.FeatureFlag];
+        ["comfy_loadimage_b64", "comfy_saveimage_ws", Ltx2HostIntegration.FeatureFlag];
 
     public static async Task<JObject> GenerateAsync(
         JObject postParameters,

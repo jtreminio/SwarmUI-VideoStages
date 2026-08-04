@@ -380,6 +380,47 @@ internal static class TestModelFactory
         Install("VAE", CommonModels.Known["ltx2-3-audio-vae"].FileName);
     }
 
+    public const string Hunyuan15ClipVisionFileName = "sigclip_vision_patch14_384.safetensors";
+
+    /// <summary>
+    /// Returns the CLIP-vision stub. Core's Hunyuan 1.5 image-to-video branch calls
+    /// <c>RequireVisionModel</c>, which — unlike <c>RequireClipModel</c> — has no "already
+    /// installed" fallback, so callers must also name it on the request.
+    /// </summary>
+    public static T2IModel InstallHunyuan15SupportModels()
+    {
+        EnsureModelSet("Stable-Diffusion");
+        EnsureModelSet("Clip");
+        EnsureModelSet("ClipVision");
+        // EnsureModelSet, not a fresh handler: the per-architecture installers are chained by
+        // cross-family fixtures, and replacing the set would drop the previous one's VAE stubs —
+        // which does not fail, it falls through to a multi-gigabyte DownloadNow().Wait().
+        EnsureModelSet("VAE");
+        if (CommonModels.Known.IsEmpty)
+        {
+            CommonModels.RegisterCoreSet();
+        }
+        Install("Clip", "qwen_2.5_vl_7b_fp8_scaled.safetensors");
+        Install("Clip", "byt5_small_glyphxl_fp16.safetensors");
+        Install("VAE", CommonModels.Known["hunyuan-video-1_5-vae"].FileName);
+        return TestStubModel.Install(
+            Program.T2IModelSets["ClipVision"],
+            Hunyuan15ClipVisionFileName);
+    }
+
+    public static void InstallMochiSupportModels()
+    {
+        EnsureModelSet("Stable-Diffusion");
+        EnsureModelSet("Clip");
+        EnsureModelSet("VAE");
+        if (CommonModels.Known.IsEmpty)
+        {
+            CommonModels.RegisterCoreSet();
+        }
+        Install("Clip", "t5xxl_enconly.safetensors");
+        Install("VAE", CommonModels.Known["mochi-vae"].FileName);
+    }
+
     private static void EnsureModelSet(string modelType)
     {
         if (!Program.T2IModelSets.ContainsKey(modelType))
