@@ -146,18 +146,11 @@ internal static class VideoExecutionPlanCompiler
                 "boundary-frame-budget-reconciled",
                 $"{boundaryBudget.Reason}."));
         }
-        VideoExecutionPlan plan = new(
-            spec.Width,
-            spec.Height,
-            spec.FPS,
-            root,
-            Array.AsReadOnly(clips.ToArray()),
-            Array.AsReadOnly(resolvedBoundaries.ToArray()),
-            Array.AsReadOnly(diagnostics.ToArray()));
-        // Every architecture carries timeline audio: one that does not consume it during
-        // generation gets the decoded overlay instead (DecodedTimelineAudioOverlay).
+        // Timeline audio remains architecture-neutral; non-consuming architectures overlay it after decode.
         TimelineAudioSegmentCompilation audio = TimelineAudioSegmentPlanCompiler.Compile(
-            plan,
+            spec.FPS,
+            clips,
+            resolvedBoundaries,
             spec.TimelineAudioSegments);
         IReadOnlyList<ClipPlan> clipsWithTimelineAudio = audio.Clips;
         foreach (ClipPlan clipPlan in clipsWithTimelineAudio)
@@ -166,11 +159,16 @@ internal static class VideoExecutionPlanCompiler
                 audioDiagnostic with { ClipId = audioDiagnostic.ClipId ?? clipPlan.ClipId }));
         }
         diagnostics.AddRange(audio.Diagnostics);
-        return plan with
+        return new(
+            spec.Width,
+            spec.Height,
+            spec.FPS,
+            root,
+            clipsWithTimelineAudio,
+            Array.AsReadOnly(resolvedBoundaries.ToArray()),
+            Array.AsReadOnly(diagnostics.ToArray()))
         {
             HasConfiguredResolution = spec.HasConfiguredResolution,
-            Clips = clipsWithTimelineAudio,
-            Diagnostics = Array.AsReadOnly(diagnostics.ToArray()),
         };
     }
 

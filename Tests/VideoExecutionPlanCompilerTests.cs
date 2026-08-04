@@ -613,7 +613,41 @@ public class VideoExecutionPlanCompilerTests
             output =>
             {
                 Assert.False(output.IsTimelineTerminal);
-            });
+        });
+    }
+
+    [Fact]
+    public void Compile_TimelineAudioUsesTheFittedBoundaryWindow()
+    {
+        VideoStagesSpec spec = Spec(
+            false,
+            GeneratedClip(0, Stage(10)) with
+            {
+                Frames = 9,
+                BoundaryOut = Constants.BoundaryOutCrossfade,
+                BoundaryOutOverlap = 16,
+            },
+            GeneratedClip(1, Stage(11)) with { Frames = 9 }) with
+        {
+            TimelineAudioSegments =
+            [
+                new(
+                    "score",
+                    new UploadedMediaSpec("data:audio/wav;base64,QUJD", "score.wav"),
+                    null,
+                    TimelineStartSeconds: 0,
+                    SourceStartSeconds: 0,
+                    LengthSeconds: 1),
+            ],
+        };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+
+        Assert.Equal(8, Assert.Single(plan.Boundaries).OverlapFrames);
+        Assert.Equal(
+            1 / 24d,
+            Assert.Single(plan.Clips[0].Audio.Segments.Items).LengthSeconds,
+            8);
     }
 
     [Fact]
@@ -659,6 +693,30 @@ public class VideoExecutionPlanCompilerTests
             Assert.Equal("dialogue.wav", item.UploadedMedia.FileName);
             Assert.Equal(0.75, item.Volume);
         });
+    }
+
+    [Fact]
+    public void Compile_FinalPlanIncludesTimelineAudioAndAuthoredResolutionState()
+    {
+        VideoStagesSpec spec = Spec(false, GeneratedClip(0, Stage(10))) with
+        {
+            HasConfiguredResolution = false,
+            TimelineAudioSegments =
+            [
+                new(
+                    "dialogue",
+                    new UploadedMediaSpec("data:audio/wav;base64,QUJD", "dialogue.wav"),
+                    null,
+                    TimelineStartSeconds: 0,
+                    SourceStartSeconds: 0,
+                    LengthSeconds: 1),
+            ],
+        };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+
+        Assert.False(plan.HasConfiguredResolution);
+        Assert.Single(Assert.Single(plan.Clips).Audio.Segments.Items);
     }
 
     [Fact]

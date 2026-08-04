@@ -18,7 +18,9 @@ public class TimelineAudioSegmentPlanCompilerTests
             Clip(2));
 
         TimelineAudioSegmentCompilation result = TimelineAudioSegmentPlanCompiler.Compile(
-            plan,
+            plan.FramesPerSecond,
+            plan.Clips,
+            plan.Boundaries,
             [Segment("score", 0, 20)]);
 
         AudioSegmentItemPlan[] items = result.Clips
@@ -39,7 +41,9 @@ public class TimelineAudioSegmentPlanCompilerTests
         VideoExecutionPlan plan = Plan(Clip(0), Clip(1, frames: null));
 
         TimelineAudioSegmentCompilation result = TimelineAudioSegmentPlanCompiler.Compile(
-            plan,
+            plan.FramesPerSecond,
+            plan.Clips,
+            plan.Boundaries,
             [Segment("early", 0, 1)]);
 
         Assert.All(result.Clips, clip => Assert.Empty(clip.Audio.Segments.Items));
@@ -53,7 +57,9 @@ public class TimelineAudioSegmentPlanCompilerTests
         VideoExecutionPlan plan = Plan(Clip(0));
 
         TimelineAudioSegmentCompilation result = TimelineAudioSegmentPlanCompiler.Compile(
-            plan,
+            plan.FramesPerSecond,
+            plan.Clips,
+            plan.Boundaries,
             [
                 Segment("duplicate", 0, 1, sourceStart: 2),
                 Segment("duplicate", 0, 1, sourceStart: 9),
@@ -74,7 +80,9 @@ public class TimelineAudioSegmentPlanCompilerTests
         };
 
         TimelineAudioSegmentCompilation result = TimelineAudioSegmentPlanCompiler.Compile(
-            plan,
+            plan.FramesPerSecond,
+            plan.Clips,
+            plan.Boundaries,
             [segment]);
 
         AudioSegmentItemPlan item = Assert.Single(
@@ -94,7 +102,9 @@ public class TimelineAudioSegmentPlanCompilerTests
         };
 
         TimelineAudioSegmentCompilation result = TimelineAudioSegmentPlanCompiler.Compile(
-            plan,
+            plan.FramesPerSecond,
+            plan.Clips,
+            plan.Boundaries,
             [segment]);
 
         AudioSegmentItemPlan item = Assert.Single(
@@ -109,7 +119,9 @@ public class TimelineAudioSegmentPlanCompilerTests
         VideoExecutionPlan plan = Plan(Clip(0));
 
         TimelineAudioSegmentCompilation result = TimelineAudioSegmentPlanCompiler.Compile(
-            plan,
+            plan.FramesPerSecond,
+            plan.Clips,
+            plan.Boundaries,
             [
                 Segment("duplicate", 100, 1),
                 Segment("duplicate", 0, 1),
@@ -128,17 +140,23 @@ public class TimelineAudioSegmentPlanCompilerTests
         VideoExecutionPlan plan = Plan(Clip(0), Clip(1));
         AssertWarning(
             TimelineAudioSegmentPlanCompiler.Compile(
-                plan with { Clips = [plan.Clips[0], plan.Clips[0]] },
+                plan.FramesPerSecond,
+                [plan.Clips[0], plan.Clips[0]],
+                plan.Boundaries,
                 []),
             "audio.timeline.clip.duplicate_id");
         AssertWarning(
             TimelineAudioSegmentPlanCompiler.Compile(
-                plan with { FramesPerSecond = 0 },
+                0,
+                plan.Clips,
+                plan.Boundaries,
                 []),
             "audio.timeline.invalid_fps");
         AssertWarning(
             TimelineAudioSegmentPlanCompiler.Compile(
-                plan with { Boundaries = [plan.Boundaries[0], plan.Boundaries[0]] },
+                plan.FramesPerSecond,
+                plan.Clips,
+                [plan.Boundaries[0], plan.Boundaries[0]],
                 []),
             "audio.timeline.boundary.duplicate_from_clip");
     }

@@ -9,13 +9,20 @@ internal sealed record TimelineAudioSegmentCompilation(
 internal static class TimelineAudioSegmentPlanCompiler
 {
     internal static TimelineAudioSegmentCompilation Compile(
-        VideoExecutionPlan plan,
+        int framesPerSecond,
+        IReadOnlyList<ClipPlan> clips,
+        IReadOnlyList<BoundaryPlan> boundaries,
         IReadOnlyList<TimelineAudioSegmentSpec> segments)
     {
-        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(clips);
+        ArgumentNullException.ThrowIfNull(boundaries);
         ImmutableArray<PlanDiagnostic>.Builder diagnostics =
             ImmutableArray.CreateBuilder<PlanDiagnostic>();
-        ImmutableArray<ClipWindow> clipWindows = BuildClipWindows(plan, diagnostics);
+        ImmutableArray<ClipWindow> clipWindows = BuildClipWindows(
+            framesPerSecond,
+            clips,
+            boundaries,
+            diagnostics);
         IReadOnlyDictionary<int, ClipWindow> clipsById = IndexClipWindows(
             clipWindows,
             diagnostics);
@@ -61,7 +68,7 @@ internal static class TimelineAudioSegmentPlanCompiler
         }
 
         return new(
-            Array.AsReadOnly(plan.Clips.Select(clip => AppendSegments(clip, additions)).ToArray()),
+            Array.AsReadOnly(clips.Select(clip => AppendSegments(clip, additions)).ToArray()),
             diagnostics.ToImmutable());
     }
 
@@ -223,20 +230,22 @@ internal static class TimelineAudioSegmentPlanCompiler
     }
 
     private static ImmutableArray<ClipWindow> BuildClipWindows(
-        VideoExecutionPlan plan,
+        int framesPerSecond,
+        IReadOnlyList<ClipPlan> clips,
+        IReadOnlyList<BoundaryPlan> boundaries,
         ImmutableArray<PlanDiagnostic>.Builder diagnostics)
     {
-        if (plan.FramesPerSecond <= 0)
+        if (framesPerSecond <= 0)
         {
             diagnostics.Add(new(
                 PlanDiagnosticSeverity.Warning,
                 "audio.timeline.invalid_fps",
                 "Timeline audio windows require a positive frames-per-second value."));
-            return [.. plan.Clips.Select(clip => new ClipWindow(clip.ClipId, null, null))];
+            return [.. clips.Select(clip => new ClipWindow(clip.ClipId, null, null))];
         }
 
         Dictionary<int, BoundaryPlan> outgoing = [];
-        foreach (BoundaryPlan boundary in plan.Boundaries)
+        foreach (BoundaryPlan boundary in boundaries)
         {
             if (!outgoing.TryAdd(boundary.FromClipId, boundary))
             {
@@ -251,7 +260,7 @@ internal static class TimelineAudioSegmentPlanCompiler
         ImmutableArray<ClipWindow>.Builder windows = ImmutableArray.CreateBuilder<ClipWindow>();
         double nextStart = 0;
         bool canResolveFollowing = true;
-        foreach (ClipPlan clip in plan.Clips)
+        foreach (ClipPlan clip in clips)
         {
             int trimFrames = 0;
             if (outgoing.TryGetValue(clip.ClipId, out BoundaryPlan boundary)
@@ -280,7 +289,7 @@ internal static class TimelineAudioSegmentPlanCompiler
                     $"Clip {clip.ClipId}'s outgoing boundary trim consumes its complete duration.",
                     ClipId: clip.ClipId));
             }
-            double duration = keptFrames / (double)plan.FramesPerSecond;
+            double duration = keptFrames / (double)framesPerSecond;
             windows.Add(new(clip.ClipId, nextStart, duration));
             nextStart += duration;
         }
