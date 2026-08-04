@@ -24,10 +24,8 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class Ltx2StageChainContractTests
 {
-    /// <summary>A latent-model upscale doubles 512 to this.</summary>
     private const int UpscaledEdge = 1024;
 
-    /// <summary>The <c>ImageScale</c> that fits a guide image to the stage resolution.</summary>
     private static ImageScaleNode FramingOf(LTXVImgToVideoInplaceNode guide) =>
         Assert.IsType<ImageScaleNode>(
             Assert.IsType<LTXVPreprocessNode>(guide.Image.Connection?.Node).Image.Connection?.Node);
@@ -529,9 +527,11 @@ public class Ltx2StageChainContractTests
             result.Graph.NodesOfType<VAEEncodeNode>(),
             node => ReachesUpstream(result, node, wrapperId));
         Assert.True(ReachesUpstream(result, reEncode, first.Id));
-        Assert.True(ReachesUpstream(result, secondLatent, reEncode.Id));
+        LTXVImgToVideoInplaceNode fallbackGuide = Assert.IsType<LTXVImgToVideoInplaceNode>(
+            secondLatent.VideoLatent.Connection?.Node);
+        Assert.Same(reEncode, fallbackGuide.LatentInput.Connection?.Node);
 
-        live.AssertAllLive(first, second, reEncode);
+        live.AssertAllLive(first, second, reEncode, fallbackGuide);
         AssertShippable(result, workflow, live);
     }
 

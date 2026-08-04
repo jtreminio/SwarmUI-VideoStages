@@ -187,44 +187,59 @@ internal class StageRunner
                 referenceFraming: referenceFraming);
         }
 
-        StageInputCase inputCase = StageInputDispatcher.Resolve(new StageInputFacts(
-            HasPrimaryGuide: primaryGuideClipRef is not null,
-            PrimaryGuideIsStageInput: PrimaryGuideIsStageInput(
-                primaryGuideClipRef,
-                stageFrame.PriorOutputPath,
-                sourceMedia),
-            IsContinuationTail: isContinuationTail,
-            HasOtherFrameReferences: clipRefs is { Count: > 0 },
-            ReplacesTextToVideoRoot: stageFrame.ReplacesTextToVideoRoot,
+        WGNodeData guideMedia = null;
+        Func<WGNodeData> resolveFallbackGuide = null;
+        if (primaryGuideClipRef is not null)
+        {
+            guideMedia = PrimaryGuideIsStageInput(
+                    primaryGuideClipRef,
+                    stageFrame.PriorOutputPath,
+                    sourceMedia)
+                ? ResolveDefaultLocalGuideMedia(sourceMedia, postVideoChain)
+                : GuideMediaPreparation.Prepare(
+                    _generator,
+                    primaryGuideClipRef.Image,
+                    sourceMedia,
+                    scaleToSourceSize: true,
+                    referenceFraming: referenceFraming);
+        }
+        else
+        {
             // Reinjection would overwrite the noise mask for the encoded footage's frame span.
-            InitVideoFootageIsStageInput: clipContext.PlannedClip.HasInitVideo
+            bool initVideoFootageIsStageInput = clipContext.PlannedClip.HasInitVideo
                 && clipContext.IsFirstStage(stage)
                 && payload.Guide.Kind == StageGuideReferenceKind.Generated
-                && !payload.ImageReferenceWasExplicit,
+                && !payload.ImageReferenceWasExplicit;
             // Only clip 0/stage 0 treats the host image as its implicit frame-1 guide.
-            RefinesIncomingLatent: clipContext.Plan.Root.HostKind == HostRootKind.ImageToVideo
+            bool refinesIncomingLatent = clipContext.Plan.Root.HostKind == HostRootKind.ImageToVideo
                 && !payload.ImageReferenceWasExplicit
-                && (clipContext.PlannedClip.ClipId != 0 || stage.ClipStageIndex != 0),
-            PriorStageLatentIsReusable: PriorStageLatentIsReusable(
-                stage,
-                sourceMedia,
-                guideReference,
-                genInfo,
-                postVideoChain),
-            HasGuide: primaryGuideClipRef?.Image is not null || guideReference?.Media is not null));
-
-        WGNodeData guideMedia = ResolveGuideMedia(
-            inputCase,
-            primaryGuideClipRef,
-            guideReference,
-            stageFrame,
-            referenceFraming);
-        Func<WGNodeData> resolveFallbackGuide = inputCase == StageInputCase.PriorStageLatentReuse
-            ? () => ResolveReinjectedGuideMedia(
-                guideReference,
-                stageFrame,
-                referenceFraming)
-            : null;
+                && (clipContext.PlannedClip.ClipId != 0 || stage.ClipStageIndex != 0);
+            if (!stageFrame.ReplacesTextToVideoRoot
+                && clipRefs.Count == 0
+                && !initVideoFootageIsStageInput
+                && !refinesIncomingLatent)
+            {
+                if (PriorStageLatentIsReusable(
+                        stage,
+                        sourceMedia,
+                        guideReference,
+                        genInfo,
+                        postVideoChain))
+                {
+                    resolveFallbackGuide = () => ResolveReinjectedGuideMedia(
+                        guideReference,
+                        stageFrame,
+                        referenceFraming);
+                }
+                else if (guideReference?.Media is not null)
+                {
+                    guideMedia = ResolveReinjectedGuideMedia(
+                        guideReference,
+                        stageFrame,
+                        referenceFraming);
+                }
+            }
+        }
         _stageExecutor.RunStage(
             genInfo,
             stageFrame,
@@ -236,30 +251,6 @@ internal class StageRunner
             clipRefs,
             primaryGuideClipRef?.Strength ?? 1.0);
     }
-
-    private WGNodeData ResolveGuideMedia(
-        StageInputCase inputCase,
-        ResolvedClipRef primaryGuideClipRef,
-        StageRefStore.StageRef guideReference,
-        StageFrame stageFrame,
-        ReferenceFramingMode referenceFraming) => inputCase switch
-        {
-            StageInputCase.PrimaryGuideIsStageInput =>
-                ResolveDefaultLocalGuideMedia(stageFrame.SourceMedia, stageFrame.PostVideoChain),
-            StageInputCase.ContinuationTail or StageInputCase.AuthoredGuideReference =>
-                GuideMediaPreparation.Prepare(
-                    _generator,
-                    primaryGuideClipRef.Image,
-                    stageFrame.SourceMedia,
-                    scaleToSourceSize: true,
-                    referenceFraming: referenceFraming),
-            StageInputCase.GuideReinjection =>
-                ResolveReinjectedGuideMedia(
-                    guideReference,
-                    stageFrame,
-                    referenceFraming),
-            _ => null,
-        };
 
     private bool PrimaryGuideIsStageInput(
         ResolvedClipRef primaryGuideClipRef,

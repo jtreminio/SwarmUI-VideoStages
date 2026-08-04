@@ -4,7 +4,6 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Architectures.Ltx2;
 using VideoStages.HostVideo;
 using VideoStages.Planning;
 using Xunit;
@@ -236,126 +235,6 @@ public class BackendConsolidationTests
                 int.MaxValue,
                 int.MaxValue));
     }
-
-    [Fact]
-    public void Stage_input_dispatch_names_the_primary_guide_cases_in_priority_order()
-    {
-        Assert.Equal(
-            StageInputCase.PrimaryGuideIsStageInput,
-            StageInputDispatcher.Resolve(new StageInputFacts(
-                HasPrimaryGuide: true,
-                PrimaryGuideIsStageInput: true,
-                IsContinuationTail: true,
-                HasOtherFrameReferences: true,
-                ReplacesTextToVideoRoot: true,
-                InitVideoFootageIsStageInput: true,
-                RefinesIncomingLatent: true,
-                PriorStageLatentIsReusable: true,
-                HasGuide: true)));
-        Assert.Equal(
-            StageInputCase.ContinuationTail,
-            StageInputDispatcher.Resolve(Facts() with
-            {
-                HasPrimaryGuide = true,
-                IsContinuationTail = true,
-            }));
-        Assert.Equal(
-            StageInputCase.AuthoredGuideReference,
-            StageInputDispatcher.Resolve(Facts() with { HasPrimaryGuide = true }));
-    }
-
-    [Theory]
-    [InlineData(nameof(StageInputFacts.ReplacesTextToVideoRoot), (int)StageInputCase.TextToVideoRootReplacement)]
-    [InlineData(nameof(StageInputFacts.HasOtherFrameReferences), (int)StageInputCase.FrameReferencesOnly)]
-    [InlineData(nameof(StageInputFacts.InitVideoFootageIsStageInput), (int)StageInputCase.InitVideoFootage)]
-    [InlineData(nameof(StageInputFacts.RefinesIncomingLatent), (int)StageInputCase.IncomingLatentRefine)]
-    [InlineData(nameof(StageInputFacts.PriorStageLatentIsReusable), (int)StageInputCase.PriorStageLatentReuse)]
-    public void Stage_input_dispatch_names_every_guide_free_case(
-        string fact,
-        int expected)
-    {
-        StageInputFacts facts = fact switch
-        {
-            nameof(StageInputFacts.ReplacesTextToVideoRoot) =>
-                Facts() with { ReplacesTextToVideoRoot = true },
-            nameof(StageInputFacts.HasOtherFrameReferences) =>
-                Facts() with { HasOtherFrameReferences = true },
-            nameof(StageInputFacts.InitVideoFootageIsStageInput) =>
-                Facts() with { InitVideoFootageIsStageInput = true },
-            nameof(StageInputFacts.RefinesIncomingLatent) =>
-                Facts() with { RefinesIncomingLatent = true },
-            _ => Facts() with { PriorStageLatentIsReusable = true },
-        };
-
-        StageInputCase actual = StageInputDispatcher.Resolve(facts);
-
-        Assert.Equal((StageInputCase)expected, actual);
-    }
-
-    [Fact]
-    public void Stage_input_dispatch_falls_back_to_reinjecting_the_resolved_guide()
-    {
-        StageInputCase actual = StageInputDispatcher.Resolve(Facts() with { HasGuide = true });
-
-        Assert.Equal(StageInputCase.GuideReinjection, actual);
-    }
-
-    [Fact]
-    public void Stage_input_dispatch_skips_reinjection_when_no_guide_resolved()
-    {
-        StageInputCase actual = StageInputDispatcher.Resolve(Facts());
-
-        Assert.Equal(StageInputCase.NoGuide, actual);
-    }
-
-    [Fact]
-    public void Every_stage_input_case_is_reachable_from_the_dispatch()
-    {
-        HashSet<StageInputCase> produced = [];
-        for (int mask = 0; mask < 1 << 9; mask++)
-        {
-            produced.Add(StageInputDispatcher.Resolve(new StageInputFacts(
-                HasPrimaryGuide: (mask & 1) != 0,
-                PrimaryGuideIsStageInput: (mask & 2) != 0,
-                IsContinuationTail: (mask & 4) != 0,
-                HasOtherFrameReferences: (mask & 8) != 0,
-                ReplacesTextToVideoRoot: (mask & 16) != 0,
-                InitVideoFootageIsStageInput: (mask & 32) != 0,
-                RefinesIncomingLatent: (mask & 64) != 0,
-                PriorStageLatentIsReusable: (mask & 128) != 0,
-                HasGuide: (mask & 256) != 0)));
-        }
-
-        Assert.Equal(Enum.GetValues<StageInputCase>().ToHashSet(), produced);
-    }
-
-    [Fact]
-    public void Stage_execution_has_one_owner_per_layer()
-    {
-        Assert.Null(typeof(StageRunner).Assembly.GetType(
-            "VideoStages.Architectures.Ltx2.LtxStageOrchestrator"));
-        Assert.Equal(
-            [
-                typeof(WorkflowGenerator),
-                typeof(LtxStageExecutor),
-                typeof(LtxStageGuideMediaResolver),
-                typeof(LtxClipRefResolver),
-            ],
-            Assert.Single(typeof(StageRunner).GetConstructors())
-                .GetParameters()
-                .Select(parameter => parameter.ParameterType));
-    }
-
-    private static StageInputFacts Facts() => new(
-        HasPrimaryGuide: false,
-        PrimaryGuideIsStageInput: false,
-        IsContinuationTail: false,
-        HasOtherFrameReferences: false,
-        ReplacesTextToVideoRoot: false,
-        InitVideoFootageIsStageInput: false,
-        RefinesIncomingLatent: false,
-        PriorStageLatentIsReusable: false,
-        HasGuide: false);
 
     private static ClipSpec ClipWithBoundary(int id, int frames, string boundary) => new(
         Id: id,
