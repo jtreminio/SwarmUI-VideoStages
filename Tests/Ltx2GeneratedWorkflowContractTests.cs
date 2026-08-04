@@ -323,7 +323,9 @@ public class Ltx2GeneratedWorkflowContractTests
         Assert.Equal("target opening", windows[1].Value<string>("prompt"));
 
         SwarmKSamplerNode targetSampler = StageSampler(bridge, 1);
-        Assert.True(ReachesUpstream(bridge, targetSampler, relay.Id));
+        // Reachability from the sampler itself would also hold for a relay wired onto clip 0 — the
+        // continue boundary puts all of clip 0 upstream. Only its conditioning arm is the claim.
+        Assert.True(ReachesUpstream(bridge, targetSampler.Positive.Connection?.Node, relay.Id));
 
         live.AssertAllLive(relay, targetLatent, targetSampler);
         AssertShippable(bridge, workflow, live);

@@ -197,11 +197,6 @@ public partial class StageFlowTests
             .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CorePreVideoSavePrepStep(), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithoutRefiner() =>
-        WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
-            .Concat(WorkflowTestHarness.VideoStagesSteps());
-
     private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>
         new(g =>
         {

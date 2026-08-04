@@ -242,13 +242,11 @@ public class MiniMaxGeneratedWorkflowContractTests
 
         List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
         Assert.Equal(2, samplers.Count);
-        Assert.All(samplers, sampler =>
-        {
-            Assert.Equal(4, sampler.StartAtStep.LiteralAsInt());
-            Assert.True(ReachesUpstream(bridge, sampler, window.Id));
-        });
+        Assert.All(samplers, sampler => Assert.Equal(4, sampler.StartAtStep.LiteralAsInt()));
 
-        // The refine stage inherits it, so asserting both would be true by transitivity.
+        // The refine stage inherits both through stage 0's latent, so asserting them on stage 1
+        // too would be true by transitivity.
+        Assert.True(ReachesUpstream(bridge, samplers[0], window.Id));
         Assert.True(ReachesUpstream(bridge, samplers[0], sourceAudio.Id));
         Assert.Single(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
 

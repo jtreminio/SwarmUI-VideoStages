@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
+using SwarmUI.Text2Image;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -176,6 +177,14 @@ internal static class TypedWorkflowAssertions
         Assert.True(workflow[node.Id] is JObject, $"Expected workflow to contain node id '{node.Id}'.");
         return new WorkflowNode(node.Id, (JObject)workflow[node.Id]);
     }
+
+    /// <summary>
+    /// The browser-visible warnings <c>PlanDiagnosticReporter.TrackRequestWarning</c> accumulates.
+    /// The API route's generator carries the same input, so these are readable off a generated
+    /// workflow as well as off a hand-built generator.
+    /// </summary>
+    public static List<string> RequestWarnings(T2IParamInput input) =>
+        Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
 
     /// <summary>
     /// Inclusive variant of <see cref="ComfyGraph.IsReachableUpstream"/>: returns true if

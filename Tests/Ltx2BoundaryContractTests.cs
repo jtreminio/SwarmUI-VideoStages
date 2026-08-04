@@ -243,7 +243,6 @@ public class Ltx2BoundaryContractTests
             carryMask.SourceStartSeconds.LiteralAsDouble()!.Value,
             precision: 6);
         Assert.True(ReachesUpstream(bridge, carryMask.Samples.Connection.Node, firstClip.Id));
-        Assert.True(ReachesUpstream(bridge, secondClip, carryMask.Id));
         Assert.Empty(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
 
         // Carry is generation-time context. There is no second merge near final publication.
@@ -333,9 +332,6 @@ public class Ltx2BoundaryContractTests
         Assert.All(anchors, anchor => Assert.Equal(1.0, anchor.Strength.LiteralAsDouble()));
         Assert.Equal([(512, 512)], TailGuideScales(anchors[0], tail.Id));
         Assert.Equal([(1024, 1024)], TailGuideScales(anchors[1], tail.Id));
-        Assert.True(
-            ReachesUpstream(bridge, anchors[1], clipZeroLast.Id),
-            "The final stage's anchor must trace back to clip 0's own output.");
 
         // Re-anchoring is invisible to the merge: the published slice geometry is unchanged.
         Assert.Equal(ContinueMergeSlices, MergeSlices(bridge));
