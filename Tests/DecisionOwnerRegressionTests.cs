@@ -443,7 +443,11 @@ public class DecisionOwnerRegressionTests
                 HostRootKind.TextToVideoRoot,
                 DiscardsRoot: true,
                 UsesGeneratedClipDonor: false,
-                InterceptsHostCore: true),
+                InterceptsHostCore: true,
+                FirstClipHasInitVideo: true,
+                UsesStageHandoff: false,
+                DropsTextToVideoRootDonor: false,
+                DiscardsTextToVideoRoot: true),
             [clip],
             [],
             []);
@@ -508,18 +512,27 @@ public class DecisionOwnerRegressionTests
                 ? InitVideoClip(index, architecture)
                 : GeneratedClip(index, architecture))]);
 
-    private static VideoExecutionPlan Plan(ClipPlan[] clips) => new(
-        512,
-        512,
-        24,
-        new(
-            HostRootKind.TextToVideoRoot,
-            DiscardsRoot: true,
-            UsesGeneratedClipDonor: false,
-            InterceptsHostCore: true),
-        clips,
-        [],
-        []);
+    private static VideoExecutionPlan Plan(ClipPlan[] clips)
+    {
+        bool firstClipHasInitVideo = clips.FirstOrDefault()?.HasInitVideo == true;
+        bool hasGeneratedClip = clips.Any(clip => !clip.HasInitVideo);
+        return new(
+            512,
+            512,
+            24,
+            new(
+                HostRootKind.TextToVideoRoot,
+                DiscardsRoot: true,
+                UsesGeneratedClipDonor: false,
+                InterceptsHostCore: true,
+                firstClipHasInitVideo,
+                UsesStageHandoff: !firstClipHasInitVideo,
+                DropsTextToVideoRootDonor: firstClipHasInitVideo && hasGeneratedClip,
+                DiscardsTextToVideoRoot: true),
+            clips,
+            [],
+            []);
+    }
 
     private static VideoExecutionPlanContext BoundContext(
         WorkflowGenerator generator,

@@ -23,7 +23,7 @@ namespace VideoStages;
 /// </summary>
 internal sealed class HostRootAdoption(
     WorkflowGenerator generator,
-    RootExecutionPolicy rootPolicy,
+    RootPlan root,
     IReadOnlySet<string> ownedRootNodeIds)
 {
     /// <summary>Core's reserved base sampler and decode, per its own id map.</summary>
@@ -79,7 +79,7 @@ internal sealed class HostRootAdoption(
     private bool TryClaim(ClipPlan clip, StagePlan stage, IReadOnlyCollection<string> ids)
     {
         if (_claimed
-            || !rootPolicy.ReplacesTextToVideoRootStage(stage, clip)
+            || !root.ReplacesTextToVideoRootStage(stage, clip)
             || !ids.All(id => generator.HasNode(id) && ownedRootNodeIds.Contains(id))
             // A capture resolves to a node id rather than to a graph edge, so it survives the
             // ownership test above and has to be excluded on its own.

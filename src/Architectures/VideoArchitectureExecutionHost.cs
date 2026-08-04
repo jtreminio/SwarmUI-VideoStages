@@ -122,7 +122,6 @@ internal sealed class VideoArchitectureExecutionHost
         }
         RootRuntimeSession rootSession = RootRuntimeSession.Capture(_generator, _plan);
         MultiClipParallelMerger merger = new(_generator);
-        RootExecutionPolicy rootPolicy = new(_plan);
         AudioRuntimeSources preparedAudioSources = new AudioRuntimeSourceResolver(
             _generator,
             new AudioHandler(_generator)).Resolve(_plan);
@@ -134,12 +133,11 @@ internal sealed class VideoArchitectureExecutionHost
         ArchitectureTimelineSessionContext sessionContext = new(
             _plan,
             preparedAudioSources,
-            rootPolicy,
             assembly)
         {
             RootAdoption = new HostRootAdoption(
                 _generator,
-                rootPolicy,
+                _plan.Root,
                 rootSession.OwnedRootComponentIds),
         };
         RuntimeArtifact finalArtifact;

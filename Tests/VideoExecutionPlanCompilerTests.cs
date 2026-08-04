@@ -514,6 +514,10 @@ public class VideoExecutionPlanCompilerTests
         Assert.True(plan.Root.DiscardsRoot);
         Assert.True(plan.Root.InterceptsHostCore);
         Assert.False(plan.Root.UsesGeneratedClipDonor);
+        Assert.True(plan.Root.FirstClipHasInitVideo);
+        Assert.False(plan.Root.UsesStageHandoff);
+        Assert.False(plan.Root.DropsTextToVideoRootDonor);
+        Assert.False(plan.Root.DiscardsTextToVideoRoot);
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "duplicate-clip-id"
                 && diagnostic.Severity == PlanDiagnosticSeverity.Warning);

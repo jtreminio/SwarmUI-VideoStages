@@ -8,7 +8,7 @@ namespace VideoStages.Architectures.Ltx2;
 internal sealed class StageGuideReferenceState(
     WorkflowGenerator g,
     StageRefStore store,
-    RootExecutionPolicy rootPolicy)
+    RootPlan root)
 {
     private readonly Dictionary<int, StageRefStore.StageRef> _stageOutputs = [];
     private StageRefStore.StageRef _previousStageRef;
@@ -38,7 +38,7 @@ internal sealed class StageGuideReferenceState(
             // and every stage's ImageReference is rewritten to Generated on such a request — so a
             // miss here is the intended state for the whole timeline, not something to report.
             StageGuideReferenceKind.Generated => _previousStageRef
-                ?? (rootPolicy.DiscardsTextToVideoRoot
+                ?? (root.DiscardsTextToVideoRoot
                     ? null
                     : WarnIfMissing(
                         store.Generated,

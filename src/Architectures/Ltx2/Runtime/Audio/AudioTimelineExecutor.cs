@@ -26,17 +26,17 @@ internal sealed class AudioTimelineExecutor
     public void PrepareRootAudio(
         VideoExecutionPlan plan,
         AudioRuntimeSources sources,
-        RootExecutionPolicy rootPolicy)
+        RootPlan root)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(sources);
-        ArgumentNullException.ThrowIfNull(rootPolicy);
+        ArgumentNullException.ThrowIfNull(root);
         if (plan.Clips.Count == 0)
         {
             _ = _audioInjector.TryInject(sources.NativeAudio);
             return;
         }
-        if (rootPolicy.UsesStageHandoff || rootPolicy.FirstClipHasInitVideo)
+        if (root.UsesStageHandoff || root.FirstClipHasInitVideo)
         {
             return;
         }

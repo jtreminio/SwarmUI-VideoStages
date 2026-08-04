@@ -66,7 +66,11 @@ public class AudioHandlerTests
             HostRootKind.ImageToVideo,
             DiscardsRoot: false,
             UsesGeneratedClipDonor: false,
-            InterceptsHostCore: true),
+            InterceptsHostCore: true,
+            FirstClipHasInitVideo: false,
+            UsesStageHandoff: true,
+            DropsTextToVideoRootDonor: false,
+            DiscardsTextToVideoRoot: false),
         Clips: clips,
         Boundaries: [],
         Diagnostics: []);

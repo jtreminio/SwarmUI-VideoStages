@@ -32,7 +32,7 @@ public class StageRunnerCollaboratorTests
             typeof(int),
             typeof(ClipContext),
             typeof(bool),
-            typeof(RootExecutionPolicy));
+            typeof(RootPlan));
         AssertTypedMethod(
             typeof(StageUpscaleGraphBuilder),
             nameof(StageUpscaleGraphBuilder.Apply),

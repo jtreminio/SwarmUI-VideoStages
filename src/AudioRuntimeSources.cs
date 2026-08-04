@@ -16,4 +16,4 @@ internal sealed record ClipAudioExecutionContext(
     int FramesPerSecond,
     bool IsFirstClip,
     AudioRuntimeSources Sources,
-    RootExecutionPolicy RootPolicy);
+    RootPlan Root);

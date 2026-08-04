@@ -125,8 +125,7 @@ internal sealed class RootVideoStageResizer(WorkflowGenerator g)
 
     private bool CurrentMediaFeedsSaveImage()
     {
-        if (!new RootExecutionPolicy(
-                g.RequireVideoExecutionPlanContext().Plan).InterceptsHostCore
+        if (!g.RequireVideoExecutionPlanContext().Plan.Root.InterceptsHostCore
             || g.CurrentMedia?.Path is not { Count: 2 } mediaPath)
         {
             return false;

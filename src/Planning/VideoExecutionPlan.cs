@@ -25,7 +25,18 @@ internal sealed record RootPlan(
     HostRootKind HostKind,
     bool DiscardsRoot,
     bool UsesGeneratedClipDonor,
-    bool InterceptsHostCore);
+    bool InterceptsHostCore,
+    bool FirstClipHasInitVideo,
+    bool UsesStageHandoff,
+    bool DropsTextToVideoRootDonor,
+    bool DiscardsTextToVideoRoot)
+{
+    public bool ReplacesTextToVideoRootStage(StagePlan stage, ClipPlan clip) =>
+        DiscardsTextToVideoRoot
+        && clip.Input == ClipInputKind.EmptyLatent
+        && stage.Input == StageInputKind.EmptyLatent
+        && stage.ClipStageIndex == 0;
+}
 
 internal enum HostRootKind
 {

@@ -1,10 +1,11 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
 /// <summary>
-/// Applies the compiled root ownership policy once, captures the generated reference at the
+/// Applies the compiled root plan once, captures the generated reference at the
 /// post-video-chain boundary, and snapshots the root sources shared by generated clips.
 /// </summary>
 internal sealed class StageSequenceRootSetup(
@@ -14,16 +15,16 @@ internal sealed class StageSequenceRootSetup(
 {
     public StageSequenceRootSources Prepare(
         AudioRuntimeSources preparedAudioSources,
-        RootExecutionPolicy rootPolicy)
+        RootPlan root)
     {
         ArgumentNullException.ThrowIfNull(preparedAudioSources);
-        ArgumentNullException.ThrowIfNull(rootPolicy);
+        ArgumentNullException.ThrowIfNull(root);
 
-        if (rootPolicy.UsesStageHandoff)
+        if (root.UsesStageHandoff)
         {
             rootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia();
         }
-        else if (rootPolicy.DropsTextToVideoRootDonor)
+        else if (root.DropsTextToVideoRootDonor)
         {
             // The root will be pruned, so only stamp its timeline dimensions. Removing inherited
             // audio prevents replacement clips from retaining the unrelated root sampler.
@@ -33,17 +34,17 @@ internal sealed class StageSequenceRootSetup(
                 g.CurrentMedia.AttachedAudio = null;
             }
         }
-        else if (rootPolicy.ConformsSurvivingRootMedia)
+        else if (root.UsesGeneratedClipDonor)
         {
             rootVideoStageResizer.ApplyConfiguredRootStageResolutionToSurvivingRootMedia();
         }
 
-        CaptureGeneratedReference(rootPolicy);
+        CaptureGeneratedReference(root);
         return new StageSequenceRootSources(
             g.CurrentMedia?.Duplicate(),
             g.CurrentVae?.Duplicate(),
             new AudioRuntimeSources(
-                rootPolicy.DropsTextToVideoRootDonor
+                root.DropsTextToVideoRootDonor
                     ? null
                     : preparedAudioSources.NativeAudio ?? g.CurrentMedia?.AttachedAudio,
                 preparedAudioSources.ClipAudios,
@@ -52,11 +53,11 @@ internal sealed class StageSequenceRootSetup(
 
     public StageSequenceRootSources Snapshot(
         AudioRuntimeSources preparedAudioSources,
-        RootExecutionPolicy rootPolicy)
+        RootPlan root)
     {
         ArgumentNullException.ThrowIfNull(preparedAudioSources);
-        ArgumentNullException.ThrowIfNull(rootPolicy);
-        if (!rootPolicy.DiscardsTextToVideoRoot)
+        ArgumentNullException.ThrowIfNull(root);
+        if (!root.DiscardsTextToVideoRoot)
         {
             store.Capture(StageRefStore.StageKind.Generated, g.CurrentMedia, g.CurrentVae);
         }
@@ -66,9 +67,9 @@ internal sealed class StageSequenceRootSetup(
             preparedAudioSources);
     }
 
-    private void CaptureGeneratedReference(RootExecutionPolicy rootPolicy)
+    private void CaptureGeneratedReference(RootPlan root)
     {
-        if (rootPolicy.DiscardsTextToVideoRoot)
+        if (root.DiscardsTextToVideoRoot)
         {
             return;
         }

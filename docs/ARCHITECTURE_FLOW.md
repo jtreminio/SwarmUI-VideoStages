@@ -434,9 +434,9 @@ For the ControlNet preprocessor phase,
 to active architecture providers. `Ltx2ExecutionAdapter` derives its private
 multiple-of-64 branch from that capture through `LtxControlNetMediaNormalizer`,
 never from the current shared apply input, so the result does not depend on which
-architectures ran before it. Wrapping the shared apply input down to one frame is
-LTX root policy, so it happens only when LTX owns the host root; the source-only
-path retains the raw capture.
+architectures ran before it. The compiled root plan controls whether the shared apply input is
+wrapped down to one frame, so it happens only when LTX owns the host root; the source-only path
+retains the raw capture.
 LTX also handles base/refiner references and root audio-mask sizing.
 `MiniMaxExecutionAdapter` captures the same base/refiner host reference points.
 `VideoArchitectureExecutionHost` captures resolvable root media, optional VAE

@@ -40,7 +40,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
     /// </summary>
     private void CaptureIfReferenced(VideoExecutionPlan plan, StageRefStore.StageKind kind)
     {
-        if (new RootExecutionPolicy(plan).DiscardsTextToVideoRoot)
+        if (plan.Root.DiscardsTextToVideoRoot)
         {
             // Nothing can consume a host reference here: the spec parser rewrites every stage's
             // ImageReference to Generated on such a request, and LtxClipRefResolver drops every
@@ -91,21 +91,21 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         StageGuideReferenceState guideReferences = new(
             generator,
             stageRefStore,
-            context.RootPolicy);
+            context.Plan.Root);
         StageSequenceRootSources rootSources;
         if (context.OwnsGeneratedRoot)
         {
             audioTimelineExecutor.PrepareRootAudio(
                 context.Plan,
                 context.AudioSources,
-                context.RootPolicy);
+                context.Plan.Root);
             rootSources = rootSetup.Prepare(
                 context.AudioSources,
-                context.RootPolicy);
+                context.Plan.Root);
         }
         else
         {
-            rootSources = rootSetup.Snapshot(context.AudioSources, context.RootPolicy);
+            rootSources = rootSetup.Snapshot(context.AudioSources, context.Plan.Root);
         }
         return new Ltx2GenerationSession(
             generator,

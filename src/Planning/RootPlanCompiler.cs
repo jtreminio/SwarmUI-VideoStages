@@ -7,17 +7,33 @@ internal static class RootPlanCompiler
     {
         if (clips.Count == 0)
         {
-            return new RootPlan(environment.HostKind, false, false, false);
+            return new RootPlan(
+                HostKind: environment.HostKind,
+                DiscardsRoot: false,
+                UsesGeneratedClipDonor: false,
+                InterceptsHostCore: false,
+                FirstClipHasInitVideo: false,
+                UsesStageHandoff: false,
+                DropsTextToVideoRootDonor: false,
+                DiscardsTextToVideoRoot: false);
         }
 
         bool hasGeneratedClip = clips.Any(clip => clip.InitVideo is null);
-        bool initVideoLeadWithGeneratedClips = clips[0].InitVideo is not null && hasGeneratedClip;
+        bool firstClipHasInitVideo = clips[0].InitVideo is not null;
+        bool initVideoLeadWithGeneratedClips = firstClipHasInitVideo && hasGeneratedClip;
         bool discardsRoot = environment.HostKind == HostRootKind.TextToVideoRoot
             || !hasGeneratedClip;
+        bool interceptsHostCore = discardsRoot || environment.CanHandoffHostCore;
         return new RootPlan(
-            environment.HostKind,
-            discardsRoot,
-            !discardsRoot && initVideoLeadWithGeneratedClips,
-            discardsRoot || environment.CanHandoffHostCore);
+            HostKind: environment.HostKind,
+            DiscardsRoot: discardsRoot,
+            UsesGeneratedClipDonor: !discardsRoot && initVideoLeadWithGeneratedClips,
+            InterceptsHostCore: interceptsHostCore,
+            FirstClipHasInitVideo: firstClipHasInitVideo,
+            UsesStageHandoff: interceptsHostCore && !firstClipHasInitVideo,
+            DropsTextToVideoRootDonor: environment.HostKind == HostRootKind.TextToVideoRoot
+                && initVideoLeadWithGeneratedClips,
+            DiscardsTextToVideoRoot: environment.HostKind == HostRootKind.TextToVideoRoot
+                && discardsRoot);
     }
 }

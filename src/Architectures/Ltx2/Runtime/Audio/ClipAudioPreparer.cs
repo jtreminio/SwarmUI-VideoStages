@@ -30,9 +30,10 @@ internal sealed class ClipAudioPreparer(
         }
 
         WGNodeData currentMedia = g.CurrentMedia.Duplicate();
-        bool suppressNative = context.RootPolicy.SuppressesNativeAudioForStage(
-            context.FirstStage,
-            context.PlannedClip);
+        bool suppressNative = context.Root.UsesStageHandoff
+            && context.Root.ReplacesTextToVideoRootStage(
+                context.FirstStage,
+                context.PlannedClip);
         WGNodeData selectedBaseAudio = PlannedAudioSourceSelector.Select(
             context.PlannedClip.ClipId,
             context.PlannedClip.Audio.Base,
@@ -178,13 +179,8 @@ internal sealed class ClipAudioPreparer(
         bool overlaysOverNoBase = preserveWindows.Count > 0
             && baseAudio is null
             && duration > 0;
-        // Injecting conditions the host's own root chain, which is only worth doing while that
-        // chain is what generates. Under a discarded text root the first clip's stage replaces it,
-        // so every injection below is skipped: this one used to leave the clip generating
-        // unconditioned audio, because clearing AttachedAudio let the stage build a fresh empty
-        // latent over the injected one, and the two later ones merely ship a duplicate encode chain
-        // ComfyUI runs for nothing. Evaluated before TryInject: the call is the injection.
-        bool replacesHostChain = context.RootPolicy.DiscardsTextToVideoRoot;
+        // Injecting into a discarded host root creates conditioning and encode work no sampler uses.
+        bool replacesHostChain = context.Root.DiscardsTextToVideoRoot;
         bool overlaysConditionRootGeneration = hasGenerationStage
             && context.IsFirstClip
             && overlaysOverNoBase
@@ -221,13 +217,13 @@ internal sealed class ClipAudioPreparer(
             return;
         }
 
-        bool rootInjection = context.RootPolicy.UsesStageHandoff
+        bool rootInjection = context.Root.UsesStageHandoff
             && context.PlannedClip.RequireLtx2Payload().AudioInjection.RootHandoffMatchesAudioLength;
         if (rootInjection && baseAudio is not null)
         {
             _ = audioInjector.TryInject(combinedAudio);
         }
-        else if (!context.RootPolicy.UsesStageHandoff
+        else if (!context.Root.UsesStageHandoff
             && context.IsFirstClip
             && preserveWindows.Count > 0
             && baseAudio is not null)

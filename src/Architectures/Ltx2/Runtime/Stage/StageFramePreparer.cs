@@ -18,18 +18,18 @@ internal sealed class StageFramePreparer(
         int sectionId,
         ClipContext clipContext,
         bool requiresDedicatedOutput,
-        RootExecutionPolicy rootPolicy)
+        RootPlan root)
     {
         ArgumentNullException.ThrowIfNull(stage);
         ArgumentNullException.ThrowIfNull(clipContext);
-        ArgumentNullException.ThrowIfNull(rootPolicy);
+        ArgumentNullException.ThrowIfNull(root);
 
         WGNodeData currentMedia = g.CurrentMedia
             ?? throw VideoStagesInvariant.Failure(
                 $"VideoStages: stage {stage.StageId} has no input media.");
         JArray priorOutputPath = CopyPath(currentMedia.Path);
         LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
-        bool replacesTextToVideoRoot = rootPolicy.ReplacesTextToVideoRootStage(
+        bool replacesTextToVideoRoot = root.ReplacesTextToVideoRootStage(
             stage,
             clipContext.PlannedClip);
         LtxPostVideoChainCapture postVideoChain = replacesTextToVideoRoot

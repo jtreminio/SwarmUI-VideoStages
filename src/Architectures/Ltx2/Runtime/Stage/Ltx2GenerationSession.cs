@@ -141,7 +141,7 @@ internal sealed class Ltx2GenerationSession(
             session.Plan.FramesPerSecond,
             IsFirstClip: context.ClipIndex == 0,
             clipAudioSources,
-            session.RootPolicy),
+            session.Plan.Root),
             clipContext,
             boundaryAudioCarry);
     }
@@ -172,7 +172,7 @@ internal sealed class Ltx2GenerationSession(
             store,
             clipContext,
             requiresDedicatedOutput,
-            session.RootPolicy);
+            session.Plan.Root);
         guideReferences.CaptureStageOutput(stage);
     }
 

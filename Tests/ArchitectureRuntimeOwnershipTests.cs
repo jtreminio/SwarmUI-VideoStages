@@ -255,7 +255,11 @@ public class ArchitectureRuntimeOwnershipTests
                 HostRootKind.ImageToVideo,
                 DiscardsRoot: false,
                 UsesGeneratedClipDonor: true,
-                InterceptsHostCore: true),
+                InterceptsHostCore: true,
+                FirstClipHasInitVideo: true,
+                UsesStageHandoff: false,
+                DropsTextToVideoRootDonor: false,
+                DiscardsTextToVideoRoot: false),
             [initVideoClip, generated],
             [
                 new(
