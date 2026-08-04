@@ -14,7 +14,6 @@ using Image = SwarmUI.Utils.Image;
 
 namespace VideoStages.Architectures.MiniMax;
 
-/// <summary>Runs MiniMax H3 stages over a joint audio-video latent.</summary>
 internal sealed class MiniMaxGenerationSession(
     WorkflowGenerator g,
     VideoExecutionPlan plan,
@@ -164,27 +163,33 @@ internal sealed class MiniMaxGenerationSession(
                 sectionId,
                 positive,
                 negative);
+            WGNodeData incoming = null;
+            WGNodeData firstFrame = _entryFirstFrame;
+            int startStep = 0;
             if (stage.Input is StageInputKind.PreviousStage or StageInputKind.InitVideo)
             {
                 stageInput.Configure(clip, stage, genInfo, startStep: 0);
-                ExecuteRefineStage(
-                    clip,
-                    stage,
-                    genInfo,
-                    HostVideoStageSchedulePolicy.StartStep(core.Steps, core.Control),
-                    core.Upscale);
+                incoming = g.CurrentMedia
+                    ?? throw VideoStagesInvariant.Failure(
+                        "A MiniMax H3 refine stage has no incoming decoded media.");
+                if (incoming.AttachedAudio is null)
+                {
+                    throw VideoStagesInvariant.Failure(
+                        "A MiniMax H3 refine stage's incoming media carries no audio input.");
+                }
+                firstFrame = null;
+                startStep = HostVideoStageSchedulePolicy.StartStep(
+                    core.Steps,
+                    core.Control);
             }
-            else
-            {
-                SampleNatively(
-                    clip,
-                    stage,
-                    genInfo,
-                    incoming: null,
-                    _entryFirstFrame,
-                    startStep: 0,
-                    core.Upscale);
-            }
+            SampleNatively(
+                clip,
+                stage,
+                genInfo,
+                incoming,
+                firstFrame,
+                startStep,
+                core.Upscale);
             RestoreReusableAudio(clipPayload, stage);
             if (stage.StageId == clip.Stages.Last(candidate => !candidate.IsPassthrough).StageId)
             {
@@ -269,36 +274,6 @@ internal sealed class MiniMaxGenerationSession(
             (previous.Frames - windowFrames) / (double)previous.FramesPerSecond;
     }
 
-    /// <summary>
-    /// Refines decoded media. The joint latent must be rebuilt here rather than through the host
-    /// builder: <c>WGNodeData.AsSamplingLatent</c> encodes raw video video-only, and its
-    /// audio-concat branch fires only once the video is already a latent.
-    /// </summary>
-    private void ExecuteRefineStage(
-        ClipPlan clip,
-        StagePlan stage,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        int startStep,
-        StageUpscalePlan stageUpscale)
-    {
-        WGNodeData incoming = g.CurrentMedia
-            ?? throw VideoStagesInvariant.Failure(
-                "A MiniMax H3 refine stage has no incoming decoded media.");
-        if (incoming.AttachedAudio is null)
-        {
-            throw VideoStagesInvariant.Failure(
-                "A MiniMax H3 refine stage's incoming media carries no audio input.");
-        }
-        SampleNatively(
-            clip,
-            stage,
-            genInfo,
-            incoming,
-            firstFrame: null,
-            startStep,
-            stageUpscale);
-    }
-
     private void SampleNatively(
         ClipPlan clip,
         StagePlan stage,
@@ -352,11 +327,7 @@ internal sealed class MiniMaxGenerationSession(
         }
     }
 
-    /// <summary>
-    /// Mirrors <c>ImageToVideoGenInfo.PrepModelAndCond</c> minus its H3 keyframe attach, which
-    /// reads the host's current media: absent on text entry, and a whole decoded video on refine.
-    /// Keyframes are attached to the sampling latent instead.
-    /// </summary>
+    /// <summary>Prepares the model and prompt without host keyframe attachment.</summary>
     private void PrepModelAndPrompt(WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
         g.FinalLoadedModel = genInfo.VideoModel;
@@ -578,10 +549,7 @@ internal sealed class MiniMaxGenerationSession(
         return combinedAudio;
     }
 
-    /// <summary>
-    /// The separated audio half arrives still latent; the clip artifact contract needs decoded
-    /// audio, not a latent the assembler cannot mix.
-    /// </summary>
+    /// <summary>Decodes the latent audio required by the clip artifact.</summary>
     private void AttachDecodedAudio()
     {
         if (g.CurrentMedia?.AttachedAudio is not WGNodeData attached
@@ -635,11 +603,7 @@ internal sealed class MiniMaxGenerationSession(
         return decoded;
     }
 
-    /// <summary>
-    /// An authored final-frame reference is clip-local. SwarmUI's request-global 'Video End Frame'
-    /// has no unambiguous target once a timeline has more than one clip, so it only applies to a
-    /// lone MiniMax clip that did not author its own.
-    /// </summary>
+    /// <summary>Uses the global final frame only when one clip has no authored reference.</summary>
     private WGNodeData ResolveEndFrame(NativeFrameReferencePlan authored)
     {
         if (authored is not null)
