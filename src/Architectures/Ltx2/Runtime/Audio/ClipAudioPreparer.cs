@@ -178,9 +178,17 @@ internal sealed class ClipAudioPreparer(
         bool overlaysOverNoBase = preserveWindows.Count > 0
             && baseAudio is null
             && duration > 0;
+        // Injecting conditions the host's own root chain, which is only worth doing while that
+        // chain is what generates. Under a discarded text root the first clip's stage replaces it,
+        // so every injection below is skipped: this one used to leave the clip generating
+        // unconditioned audio, because clearing AttachedAudio let the stage build a fresh empty
+        // latent over the injected one, and the two later ones merely ship a duplicate encode chain
+        // ComfyUI runs for nothing. Evaluated before TryInject: the call is the injection.
+        bool replacesHostChain = context.RootPolicy.DiscardsTextToVideoRoot;
         bool overlaysConditionRootGeneration = hasGenerationStage
             && context.IsFirstClip
             && overlaysOverNoBase
+            && !replacesHostChain
             && audioInjector.TryInject(
                 combinedAudio,
                 matchVideoLengthToAudio: false,
@@ -208,7 +216,7 @@ internal sealed class ClipAudioPreparer(
         }
         g.CurrentMedia = currentMedia;
 
-        if (!hasGenerationStage)
+        if (!hasGenerationStage || replacesHostChain)
         {
             return;
         }

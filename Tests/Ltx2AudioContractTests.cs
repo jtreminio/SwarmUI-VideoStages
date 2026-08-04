@@ -15,11 +15,11 @@ namespace VideoStages.Tests;
 /// the model preserves it instead of regenerating it, and how per-clip audio is published — all
 /// generated through the real Comfy API POST path.
 /// <para>
-/// Shape is load-bearing. Most tests use image-to-video, where the extension owns every clip's
-/// audio. In text-to-video the first clip's chain is core's own root, so audio conditioning for
-/// that clip routes through <c>LtxAudioInjector</c> instead — a path with a live defect, see
-/// <see cref="Timeline_segment_over_no_base_track_conditions_generation_through_a_window_mask"/>.
-/// The two text-to-video tests here take that shape only for what it uniquely exposes.
+/// Shape is load-bearing. Most tests use image-to-video, where core's own root chain is what
+/// generates and the extension conditions it in place. Under a discarded text root the first clip's
+/// stage replaces that chain, so its audio takes the same windowed-latent path every later clip
+/// takes — see
+/// <see cref="A_text_root_clips_timeline_segment_conditions_the_stage_that_replaces_the_root"/>.
 /// </para>
 /// </summary>
 [Collection("VideoStagesTests")]
@@ -413,14 +413,6 @@ public class Ltx2AudioContractTests
     /// trimmed, volume-adjusted and laid over silence, then encoded and masked so only its own
     /// seconds are preserved and the model fills the gaps. The absent <c>SetLatentNoiseMask</c> is
     /// the distinction — that is the preserve-everything mask a full base track would get.
-    /// <para>
-    /// KNOWN DEFECT, which is why this is image-to-video: under text-to-video the first clip is
-    /// core's own root chain, so <c>ClipAudioPreparer</c> takes the
-    /// <c>LtxAudioInjector.TryInject</c> branch and clears <c>AttachedAudio</c>, then the clip's
-    /// stage builds a fresh <c>LTXVEmptyLatentAudio</c> that discards the injected mask. The whole
-    /// segment chain is left orphaned in the shipped graph and clip 0 generates unconditioned
-    /// audio; clips 1 and later take the branch asserted here and are correct.
-    /// </para>
     /// </summary>
     [Fact]
     public async Task Timeline_segment_over_no_base_track_conditions_generation_through_a_window_mask()
@@ -462,6 +454,75 @@ public class Ltx2AudioContractTests
         Assert.Same(mask.Latent, JointLatentOf(sampler).AudioLatent.Connection);
 
         live.AssertAllLive(mask, trim, volume, encode, sampler);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// The same segment under a text root, where the first clip's stage replaces core's chain
+    /// rather than conditioning it. Conditioning the chain there reached nothing: the stage built a
+    /// fresh <c>LTXVEmptyLatentAudio</c> over the top, so the clip generated unconditioned audio
+    /// and shipped the entire segment chain to ComfyUI orphaned, with no warning.
+    /// </summary>
+    [Fact]
+    public async Task A_text_root_clips_timeline_segment_conditions_the_stage_that_replaces_the_root()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        JObject document = MakeDocument(AudioClip(
+            Constants.AudioSourceUpload,
+            duration: 10.0,
+            uploadedAudio: null,
+            fixture.Stage(control: 0.5)));
+        document["audioTracks"] = new JArray(
+            AudioTrack("track-seg", volume: 0.5, fileName: "timeline.wav", AudioSpan(
+                timelineStartSeconds: 1.0,
+                timelineLengthSeconds: 2.0,
+                sourceStartSeconds: 0.5)));
+
+        JObject workflow = await fixture.GenerateAsync(document);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmSetAudioMaskWindowsNode mask = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>());
+        Assert.Equal((1.0, 3.0), OnlyWindowOf(mask));
+        Assert.Same(
+            mask.Latent,
+            JointLatentOf(StageSampler(bridge, 0)).AudioLatent.Connection);
+        // The fresh empty latent that used to displace it: there is no second audio latent at all.
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());
+
+        live.AssertAllLive(mask, StageSampler(bridge, 0));
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// A clip taking its length from its own audio track builds one encode chain, not two. The
+    /// second, conditioning core's chain, was pure waste under a text root — the stage replaces
+    /// that chain, so ComfyUI ran a whole extra audio VAE encode for a graph nobody samples.
+    /// </summary>
+    [Fact]
+    public async Task A_text_root_clip_sized_from_its_audio_encodes_that_audio_once()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        JObject clip = AudioClip(
+            Constants.AudioSourceUpload,
+            duration: null,
+            uploadedAudio: UploadedAudio(),
+            fixture.Stage(control: 0.5));
+        clip["clipLengthFromAudio"] = true;
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        LTXVAudioVAEEncodeNode encode = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.True(
+            ReachesUpstream(bridge, StageSampler(bridge, 0), encode.Id),
+            "The clip's audio is encoded but never sampled.");
+
+        live.AssertLive(encode);
         AssertShippable(bridge, workflow, live);
     }
 
