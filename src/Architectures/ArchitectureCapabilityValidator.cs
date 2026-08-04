@@ -210,7 +210,7 @@ internal static class ArchitectureCapabilityValidator
         if (kind == AudioSourceKind.Unknown
             || AudioSourceKindPolicy.CanDriveClipDuration(kind))
         {
-            // Unknown sources are normalized by AudioBaseSourcePlanCompiler.
+            // Unknown sources are reported during audio-plan compilation.
             return;
         }
         diagnostics.Add(new(

@@ -750,7 +750,7 @@ public class ArchitectureFoundationTests
         Assert.Single(
             plan.Diagnostics,
             diagnostic => diagnostic.Code
-                == AudioBaseSourcePlanCompiler.UnknownSourceCode);
+                == "audio.source.unknown");
         Assert.DoesNotContain(
             plan.Diagnostics,
             diagnostic => diagnostic.Code.StartsWith(

@@ -222,7 +222,43 @@ public class AudioPlanCompilerTests
 
         Assert.Equal(AudioSourceKind.Disabled, plan.Base.Kind);
         PlanDiagnostic unknown = Assert.Single(
-            plan.Diagnostics.Where(d => d.Code == AudioBaseSourcePlanCompiler.UnknownSourceCode));
+            plan.Diagnostics.Where(d => d.Code == "audio.source.unknown"));
         Assert.Equal(PlanDiagnosticSeverity.Warning, unknown.Severity);
+    }
+
+    [Fact]
+    public void Compile_reports_source_before_duration_diagnostics()
+    {
+        AudioPlan plan = AudioPlanCompiler.Compile(Clip(
+            source: "unrecognized",
+            audioLength: true,
+            controlNetLength: true));
+
+        Assert.Equal(
+        [
+            "audio.source.unknown",
+            "audio.length.controlnet_overrides_audio",
+        ],
+            plan.Diagnostics.Select(diagnostic => diagnostic.Code));
+    }
+
+    [Fact]
+    public void Compile_segments_rejects_invalid_windows_and_sources()
+    {
+        AudioPlanComponentResult<AudioSegmentPlan> result =
+            AudioSegmentPlanCompiler.Compile(
+                [
+                    new(AudioSourceKind.Upload, null, -1, 0, 1, null),
+                    new(AudioSourceKind.Upload, null, 0, 0, 1, null),
+                ],
+                Base(hasConfiguredTrack: false));
+
+        Assert.Empty(result.Plan.Items);
+        Assert.Equal(
+        [
+            "audio.segment.ignored_invalid_window",
+            "audio.segment.ignored_no_source",
+        ],
+            result.Diagnostics.Select(diagnostic => diagnostic.Code));
     }
 }

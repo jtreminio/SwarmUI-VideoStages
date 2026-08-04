@@ -201,7 +201,7 @@ public class BackendConsolidationTests
             plan.Diagnostics,
             diagnostic => diagnostic.Message.Contains("not-a-real-source"));
         Assert.Equal(PlanDiagnosticSeverity.Warning, warning.Severity);
-        Assert.Equal(AudioBaseSourcePlanCompiler.UnknownSourceCode, warning.Code);
+        Assert.Equal("audio.source.unknown", warning.Code);
         Assert.Equal(0, warning.ClipId);
         Assert.Equal(
             AudioSourceKind.Disabled,

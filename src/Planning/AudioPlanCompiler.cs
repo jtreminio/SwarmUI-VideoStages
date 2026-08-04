@@ -3,24 +3,83 @@ using System.Collections.Immutable;
 namespace VideoStages.Planning;
 
 /// <summary>
-/// Converts parsed clip configuration into immutable audio policy. It intentionally does not inspect
-/// the workflow: whether a native track, an AceStepFun decode, or a ControlNet capture exists is a
-/// runtime artifact-resolution concern, not a planning concern.
+/// Compiles immutable audio policy without resolving runtime workflow artifacts.
 /// </summary>
 internal static class AudioPlanCompiler
 {
+    private const string UnknownSourceCode = "audio.source.unknown";
+    private const string ControlNetOverridesAudioLength =
+        "audio.length.controlnet_overrides_audio";
+    private const string AudioLengthWithoutTrack =
+        "audio.length.audio_owner_has_no_lockable_track";
+
     public static AudioPlan Compile(ClipSpec clip)
     {
         ArgumentNullException.ThrowIfNull(clip);
 
-        AudioPlanComponentResult<AudioBaseSourcePlan> baseSource = AudioBaseSourcePlanCompiler.Compile(clip);
-        AudioPlanComponentResult<AudioLengthPlan> length = AudioLengthPlanCompiler.Compile(clip, baseSource.Plan);
+        ImmutableArray<PlanDiagnostic>.Builder diagnostics =
+            ImmutableArray.CreateBuilder<PlanDiagnostic>();
+        AudioSourceSelection selection = AudioSourceParser.Parse(clip.AudioSource);
+        AudioSourceKind sourceKind = selection.Kind;
+        bool hasConfiguredTrack;
+        if (sourceKind == AudioSourceKind.Unknown)
+        {
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Warning,
+                UnknownSourceCode,
+                $"Audio source '{selection.Raw}' is not supported; audio is disabled for this clip.",
+                clip.Id));
+            sourceKind = AudioSourceKind.Disabled;
+            hasConfiguredTrack = false;
+        }
+        else
+        {
+            hasConfiguredTrack = sourceKind != AudioSourceKind.Upload
+                || !string.IsNullOrWhiteSpace(clip.UploadedAudio?.Data);
+        }
+        AudioBaseSourcePlan baseSource = new(
+            sourceKind,
+            selection.Raw,
+            selection.AceStepFunTrack,
+            hasConfiguredTrack,
+            selection.Kind == AudioSourceKind.Upload
+                ? AudioMediaIdentityPlan.From(clip.UploadedAudio)
+                : null);
+
+        AudioLengthOwner lengthOwner;
+        if (clip.ClipLengthFromControlNet)
+        {
+            lengthOwner = AudioLengthOwner.ControlNet;
+            if (clip.ClipLengthFromAudio)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
+                    ControlNetOverridesAudioLength,
+                    "ControlNet owns clip length when both ControlNet and audio length are requested."));
+            }
+        }
+        else if (clip.ClipLengthFromAudio
+            && AudioSourceKindPolicy.CanDriveClipDuration(selection.Kind))
+        {
+            lengthOwner = AudioLengthOwner.Audio;
+            if (!baseSource.HasConfiguredTrack)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
+                    AudioLengthWithoutTrack,
+                    "Audio owns clip length, but the selected audio source does not provide a locked track."));
+            }
+        }
+        else
+        {
+            lengthOwner = AudioLengthOwner.Timeline;
+        }
 
         // Root timeline segments are added after boundary planning.
         return new(
-            baseSource.Plan,
-            length.Plan,
+            baseSource,
+            new(lengthOwner),
             new(ImmutableArray<AudioSegmentItemPlan>.Empty),
-            [.. baseSource.Diagnostics, .. length.Diagnostics]);
+            diagnostics.ToImmutable());
     }
 }
