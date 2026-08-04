@@ -317,8 +317,7 @@ public class WanRuntimeFlowTests
     [Fact]
     public void Wan5b_cleanup_uses_model_class_despite_forged_profile_aliases()
     {
-        using SwarmUiTestContext context = new();
-        EnableHostLoraLoading();
+        using SwarmUiTestContext context = new(clearModelGenSteps: false);
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
         AddLoraModel("UnitTest_Wan5b_Failure_Prompt.safetensors");
         AddLoraModel("UnitTest_Wan5b_Failure_Persisted.safetensors");
@@ -520,8 +519,7 @@ public class WanRuntimeFlowTests
     [Fact]
     public void Wan5b_native_text_restores_ambient_video_and_audio_scopes_after_model_prep_failure()
     {
-        using SwarmUiTestContext context = new();
-        EnableHostLoraLoading();
+        using SwarmUiTestContext context = new(clearModelGenSteps: false);
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
         T2IParamInput input = BuildTextToVideoInput(
             models.VideoModel,
@@ -579,8 +577,7 @@ public class WanRuntimeFlowTests
     [Fact]
     public void Wan_low_continuation_loader_failure_restores_all_temporary_state()
     {
-        using SwarmUiTestContext context = new();
-        EnableHostLoraLoading();
+        using SwarmUiTestContext context = new(clearModelGenSteps: false);
         TestModelBundle models =
             TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         AddLoraModel("UnitTest_Wan_Low_Failure_Prompt.safetensors");
@@ -843,39 +840,6 @@ public class WanRuntimeFlowTests
         Assert.Equal(expected.Weights, actual.Weights);
         Assert.Equal(expected.TextEncoderWeights, actual.TextEncoderWeights);
         Assert.Equal(expected.Confinements, actual.Confinements);
-    }
-
-    private static void EnableHostLoraLoading()
-    {
-        WorkflowGenerator.AddModelGenStep(g =>
-        {
-            if (g.LoadingModelType == "negative"
-                && !g.UserInput.Get(T2IParamTypes.NegativeModelIncludeLoras, true))
-            {
-                return;
-            }
-            (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(
-                -1,
-                g.LoadingModel,
-                g.LoadingClip);
-            (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(
-                0,
-                g.LoadingModel,
-                g.LoadingClip);
-            int confinement = g.IsRefinerStage
-                ? T2IParamInput.SectionID_Refiner
-                : g.IsPixelDecoderStage
-                    ? T2IParamInput.SectionID_PixelDecoder
-                    : g.IsImageToVideoSwap
-                        ? T2IParamInput.SectionID_VideoSwap
-                        : g.IsImageToVideo
-                            ? T2IParamInput.SectionID_Video
-                            : T2IParamInput.SectionID_BaseOnly;
-            (g.LoadingModel, g.LoadingClip) = g.LoadLorasForConfinement(
-                confinement,
-                g.LoadingModel,
-                g.LoadingClip);
-        }, -10);
     }
 
     private static T2IModel AddLoraModel(string name)

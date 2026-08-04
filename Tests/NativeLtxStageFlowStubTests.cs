@@ -75,8 +75,8 @@ public partial class StageFlowTests
         LTXVAudioVAEDecodeNode finalAudioDecode = RequireTypedNode<LTXVAudioVAEDecodeNode>(bridge, "203");
         LTXVSeparateAVLatentNode finalSeparateTyped = RequireTypedNode<LTXVSeparateAVLatentNode>(bridge, finalSeparate.Id);
         Assert.Same(finalSeparateTyped.AudioLatent, finalAudioDecode.Samples.Connection);
-        AssertNoDanglingTiledVaeDecodes(workflow);
-        AssertWorkflowHasNoCycles(workflow);
+        WorkflowLivePath.For(bridge).AssertAllLive([.. bridge.Graph.NodesOfType<VAEDecodeTiledNode>()]);
+        AssertAcyclic(bridge);
 
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
         Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, new JArray("204", 0)));

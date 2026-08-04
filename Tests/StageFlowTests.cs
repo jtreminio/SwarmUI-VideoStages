@@ -83,15 +83,6 @@ public partial class StageFlowTests
         Assert.True(ReachesUpstream(bridge, samplesInput.Connection.Node, expectedSourceId));
     }
 
-    private static void AssertNoDanglingTiledVaeDecodes(JObject workflow)
-    {
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        foreach (VAEDecodeTiledNode node in bridge.Graph.NodesOfType<VAEDecodeTiledNode>())
-        {
-            Assert.NotEmpty(bridge.Graph.FindInputsConnectedTo(node.IMAGE));
-        }
-    }
-
     private static void AssertStageLtxConcatsReuseOriginalAudio(JObject workflow, WorkflowNode originalSeparate)
     {
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -120,43 +111,6 @@ public partial class StageFlowTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         LTXVSeparateAVLatentNode separate = RequireTypedNode<LTXVSeparateAVLatentNode>(bridge, "201");
         return AsWorkflowNode(separate, workflow);
-    }
-
-    private static void AssertWorkflowHasNoCycles(JObject workflow)
-    {
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        Dictionary<string, int> states = [];
-
-        bool visit(ComfyNode node)
-        {
-            states[node.Id] = 1;
-
-            foreach (ComfyNode upstream in bridge.Graph.FindUpstream(node))
-            {
-                if (!states.TryGetValue(upstream.Id, out int state))
-                {
-                    if (visit(upstream))
-                    {
-                        return true;
-                    }
-                }
-                else if (state == 1)
-                {
-                    return true;
-                }
-            }
-
-            states[node.Id] = 2;
-            return false;
-        }
-
-        foreach (ComfyNode node in bridge.Graph.Nodes.Values)
-        {
-            if (!states.ContainsKey(node.Id))
-            {
-                Assert.False(visit(node), $"Workflow contains a cycle involving node {node.Id}.");
-            }
-        }
     }
 
     private static IReadOnlyList<WorkflowNode> AssertLtxConditioningUsesAdvancedEncoders(JObject workflow)
