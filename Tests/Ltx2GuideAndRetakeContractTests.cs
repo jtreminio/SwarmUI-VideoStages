@@ -73,13 +73,11 @@ public class Ltx2GuideAndRetakeContractTests
     /// <summary>
     /// Base is captured at priority -4.2 — the base sampler's <em>latent</em>, before the refiner —
     /// and Refiner at 5.89, the decoded image after it. <c>LtxStageGuideMediaResolver</c> turns the
-    /// latent into an image by walking downstream to the nearest VAEDecode.
+    /// latent into an image by walking downstream to the nearest VAEDecode of that same latent.
     /// <para>
-    /// KNOWN DEFECT: that walk crosses the refiner sampler, so under a latent-space refiner a Base
-    /// reference silently yields the <em>refined</em> image and the two references are
-    /// indistinguishable. The pixel upscale configured here is what forces core to decode the base
-    /// pass separately (<c>doPixelUpscale</c> in its refiner step), which is the only reason this
-    /// theory can tell them apart. Fixing the resolver should let the upscale be dropped.
+    /// The refiner here is the default kind — <c>PostApply</c>, no upscale — so core materialises no
+    /// pre-refiner decode at all and the only decode in the graph is the refiner's. A walk that
+    /// crossed the refiner sampler would land on it and make the two references indistinguishable.
     /// </para>
     /// </summary>
     [Theory]
@@ -98,8 +96,6 @@ public class Ltx2GuideAndRetakeContractTests
                 // Core's refiner step is gated on BOTH of these being present.
                 post["refinermethod"] = "PostApply";
                 post["refinercontrolpercentage"] = 0.2;
-                post["refinerupscale"] = 1.5;
-                post["refinerupscalemethod"] = "pixel-lanczos";
             });
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);

@@ -1,5 +1,6 @@
 using ComfyTyped.Core;
 using ComfyTyped.Families;
+using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -36,8 +37,12 @@ internal sealed class LtxStageGuideMediaResolver(WorkflowGenerator g)
         {
             WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
             INodeOutput guideOutput = bridge.ResolvePath(guidePath);
+            // Stop at the sampler: a decode on its far side is of different pixels, so an
+            // unbounded walk resolved a Base reference to the refined image whenever core built no
+            // pre-refiner decode of its own — which, under the default PostApply refiner with no
+            // upscale, is always.
             IVaeDecode decode = guideOutput is not null
-                ? bridge.Graph.FindNearestDownstream<IVaeDecode>(guideOutput)
+                ? bridge.Graph.FindNearestDownstream<IVaeDecode, SwarmKSamplerNode>(guideOutput)
                 : null;
             if (decode is not null)
             {
