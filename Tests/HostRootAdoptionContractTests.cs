@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.Families;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -131,6 +132,7 @@ public sealed class HostRootAdoptionContractTests
     [InlineData("wan")]
     [InlineData("host-video")]
     [InlineData("minimax")]
+    [InlineData("ltx2")]
     public async Task A_text_stage_claims_cores_sampler_and_decode(string architecture)
     {
         using VideoStagesWorkflowFixture fixture = CreateFixture(architecture);
@@ -144,9 +146,10 @@ public sealed class HostRootAdoptionContractTests
         Assert.Equal(CoreSamplerId, sampler.Id);
         Assert.Same(sampler, StageSampler(bridge, 0));
 
-        // H3 splits its joint latent before decoding, so the decode reads the sampler through the
-        // split rather than straight off it.
-        VAEDecodeNode decode = Assert.Single(bridge.Graph.NodesOfType<VAEDecodeNode>());
+        // By interface, not by node class: LTX-2 decodes tiled and H3 splits its joint latent
+        // first, so neither the class nor a direct connection to the sampler is common ground.
+        ComfyNode decode = Assert.IsAssignableFrom<ComfyNode>(
+            Assert.Single(bridge.Graph.Nodes.Values.OfType<IVaeDecode>()));
         Assert.Equal(CoreDecodeId, decode.Id);
         Assert.True(ReachesUpstream(bridge, decode, sampler.Id));
         Assert.Same(decode, live.FinalVideoSave().Images.Connection?.Node);
@@ -240,15 +243,15 @@ public sealed class HostRootAdoptionContractTests
     }
 
     /// <summary>
-    /// The claim belongs to the timeline, not to an architecture, so an LTX-2 clip that does not
-    /// claim must not stop its neighbour claiming either — in either order. LTX-2 captured the host
-    /// root unconditionally, and since a capture refuses the claim, one LTX-2 clip used to deny it
-    /// to the whole timeline.
+    /// The claim belongs to the timeline rather than to an architecture: whichever clip generates
+    /// first takes it, and the other family's clip neither takes it nor blocks it. LTX-2 used to
+    /// capture the host root unconditionally, and since a capture refuses the claim, one LTX-2 clip
+    /// denied it to the whole timeline whichever end it sat at.
     /// </summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task An_ltx_clip_does_not_deny_the_claim_to_its_neighbour(bool ltxLeads)
+    public async Task The_first_generated_stage_claims_whichever_family_owns_it(bool ltxLeads)
     {
         using LtxAndWanFixture fixture = new();
         JObject ltxClip = MakeClip(0.6, fixture.Stage());
@@ -261,11 +264,12 @@ public sealed class HostRootAdoptionContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         SwarmKSamplerNode claimed = RequireTypedNode<SwarmKSamplerNode>(bridge, CoreSamplerId);
-        Assert.Same(claimed, StageSampler(bridge, ltxLeads ? 1 : 0));
+        Assert.Same(claimed, StageSampler(bridge, 0));
+        Assert.NotEqual(CoreSamplerId, StageSampler(bridge, 1).Id);
         Assert.Equal(
             CoreDecodeId,
             Assert.Single(
-                bridge.Graph.NodesOfType<VAEDecodeNode>(),
+                bridge.Graph.Nodes.Values.OfType<IVaeDecode>().Cast<ComfyNode>(),
                 decode => ReachesUpstream(bridge, decode, claimed.Id)).Id);
 
         live.AssertLive(claimed);
@@ -290,7 +294,7 @@ public sealed class HostRootAdoptionContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        Assert.Equal(CoreSamplerId, StageSampler(bridge, 1).Id);
+        Assert.Equal(CoreSamplerId, StageSampler(bridge, 0).Id);
 
         AssertShippable(bridge, workflow, live);
     }

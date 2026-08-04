@@ -43,6 +43,7 @@ internal sealed class LtxStageSampler(WorkflowGenerator g)
             sigmin: 0.002,
             sigmax: 1000,
             previews: previewType,
+            id: stageFrame.ClaimedSamplerId,
             defsampler: genInfo.DefaultSampler,
             defscheduler: genInfo.DefaultScheduler,
             hadSpecialCond: genInfo.HadSpecialCond,

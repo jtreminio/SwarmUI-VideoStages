@@ -37,6 +37,12 @@ internal sealed class StageFrame
 
     public bool NeedsCropGuidesAfterSampler { get; set; }
 
+    /// <summary>Core's own sampler and decode ids when this stage took them over, null otherwise.
+    /// The claim is made once, before sampling, but the decode is built well after it.</summary>
+    public string ClaimedSamplerId { get; set; }
+
+    public string ClaimedDecodeId { get; set; }
+
     /// <summary>The continue boundary's tail, conformed to this stage's resolution, for a stage past
     /// the clip's first that regenerates the head. The opening stage takes the tail as its primary
     /// guide instead; later stages already have their own input contract, so the anchor is layered on

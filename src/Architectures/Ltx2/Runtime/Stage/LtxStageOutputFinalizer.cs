@@ -56,7 +56,11 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
         }
         else
         {
-            g.CurrentMedia = VaeDecodePreference.AsRawImage(g, g.CurrentMedia, genInfo.Vae);
+            g.CurrentMedia = VaeDecodePreference.AsRawImage(
+                g,
+                g.CurrentMedia,
+                genInfo.Vae,
+                stageFrame.ClaimedDecodeId);
             AttachDecodedLtxAudioFromCurrentVideo();
             ApplyCurrentMediaOutputMetadata(
                 outputWidth,

@@ -20,13 +20,16 @@ internal sealed class LtxStageExecutor
     private readonly LtxStageLatentBuilder latentBuilder;
     private readonly LtxStageSampler sampler;
     private readonly LtxStageOutputFinalizer outputFinalizer;
+    private readonly HostRootAdoption rootAdoption;
 
     internal LtxStageExecutor(
         WorkflowGenerator g,
-        RootVideoStageResizer rootVideoStageResizer)
+        RootVideoStageResizer rootVideoStageResizer,
+        HostRootAdoption rootAdoption)
     {
         this.g = g;
         this.rootVideoStageResizer = rootVideoStageResizer;
+        this.rootAdoption = rootAdoption;
         modelPromptPreparer = new LtxModelPromptPreparer(g);
         latentBuilder = new LtxStageLatentBuilder(g);
         sampler = new LtxStageSampler(g);
@@ -118,6 +121,8 @@ internal sealed class LtxStageExecutor
                         == postVideoChain.State.VideoDecodeNodeId;
             }
 
+            (stageFrame.ClaimedSamplerId, stageFrame.ClaimedDecodeId) =
+                rootAdoption.ClaimTextRoot(stageFrame.ClipContext.PlannedClip, stageFrame.Stage);
             sampler.Execute(genInfo, stageFrame);
             outputFinalizer.Complete(genInfo, stageFrame, postVideoChain,
                 stageFrame.RequiresDedicatedOutput || forceDedicatedOutput);

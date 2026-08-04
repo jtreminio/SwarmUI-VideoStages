@@ -10,7 +10,11 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal static class VaeDecodePreference
 {
-    public static WGNodeData AsRawImage(WorkflowGenerator g, WGNodeData media, WGNodeData vae)
+    public static WGNodeData AsRawImage(
+        WorkflowGenerator g,
+        WGNodeData media,
+        WGNodeData vae,
+        string decodeId = null)
     {
         if (media is null)
         {
@@ -26,17 +30,24 @@ internal static class VaeDecodePreference
         }
         if (media.DataType == WGNodeData.DT_LATENT_IMAGE || media.DataType == WGNodeData.DT_LATENT_VIDEO)
         {
-            return DecodeImageOrVideoLatents(g, media, vae);
+            return DecodeImageOrVideoLatents(g, media, vae, decodeId);
         }
         if (media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO
             && media.IsCompat(T2IModelClassSorter.CompatLtxv2))
         {
-            return DecodeLtxAudioVideoLatents(g, media, vae);
+            return DecodeLtxAudioVideoLatents(g, media, vae, decodeId);
         }
+        // Audio-only, or a joint latent from another family: no LTX decode to place, so a caller
+        // that claimed a host decode id does not get to spend it here. Nothing a stage produces
+        // after sampling reaches this, and an unspent claim only leaves core's decode to be swept.
         return media.AsRawImage(vae);
     }
 
-    private static WGNodeData DecodeLtxAudioVideoLatents(WorkflowGenerator g, WGNodeData media, WGNodeData vae)
+    private static WGNodeData DecodeLtxAudioVideoLatents(
+        WorkflowGenerator g,
+        WGNodeData media,
+        WGNodeData vae,
+        string decodeId)
     {
         (string sourceType, JObject sourceInputs) = media.SourceNodeData;
         JArray videoRoute;
@@ -62,10 +73,14 @@ internal static class VaeDecodePreference
 
         WGNodeData latentVideo = media.WithPath(videoRoute, WGNodeData.DT_LATENT_VIDEO);
         latentVideo.AttachedAudio = media.WithPath(audioRoute, WGNodeData.DT_LATENT_AUDIO);
-        return DecodeImageOrVideoLatents(g, latentVideo, vae);
+        return DecodeImageOrVideoLatents(g, latentVideo, vae, decodeId);
     }
 
-    private static WGNodeData DecodeImageOrVideoLatents(WorkflowGenerator g, WGNodeData media, WGNodeData vae)
+    private static WGNodeData DecodeImageOrVideoLatents(
+        WorkflowGenerator g,
+        WGNodeData media,
+        WGNodeData vae,
+        string decodeId)
     {
         WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         INodeOutput targetVae = bridge.ResolvePath(vae.Path);
@@ -89,7 +104,8 @@ internal static class VaeDecodePreference
             bridge,
             targetVae,
             latent,
-            LtxDecodeConfig.From(g));
+            LtxDecodeConfig.From(g),
+            decodeId);
         string decodedDataType = media.DataType == WGNodeData.DT_LATENT_VIDEO
             ? WGNodeData.DT_VIDEO
             : WGNodeData.DT_IMAGE;

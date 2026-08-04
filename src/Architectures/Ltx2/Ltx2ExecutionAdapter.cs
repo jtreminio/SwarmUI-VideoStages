@@ -109,7 +109,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             new(generator, audioInjector);
         StageRunner stageRunner = new(
             generator,
-            new LtxStageExecutor(generator, resizer),
+            new LtxStageExecutor(generator, resizer, context.RootAdoption),
             guideMediaResolver,
             new LtxClipRefResolver(generator, guideMediaResolver));
         StageSequenceRootSetup rootSetup = new(
