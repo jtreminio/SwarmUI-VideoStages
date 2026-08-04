@@ -4,6 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using VideoStages.Generated;
 using VideoStages.Planning;
 using Xunit;
@@ -438,6 +439,48 @@ public class HostVideoContractTests
     }
 
     /// <summary>
+    /// The text-to-video shape, where the timeline displaces core's video root entirely and the
+    /// root's own save is the only one in the graph: it is retargeted onto whatever the timeline
+    /// ends up publishing, or removed outright under <c>donotsave</c>. Core's base-image save — the
+    /// thing that keeps the image-to-video shape shippable — does not exist here.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_displaced_root_retargets_or_removes_its_own_save(bool doNotSave)
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(
+                    MakeDocument(MakeClip(1.0, fixture.Stage(steps: 8))),
+                    post => post["donotsave"] = doNotSave));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        // Core's displaced root pass is gone; only the stage's own sampler remains.
+        SwarmKSamplerNode stage = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        Assert.Equal(VideoStagesWorkflowFixture.StageSeed(0), stage.NoiseSeed.LiteralAsLong());
+
+        if (doNotSave)
+        {
+            live.AssertNoPublishedOutput();
+            AssertNoDanglingNodeRefs(workflow);
+            AssertAcyclic(bridge);
+            return;
+        }
+
+        SwarmSaveAnimationWSNode published = live.FinalVideoSave();
+        Assert.Equal(
+            new JArray(published.Images.Connection.Node.Id, 0),
+            generator.CurrentMedia.Path);
+
+        live.AssertAllLive(stage, published);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
     /// An LTX-2 source clip refines its uploaded footage through the same conform chain the generic
     /// runtime uses, and takes core's video root with it, so the clip's own pass is the only video
     /// sampler. Unlike the generic path it also carries the footage's audio into the joint latent,
@@ -860,6 +903,125 @@ public class HostVideoContractTests
         Assert.Equal(0.2, generator.UserInput.Get(T2IParamTypes.Video2VideoCreativity));
 
         live.AssertAllLive(upscale, StageSampler(bridge, 0), StageSampler(bridge, 1));
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>Two host-video families loaded at once, for the mixed-compatibility refusal.</summary>
+    private sealed class GenericPairFixture : VideoStagesWorkflowFixture
+    {
+        private GenericPairFixture()
+            : base(
+                [Hunyuan15WorkflowFixture.ModelFixturePath, MochiWorkflowFixture.ModelFixturePath],
+                withBaseModel: true)
+        {
+        }
+
+        public static GenericPairFixture Create() => new();
+
+        public T2IModel MochiModel => Models[1];
+
+        public override JObject Post(JObject document, Action<JObject> customize = null) =>
+            base.Post(document, post =>
+            {
+                post["clipvisionmodel"] = TestModelFactory.Hunyuan15ClipVisionFileName;
+                customize?.Invoke(post);
+            });
+
+        protected override void InstallSupportModels()
+        {
+            TestModelFactory.InstallHunyuan15SupportModels();
+            TestModelFactory.InstallMochiSupportModels();
+        }
+
+        public override int DefaultSteps => 12;
+
+        public override double DefaultCfgScale => 4.5;
+
+        public override int ExpectedGeneratedFrames => RequestedFrames;
+    }
+
+    /// <summary>
+    /// The generic runtime drives one host family per clip: its stages share a model loader and a
+    /// conditioning primitive, so two compatibility classes in one clip cannot both be honoured.
+    /// The refusal is readable, and it lands before anything is built — the shape
+    /// <c>HostVideoRuntimeFlowTests.AssertRejectedBeforeMutation</c> pins.
+    /// </summary>
+    [Fact]
+    public async Task One_clip_cannot_mix_generic_compatibility_classes()
+    {
+        using GenericPairFixture fixture = GenericPairFixture.Create();
+
+        SwarmReadableErrorException error =
+            await Assert.ThrowsAsync<SwarmReadableErrorException>(() =>
+                ComfyWorkflowApiTestHarness.GenerateAsync(
+                    fixture.ImageToVideoPost(MakeDocument(MakeClip(
+                        1.0,
+                        fixture.Stage(steps: 8),
+                        MakeStage(
+                            fixture.MochiModel.Name,
+                            "PreviousStage",
+                            control: 0.5,
+                            steps: 8))))));
+
+        Assert.Contains(
+            "All authored stages in one clip must use one host compatibility class",
+            error.Message);
+    }
+
+    /// <summary>
+    /// The request-global video-swap and creativity settings are SwarmUI's own; the generic runtime
+    /// refuses to act on them and says so, but must not rewrite the request either — the authored
+    /// values survive for metadata. Core's video pass therefore starts at step 0, which is what the
+    /// mid-generation probe reads before the extension prunes that pass.
+    /// </summary>
+    [Fact]
+    public async Task Generic_core_pass_ignores_legacy_swap_and_creativity()
+    {
+        using Hunyuan15WorkflowFixture fixture = Hunyuan15WorkflowFixture.CreateWithBaseModel();
+        JToken coreStartStep = null;
+        WorkflowGenerator.WorkflowGenStep inspectCore = new(g =>
+        {
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            // Core's video pass, not its base image pass: at this point they are the only two
+            // samplers and the base one carries the request seed. Read off the raw workflow — 0 is
+            // the generated node's default, so a missing key would read back as the wanted value.
+            coreStartStep = ShippedInput(
+                g.Workflow,
+                Assert.Single(
+                    bridge.Graph.NodesOfType<SwarmKSamplerNode>(),
+                    sampler => sampler.NoiseSeed.LiteralAsLong()
+                        != VideoStagesWorkflowFixture.Seed),
+                "start_at_step");
+        }, Constants.WorkflowStepPriority.DropCoreImageToVideoOutput - 0.01);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.ImageToVideoPost(
+                    MakeDocument(MakeClip(1.0, fixture.Stage(steps: 8))),
+                    post =>
+                    {
+                        post["videoswapmodel"] = fixture.Model.Name;
+                        post["videoswappercent"] = 0.3;
+                        post["video2videocreativity"] = 0.25;
+                    }),
+                extraSteps: [inspectCore]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Equal(0, coreStartStep?.Value<int>());
+        Assert.Equal(fixture.Model.Name, generator.UserInput.Get(T2IParamTypes.VideoSwapModel).Name);
+        Assert.Equal(0.3, generator.UserInput.Get(T2IParamTypes.VideoSwapPercent));
+        Assert.Equal(0.25, generator.UserInput.Get(T2IParamTypes.Video2VideoCreativity));
+        Assert.Contains(
+            Diagnostics(generator),
+            diagnostic => diagnostic.Code == "effective-request.video-swap-ignored");
+
+        // Core's swapped second pass did not survive into the timeline's graph.
+        SwarmKSamplerNode stage = StageSampler(bridge, 0);
+        Assert.Equal(2, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
+        AssertShippedLiteral(workflow, stage, "start_at_step", 0);
+
+        live.AssertAllLive(fixture.BaseSampler(bridge), stage);
         AssertShippable(bridge, workflow, live);
     }
 }

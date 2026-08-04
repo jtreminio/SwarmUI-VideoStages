@@ -156,6 +156,13 @@ public class StageSequenceCollaboratorTests
         Assert.Equal(new Newtonsoft.Json.Linq.JArray(resample.Id, 0), guide.Path);
     }
 
+    /// <summary>
+    /// A <c>Stage&lt;N&gt;</c> selector is clip-local, so the capture table has to be cleared when a
+    /// clip begins. The stage under test comes from the second clip, where the flat-across-clips
+    /// <c>StageId</c> and the per-clip <c>ClipStageIndex</c> disagree — production keys the table by
+    /// the latter, and on a single-clip plan both are 0, which is what previously let a mis-keyed
+    /// lookup pass.
+    /// </summary>
     [Fact]
     public void Guide_reference_state_resets_captured_stage_outputs()
     {
@@ -164,7 +171,9 @@ public class StageSequenceCollaboratorTests
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
-            JsonSingleClipStages(MakeStage(models.VideoModel.Name)));
+            MakeDocument(
+                MakeClip(MakeStage(models.VideoModel.Name)),
+                MakeClip(MakeStage(models.VideoModel.Name))).ToString());
         (Newtonsoft.Json.Linq.JObject unusedWorkflow, WorkflowGenerator generator) =
             WorkflowTestHarness.GenerateWithStepsAndState(
             input,
@@ -172,17 +181,16 @@ public class StageSequenceCollaboratorTests
         StageRefStore store = new(generator);
         StageGuideReferenceState state = new(generator, store);
         StagePlan stage = Assert.Single(
-            Assert.Single(
-                TestPlanCompiler.Compile(generator.GetVideoStagesSpec()).Clips)
-            .Stages);
+            TestPlanCompiler.Compile(generator.GetVideoStagesSpec()).Clips[1].Stages);
+        Assert.NotEqual(stage.StageId, stage.ClipStageIndex);
         StagePlan explicitStageGuide = stage with
         {
             ArchitecturePayload = stage.RequireLtx2Payload() with
             {
                 Guide = new GuideReferencePlan(
                     StageGuideReferenceKind.ExplicitStage,
-                    $"Stage{stage.StageId}",
-                    stage.StageId)
+                    $"Stage{stage.ClipStageIndex}",
+                    stage.ClipStageIndex)
             }
         };
 

@@ -2946,6 +2946,48 @@ public class WanGeneratedWorkflowContractTests
         AssertAcyclic(bridge);
     }
 
+    /// <summary>
+    /// A later stage's Control is a fraction of its own step count, and 0.9 over 8 steps floors to
+    /// start step 0 — a refining pass that would silently regenerate everything. The request is
+    /// refused readably, before any VideoStages phase touches the graph.
+    /// <para>
+    /// Neither stage authors an image reference, so this also pins the defaults that make stage 1 a
+    /// refining pass at all: <c>Generated</c> first, <c>PreviousStage</c> after.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task A_later_control_that_quantizes_to_start_step_zero_is_refused()
+    {
+        using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
+        JObject first = fixture.Stage(steps: 8);
+        JObject second = fixture.Stage(control: 0.9, steps: 8);
+        first.Remove("imageReference");
+        second.Remove("imageReference");
+        WorkflowGenerator captured = null;
+        JObject beforePreflight = null;
+        VideoStagesSpec parsed = null;
+
+        SwarmReadableErrorException error = await Assert.ThrowsAsync<SwarmReadableErrorException>(
+            () => ComfyWorkflowApiTestHarness.GenerateAsync(
+                fixture.ImageToVideoPost(MakeDocument(MakeClip(first, second))),
+                extraSteps:
+                [
+                    new(g =>
+                    {
+                        captured = g;
+                        beforePreflight = (JObject)g.Workflow.DeepClone();
+                        parsed = g.GetVideoStagesSpec();
+                    }, Constants.WorkflowStepPriority.PreflightRequest - 0.1),
+                ]));
+
+        Assert.Contains("quantizes to sampler start step 0", error.Message);
+        Assert.Equal("Generated", parsed.Clips[0].Stages[0].ImageReference);
+        Assert.Equal("PreviousStage", parsed.Clips[0].Stages[1].ImageReference);
+        Assert.True(
+            JToken.DeepEquals(beforePreflight, captured.Workflow),
+            "A VideoStages phase mutated the graph before preflight refused the request.");
+    }
+
     // ---- request-global settings the timeline refuses -----------------------------------
 
     /// <summary>
@@ -3011,6 +3053,47 @@ public class WanGeneratedWorkflowContractTests
             generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null));
 
         live.AssertAllLive(StageSampler(bridge, 0));
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// A timeline whose clips are on different architectures has no single WAN clip to end, so the
+    /// end image is dropped and the warning names both families — the arm that separates this from
+    /// the plain two-clip refusal, where every clip is WAN.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_mixed_timeline_drops_the_global_end_image_and_names_both_families(
+        bool wanFirst)
+    {
+        using MultiModelFixture fixture = MultiModelFixture.Create(
+            Ltx2WorkflowFixture.ModelFixturePath,
+            WanWorkflowFixture.Wan22Ti2v5bFixturePath);
+        JObject ltxClip = MakeClip(MakeStage(fixture.Model.Name, "Generated", steps: 7));
+        JObject wanClip = MakeClip(MakeStage(fixture.Models[1].Name, "Generated", steps: 9));
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(
+                    wanFirst
+                        ? MakeDocument(wanClip, ltxClip)
+                        : MakeDocument(ltxClip, wanClip),
+                    post => post["videoendimage"] = EndImagePayload));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        string families = wanFirst ? "wan22, ltx2" : "ltx2, wan22";
+        Assert.Contains(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains("'Video End Frame' was ignored", StringComparison.Ordinal)
+                && warning.Contains($"architecture(s): {families}", StringComparison.Ordinal));
+        Assert.Empty(bridge.Graph.NodesOfType<WanFirstLastFrameToVideoNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVAddGuideNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+
+        // Both clips still generated; only the end image was refused.
+        live.AssertAllLive(StageSampler(bridge, 0), StageSampler(bridge, 1));
         AssertShippable(bridge, workflow, live);
     }
 

@@ -7,37 +7,17 @@ using SwarmUI.Text2Image;
 using VideoStages.Generated;
 using VideoStages.Architectures.Ltx2;
 using Xunit;
-using static VideoStages.Tests.Fixtures;
 
 namespace VideoStages.Tests;
 
 /// <summary>
-/// What is left of the stub-harness audio suite: the two warning paths whose audio sources cannot
-/// be seeded from a POST, one direct-API handoff check, and the seconds rounding the timeline
-/// cannot produce. The graph contracts live in <see cref="Ltx2AudioContractTests"/>.
+/// What is left of the stub-harness audio suite: one direct-API handoff check and the seconds
+/// rounding the timeline cannot produce. The graph contracts live in
+/// <see cref="Ltx2AudioContractTests"/>.
 /// </summary>
 [Collection("VideoStagesTests")]
 public class AudioInjectionTests
 {
-    private static JObject MakeStage(string model) => new()
-    {
-        ["control"] = 1.0,
-        ["upscale"] = 1.0,
-        ["upscaleMethod"] = "pixel-lanczos",
-        ["model"] = model,
-        ["steps"] = 10,
-        ["cfgScale"] = 4.5,
-        ["sampler"] = "euler",
-        ["scheduler"] = "normal",
-        ["imageReference"] = "Generated"
-    };
-
-    private static JObject MakeClipConfig(string audioSource, params JObject[] stages) => new()
-    {
-        ["audioSource"] = audioSource,
-        ["stages"] = new JArray(stages)
-    };
-
     private static WorkflowGenerator CreateInjectorGenerator(JObject workflow)
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
@@ -72,88 +52,6 @@ public class AudioInjectionTests
         return generator;
     }
 
-    private static WorkflowGenerator.WorkflowGenStep SeedRootLtxVideoChainStep() =>
-        new(g =>
-        {
-            T2IModel videoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null);
-            g.FinalLoadedModel = videoModel;
-            g.FinalLoadedModelList = videoModel is null ? [] : [videoModel];
-
-            using WorkflowBridge bridge = BridgeSync.For(g);
-
-            UnknownNode videoModelNode = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs(WGNodeData.DT_MODEL, "CLIP");
-            g.CurrentModel = videoModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
-            g.CurrentTextEnc = videoModelNode.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
-
-            UnknownNode videoVaeNode = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs(WGNodeData.DT_VAE);
-            g.CurrentVae = videoVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE);
-
-            UnknownNode audioVaeNode = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs(WGNodeData.DT_VAE);
-            g.CurrentAudioVae = audioVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIOVAE);
-
-            EmptyLTXVLatentVideoNode emptyVideoLatent = new EmptyLTXVLatentVideoNode()
-                .With(Width: 512, Height: 512, Length: 16, BatchSize: 1);
-            bridge.AddNode(emptyVideoLatent, "108");
-
-            LTXVEmptyLatentAudioNode emptyAudioLatent = new LTXVEmptyLatentAudioNode()
-                .With(FramesNumber: 16, FrameRate: "24", BatchSize: 1);
-            emptyAudioLatent.AudioVae.ConnectToUntyped(audioVaeNode.GetOutput(0));
-            bridge.AddNode(emptyAudioLatent, "109");
-
-            LTXVImgToVideoInplaceNode imgToVideo = new LTXVImgToVideoInplaceNode().With(Strength: 1.0, Bypass: false);
-            imgToVideo.Vae.ConnectToUntyped(videoVaeNode.GetOutput(0));
-            imgToVideo.Image.ConnectToUntyped(bridge.ResolvePath(g.CurrentMedia.Path));
-            imgToVideo.LatentInput.ConnectTo(emptyVideoLatent.LATENT);
-            bridge.AddNode(imgToVideo, "111");
-
-            LTXVConcatAVLatentNode concat = new();
-            concat.VideoLatent.ConnectTo(imgToVideo.Latent);
-            concat.AudioLatent.ConnectTo(emptyAudioLatent.Latent);
-            bridge.AddNode(concat, "113");
-
-            LTXVSeparateAVLatentNode separate = new();
-            separate.AvLatent.ConnectTo(concat.Latent);
-            bridge.AddNode(separate, "201");
-
-            VAEDecodeTiledNode videoDecode = new VAEDecodeTiledNode()
-                .With(TileSize: 2048, Overlap: 256, TemporalSize: 64, TemporalOverlap: 16);
-            videoDecode.Vae.ConnectToUntyped(videoVaeNode.GetOutput(0));
-            videoDecode.Samples.ConnectTo(separate.VideoLatent);
-            bridge.AddNode(videoDecode, "202");
-
-            LTXVAudioVAEDecodeNode audioDecode = new();
-            audioDecode.AudioVae.ConnectToUntyped(audioVaeNode.GetOutput(0));
-            audioDecode.Samples.ConnectTo(separate.AudioLatent);
-            bridge.AddNode(audioDecode, "203");
-
-            SwarmSaveAnimationWSNode save = new SwarmSaveAnimationWSNode()
-                .With(Fps: 24.0, Lossless: false, Quality: 95, Method: "default", Format: "h264-mp4");
-            save.Images.ConnectTo(videoDecode.IMAGE);
-            save.Audio.ConnectTo(audioDecode.Audio);
-            bridge.AddNode(save, "9");
-
-            g.CurrentMedia = videoDecode.IMAGE.ToWGMedia(g, WGNodeData.DT_VIDEO,
-                width: 512, height: 512, frames: 16, fps: 24);
-        }, 11);
-
-    private static WorkflowGenerator.WorkflowGenStep SeedNativeAudioStep() =>
-        new(g =>
-        {
-            using WorkflowBridge bridge = BridgeSync.For(g);
-
-            UnknownNode audioSource = bridge.AddStub("UnitTest_AudioSource", "300").WithOutputs(WGNodeData.DT_AUDIO);
-
-            if (g.CurrentMedia is not null)
-            {
-                g.CurrentMedia.AttachedAudio = audioSource.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIO);
-            }
-        }, 11.3);
-
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildSteps() =>
-        WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([SeedRootLtxVideoChainStep(), SeedNativeAudioStep()])
-            .Concat(WorkflowTestHarness.VideoStagesSteps());
-
     /// <summary>
     /// The comfy node reads the window list as seconds at two decimals, so the builder rounds. Half
     /// must go away from zero, not to even: banker's rounding would move 5.555 to 5.55 and shorten
@@ -186,56 +84,6 @@ public class AudioInjectionTests
         Assert.Equal(0.33, (double)windows[0]["end"]);
         Assert.Equal(4.0, (double)windows[1]["start"]);
         Assert.Equal(5.56, (double)windows[1]["end"]);
-    }
-
-    [Fact]
-    public void Missing_selected_ace_audio_track_warns_and_continues_without_it()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            MakeRootConfig(MakeClipConfig("audio7", MakeStage(models.VideoModel.Name))).ToString());
-
-        (JObject workflow, WorkflowGenerator _) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
-
-        Assert.NotEmpty(workflow);
-        List<string> warnings = Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
-        Assert.Contains(
-            warnings,
-            warning => warning.Contains("audio7")
-                && warning.Contains("continuing without that source"));
-    }
-
-    [Fact]
-    public void Missing_selected_controlnet_audio_capture_warns_and_uses_silence()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        JObject clip = MakeClipConfig(
-            Constants.AudioSourceControlNet,
-            MakeStage(models.VideoModel.Name));
-        clip["icLoras"] = new JArray(new JObject
-        {
-            ["lora"] = "unused-control",
-            ["driveSource"] = Constants.ControlNetSourceOne,
-            ["driveData"] = $"{IcLoraDriveData.Visual}",
-        });
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            MakeRootConfig(clip).ToString());
-
-        (JObject workflow, WorkflowGenerator _) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, BuildSteps());
-
-        Assert.NotEmpty(workflow);
-        List<string> warnings = Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
-        Assert.Contains(
-            warnings,
-            warning => warning.Contains("ControlNet 1 audio") && warning.Contains("using silence"));
     }
 
     [Fact]

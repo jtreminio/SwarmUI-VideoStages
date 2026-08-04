@@ -385,4 +385,72 @@ public class Ltx2GuideAndRetakeContractTests
         live.AssertAllLive(maskNode, maskByTime);
         AssertShippable(bridge, workflow, live);
     }
+
+    /// <summary>
+    /// A zero-length window is no retake: no mask ladder, and the stage keeps the schedule its
+    /// authored control asks for. That start step is the load-bearing half — a leaked retake forces
+    /// it to 0, which is why the stage cannot be authored at control 1.0 here.
+    /// </summary>
+    [Fact]
+    public async Task Retake_disabled_when_length_zero_leaves_graph_unchanged()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        JObject clip = RetakeClip(
+            new JObject
+            {
+                ["startSeconds"] = 1.0,
+                ["lengthSeconds"] = 0.0,
+                ["strength"] = 1.0,
+            },
+            fixture.Stage(control: 0.5, steps: 10));
+
+        JObject workflow = await fixture.GenerateAsync(
+            MakeDocument(clip),
+            post => post["text2videoframes"] = Ltx2WorkflowFixture.RetakeClipFrames);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVSetAudioVideoMaskByTimeNode>());
+
+        SwarmKSamplerNode sampler = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        // floor(10 x (1 - 0.5)); 0 is the codegen default, so only a non-zero value proves this.
+        AssertShippedLiteral(workflow, sampler, "start_at_step", 5);
+        // Positive control: the footage really is the clip's source, so a retake could have applied.
+        Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+
+        live.AssertAllLive(sampler);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// A retake window authored on a clip with no source video never activates — there is no
+    /// footage to hold frozen. The stage still generates from noise.
+    /// </summary>
+    [Fact]
+    public async Task Retake_ignored_when_clip_is_not_init_video()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage(control: 0.5, steps: 10));
+        clip["retake"] = new JObject
+        {
+            ["startSeconds"] = 1.0,
+            ["lengthSeconds"] = 1.0,
+            ["strength"] = 0.8,
+        };
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        // Positive control: start_at_step cannot serve — the parser forces stage 0 of a non-sourced
+        // clip to control 1.0, so it is 0 for the same reason an active retake would make it 0.
+        SwarmKSamplerNode sampler = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        Assert.Equal(10, sampler.Steps.LiteralAsInt());
+
+        live.AssertAllLive(sampler);
+        AssertShippable(bridge, workflow, live);
+    }
 }

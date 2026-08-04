@@ -20,8 +20,8 @@ namespace VideoStages.Tests;
 
 /// <summary>
 /// What the WAN path does under states a real request cannot reach: injected failures inside model
-/// preparation, a hand-corrupted root handoff, a forged model profile, and request settings with no
-/// POST representation. Each asserts recovery — restored scopes, restored parameter lists, evicted
+/// preparation, a hand-corrupted root handoff, a forged model profile, and a maliciously rewritten
+/// host latent. Each asserts recovery — restored scopes, restored parameter lists, evicted
 /// caches — which is generator state, not graph shape, and so has no graph-observable form.
 /// <para>
 /// Everything that <em>is</em> observable in a generated workflow lives in
@@ -35,47 +35,6 @@ public class WanRuntimeFlowTests
     private const double WanInitVideoStartSeconds = 1;
     private static readonly string[] WanSourceFeatures =
         [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
-
-    private sealed class PreflightSnapshot
-    {
-        internal WorkflowGenerator Generator { get; private set; }
-        internal JObject Workflow { get; private set; }
-        internal WGNodeData Media { get; private set; }
-        internal Dictionary<string, string> NodeHelpers { get; private set; }
-        internal Dictionary<int, Dictionary<string, object>> SectionOverrides
-        {
-            get;
-            private set;
-        }
-
-        internal WorkflowGenerator.WorkflowGenStep Step() => new(g =>
-        {
-            Generator = g;
-            Workflow = (JObject)g.Workflow.DeepClone();
-            Media = g.CurrentMedia;
-            NodeHelpers = new(g.NodeHelpers);
-            SectionOverrides = g.UserInput.SectionParamOverrides.ToDictionary(
-                pair => pair.Key,
-                pair => new Dictionary<string, object>(pair.Value.ValuesInput));
-        }, Constants.WorkflowStepPriority.PreflightRequest - 0.5);
-
-        internal void AssertUnchanged()
-        {
-            Assert.True(JToken.DeepEquals(Workflow, Generator.Workflow));
-            Assert.Same(Media, Generator.CurrentMedia);
-            Assert.Equal(NodeHelpers, Generator.NodeHelpers);
-            Assert.Equal(
-                SectionOverrides.Keys.Order(),
-                Generator.UserInput.SectionParamOverrides.Keys.Order());
-            foreach ((int sectionId, Dictionary<string, object> values) in
-                SectionOverrides)
-            {
-                Assert.Equal(
-                    values,
-                    Generator.UserInput.SectionParamOverrides[sectionId].ValuesInput);
-            }
-        }
-    }
 
     /// <summary>
     /// The values the request carried are preserved and the isolation handler leaves every other
@@ -713,68 +672,6 @@ public class WanRuntimeFlowTests
             captured.NodeHelpers.Keys);
     }
 
-    [Theory]
-    [InlineData("ltx2")]
-    [InlineData("wan22")]
-    public void Global_end_image_warns_for_mixed_timeline(
-        string firstFamily)
-    {
-        using SwarmUiTestContext context = new();
-        MixedVideoModelBundle models =
-            TestModelFactory.CreateBaseLtxv2AndWan22ImageToVideoModels();
-        T2IModel first = firstFamily == "wan22"
-            ? models.WanVideoModel
-            : models.LtxVideoModel;
-        T2IModel second = firstFamily == "wan22"
-            ? models.LtxVideoModel
-            : models.WanVideoModel;
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            first,
-            MakeDocument(
-                MakeClip(MakeStage(first.Name, "Generated", steps: 7)),
-                MakeClip(MakeStage(second.Name, "Generated", steps: 9))).ToString());
-        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
-
-        (JObject workflow, _) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, WanSteps());
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        List<string> warnings = Assert.IsType<List<string>>(
-            input.ExtraMeta["parser_warnings"]);
-        Assert.Single(
-            warnings,
-            warning => warning.Contains(
-                "'Video End Frame' was ignored",
-                StringComparison.Ordinal));
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVAddGuideNode>());
-        Assert.Empty(NodesOfClass(bridge, "WanFirstLastFrameToVideo"));
-    }
-
-    [Theory]
-    [InlineData(0.9, 8, "quantizes to sampler start step 0")]
-    public void Json_later_positive_partial_that_quantizes_to_zero_is_refused_before_mutation(
-        double control,
-        int steps,
-        string expectedReason)
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        JObject first = MakeStage(models.VideoModel.Name, steps: 8);
-        JObject second = MakeStage(models.VideoModel.Name, control: control, steps: steps);
-        first.Remove("imageReference");
-        second.Remove("imageReference");
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            JsonSingleClipStages(first, second));
-
-        VideoStagesSpec parsed = VideoStagesContext.GetVideoStagesSpecForPromptParse(input);
-        Assert.Equal("Generated", parsed.Clips[0].Stages[0].ImageReference);
-        Assert.Equal("PreviousStage", parsed.Clips[0].Stages[1].ImageReference);
-        AssertPreflightRefusalBeforeMutation(input, expectedReason);
-    }
-
-
     [Fact]
     public void Missing_typed_pre_core_handoff_fails_closed()
     {
@@ -1003,20 +900,4 @@ public class WanRuntimeFlowTests
         handler.Models[model.Name] = model;
         return model;
     }
-
-    private static void AssertPreflightRefusalBeforeMutation(
-        T2IParamInput input,
-        string expectedReason)
-    {
-        PreflightSnapshot snapshot = new();
-        SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                WorkflowTestHarness.Template_BaseOnlyImage()
-                    .Concat([snapshot.Step(), WorkflowTestHarness.CoreImageToVideoStep()])
-                    .Concat(WorkflowTestHarness.VideoStagesSteps())));
-        Assert.Contains(expectedReason, error.Message);
-        snapshot.AssertUnchanged();
-    }
-
 }

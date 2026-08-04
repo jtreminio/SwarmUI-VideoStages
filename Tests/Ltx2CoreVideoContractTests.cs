@@ -1701,4 +1701,30 @@ public class Ltx2CoreVideoContractTests
         live.AssertAllLive(samplers);
         AssertShippable(bridge, workflow, live);
     }
+
+    /// <summary>
+    /// A clip with no stages and no source is not executable, so the document — clip-shaped though
+    /// it is — leaves core's generation alone rather than gating it. The extension declines to plan
+    /// at all and says so.
+    /// </summary>
+    [Fact]
+    public async Task Clip_shaped_json_without_executable_timeline_does_not_gate_core_generation()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(MakeDocument(MakeClip())));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Null(generator.GetVideoExecutionPlanContext());
+        // Core's own text-to-video pass, untouched: a planned stage would seed Seed + 42 instead.
+        SwarmKSamplerNode core = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        Assert.Equal(VideoStagesWorkflowFixture.Seed, core.NoiseSeed.LiteralAsLong());
+        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
+
+        live.AssertAllLive(core);
+        AssertShippable(bridge, workflow, live);
+    }
 }

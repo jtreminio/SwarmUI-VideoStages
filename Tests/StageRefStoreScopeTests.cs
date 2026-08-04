@@ -2,7 +2,6 @@ using ComfyTyped.Core;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using Xunit;
 
@@ -40,15 +39,20 @@ public sealed class StageRefStoreScopeTests
         Assert.Equal(runtimeKeys.Count, runtimeKeys.Distinct().Count());
     }
 
+    /// <summary>
+    /// Every runtime handoff the LTX-2 path writes into <c>NodeHelpers</c> is namespaced to the
+    /// architecture, so a second architecture in the same request cannot collide with it. Generated
+    /// through the real POST path over the widest key-writing shape available: two stages, a pixel
+    /// upscale, and an IC-LoRA with an uploaded drive video and a control signal.
+    /// </summary>
     [Fact]
-    public void A_generated_ltx_workflow_writes_no_unscoped_runtime_key()
+    public async Task A_generated_ltx_workflow_writes_no_unscoped_runtime_key()
     {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        RegisterLora("UnitTest_IcLoraA");
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+        fixture.InstallModel("LoRA", "UnitTest_IcLoraA.safetensors");
         JObject clip = Fixtures.MakeClip(
-            Fixtures.MakeStage(models.VideoModel.Name, "Generated", steps: 10),
-            Fixtures.MakeStage(models.VideoModel.Name, "Generated", upscale: 2, steps: 10));
+            fixture.Stage(steps: 10),
+            fixture.Stage(upscale: 2, steps: 10));
         clip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = "UnitTest_IcLoraA",
@@ -65,14 +69,8 @@ public sealed class StageRefStoreScopeTests
         });
 
         (JObject _, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                Fixtures.BuildNativeInput(
-                    models.BaseModel,
-                    models.VideoModel,
-                    new JArray(clip).ToString()),
-                WorkflowTestHarness.Template_BaseOnlyImage()
-                    .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
-                    .Concat(WorkflowTestHarness.VideoStagesSteps()));
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.ImageToVideoPost(Fixtures.MakeDocument(clip)));
 
         // Exclude architecture-neutral ControlNet capture keys.
         string[] videoStagesKeys = [.. generator.NodeHelpers.Keys
@@ -100,30 +98,6 @@ public sealed class StageRefStoreScopeTests
             data.Vae);
 
         AssertStageRef(read.Generated, "300", "301", "302");
-    }
-
-    private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>
-        new(g =>
-        {
-            using WorkflowBridge bridge = BridgeSync.For(g);
-            UnknownNode refinerImage = bridge.AddStub("UnitTest_RefinerImage", "200")
-                .WithOutputs(WGNodeData.DT_IMAGE);
-            g.CurrentMedia = refinerImage.GetOutput(0).ToWGMedia(
-                g,
-                WGNodeData.DT_IMAGE,
-                width: 512,
-                height: 512);
-        }, 4.0);
-
-    private static void RegisterLora(string name)
-    {
-        if (!Program.T2IModelSets.TryGetValue("LoRA", out T2IModelHandler handler))
-        {
-            handler = new T2IModelHandler { ModelType = "LoRA" };
-            Program.T2IModelSets["LoRA"] = handler;
-        }
-        T2IModel lora = TestStubModel.Create(handler, $"{name}.safetensors");
-        handler.Models[lora.Name] = lora;
     }
 
     private static WorkflowGenerator Generator() => new()

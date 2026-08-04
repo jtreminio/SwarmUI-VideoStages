@@ -4,6 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -328,6 +329,45 @@ public sealed class FrameInterpolationContractTests
         // Both clips really did generate; interpolation alone was refused.
         live.AssertAllLive(StageSampler(bridge, 0), StageSampler(bridge, 1));
         AssertWarnsAndSkips(generator, "2 clips joined by 1 boundary");
+
+        SwarmSaveAnimationWSNode published = live.FinalVideoSave();
+        Assert.Equal(24.0, published.Fps.LiteralAsDouble());
+        live.AssertLive(published);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// Interpolation multiplies a frame count it has to know up front. A clip that takes its length
+    /// from an uploaded audio track only learns that count at execution time, so the request warns
+    /// and skips — LTX-2, because <c>clipLengthFromAudio</c> is an audio-capable architecture's
+    /// feature, and image-to-video, because that keeps the clip off the text-to-video audio path
+    /// P1 in <c>nonversioned/20260804-production-findings.md</c> describes.
+    /// </summary>
+    [Fact]
+    public async Task Runtime_derived_duration_warns_and_skips_interpolation()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+        JObject clip = MakeClip(fixture.Stage(steps: 8));
+        clip["audioSource"] = Constants.AudioSourceUpload;
+        clip["clipLengthFromAudio"] = true;
+        clip["uploadedAudio"] = UploadedAudio("clip.wav");
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.ImageToVideoPost(MakeDocument(clip), post =>
+                {
+                    post["videoframeinterpolationmethod"] = "RIFE";
+                    post["videoframeinterpolationmultiplier"] = 2;
+                }),
+                ["frameinterps"]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Empty(InterpolationNodes(bridge));
+        AssertWarnsAndSkips(generator, "derives its duration at runtime");
+        // Positive control: the runtime length really is in play, and the clip still generates.
+        Assert.Single(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        live.AssertLive(StageSampler(bridge, 0));
 
         SwarmSaveAnimationWSNode published = live.FinalVideoSave();
         Assert.Equal(24.0, published.Fps.LiteralAsDouble());

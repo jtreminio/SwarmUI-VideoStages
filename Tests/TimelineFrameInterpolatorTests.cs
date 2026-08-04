@@ -5,18 +5,17 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
-using VideoStages.Architectures.Ltx2;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
-using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
 /// <summary>
 /// What the frame interpolator does that a real generated graph cannot show: refuse a request
-/// before any phase mutates the workflow (asserted against a cloned pre-mutation snapshot), preserve
-/// the attached-audio object identity, and warn on timeline shapes whose architectures the POST path
-/// cannot mix. The graph-level contracts live in <see cref="FrameInterpolationContractTests"/>.
+/// before any phase mutates the workflow (asserted against a cloned pre-mutation snapshot), and
+/// preserve the attached-audio object identity across an <c>Apply</c> driven straight off a
+/// hand-built artifact. The graph-level contracts live in
+/// <see cref="FrameInterpolationContractTests"/>.
 /// </summary>
 [Collection("VideoStagesTests")]
 public sealed class TimelineFrameInterpolatorTests
@@ -65,78 +64,6 @@ public sealed class TimelineFrameInterpolatorTests
         }
 
         AssertPreflightFailure(input, ["variation_seed", "frameinterps"], expected);
-    }
-
-    [Fact]
-    public void Multi_ltx_interpolation_warns_and_skips()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 8);
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            MakeDocument(MakeClip(stage), MakeClip(stage)).ToString());
-        Configure(input, "RIFE", 2);
-
-        AssertInterpolationWarningAndSkip(
-            input,
-            ["variation_seed", "frameinterps", Ltx2HostIntegration.FeatureFlag],
-            "2 clips joined by 1 boundary");
-    }
-
-    [Fact]
-    public void Runtime_derived_duration_warns_and_skips_interpolation()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        JObject clip = MakeClip(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 8));
-        clip["audioSource"] = Constants.AudioSourceUpload;
-        clip["clipLengthFromAudio"] = true;
-        clip["uploadedAudio"] = new JObject
-        {
-            ["data"] = "data:audio/wav;base64,QUJD",
-            ["fileName"] = "clip.wav",
-        };
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            MakeDocument(clip).ToString());
-        Configure(input, "RIFE", 2);
-
-        AssertInterpolationWarningAndSkip(
-            input,
-            ["variation_seed", "frameinterps", Ltx2HostIntegration.FeatureFlag],
-            "derives its duration at runtime");
-    }
-
-    [Theory]
-    [InlineData("ltx2")]
-    [InlineData("wan22")]
-    public void Mixed_interpolation_warns_and_skips(string firstFamily)
-    {
-        using SwarmUiTestContext context = new();
-        MixedVideoModelBundle models =
-            TestModelFactory.CreateBaseLtxv2AndWan22ImageToVideoModels();
-        T2IModel first = firstFamily == "wan22"
-            ? models.WanVideoModel
-            : models.LtxVideoModel;
-        T2IModel second = firstFamily == "wan22"
-            ? models.LtxVideoModel
-            : models.WanVideoModel;
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            first,
-            MakeDocument(
-                MakeClip(MakeStage(first.Name, "Generated", steps: 7)),
-                MakeClip(MakeStage(second.Name, "Generated", steps: 9))).ToString());
-        Configure(input, "RIFE", 2);
-
-        AssertInterpolationWarningAndSkip(
-            input,
-            ["variation_seed", "frameinterps", Ltx2HostIntegration.FeatureFlag],
-            "2 clips joined by 1 boundary");
     }
 
     [Theory]
@@ -215,28 +142,6 @@ public sealed class TimelineFrameInterpolatorTests
         snapshot.AssertUnchanged();
     }
 
-    private static void AssertInterpolationWarningAndSkip(
-        T2IParamInput input,
-        IEnumerable<string> features,
-        string expected)
-    {
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                WorkflowTestHarness.Template_BaseOnlyImage()
-                    .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
-                    .Concat(WorkflowTestHarness.VideoStagesSteps()),
-                features);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        Assert.Empty(InterpolationNodes(bridge));
-        List<string> warnings = Assert.IsType<List<string>>(
-            generator.UserInput.ExtraMeta["parser_warnings"]);
-        Assert.Contains(warnings, warning =>
-            warning.Contains(expected, StringComparison.Ordinal)
-            && warning.Contains("will be skipped", StringComparison.Ordinal));
-    }
-
     private static T2IParamInput WanInput(TestModelBundle models) =>
         BuildNativeInput(
             models.BaseModel,
@@ -254,8 +159,4 @@ public sealed class TimelineFrameInterpolatorTests
         WorkflowBridge bridge,
         string classType) =>
         bridge.Graph.Nodes.Values.Where(node => node.ClassTypeName == classType);
-
-    private static IEnumerable<ComfyNode> InterpolationNodes(WorkflowBridge bridge) =>
-        bridge.Graph.Nodes.Values.Where(node => node.ClassTypeName is
-            "RIFE VFI" or "FILM VFI" or "GIMMVFI_interpolate");
 }

@@ -14,99 +14,14 @@ namespace VideoStages.Tests;
 
 /// <summary>
 /// The IC-LoRA cases the generated-workflow path cannot express: resolver and applicator
-/// components driven directly against a hand-built generator, plus the parse-time skip marker,
-/// which produces no timeline to observe. Everything observable in a shipped graph — warnings
-/// included, since the API route's generator carries the same <c>ExtraMeta</c> — moved to
-/// <see cref="Ltx2IcLoraContractTests"/>.
+/// components driven directly against a hand-built generator, in states no POST reaches — an
+/// unknown control mode, an incoming latent or video the timeline never produces. Everything
+/// observable in a shipped graph — warnings included, since the API route's generator carries the
+/// same <c>ExtraMeta</c> — lives in <see cref="Ltx2IcLoraContractTests"/>.
 /// </summary>
 [Collection("VideoStagesTests")]
 public sealed class LtxIcLoraTests
 {
-    private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>
-        new(g =>
-        {
-            using var bridge = BridgeSync.For(g);
-            UnknownNode refinerImage = bridge.AddStub("UnitTest_RefinerImage", "12").WithOutputs(WGNodeData.DT_IMAGE);
-            g.CurrentMedia = refinerImage.GetOutput(0).ToWGMedia(g, WGNodeData.DT_IMAGE,
-                width: 512, height: 512);
-        }, 5.0);
-
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowSteps() =>
-        WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
-            .Concat(WorkflowTestHarness.VideoStagesSteps());
-
-    private static JObject MakeIcLora(
-        string lora,
-        string source = Constants.IcLoraSourceUpload,
-        double strength = 1.0,
-        double attentionStrength = 1.0,
-        string controlType = Constants.IcLoraControlNone,
-        string driveMediaData = null,
-        string driveMediaFileName = "drive.mp4",
-        IcLoraDriveData? driveData = null)
-    {
-        JObject entry = new()
-        {
-            ["lora"] = lora,
-            ["driveSource"] = source,
-            ["driveData"] = $"{driveData ?? (driveMediaData is null
-                ? IcLoraDriveData.None
-                : IcLoraDriveData.Visual)}",
-            ["strength"] = strength,
-            ["attentionStrength"] = attentionStrength,
-            ["controlType"] = controlType,
-        };
-        if (driveMediaData is not null)
-        {
-            entry["driveMedia"] = new JObject
-            {
-                ["data"] = driveMediaData,
-                ["fileName"] = driveMediaFileName,
-            };
-        }
-        return entry;
-    }
-
-    private static (JObject Workflow, WorkflowBridge Bridge) Generate(
-        JObject clip,
-        TestModelBundle models,
-        IEnumerable<WorkflowGenerator.WorkflowGenStep> extraSteps = null)
-    {
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, new JArray(clip).ToString());
-        (JObject workflow, WorkflowGenerator _) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildCoreVideoWorkflowSteps().Concat(extraSteps ?? []));
-        return (workflow, WorkflowBridge.Create(workflow));
-    }
-
-    /// <summary>
-    /// Parsing, not scoping: <c>ParseStages</c> breaks at the first skipped stage, so the clip ends
-    /// up with zero stages and the timeline never activates — the entry's <c>stage: 1</c> scope is
-    /// never even consulted. Left on the stub harness because the observable result is the absence
-    /// of a timeline, which the API path would express as an ordinary non-VideoStages request.
-    /// </summary>
-    [Fact]
-    public void Skip_marker_truncates_the_clips_stage_list()
-    {
-        using SwarmUiTestContext testContext = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        JObject entry = MakeIcLora("UnitTest_IcLoraA", driveMediaData: "data:video/mp4;base64,QUJD");
-        entry["stage"] = 1;
-        JObject skipped = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
-        skipped["skipped"] = true;
-        JObject clip = MakeClip(skipped, MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["icLoras"] = new JArray(entry);
-
-        (JObject _, WorkflowBridge bridge) = Generate(clip, models);
-        using WorkflowBridge _ = bridge;
-
-        // One sampler, and it is core's own video root: the timeline contributed none. A skip that
-        // dropped only its own stage would leave stage 1 generating a second one.
-        Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
-        Assert.Empty(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
-    }
-
     [Fact]
     public void Unknown_control_mode_leaves_drive_images_unmodified()
     {
@@ -319,40 +234,4 @@ public sealed class LtxIcLoraTests
         DimensionDownscaleFactor: 1,
         GuideStrength: 1);
 
-    [Theory]
-    [InlineData(null, "requires uploaded Audio Drive Media")]
-    [InlineData(
-        "data:image/png;base64,QUJD",
-        "cannot consume Audio data from Image media")]
-    public void Lipdub_invalid_drive_media_warns_and_drops_the_entry(
-        string driveMediaData,
-        string expectedMessage)
-    {
-        using SwarmUiTestContext testContext = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-
-        JObject entry = MakeIcLora(
-            "UnitTest_IcLoraLipDub",
-            driveMediaData: driveMediaData);
-        entry["preset"] = "lipdub";
-        entry["driveData"] = $"{IcLoraDriveData.Audio}";
-        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-        clip["icLoras"] = new JArray(entry);
-
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            new JArray(clip).ToString());
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                BuildCoreVideoWorkflowSteps());
-
-        Assert.NotEmpty(workflow);
-        Assert.DoesNotContain(
-            workflow.SelectTokens("$..class_type"),
-            token => token.Value<string>().Contains("ICLoRA", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(RequestWarnings(generator.UserInput), warning =>
-            warning.Contains(expectedMessage, StringComparison.Ordinal));
-    }
 }

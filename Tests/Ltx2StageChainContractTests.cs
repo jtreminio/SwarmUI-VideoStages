@@ -1,5 +1,7 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Generated;
@@ -711,6 +713,224 @@ public class Ltx2StageChainContractTests
         Assert.Same(OutputOf(bridge, first).VideoLatent, secondGuide.LatentInput.Connection);
 
         live.AssertAllLive(first, second, secondGuide);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// Between core's base pass and the stage runner the live VAE is the host checkpoint's, and the
+    /// captured <c>Generated</c> reference carries it: under production steps core's video root is
+    /// pruned at 11.05, so the reference reverts to the base image rather than staying an LTX chain.
+    /// Neither leaks into the stages — every LTX node in both stages encodes and decodes through the
+    /// architecture's own video VAE loader, and the live VAE is that loader again by the end.
+    /// </summary>
+    [Fact]
+    public async Task A_generated_reference_keeps_the_host_vae_out_of_the_ltx_stage_chain()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+        JObject clip = MakeClip(
+            fixture.Stage(control: 0.5),
+            fixture.Stage("PreviousStage", control: 0.5));
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.ImageToVideoPost(MakeDocument(clip)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        VAELoaderNode ltxVae = Assert.Single(bridge.Graph.NodesOfType<VAELoaderNode>());
+        CheckpointLoaderSimpleNode hostCheckpoint = Assert.Single(
+            bridge.Graph.NodesOfType<CheckpointLoaderSimpleNode>());
+        // Positive control: two distinct VAEs really are in play, and core's base decode uses the
+        // host's.
+        Assert.Same(hostCheckpoint, BaseImage(bridge).Vae.Connection?.Node);
+
+        Assert.Equal(hostCheckpoint.Id, $"{new StageRefStore(generator).Generated.Vae.Path[0]}");
+        Assert.All(
+            bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>(),
+            guide => Assert.Same(ltxVae, guide.Vae.Connection?.Node));
+        Assert.All(
+            bridge.Graph.NodesOfType<VAEDecodeTiledNode>(),
+            decode => Assert.Same(ltxVae, decode.Vae.Connection?.Node));
+        Assert.Equal(ltxVae.Id, $"{generator.CurrentVae.Path[0]}");
+
+        live.AssertAllLive(ltxVae, StageSampler(bridge, 0), StageSampler(bridge, 1));
+        AssertShippable(bridge, workflow, live);
+    }
+
+    // ---- pixel upscale over a sibling extension's audio track ---------------------------
+
+    /// <summary>
+    /// Plants the AceStepFun audio decode a sibling extension publishes at its reserved node id.
+    /// Nothing in core or VideoStages produces one, so a clip naming <c>audio0</c> has no other
+    /// source. Priority 11.05 puts it in place before the stage runner reads it.
+    /// </summary>
+    private static WorkflowGenerator.WorkflowGenStep PublishAceStepFunAudioTrackStep(int track) =>
+        new(g =>
+        {
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(track));
+        }, Constants.WorkflowStepPriority.DropCoreImageToVideoOutput);
+
+    /// <summary>No sampler may be reachable from its own inputs.</summary>
+    private static void AssertNoStageFeedsItself(WorkflowBridge bridge)
+    {
+        Assert.All(bridge.Graph.NodesOfType<SwarmKSamplerNode>(), sampler => Assert.False(
+            bridge.Graph.IsReachableUpstream(sampler, sampler.Id),
+            $"Sampler {sampler.Id} is reachable from its own inputs — a stage feeds its output "
+                + "back into itself."));
+    }
+
+    /// <summary>
+    /// A pixel upscale re-encodes the previous stage's decoded frames, so the retargeted post-chain
+    /// decodes sit downstream of the stage that a later stage reads from. The clip's length is
+    /// driven by the sibling extension's audio track, and that measurement must be taken off the
+    /// track itself: reading it off the retargeted audio decode would close a cycle.
+    /// </summary>
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task A_chained_pixel_upscale_measures_audio_length_without_closing_a_cycle(
+        int stageCount)
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+        JObject[] stages =
+        [
+            fixture.Stage(control: 0.5, steps: 8),
+            .. Enumerable.Range(1, stageCount - 2)
+                .Select(_ => fixture.Stage("PreviousStage", control: 0.5, steps: 8)),
+            fixture.Stage("PreviousStage", control: 0.5, upscale: 1.5, steps: 8),
+        ];
+        JObject clip = MakeClip(stages);
+        clip["audioSource"] = "audio0";
+        clip["clipLengthFromAudio"] = true;
+
+        JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
+            fixture.ImageToVideoPost(MakeDocument(clip)),
+            extraSteps: [PublishAceStepFunAudioTrackStep(0)]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        VAEDecodeAudioNode track = Assert.Single(bridge.Graph.NodesOfType<VAEDecodeAudioNode>());
+        SwarmAudioLengthToFramesNode length = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.Same(track, length.AudioInput.Connection?.Node);
+
+        // The pixel upscale is what makes the cycle possible; without it there is nothing to
+        // prove. It is the uncropped 1.5x scale — the cropped 768 one is the next stage's framing.
+        Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            scale => scale.Width.LiteralAsInt() == 768
+                && scale.Crop.LiteralAsString() == "disabled");
+        AssertNoStageFeedsItself(bridge);
+
+        live.AssertAllLive(track, length, StageSampler(bridge, stageCount - 1));
+        AssertShippable(bridge, workflow, live);
+    }
+
+    // ---- Base2Edit stage references -----------------------------------------------------
+
+    /// <summary>
+    /// Publishes a Base2Edit edit-stage image the way the sibling extension does — a real image node
+    /// plus the <c>b2e.published.edit.{n}</c> handoff — between the drop of core's video root and
+    /// the stage runner. No production step writes that key, so the reference has no other source.
+    /// </summary>
+    private static WorkflowGenerator.WorkflowGenStep PublishBase2EditImageStep(int editStageIndex) =>
+        new(g =>
+        {
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            SwarmLoadImageB64Node published = bridge.AddNode(
+                new SwarmLoadImageB64Node().With(ImageBase64: "data:image/png;base64,QUJDREVGRw=="));
+
+            JObject media = new()
+            {
+                ["path"] = new JArray(published.Id, 0),
+                ["dataType"] = WGNodeData.DT_IMAGE,
+                ["width"] = VideoStagesWorkflowFixture.Width,
+                ["height"] = VideoStagesWorkflowFixture.Height,
+            };
+            if (g.CurrentCompat()?.ID is string compatId)
+            {
+                media["compatId"] = compatId;
+            }
+            JObject payload = new() { ["media"] = media };
+            if (g.CurrentVae?.Path is JArray { Count: 2 } vaePath)
+            {
+                JObject vae = new()
+                {
+                    ["path"] = new JArray(vaePath[0], vaePath[1]),
+                    ["dataType"] = WGNodeData.DT_VAE,
+                };
+                if (g.CurrentVae.Compat?.ID is string vaeCompatId)
+                {
+                    vae["compatId"] = vaeCompatId;
+                }
+                payload["vae"] = vae;
+            }
+            g.NodeHelpers[$"b2e.published.edit.{editStageIndex}"] = payload.ToString(Formatting.None);
+        }, Constants.WorkflowStepPriority.ApplyRootAudioMaskDimensions);
+
+    /// <summary>
+    /// A clip reference naming a published Base2Edit edit stage guides the stage from that image at
+    /// the authored ref strength. Image-to-video, because a Base2Edit reference is rejected outright
+    /// on a text-to-video request; the stage's own image reference is stripped so the published
+    /// image is the only guide source in the graph.
+    /// </summary>
+    [Fact]
+    public async Task Native_ltx_stage_can_use_base2edit_edit_stage_as_clip_ref_image()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+        JObject stage = fixture.Stage(control: 0.5);
+        stage.Remove("imageReference");
+        stage["refStrengths"] = new JArray(0.35);
+        JObject clip = MakeClipWithRefs([MakeRef("edit0", frame: 1)], stage);
+
+        JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
+            fixture.ImageToVideoPost(MakeDocument(clip)),
+            extraSteps: [PublishBase2EditImageStep(0)]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmLoadImageB64Node published = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+        LTXVImgToVideoInplaceNode guide = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
+        Assert.Same(published, FramingOf(guide).Image.Connection?.Node);
+        Assert.Equal(0.35, guide.Strength.LiteralAsDouble());
+
+        SwarmKSamplerNode stageSampler = StageSampler(bridge, 0);
+        Assert.Same(guide, JointLatentOf(stageSampler).VideoLatent.Connection?.Node);
+
+        live.AssertAllLive(published, guide, stageSampler);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// Nothing publishes a Base2Edit stage in a plain VideoStages request, so a reference to one
+    /// warns by index and the clip generates without a guide rather than failing. Both an in-range
+    /// and an out-of-range index take the same branch — the key is simply absent.
+    /// </summary>
+    [Theory]
+    [InlineData("edit0", "Base2Edit stage 0 does not exist")]
+    [InlineData("edit99", "Base2Edit stage 99 does not exist")]
+    public async Task Missing_base2edit_stage_reference_warns_and_continues(
+        string reference,
+        string expectedWarning)
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.ImageToVideoPost(
+                    MakeDocument(MakeClip(fixture.Stage(reference, control: 0.5)))));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Contains(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains(expectedWarning, StringComparison.Ordinal));
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
+
+        live.AssertAllLive(StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
     }
 }

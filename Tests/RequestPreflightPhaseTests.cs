@@ -80,7 +80,7 @@ public sealed class RequestPreflightPhaseTests
         return clip;
     }
 
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> FullPhaseSequence(
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> RefusingPhaseSequence(
         PhaseBoundarySnapshot snapshot) =>
         WorkflowTestHarness.Template_BaseOnlyImage()
             .Concat([snapshot.Step(), WorkflowTestHarness.CoreImageToVideoStep()])
@@ -104,7 +104,7 @@ public sealed class RequestPreflightPhaseTests
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(() =>
             WorkflowTestHarness.GenerateWithStepsAndState(
                 input,
-                FullPhaseSequence(snapshot),
+                RefusingPhaseSequence(snapshot),
                 features: ["variation_seed"]));
 
         Assert.Contains(Ltx2HostIntegration.NodeUrl, error.Message);
@@ -112,9 +112,11 @@ public sealed class RequestPreflightPhaseTests
     }
 
     // A toggled-off VideoStages group must not start rejecting other people's generations: the
-    // identical config JSON is still sent, but the Enabled gate flag is absent. The IC-LoRA is
-    // deliberately not registered, so the gate is armed twice over — unresolvable LoRA and missing
-    // custom nodes — and still must not fire.
+    // identical config JSON is still sent, but the Enabled gate flag is absent. What arms the gate
+    // is the withheld 'ltxvideo' feature — the sibling test above is the same request with the
+    // toggle on, and it throws. The unregistered IC-LoRA arms nothing on its own: an unresolvable
+    // entry only warns and is dropped, as Ltx2IcLoraContractTests generates end to end. That is
+    // also why this cannot move to the API harness, which unions the feature flag into every POST.
     [Fact]
     public void Preflight_does_not_fire_when_the_video_stages_group_is_disabled()
     {
@@ -125,11 +127,12 @@ public sealed class RequestPreflightPhaseTests
             models.VideoModel,
             new JArray(IcLoraClip(models)).ToString());
         input.Remove(VideoStagesExtension.Enabled);
-        PhaseBoundarySnapshot snapshot = new();
 
         JObject workflow = WorkflowTestHarness.GenerateWithStepsAndState(
             input,
-            FullPhaseSequence(snapshot),
+            WorkflowTestHarness.Template_BaseOnlyImage()
+                .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
+                .Concat(WorkflowTestHarness.VideoStagesSteps()),
             features: ["variation_seed"]).Workflow;
 
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);

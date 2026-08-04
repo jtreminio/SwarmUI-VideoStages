@@ -92,23 +92,20 @@ public class VideoExecutionPlanContextTests
         Assert.Equal(VideoExecutionState.Compiled, context.State);
     }
 
+    /// <summary>
+    /// After a real generation the context is spent: it still answers for the plan it compiled, but
+    /// the prepared execution host it handed to the runner is gone, so a late caller gets a refusal
+    /// rather than a stale host.
+    /// </summary>
     [Fact]
-    public void Successful_production_execution_completes_and_preserves_plan_access()
+    public async Task Successful_production_execution_completes_and_preserves_plan_access()
     {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            JsonSingleClipStages(MakeStage(models.VideoModel.Name, "Generated")));
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+
         (JObject unusedWorkflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                WorkflowTestHarness.Template_BaseOnlyImage()
-                    .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
-                    .Concat(WorkflowTestHarness.VideoStagesSteps()));
-        VideoExecutionPlanContext context =
-            generator.RequireVideoExecutionPlanContext();
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.ImageToVideoPost(MakeDocument(MakeClip(fixture.Stage()))));
+        VideoExecutionPlanContext context = generator.RequireVideoExecutionPlanContext();
 
         Assert.Equal(VideoExecutionState.Completed, context.State);
         Assert.Single(context.Plan.Clips);
@@ -134,27 +131,6 @@ public class VideoExecutionPlanContextTests
 
         Assert.Same(first, repeated);
         Assert.Equal(VideoExecutionState.Failed, context.State);
-    }
-
-    [Fact]
-    public void Empty_active_timeline_is_inert_across_all_registered_phases()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            "[]");
-
-        (JObject unusedWorkflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                WorkflowTestHarness.Template_BaseOnlyImage()
-                    .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
-                    .Concat(WorkflowTestHarness.VideoStagesSteps()));
-
-        Assert.Null(generator.GetVideoExecutionPlanContext());
-        Assert.NotNull(generator.CurrentMedia);
     }
 
     [Fact]

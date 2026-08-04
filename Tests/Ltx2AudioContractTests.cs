@@ -645,4 +645,78 @@ public class Ltx2AudioContractTests
         live.AssertAllLive(sampler);
         AssertShippable(bridge, workflow, live);
     }
+
+    // ---- sources the request names but the workflow does not carry ----------------------
+
+    /// <summary>
+    /// An AceStepFun track is planted by a sibling extension at a reserved node id. Naming one that
+    /// is not there warns by name and generates anyway, on the model's own audio.
+    /// </summary>
+    [Fact]
+    public async Task Missing_selected_ace_audio_track_warns_and_continues_without_it()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        JObject clip = AudioClip("audio7", duration: null, uploadedAudio: null, fixture.Stage());
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(MakeDocument(clip)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Contains(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains("audio7", StringComparison.Ordinal)
+                && warning.Contains("continuing without that source", StringComparison.Ordinal));
+
+        SwarmKSamplerNode sampler = StageSampler(bridge, 0);
+        Assert.IsType<LTXVEmptyLatentAudioNode>(
+            JointLatentOf(sampler).AudioLatent.Connection?.Node);
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
+
+        live.AssertAllLive(sampler, PublishedAudioDecode(live));
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// ControlNet audio is captured off a drive source core wired into the graph. The IC-LoRA entry
+    /// is what fixes <em>which</em> source, so its weights have to resolve — an unregistered LoRA
+    /// drops the entry and the fallback scan warns about a non-unique source instead. With the
+    /// source pinned and nothing captured under it, the clip warns and falls back to silence.
+    /// </summary>
+    [Fact]
+    public async Task Missing_selected_controlnet_audio_capture_warns_and_uses_silence()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        fixture.InstallModel("LoRA", "UnitTest_ControlNetIcLora.safetensors");
+        JObject clip = AudioClip(
+            Constants.AudioSourceControlNet,
+            duration: null,
+            uploadedAudio: null,
+            fixture.Stage());
+        clip["icLoras"] = new JArray(new JObject
+        {
+            ["lora"] = "UnitTest_ControlNetIcLora",
+            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
+        });
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(MakeDocument(clip)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Contains(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains("ControlNet 1 audio", StringComparison.Ordinal)
+                && warning.Contains("using silence", StringComparison.Ordinal));
+
+        SwarmKSamplerNode sampler = StageSampler(bridge, 0);
+        Assert.IsType<LTXVEmptyLatentAudioNode>(
+            JointLatentOf(sampler).AudioLatent.Connection?.Node);
+
+        live.AssertAllLive(sampler, PublishedAudioDecode(live));
+        AssertShippable(bridge, workflow, live);
+    }
 }

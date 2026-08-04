@@ -1240,4 +1240,36 @@ public class Ltx2IcLoraContractTests
         live.AssertAllLive(StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
     }
+
+    /// <summary>
+    /// A skip marker does not drop only its own stage. <c>ParseStages</c> breaks at the first
+    /// skipped stage, so the clip keeps none of them, the timeline never activates, and the
+    /// entry's <c>stage: 1</c> scope is never consulted — core generates the request alone.
+    /// </summary>
+    [Fact]
+    public async Task Skip_marker_truncates_the_clips_stage_list()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        fixture.InstallModel("LoRA", "UnitTest_IcLoraA.safetensors");
+
+        JObject entry = MakeIcLora("UnitTest_IcLoraA", driveMediaData: DriveVideo);
+        entry["stage"] = 1;
+        JObject skipped = fixture.Stage();
+        skipped["skipped"] = true;
+
+        JObject workflow = await fixture.GenerateAsync(
+            MakeDocument(IcLoraClip([skipped, fixture.Stage()], entry)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        // Core's own text-to-video pass, and only it: a surviving stage 1 would add a second
+        // sampler at StageSeed(1).
+        SwarmKSamplerNode core = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        Assert.Equal(VideoStagesWorkflowFixture.Seed, core.NoiseSeed.LiteralAsLong());
+        AssertNoIcLoraNodes(bridge);
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+
+        live.AssertAllLive(core);
+        AssertShippable(bridge, workflow, live);
+    }
 }

@@ -1,6 +1,3 @@
-using ComfyTyped.Core;
-using ComfyTyped.Generated;
-using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
@@ -10,65 +7,22 @@ using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.HostVideo;
 using VideoStages.Architectures.Ltx2;
-using VideoStages.Generated;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
-using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
+/// <summary>
+/// What the generic host-video fallback does under states no POST reaches: a later generic clip
+/// probed against a specialized root owner, an injected core-isolation failure, and the preflight
+/// diagnostics that never enter the compiled plan. The graph-observable half — including the
+/// mixed-compatibility refusal and the ignored request-global settings — lives in
+/// <see cref="HostVideoContractTests"/>.
+/// </summary>
 [Collection("VideoStagesTests")]
 public class HostVideoRuntimeFlowTests
 {
-    [Fact]
-    public void Generic_core_pass_ignores_legacy_swap_and_creativity()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = HostModel(
-            T2IModelClassSorter.CompatHunyuanVideo1_5,
-            "hunyuan-video-1_5");
-        T2IModel visionModel = TestModelFactory.InstallHunyuan15SupportModels();
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            JsonSingleClipStages(
-                MakeStage(models.VideoModel.Name, "Generated", steps: 8)));
-        input.Set(T2IParamTypes.ClipVisionModel, visionModel);
-        input.Set(T2IParamTypes.VideoSwapModel, models.VideoModel);
-        input.Set(T2IParamTypes.VideoSwapPercent, 0.3);
-        input.Set(T2IParamTypes.Video2VideoCreativity, 0.25);
-        int? coreStartStep = null;
-        WorkflowGenerator.WorkflowGenStep inspectCore = new(g =>
-        {
-            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-            coreStartStep = Assert.Single(Samplers(bridge))
-                .FindInput("start_at_step")
-                .LiteralAsInt();
-        }, Constants.WorkflowStepPriority.DropCoreImageToVideoOutput - 0.01);
-
-        (_, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                WorkflowTestHarness.Template_BaseOnlyImage()
-                    .Concat([
-                        WorkflowTestHarness.CoreImageToVideoStep(),
-                        inspectCore,
-                    ])
-                    .Concat(WorkflowTestHarness.VideoStagesSteps()));
-
-        Assert.Equal(0, coreStartStep);
-        Assert.Same(
-            models.VideoModel,
-            input.Get(T2IParamTypes.VideoSwapModel, null));
-        Assert.Equal(0.3, input.Get(T2IParamTypes.VideoSwapPercent));
-        Assert.Equal(0.25, input.Get(T2IParamTypes.Video2VideoCreativity));
-        Assert.Contains(
-            generator.RequireVideoExecutionPlanContext().Plan.Diagnostics,
-            diagnostic => diagnostic.Code
-                == "effective-request.video-swap-ignored");
-    }
-
     [Fact]
     public void Later_generic_clip_does_not_change_a_specialized_root_request()
     {
@@ -245,34 +199,6 @@ public class HostVideoRuntimeFlowTests
             "does not resolve to a registered video architecture");
     }
 
-    [Fact]
-    public void One_clip_cannot_mix_generic_compatibility_classes()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = HostModel(
-            T2IModelClassSorter.CompatHunyuanVideo1_5,
-            "hunyuan-video-1_5");
-        T2IModel mochi = AddHostModel(
-            models.VideoModel,
-            T2IModelClassSorter.CompatGenmoMochi,
-            "genmo-mochi-1",
-            "UnitTest_Mochi_Second.safetensors");
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            JsonSingleClipStages(
-                MakeStage(models.VideoModel.Name, "Generated", steps: 8),
-                MakeStage(
-                    mochi.Name,
-                    "PreviousStage",
-                    control: 0.5,
-                    steps: 8)));
-
-        AssertRejectedBeforeMutation(
-            input,
-            "All authored stages in one clip must use one host compatibility class");
-    }
-
     private static TestModelBundle HostModel(
         T2IModelCompatClass compatibility,
         string modelClassId)
@@ -330,14 +256,4 @@ public class HostVideoRuntimeFlowTests
         Assert.Contains(expectedReason, error.Message);
         Assert.True(JToken.DeepEquals(before, captured.Workflow));
     }
-
-    private static IEnumerable<ComfyNode> NodesOfClass(
-        WorkflowBridge bridge,
-        string classType) =>
-        bridge.Graph.Nodes.Values.Where(node => node.ClassTypeName == classType);
-
-    private static IReadOnlyList<ComfyNode> Samplers(WorkflowBridge bridge) =>
-        NodesOfClass(bridge, "SwarmKSampler")
-            .Concat(NodesOfClass(bridge, "KSamplerAdvanced"))
-            .ToArray();
 }

@@ -201,45 +201,6 @@ public partial class StageFlowTests
                 width: 512, height: 512);
         }, 5.0);
 
-    private static WorkflowGenerator.WorkflowGenStep SeedPublishedBase2EditImageRefStep(int editStageIndex, double priority) =>
-        new(g =>
-        {
-            using var bridge = BridgeSync.For(g);
-            UnknownNode imageNodeRef = bridge.AddStub("UnitTest_Base2EditPublishedImage", "60");
-            string imageNode = "60";
-            JObject media = new()
-            {
-                ["path"] = new JArray(imageNode, 0),
-                ["dataType"] = WGNodeData.DT_IMAGE,
-                ["width"] = 512,
-                ["height"] = 512
-            };
-            if (!string.IsNullOrWhiteSpace(g.CurrentCompat()?.ID))
-            {
-                media["compatId"] = g.CurrentCompat().ID;
-            }
-
-            JObject payload = new()
-            {
-                ["media"] = media
-            };
-            if (g.CurrentVae?.Path is JArray { Count: 2 } vaePath)
-            {
-                JObject vae = new()
-                {
-                    ["path"] = new JArray(vaePath[0], vaePath[1]),
-                    ["dataType"] = WGNodeData.DT_VAE
-                };
-                if (!string.IsNullOrWhiteSpace(g.CurrentVae.Compat?.ID))
-                {
-                    vae["compatId"] = g.CurrentVae.Compat.ID;
-                }
-                payload["vae"] = vae;
-            }
-
-            g.NodeHelpers[$"b2e.published.edit.{editStageIndex}"] = payload.ToString(Formatting.None);
-        }, priority);
-
     private static WorkflowGenerator.WorkflowGenStep SeedNativeLtxVideoChainStep(bool attachAudioToCurrentMedia) =>
         new(g =>
         {
@@ -346,16 +307,6 @@ public partial class StageFlowTests
             }
         }, 11);
 
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeSteps(bool attachAudioToCurrentMedia) =>
-        WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([SeedRefinerImageStep(), SeedNativeLtxVideoChainStep(attachAudioToCurrentMedia)])
-            .Concat(WorkflowTestHarness.VideoStagesSteps());
-
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeStepsWithPublishedBase2EditImage(int editStageIndex, bool attachAudioToCurrentMedia) =>
-        WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([SeedRefinerImageStep(), SeedNativeLtxVideoChainStep(attachAudioToCurrentMedia), SeedPublishedBase2EditImageRefStep(editStageIndex, priority: 11.4)])
-            .Concat(WorkflowTestHarness.VideoStagesSteps());
-
     private static void SeedTextToVideoLtxVideoChain(WorkflowGenerator g, bool attachAudioToCurrentMedia)
     {
         T2IModel videoModel = g.UserInput.Get(T2IParamTypes.Model, null);
@@ -418,31 +369,8 @@ public partial class StageFlowTests
         new[] { SeedNativeTextToVideoChainAsPreCoreMediaStep(attachAudioToCurrentMedia) }
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeStepsWithCurrentVaeMismatch(T2IModel baseModel, bool attachAudioToCurrentMedia) =>
-        WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat(
-            [
-                SeedRefinerImageStep(),
-                SeedNativeLtxVideoChainStep(attachAudioToCurrentMedia),
-                ResetCurrentModelAndVaeToBaseCompatStep(baseModel)
-            ])
-            .Concat(WorkflowTestHarness.VideoStagesSteps());
-
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeStepsWithTrimWrapper(bool attachAudioToCurrentMedia) =>
         WorkflowTestHarness.Template_BaseOnlyImage()
             .Concat([SeedRefinerImageStep(), SeedNativeLtxVideoChainWithTrimWrapperStep(attachAudioToCurrentMedia)])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
-
-    private static WorkflowGenerator.WorkflowGenStep ResetCurrentModelAndVaeToBaseCompatStep(T2IModel baseModel) =>
-        new(g =>
-        {
-            using var bridge = BridgeSync.For(g);
-            UnknownNode baseModelNode = bridge.AddStub("UnitTest_ResetBaseModel", "301").WithOutputs(WGNodeData.DT_MODEL, "CLIP");
-            UnknownNode baseVaeNode = bridge.AddStub("UnitTest_ResetBaseVae", "302").WithOutputs(WGNodeData.DT_VAE);
-            g.FinalLoadedModel = baseModel;
-            g.FinalLoadedModelList = baseModel is null ? [] : [baseModel];
-            g.CurrentModel = baseModelNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL, baseModel?.ModelClass?.CompatClass);
-            g.CurrentTextEnc = baseModelNode.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC, baseModel?.ModelClass?.CompatClass);
-            g.CurrentVae = baseVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE, baseModel?.ModelClass?.CompatClass);
-        }, 11.4);
 }

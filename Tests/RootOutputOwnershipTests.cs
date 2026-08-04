@@ -12,6 +12,19 @@ namespace VideoStages.Tests;
 
 public partial class StageFlowTests
 {
+    /// <summary>
+    /// The half of displaced-root ownership a POST cannot build: a <em>foreign</em> extension's
+    /// publication (<c>801</c> off its own media <c>800</c>) and a foreign sink hanging off the
+    /// shared root VAE loader (<c>802</c> off <c>101</c>). Both sit inside the closure the
+    /// displaced-root sweep walks, and neither belongs to the timeline, so both must survive
+    /// untouched — under suppression as well as retargeting. Nothing in core or VideoStages emits
+    /// a second extension's save.
+    /// <para>
+    /// The timeline's own save — retargeted onto its publication, or removed under
+    /// <c>donotsave</c> — is generated end-to-end by
+    /// <see cref="HostVideoContractTests.A_displaced_root_retargets_or_removes_its_own_save"/>.
+    /// </para>
+    /// </summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

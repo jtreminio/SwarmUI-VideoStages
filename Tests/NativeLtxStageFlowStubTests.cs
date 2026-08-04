@@ -10,121 +10,14 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// The native-LTX stage-flow cases that cannot move to the Comfy API path. Two need generator
-/// state the API harness cannot reach — a reset <c>CurrentVae</c> and a published Base2Edit image
-/// (no step writes <c>b2e.published.edit.{n}</c>) — one needs a core post-decode wrapper surviving
-/// to 11.5, which it does not whenever the extension intercepts the host root, since
-/// <c>DropCoreImageToVideoOutput</c> prunes core's whole chain at 11.05 — and two assert warnings
-/// on requests that produce no distinguishing graph. Everything else in these files now lives in
-/// <see cref="Ltx2StageChainContractTests"/>.
+/// The one native-LTX stage-flow case that cannot move to the Comfy API path: it needs a core
+/// post-decode wrapper still standing when the stage runner reaches 11.5, and no POST produces
+/// that — whenever the extension intercepts the host root,
+/// <c>DropCoreImageToVideoOutput</c> prunes core's whole chain at 11.05. Everything else in these
+/// files now lives in <see cref="Ltx2StageChainContractTests"/>.
 /// </summary>
 public partial class StageFlowTests
 {
-    private static List<string> RequestWarnings(T2IParamInput input) =>
-        Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
-
-    [Fact]
-    public void Native_ltx_generated_reference_reuses_current_video_chain_even_if_current_vae_was_reset()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-
-        string stagesJson = JsonSingleClipStages(
-            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        (JObject workflow, WorkflowGenerator generator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildNativeStepsWithCurrentVaeMismatch(models.BaseModel, attachAudioToCurrentMedia: false));
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        StageRefStore store = new(generator);
-        Assert.Equal(T2IModelClassSorter.CompatLtxv2.ID, store.Generated.Vae.Compat?.ID);
-
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
-    }
-
-    [Fact]
-    public void Native_ltx_stage_can_use_base2edit_edit_stage_as_clip_ref_image()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-
-        JObject stage = MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10);
-        stage["refStrengths"] = new JArray(0.35);
-        string stagesJson = new JArray(
-            MakeClipWithRefs(refs: [MakeRef("edit0", frame: 1)], stage)
-        ).ToString();
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        (JObject workflow, WorkflowGenerator unusedGenerator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildNativeStepsWithPublishedBase2EditImage(0, attachAudioToCurrentMedia: false));
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        LTXVPreprocessNode preprocessNode = Assert.Single(
-            bridge.Graph.NodesOfType<LTXVPreprocessNode>().OrderBy(node => int.Parse(node.Id)));
-        ImageScaleNode preprocessUpstream = (ImageScaleNode)preprocessNode.Image.Connection!.Node;
-        Assert.Equal("60", preprocessUpstream.Image.Connection!.Node.Id);
-        Assert.Equal(0, preprocessUpstream.Image.Connection.SlotIndex);
-        LTXVImgToVideoInplaceNode imgToVideoNode = Assert.Single(
-            bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>().OrderBy(node => int.Parse(node.Id)));
-        Assert.Same(preprocessNode.OutputImage, imgToVideoNode.Image.Connection);
-        Assert.Equal(0.35, imgToVideoNode.Strength.LiteralAsDouble());
-    }
-
-    [Fact]
-    public void Missing_base2edit_edit_stage_reference_warns_and_continues()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-
-        string stagesJson = JsonSingleClipStages(
-            MakeStage(models.VideoModel.Name, "edit0", control: 0.5, steps: 10));
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                BuildNativeSteps(attachAudioToCurrentMedia: false));
-
-        Assert.NotEmpty(workflow);
-        Assert.Contains(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains("Base2Edit stage 0 does not exist", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void Guide_ref_miss_warns_and_continues_during_workflow_run()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-
-        string stagesJson = MakeRootConfig(
-            width: 512,
-            height: 512,
-            MakeClip(
-                MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10),
-                MakeStage(models.VideoModel.Name, "edit99", control: 0.5, steps: 10)),
-            MakeClip(
-                MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10))
-        ).ToString();
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                BuildNativeSteps(attachAudioToCurrentMedia: true));
-
-        Assert.NotEmpty(workflow);
-        Assert.Contains(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains("Base2Edit stage 99 does not exist", StringComparison.Ordinal));
-    }
-
     [Fact]
     public void Native_ltx_wrapper_chain_reuses_decode_audio_and_save_without_duplicate_trim()
     {
