@@ -119,6 +119,53 @@ internal static class UnitTestStubs
 
     }
 
+    public static void EnsureComfyWorkflowParamsRegistered()
+    {
+        EnsureComfySamplerSchedulerRegistered();
+        EnsureComfyVideoParamsRegistered();
+
+        Ensure(ref ComfyUIBackendExtension.CustomWorkflowParam, "ComfyUI Custom Workflow", "");
+        Ensure(ref ComfyUIBackendExtension.SetClipDevice, "Set Clip Device", "cpu");
+        Ensure(ref ComfyUIBackendExtension.SelfAttentionGuidanceScale, "SAG Scale", "0.5");
+        Ensure(ref ComfyUIBackendExtension.SelfAttentionGuidanceSigmaBlur, "SAG Blur", "2");
+        Ensure(ref ComfyUIBackendExtension.PerturbedAttentionGuidanceScale, "PAG Scale", "3");
+        Ensure(ref ComfyUIBackendExtension.RescaleCFGMultiplier, "Rescale CFG", "0.7");
+        Ensure(ref ComfyUIBackendExtension.RenormCFG, "Renorm CFG", "0");
+        Ensure(ref ComfyUIBackendExtension.UseCfgZeroStar, "CFG Zero Star", "false");
+        Ensure(ref ComfyUIBackendExtension.UseTCFG, "TCFG", "false");
+        Ensure(ref ComfyUIBackendExtension.NormalizedAttentionGuidanceScale, "NAG Scale", "0");
+        Ensure(ref ComfyUIBackendExtension.NormalizedAttentionGuidanceAlpha, "NAG Alpha", "0.5");
+        Ensure(ref ComfyUIBackendExtension.NormalizedAttentionGuidanceTau, "NAG Tau", "1.5");
+        Ensure(ref ComfyUIBackendExtension.TeaCacheMode, "TeaCache Mode", "disabled");
+        Ensure(ref ComfyUIBackendExtension.TeaCacheThreshold, "TeaCache Threshold", "0.25");
+        Ensure(ref ComfyUIBackendExtension.TeaCacheStart, "TeaCache Start", "0");
+        Ensure(ref ComfyUIBackendExtension.EasyCacheMode, "EasyCache Mode", "disabled");
+        Ensure(ref ComfyUIBackendExtension.EasyCacheThreshold, "EasyCache Threshold", "0.2");
+        Ensure(ref ComfyUIBackendExtension.EasyCacheStart, "EasyCache Start", "0.15");
+        Ensure(ref ComfyUIBackendExtension.EasyCacheEnd, "EasyCache End", "0.95");
+        Ensure(ref ComfyUIBackendExtension.AITemplateParam, "AITemplate", "false");
+        Ensure(ref ComfyUIBackendExtension.ShiftedLatentAverageInit, "Shifted Latent Average", "false");
+        Ensure(ref ComfyUIBackendExtension.NunchakuCacheThreshold, "Nunchaku Cache", "0");
+        Ensure(ref ComfyUIBackendExtension.PreferredDType, "Preferred DType", "automatic");
+        Ensure(ref ComfyUIBackendExtension.Sam2PointCoordsPositive, "SAM2 Positive", "[]");
+        Ensure(ref ComfyUIBackendExtension.Sam2PointCoordsNegative, "SAM2 Negative", "[]");
+        Ensure(ref ComfyUIBackendExtension.Sam2BBox, "SAM2 BBox", "");
+        Ensure(ref ComfyUIBackendExtension.PixelDecoderModel, "Pixel Decoder", "");
+    }
+
+    private static void Ensure<T>(
+        ref T2IRegisteredParam<T> parameter,
+        string name,
+        string defaultValue)
+    {
+        parameter ??= T2IParamTypes.Register<T>(new T2IParamType(
+            Name: $"{name} (Workflow Test Stub)",
+            Description: "Parameter stub used by full SwarmUI workflow contract tests.",
+            Default: defaultValue,
+            Min: -100,
+            Max: 100));
+    }
+
     public static void EnsureComfyControlNetParamsRegistered()
     {
         if (ComfyUIBackendExtension.ControlNetPreprocessorParams[0] is not null
@@ -256,8 +303,10 @@ internal static class TestModelFactory
         return models;
     }
 
-    private static void InstallMiniMaxSupportModels()
+    public static void InstallMiniMaxSupportModels()
     {
+        EnsureModelSet("Stable-Diffusion");
+        EnsureModelSet("Clip");
         Program.T2IModelSets["VAE"] = new() { ModelType = "VAE" };
         if (CommonModels.Known.IsEmpty)
         {
@@ -266,6 +315,14 @@ internal static class TestModelFactory
         Install("Clip", "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors");
         Install("VAE", CommonModels.Known["minimax-h3-video-vae"].FileName);
         Install("VAE", CommonModels.Known["minimax-h3-audio-vae"].FileName);
+    }
+
+    private static void EnsureModelSet(string modelType)
+    {
+        if (!Program.T2IModelSets.ContainsKey(modelType))
+        {
+            Program.T2IModelSets[modelType] = new() { ModelType = modelType };
+        }
     }
 
     public static TestModelBundle CreateBaseAndWan22ImageToVideoModels()

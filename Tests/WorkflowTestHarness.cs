@@ -58,6 +58,16 @@ internal static class WorkflowTestHarness
         return _videoStagesSteps;
     }
 
+    public static IReadOnlyList<WorkflowGenerator.WorkflowGenStep> ProductionSteps()
+    {
+        EnsureInitialized();
+        return [
+            .. _coreSteps
+                .Concat(_videoStagesSteps)
+                .OrderBy(step => step.Priority)
+        ];
+    }
+
     public static WorkflowGenerator.WorkflowGenStep CoreImageToVideoStep()
     {
         EnsureInitialized();
