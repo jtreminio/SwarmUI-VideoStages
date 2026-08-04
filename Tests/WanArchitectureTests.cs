@@ -11,10 +11,6 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// The Wan module's own capability and payload contract. Shared recognition and descriptor
-/// invariants live in <see cref="RealArchitectureContractTests"/>.
-/// </summary>
 [Collection("VideoStagesTests")]
 public class WanArchitectureTests
 {
@@ -56,6 +52,14 @@ public class WanArchitectureTests
             CompatClass = T2IModelClassSorter.CompatWan21_14b,
         };
         Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
+        T2IModelClass exactFourteen = fourteen.VideoModel.ModelClass;
+        fourteen.VideoModel.ModelClass = exactFourteen with
+        {
+            CompatClass = T2IModelClassSorter.CompatWan22_5b,
+        };
+        Assert.False(WanArchitectureModule.Instance.TryResolveModel(
+            fourteen.VideoModel,
+            out _));
         five.VideoModel.ModelClass = exactFive with
         {
             ID = $"{WanArchitectureModule.Ti2v5bModelClassId}/lora",
@@ -737,11 +741,6 @@ public class WanArchitectureTests
             item => item.Code == "clip-aspect-mismatch");
     }
 
-    /// <summary>
-    /// Every WAN compatibility class declares that LoRAs do not target the text encoder, and the
-    /// compiler plans accordingly: a LoRA that would only be effective through its text-encoder
-    /// weight never loads.
-    /// </summary>
     [Fact]
     public void Normal_LoRAs_target_the_model_only_across_every_Wan_compatibility_class()
     {
@@ -1346,48 +1345,6 @@ public class WanArchitectureTests
         AssertRefused(
             InitVideoClip(0, stage with { Control = 0.9, Steps = 8 }),
             "quantizes to sampler start step 0");
-    }
-
-    [Fact]
-    public void Compiler_ignores_forged_profile_alias_when_model_facts_are_valid()
-    {
-        StageSpec first = Stage(10, "wan-current");
-        StageSpec second = Stage(11, "wan-alternate") with
-        {
-            Control = 0.5,
-            ImageReference = "PreviousStage",
-            ClipStageIndex = 1,
-            ClipStageRawIndex = 1,
-        };
-        ClipSpec clip = GeneratedClip(0, first, second);
-        VideoArchitectureDescriptor canonical =
-            WanArchitectureModule.Instance.Descriptor;
-        ModelProfileId alternateId = new("synthetic-wan-alternate");
-        Dictionary<int, ResolvedVideoModel> stageModels = new()
-        {
-            [0] = TestResolvedVideoModel.Create(
-                first.Model,
-                new("forged-first"),
-                canonical,
-                WanArchitectureModule.ImageToVideoModelClassId,
-                T2IModelClassSorter.CompatWan21_14b.ID),
-            [1] = TestResolvedVideoModel.Create(
-                second.Model,
-                alternateId,
-                canonical,
-                WanArchitectureModule.ImageToVideoModelClassId,
-                T2IModelClassSorter.CompatWan21_14b.ID),
-        };
-
-        ArchitectureClipCompilation compilation =
-            WanArchitectureModule.Instance.ValidateAndCompileClip(
-                clip,
-                stageModels,
-                new(512, 512, 24, ArchitectureEntryMode.ImageToVideo));
-
-        Assert.DoesNotContain(
-            compilation.Diagnostics,
-            item => item.Severity == PlanDiagnosticSeverity.Error);
     }
 
     [Fact]

@@ -18,16 +18,7 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// What the WAN path does under states a real request cannot reach: injected failures inside model
-/// preparation, a hand-corrupted root handoff, a forged model profile, and a maliciously rewritten
-/// host latent. Each asserts recovery — restored scopes, restored parameter lists, evicted
-/// caches — which is generator state, not graph shape, and so has no graph-observable form.
-/// <para>
-/// Everything that <em>is</em> observable in a generated workflow lives in
-/// <see cref="WanGeneratedWorkflowContractTests"/>, which runs through the real Comfy API POST path.
-/// </para>
-/// </summary>
+/// <summary>Direct tests for WAN runtime failure recovery and unreachable states.</summary>
 [Collection("VideoStagesTests")]
 public class WanRuntimeFlowTests
 {
@@ -36,12 +27,6 @@ public class WanRuntimeFlowTests
     private static readonly string[] WanSourceFeatures =
         [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
 
-    /// <summary>
-    /// The values the request carried are preserved and the isolation handler leaves every other
-    /// caller's settings alone. That no second sampling pass is built from them is a graph fact,
-    /// covered against a real workflow by
-    /// <see cref="WanGeneratedWorkflowContractTests.Legacy_video_swap_fields_warn_and_build_no_second_video_pass"/>.
-    /// </summary>
     [Fact]
     public void Legacy_Wan_swap_fields_are_preserved_and_warned_about()
     {
@@ -315,7 +300,7 @@ public class WanRuntimeFlowTests
     }
 
     [Fact]
-    public void Wan5b_cleanup_uses_model_class_despite_forged_profile_aliases()
+    public void Wan5b_cleanup_uses_resolved_profile_despite_forged_authored_hints()
     {
         using SwarmUiTestContext context = new(clearModelGenSteps: false);
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
@@ -741,8 +726,6 @@ public class WanRuntimeFlowTests
                     .Concat(WorkflowTestHarness.VideoStagesSteps())));
 
         Assert.Contains("host root media is missing or no longer resolves", error.Message);
-        // The refusal lands at capture, before any stage runs — so no stage got as far as borrowing
-        // the host model loader. (The core-media capture marker is written earlier and does stay.)
         Assert.DoesNotContain(
             $"modelloader_{models.VideoModel.Name}_image2video",
             captured.NodeHelpers.Keys);

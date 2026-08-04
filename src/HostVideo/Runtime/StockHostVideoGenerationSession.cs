@@ -11,10 +11,6 @@ using VideoStages.Planning;
 
 namespace VideoStages.HostVideo.Runtime;
 
-/// <summary>
-/// Runs architectures that use SwarmUI's stock video builders, with WAN behavior supplied by
-/// <see cref="WanStockHostVideoBehavior"/>.
-/// </summary>
 internal sealed class StockHostVideoGenerationSession(
     WorkflowGenerator g,
     VideoExecutionPlan plan,
@@ -224,7 +220,7 @@ internal sealed class StockHostVideoGenerationSession(
             bool ambientImageToVideo = g.IsImageToVideo;
             bool ambientImageToVideoSwap = g.IsImageToVideoSwap;
             ISet<string> preHostNodeIds =
-                _wanBehavior?.CapturePreHostNodeIds(payload, genInfo);
+                _wanBehavior?.CapturePreHostNodeIds(stage, genInfo);
             Exception hostConstructionError = null;
             try
             {
@@ -351,6 +347,7 @@ internal sealed class StockHostVideoGenerationSession(
                 if (genInfo.VideoEndFrame is not null)
                 {
                     _wanBehavior.BuildNativeLastFrameConditioning(
+                        stage,
                         genInfo,
                         frames);
                 }

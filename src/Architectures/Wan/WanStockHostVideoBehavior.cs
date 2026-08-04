@@ -11,10 +11,6 @@ using Image = SwarmUI.Utils.Image;
 
 namespace VideoStages.Architectures.Wan;
 
-/// <summary>
-/// Adds Wan bounded references, temporal snapping, final-frame conditioning, and 5B cleanup to
-/// the shared stock-host path.
-/// </summary>
 internal sealed class WanStockHostVideoBehavior(
     WorkflowGenerator generator,
     VideoExecutionPlan plan)
@@ -84,6 +80,7 @@ internal sealed class WanStockHostVideoBehavior(
             : ResolveRequestedFrames(clip, stage, sectionId: null);
 
     internal void BuildNativeLastFrameConditioning(
+        StagePlan stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         int frames)
     {
@@ -103,10 +100,9 @@ internal sealed class WanStockHostVideoBehavior(
         JToken clipVisionEnd = null;
         string compatibilityId =
             genInfo.VideoModel.ModelClass?.CompatClass?.ID;
-        bool exactWan22ImageModel = StringUtils.Equals(
-            genInfo.VideoModel.ModelClass?.ID,
-            WanArchitectureModule.ImageToVideoModelClassId);
-        if (!exactWan22ImageModel
+        bool exactWan22ImageProfile =
+            stage.ResolvedModel.ModelProfileId == WanArchitectureModule.ImageToVideoProfileId;
+        if (!exactWan22ImageProfile
             && (compatibilityId == T2IModelClassSorter.CompatWan21_14b.ID
                 || compatibilityId
                     == T2IModelClassSorter.CompatWan21_1_3b.ID))
@@ -165,13 +161,10 @@ internal sealed class WanStockHostVideoBehavior(
     }
 
     internal ISet<string> CapturePreHostNodeIds(
-        StockHostVideoStagePayload payload,
+        StagePlan stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        if (!string.Equals(
-                payload.ModelClassId,
-                WanArchitectureModule.Ti2v5bModelClassId,
-                StringComparison.OrdinalIgnoreCase)
+        if (stage.ResolvedModel.ModelProfileId != WanArchitectureModule.Ti2v5bProfileId
             || genInfo.StartStep <= 0)
         {
             return null;
@@ -195,10 +188,7 @@ internal sealed class WanStockHostVideoBehavior(
             hostConstructionError);
     }
 
-    /// <summary>
-    /// Cleanup failures are authoritative after successful host construction. While a host
-    /// exception is already unwinding, cleanup is best-effort so it cannot replace that failure.
-    /// </summary>
+    /// <summary>Cleanup errors win after success but cannot replace an existing host failure.</summary>
     internal static void RunPostHostCleanup(
         Action cleanup,
         Exception hostConstructionError)

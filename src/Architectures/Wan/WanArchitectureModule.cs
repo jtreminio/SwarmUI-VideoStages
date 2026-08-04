@@ -5,10 +5,6 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan;
 
-/// <summary>
-/// WAN models recognized from the host's compatibility and checkpoint facts. Exact legacy
-/// profiles remain aliases for established paths.
-/// </summary>
 internal sealed class WanArchitectureModule : IVideoArchitectureModule
 {
     private sealed record RecognizedProfile(
@@ -18,15 +14,10 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
 
     internal static ArchitectureId ArchitectureId { get; } = new("wan22");
 
-    /// <summary>Wan generated frame counts advance in four-frame intervals.</summary>
     internal const int FrameGrid = 4;
 
-    /// <summary>
-    /// The exact 14B host model class recognized by the original profile.
-    /// </summary>
     internal const string ImageToVideoModelClassId = "wan-2_2-image2video-14b";
 
-    /// <summary>The exact 5B class whose image-conditioned path is proven by this module.</summary>
     internal const string Ti2v5bModelClassId = "wan-2_2-ti2v-5b";
 
     internal static ModelProfileId ImageToVideoProfileId { get; } = new("wan-2.2-i2v-14b");
@@ -36,7 +27,7 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
     internal static ModelProfileId OrdinaryImageToVideoProfileId { get; } =
         new("wan-i2v");
 
-    private static IReadOnlyList<RecognizedProfile> LegacyRecognizedProfiles { get; } =
+    private static IReadOnlyList<RecognizedProfile> ExactProfiles { get; } =
     [
         new(
             ImageToVideoModelClassId,
@@ -73,25 +64,19 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
     {
         string modelClassId = model?.ModelClass?.ID;
         string compatClassId = model?.ModelClass?.CompatClass?.ID;
-        if (!IsOrdinaryWanModel(model))
+        RecognizedProfile exactProfile = ExactProfiles.SingleOrDefault(candidate =>
+            string.Equals(
+                modelClassId,
+                candidate.ModelClassId,
+                StringComparison.OrdinalIgnoreCase));
+        if (!IsOrdinaryWanModel(model, exactProfile))
         {
             resolved = null;
             return false;
         }
-        RecognizedProfile legacyMatch = LegacyRecognizedProfiles.SingleOrDefault(candidate =>
-            string.Equals(
-                modelClassId,
-                candidate.ModelClassId,
-                StringComparison.OrdinalIgnoreCase)
-            && string.Equals(
-                compatClassId,
-                candidate.CompatClassId,
-                StringComparison.Ordinal));
-        ModelProfileId profileId =
-            legacyMatch?.ProfileId ?? OrdinaryImageToVideoProfileId;
         resolved = new(
             model.Name,
-            profileId,
+            exactProfile?.ProfileId ?? OrdinaryImageToVideoProfileId,
             Descriptor,
             modelClassId,
             compatClassId,
@@ -112,7 +97,9 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
             T2IModelClassSorter.CompatWan21_1_3b.ID,
             StringComparison.Ordinal);
 
-    private static bool IsOrdinaryWanModel(T2IModel model)
+    private static bool IsOrdinaryWanModel(
+        T2IModel model,
+        RecognizedProfile exactProfile)
     {
         T2IModelClass modelClass = model?.ModelClass;
         T2IModelCompatClass compatibility = modelClass?.CompatClass;
@@ -133,24 +120,10 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         {
             return false;
         }
-        if (string.Equals(
-                modelClassId,
-                Ti2v5bModelClassId,
-                StringComparison.OrdinalIgnoreCase)
+        if (exactProfile is not null
             && !string.Equals(
                 compatibilityClassId,
-                T2IModelClassSorter.CompatWan22_5b.ID,
-                StringComparison.Ordinal))
-        {
-            return false;
-        }
-        if (string.Equals(
-                modelClassId,
-                ImageToVideoModelClassId,
-                StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(
-                compatibilityClassId,
-                T2IModelClassSorter.CompatWan21_14b.ID,
+                exactProfile.CompatClassId,
                 StringComparison.Ordinal))
         {
             return false;

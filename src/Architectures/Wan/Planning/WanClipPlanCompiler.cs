@@ -5,9 +5,6 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan.Planning;
 
-/// <summary>
-/// Compiles Wan-owned clip settings and reports unsupported or normalized options.
-/// </summary>
 internal static class WanClipPlanCompiler
 {
     internal static ArchitectureClipCompilation Compile(
@@ -60,7 +57,7 @@ internal static class WanClipPlanCompiler
         for (int stageIndex = 0; stageIndex < activeStages.Count; stageIndex++)
         {
             StageSpec stage = activeStages[stageIndex];
-            // Resolved stage models are a prerequisite; indexing asserts that planning contract.
+            // Planning requires a resolved model for every active stage.
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
             bool firstStage = stageIndex == 0;
             bool decodedStageInput = initVideoEntry || !firstStage;
@@ -85,14 +82,8 @@ internal static class WanClipPlanCompiler
                     StringComparison.OrdinalIgnoreCase)
                 && HasNoiseRole(previousModel.ModelName, "high")
                 && HasNoiseRole(resolved.ModelName, "low")
-                && string.Equals(
-                    previousModel.ModelClassId,
-                    WanArchitectureModule.ImageToVideoModelClassId,
-                    StringComparison.OrdinalIgnoreCase)
-                && string.Equals(
-                    resolved.ModelClassId,
-                    WanArchitectureModule.ImageToVideoModelClassId,
-                    StringComparison.OrdinalIgnoreCase)
+                && previousModel.ModelProfileId == WanArchitectureModule.ImageToVideoProfileId
+                && resolved.ModelProfileId == WanArchitectureModule.ImageToVideoProfileId
                 && string.Equals(
                     previousModel.CompatibilityClassId,
                     resolved.CompatibilityClassId,
@@ -163,10 +154,6 @@ internal static class WanClipPlanCompiler
             diagnostics.AsReadOnly());
     }
 
-    /// <summary>
-    /// Wan native conditioning has no per-reference strength input, so authored strengths cannot
-    /// reach the graph. They stay saved and are reported once per clip rather than dropped silently.
-    /// </summary>
     private static void WarnAboutReferenceStrengths(
         ClipSpec clip,
         IReadOnlyList<StageSpec> activeStages,

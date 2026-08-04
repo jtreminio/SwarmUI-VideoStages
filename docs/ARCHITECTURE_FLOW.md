@@ -101,12 +101,13 @@ aliases:
 - `wan-2_2-ti2v-5b` / `wan-22-5b` resolves to `wan22` /
   `wan-2.2-ti2v-5b`.
 
+One private table owns both exact class/compatibility pairs and their profiles;
+planning and runtime use the resolved profile instead of repeating those pairs.
 The exact identifiers are compatibility aliases rather than the recognition
 allowlist. Other ordinary WAN models resolve to the generic
-`wan-i2v` profile; first/last-frame and native 5B behavior are not inferred for
-that alias. The 14B profile remains the descriptor default for compatible
-runtime routing, but these aliases are not separate user-facing
-text-versus-image families.
+`wan-i2v` profile. First/last-frame support remains compatibility-driven;
+native 5B behavior requires the exact resolved profile. These profiles are not
+separate user-facing text-versus-image families.
 `HostVideoArchitectureModule.TryResolveModel` is the last-priority baseline. It
 does not trust `IsText2Video` / `IsImage2Video` by themselves. Its proof table
 admits exact stock branches for Hunyuan Video, Hunyuan Video 1.5, Mochi,
