@@ -13,9 +13,6 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// Backend checks for fixtures also asserted by frontend or Comfy-node tests.
-/// </summary>
 [Collection("VideoStagesTests")]
 public class CrossLanguageMirrorTests
 {
@@ -116,10 +113,6 @@ public class CrossLanguageMirrorTests
         }
     }
 
-    /// <summary>
-    /// M5 — LTX pixel→latent frame mapping: <see cref="Ltx2ArchitectureModule.LatentFrameCount"/> vs
-    /// the Comfy node's <c>pixel_to_latent_frames</c>, which asserts the same fixture in pytest.
-    /// </summary>
     [Fact]
     public void LatentFrameCount_MatchesSharedFixture()
     {
@@ -232,7 +225,7 @@ public class CrossLanguageMirrorTests
     }
 
     [Fact]
-    public void IcLoraDriveMediaContracts_MatchSharedFixture()
+    public void IcLoraDriveMediaKinds_MatchSharedFixture()
     {
         JObject fixture = LoadObjectFixture("ic-lora-drive-media-contract.json");
         foreach (JObject expected in fixture.Properties().Select(property => property.Value))
@@ -242,25 +235,22 @@ public class CrossLanguageMirrorTests
                 ignoreCase: true);
             string[] driveMediaKinds =
                 [.. expected["driveMediaKinds"]!.Values<string>()];
-            AssertContract(
+            AssertAcceptedKinds(
                 expected,
-                IcLoraDriveMediaContracts.Resolve(driveData, driveMediaKinds));
+                IcLoraDriveMediaKinds.AcceptedFor(driveData, driveMediaKinds));
         }
     }
 
-    private static void AssertContract(
+    private static void AssertAcceptedKinds(
         JObject expected,
-        IcLoraDriveMediaContract actual)
+        IReadOnlySet<IcLoraDriveMediaKind> actual)
     {
         string[] accepted = [.. Enum.GetValues<IcLoraDriveMediaKind>()
-            .Where(kind => actual.Accepts(kind))
+            .Where(actual.Contains)
             .Select(kind => kind.ToString().ToLowerInvariant())];
         Assert.Equal(
             expected["acceptedKinds"]!.Values<string>().OrderBy(value => value),
             accepted.OrderBy(value => value));
-        Assert.Equal(
-            expected.Value<string>("driveData"),
-            actual.DriveData.ToString().ToLowerInvariant());
     }
 
     [Fact]

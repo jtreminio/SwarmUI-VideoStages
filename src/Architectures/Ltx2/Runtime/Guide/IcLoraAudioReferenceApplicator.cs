@@ -59,7 +59,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         string sampleKey = LtxRuntimeKeyScope.IcLoraAudioReference(
             clip.ClipId,
             entry.EntryIndex,
-            entry.MediaInput.Source == IcLoraMediaSourceKind.Incoming
+            entry.Drive.Source == IcLoraMediaSourceKind.Incoming
                 ? rawStageIndex
                 : null);
         if (VideoGraphHelpers.TryGetCachedPath(g, null, sampleKey, out JArray cached))
@@ -105,7 +105,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         IcLoraPlan entry,
         WGNodeData incomingMedia)
     {
-        if (entry.MediaInput.Source == IcLoraMediaSourceKind.Incoming)
+        if (entry.Drive.Source == IcLoraMediaSourceKind.Incoming)
         {
             if (incomingMedia?.AttachedAudio is not WGNodeData incomingAudio)
             {
@@ -117,18 +117,18 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
             }
             return incomingAudio;
         }
-        if (entry.MediaInput.Source != IcLoraMediaSourceKind.Upload)
+        if (entry.Drive.Source != IcLoraMediaSourceKind.Upload)
         {
             throw VideoStagesInvariant.Failure(
                 $"VideoStages: IC-LoRA entry {entry.EntryIndex} has no supported audio drive source.");
         }
-        IcLoraDriveMediaPlan media = entry.DriveMedia;
-        if (!media.IsConfigured)
+        UploadedMediaSpec media = entry.Drive.Upload;
+        if (string.IsNullOrWhiteSpace(media?.Data))
         {
             throw VideoStagesInvariant.Failure(
                 $"VideoStages: IC-LoRA entry {entry.EntryIndex} requires audio or video Drive Media.");
         }
-        if (media.Kind == IcLoraDriveMediaKind.Audio)
+        if (entry.Drive.MediaKind == IcLoraDriveMediaKind.Audio)
         {
             JArray uploadedAudio = LoadUploadedAudio(media);
             return uploadedAudio is null ? null : new(
@@ -137,7 +137,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
                 WGNodeData.DT_AUDIO,
                 g.CurrentAudioVae?.Compat);
         }
-        if (media.Kind != IcLoraDriveMediaKind.Video)
+        if (entry.Drive.MediaKind != IcLoraDriveMediaKind.Video)
         {
             throw VideoStagesInvariant.Failure(
                 "This IC-LoRA requires audio or video Drive Media for its speaker reference.");
@@ -150,11 +150,11 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         return components.Audio.ToWGNodeData(g, WGNodeData.DT_AUDIO);
     }
 
-    private JArray LoadUploadedAudio(IcLoraDriveMediaPlan media)
+    private JArray LoadUploadedAudio(UploadedMediaSpec media)
     {
         AudioFile uploaded = EmbeddedMediaMaterializer.MaterializeAudio(
             g,
-            new UploadedMediaSpec(media.Data, media.FileName));
+            media);
         if (uploaded is null)
         {
             return null;

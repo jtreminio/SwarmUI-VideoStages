@@ -150,7 +150,7 @@ internal sealed class LtxStageExecutor
     private WGNodeData ResolveIcLoraStageInput(StageFrame stageFrame)
     {
         bool wantsIncoming = stageFrame.Stage.RequireLtx2Payload().IcLoras.Any(entry =>
-            entry.MediaInput.Source == IcLoraMediaSourceKind.Incoming);
+            entry.Drive.Source == IcLoraMediaSourceKind.Incoming);
         if (!wantsIncoming)
         {
             return null;

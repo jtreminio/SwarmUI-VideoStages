@@ -23,11 +23,11 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         out ResolvedIcLoraDrive drive)
     {
         drive = null;
-        if (!entry.MediaContract.ConsumesVisual)
+        if (entry.Drive.Stream != IcLoraDriveData.Visual)
         {
             return false;
         }
-        switch (entry.MediaInput.Source)
+        switch (entry.Drive.Source)
         {
             case IcLoraMediaSourceKind.Upload:
             {
@@ -42,7 +42,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
                 drive = new(
                     images,
                     null,
-                    entry.DriveMedia.Kind == IcLoraDriveMediaKind.Image);
+                    entry.Drive.MediaKind == IcLoraDriveMediaKind.Image);
                 return true;
             }
             case IcLoraMediaSourceKind.Incoming:
@@ -57,10 +57,10 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
                 drive = new(
                     new JArray(stageInput.Path[0], stageInput.Path[1]),
                     null,
-                    entry.MediaInput.Kind == IcLoraDriveMediaKind.Image);
+                    entry.Drive.MediaKind == IcLoraDriveMediaKind.Image);
                 return true;
             case IcLoraMediaSourceKind.ControlNet:
-                if (entry.MediaInput.ControlNetIndex is not int index
+                if (entry.Drive.ControlNetIndex is not int index
                     || !new LtxControlNetMediaNormalizer(g).TryGetNormalizedControlImage(
                         index,
                         out WGNodeData controlImage))
@@ -68,7 +68,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
                     PlanDiagnosticReporter.TrackRequestWarning(
                         g.UserInput,
                         $"VideoStages: planned IC-LoRA entry {entry.EntryIndex} requires ControlNet "
-                        + $"{(entry.MediaInput.ControlNetIndex ?? -1) + 1} drive media, but it is unavailable; "
+                        + $"{(entry.Drive.ControlNetIndex ?? -1) + 1} drive media, but it is unavailable; "
                         + "applying the model patch without a guide.");
                     return false;
                 }
@@ -77,8 +77,6 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
                     index,
                     false);
                 return true;
-            case IcLoraMediaSourceKind.LoaderOnly:
-                return false;
             default:
                 PlanDiagnosticReporter.TrackRequestWarning(
                     g.UserInput,
@@ -88,29 +86,18 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         }
     }
 
-    internal JArray GetOrCreateUploadedDriveImages(
+    private JArray GetOrCreateUploadedDriveImages(
         WorkflowBridge bridge,
         int clipId,
-        IcLoraPlan entry) => GetOrCreateUploadedDriveImages(
-            bridge,
-            clipId,
-            entry.EntryIndex,
-            entry.DriveMedia.Kind,
-            entry.DriveMedia.Data);
-
-    internal JArray GetOrCreateUploadedDriveImages(
-        WorkflowBridge bridge,
-        int clipId,
-        int entryIndex,
-        IcLoraDriveMediaKind mediaKind,
-        string data)
+        IcLoraPlan entry)
     {
+        int entryIndex = entry.EntryIndex;
         string key = LtxRuntimeKeyScope.IcLoraUploadedDriveImages(clipId, entryIndex);
         if (VideoGraphHelpers.TryGetCachedPath(g, bridge, key, out JArray cached))
         {
             return cached;
         }
-        if (string.IsNullOrWhiteSpace(data))
+        if (string.IsNullOrWhiteSpace(entry.Drive.Upload?.Data))
         {
             PlanDiagnosticReporter.TrackRequestWarning(
                 g.UserInput,
@@ -120,18 +107,18 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         }
 
         JArray path;
-        if (mediaKind == IcLoraDriveMediaKind.Image)
+        if (entry.Drive.MediaKind == IcLoraDriveMediaKind.Image)
         {
             SwarmLoadImageB64Node loadImage =
                 bridge.AddNode(new SwarmLoadImageB64Node().With(
-                    ImageBase64: VideoGraphHelpers.StripDataUriPrefix(data)));
+                    ImageBase64: VideoGraphHelpers.StripDataUriPrefix(entry.Drive.Upload.Data)));
             path = WorkflowBridge.ToPath(loadImage.IMAGE);
         }
-        else if (mediaKind == IcLoraDriveMediaKind.Video)
+        else if (entry.Drive.MediaKind == IcLoraDriveMediaKind.Video)
         {
             SwarmLoadVideoB64Node load =
                 bridge.AddNode(new SwarmLoadVideoB64Node().With(
-                    VideoBase64: VideoGraphHelpers.StripDataUriPrefix(data)));
+                    VideoBase64: VideoGraphHelpers.StripDataUriPrefix(entry.Drive.Upload.Data)));
             GetVideoComponentsNode components =
                 bridge.AddNode(new GetVideoComponentsNode());
             components.Video.ConnectToUntyped(load.VIDEO);

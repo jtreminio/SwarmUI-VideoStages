@@ -74,7 +74,7 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
             }
 
             double strength = entry.Plan.GuideStrength
-                ?? ResolveControlNetGuideStrength(entry.Plan.MediaInput.ControlNetIndex);
+                ?? ResolveControlNetGuideStrength(entry.Plan.Drive.ControlNetIndex);
             if (strength <= 0)
             {
                 continue;
@@ -95,7 +95,7 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
                 frameCount,
                 clip.Audio.Length.Owner == AudioLengthOwner.ControlNet,
                 drive.ControlNetIndex);
-            int guideHandleFrames = entry.Plan.MediaInput.Source == IcLoraMediaSourceKind.Incoming
+            int guideHandleFrames = entry.Plan.Drive.Source == IcLoraMediaSourceKind.Incoming
                 && incomingMediaIncludesContinueHandle
                     ? 0
                     : incomingContinueHandleFrames;

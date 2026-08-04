@@ -71,7 +71,6 @@ internal enum IcLoraMediaSourceKind
     Upload,
     Incoming,
     ControlNet,
-    LoaderOnly,
     Unknown,
 }
 
@@ -93,20 +92,12 @@ internal enum IcLoraDriveMediaKind
     Unknown,
 }
 
-internal sealed record IcLoraDriveMediaPlan(
-    IcLoraDriveMediaKind Kind,
-    string Data,
-    string FileName)
-{
-    internal bool IsConfigured => !string.IsNullOrWhiteSpace(Data);
-}
-
-internal sealed record IcLoraMediaInputPlan(
+internal sealed record IcLoraDrivePlan(
+    IcLoraDriveData Stream,
     IcLoraMediaSourceKind Source,
-    string RawSource,
-    IcLoraDriveMediaKind Kind,
-    int? ControlNetIndex,
-    bool HasInput);
+    IcLoraDriveMediaKind MediaKind,
+    UploadedMediaSpec Upload,
+    int? ControlNetIndex);
 
 internal sealed record IcLoraPlan(
     int EntryIndex,
@@ -116,15 +107,13 @@ internal sealed record IcLoraPlan(
     double ModelStrength,
     double AttentionStrength,
     IcLoraControlMode ControlMode,
-    IcLoraDriveMediaContract MediaContract,
-    IcLoraDriveMediaPlan DriveMedia,
-    IcLoraMediaInputPlan MediaInput,
+    IcLoraDrivePlan Drive,
     int DimensionDownscaleFactor,
     double? GuideStrength)
 {
-    internal bool HasVisualGuide => MediaContract.ConsumesVisual && MediaInput.HasInput;
+    internal bool HasVisualGuide => Drive.Stream == IcLoraDriveData.Visual;
 
-    internal bool HasAudioReference => MediaContract.ConsumesAudio && MediaInput.HasInput;
+    internal bool HasAudioReference => Drive.Stream == IcLoraDriveData.Audio;
 }
 
 internal sealed record RetakePlan(

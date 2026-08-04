@@ -6,7 +6,7 @@ using Xunit;
 namespace VideoStages.Tests;
 
 [Collection("VideoStagesTests")]
-public class IcLoraDriveMediaContractTests
+public class IcLoraDrivePlanTests
 {
     [Theory]
     [InlineData("data:audio/wav;base64,QUJD", (int)IcLoraDriveMediaKind.Audio)]
@@ -21,9 +21,11 @@ public class IcLoraDriveMediaContractTests
 
         IcLoraPlan plan = Assert.Single(PlansFor(clip, clip.Stages[0]));
 
-        Assert.Equal(IcLoraDriveData.Audio, plan.MediaContract.DriveData);
-        Assert.Equal((IcLoraDriveMediaKind)expectedKind, plan.DriveMedia.Kind);
-        Assert.Equal(IcLoraMediaSourceKind.Upload, plan.MediaInput.Source);
+        Assert.Equal(IcLoraDriveData.Audio, plan.Drive.Stream);
+        Assert.Equal((IcLoraDriveMediaKind)expectedKind, plan.Drive.MediaKind);
+        Assert.Equal(IcLoraMediaSourceKind.Upload, plan.Drive.Source);
+        Assert.Equal(data, plan.Drive.Upload.Data);
+        Assert.Equal("speaker.media", plan.Drive.Upload.FileName);
         Assert.False(plan.HasVisualGuide);
         Assert.True(plan.HasAudioReference);
         Assert.Empty(CompileIcLoras(clip).Diagnostics);
@@ -56,8 +58,9 @@ public class IcLoraDriveMediaContractTests
         IcLoraPlan lipDub = Assert.Single(PlansFor(clip, clip.Stages[0]));
         IcLoraPlan custom = Assert.Single(PlansFor(clip, clip.Stages[1]));
 
-        Assert.Equal(lipDub.MediaContract, custom.MediaContract);
-        Assert.Equal(IcLoraDriveData.Audio, custom.MediaContract.DriveData);
+        Assert.Equal(lipDub.Drive.Stream, custom.Drive.Stream);
+        Assert.Equal(lipDub.Drive.MediaKind, custom.Drive.MediaKind);
+        Assert.Equal(IcLoraDriveData.Audio, custom.Drive.Stream);
         Assert.True(custom.HasAudioReference);
         Assert.False(custom.HasVisualGuide);
     }
@@ -85,7 +88,7 @@ public class IcLoraDriveMediaContractTests
     [Theory]
     [InlineData("data:image/png;base64,QUJD", false)]
     [InlineData("data:video/mp4;base64,QUJD", true)]
-    public void Image_only_contract_accepts_image_upload_and_rejects_video_upload(
+    public void Image_only_policy_accepts_image_upload_and_rejects_video_upload(
         string data,
         bool shouldReject)
     {
@@ -113,7 +116,7 @@ public class IcLoraDriveMediaContractTests
     [Theory]
     [InlineData((int)ArchitectureEntryMode.ImageToVideo, false)]
     [InlineData((int)ArchitectureEntryMode.InitVideo, true)]
-    public void Image_only_contract_accepts_image_incoming_and_rejects_video_incoming(
+    public void Image_only_policy_accepts_image_incoming_and_rejects_video_incoming(
         int entryMode,
         bool shouldReject)
     {
@@ -221,7 +224,7 @@ public class IcLoraDriveMediaContractTests
     [InlineData("Incoming")]
     [InlineData("ControlNet 1")]
     [InlineData("future-source")]
-    public void Model_only_contract_rejects_hidden_non_upload_source(string driveSource)
+    public void Model_only_planning_rejects_hidden_non_upload_source(string driveSource)
     {
         ClipSpec clip = Clip([
             new(
@@ -238,6 +241,29 @@ public class IcLoraDriveMediaContractTests
         Assert.Contains(
             CompileIcLoras(clip).Diagnostics,
             diagnostic => diagnostic.Code == "ltx2.ic-lora.drive-source-contradictory");
+    }
+
+    [Fact]
+    public void Model_only_planning_uses_the_canonical_empty_drive()
+    {
+        ClipSpec clip = Clip([
+            new(
+                "model-only.safetensors",
+                Constants.IcLoraSourceUpload,
+                1,
+                1,
+                Constants.IcLoraControlNone,
+                null,
+                DriveData: IcLoraDriveData.None),
+        ]);
+
+        IcLoraDrivePlan drive = Assert.Single(PlansFor(clip, clip.Stages[0])).Drive;
+
+        Assert.Equal(IcLoraDriveData.None, drive.Stream);
+        Assert.Equal(IcLoraMediaSourceKind.Upload, drive.Source);
+        Assert.Equal(IcLoraDriveMediaKind.None, drive.MediaKind);
+        Assert.Null(drive.Upload);
+        Assert.Null(drive.ControlNetIndex);
     }
 
     [Fact]
@@ -302,8 +328,8 @@ public class IcLoraDriveMediaContractTests
         IcLoraPlan plan = Assert.Single(
             PlansFor(clip, clip.Stages[0], context));
 
-        Assert.Equal(IcLoraMediaSourceKind.Incoming, plan.MediaInput.Source);
-        Assert.Equal(IcLoraDriveMediaKind.Image, plan.MediaInput.Kind);
+        Assert.Equal(IcLoraMediaSourceKind.Incoming, plan.Drive.Source);
+        Assert.Equal(IcLoraDriveMediaKind.Image, plan.Drive.MediaKind);
         Assert.Empty(CompileIcLoras(clip, context).Diagnostics);
     }
 
@@ -340,7 +366,7 @@ public class IcLoraDriveMediaContractTests
         IcLoraPlan plan = Assert.Single(
             PlansFor(clip, clip.Stages[0], context));
 
-        Assert.Equal(IcLoraDriveMediaKind.Video, plan.MediaInput.Kind);
+        Assert.Equal(IcLoraDriveMediaKind.Video, plan.Drive.MediaKind);
         Assert.True(plan.HasAudioReference);
         Assert.Empty(CompileIcLoras(clip, context).Diagnostics);
     }
@@ -378,7 +404,7 @@ public class IcLoraDriveMediaContractTests
     [InlineData((int)IcLoraDriveData.None)]
     [InlineData((int)IcLoraDriveData.Visual)]
     [InlineData((int)IcLoraDriveData.Audio)]
-    public void Every_ic_lora_contract_rejects_a_passthrough_stage(int driveData)
+    public void Every_ic_lora_plan_rejects_a_passthrough_stage(int driveData)
     {
         IcLoraDriveData data = (IcLoraDriveData)driveData;
         UploadedMediaSpec media = data switch
@@ -498,7 +524,7 @@ public class IcLoraDriveMediaContractTests
         Assert.Empty(compilation.Stages[0]);
         Assert.Equal(
             IcLoraDriveMediaKind.Video,
-            Assert.Single(compilation.Stages[1]).MediaInput.Kind);
+            Assert.Single(compilation.Stages[1]).Drive.MediaKind);
     }
 
     [Fact]

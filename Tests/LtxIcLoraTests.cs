@@ -13,13 +13,7 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// The IC-LoRA cases the generated-workflow path cannot express: resolver and applicator
-/// components driven directly against a hand-built generator, in states no POST reaches — an
-/// unknown control mode, an incoming latent or video the timeline never produces. Everything
-/// observable in a shipped graph — warnings included, since the API route's generator carries the
-/// same <c>ExtraMeta</c> — lives in <see cref="Ltx2IcLoraContractTests"/>.
-/// </summary>
+/// <summary>Direct component tests for runtime states that generated workflows cannot produce.</summary>
 [Collection("VideoStagesTests")]
 public sealed class LtxIcLoraTests
 {
@@ -44,14 +38,12 @@ public sealed class LtxIcLoraTests
             ModelStrength: 1,
             AttentionStrength: 1,
             IcLoraControlMode.Unknown,
-            IcLoraDriveMediaContracts.Resolve(IcLoraDriveData.Visual),
-            new(IcLoraDriveMediaKind.Image, null, null),
             new(
+                IcLoraDriveData.Visual,
                 IcLoraMediaSourceKind.Upload,
-                Constants.IcLoraSourceUpload,
                 IcLoraDriveMediaKind.Image,
-                ControlNetIndex: null,
-                HasInput: true),
+                Upload: null,
+                ControlNetIndex: null),
             DimensionDownscaleFactor: 1,
             GuideStrength: 1);
 
@@ -228,9 +220,12 @@ public sealed class LtxIcLoraTests
         ModelStrength: 1,
         AttentionStrength: 1,
         IcLoraControlMode.None,
-        IcLoraDriveMediaContracts.Resolve(driveData),
-        new(kind, data, "drive.wav"),
-        new(source, $"{source}", kind, ControlNetIndex: null, HasInput: true),
+        new(
+            driveData,
+            source,
+            kind,
+            data is null ? null : new UploadedMediaSpec(data, "drive.wav"),
+            ControlNetIndex: null),
         DimensionDownscaleFactor: 1,
         GuideStrength: 1);
 

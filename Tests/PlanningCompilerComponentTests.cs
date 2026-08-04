@@ -202,8 +202,8 @@ public class PlanningCompilerComponentTests
             loras,
             lora => Assert.Equal("clip", lora.Name),
             lora => Assert.Equal("stage", lora.Name));
-        Assert.Equal(IcLoraMediaSourceKind.ControlNet, Assert.Single(icLoras).MediaInput.Source);
-        Assert.Equal(1, icLoras[0].MediaInput.ControlNetIndex);
+        Assert.Equal(IcLoraMediaSourceKind.ControlNet, Assert.Single(icLoras).Drive.Source);
+        Assert.Equal(1, icLoras[0].Drive.ControlNetIndex);
         Assert.Equal(ImageReferenceSourceKind.Upload, Assert.Single(references).SourceKind);
     }
 

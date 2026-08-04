@@ -310,12 +310,12 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(2, ltx.IcLoras.Length);
         IcLoraPlan uploaded = ltx.IcLoras[0];
         Assert.True(uploaded.UsesAutoModel);
-        Assert.Equal(IcLoraMediaSourceKind.Upload, uploaded.MediaInput.Source);
-        Assert.Equal(IcLoraDriveMediaKind.Image, uploaded.DriveMedia.Kind);
+        Assert.Equal(IcLoraMediaSourceKind.Upload, uploaded.Drive.Source);
+        Assert.Equal(IcLoraDriveMediaKind.Image, uploaded.Drive.MediaKind);
         Assert.Equal(IcLoraControlMode.Canny, uploaded.ControlMode);
         Assert.Equal(0.55, uploaded.GuideStrength);
-        Assert.Equal(IcLoraMediaSourceKind.ControlNet, ltx.IcLoras[1].MediaInput.Source);
-        Assert.Equal(1, ltx.IcLoras[1].MediaInput.ControlNetIndex);
+        Assert.Equal(IcLoraMediaSourceKind.ControlNet, ltx.IcLoras[1].Drive.Source);
+        Assert.Equal(1, ltx.IcLoras[1].Drive.ControlNetIndex);
 
         Assert.Equal(new RetakePlan(8, 16, 0.75), ltx.Retake);
         Assert.Equal(PromptRelayMode.Relay, ltx.PromptRelay.Mode);
