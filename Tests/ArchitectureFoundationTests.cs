@@ -921,8 +921,7 @@ public class ArchitectureFoundationTests
         Assert.DoesNotContain(
             typeof(SourceOnlyGenerationSession).GetConstructors()
                 .SelectMany(constructor => constructor.GetParameters()),
-            parameter => parameter.ParameterType == typeof(StageClipExecutor)
-                || parameter.ParameterType.Namespace?.Contains("Ltx", StringComparison.OrdinalIgnoreCase)
+            parameter => parameter.ParameterType.Namespace?.Contains("Ltx", StringComparison.OrdinalIgnoreCase)
                     == true);
     }
 

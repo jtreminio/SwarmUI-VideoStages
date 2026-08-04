@@ -87,7 +87,7 @@ internal sealed class VideoStageRunner : IDisposable
         return DecodedClipArtifact.FromRuntime(output, clip);
     }
 
-    internal RuntimeArtifact ExecuteStages(
+    private RuntimeArtifact ExecuteStages(
         ClipPlan clip,
         Func<StagePlan, StagePlan, bool> executeStage)
     {
@@ -136,19 +136,6 @@ internal sealed class VideoStageRunner : IDisposable
 
     internal bool PublishesIntermediateStages =>
         _stageScope.PublishesIntermediateStages;
-
-    internal int ApplyStageOverrides(
-        ClipPlan clip,
-        StagePlan stage,
-        int? width,
-        int? height,
-        int? frameCount) =>
-        _stageScope.ApplyStageOverrides(
-            clip,
-            stage,
-            width,
-            height,
-            frameCount);
 
     internal void PublishIntermediate(
         StagePlan stage,

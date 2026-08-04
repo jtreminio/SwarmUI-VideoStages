@@ -71,7 +71,6 @@ public class StageRunnerCollaboratorTests
         Type[] executionContextTypes =
         [
             typeof(ArchitectureClipRuntimeContext),
-            typeof(StageClipExecutionContext),
             typeof(ClipContext),
         ];
         Assert.DoesNotContain(
@@ -110,28 +109,34 @@ public class StageRunnerCollaboratorTests
     }
 
     [Fact]
-    public void Shared_stage_runner_rejects_a_missing_stage_output()
+    public void Host_stage_runner_rejects_a_missing_stage_output()
     {
+        using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         WorkflowGenerator generator = new()
         {
             Workflow = [],
             UserInput = new(null)
         };
-        VideoExecutionPlan plan = MakeExecutionPlan();
+        VideoExecutionPlan plan = MakeExecutionPlan(models.VideoModel.Name);
         ClipPlan clip = Assert.Single(plan.Clips);
         using VideoStageRunner stageRunner = new(generator, plan, "unit test");
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => stageRunner.ExecuteStages(clip, (stage, continuation) => false));
+            () => stageRunner.Execute(
+                clip,
+                (plannedClip, stage) => null,
+                (plannedClip, stage, continuation, input, sectionId) => false));
 
         Assert.Contains($"stage {clip.Stages[0].StageId}", error.Message);
         Assert.Contains("produced no media artifact", error.Message);
     }
 
     [Fact]
-    public void Shared_stage_runner_trims_the_terminal_output_before_returning()
+    public void Host_stage_runner_trims_the_terminal_output_before_returning()
     {
         using SwarmUiTestContext _ = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IParamInput input = new(null);
         input.Set(T2IParamTypes.TrimVideoStartFrames, 2);
         input.Set(T2IParamTypes.TrimVideoEndFrames, 3);
@@ -152,13 +157,14 @@ public class StageRunnerCollaboratorTests
                 frames: 25,
                 fps: 24);
         }
-        VideoExecutionPlan plan = MakeExecutionPlan();
+        VideoExecutionPlan plan = MakeExecutionPlan(models.VideoModel.Name);
         ClipPlan clip = Assert.Single(plan.Clips);
         using VideoStageRunner stageRunner = new(generator, plan, "unit test");
 
-        RuntimeArtifact output = stageRunner.ExecuteStages(
+        DecodedClipArtifact output = stageRunner.Execute(
             clip,
-            (stage, continuation) => false);
+            (plannedClip, stage) => null,
+            (plannedClip, stage, continuation, input, sectionId) => false);
 
         using WorkflowBridge outputBridge = WorkflowBridge.Create(generator.Workflow);
         ComfyNode trim = Assert.Single(
@@ -167,7 +173,7 @@ public class StageRunnerCollaboratorTests
         Assert.Equal(trim.Id, $"{generator.CurrentMedia.Path[0]}");
         Assert.Equal(2, trim.FindInput("trim_start").LiteralAsInt());
         Assert.Equal(3, trim.FindInput("trim_end").LiteralAsInt());
-        Assert.Equal(20, output.Media.Frames);
+        Assert.Equal(20, output.Frames);
         Assert.Equal(20, generator.CurrentMedia.Frames);
     }
 
@@ -275,14 +281,14 @@ public class StageRunnerCollaboratorTests
         return (plannedClip, Assert.Single(plannedClip.Stages));
     }
 
-    private static VideoExecutionPlan MakeExecutionPlan()
+    private static VideoExecutionPlan MakeExecutionPlan(string modelName = "unit-test-model")
     {
         StageSpec stage = new(
             Id: 31,
             Control: 1,
             Upscale: 1,
             UpscaleMethod: "",
-            Model: "unit-test-model",
+            Model: modelName,
             Steps: 8,
             CfgScale: 1,
             Sampler: "euler",

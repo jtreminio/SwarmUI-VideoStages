@@ -474,11 +474,11 @@ before validating clip identity and decoded-media shape. It does not repeat
 model-name checks.
 
 Timeline state such as the plan, prepared audio, assembly session, and root
-policy is captured when each architecture session is created. LTX composes the
-per-clip context with its private root and host state in
-`StageClipExecutionContext`; MiniMax captures its root, audio sources, and base/
-refiner references in `MiniMaxGenerationSession`; the init-video-only session
-captures only frame rate and audio sources.
+policy is captured when each architecture session is created. LTX captures its
+private root, audio, guide, and boundary state in `Ltx2GenerationSession`;
+MiniMax captures its root, audio sources, and base/refiner references in
+`MiniMaxGenerationSession`; the init-video-only session captures only frame rate
+and audio sources.
 
 ### B6a. LTX graph execution
 
@@ -490,8 +490,7 @@ The LTX path is:
 
 ```text
 LTX private generation session
-    → StageClipExecutor.Execute
-    → VideoStageRunner.ExecuteStages
+    → Ltx2GenerationSession.Execute
     → StageRunner.RunStage
     → LtxStageExecutor.RunStage
     → LtxStageOutputFinalizer.Complete
@@ -499,10 +498,9 @@ LTX private generation session
     → DecodedClipArtifact.FromRuntime
 ```
 
-`StageClipExecutor` installs source media if planned, prepares LTX boundary and
-audio state, then hands stage advancement to `VideoStageRunner`.
-`VideoStageRunner` publishes each stage input, captures and validates each stage
-output, and publishes intermediates. `StageRunner` owns passthrough versus
+`Ltx2GenerationSession` installs source media if planned, prepares LTX boundary
+and audio state, then explicitly advances stages, validates outputs, applies the
+terminal trim, and publishes intermediates. `StageRunner` owns passthrough versus
 generated execution and prepares guides, references, upscale, and IC-LoRA input.
 `LtxStageExecutor` builds LTX model/prompt state, latent, conditioning, sampler,
 and decoded video/audio output. LTX node choices, latent/VAE handling, audio

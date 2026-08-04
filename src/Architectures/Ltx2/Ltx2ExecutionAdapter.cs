@@ -1,8 +1,6 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2.Planning;
-using VideoStages.Execution;
-using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -120,15 +118,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             generator,
             stageRefStore,
             context.RootPolicy);
-        StageClipExecutor clipExecutor = new(
-            generator,
-            stageRefStore,
-            stageRunner,
-            audioTimelineExecutor,
-            guideReferences,
-            new BoundaryHandoffResolver(
-                new ContinuityGuideBuilder(generator),
-                new LtxBoundaryAudioCarryBuilder(generator)));
         StageSequenceRootSources rootSources;
         if (context.OwnsGeneratedRoot)
         {
@@ -144,50 +133,16 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         {
             rootSources = rootSetup.Snapshot(context.AudioSources, context.RootPolicy);
         }
-        return new GenerationSession(
+        return new Ltx2GenerationSession(
             generator,
-            clipExecutor,
+            stageRefStore,
+            stageRunner,
+            audioTimelineExecutor,
+            guideReferences,
+            new BoundaryHandoffResolver(
+                new ContinuityGuideBuilder(generator),
+                new LtxBoundaryAudioCarryBuilder(generator)),
             rootSources,
-            new VideoStageRunner(
-                generator,
-                context.Plan,
-                "LTX"),
-            context.Plan,
-            context.Assembly,
-            context.RootPolicy);
-    }
-
-    private sealed class GenerationSession(
-        WorkflowGenerator generator,
-        StageClipExecutor executor,
-        StageSequenceRootSources rootSources,
-        VideoStageRunner stageRunner,
-        VideoExecutionPlan plan,
-        TimelineAssemblySession assembly,
-        RootExecutionPolicy rootPolicy) : IVideoGenerationSession
-    {
-        public ArchitectureId ArchitectureId =>
-            Ltx2ArchitectureModule.ArchitectureId;
-
-        public DecodedClipArtifact Execute(
-            ArchitectureClipRuntimeContext context)
-        {
-            ArgumentNullException.ThrowIfNull(context);
-            StageClipExecutionContext stageContext = new(
-                context,
-                plan,
-                context.PreviousClipOutput?.ToHostMedia(generator),
-                context.PreviousTimelineClipOutput?.ToHostMedia(generator),
-                rootSources,
-                assembly,
-                rootPolicy);
-            RuntimeArtifact output = executor.Execute(stageContext, stageRunner);
-            return DecodedClipArtifact.FromRuntime(output, context.Clip);
-        }
-
-        public void Dispose()
-        {
-            stageRunner.Dispose();
-        }
+            context);
     }
 }

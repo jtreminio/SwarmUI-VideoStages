@@ -169,17 +169,19 @@ this common boundary.
 
 ## 6. Stage loops
 
-### Shared stage loop
+### Host stage loop
 
-`VideoStageRunner.ExecuteStages` is the common outer loop used by LTX, MiniMax,
-WAN, and generic host video. It owns:
+`VideoStageRunner.Execute` is the outer loop used by MiniMax, WAN, and generic
+host video. It owns:
 
 - stage iteration;
 - adjacent sampling-continuation selection;
+- decoded upscale and passthrough handling;
 - stage-input publication;
 - stage-output capture and validation;
 - intermediate publication;
-- and advancing past a consumed continuation.
+- terminal trim; and
+- advancing past a consumed continuation.
 
 Each architecture keeps one cohesive stage procedure for its model-specific
 references, audio, conditioning, latent construction, sampling, and decode.
@@ -219,14 +221,12 @@ trim, and skips request-global frame interpolation.
 
 ### LTX
 
-LTX uses `VideoStageRunner.ExecuteStages` for the outer lifecycle. Its latent,
-conditioning, audio, IC-LoRA, guide, retake, and post-video-chain semantics
-remain inside the LTX path:
+LTX owns its outer lifecycle and its latent, conditioning, audio, IC-LoRA, guide,
+retake, and post-video-chain semantics:
 
 ```text
 LTX private generation session
-    → StageClipExecutor
-    → VideoStageRunner.ExecuteStages
+    → Ltx2GenerationSession
     → StageRunner
     → LtxStageExecutor
     → LtxStageOutputFinalizer
