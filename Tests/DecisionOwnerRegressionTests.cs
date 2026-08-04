@@ -250,7 +250,7 @@ public class DecisionOwnerRegressionTests
         VideoExecutionPlan plan = InitVideoOnlyPlan();
         VideoArchitectureExecutionHost host = BoundHost(generator, plan);
 
-        host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors);
+        host.CaptureControlNetPreprocessors();
 
         Assert.False(generator.NodeHelpers.ContainsKey(ControlNetCaptureKeys.Image(0)));
         Assert.False(generator.NodeHelpers.ContainsKey(ControlNetCaptureKeys.Audio(0)));
@@ -263,8 +263,7 @@ public class DecisionOwnerRegressionTests
         WorkflowGenerator generator = GeneratorWithVideoControlNet();
 
         VideoExecutionPlan plan = PlanWithArchitectures(NoneArchitecture.Descriptor);
-        BoundHost(generator, plan).DispatchHostPhase(
-            ArchitectureHostPhase.CaptureControlNetPreprocessors);
+        BoundHost(generator, plan).CaptureControlNetPreprocessors();
 
         using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         ResizeImageMaskNodeNode hostResize =
@@ -310,8 +309,8 @@ public class DecisionOwnerRegressionTests
         VideoExecutionPlan plan = PlanWithArchitectures(architectures);
         VideoArchitectureExecutionHost host = BoundHost(generator, plan);
 
-        host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors);
-        host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors);
+        host.CaptureControlNetPreprocessors();
+        host.CaptureControlNetPreprocessors();
 
         Assert.True(
             ControlNetCoreMediaCapture.TryGetCapturedControlImage(
@@ -376,7 +375,7 @@ public class DecisionOwnerRegressionTests
             plan,
             [new ForeignRootAdapter(generator, foreign.Id), new Ltx2ExecutionAdapter(generator)]);
 
-        host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors);
+        host.CaptureControlNetPreprocessors();
 
         Assert.True(
             ControlNetCoreMediaCapture.TryGetCapturedControlImage(
@@ -540,26 +539,33 @@ public class DecisionOwnerRegressionTests
         VideoArchitectureExecutionHost host = new(
             generator,
             plan,
-            innerProviders.Select(provider => new HostPhaseTestProvider(provider)));
+            innerProviders.Select(provider => new LifecycleTestProvider(provider)));
         VideoExecutionPlanContext request = new(plan, _ => host);
         request.PrepareRequest();
         return request.RequirePreparedExecutionHost();
     }
 
-    private sealed class HostPhaseTestProvider(
+    private sealed class LifecycleTestProvider(
         IArchitectureGenerationSessionProvider inner) :
-        IArchitectureGenerationSessionProvider,
-        IArchitectureHostPhaseParticipant
+        IArchitectureGenerationSessionProvider
     {
         public ArchitectureId ArchitectureId => inner.ArchitectureId;
 
-        public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
-        {
-            if (inner is IArchitectureHostPhaseParticipant participant)
-            {
-                participant.ExecuteHostPhase(context);
-            }
-        }
+        public void CaptureControlNetPreprocessors(bool ownsHostRoot) =>
+            inner.CaptureControlNetPreprocessors(ownsHostRoot);
+
+        public void CaptureBaseReference(VideoExecutionPlan plan) =>
+            inner.CaptureBaseReference(plan);
+
+        public void CaptureRefinerReference(VideoExecutionPlan plan) =>
+            inner.CaptureRefinerReference(plan);
+
+        public void CapturePreCoreMedia() => inner.CapturePreCoreMedia();
+
+        public void DropCoreOutput() => inner.DropCoreOutput();
+
+        public void ApplyRootAudioMaskDimensions() =>
+            inner.ApplyRootAudioMaskDimensions();
 
         public IVideoGenerationSession CreateSession(
             ArchitectureTimelineSessionContext context) =>
@@ -627,12 +633,11 @@ public class DecisionOwnerRegressionTests
     private sealed class ForeignRootAdapter(
         WorkflowGenerator generator,
         ArchitectureId architectureId) :
-        IArchitectureGenerationSessionProvider,
-        IArchitectureHostPhaseParticipant
+        IArchitectureGenerationSessionProvider
     {
         public ArchitectureId ArchitectureId => architectureId;
 
-        public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
+        public void CaptureControlNetPreprocessors(bool ownsHostRoot)
         {
             using WorkflowBridge bridge = BridgeSync.For(generator);
             ControlNetApplyAdvancedNode apply =

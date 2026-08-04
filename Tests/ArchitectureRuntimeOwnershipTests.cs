@@ -29,7 +29,7 @@ public class ArchitectureRuntimeOwnershipTests
     }
 
     [Fact]
-    public void InitVideo_leading_architecture_does_not_claim_exclusive_root_phases()
+    public void InitVideo_leading_architecture_does_not_claim_root_lifecycle_calls()
     {
         VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         WorkflowGenerator generator = Generator();
@@ -40,15 +40,16 @@ public class ArchitectureRuntimeOwnershipTests
             plan,
             [initVideoClip, future]);
 
-        host.DispatchHostPhase(ArchitectureHostPhase.DropCoreOutput);
+        host.CapturePreCoreMedia();
+        host.DropCoreOutput();
+        host.ApplyRootAudioMaskDimensions();
 
-        Assert.Empty(initVideoClip.HostPhases);
-        ArchitectureHostPhaseContext rootPhase = Assert.Single(future.HostPhases);
-        Assert.Equal(new ArchitectureId("future-arch"), rootPhase.RootOwnerArchitectureId);
+        Assert.Empty(initVideoClip.LifecycleCalls);
+        Assert.Equal(["pre-core", "drop-core", "audio-mask"], future.LifecycleCalls);
     }
 
     [Fact]
-    public void Fan_out_host_phase_reaches_all_active_architectures_but_keeps_one_root_owner()
+    public void ControlNet_capture_reaches_all_active_architectures_with_one_root_owner()
     {
         VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         WorkflowGenerator generator = Generator();
@@ -59,12 +60,12 @@ public class ArchitectureRuntimeOwnershipTests
             plan,
             [initVideoClip, future]);
 
-        host.DispatchHostPhase(ArchitectureHostPhase.CaptureControlNetPreprocessors);
+        host.CaptureControlNetPreprocessors();
 
-        ArchitectureHostPhaseContext initVideoPhase = Assert.Single(initVideoClip.HostPhases);
-        ArchitectureHostPhaseContext futurePhase = Assert.Single(future.HostPhases);
-        Assert.Equal(new ArchitectureId("future-arch"), initVideoPhase.RootOwnerArchitectureId);
-        Assert.Equal(initVideoPhase, futurePhase);
+        Assert.Equal(["control-net"], initVideoClip.LifecycleCalls);
+        Assert.Equal(["control-net"], future.LifecycleCalls);
+        Assert.Equal([false], initVideoClip.ControlNetRootOwnership);
+        Assert.Equal([true], future.ControlNetRootOwnership);
     }
 
     [Fact]
@@ -112,14 +113,14 @@ public class ArchitectureRuntimeOwnershipTests
             request.PreflightDiagnostics,
             diagnostic => diagnostic.Code == "test.preflight");
         Assert.Equal(["preflight:init-video-arch", "preflight:future-arch"], calls);
-        Assert.Empty(initVideoClip.HostPhases);
-        Assert.Empty(future.HostPhases);
+        Assert.Empty(initVideoClip.LifecycleCalls);
+        Assert.Empty(future.LifecycleCalls);
         Assert.Same(beforeMedia, generator.CurrentMedia);
         Assert.True(JToken.DeepEquals(before, generator.Workflow));
     }
 
     [Fact]
-    public void Prepared_context_binds_active_providers_once_and_reuses_them_for_host_phases()
+    public void Prepared_context_reuses_active_providers_for_lifecycle_calls()
     {
         VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         List<string> calls = [];
@@ -138,15 +139,15 @@ public class ArchitectureRuntimeOwnershipTests
         request.PrepareRequest();
         request.PrepareRequest();
         VideoArchitectureExecutionHost host = request.RequirePreparedExecutionHost();
-        host.DispatchHostPhase(ArchitectureHostPhase.CaptureBaseReference);
-        host.DispatchHostPhase(ArchitectureHostPhase.CaptureRefinerReference);
+        host.CaptureBaseReference();
+        host.CaptureRefinerReference();
 
         Assert.Equal(1, bindingCount);
         Assert.Equal(
             ["preflight:init-video-arch", "preflight:future-arch"],
             calls);
-        Assert.Equal(2, initVideoClip.HostPhases.Count);
-        Assert.Equal(2, future.HostPhases.Count);
+        Assert.Equal(["base-reference", "refiner-reference"], initVideoClip.LifecycleCalls);
+        Assert.Equal(["base-reference", "refiner-reference"], future.LifecycleCalls);
     }
 
     [Fact]
@@ -161,11 +162,11 @@ public class ArchitectureRuntimeOwnershipTests
             [initVideoClip, future]);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            host.DispatchHostPhase(ArchitectureHostPhase.CaptureBaseReference));
+            host.CaptureBaseReference());
 
         Assert.Contains("not bound to a prepared", error.Message);
-        Assert.Empty(initVideoClip.HostPhases);
-        Assert.Empty(future.HostPhases);
+        Assert.Empty(initVideoClip.LifecycleCalls);
+        Assert.Empty(future.LifecycleCalls);
     }
 
     [Fact]
@@ -185,14 +186,14 @@ public class ArchitectureRuntimeOwnershipTests
     }
 
     [Fact]
-    public void Host_phase_failure_is_sticky_and_blocks_later_mutation()
+    public void Lifecycle_failure_is_sticky_and_blocks_later_mutation()
     {
         VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         InvalidOperationException phaseFailure = new("provider mutation failed");
         RecordingProvider initVideoClip = new(new("init-video-arch"));
         RecordingProvider future = new(
             new("future-arch"),
-            hostPhaseFailure: phaseFailure);
+            lifecycleFailure: phaseFailure);
         WorkflowGenerator generator = Generator();
         VideoArchitectureExecutionHost host = new(
             generator,
@@ -202,15 +203,15 @@ public class ArchitectureRuntimeOwnershipTests
         request.PrepareRequest();
 
         InvalidOperationException first = Assert.Throws<InvalidOperationException>(() =>
-            host.DispatchHostPhase(ArchitectureHostPhase.CaptureBaseReference));
+            host.CaptureBaseReference());
         InvalidOperationException repeated = Assert.Throws<InvalidOperationException>(() =>
-            host.DispatchHostPhase(ArchitectureHostPhase.CaptureRefinerReference));
+            host.CaptureRefinerReference());
 
         Assert.Same(phaseFailure, first);
         Assert.Same(first, repeated);
         Assert.Equal(VideoExecutionState.Failed, request.State);
-        Assert.Single(initVideoClip.HostPhases);
-        Assert.Single(future.HostPhases);
+        Assert.Single(initVideoClip.LifecycleCalls);
+        Assert.Single(future.LifecycleCalls);
     }
 
     private static VideoExecutionPlan MixedInitVideoLeadingPlan()
@@ -345,13 +346,14 @@ public class ArchitectureRuntimeOwnershipTests
         ArchitectureId architectureId,
         ICollection<string> calls = null,
         string preflightError = null,
-        Exception hostPhaseFailure = null) :
-        IArchitectureGenerationSessionProvider,
-        IArchitectureHostPhaseParticipant
+        Exception lifecycleFailure = null) :
+        IArchitectureGenerationSessionProvider
     {
         public ArchitectureId ArchitectureId => architectureId;
 
-        internal List<ArchitectureHostPhaseContext> HostPhases { get; } = [];
+        internal List<string> LifecycleCalls { get; } = [];
+
+        internal List<bool> ControlNetRootOwnership { get; } = [];
 
         internal List<bool> RootOwnership { get; } = [];
 
@@ -364,12 +366,29 @@ public class ArchitectureRuntimeOwnershipTests
                 : [new(PlanDiagnosticSeverity.Error, "test.preflight", preflightError)];
         }
 
-        public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
+        public void CaptureControlNetPreprocessors(bool ownsHostRoot)
         {
-            HostPhases.Add(context);
-            if (hostPhaseFailure is not null)
+            ControlNetRootOwnership.Add(ownsHostRoot);
+            Record("control-net");
+        }
+
+        public void CaptureBaseReference(VideoExecutionPlan plan) => Record("base-reference");
+
+        public void CaptureRefinerReference(VideoExecutionPlan plan) =>
+            Record("refiner-reference");
+
+        public void CapturePreCoreMedia() => Record("pre-core");
+
+        public void DropCoreOutput() => Record("drop-core");
+
+        public void ApplyRootAudioMaskDimensions() => Record("audio-mask");
+
+        private void Record(string call)
+        {
+            LifecycleCalls.Add(call);
+            if (lifecycleFailure is not null)
             {
-                throw hostPhaseFailure;
+                throw lifecycleFailure;
             }
         }
 

@@ -95,7 +95,7 @@ providers used by active clip architectures, and runs:
   each active architecture.
 
 The provider object is request-scoped and reused sequentially by preflight,
-host phases, and session creation. It may retain host-phase captures; mutable
+host phases, and session creation. It may retain lifecycle captures; mutable
 timeline and clip state belongs to the session it creates.
 
 ## 3. Ordered SwarmUI workflow phases
@@ -105,9 +105,9 @@ timeline and clip state belongs to the session it creates.
 | Priority | Entry point | Scope/purpose |
 | ---: | --- | --- |
 | -6 | `Runner.PreflightRequest` | compile/prepare once; no VideoStages graph mutation |
-| -5.9 | `CaptureCoreVideoControlNetPreprocessors` | common capture once, then all active architecture participants |
-| -4.2 | `CaptureBase` | all active participants may snapshot base reference facts |
-| 5.89 | `CaptureRefiner` | all active participants may snapshot refiner facts |
+| -5.9 | `CaptureCoreVideoControlNetPreprocessors` | common capture once, then all active architecture providers |
+| -4.2 | `CaptureBase` | all active providers may snapshot base reference facts |
+| 5.89 | `CaptureRefiner` | all active providers may snapshot refiner facts |
 | 10.95 | `CapturePreCoreVideoMedia` | root-owner architecture only |
 | 11.05 | `DropCoreImageToVideoOutput` | root-owner architecture only |
 | 11.4 | `ApplyRootAudioMaskDimensions` | root-owner architecture only |
@@ -121,9 +121,9 @@ or ambiguous.
 clip whose planned input consumes host root media or an empty latent. A init-video
 clip owns its own media and does not claim the host root.
 
-`ArchitectureHostPhases.IsRootOwnerOnly` decides who receives a phase. Adding a
-phase requires adding it to the enum and, if it is a root-media handoff, to that
-predicate; phases are not ad hoc string hooks.
+`VideoArchitectureExecutionHost` exposes one method for each fixed lifecycle
+step. ControlNet and reference capture call every active provider in plan order;
+root-media steps call only the resolved root owner.
 
 ## 4. Provider and session lifetimes
 

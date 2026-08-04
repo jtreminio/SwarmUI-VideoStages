@@ -8,8 +8,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.HostVideo;
 
 internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
-    IArchitectureGenerationSessionProvider,
-    IArchitectureHostPhaseParticipant
+    IArchitectureGenerationSessionProvider
 {
     private readonly RootMediaHandoff _rootHandoff = new(
         generator,
@@ -63,26 +62,9 @@ internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
         return diagnostics;
     }
 
-    public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        switch (context.Phase)
-        {
-            case ArchitectureHostPhase.CapturePreCoreMedia:
-                _rootHandoff.CapturePreCoreMedia();
-                break;
-            case ArchitectureHostPhase.DropCoreOutput:
-                _rootHandoff.DropCoreOutput();
-                break;
-            case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
-            case ArchitectureHostPhase.CaptureBaseReference:
-            case ArchitectureHostPhase.CaptureRefinerReference:
-            case ArchitectureHostPhase.CaptureControlNetPreprocessors:
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(context));
-        }
-    }
+    public void CapturePreCoreMedia() => _rootHandoff.CapturePreCoreMedia();
+
+    public void DropCoreOutput() => _rootHandoff.DropCoreOutput();
 
     public IVideoGenerationSession CreateSession(
         ArchitectureTimelineSessionContext context) =>

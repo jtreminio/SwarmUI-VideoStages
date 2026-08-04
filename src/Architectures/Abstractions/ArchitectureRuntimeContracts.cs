@@ -111,37 +111,17 @@ internal interface IArchitectureGenerationSessionProvider
     IReadOnlyList<PlanDiagnostic> PreflightRequest(
         ArchitectureRequestPreflightContext context) => [];
 
+    void CaptureControlNetPreprocessors(bool ownsHostRoot) { }
+
+    void CaptureBaseReference(VideoExecutionPlan plan) { }
+
+    void CaptureRefinerReference(VideoExecutionPlan plan) { }
+
+    void CapturePreCoreMedia() { }
+
+    void DropCoreOutput() { }
+
+    void ApplyRootAudioMaskDimensions() { }
+
     IVideoGenerationSession CreateSession(ArchitectureTimelineSessionContext context);
-}
-
-internal enum ArchitectureHostPhase
-{
-    CaptureControlNetPreprocessors,
-    CaptureBaseReference,
-    CaptureRefinerReference,
-    CapturePreCoreMedia,
-    DropCoreOutput,
-    ApplyRootAudioMaskDimensions,
-}
-
-internal static class ArchitectureHostPhases
-{
-    /// <summary>
-    /// Who receives a host phase. Root-media handoff belongs to the one root owner; every other
-    /// phase fans out, because a non-root architecture still captures its own stage references.
-    /// </summary>
-    internal static bool IsRootOwnerOnly(ArchitectureHostPhase phase) =>
-        phase is ArchitectureHostPhase.CapturePreCoreMedia
-            or ArchitectureHostPhase.DropCoreOutput
-            or ArchitectureHostPhase.ApplyRootAudioMaskDimensions;
-}
-
-internal sealed record ArchitectureHostPhaseContext(
-    ArchitectureHostPhase Phase,
-    VideoExecutionPlan Plan,
-    ArchitectureId? RootOwnerArchitectureId);
-
-internal interface IArchitectureHostPhaseParticipant
-{
-    void ExecuteHostPhase(ArchitectureHostPhaseContext context);
 }

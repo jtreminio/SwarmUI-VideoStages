@@ -1,5 +1,4 @@
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages;
 
@@ -42,7 +41,7 @@ public static class Runner
             return;
         }
 
-        Dispatch(context, ArchitectureHostPhase.CaptureControlNetPreprocessors);
+        context.RequirePreparedExecutionHost().CaptureControlNetPreprocessors();
     }
 
     public static void CaptureBase(WorkflowGenerator g)
@@ -52,7 +51,7 @@ public static class Runner
             return;
         }
 
-        Dispatch(context, ArchitectureHostPhase.CaptureBaseReference);
+        context.RequirePreparedExecutionHost().CaptureBaseReference();
     }
 
     public static void CaptureRefiner(WorkflowGenerator g)
@@ -62,7 +61,7 @@ public static class Runner
             return;
         }
 
-        Dispatch(context, ArchitectureHostPhase.CaptureRefinerReference);
+        context.RequirePreparedExecutionHost().CaptureRefinerReference();
     }
 
     public static void CapturePreCoreVideoMedia(WorkflowGenerator g)
@@ -72,7 +71,7 @@ public static class Runner
             return;
         }
 
-        Dispatch(context, ArchitectureHostPhase.CapturePreCoreMedia);
+        context.RequirePreparedExecutionHost().CapturePreCoreMedia();
     }
 
     public static void DropCoreImageToVideoOutput(WorkflowGenerator g)
@@ -82,7 +81,7 @@ public static class Runner
             return;
         }
 
-        Dispatch(context, ArchitectureHostPhase.DropCoreOutput);
+        context.RequirePreparedExecutionHost().DropCoreOutput();
     }
 
     public static void ApplyRootAudioMaskDimensionsAfterNativeVideo(WorkflowGenerator g)
@@ -92,7 +91,7 @@ public static class Runner
             return;
         }
 
-        Dispatch(context, ArchitectureHostPhase.ApplyRootAudioMaskDimensions);
+        context.RequirePreparedExecutionHost().ApplyRootAudioMaskDimensions();
     }
 
     public static void RunConfiguredStages(WorkflowGenerator g)
@@ -104,11 +103,6 @@ public static class Runner
 
         context.RequirePreparedExecutionHost().RunConfiguredStages();
     }
-
-    private static void Dispatch(
-        VideoExecutionPlanContext context,
-        ArchitectureHostPhase phase) =>
-        context.RequirePreparedExecutionHost().DispatchHostPhase(phase);
 
     private static bool IsExtensionActive(WorkflowGenerator g) => VideoStagesPromptSection.IsActive(g);
 

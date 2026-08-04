@@ -7,8 +7,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.MiniMax;
 
 internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
-    IArchitectureGenerationSessionProvider,
-    IArchitectureHostPhaseParticipant
+    IArchitectureGenerationSessionProvider
 {
     private readonly RootMediaHandoff _rootHandoff = new(
         generator,
@@ -67,34 +66,25 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
         return diagnostics;
     }
 
-    public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
+    public void CaptureBaseReference(VideoExecutionPlan plan)
     {
-        ArgumentNullException.ThrowIfNull(context);
-        switch (context.Phase)
+        if (AnyClipReferences(plan, "Base"))
         {
-            case ArchitectureHostPhase.CapturePreCoreMedia:
-                _rootHandoff.CapturePreCoreMedia();
-                break;
-            case ArchitectureHostPhase.DropCoreOutput:
-                _rootHandoff.DropCoreOutput();
-                break;
-            case ArchitectureHostPhase.CaptureBaseReference:
-                if (AnyClipReferences(context.Plan, "Base"))
-                {
-                    _baseReference = CapturedHostReference.From(generator);
-                }
-                break;
-            case ArchitectureHostPhase.CaptureRefinerReference:
-                if (AnyClipReferences(context.Plan, "Refiner"))
-                {
-                    _refinerReference = CapturedHostReference.From(generator);
-                }
-                break;
-            case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
-            case ArchitectureHostPhase.CaptureControlNetPreprocessors:
-                break;
+            _baseReference = CapturedHostReference.From(generator);
         }
     }
+
+    public void CaptureRefinerReference(VideoExecutionPlan plan)
+    {
+        if (AnyClipReferences(plan, "Refiner"))
+        {
+            _refinerReference = CapturedHostReference.From(generator);
+        }
+    }
+
+    public void CapturePreCoreMedia() => _rootHandoff.CapturePreCoreMedia();
+
+    public void DropCoreOutput() => _rootHandoff.DropCoreOutput();
 
     /// <summary>
     /// A capture pins the host node it names for the rest of the request, which is why an unwanted

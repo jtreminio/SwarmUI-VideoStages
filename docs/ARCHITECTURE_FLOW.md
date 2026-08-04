@@ -423,16 +423,15 @@ The full prepared-state machine and exact eight-step priority table are in
 
 ### B4. Host phases prepare selected architecture state
 
-Later `Runner` phases dispatch through
-`VideoArchitectureExecutionHost.DispatchHostPhase`.
-`ArchitectureHostPhases.IsRootOwnerOnly` chooses root-owner-only versus all-active;
-`ArchitectureRootOwnerResolver` selects the one architecture allowed to
-transform host-root media.
+Each later `Runner` callback invokes its matching lifecycle method on
+`VideoArchitectureExecutionHost`. ControlNet and reference capture visit every
+active provider; root-media operations visit only the provider selected by
+`ArchitectureRootOwnerResolver`.
 
 For the ControlNet preprocessor phase,
 `VideoArchitectureExecutionHost` invokes common
 `ControlNetCoreMediaCapture` once to capture raw host media. It then fans out
-to active architecture participants. `Ltx2ExecutionAdapter` derives its private
+to active architecture providers. `Ltx2ExecutionAdapter` derives its private
 multiple-of-64 branch from that capture through `LtxControlNetMediaNormalizer`,
 never from the current shared apply input, so the result does not depend on which
 architectures ran before it. Wrapping the shared apply input down to one frame is

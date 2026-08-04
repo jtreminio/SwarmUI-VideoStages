@@ -99,29 +99,42 @@ internal sealed class VideoArchitectureExecutionHost
         _executionContext = context;
     }
 
-    internal void DispatchHostPhase(ArchitectureHostPhase phase)
+    internal void CaptureControlNetPreprocessors() => ExecutePrepared(() =>
     {
-        RequireExecutionContext().ExecutePrepared(
-            this,
-            () => DispatchHostPhaseCore(phase));
-    }
+        new ControlNetCoreMediaCapture(_generator).Capture();
+        foreach (IArchitectureGenerationSessionProvider provider in _activeProviders)
+        {
+            provider.CaptureControlNetPreprocessors(provider.ArchitectureId == _rootOwner);
+        }
+    });
 
-    private void DispatchHostPhaseCore(ArchitectureHostPhase phase)
+    internal void CaptureBaseReference() => ExecutePrepared(() =>
     {
-        if (phase == ArchitectureHostPhase.CaptureControlNetPreprocessors)
+        foreach (IArchitectureGenerationSessionProvider provider in _activeProviders)
         {
-            new ControlNetCoreMediaCapture(_generator).Capture();
+            provider.CaptureBaseReference(_plan);
         }
-        IEnumerable<IArchitectureGenerationSessionProvider> providers =
-            ArchitectureHostPhases.IsRootOwnerOnly(phase)
-                ? RootOwnerProvider()
-                : _activeProviders;
-        foreach (IArchitectureHostPhaseParticipant participant in providers
-            .OfType<IArchitectureHostPhaseParticipant>())
+    });
+
+    internal void CaptureRefinerReference() => ExecutePrepared(() =>
+    {
+        foreach (IArchitectureGenerationSessionProvider provider in _activeProviders)
         {
-            participant.ExecuteHostPhase(new(phase, _plan, _rootOwner));
+            provider.CaptureRefinerReference(_plan);
         }
-    }
+    });
+
+    internal void CapturePreCoreMedia() => ExecutePrepared(() =>
+        RootOwnerProvider()?.CapturePreCoreMedia());
+
+    internal void DropCoreOutput() => ExecutePrepared(() =>
+        RootOwnerProvider()?.DropCoreOutput());
+
+    internal void ApplyRootAudioMaskDimensions() => ExecutePrepared(() =>
+        RootOwnerProvider()?.ApplyRootAudioMaskDimensions());
+
+    private void ExecutePrepared(Action action) =>
+        RequireExecutionContext().ExecutePrepared(this, action);
 
     internal void RunConfiguredStages()
     {
@@ -367,11 +380,11 @@ internal sealed class VideoArchitectureExecutionHost
         ?? throw VideoStagesInvariant.Failure(
             "The execution host is not bound to a prepared VideoStages request.");
 
-    private IEnumerable<IArchitectureGenerationSessionProvider> RootOwnerProvider()
+    private IArchitectureGenerationSessionProvider? RootOwnerProvider()
     {
         if (_rootOwner is null)
         {
-            return [];
+            return null;
         }
         if (!_providers.TryGetValue(
             _rootOwner.Value,
@@ -381,7 +394,7 @@ internal sealed class VideoArchitectureExecutionHost
                 $"No generation runtime provider is registered for root architecture "
                     + $"'{_rootOwner.Value}'.");
         }
-        return [provider];
+        return provider;
     }
 
     private sealed record RuntimeProviderBinding(

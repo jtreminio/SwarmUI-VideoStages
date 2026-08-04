@@ -6,8 +6,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
-    IArchitectureGenerationSessionProvider,
-    IArchitectureHostPhaseParticipant
+    IArchitectureGenerationSessionProvider
 {
     private readonly RootMediaHandoff _rootHandoff = new(
         generator,
@@ -22,41 +21,24 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         return Ltx2RequestPreflight.Resolve(generator.Features, context.Plan);
     }
 
-    public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        if (context.Phase == ArchitectureHostPhase.CapturePreCoreMedia)
-        {
-            _rootHandoff.CapturePreCoreMedia();
-            return;
-        }
-        if (context.Phase == ArchitectureHostPhase.DropCoreOutput)
-        {
-            _rootHandoff.DropCoreOutput();
-            return;
-        }
-        if (context.Phase == ArchitectureHostPhase.CaptureControlNetPreprocessors)
-        {
-            new LtxControlNetMediaNormalizer(generator).Normalize(
-                ownsHostRoot: context.RootOwnerArchitectureId == ArchitectureId);
-            return;
-        }
-        switch (context.Phase)
-        {
-            case ArchitectureHostPhase.CaptureBaseReference:
-                CaptureIfReferenced(context.Plan, StageRefStore.StageKind.Base);
-                break;
-            case ArchitectureHostPhase.CaptureRefinerReference:
-                CaptureIfReferenced(context.Plan, StageRefStore.StageKind.Refiner);
-                break;
-            case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
-                new LtxAudioMaskResizer(
-                    generator,
-                    new RootVideoStageResizer(generator))
-                    .ApplyRootAudioMaskDimensionsAfterNativeVideo();
-                break;
-        }
-    }
+    public void CaptureControlNetPreprocessors(bool ownsHostRoot) =>
+        new LtxControlNetMediaNormalizer(generator).Normalize(ownsHostRoot);
+
+    public void CaptureBaseReference(VideoExecutionPlan plan) =>
+        CaptureIfReferenced(plan, StageRefStore.StageKind.Base);
+
+    public void CaptureRefinerReference(VideoExecutionPlan plan) =>
+        CaptureIfReferenced(plan, StageRefStore.StageKind.Refiner);
+
+    public void CapturePreCoreMedia() => _rootHandoff.CapturePreCoreMedia();
+
+    public void DropCoreOutput() => _rootHandoff.DropCoreOutput();
+
+    public void ApplyRootAudioMaskDimensions() =>
+        new LtxAudioMaskResizer(
+            generator,
+            new RootVideoStageResizer(generator))
+            .ApplyRootAudioMaskDimensionsAfterNativeVideo();
 
     /// <summary>
     /// A capture pins the host node it names for the rest of the request — that is what stops a

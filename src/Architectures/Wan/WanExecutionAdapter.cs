@@ -7,8 +7,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Wan;
 
 internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
-    IArchitectureGenerationSessionProvider,
-    IArchitectureHostPhaseParticipant
+    IArchitectureGenerationSessionProvider
 {
     private readonly RootMediaHandoff _rootHandoff = new(
         generator,
@@ -60,25 +59,9 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
         return diagnostics;
     }
 
-    public void ExecuteHostPhase(ArchitectureHostPhaseContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        switch (context.Phase)
-        {
-            case ArchitectureHostPhase.CapturePreCoreMedia:
-                _rootHandoff.CapturePreCoreMedia();
-                break;
-            case ArchitectureHostPhase.DropCoreOutput:
-                _rootHandoff.DropCoreOutput();
-                break;
-            // Wan handles previous-stage media inside its session and has no work for these hooks.
-            case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
-            case ArchitectureHostPhase.CaptureBaseReference:
-            case ArchitectureHostPhase.CaptureRefinerReference:
-            case ArchitectureHostPhase.CaptureControlNetPreprocessors:
-                break;
-        }
-    }
+    public void CapturePreCoreMedia() => _rootHandoff.CapturePreCoreMedia();
+
+    public void DropCoreOutput() => _rootHandoff.DropCoreOutput();
 
     public IVideoGenerationSession CreateSession(
         ArchitectureTimelineSessionContext context) =>
