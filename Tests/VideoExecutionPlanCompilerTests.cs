@@ -659,7 +659,7 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_MixedTimelineAudio_SuppressesSegmentsForUnsupportedArchitecture()
+    public void Compile_MixedTimelineAudio_ProjectsSegmentsOntoEveryArchitecture()
     {
         ClipSpec ltx = GeneratedClip(0, Stage(10));
         ClipSpec host = GeneratedClip(1, Stage(11));
@@ -707,14 +707,13 @@ public class VideoExecutionPlanCompilerTests
             RootEnvironment.FromSpec(spec),
             architectures);
 
+        // Audio tracks are model-independent: the generic clip carries its window too, and
+        // mixes it after decode instead of during generation.
         Assert.Single(plan.Clips[0].Audio.Segments.Items);
-        Assert.Empty(plan.Clips[1].Audio.Segments.Items);
-        // Segments the architecture cannot use are a per-clip warning, never a capability error:
-        // the authored track stays saved and only its window on the host clip is dropped.
-        PlanDiagnostic reported = Assert.Single(plan.Diagnostics);
-        Assert.Equal("effective-request.audio-segments-ignored", reported.Code);
-        Assert.Equal(host.Id, reported.ClipId);
-        Assert.Equal(PlanDiagnosticSeverity.Warning, reported.Severity);
+        Assert.Single(plan.Clips[1].Audio.Segments.Items);
+        Assert.True(plan.Clips[0].Architecture.ConsumesTimelineAudio);
+        Assert.False(plan.Clips[1].Architecture.ConsumesTimelineAudio);
+        Assert.Empty(plan.Diagnostics);
     }
 
     [Fact]

@@ -105,7 +105,7 @@ describe("timeline-wide audio segments panel", () => {
         expect(host.textContent).not.toContain("Planned");
         expect(
             host.querySelector(".vst-audio-track-tab")?.textContent,
-        ).toContain("S0");
+        ).toContain("A1");
 
         expect(
             fieldControl<HTMLSelectElement>(host, "Source", "select").value,
@@ -256,8 +256,8 @@ describe("timeline-wide audio segments panel", () => {
         render();
         const tabs = Array.from(host.querySelectorAll(".vst-audio-track-tab"));
         expect(tabs).toHaveLength(2);
-        expect(tabs[0].textContent).toContain("S0");
-        expect(tabs[1].textContent).toContain("S1");
+        expect(tabs[0].textContent).toContain("A1");
+        expect(tabs[1].textContent).toContain("A2");
 
         // Every lane still projects exactly the window its span described.
         const raw = JSON.parse(serializeStateForStorage(state)) as {
@@ -394,7 +394,7 @@ describe("timeline-wide audio segments panel", () => {
                     ".vst-audio-track-tab .header-label",
                 ),
             ).map((tab) => tab.textContent?.trim()),
-        ).toEqual(["S1", "S2"]);
+        ).toEqual(["A2", "A3"]);
     });
 
     it("adds a segment from a clip audio panel inside that clip's window", () => {

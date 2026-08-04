@@ -77,15 +77,23 @@ export const renderWindowSpan = (options: {
 export const headTag = (
     kind: string,
     label: string,
-    options?: { active?: boolean; muted?: boolean; style?: string },
+    options?: {
+        active?: boolean;
+        muted?: boolean;
+        style?: string;
+        /** Attributes that turn the tag into a button; decorative otherwise. */
+        action?: string;
+    },
 ): string => {
+    const action = options?.action;
     const classes =
         `vst-head-tag vst-head-tag-${kind}` +
         (options?.active ? " vst-head-tag-active" : "") +
-        (options?.muted ? " vst-head-tag-muted" : "");
+        (options?.muted ? " vst-head-tag-muted" : "") +
+        (action ? " vst-head-tag-action" : "");
     const style = options?.style ? ` style="${options.style}"` : "";
     return (
-        `<div class="${classes}"${style} aria-hidden="true">` +
+        `<div class="${classes}"${style} ${action ? `${action} role="button" tabindex="0"` : `aria-hidden="true"`}>` +
         `<span class="vst-head-tag-pill">${label}</span>` +
         `<span class="vst-head-tag-tick"></span>` +
         `</div>`

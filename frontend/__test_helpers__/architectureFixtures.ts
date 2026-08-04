@@ -17,7 +17,6 @@ export const testArchitectureCapabilities = (
         "frameReferences",
         "referenceFraming",
         "retake",
-        "audioSegments",
         "audioBoundaryCarry",
         "latentUpscale",
         "latentModelUpscale",
@@ -149,7 +148,7 @@ export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
     id: "none",
     label: "Decoded source only",
     capabilities: testArchitectureCapabilities({
-        features: ["audioSegments"],
+        features: [],
         entryModes: ["init-video"],
         audioSourceKinds: ["Disabled", "Upload"],
     }),

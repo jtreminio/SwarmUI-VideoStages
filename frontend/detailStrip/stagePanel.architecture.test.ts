@@ -21,6 +21,7 @@ import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
+import * as persistence from "../persistence/repository";
 import {
     __resetPersistenceForTests,
     getState,
@@ -124,6 +125,20 @@ const modelOptions = (column: HTMLElement): HTMLOptionElement[] => {
     );
     return Array.from(modelField?.querySelectorAll("option") ?? []);
 };
+
+/** Puts the clip in the store so a model change has something to commit against. */
+const mountClip = <T extends object>(clip: T): T => {
+    mountVideoStagesData({ clips: [clip], audioTracks: [] });
+    mountPromptBox("");
+    __resetPersistenceForTests();
+    return getState().clips[0] as T;
+};
+
+/** Which command a model change dispatches is the whole-clip vs stage decision. */
+const dispatchSpy = () =>
+    jest
+        .spyOn(persistence, "dispatchDocumentCommand")
+        .mockReturnValue({ applied: false, revision: 0 });
 
 afterEach(() => {
     jest.restoreAllMocks();
@@ -666,13 +681,14 @@ describe("stage architecture model filtering", () => {
                 minimalStage({ model: "removed-sibling.safetensors" }),
             ],
         });
-        const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
+        const persisted = mountClip(clip);
+        const dispatch = dispatchSpy();
         const column = buildStageParamsColumn(
             context(models),
-            clip,
+            persisted,
             0,
             0,
-            clip.stages[0],
+            persisted.stages[0],
             testRootDefaults(models),
         );
         const options = modelOptions(column);
@@ -686,17 +702,17 @@ describe("stage architecture model filtering", () => {
         );
         select.value = "ltx";
         select.dispatchEvent(new Event("change"));
-        expect(confirm).toHaveBeenCalledWith(
-            expect.stringContaining("Convert this clip"),
+        expect(dispatch).toHaveBeenCalledWith(
+            expect.objectContaining({ type: "clip.convert-architecture" }),
+            expect.anything(),
         );
     });
 
-    it("restores the model selection when architecture conversion is canceled", () => {
+    it("restores the model selection when the conversion cannot be applied", () => {
         const models = catalog();
         const clip = minimalClip({
             stages: [minimalStage({ model: "ltx" })],
         });
-        const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
         const column = buildStageParamsColumn(
             context(models),
             clip,
@@ -713,9 +729,7 @@ describe("stage architecture model filtering", () => {
         select.value = "test-video.safetensors";
         select.dispatchEvent(new Event("change"));
 
-        expect(confirm).toHaveBeenCalledWith(
-            expect.stringContaining("one undoable change"),
-        );
+        // This clip is not in the store, so the command cannot commit.
         expect(select.value).toBe("ltx");
     });
 
@@ -731,13 +745,14 @@ describe("stage architecture model filtering", () => {
                 }),
             ],
         });
-        const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
+        const persisted = mountClip(clip);
+        const dispatch = dispatchSpy();
         const column = buildStageParamsColumn(
             context(models),
-            clip,
+            persisted,
             0,
             0,
-            clip.stages[0],
+            persisted.stages[0],
             testRootDefaults(models),
         );
         const select = modelOptions(column)[0].parentElement;
@@ -748,7 +763,10 @@ describe("stage architecture model filtering", () => {
         select.value = "wan-alternate.safetensors";
         select.dispatchEvent(new Event("change"));
 
-        expect(confirm).not.toHaveBeenCalled();
+        expect(dispatch).toHaveBeenCalledWith(
+            expect.objectContaining({ type: "stage.retarget-model" }),
+            expect.anything(),
+        );
     });
 
     it("uses authored WAN ownership instead of a stale cached LTX hint for whole-clip LTX conversion", () => {
@@ -763,14 +781,15 @@ describe("stage architecture model filtering", () => {
                 }),
             ],
         });
-        const before = structuredClone(clip);
-        const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
+        const persisted = mountClip(clip);
+        const before = structuredClone(persisted);
+        const dispatch = dispatchSpy();
         const column = buildStageParamsColumn(
             context(models),
-            clip,
+            persisted,
             0,
             0,
-            clip.stages[0],
+            persisted.stages[0],
             testRootDefaults(models),
         );
         const select = modelOptions(column)[0].parentElement;
@@ -781,16 +800,17 @@ describe("stage architecture model filtering", () => {
         select.value = "ltx";
         select.dispatchEvent(new Event("change"));
 
-        expect(confirm).toHaveBeenCalledWith(
-            expect.stringContaining("Convert this clip from WAN to LTX"),
+        expect(dispatch).toHaveBeenCalledWith(
+            expect.objectContaining({
+                type: "clip.convert-architecture",
+                target: expect.objectContaining({ architectureId: "ltx2" }),
+            }),
+            expect.anything(),
         );
-        expect(confirm).toHaveBeenCalledWith(
-            expect.stringContaining("one undoable change"),
-        );
-        expect(clip).toEqual(before);
+        expect(persisted).toEqual(before);
     });
 
-    it("commits a confirmed conversion through the UI as one exact undoable store change", async () => {
+    it("commits a conversion through the UI as one exact undoable store change", async () => {
         const models = catalog();
         const dto = {
             schemaVersion: 2,
@@ -853,7 +873,6 @@ describe("stage architecture model filtering", () => {
 
         const before = JSON.stringify(getState());
         const revisionBefore = getTimelineStore().revision();
-        const confirm = jest.spyOn(window, "confirm").mockReturnValue(true);
         const panelContext = context(models);
         const persisted = getState().clips[0];
         const column = buildStageParamsColumn(
@@ -872,7 +891,6 @@ describe("stage architecture model filtering", () => {
         select.value = "test-video.safetensors";
         select.dispatchEvent(new Event("change"));
 
-        expect(confirm).toHaveBeenCalledTimes(1);
         expect(getTimelineStore().revision()).toBe(revisionBefore + 1);
         expect(notifications).toEqual(["detail-strip"]);
         // The timeline's store subscriber owns the render for this dispatch;

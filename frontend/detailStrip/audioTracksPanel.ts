@@ -75,7 +75,7 @@ const buildTrackEditor = (
     if (!span) {
         const note = document.createElement("p");
         note.className = "vst-detail-note";
-        note.textContent = "This audio segment has no timeline window.";
+        note.textContent = "This audio track has no timeline window.";
         fields.appendChild(note);
         return fields;
     }
@@ -271,7 +271,7 @@ const buildTrackEditor = (
             "Length (s)",
             lengthInput,
             undefined,
-            "How long this segment plays across the complete timeline.",
+            "How long this track plays across the complete timeline.",
         ),
     );
 
@@ -353,13 +353,13 @@ export const buildAudioTracksPanel = (
             : (visibleTrackIndices[0] ?? null);
     const built = buildRepeatingEditor({
         key: "audio-tracks",
-        label: "Audio Segments",
+        label: "Audio Tracks",
         sectionClass: "vst-audio-tracks-panel",
         open: selectedTrackIndex !== null,
         items: visibleTrackIndices.map((trackIndex) => ({
-            label: `S${trackIndex}`,
+            label: `A${trackIndex + 1}`,
             focusKey: `audio-track-tab-${trackIndex}`,
-            title: `Edit audio segment ${trackIndex}`,
+            title: `Edit audio track A${trackIndex + 1}`,
             active: trackIndex === activeTrackIndex,
             className: "vst-audio-track-tab",
             onSelect: () =>
@@ -387,8 +387,8 @@ export const buildAudioTracksPanel = (
                 : undefined;
         },
         add: {
-            title: "Add a timeline-wide audio segment",
-            label: "+ Add Audio Segment",
+            title: "Add an audio track spanning the timeline",
+            label: "+ Add Audio Track",
             className: "vst-audio-track-add",
             onClick: () => {
                 const trackIdx = addAudioTrack(ctx, state, options?.clipWindow);
@@ -399,8 +399,8 @@ export const buildAudioTracksPanel = (
         remove: {
             title:
                 activeTrackIndex === null
-                    ? "No audio segment to delete"
-                    : `Delete audio segment ${activeTrackIndex}`,
+                    ? "No audio track to delete"
+                    : `Delete audio track A${activeTrackIndex + 1}`,
             className: "vst-audio-track-delete",
         },
     });
@@ -408,10 +408,10 @@ export const buildAudioTracksPanel = (
     note.className = "vst-detail-note";
     note.textContent =
         tracks.length === 0
-            ? "No overlay segments."
+            ? "No audio tracks."
             : visibleTrackIndices.length === 0
-              ? "No overlay segments in this clip."
-              : "Timeline-wide overlays are cut per clip during generation; overlapping segments mix together.";
+              ? "No audio tracks in this clip."
+              : "Audio tracks are cut per clip during generation; overlapping tracks mix together.";
     built.content.insertBefore(note, built.content.firstChild);
     return built.section;
 };

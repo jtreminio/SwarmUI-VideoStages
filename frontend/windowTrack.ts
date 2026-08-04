@@ -188,6 +188,11 @@ export interface WindowTrackConfig<TOwner = Clip> {
     edgeAttr: string;
     /** Empty-lane element that creates a new span on press. */
     laneSelector: string;
+    /**
+     * Button outside the lanes (the audio track head's "+") that creates a
+     * default-length span at the start of the timeline on click or Enter.
+     */
+    createButtonSelector?: string;
     draggingClass: string;
     ghostClass: string;
     /** Preview/ghost positioning: % of the lane, or px at the live pps. */
@@ -668,6 +673,32 @@ export const createWindowTrack = <TOwner = Clip>(
         };
     };
 
+    /** Handles a press on the out-of-lane create button; false when it wasn't one. */
+    const createFromButton = (target: Element): boolean => {
+        const button = config.createButtonSelector
+            ? target.closest(config.createButtonSelector)
+            : null;
+        if (!(button instanceof HTMLElement)) {
+            return false;
+        }
+        const lane = config.scope.resolveLane(button);
+        if (lane && !(config.canCreate && !config.canCreate(lane))) {
+            commitCreate(
+                {
+                    ownerIdx: lane.ownerIdx,
+                    duration: lane.duration,
+                    laneEl: button,
+                    laneLeft: 0,
+                    startSec: 0,
+                    ghost: null,
+                    sourceRevision: currentRevision(),
+                },
+                null,
+            );
+        }
+        return true;
+    };
+
     const itemIdxOf = (span: Element): number | null =>
         config.itemIdxAttr ? parseIntAttr(span, config.itemIdxAttr) : 0;
 
@@ -772,6 +803,9 @@ export const createWindowTrack = <TOwner = Clip>(
         if (!(event.target instanceof Element)) {
             return;
         }
+        if (createFromButton(event.target)) {
+            return;
+        }
         const span = event.target.closest(config.spanSelector);
         if (!(span instanceof HTMLElement)) {
             config.onClickFallthrough?.(event as MouseEvent, event.target);
@@ -812,6 +846,10 @@ export const createWindowTrack = <TOwner = Clip>(
             return;
         }
         if (!(ke.target instanceof Element)) {
+            return;
+        }
+        if (createFromButton(ke.target)) {
+            ke.preventDefault();
             return;
         }
         const span = ke.target.closest(config.spanSelector);

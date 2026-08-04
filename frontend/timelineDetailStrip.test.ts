@@ -2724,7 +2724,7 @@ describe("createTimelineDetailStrip", () => {
             ".vst-audio-track-add",
         );
         expect(addBtn).not.toBeNull();
-        expect(addBtn?.textContent).toBe("+ Add Audio Segment");
+        expect(addBtn?.textContent).toBe("+ Add Audio Track");
         addBtn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
         expect(getSelection()).toEqual({
@@ -2807,10 +2807,10 @@ describe("createTimelineDetailStrip", () => {
             ).map((label) => label.textContent ?? "");
 
         setSelection({ kind: "audio", clipIdx: 0 });
-        expect(visibleSegmentLabels()).toEqual(["S0", "S1"]);
+        expect(visibleSegmentLabels()).toEqual(["A1", "A2"]);
 
         setSelection({ kind: "audio", clipIdx: 1 });
-        expect(visibleSegmentLabels()).toEqual(["S1", "S2"]);
+        expect(visibleSegmentLabels()).toEqual(["A2", "A3"]);
     });
 
     it("edits the clip's major prompt (debounced) through saveClips", () => {

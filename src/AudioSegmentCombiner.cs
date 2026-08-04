@@ -69,7 +69,7 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
                 {
                     PlanDiagnosticReporter.TrackRequestWarning(
                         g.UserInput,
-                        $"VideoStages: clip {clipId} audio segment references AceStepFun track "
+                        $"VideoStages: clip {clipId} audio track references AceStepFun track "
                         + $"'{segment.AceStepFunTrack}', which is not present in the workflow; skipping the segment.");
                 }
                 continue;

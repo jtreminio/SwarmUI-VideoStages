@@ -66,7 +66,6 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             ArchitectureEntryMode.InitVideo,
         ],
         ArchitectureFeature.FrameReferences
-            | ArchitectureFeature.AudioSegments
             | ArchitectureFeature.AudioDerivedDuration
             | ArchitectureFeature.ReferenceFraming
             | ArchitectureFeature.AudioReuse
@@ -74,6 +73,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             | ArchitectureFeature.LatentUpscale,
         BoundaryPolicy)
     {
+        ConsumesTimelineAudio = true,
         FrameGrid = FrameGrid,
         FrameGridOrigin = FrameGridOrigin,
         StageGuideReferences = new(

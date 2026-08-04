@@ -91,7 +91,6 @@ public class MiniMaxArchitectureTests
             [
                 "frameReferences",
                 "referenceFraming",
-                "audioSegments",
                 "audioBoundaryCarry",
                 "latentUpscale",
                 "audioReuse",

@@ -24,7 +24,7 @@ import type { DetailStripContext } from "./context";
 const restrictedCatalog = (): ArchitectureModelCatalog => {
     const models = testArchitectureCatalog();
     models.architectures[0].capabilities = testArchitectureCapabilities({
-        features: ["promptRelay", "retake", "audioSegments", "icLora"],
+        features: ["promptRelay", "retake", "icLora"],
     });
     return models;
 };

@@ -667,12 +667,12 @@ public class HostVideoContractTests
     }
 
     /// <summary>
-    /// Authored timeline audio on a generic-only timeline is warned about and never reaches the
-    /// graph: no upload node, no concat, and the publication carries no audio — while the authored
-    /// tracks stay in the saved document.
+    /// An authored audio track plays over a video model that knows nothing about audio: the mixer
+    /// runs after decode, over a silent bed of the clip's own length, and the result is what the
+    /// save muxes. No capability warning — audio tracks are model-independent.
     /// </summary>
     [Fact]
-    public async Task Generic_only_timeline_warns_and_ignores_authored_audio_tracks()
+    public async Task Generic_only_timeline_overlays_authored_audio_tracks_after_decode()
     {
         using Hunyuan15WorkflowFixture fixture = Hunyuan15WorkflowFixture.CreateWithBaseModel();
         JObject document = MakeDocument(MakeClip(1.0, fixture.Stage(steps: 8)));
@@ -685,22 +685,21 @@ public class HostVideoContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        Assert.Contains(
+        Assert.DoesNotContain(
             Diagnostics(generator),
             diagnostic => diagnostic.Code == "effective-request.audio-segments-ignored");
-        Assert.Contains(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains(
-                "None of the selected video architectures use timeline audio tracks",
-                StringComparison.Ordinal));
 
-        Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
-        Assert.Empty(bridge.Graph.NodesOfType<AudioConcatNode>());
-        Assert.Null(live.PublishedAudio());
-        Assert.Null(generator.CurrentMedia.AttachedAudio);
+        Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        EmptyAudioNode bed = Assert.Single(bridge.Graph.NodesOfType<EmptyAudioNode>());
+        // The bed is the clip's own decoded length: 25 frames at 24 fps.
+        Assert.Equal(25 / 24d, bed.Duration.LiteralAsDouble() ?? 0, 6);
+        AudioMergeNode mix = Assert.Single(bridge.Graph.NodesOfType<AudioMergeNode>());
+        Assert.Same(bed, mix.Audio1.Connection?.Node);
+        Assert.Same(mix, live.PublishedAudio());
+        Assert.NotNull(generator.CurrentMedia.AttachedAudio);
         Assert.Single(generator.GetVideoStagesSpec().TimelineAudioSegments);
 
-        live.AssertAllLive(StageSampler(bridge, 0));
+        live.AssertAllLive(StageSampler(bridge, 0), mix);
         AssertShippable(bridge, workflow, live);
     }
 

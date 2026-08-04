@@ -1,14 +1,9 @@
 import {
-    architectureDescriptor,
     buildArchitectureRetargetPlan,
     modelCatalogEntry,
 } from "../../architectures/catalog";
 import { resolvedClipArchitectureId } from "../../architectures/clipIdentity";
 import { planArchitectureConversion } from "../../architectures/conversion/plan";
-import {
-    architectureConversionMessage,
-    confirmArchitectureConversion,
-} from "../../architectures/conversion/presentation";
 import {
     buildField,
     buildOptionSelect,
@@ -117,46 +112,25 @@ export const appendStageModelSection = ({
                     modelSelect.value = stage.model;
                     return;
                 }
-                const fromLabel =
-                    (ownerArchitectureId
-                        ? architectureDescriptor(
-                              defaults.modelCatalog,
-                              ownerArchitectureId,
-                          )?.label
-                        : null) ??
-                    (clip.architectureHint
-                        ? `${clip.architectureHint} (unresolved hint)`
-                        : "Unresolved model");
-                const toLabel =
-                    architectureDescriptor(
-                        defaults.modelCatalog,
-                        plan.architectureId,
-                    )?.label ?? plan.architectureId;
-                const confirmedAndApplied = confirmArchitectureConversion(
-                    architectureConversionMessage(
-                        fromLabel,
-                        toLabel,
-                        conversion.removals,
-                    ),
-                    () => {
-                        const snapshot = getTimelineStore().getSnapshot();
-                        const clipId = snapshot.state.clips[clipIdx]?.id;
-                        if (!clipId) return false;
-                        const result = dispatchDocumentCommand(
-                            {
-                                type: "clip.convert-architecture",
-                                clipId,
-                                target: plan,
-                            },
-                            {
-                                expectedRevision: snapshot.revision,
-                                origin: "detail-strip",
-                            },
-                        );
-                        return result.applied;
-                    },
-                );
-                if (!confirmedAndApplied) modelSelect.value = stage.model;
+                // The conversion applies straight away: it is one undoable
+                // change, and what it drops is reported by the diagnostics.
+                const converting = getTimelineStore().getSnapshot();
+                const convertingClipId =
+                    converting.state.clips[clipIdx]?.id ?? null;
+                const converted = convertingClipId
+                    ? dispatchDocumentCommand(
+                          {
+                              type: "clip.convert-architecture",
+                              clipId: convertingClipId,
+                              target: plan,
+                          },
+                          {
+                              expectedRevision: converting.revision,
+                              origin: "detail-strip",
+                          },
+                      ).applied
+                    : false;
+                if (!converted) modelSelect.value = stage.model;
                 return;
             }
             const snapshot = getTimelineStore().getSnapshot();

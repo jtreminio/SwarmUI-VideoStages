@@ -1267,9 +1267,9 @@ public class ArchitectureFoundationTests
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "none");
         Assert.Equal("Decoded source only", none["label"]);
-        Assert.Equal(
-            ["audioSegments"],
-            none["capabilities"]["features"].Values<string>());
+        // A decoded source-only clip authors no extras: timeline audio is not a declared
+        // feature, every architecture carries it.
+        Assert.Empty(none["capabilities"]["features"].Values<string>());
         Assert.Equal(
             ["init-video"],
             none["capabilities"]["entryModes"].Values<string>());
@@ -1292,7 +1292,6 @@ public class ArchitectureFoundationTests
                 "frameReferences",
                 "referenceFraming",
                 "retake",
-                "audioSegments",
                 "audioBoundaryCarry",
                 "latentUpscale",
                 "latentModelUpscale",

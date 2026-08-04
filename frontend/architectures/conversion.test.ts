@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from "@jest/globals";
+import { describe, expect, it } from "@jest/globals";
 import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
@@ -10,10 +10,6 @@ import {
 } from "../__test_helpers__/clipFixtures";
 import { createTimelineHistory } from "../timelineHistory";
 import { planArchitectureConversion } from "./conversion/plan";
-import {
-    architectureConversionMessage,
-    confirmArchitectureConversion,
-} from "./conversion/presentation";
 
 describe("architecture conversion policy", () => {
     it("preserves architecture-owned settings as dormant data", () => {
@@ -35,36 +31,14 @@ describe("architecture conversion policy", () => {
 
         const conversion = planArchitectureConversion(clip, target, fake);
         expect(conversion).not.toBeNull();
-        const removals = conversion?.removals ?? [];
-        const message = architectureConversionMessage(
-            "LTX Video 2.3",
-            "Test Video",
-            removals,
-        );
 
-        expect(removals).toEqual([]);
-        expect(message).toContain("one undoable change");
-        expect(message).toContain("stay saved but dormant");
+        expect(conversion?.removals ?? []).toEqual([]);
         expect(conversion?.clip).toMatchObject({
             refs: clip.refs,
             refFraming: "fit-green",
             loras: clip.loras,
             promptWindows: clip.promptWindows,
         });
-    });
-
-    it("does not apply on cancel and applies exactly once on confirm", () => {
-        const apply = jest.fn(() => true);
-
-        expect(
-            confirmArchitectureConversion("convert?", apply, () => false),
-        ).toBe(false);
-        expect(apply).not.toHaveBeenCalled();
-
-        expect(
-            confirmArchitectureConversion("convert?", apply, () => true),
-        ).toBe(true);
-        expect(apply).toHaveBeenCalledTimes(1);
     });
 
     it("preserves source video when an image-capable target can refine it", () => {

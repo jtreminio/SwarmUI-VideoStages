@@ -208,6 +208,10 @@ internal sealed class VideoArchitectureExecutionHost
                         $"Architecture '{session.ArchitectureId}' returned no decoded clip "
                             + "artifact.");
                 ValidateOutput(output, session, runtimeContext);
+                output = DecodedTimelineAudioOverlay.Apply(
+                    _generator,
+                    output,
+                    plannedClip);
                 clipOutputs.Add(output);
                 previousClipOutput = output;
                 previousClip = plannedClip;

@@ -177,6 +177,39 @@ const audioFlagChips = (clip: Clip): string => {
         : `<span class="vst-audio-flags" aria-hidden="true">${chips.join("")}</span>`;
 };
 
+/** Audio the clip carries itself, which stays removable after its architecture stops offering it. */
+const persistedClipAudio = (clip: Clip): boolean =>
+    clip.audioSource !== "Native" ||
+    clip.uploadedAudio !== null ||
+    clip.reuseAudio === true ||
+    clip.clipLengthFromAudio === true ||
+    clip.saveAudioTrack === true;
+
+/**
+ * The clip mini-row is per-architecture: a model without native audio (WAN)
+ * shows no clip lane, while the timeline-wide tracks below stay on every
+ * architecture because they are mixed outside the video model.
+ */
+const clipAudioLaneVisible = (
+    clip: Clip,
+    capabilities?: CapabilityViewResolver,
+): boolean => {
+    const view = capabilities?.forClip(clip);
+    return (
+        view === undefined ||
+        view.clipAudio.supported ||
+        persistedClipAudio(clip)
+    );
+};
+
+/** UI name for a timeline-wide audio track; `A1`-style in the narrow track head. */
+const audioTrackTag = (trackIdx: number): string => `A${trackIdx + 1}`;
+
+const audioTrackName = (track: AudioTrack, trackIdx: number): string =>
+    track.source.reference ||
+    track.source.uploadedAudio?.fileName ||
+    `Audio track ${audioTrackTag(trackIdx)}`;
+
 const renderTimelineAudioSegmentBlock = (
     track: AudioTrack,
     trackIdx: number,
@@ -195,10 +228,7 @@ const renderTimelineAudioSegmentBlock = (
         span.timelineLengthSeconds,
         totalSeconds,
     );
-    const labelText =
-        track.source.reference ||
-        track.source.uploadedAudio?.fileName ||
-        "audio segment";
+    const labelText = audioTrackName(track, trackIdx);
     const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
     const waveform = audioSegmentWaveBarHeights(trackIdx, trackIdx, 40)
         .map((height) => `<span style="height:${height}%"></span>`)
@@ -211,7 +241,7 @@ const renderTimelineAudioSegmentBlock = (
         labelClass: "vst-audio-label",
         label: labelText,
         title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
-        ariaLabel: `Edit timeline audio segment ${trackIdx}`,
+        ariaLabel: `Edit audio track ${audioTrackTag(trackIdx)}`,
         startSeconds: start,
         lengthSeconds: end - start,
         durationSeconds: totalSeconds,
@@ -234,7 +264,7 @@ const renderTimelineAudioSegmentLanes = (
     );
     lanes.push(
         `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add ` +
-            `style="${place(tracks.length)}" title="Click or drag to add a timeline-wide audio segment"></div>`,
+            `style="${place(tracks.length)}" title="Click or drag to add an audio track spanning the timeline"></div>`,
     );
     return lanes.join("");
 };
@@ -247,22 +277,20 @@ export const renderAudioTrackRow = (
     pxPerSecond = 1,
     timelineTotalSeconds?: number,
 ): string => {
+    const clipLane = (clip: Clip): boolean =>
+        clipAudioLaneVisible(clip, capabilities);
+    const clipRow = clips.some(clipLane);
     const baseSegments = layouts
         .map((layout) => {
             const clip = clips[layout.index];
-            if (!clip) {
+            if (!clip || !clipLane(clip)) {
                 return "";
             }
             const badge = audioSourceBadge(clip.audioSource ?? "");
             const clipCapabilities = capabilities?.forClip(clip);
             const clipAudioSupported =
                 clipCapabilities?.clipAudio.supported ?? true;
-            const persistedAudio =
-                clip.audioSource !== "Native" ||
-                clip.uploadedAudio !== null ||
-                clip.reuseAudio ||
-                clip.clipLengthFromAudio ||
-                clip.saveAudioTrack;
+            const persistedAudio = persistedClipAudio(clip);
             const audioOperable = clipAudioSupported || persistedAudio;
             const native = badge.label === "Native";
             const width = clipInnerWidth(layout.widthPx);
@@ -328,19 +356,28 @@ export const renderAudioTrackRow = (
         totalWidthPx,
     );
     const laneCount = Math.max(1, audioTracks.length + 1);
-    const laneTags = [headTag("src", "Clip", { active: true })];
+    // The clip's own audio is lane zero of the same stack the tracks continue.
+    const laneTags = clipRow ? [headTag("src", "A0", { active: true })] : [];
     for (let i = 0; i < laneCount; i++) {
         const blank = i === laneCount - 1;
+        // The blank lane's tag is the track head's only button, and it names
+        // what it adds at every track count — the full wording is in the tooltip.
         laneTags.push(
-            headTag("seg", blank ? "+" : `S${i}`, {
+            headTag("seg", blank ? "+ Audio" : audioTrackTag(i), {
                 active: !blank,
                 muted: blank,
                 style: `--vst-audio-lane-idx:${i}`,
+                action: blank
+                    ? `data-vst-audio-seg-add title="Add an audio track spanning the timeline" aria-label="Add an audio track"`
+                    : undefined,
             }),
         );
     }
+    // Neither a clip lane nor a track: the row is the blank add-lane alone, and
+    // it is centred instead of pinned to the top border.
+    const soloLane = !clipRow && audioTracks.length === 0;
     return (
-        `<div class="vst-track-row vst-track-audio" style="--vst-audio-lane-count:${laneCount}">` +
+        `<div class="vst-track-row vst-track-audio${clipRow ? "" : " vst-no-clip-audio"}${soloLane ? " vst-audio-solo-lane" : ""}" style="--vst-audio-lane-count:${laneCount}">` +
         renderTrackHead(
             "vst-track-icon-audio",
             "♪",

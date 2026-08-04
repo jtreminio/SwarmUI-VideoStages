@@ -341,6 +341,46 @@ describe("timeline-wide audio segment gestures", () => {
         });
     });
 
+    const headAddButton = (body: HTMLElement): HTMLElement => {
+        const button = document.createElement("div");
+        button.className = "vst-head-tag vst-head-tag-seg vst-head-tag-action";
+        button.setAttribute("data-vst-audio-seg-add", "");
+        button.setAttribute("role", "button");
+        button.tabIndex = 0;
+        body.appendChild(button);
+        return button;
+    };
+
+    it("adds a track from the track head's add button", () => {
+        const body = setupGlobal(false);
+
+        headAddButton(body).dispatchEvent(
+            new MouseEvent("click", { bubbles: true }),
+        );
+
+        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        expect(saved.audioTracks).toHaveLength(1);
+        // The button carries no time of its own, so the track starts the timeline.
+        expect(saved.audioTracks?.[0].spans[0]).toMatchObject({
+            timelineStartSeconds: 0,
+            timelineLengthSeconds: 2,
+            sourceStartSeconds: 0,
+        });
+        expect(getSelection()).toEqual({ kind: "audio-track", trackIdx: 0 });
+    });
+
+    it("adds a track from the head button on keyboard activation", () => {
+        const body = setupGlobal(true);
+
+        headAddButton(body).dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+        );
+
+        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        expect(saved.audioTracks).toHaveLength(2);
+        expect(getSelection()).toEqual({ kind: "audio-track", trackIdx: 1 });
+    });
+
     it("allows independently overlapping global lanes", () => {
         const body = setupGlobal(false);
         const lane = el(body, "[data-vst-audio-seg-add]");

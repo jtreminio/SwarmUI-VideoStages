@@ -15,7 +15,9 @@
        segment plus a blank add-lane — the row height scales with
        --vst-audio-lane-count (set inline by the renderer). */
     --vst-audio-cliprow-h: 36px;
-    --vst-audio-seg-lane-h: 26px;
+    /* Timeline audio lanes stand as tall as the clip mini-row: same band, same
+       bar height, so A0 and A1+ read as one stack. */
+    --vst-audio-seg-lane-h: 36px;
     --vst-lane-audio-h: 72px;
     --vst-lane-prompt-h: 72px;
     /* Major prompt segment: the top half, or the whole row under .vst-no-relay. */
@@ -443,6 +445,22 @@
 /* Blank add-lanes (Audio "+") and single-lane tracks (Refs) read quieter. */
 .vst-head-tag-muted .vst-head-tag-pill {
     opacity: 0.55;
+}
+/* The one interactive tag (Audio "+"): .vst-head-tags is pointer-transparent,
+   so the button re-enables hits on itself. */
+.vst-head-tag-action {
+    pointer-events: auto;
+    cursor: pointer;
+}
+.vst-head-tag-action:hover .vst-head-tag-pill,
+.vst-head-tag-action:focus-visible .vst-head-tag-pill {
+    opacity: 1;
+    color: color-mix(in srgb, var(--emphasis) 80%, var(--text));
+    border-color: color-mix(in srgb, var(--emphasis) 55%, var(--vst-hairline));
+    background: color-mix(in srgb, var(--emphasis) 16%, var(--vst-panel));
+}
+.vst-head-tag-action:focus-visible {
+    outline: none;
 }
 
 /* Prompt: major top half / relay bottom half (mirrors .vst-major-seg and
@@ -1195,13 +1213,33 @@
     border-top: 1px dashed var(--vst-hairline);
     pointer-events: none;
 }
+/* No clip in this timeline can carry its own audio (no native-audio model):
+   the clip mini-row collapses and the timeline-wide lanes take the row. */
+.vst-no-clip-audio {
+    --vst-audio-cliprow-h: 0px;
+}
+.vst-no-clip-audio .vst-audio-cell::after {
+    display: none;
+}
+/* Only the blank add-lane is left: the lane offset that the clip row used to
+   provide becomes an even top gap (the cell already reserves 6px below), so the
+   lone lane and its tag sit centred in the row. */
+.vst-audio-solo-lane {
+    --vst-audio-cliprow-h: 6px;
+}
+/* The collapsed clip row puts the first lane tag level with the track title,
+   whose block sits a layer up (.vst-head-top). The tags take that layer back so
+   the pill is not painted over — and so the add button keeps its whole hit area. */
+.vst-no-clip-audio .vst-head-tag-seg {
+    z-index: 2;
+}
 .vst-audio-seg-lane {
     position: absolute;
     top: calc(
         var(--vst-audio-cliprow-h) + var(--vst-audio-lane-idx, 0) *
-            var(--vst-audio-seg-lane-h) + 2px
+            var(--vst-audio-seg-lane-h) + 3px
     );
-    height: calc(var(--vst-audio-seg-lane-h) - 4px);
+    height: calc(var(--vst-audio-seg-lane-h) - 6px);
 }
 .vst-audio-seg-lane-blank {
     cursor: copy;

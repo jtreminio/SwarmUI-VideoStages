@@ -89,7 +89,7 @@ export const detailBreadcrumb = (
         case "audio":
             return `Audio · Clip ${selection.clipIdx}`;
         case "audio-track":
-            return `Audio segment S${selection.trackIdx}`;
+            return `Audio track A${selection.trackIdx + 1}`;
         case "boundary": {
             const seam = executableBoundaryForLeftClip(
                 clips,

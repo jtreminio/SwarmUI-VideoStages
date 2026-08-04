@@ -21,9 +21,10 @@ internal static class NoneArchitecture
             AudioSourceKind.Upload,
         ],
         [ArchitectureEntryMode.InitVideo],
-        ArchitectureFeature.AudioSegments,
+        ArchitectureFeature.None,
         BoundaryPolicy)
     {
+        ConsumesTimelineAudio = true,
         FrameGrid = 1,
         StageGuideReferences = StageGuideReferencePolicy.GeneratedOnly,
     };

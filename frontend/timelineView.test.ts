@@ -1243,8 +1243,8 @@ describe("track-head lane tags", () => {
         ];
         const layouts = computeRegionLayout(clips, { pxPerSecond: 60 });
 
-        // Audio: laneCount = 3 -> Src, S0, S1 active; trailing "+" muted on
-        // the blank add-lane, placed via the same lane-idx var the lanes use.
+        // Audio: laneCount = 3 -> Clip, A1, A2 active; the trailing add
+        // button is muted, placed via the same lane-idx var the lanes use.
         const audio = renderAudioTrackRow(
             clips,
             layouts,
@@ -1252,15 +1252,37 @@ describe("track-head lane tags", () => {
             audioTracks(2),
         );
         expect(audio).toContain("vst-head-tag-src");
-        expect(audio).toContain(">S0<");
-        expect(audio).toContain(">S1<");
+        expect(audio).toContain(">A1<");
+        expect(audio).toContain(">A2<");
         expect(audio).toMatch(
-            /vst-head-tag-seg vst-head-tag-muted" style="--vst-audio-lane-idx:2"/,
+            /vst-head-tag-seg vst-head-tag-muted vst-head-tag-action" style="--vst-audio-lane-idx:2"/,
         );
 
         const prompt = renderPromptTrackRow(clips, layouts, 60, "global");
         expect(prompt).toContain("vst-head-tag-major vst-head-tag-active");
         expect(prompt).toContain("vst-head-tag-relay vst-head-tag-active");
+    });
+
+    it("names the audio add button at every track count", () => {
+        const clips = [minimalClip({ duration: 4 })];
+        const layouts = computeRegionLayout(clips, { pxPerSecond: 60 });
+
+        const empty = renderAudioTrackRow(clips, layouts);
+        expect(empty).toContain(">+ Audio<");
+        expect(empty).toContain("vst-head-tag-action");
+        expect(empty).toContain(
+            'data-vst-audio-seg-add title="Add an audio track spanning the timeline" aria-label="Add an audio track" role="button" tabindex="0"',
+        );
+
+        const filled = renderAudioTrackRow(
+            clips,
+            layouts,
+            undefined,
+            audioTracks(1),
+        );
+        // The added track takes lane 0's tag; the button keeps its own wording.
+        expect(filled).toContain(">A1<");
+        expect(filled).toContain(">+ Audio<");
     });
 
     it("leaves the relay tag inactive when no clip has prompt windows", () => {
@@ -1327,7 +1349,7 @@ describe("timeline-wide audio segment lanes", () => {
         expect(document.querySelectorAll(".vst-audio-seg-lane")).toHaveLength(
             2,
         );
-        expect(document.body.innerHTML).toContain(">S0<");
+        expect(document.body.innerHTML).toContain(">A1<");
     });
 });
 
@@ -1417,14 +1439,9 @@ describe("unsupported persisted timeline controls", () => {
         expect(
             document.querySelector('.vst-retake-lane[data-clip-idx="1"]'),
         ).toBeNull();
-        const emptyAudio = document.querySelector(
-            '.vst-audio-clip[data-clip-idx="1"]',
-        );
-        expect(emptyAudio?.getAttribute("aria-disabled")).toBe("true");
-        expect(emptyAudio?.hasAttribute("role")).toBe(false);
-        expect(emptyAudio?.hasAttribute("tabindex")).toBe(false);
-        expect(emptyAudio?.getAttribute("aria-label")).toBe(
-            "Audio unavailable for clip 1",
-        );
+        // Same for its clip audio: nothing to repair, so the lane is dropped.
+        expect(
+            document.querySelector('.vst-audio-clip[data-clip-idx="1"]'),
+        ).toBeNull();
     });
 });

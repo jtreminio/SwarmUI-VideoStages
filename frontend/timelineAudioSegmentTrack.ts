@@ -132,6 +132,7 @@ export const createTimelineAudioSegmentTrack = (
         edgeAttr: "data-vst-audio-seg-edge",
         laneSelector:
             ".vst-audio-seg-lane[data-vst-audio-seg-add]:not([data-clip-idx])",
+        createButtonSelector: ".vst-head-tag-seg[data-vst-audio-seg-add]",
         draggingClass: "vst-audio-seg-dragging",
         ghostClass: "vst-audio-seg-ghost",
         unit: "pct",

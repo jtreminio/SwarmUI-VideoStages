@@ -57,7 +57,6 @@ internal enum ArchitectureFeature
     FrameReferences = 1 << 1,
     ReferenceFraming = 1 << 2,
     Retake = 1 << 3,
-    AudioSegments = 1 << 4,
     AudioReuse = 1 << 5,
     AudioDerivedDuration = 1 << 6,
     IcLora = 1 << 7,
@@ -167,6 +166,14 @@ internal sealed record VideoArchitectureDescriptor(
     /// </summary>
     public StageGuideReferencePolicy StageGuideReferences { get; init; } =
         StageGuideReferencePolicy.GeneratedOnly;
+
+    /// <summary>
+    /// True when this architecture consumes the authored timeline audio tracks itself — it
+    /// conditions generation on them or muxes them inside its own session. Every other
+    /// architecture gets the generic post-decode overlay, so audio tracks play over any video
+    /// model without the model knowing about them.
+    /// </summary>
+    public bool ConsumesTimelineAudio { get; init; }
 
     public IReadOnlyDictionary<BoundaryJoinType, RuleDecision> BoundaryRules =>
         BoundaryPolicy.Rules;

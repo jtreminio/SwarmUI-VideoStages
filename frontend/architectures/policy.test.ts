@@ -411,6 +411,43 @@ describe("catalog-backed authoring policy", () => {
         );
     });
 
+    it("drops the clip audio row while keeping the timeline audio tracks", () => {
+        const body = document.createElement("div");
+        renderTimeline(body, [fakeClip()], {
+            capabilities: createCapabilityViewResolver(catalog()),
+        });
+
+        expect(body.querySelector(".vst-audio-clip")).toBeNull();
+        expect(body.querySelector(".vst-head-tag-src")).toBeNull();
+        expect(body.querySelector(".vst-track-audio")?.className).toContain(
+            "vst-no-clip-audio",
+        );
+        // Audio mixed outside the video model stays authorable regardless.
+        expect(body.querySelector(".vst-audio-seg-lane-blank")).not.toBeNull();
+        // Nothing above or below it, so the lone add-lane is centred.
+        expect(body.querySelector(".vst-track-audio")?.className).toContain(
+            "vst-audio-solo-lane",
+        );
+        expect(
+            body.querySelector(".vst-head-tag-seg[data-vst-audio-seg-add]"),
+        ).not.toBeNull();
+    });
+
+    it("keeps the clip audio row for the clips whose model carries audio", () => {
+        const body = document.createElement("div");
+        renderTimeline(body, [minimalClip(), fakeClip()], {
+            capabilities: createCapabilityViewResolver(catalog()),
+        });
+
+        const lanes = body.querySelectorAll(".vst-audio-clip");
+        expect(lanes.length).toBe(1);
+        expect(lanes[0].getAttribute("data-clip-idx")).toBe("0");
+        expect(body.querySelector(".vst-head-tag-src")).not.toBeNull();
+        expect(body.querySelector(".vst-track-audio")?.className).not.toContain(
+            "vst-no-clip-audio",
+        );
+    });
+
     it("keeps a zero-stage source-only clip selectable and labels it plainly", () => {
         const clip = minimalClip({
             architectureHint: "none",

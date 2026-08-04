@@ -44,7 +44,6 @@ internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
             | ArchitectureFeature.FrameReferences
             | ArchitectureFeature.Retake
             | ArchitectureFeature.AudioReuse
-            | ArchitectureFeature.AudioSegments
             | ArchitectureFeature.AudioBoundaryCarry
             | ArchitectureFeature.LatentUpscale
             | ArchitectureFeature.LatentModelUpscale
@@ -53,6 +52,7 @@ internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
             | ArchitectureFeature.IcLora,
         Ltx2BoundaryPolicy.Instance)
     {
+        ConsumesTimelineAudio = true,
         FrameGrid = FrameGrid,
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated

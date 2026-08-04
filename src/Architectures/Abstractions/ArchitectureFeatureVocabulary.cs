@@ -17,7 +17,6 @@ internal static class ArchitectureFeatureVocabulary
         new(ArchitectureFeature.FrameReferences, "frameReferences", "Frame references"),
         new(ArchitectureFeature.ReferenceFraming, "referenceFraming", "Reference framing"),
         new(ArchitectureFeature.Retake, "retake", "Retakes"),
-        new(ArchitectureFeature.AudioSegments, "audioSegments", "Audio segments"),
         new(
             ArchitectureFeature.AudioBoundaryCarry,
             "audioBoundaryCarry",

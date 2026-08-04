@@ -19,7 +19,7 @@ internal static class AudioSegmentPlanCompiler
         {
             if (segment is null)
             {
-                diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SegmentIgnoredNoSource, "An audio segment has no source and was ignored."));
+                diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SegmentIgnoredNoSource, "An audio track has no source and was ignored."));
                 continue;
             }
             if (double.IsNaN(segment.StartSeconds) || double.IsInfinity(segment.StartSeconds)
@@ -27,26 +27,26 @@ internal static class AudioSegmentPlanCompiler
                 || double.IsNaN(segment.LengthSeconds) || double.IsInfinity(segment.LengthSeconds)
                 || segment.StartSeconds < 0 || segment.TrimStartSeconds < 0 || segment.LengthSeconds <= 0)
             {
-                diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SegmentIgnoredInvalidWindow, "An audio segment has an invalid time window and was ignored."));
+                diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SegmentIgnoredInvalidWindow, "An audio track has an invalid time window and was ignored."));
                 continue;
             }
             // Segments are only executable from these two sources; the shared vocabulary carries
             // more kinds than a projected segment can resolve.
             if (segment.SourceKind is not (AudioSourceKind.AceStepFun or AudioSourceKind.Upload))
             {
-                diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SegmentIgnoredNoSource, "An audio segment has an unusable source kind and was ignored."));
+                diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SegmentIgnoredNoSource, "An audio track has an unusable source kind and was ignored."));
                 continue;
             }
             if (segment.SourceKind == AudioSourceKind.AceStepFun
                 && segment.AceStepFunTrack is null)
             {
-                diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SegmentIgnoredNoSource, "An audio segment has no usable AceStepFun track and was ignored."));
+                diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SegmentIgnoredNoSource, "An audio track has no usable AceStepFun source and was ignored."));
                 continue;
             }
             if (segment.SourceKind == AudioSourceKind.Upload
                 && string.IsNullOrWhiteSpace(segment.UploadedMedia?.Data))
             {
-                diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SegmentIgnoredNoSource, "An audio segment has no usable upload source and was ignored."));
+                diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SegmentIgnoredNoSource, "An audio track has no usable upload source and was ignored."));
                 continue;
             }
             items.Add(segment);
@@ -61,7 +61,7 @@ internal static class AudioSegmentPlanCompiler
             diagnostics.Add(new(
                 PlanDiagnosticSeverity.Warning,
                 SegmentsWithoutBase,
-                "Audio segments have no locked base track, so only their windows are preserved and gaps are generated."));
+                "Audio tracks have no locked base audio, so only their windows are preserved and gaps are generated."));
         }
         return new(new(ordered), diagnostics.ToImmutable());
     }

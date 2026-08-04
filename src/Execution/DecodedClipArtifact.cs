@@ -28,6 +28,13 @@ internal sealed record DecodedOutputHandle(
         return new(output.Node.Id, output.SlotIndex, kind);
     }
 
+    /// <summary>Rebuilds an audio handle from a graph path a mixer produced outside the bridge.</summary>
+    internal static DecodedOutputHandle FromPath(JArray path) =>
+        path is { Count: 2 }
+            ? new((string)path[0], (int)path[1], DecodedMediaKind.Audio)
+            : throw VideoStagesInvariant.Failure(
+                "VideoStages: decoded audio path is not a node output.");
+
     internal INodeOutput Resolve(WorkflowBridge bridge) =>
         bridge.ResolvePath(new JArray(NodeId, SlotIndex));
 
