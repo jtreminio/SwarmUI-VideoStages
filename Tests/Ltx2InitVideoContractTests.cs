@@ -195,6 +195,38 @@ public class Ltx2InitVideoContractTests
     }
 
     /// <summary>
+    /// The resample target is the timeline's rate, not <c>SwarmVideoResampleFPS</c>'s own 24 fps
+    /// default — which is all the fixture-rate conform assertions elsewhere can read back. At 30 fps
+    /// the same 0.6s slice starts 30 frames in and is 18 raw frames, snapped up to LTX's 8k+1 grid.
+    /// </summary>
+    [Fact]
+    public async Task A_sourced_clip_conforms_to_a_non_default_timeline_rate()
+    {
+        const int Rate = 30;
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+
+        JObject workflow = await fixture.GenerateImageToVideoAsync(
+            MakeDocument(SourcedClip(SourcedStage(fixture))),
+            post => post["videofps"] = Rate);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmFrameWindowNode window = AssertSourceConformChain(
+            bridge,
+            (int)(StartSeconds * Rate),
+            25,
+            VideoStagesWorkflowFixture.Width,
+            VideoStagesWorkflowFixture.Height,
+            Rate);
+        SwarmKSamplerNode sourced = StageSampler(bridge, 0);
+        Assert.True(ReachesUpstream(bridge, FootageEncodeOf(sourced), window.Id));
+        Assert.Equal(Rate, live.FinalVideoSave().Fps.LiteralAsDouble());
+
+        live.AssertAllLive(window, sourced);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
     /// Without a clip duration there is no usable slice of the upload, so the footage is dropped at
     /// parse time — no loader is built at all — and the clip generates from an empty latent at the
     /// request's own frame count.
@@ -226,7 +258,8 @@ public class Ltx2InitVideoContractTests
             latent.LATENT,
             Assert.IsType<LTXVImgToVideoInplaceNode>(
                 JointLatentOf(sampler).VideoLatent.Connection?.Node).LatentInput.Connection);
-        Assert.Contains(
+        // Once: the footage is dropped at parse time, so nothing downstream re-reports it.
+        Assert.Single(
             RequestWarnings(generator.UserInput),
             warning => warning.Contains("source video but no usable duration"));
 
@@ -451,8 +484,13 @@ public class Ltx2InitVideoContractTests
 
         SwarmKSamplerNode sampler = StageSampler(bridge, 0);
         Assert.True(ReachesUpstream(bridge, FootageEncodeOf(sampler), window.Id));
+        // The whole video half of the joint latent, not just the footage encode: a leak would live
+        // in the in-place guide branch that FootageEncodeOf unwraps past.
         Assert.False(
-            ReachesUpstream(bridge, FootageEncodeOf(sampler), driveComponents.Id),
+            ReachesUpstream(
+                bridge,
+                JointLatentOf(sampler).VideoLatent.Connection?.Node,
+                driveComponents.Id),
             "Drive video frames leaked into the sampled visual path.");
 
         live.AssertAllLive(refTokens, sampler);
@@ -1175,7 +1213,20 @@ public class Ltx2InitVideoContractTests
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>().Count);
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count);
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXVCropGuidesNode>().Count);
+        // Each crop on its own stage's latent: two crops stacked on stage 0 would count the same.
+        Assert.All(
+            new[] { first, second },
+            stage => Assert.Single(
+                bridge.Graph.NodesOfType<LTXVCropGuidesNode>(),
+                crop => ReferenceEquals(
+                    crop.LatentInput.Connection?.Node, OutputOf(bridge, stage))));
         Assert.IsType<LTXVAudioVAEDecodeNode>(live.PublishedAudio());
+
+        // The root save is taken over, not duplicated: the one publication AssertShippable counts
+        // traces back to the footage the timeline replaced the root generation with.
+        Assert.True(
+            ReachesUpstream(bridge, live.FinalVideoSave().Images.Connection?.Node, window.Id),
+            "The published save does not trace back to the clip's footage chain.");
 
         live.AssertAllLive(window, first, second);
         AssertShippable(bridge, workflow, live);

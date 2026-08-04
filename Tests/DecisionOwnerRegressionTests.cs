@@ -341,8 +341,9 @@ public class DecisionOwnerRegressionTests
         Assert.Equal(8, hostResize.ExtraInputs["resize_type.multiple"]?.Value<int>());
         Assert.Equal(64, ltxResize.ExtraInputs["resize_type.multiple"]?.Value<int>());
         Assert.Equal(hostResize.Id, ltxResize.Input.Connection?.Node.Id);
-        Assert.Equal(0, wrapper.BatchIndex.LiteralAsInt());
-        Assert.Equal(1, wrapper.Length.LiteralAsInt());
+        // ImageFromBatch defaults to exactly this slice, so read what core actually shipped.
+        TypedWorkflowAssertions.AssertShippedLiteral(generator.Workflow, wrapper, "batch_index", 0);
+        TypedWorkflowAssertions.AssertShippedLiteral(generator.Workflow, wrapper, "length", 1);
         Assert.Equal(ltxResize.Id, wrapper.Image.Connection?.Node.Id);
         Assert.Equal(wrapper.Id, apply.Image.Connection?.Node.Id);
 

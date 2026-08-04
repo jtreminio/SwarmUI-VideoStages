@@ -150,6 +150,14 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
+    /// <summary>
+    /// A stage-level <c>Base</c> reference carries no strength of its own — <c>refStrengths</c>
+    /// only indexes clip refs — so the guide runs at the architecture default of 1.0. That is also
+    /// <c>LTXVImgToVideoInplace</c>'s codegen default and cannot be authored differently here, so
+    /// the strength alone proves little; the wiring assertions are what make the test falsifiable.
+    /// <see cref="Primary_ref_strength_scales_the_in_place_guide_and_zero_removes_it"/> is the
+    /// control that an authored strength does reach this input.
+    /// </summary>
     [Fact]
     public async Task Stage_guide_uses_the_core_default_strength_without_a_ref_override()
     {
@@ -162,9 +170,14 @@ public class Ltx2StageChainContractTests
 
         LTXVImgToVideoInplaceNode guide = Assert.Single(
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
-        Assert.Equal(1.0, guide.Strength.LiteralAsDouble());
+        AssertShippedLiteral(workflow, guide, "strength", 1.0);
+        Assert.Equal(false, ShippedInput(workflow, guide, "bypass"));
+        // The strength is only worth anything if this guide is the one the stage samples.
+        SwarmKSamplerNode sampler = StageSampler(bridge, 0);
+        Assert.Same(guide, JointLatentOf(sampler).VideoLatent.Connection?.Node);
+        Assert.Same(BaseImage(bridge), FramingOf(guide).Image.Connection?.Node);
 
-        live.AssertAllLive(guide, StageSampler(bridge, 0));
+        live.AssertAllLive(guide, sampler);
         AssertShippable(bridge, workflow, live);
     }
 

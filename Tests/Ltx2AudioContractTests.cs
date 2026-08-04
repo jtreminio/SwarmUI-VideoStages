@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Architectures.Ltx2;
 using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -139,12 +140,14 @@ public class Ltx2AudioContractTests
             bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
         SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
             bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
-        Assert.Equal(VideoStagesWorkflowFixture.Fps, lengthToFrames.FrameRate.LiteralAsInt());
-        // LTX's 8k+1 grid, set by the injector. These happen to match the generated node defaults,
-        // so they only mean something asserted against the value the extension chose.
-        Assert.Equal(8, lengthToFrames.FrameGrid.LiteralAsInt());
-        Assert.Equal(1, lengthToFrames.FrameGridOrigin.LiteralAsInt());
-        Assert.Equal(1, lengthToFrames.FrameCountOffset.LiteralAsInt());
+        AssertShippedLiteral(workflow, lengthToFrames, "frame_rate", VideoStagesWorkflowFixture.Fps);
+        // The rate is all LTX chooses: unlike MiniMax, it never passes a grid, so the 8k+1 snap is
+        // whatever SwarmAudioLengthToFrames itself defaults to. That silent coupling is the claim —
+        // the inherited default must still be the grid LTX declares, or clips sized from audio
+        // land off the grid every other part of the architecture snaps to.
+        AssertShippedLiteral(workflow, lengthToFrames, "frame_grid", Ltx2ArchitectureModule.FrameGrid);
+        AssertShippedLiteral(workflow, lengthToFrames, "frame_grid_origin", 1);
+        AssertShippedLiteral(workflow, lengthToFrames, "frame_count_offset", 1);
 
         // The measured track is the padded one, not the raw upload: measuring the raw upload would
         // report a length the graph never generates at.

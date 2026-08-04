@@ -1,6 +1,8 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
+using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
 using VideoStages.Generated;
 using Xunit;
@@ -9,6 +11,17 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
+/// <summary>
+/// MiniMax H3 — the joint audio/video latent, its 17k+5 frame grid, keyframe references, stage
+/// chaining and the published tail — generated through the real Comfy API POST path.
+/// <para>
+/// Stages are selected with <c>StageSampler(bridge, stageId)</c>, which keys on the seed
+/// <c>Seed + 42 + StageId</c>. Node ids are allocation order, not stage order, so indexing an
+/// id-sorted sampler list would silently check the wrong stage. Reachability upstream from a stage
+/// sampler proves nothing about stage membership either, because a refining stage re-encodes its
+/// predecessor's output and so reaches that predecessor's whole branch.
+/// </para>
+/// </summary>
 [Collection("VideoStagesTests")]
 public class MiniMaxGeneratedWorkflowContractTests
 {
@@ -57,13 +70,11 @@ public class MiniMaxGeneratedWorkflowContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        Assert.Equal(2, samplers.Count);
-        Assert.Equal([0, 4], samplers.Select(node => node.StartAtStep.LiteralAsInt()).Order());
+        Assert.Equal(2, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count());
+        Assert.Equal(0, StageSampler(bridge, 0).StartAtStep.LiteralAsInt());
 
-        SwarmKSamplerNode refine = Assert.Single(
-            samplers,
-            node => node.StartAtStep.LiteralAsInt() == 4);
+        SwarmKSamplerNode refine = StageSampler(bridge, 1);
+        Assert.Equal(4, refine.StartAtStep.LiteralAsInt());
         LTXVConcatAVLatentNode joint = Assert.IsType<LTXVConcatAVLatentNode>(
             refine.LatentImage.Connection?.Node);
 
@@ -108,10 +119,9 @@ public class MiniMaxGeneratedWorkflowContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         // Identify stages by seed rather than by count: a real graph may carry other samplers.
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        SwarmKSamplerNode first = StageSampler(samplers, 43);
-        SwarmKSamplerNode second = StageSampler(samplers, 44);
-        SwarmKSamplerNode third = StageSampler(samplers, 45);
+        SwarmKSamplerNode first = StageSampler(bridge, 0);
+        SwarmKSamplerNode second = StageSampler(bridge, 1);
+        SwarmKSamplerNode third = StageSampler(bridge, 2);
 
         SwarmTrimFramesNode trim = Assert.Single(bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
         Assert.Equal(4, trim.TrimStart.LiteralAsInt());
@@ -149,6 +159,11 @@ public class MiniMaxGeneratedWorkflowContractTests
     /// <summary>
     /// Core's model-gen step picks the LoRA confinement by refiner/pixel-decoder/image-to-video
     /// state; only the production list exercises that branch.
+    /// <para>
+    /// The loader cache is the mechanism: a stage that loads LoRAs must publish its own loader
+    /// chain under the shared <c>modelloader_*</c> key, so the next stage reuses the plain loader
+    /// rather than inheriting the previous stage's LoRAs.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task Persisted_and_prompt_LoRAs_are_stage_scoped()
@@ -167,19 +182,19 @@ public class MiniMaxGeneratedWorkflowContractTests
         JObject clip = MakeClip(first, fixture.Stage("PreviousStage", control: 0.5, steps: 9));
         clip["duration"] = 1.0;
 
-        JObject workflow = await fixture.GenerateAsync(
-            MakeDocument(clip),
-            post => post["prompt"] =
-                "global <videoclip[0,0]><lora:UnitTest_MiniMax_Prompt:0.4:0.8>");
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(
+                    MakeDocument(clip),
+                    post => post["prompt"] =
+                        "global <videoclip[0,0]><lora:UnitTest_MiniMax_Prompt:0.4:0.8>"));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        SwarmKSamplerNode firstSampler = Assert.Single(
-            SamplerNodesOrdered(bridge),
-            sampler => sampler.Steps.LiteralAsInt() == MiniMaxWorkflowFixture.Steps);
-        SwarmKSamplerNode secondSampler = Assert.Single(
-            SamplerNodesOrdered(bridge),
-            sampler => sampler.Steps.LiteralAsInt() == 9);
+        SwarmKSamplerNode firstSampler = StageSampler(bridge, 0);
+        SwarmKSamplerNode secondSampler = StageSampler(bridge, 1);
+        Assert.Equal(MiniMaxWorkflowFixture.Steps, firstSampler.Steps.LiteralAsInt());
+        Assert.Equal(9, secondSampler.Steps.LiteralAsInt());
 
         ComfyNode[] loras = [.. LoraLoaderNodesOf(bridge)];
         Assert.Equal(2, loras.Length);
@@ -196,10 +211,15 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertModelOnlyLora(loras, "UnitTest_MiniMax_Persisted.safetensors", 0.6);
         AssertModelOnlyLora(loras, "UnitTest_MiniMax_Prompt.safetensors", 0.4);
 
+        // The shared loader cache is what the next stage reads; leaving stage 0's LoRA chain in it
+        // is how a stage-scoped LoRA would leak forward.
+        Assert.True(generator.NodeHelpers.TryGetValue(
+            $"modelloader_{fixture.Model.Name}_image2video",
+            out string cachedLoader));
+        Assert.Equal(secondSampler.Model.Connection?.Node.Id, cachedLoader.Split(':')[0]);
+
         live.AssertAllLive([firstSampler, secondSampler, .. loras]);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -241,14 +261,16 @@ public class MiniMaxGeneratedWorkflowContractTests
             node => node.StartIndex.LiteralAsDouble() == 1);
         Assert.Equal(39 / 24.0, sourceAudio.Duration.LiteralAsDouble().Value, 6);
 
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        Assert.Equal(2, samplers.Count);
-        Assert.All(samplers, sampler => Assert.Equal(4, sampler.StartAtStep.LiteralAsInt()));
+        SwarmKSamplerNode first = StageSampler(bridge, 0);
+        SwarmKSamplerNode second = StageSampler(bridge, 1);
+        Assert.Equal(2, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count());
+        Assert.Equal(4, first.StartAtStep.LiteralAsInt());
+        Assert.Equal(4, second.StartAtStep.LiteralAsInt());
 
         // The refine stage inherits both through stage 0's latent, so asserting them on stage 1
         // too would be true by transitivity.
-        Assert.True(ReachesUpstream(bridge, samplers[0], window.Id));
-        Assert.True(ReachesUpstream(bridge, samplers[0], sourceAudio.Id));
+        Assert.True(ReachesUpstream(bridge, first, window.Id));
+        Assert.True(ReachesUpstream(bridge, first, sourceAudio.Id));
         Assert.Single(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
 
         // One joint latent per stage survives core's post-cleanup, which collapses
@@ -256,7 +278,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>().Count());
         Assert.Equal(2, bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>().Count());
 
-        live.AssertAllLive(window, scale, sourceAudio, samplers[0], samplers[1]);
+        live.AssertAllLive(window, scale, sourceAudio, first, second);
         live.AssertNoOrphanNodes();
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
@@ -296,7 +318,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         LTXVConcatAVLatentNode joint = Assert.Single(
             bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
         Assert.Same(mask.LATENT, joint.AudioLatent.Connection);
-        SwarmKSamplerNode sampler = StageSampler(SamplerNodesOrdered(bridge), 43);
+        SwarmKSamplerNode sampler = StageSampler(bridge, 0);
         Assert.Same(joint, sampler.LatentImage.Connection?.Node);
 
         live.AssertAllLive(upload, encode, mask, joint, sampler);
@@ -338,10 +360,13 @@ public class MiniMaxGeneratedWorkflowContractTests
         Assert.Same(lengthToFrames.Frames, latent.Length.Connection);
         Assert.Null(latent.Length.LiteralAsInt());
 
-        live.AssertAllLive(upload, lengthToFrames, latent);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        // The encoded track is trimmed to the derived length, so the encode reads through the same
+        // node the latent takes its length from rather than the raw upload.
+        VAEEncodeAudioNode encode = Assert.Single(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.True(ReachesUpstream(bridge, encode.Audio.Connection?.Node, lengthToFrames.Id));
+
+        live.AssertAllLive(upload, lengthToFrames, latent, encode);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -375,18 +400,32 @@ public class MiniMaxGeneratedWorkflowContractTests
             node => node.Width.LiteralAsInt() == 768);
         Assert.All(
             new[] { framed512, framed768 },
-            node => Assert.Same(upload, node.ImagesInput.Connection?.Node));
+            node =>
+            {
+                Assert.Same(upload, node.ImagesInput.Connection?.Node);
+                Assert.Equal("fit-green", node.Method.LiteralAsString());
+            });
 
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        SwarmKSamplerNode first = StageSampler(samplers, 43);
-        SwarmKSamplerNode second = StageSampler(samplers, 44);
+        // The authored reference is fromEnd, so each stage must consume its framing through the
+        // keyframe node's last_frame slot — reachability from the sampler alone would not say which
+        // slot, nor that first_frame stayed unwired.
+        Assert.All(
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>(),
+            keyframes => Assert.Null(keyframes.FirstFrame.Connection));
+        Assert.Equal(
+            [512, 768],
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>()
+                .Select(keyframes => Assert.IsType<SwarmFrameImageNode>(
+                    keyframes.LastFrame.Connection?.Node).Width.LiteralAsInt())
+                .Order());
+
+        SwarmKSamplerNode first = StageSampler(bridge, 0);
+        SwarmKSamplerNode second = StageSampler(bridge, 1);
         Assert.True(ReachesUpstream(bridge, first.Positive.Connection?.Node, framed512.Id));
         Assert.True(ReachesUpstream(bridge, second.Positive.Connection?.Node, framed768.Id));
 
         live.AssertAllLive(upload, framed512, framed768, first, second);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -433,10 +472,20 @@ public class MiniMaxGeneratedWorkflowContractTests
                 Assert.Equal(320, node.Height.LiteralAsInt());
             });
 
+        // Which upload lands in which slot: two framed images of identical size would otherwise be
+        // interchangeable.
+        Assert.Equal(
+            "RklSU1Q=",
+            Assert.IsType<SwarmLoadImageB64Node>(firstFrame.ImagesInput.Connection?.Node)
+                .ImageBase64.LiteralAsString());
+        Assert.Equal(
+            "TEFTVA==",
+            Assert.IsType<SwarmLoadImageB64Node>(lastFrame.ImagesInput.Connection?.Node)
+                .ImageBase64.LiteralAsString());
+        Assert.Same(keyframes, StageSampler(bridge, 0).Positive.Connection?.Node);
+
         live.AssertAllLive([keyframes, firstFrame, lastFrame, .. uploads]);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     [Fact]
@@ -459,9 +508,8 @@ public class MiniMaxGeneratedWorkflowContractTests
                 .Select(node => node.Length.LiteralAsInt())
                 .Order());
 
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        SwarmKSamplerNode first = StageSampler(samplers, 43);
-        SwarmKSamplerNode second = StageSampler(samplers, 44);
+        SwarmKSamplerNode first = StageSampler(bridge, 0);
+        SwarmKSamplerNode second = StageSampler(bridge, 1);
 
         SwarmSaveAnimationWSNode save = Assert.Single(
             bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
@@ -470,9 +518,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         Assert.Equal(MiniMaxWorkflowFixture.Fps, save.Fps.LiteralAsDouble());
 
         live.AssertAllLive(first, second);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -489,7 +535,9 @@ public class MiniMaxGeneratedWorkflowContractTests
         JObject longClip = MakeClip(fixture.Stage());
         longClip["duration"] = 1.0;
 
-        JObject workflow = await fixture.GenerateAsync(MakeDocument(shortClip, longClip));
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(MakeDocument(shortClip, longClip)));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -506,10 +554,12 @@ public class MiniMaxGeneratedWorkflowContractTests
             ReachesUpstream(bridge, save.Images.Connection?.Node, blend.Id),
             "The published video does not read the crossfade merge.");
 
+        // The overlap is consumed, not appended: 22 + 39 frames merged over 8.
+        Assert.Equal(53, generator.CurrentMedia.Frames);
+        Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.AttachedAudio?.DataType);
+
         live.AssertAllLive(ramp, blend);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -533,19 +583,30 @@ public class MiniMaxGeneratedWorkflowContractTests
 
         SwarmSetAudioMaskWindowsNode carryMask = Assert.Single(
             bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>());
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        SwarmKSamplerNode first = StageSampler(samplers, 43);
-        SwarmKSamplerNode second = StageSampler(samplers, 44);
+        SwarmKSamplerNode first = StageSampler(bridge, 0);
+        SwarmKSamplerNode second = StageSampler(bridge, 1);
 
         // The carry conditions the SECOND clip from the FIRST clip's tail, not the other way round.
         Assert.True(ReachesUpstream(bridge, second, carryMask.Id));
         Assert.False(ReachesUpstream(bridge, first, carryMask.Id));
         Assert.True(ReachesUpstream(bridge, carryMask, first.Id));
 
-        live.AssertAllLive(carryMask, first, second);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        // The preserved window is the 8-frame overlap at the head of the second clip, and the
+        // carried track is cut from the tail of the first clip's 22 frames.
+        JObject window = Assert.IsType<JObject>(
+            Assert.Single(JArray.Parse(carryMask.Windows.LiteralAsString())));
+        Assert.Equal(0, window.Value<double>("start"));
+        Assert.Equal(0.33, window.Value<double>("end"), 6);
+        // The graph also carries the merge's own tail trim, so select the carried cut by the mask
+        // that reads it rather than by the values under test.
+        TrimAudioDurationNode carryTrim = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
+            node => ReachesUpstream(bridge, carryMask.Samples.Connection?.Node, node.Id));
+        Assert.Equal(14 / 24.0, carryTrim.StartIndex.LiteralAsDouble().Value, 6);
+        Assert.Equal(8 / 24.0, carryTrim.Duration.LiteralAsDouble().Value, 6);
+
+        live.AssertAllLive(carryMask, carryTrim, first, second);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -565,7 +626,9 @@ public class MiniMaxGeneratedWorkflowContractTests
             ["startSeconds"] = 1.0,
         };
 
-        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(MakeDocument(clip)));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -584,6 +647,16 @@ public class MiniMaxGeneratedWorkflowContractTests
             bridge.Graph.NodesOfType<SwarmKSamplerNode>(),
             node => ReachesUpstream(bridge, save.Images.Connection?.Node, node.Id));
         Assert.Empty(bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+
+        // The handoff the next clip or stage would read: unsnapped frame count, and the source's
+        // own audio still attached rather than a generated track.
+        Assert.Equal(25, generator.CurrentMedia.Frames);
+        Assert.True(ReachesUpstream(
+            bridge,
+            bridge.ResolvePath((JArray)generator.CurrentMedia.Path)?.Node,
+            window.Id));
+        Assert.IsType<TrimAudioDurationNode>(
+            bridge.ResolvePath((JArray)generator.CurrentMedia.AttachedAudio.Path)?.Node);
 
         live.AssertAllLive(window, conform);
         AssertNoDanglingNodeRefs(workflow);
@@ -610,9 +683,8 @@ public class MiniMaxGeneratedWorkflowContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        SwarmKSamplerNode third = StageSampler(samplers, 45);
-        SwarmKSamplerNode fourth = StageSampler(samplers, 46);
+        SwarmKSamplerNode third = StageSampler(bridge, 2);
+        SwarmKSamplerNode fourth = StageSampler(bridge, 3);
 
         SetLatentNoiseMaskNode thirdMask = Assert.IsType<SetLatentNoiseMaskNode>(
             Assert.IsType<LTXVConcatAVLatentNode>(third.LatentImage.Connection?.Node)
@@ -769,8 +841,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        SwarmKSamplerNode refine = StageSampler(samplers, MiniMaxWorkflowFixture.Seed + 43);
+        SwarmKSamplerNode refine = StageSampler(bridge, 1);
         Assert.Equal(expectedStartStep, refine.StartAtStep.LiteralAsInt());
         Assert.Equal(MiniMaxWorkflowFixture.Steps, refine.Steps.LiteralAsInt());
 
@@ -900,7 +971,7 @@ public class MiniMaxGeneratedWorkflowContractTests
 
         SwarmLoadAudioB64Node upload = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
-        SwarmKSamplerNode sampler = StageSampler(SamplerNodesOrdered(bridge), 43);
+        SwarmKSamplerNode sampler = StageSampler(bridge, 0);
         Assert.True(
             ReachesUpstream(bridge, sampler, upload.Id),
             "The uploaded audio does not reach the sampler.");
@@ -908,10 +979,14 @@ public class MiniMaxGeneratedWorkflowContractTests
             ReachesUpstream(bridge, live.FinalVideoSave().Audio.Connection?.Node, upload.Id),
             "The uploaded audio does not reach the published save.");
 
+        // The positive control is Init_video_refines_conformed_footage_and_its_audio, where the
+        // same footage does build a start_index 1 trim of its own soundtrack.
+        Assert.DoesNotContain(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
+            node => node.StartIndex.LiteralAsDouble() == 1);
+
         live.AssertAllLive(upload, sampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -966,4 +1041,439 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
     }
+
+    /// <summary>
+    /// A pixel upscale scales the previous stage's decoded frames, so the next stage's joint latent
+    /// is re-encoded from the scaled image rather than from a scaled latent.
+    /// </summary>
+    [Fact]
+    public async Task A_pixel_upscale_resizes_the_decoded_frames_before_the_next_stage()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(
+            fixture.Stage(),
+            fixture.Stage(
+                "PreviousStage",
+                control: 0.5,
+                upscale: 1.5,
+                upscaleMethod: "pixel-lanczos"));
+        clip["duration"] = 1.0;
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmKSamplerNode first = StageSampler(bridge, 0);
+        SwarmKSamplerNode second = StageSampler(bridge, 1);
+
+        ImageScaleNode scale = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            node => node.Width.LiteralAsInt() == 768);
+        Assert.Equal(768, scale.Height.LiteralAsInt());
+        Assert.Equal("lanczos", scale.UpscaleMethod.LiteralAsString());
+        Assert.True(
+            ReachesUpstream(bridge, scale, first.Id),
+            "The upscale does not read the previous stage's output.");
+        Assert.True(
+            ReachesUpstream(bridge, JointLatentOf(second).VideoLatent.Connection?.Node, scale.Id),
+            "The next stage's video latent is not built from the upscaled frames.");
+
+        // Nothing is scaled in latent space; the latent sibling above is the positive control.
+        Assert.Empty(bridge.Graph.NodesOfType<LatentUpscaleByNode>());
+
+        live.AssertAllLive(first, second, scale);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// Latent interpolation scales the video half in latent space and leaves the audio half — which
+    /// shares the same joint latent — untouched. The zero-control sibling only proves the node
+    /// survives core's sampler deletion; this proves a refining stage samples the scaled latent.
+    /// </summary>
+    [Fact]
+    public async Task A_latent_interpolation_upscale_resizes_only_the_video_half()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(
+            fixture.Stage(),
+            fixture.Stage(
+                "PreviousStage",
+                control: 0.5,
+                upscale: 2.0,
+                upscaleMethod: "latent-bislerp"));
+        clip["duration"] = 1.0;
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmKSamplerNode first = StageSampler(bridge, 0);
+        SwarmKSamplerNode second = StageSampler(bridge, 1);
+
+        LatentUpscaleByNode scale = Assert.Single(bridge.Graph.NodesOfType<LatentUpscaleByNode>());
+        Assert.Equal("bislerp", scale.UpscaleMethod.LiteralAsString());
+        // 2.0, not the authored-elsewhere 1.5: LatentUpscaleBy's generated default IS 1.5.
+        Assert.Equal(2.0, scale.ScaleBy.LiteralAsDouble());
+        Assert.True(ReachesUpstream(bridge, scale, first.Id));
+
+        LTXVConcatAVLatentNode joint = JointLatentOf(second);
+        Assert.Same(scale.LATENT, joint.VideoLatent.Connection);
+        Assert.NotSame(scale.LATENT, joint.AudioLatent.Connection);
+
+        // No pixel round trip: nothing is scaled to the upscaled edge in image space.
+        Assert.DoesNotContain(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            node => node.Width.LiteralAsInt() == 1024);
+        Assert.NotNull(live.PublishedAudio());
+
+        live.AssertAllLive(first, second, scale);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// A model upscale runs an ESRGAN-style model over the decoded frames and then fits the result
+    /// to the stage resolution, because the model's own factor is fixed and need not match the
+    /// authored one.
+    /// </summary>
+    [Fact]
+    public async Task A_model_upscale_fits_its_output_to_the_next_stage_resolution()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(
+            fixture.Stage(),
+            fixture.Stage(
+                "PreviousStage",
+                control: 0.5,
+                upscale: 1.5,
+                upscaleMethod: $"model-{UpscaleModelFileName}"));
+        clip["duration"] = 1.0;
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmKSamplerNode first = StageSampler(bridge, 0);
+        SwarmKSamplerNode second = StageSampler(bridge, 1);
+
+        UpscaleModelLoaderNode loader = Assert.Single(
+            bridge.Graph.NodesOfType<UpscaleModelLoaderNode>());
+        Assert.Equal(UpscaleModelFileName, loader.ModelName.LiteralAsString());
+        ImageUpscaleWithModelNode modelUpscale = Assert.Single(
+            bridge.Graph.NodesOfType<ImageUpscaleWithModelNode>());
+        Assert.Same(loader, modelUpscale.UpscaleModel.Connection?.Node);
+        Assert.True(ReachesUpstream(bridge, modelUpscale, first.Id));
+
+        ImageScaleNode fit = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            node => ReferenceEquals(node.Image.Connection?.Node, modelUpscale));
+        Assert.Equal(768, fit.Width.LiteralAsInt());
+        Assert.Equal(768, fit.Height.LiteralAsInt());
+        Assert.True(
+            ReachesUpstream(bridge, JointLatentOf(second).VideoLatent.Connection?.Node, fit.Id),
+            "The next stage's video latent is not built from the fitted upscale.");
+
+        live.AssertAllLive(first, second, loader, modelUpscale, fit);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// A ControlNet source's own soundtrack can set the clip length, which moves the 17k+5 snap out
+    /// of the compiler and into the graph exactly as an uploaded track does.
+    /// </summary>
+    [Fact]
+    public async Task ControlNet_audio_can_drive_the_entry_joint_latent_length()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["audioSource"] = Constants.AudioSourceControlNet;
+        clip["clipLengthFromAudio"] = true;
+
+        JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
+            fixture.Post(MakeDocument(clip)),
+            extraSteps: [SeedControlNetAudioCaptures(1)]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        GetVideoComponentsNode source = Assert.Single(
+            bridge.Graph.NodesOfType<GetVideoComponentsNode>());
+        SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.Same(source.Audio, lengthToFrames.AudioInput.Connection);
+        Assert.Equal(17, lengthToFrames.FrameGrid.LiteralAsInt());
+        Assert.Equal(5, lengthToFrames.FrameGridOrigin.LiteralAsInt());
+
+        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        Assert.Same(lengthToFrames.Frames, latent.Length.Connection);
+
+        VAEEncodeAudioNode encode = Assert.Single(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.True(ReachesUpstream(bridge, encode, source.Id));
+        LTXVConcatAVLatentNode joint = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        Assert.Same(joint, StageSampler(bridge, 0).LatentImage.Connection?.Node);
+
+        live.AssertAllLive(lengthToFrames, latent, encode, joint);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// No capture and an ambiguous pair of captures both mean "no usable ControlNet audio". The
+    /// request must continue on H3's native audio generation rather than refuse or silently build
+    /// a conditioned latent from the wrong source.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    public async Task Unusable_ControlNet_audio_warns_and_keeps_native_audio_generation(
+        int capturedTracks)
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["audioSource"] = Constants.AudioSourceControlNet;
+        clip["clipLengthFromAudio"] = true;
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(MakeDocument(clip)),
+                extraSteps: capturedTracks == 0
+                    ? null
+                    : [SeedControlNetAudioCaptures(capturedTracks)]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Contains(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains("ControlNet audio") && warning.Contains("using silence"));
+
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        Assert.Equal(MiniMaxWorkflowFixture.GeneratedFrames, latent.Length.LiteralAsInt());
+        SwarmKSamplerNode sampler = StageSampler(bridge, 0);
+        Assert.Same(latent, sampler.LatentImage.Connection?.Node);
+
+        // The refused captures are this test's own scaffolding standing in for core's ControlNet
+        // chain; with none seeded (arm 0) this is the ordinary no-orphans assertion.
+        Assert.All(
+            live.OrphanNodes(),
+            orphan => Assert.StartsWith($"{GetVideoComponentsNode.ClassType}#", orphan));
+
+        live.AssertAllLive(latent, sampler);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    /// <summary>
+    /// A sibling extension's AceStepFun track is another length source; the extension reaches it by
+    /// its reserved decode node id, not by scanning for an audio node.
+    /// </summary>
+    [Fact]
+    public async Task AceStepFun_audio_can_drive_the_entry_joint_latent_length()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["audioSource"] = "audio0";
+        clip["clipLengthFromAudio"] = true;
+
+        JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
+            fixture.Post(MakeDocument(clip)),
+            extraSteps: [SeedAceStepFunAudioTrack(0)]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        string aceDecodeId = AudioHandler.MakeAceStepFunDecodeId(0);
+        SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.True(ReachesUpstream(
+            bridge,
+            lengthToFrames.AudioInput.Connection?.Node,
+            aceDecodeId));
+
+        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        Assert.Same(lengthToFrames.Frames, latent.Length.Connection);
+
+        VAEEncodeAudioNode encode = Assert.Single(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.True(ReachesUpstream(bridge, encode.Audio.Connection?.Node, aceDecodeId));
+        LTXVConcatAVLatentNode joint = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        Assert.Same(joint, StageSampler(bridge, 0).LatentImage.Connection?.Node);
+
+        live.AssertAllLive(lengthToFrames, latent, encode, joint);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// An AceStepFun track index nothing published must warn and fall back, not silently generate
+    /// against a nonexistent node id.
+    /// </summary>
+    [Fact]
+    public async Task Missing_AceStepFun_audio_warns_and_keeps_native_audio_generation()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["audioSource"] = "audio7";
+        clip["clipLengthFromAudio"] = true;
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(MakeDocument(clip)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Contains(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains("audio7")
+                && warning.Contains("continuing without that source"));
+
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        // The authored length stands, so it is a literal rather than a wired frame count.
+        Assert.Equal(MiniMaxWorkflowFixture.GeneratedFrames, latent.Length.LiteralAsInt());
+        Assert.Same(latent, StageSampler(bridge, 0).LatentImage.Connection?.Node);
+
+        live.AssertLive(latent);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// A timeline audio segment is projected onto whichever clip it overlaps. Its spans are
+    /// authored against the timeline, so the graph must pad the track to the clip's opening and
+    /// condition only the clip the span lands in.
+    /// </summary>
+    [Fact]
+    public async Task Timeline_audio_uses_aligned_clip_windows_and_conditions_only_its_own_clip()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject first = MakeClip(1.0, fixture.Stage());
+        JObject second = MakeClip(1.0, fixture.Stage());
+        JObject document = MakeDocument(first, second);
+        // 0.1s into the second clip, which opens at the first clip's 39 frames.
+        document["audioTracks"] = new JArray(AudioTrack(
+            "timeline-segment",
+            0.5,
+            "timeline.wav",
+            AudioSpan(39.0 / 24.0 + 0.1, 0.2, 0.1)));
+
+        JObject workflow = await fixture.GenerateAsync(document);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmLoadAudioB64Node upload = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        TrimAudioDurationNode trim = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.Equal(0.1, trim.StartIndex.LiteralAsDouble());
+        Assert.Equal(0.2, trim.Duration.LiteralAsDouble().Value, 8);
+
+        // Two silences: the lead-in inside the clip, and the whole first clip the span skips.
+        double?[] silences = [.. bridge.Graph.NodesOfType<EmptyAudioNode>()
+            .Select(node => node.Duration.LiteralAsDouble())
+            .Order()];
+        Assert.Equal(2, silences.Length);
+        Assert.Equal(0.1, silences[0].Value, 8);
+        Assert.Equal(39.0 / 24.0, silences[1].Value, 8);
+
+        VAEEncodeAudioNode encode = Assert.Single(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        Assert.True(ReachesUpstream(bridge, encode.Audio.Connection?.Node, upload.Id));
+
+        // A windowed mask, not the whole-track preserve mask an uploaded clip audio would build.
+        Assert.Empty(bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+        SwarmSetAudioMaskWindowsNode mask = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmSetAudioMaskWindowsNode>());
+        JObject window = Assert.IsType<JObject>(
+            Assert.Single(JArray.Parse(mask.Windows.LiteralAsString())));
+        Assert.Equal(0.1, window.Value<double>("start"));
+        Assert.Equal(0.3, window.Value<double>("end"));
+
+        LTXVConcatAVLatentNode joint = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        Assert.Same(mask.Latent, joint.AudioLatent.Connection);
+        SwarmKSamplerNode conditioned = StageSampler(bridge, 1);
+        SwarmKSamplerNode unconditioned = StageSampler(bridge, 0);
+        Assert.Same(joint, conditioned.LatentImage.Connection?.Node);
+        Assert.False(ReachesUpstream(bridge, unconditioned, upload.Id));
+
+        live.AssertAllLive(upload, trim, encode, mask, conditioned, unconditioned);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// Two references resolving to the same media at the same stage resolution share one framing
+    /// node, so both keyframe slots read the same output — the reuse must not drop one of them.
+    /// </summary>
+    [Fact]
+    public async Task Refiner_first_and_last_frame_references_share_one_framing()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.CreateWithBaseModel();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["refs"] = new JArray(MakeRef("Refiner"), MakeRef("Refiner", fromEnd: true));
+
+        JObject workflow = await fixture.GenerateImageToVideoAsync(
+            MakeDocument(clip),
+            post =>
+            {
+                // Core's refiner step is gated on BOTH of these being present.
+                post["refinermethod"] = "PostApply";
+                post["refinercontrolpercentage"] = 0.2;
+            });
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmMiniMaxH3AddKeyframesNode keyframes = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
+        Assert.NotNull(keyframes.FirstFrame.Connection);
+        Assert.NotNull(keyframes.LastFrame.Connection);
+        Assert.Same(keyframes.FirstFrame.Connection, keyframes.LastFrame.Connection);
+        AssertImageSource(keyframes.FirstFrame.Connection.Node, "first_frame");
+        Assert.True(ReachesUpstream(
+            bridge,
+            keyframes.FirstFrame.Connection.Node,
+            fixture.RefinerSampler(bridge).Id));
+
+        live.AssertLive(keyframes);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    /// <summary>Nothing resolves or downloads this; the loader only names it.</summary>
+    private const string UpscaleModelFileName = "unit-test-upscaler.pth";
+
+    /// <summary>
+    /// Stands in for core's ControlNet chain, which no MiniMax POST shape builds: the extension
+    /// reads captures out of <c>NodeHelpers</c>, so the seeded node plus its key is the whole
+    /// contract. Priority 11.05 is after core's root graph is dropped and before the stages run.
+    /// </summary>
+    private static WorkflowGenerator.WorkflowGenStep SeedControlNetAudioCaptures(int count) =>
+        new(g =>
+        {
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            for (int index = 0; index < count; index++)
+            {
+                string nodeId = $"90{index + 1}";
+                bridge.AddNode(new GetVideoComponentsNode(), nodeId);
+                g.NodeHelpers[ControlNetCaptureKeys.Audio(index)] =
+                    new JArray(nodeId, 1).ToString(Newtonsoft.Json.Formatting.None);
+            }
+        }, 11.05);
+
+    /// <summary>Stands in for the sibling extension that publishes AceStepFun tracks.</summary>
+    private static WorkflowGenerator.WorkflowGenStep SeedAceStepFunAudioTrack(int trackIndex) =>
+        new(g =>
+        {
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            bridge.AddNode(
+                new VAEDecodeAudioNode(),
+                AudioHandler.MakeAceStepFunDecodeId(trackIndex));
+        }, 11.05);
 }

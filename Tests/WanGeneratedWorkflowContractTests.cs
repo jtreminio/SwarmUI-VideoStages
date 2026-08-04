@@ -271,7 +271,7 @@ public class WanGeneratedWorkflowContractTests
         }
         else
         {
-            Assert.Null(conditioning.ClipVisionOutput.Connection);
+            Assert.False(conditioning.ClipVisionOutput.HasValue);
             Assert.Empty(bridge.Graph.NodesOfType<CLIPVisionEncodeNode>());
         }
 
@@ -380,7 +380,8 @@ public class WanGeneratedWorkflowContractTests
 
         Wan22ImageToVideoLatentNode latent = Assert.Single(
             bridge.Graph.NodesOfType<Wan22ImageToVideoLatentNode>());
-        Assert.Null(latent.StartImage.Connection);
+        // Absent, not merely unconnected: a literal here would still be a donor.
+        Assert.False(latent.StartImage.HasValue);
         Assert.Equal(25, latent.Length.LiteralAsInt());
         Assert.Equal(512, latent.Width.LiteralAsInt());
         Assert.Equal(512, latent.Height.LiteralAsInt());
@@ -417,7 +418,7 @@ public class WanGeneratedWorkflowContractTests
 
         Wan22ImageToVideoLatentNode latent = Assert.Single(
             bridge.Graph.NodesOfType<Wan22ImageToVideoLatentNode>());
-        Assert.Null(latent.StartImage.Connection);
+        Assert.False(latent.StartImage.HasValue);
         Assert.Equal(81, latent.Length.LiteralAsInt());
         Assert.Equal(81, generator.CurrentMedia.Frames);
 
@@ -450,7 +451,7 @@ public class WanGeneratedWorkflowContractTests
             first.LatentImage.Connection?.Node);
         Wan22ImageToVideoLatentNode continuation = Assert.IsType<Wan22ImageToVideoLatentNode>(
             second.LatentImage.Connection?.Node);
-        Assert.Null(native.StartImage.Connection);
+        Assert.False(native.StartImage.HasValue);
         Assert.True(ReachesUpstream(
             bridge,
             continuation.StartImage.Connection?.Node,
@@ -562,8 +563,8 @@ public class WanGeneratedWorkflowContractTests
 
         WanFirstLastFrameToVideoNode conditioning = Assert.Single(
             bridge.Graph.NodesOfType<WanFirstLastFrameToVideoNode>());
-        Assert.Null(conditioning.StartImage.Connection);
-        Assert.Null(conditioning.ClipVisionStartImage.Connection);
+        Assert.False(conditioning.StartImage.HasValue);
+        Assert.False(conditioning.ClipVisionStartImage.HasValue);
         SwarmLoadImageB64Node upload = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
         Assert.Equal("TEFTVA==", upload.ImageBase64.LiteralAsString());
@@ -581,7 +582,7 @@ public class WanGeneratedWorkflowContractTests
         }
         else
         {
-            Assert.Null(conditioning.ClipVisionEndImage.Connection);
+            Assert.False(conditioning.ClipVisionEndImage.HasValue);
             Assert.Empty(bridge.Graph.NodesOfType<CLIPVisionEncodeNode>());
         }
 
@@ -615,11 +616,16 @@ public class WanGeneratedWorkflowContractTests
 
         WanFirstLastFrameToVideoNode conditioning = Assert.Single(
             bridge.Graph.NodesOfType<WanFirstLastFrameToVideoNode>());
-        Assert.Null(conditioning.StartImage.Connection);
+        Assert.False(conditioning.StartImage.HasValue);
         SwarmLoadImageB64Node upload = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
         Assert.Equal("TEFTVA==", upload.ImageBase64.LiteralAsString());
         Assert.NotNull(conditioning.EndImage.Connection);
+        // Exactly one: the valid last reference must not draw a warning of its own, which is the
+        // whole "does not take the other down with it" claim.
+        Assert.Single(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains("reference", StringComparison.Ordinal));
         Assert.Contains(
             RequestWarnings(generator.UserInput),
             warning => warning.Contains(
@@ -712,9 +718,12 @@ public class WanGeneratedWorkflowContractTests
                 upload.ImageBase64.LiteralAsString() == "TEFTVA==").Id));
 
         // The global end image really was accepted by the request — it is simply never used, and
-        // the extension leaves it on the input rather than consuming it.
+        // the extension leaves it on the input rather than consuming it. Its payload is what proves
+        // that: the two uploads above are the clip's own, and the request's is nowhere in the graph.
         Assert.NotNull(generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null));
-        Assert.Empty(bridge.Graph.NodesOfType<LoadImageNode>());
+        Assert.DoesNotContain(
+            uploads,
+            upload => upload.ImageBase64.LiteralAsString() == EndImageBase64);
 
         live.AssertAllLive(conditioning, StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
@@ -726,6 +735,11 @@ public class WanGeneratedWorkflowContractTests
     /// An authored clip duration replaces the request's frame count and is snapped onto WAN's 4k+1
     /// grid — 13 frames of footage become 17. The request's own value is left as the user set it,
     /// so a later consumer still sees 25.
+    /// <para>
+    /// Both 2.1 checkpoints are exercised because the I2V one is the interesting arm: entered as
+    /// text-to-video it must build the same bare native latent as the T2V one rather than have
+    /// image conditioning invented for it.
+    /// </para>
     /// </summary>
     [Theory]
     [InlineData(WanWorkflowFixture.Wan21I2v14bFixturePath)]
@@ -746,7 +760,15 @@ public class WanGeneratedWorkflowContractTests
         Assert.Equal(17, latent.Length.LiteralAsInt());
         Assert.Equal(17, generator.CurrentMedia.Frames);
         Assert.Equal(25, generator.UserInput.Get(T2IParamTypes.Text2VideoFrames));
-        Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        SwarmKSamplerNode stage = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        // The arm really loaded the checkpoint it names, and neither 2.1 shape conditions on an
+        // image it was never given.
+        Assert.Equal(
+            Path.GetFileName(modelFixturePath),
+            ModelBranchOf(stage).Loader.UnetName.LiteralAsString());
+        Assert.Empty(bridge.Graph.NodesOfType<WanImageToVideoNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<WanFirstLastFrameToVideoNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<CLIPVisionEncodeNode>());
 
         live.AssertAllLive(latent, StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
@@ -900,10 +922,19 @@ public class WanGeneratedWorkflowContractTests
         LoraLoaderModelOnlyNode persisted = Assert.Single(
             bridge.Graph.NodesOfType<LoraLoaderModelOnlyNode>(),
             node => node.LoraName.LiteralAsString() == "UnitTest_Wan_Persisted.safetensors");
-        Assert.IsType<UNETLoaderNode>(prompt.Model.Connection?.Node);
+        Assert.Equal(
+            Path.GetFileName(modelFixturePath),
+            Assert.IsType<UNETLoaderNode>(prompt.Model.Connection?.Node)
+                .UnetName.LiteralAsString());
         Assert.Same(prompt, persisted.Model.Connection?.Node);
         SwarmKSamplerNode stageSampler = StageSampler(bridge, 0);
         Assert.Same(persisted, stageSampler.Model.Connection?.Node);
+
+        // The arms are different graph shapes, which the LoRA chain alone would never notice: 14B
+        // conditions through WanImageToVideo, 5B through its own native latent.
+        bool is5b = modelFixturePath == WanWorkflowFixture.Wan22Ti2v5bFixturePath;
+        Assert.Equal(is5b ? 0 : 1, bridge.Graph.NodesOfType<WanImageToVideoNode>().Count);
+        Assert.Equal(is5b ? 1 : 0, bridge.Graph.NodesOfType<Wan22ImageToVideoLatentNode>().Count);
 
         // The request's own LoRA list is exactly what it was before the stages ran: the two the
         // prompt parser put there (a zero weight still counts) plus whatever the POST set. The
@@ -926,7 +957,7 @@ public class WanGeneratedWorkflowContractTests
             // reaches the graph even though it is still on the request.
             Wan22ImageToVideoLatentNode latent = Assert.Single(
                 bridge.Graph.NodesOfType<Wan22ImageToVideoLatentNode>());
-            Assert.Null(latent.StartImage.Connection);
+            Assert.False(latent.StartImage.HasValue);
             Assert.False(generator.IsImageToVideo);
             Assert.False(generator.IsImageToVideoSwap);
         }
@@ -1340,7 +1371,7 @@ public class WanGeneratedWorkflowContractTests
                 T2IParamTypes.CFGScale, T2IParamInput.SectionID_VideoSwap, false));
 
         live.AssertAllLive(high, low, highLoader, lowLoader);
-        AssertShippable(bridge, workflow, live);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 2);
     }
 
     /// <summary>
@@ -1415,6 +1446,11 @@ public class WanGeneratedWorkflowContractTests
             endImage,
             Assert.IsType<ImageScaleNode>(terminal.EndImage.Connection?.Node)
                 .Image.Connection?.Node);
+        // The end slot only: the start stays the host base image, so the continuation still opens
+        // from what the request generated rather than from the frame it is aiming at.
+        Assert.True(ReachesUpstream(
+            bridge, terminal.StartImage.Connection?.Node, fixture.BaseSampler(bridge).Id));
+        Assert.False(ReachesUpstream(bridge, terminal.StartImage.Connection?.Node, endImage.Id));
         Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeNode>());
 
         live.AssertAllLive(endImage, terminal, high, low);
@@ -1765,7 +1801,7 @@ public class WanGeneratedWorkflowContractTests
             bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.Equal(coreSaveId, save.Id);
         Assert.True(ReachesUpstream(bridge, save.Images.Connection?.Node, stage.Id));
-        Assert.Null(save.Audio.Connection);
+        Assert.False(save.Audio.HasValue);
         Assert.Null(generator.CurrentMedia.AttachedAudio);
         Assert.Empty(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
 
@@ -1850,7 +1886,7 @@ public class WanGeneratedWorkflowContractTests
         Assert.Empty(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
 
         live.AssertAllLive(window, encode, stage);
-        AssertShippable(bridge, workflow, live);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 2);
     }
 
     /// <summary>
@@ -1895,7 +1931,7 @@ public class WanGeneratedWorkflowContractTests
         Assert.Null(generator.CurrentMedia.AttachedAudio);
 
         live.AssertAllLive(handoff, first, third);
-        AssertShippable(bridge, workflow, live);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 3);
     }
 
     /// <summary>
@@ -2063,21 +2099,26 @@ public class WanGeneratedWorkflowContractTests
         Assert.Equal(24, generator.CurrentMedia.GetRawFPS());
 
         live.AssertAllLive(trim, first, second, third);
-        AssertShippable(bridge, workflow, live);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 3);
     }
 
     /// <summary>
     /// The request's global end image goes to the clip's last generating stage and nowhere else:
     /// the opening stage keeps plain image-to-video conditioning off the host base image. Core's
     /// own WAN video root, which would carry a third conditioning node, is pruned.
+    /// <para>
+    /// The 2.1 arm exists because 2.1 additionally CLIP-vision encodes both ends; without that
+    /// assertion it would run the same checks as its 2.2 sibling and pin nothing about the model.
+    /// </para>
     /// </summary>
     [Theory]
-    [InlineData(WanWorkflowFixture.Wan22I2v14bFixturePath, 0.5)]
-    [InlineData(WanWorkflowFixture.Wan22I2v14bFixturePath, 1)]
-    [InlineData(WanWorkflowFixture.Wan21I2v14bFixturePath, 1)]
+    [InlineData(WanWorkflowFixture.Wan22I2v14bFixturePath, 0.5, false)]
+    [InlineData(WanWorkflowFixture.Wan22I2v14bFixturePath, 1, false)]
+    [InlineData(WanWorkflowFixture.Wan21I2v14bFixturePath, 1, true)]
     public async Task The_global_end_image_belongs_to_the_clips_terminal_generating_stage(
         string modelFixturePath,
-        double terminalControl)
+        double terminalControl,
+        bool expectsClipVision)
     {
         using WanWorkflowFixture fixture =
             WanWorkflowFixture.CreateWithBaseModel(modelFixturePath);
@@ -2087,8 +2128,14 @@ public class WanGeneratedWorkflowContractTests
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
-                fixture.ImageToVideoPost(
-                    document, post => post["videoendimage"] = EndImagePayload));
+                fixture.ImageToVideoPost(document, post =>
+                {
+                    post["videoendimage"] = EndImagePayload;
+                    // Non-square on purpose: ImageScale defaults to 512x512, so the framing
+                    // assertion below would hold at the fixture's own resolution either way.
+                    post["width"] = 768;
+                    post["height"] = 448;
+                }));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -2106,9 +2153,31 @@ public class WanGeneratedWorkflowContractTests
         Assert.Equal(EndImageBase64, endImage.ImageBase64.LiteralAsString());
         ImageScaleNode framing = Assert.IsType<ImageScaleNode>(last.EndImage.Connection?.Node);
         Assert.Same(endImage, framing.Image.Connection?.Node);
-        Assert.Equal(512, framing.Width.LiteralAsInt());
-        Assert.Equal(512, framing.Height.LiteralAsInt());
+        Assert.Equal(768, framing.Width.LiteralAsInt());
+        Assert.Equal(448, framing.Height.LiteralAsInt());
         Assert.Equal("lanczos", framing.UpscaleMethod.LiteralAsString());
+
+        // The other half of "and nowhere else": the end image claims the end slot only. The start
+        // stays the host base image, which both conditioning nodes share.
+        SwarmKSamplerNode basePass = fixture.BaseSampler(bridge);
+        Assert.True(ReachesUpstream(bridge, last.StartImage.Connection?.Node, basePass.Id));
+        Assert.False(ReachesUpstream(bridge, last.StartImage.Connection?.Node, endImage.Id));
+        Assert.True(ReachesUpstream(bridge, opening.StartImage.Connection?.Node, basePass.Id));
+        Assert.False(ReachesUpstream(bridge, opening.StartImage.Connection?.Node, endImage.Id));
+
+        if (expectsClipVision)
+        {
+            Assert.True(ReachesUpstream(
+                bridge, last.ClipVisionEndImage.Connection?.Node, endImage.Id));
+            Assert.True(ReachesUpstream(
+                bridge, last.ClipVisionStartImage.Connection?.Node, basePass.Id));
+        }
+        else
+        {
+            Assert.False(last.ClipVisionEndImage.HasValue);
+            Assert.False(last.ClipVisionStartImage.HasValue);
+            Assert.Empty(bridge.Graph.NodesOfType<CLIPVisionEncodeNode>());
+        }
 
         if (terminalControl < 1)
         {
@@ -2213,7 +2282,7 @@ public class WanGeneratedWorkflowContractTests
         Assert.Equal(50, generator.CurrentMedia.Frames);
 
         live.AssertAllLive(conditioning, first, second, merged);
-        AssertShippable(bridge, workflow, live);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 2);
     }
 
     /// <summary>
@@ -2294,8 +2363,12 @@ public class WanGeneratedWorkflowContractTests
         SwarmKSamplerNode secondLow = StageSampler(bridge, 3);
         Assert.Same(firstHigh, firstLow.LatentImage.Connection?.Node);
         Assert.Same(secondHigh, secondLow.LatentImage.Connection?.Node);
-        Assert.False(ReachesUpstream(bridge, secondHigh, firstLow.Id));
-        Assert.False(ReachesUpstream(bridge, firstHigh, secondLow.Id));
+        // Asserted on the low samplers, not the high ones: a high sampler can never reach any low
+        // sampler in either clip — the wiring above makes low strictly downstream of high — so the
+        // reverse pair would hold whatever the clips were wired to. A low stage picking up the
+        // other clip's high latent is the failure that is actually possible here.
+        Assert.False(ReachesUpstream(bridge, secondLow, firstHigh.Id));
+        Assert.False(ReachesUpstream(bridge, firstLow, secondHigh.Id));
         Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeNode>());
 
         // Only the two low stages are decoded; the third decode is core's own base image.
@@ -2412,6 +2485,15 @@ public class WanGeneratedWorkflowContractTests
         WanFirstLastFrameToVideoNode last = Assert.Single(
             bridge.Graph.NodesOfType<WanFirstLastFrameToVideoNode>());
         Assert.Same(last.Positive, terminal.Positive.Connection);
+        // The stage that owns the end really did receive it, in the end slot only — without this
+        // the test proves only that a first/last node exists somewhere.
+        SwarmLoadImageB64Node endImage = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+        Assert.Equal(EndImageBase64, endImage.ImageBase64.LiteralAsString());
+        Assert.True(ReachesUpstream(bridge, last.EndImage.Connection?.Node, endImage.Id));
+        Assert.True(ReachesUpstream(
+            bridge, last.StartImage.Connection?.Node, fixture.BaseSampler(bridge).Id));
+        Assert.False(ReachesUpstream(bridge, last.StartImage.Connection?.Node, endImage.Id));
         // Core's base pass plus the two generating stages; the passthrough contributes none.
         Assert.Equal(3, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
         Assert.DoesNotContain(
@@ -2430,16 +2512,20 @@ public class WanGeneratedWorkflowContractTests
     /// runtime; either way the request's own end image is what conditions the clip.
     /// </summary>
     [Theory]
-    [InlineData("Base")]
-    [InlineData("Upload")]
-    public async Task An_unusable_last_reference_leaves_the_global_end_image_in_place(string source)
+    [InlineData("Base", "WAN final-frame reference uses source 'Base'")]
+    [InlineData("Upload", "Upload WAN final-frame reference is missing")]
+    public async Task An_unusable_last_reference_leaves_the_global_end_image_in_place(
+        string source,
+        string expectedWarning)
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(fixture.Stage(control: 1, steps: 10));
         clip["refs"] = new JArray(MakeRef(source, fromEnd: true));
 
-        JObject workflow = await fixture.GenerateImageToVideoAsync(
-            MakeDocument(clip), post => post["videoendimage"] = EndImagePayload);
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.ImageToVideoPost(
+                    MakeDocument(clip), post => post["videoendimage"] = EndImagePayload));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -2449,6 +2535,17 @@ public class WanGeneratedWorkflowContractTests
             bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
         Assert.Equal(EndImageBase64, endImage.ImageBase64.LiteralAsString());
         Assert.True(ReachesUpstream(bridge, conditioning.EndImage.Connection?.Node, endImage.Id));
+        // The end slot is all it claims: the start is still the host base image.
+        Assert.True(ReachesUpstream(
+            bridge, conditioning.StartImage.Connection?.Node, fixture.BaseSampler(bridge).Id));
+        Assert.False(ReachesUpstream(bridge, conditioning.StartImage.Connection?.Node, endImage.Id));
+        // The two arms are unusable for different reasons — planning drops the Base one, runtime
+        // refuses the payload-less Upload — and each says so in its own words, once. A second
+        // reference warning would mean the request's own end image was questioned too.
+        Assert.Single(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains("reference", StringComparison.Ordinal)
+                && warning.Contains(expectedWarning, StringComparison.Ordinal));
 
         live.AssertAllLive(endImage, conditioning, StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
@@ -2511,7 +2608,7 @@ public class WanGeneratedWorkflowContractTests
         Assert.Empty(bridge.Graph.NodesOfType<EmptyAudioNode>());
 
         live.AssertAllLive(latent, first, second, merged);
-        AssertShippable(bridge, workflow, live);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 2);
     }
 
     /// <summary>
@@ -2645,7 +2742,7 @@ public class WanGeneratedWorkflowContractTests
                 && !ReachesUpstream(bridge, save.Images.Connection?.Node, secondSampler.Id));
 
         live.AssertAllLive(wanLatent, silence, ltxSampler, wanSampler, merged);
-        AssertShippable(bridge, workflow, live);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 2);
     }
 
     /// <summary>
@@ -2732,7 +2829,7 @@ public class WanGeneratedWorkflowContractTests
         Assert.Same(trim, live.FinalVideoSave().Images.Connection?.Node);
 
         live.AssertAllLive(window, wanLatent, ltxSampler, wanSampler, trim, silence);
-        AssertShippable(bridge, workflow, live);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 2);
     }
 
     /// <summary>
@@ -2808,7 +2905,7 @@ public class WanGeneratedWorkflowContractTests
                 && !ReachesUpstream(bridge, save.Images.Connection?.Node, wanClose.Id));
 
         live.AssertAllLive(handoff, ltx, wanOpen, wanClose, trim, silence);
-        AssertShippable(bridge, workflow, live);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 3);
     }
 
     /// <summary>

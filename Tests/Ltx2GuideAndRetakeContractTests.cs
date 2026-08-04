@@ -41,14 +41,20 @@ public class Ltx2GuideAndRetakeContractTests
         JObject clip = MakeClip(1.0, fixture.Stage("Base"));
         clip["refFraming"] = Constants.ReferenceFramingFitGreen;
 
-        JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
+        // Non-square on purpose: SwarmFrameImage defaults to 512x512, which is the fixture's own
+        // resolution, so at that size the geometry below would hold even unwritten.
+        JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip), post =>
+        {
+            post["width"] = 768;
+            post["height"] = 448;
+        });
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         SwarmFrameImageNode frame = Assert.Single(bridge.Graph.NodesOfType<SwarmFrameImageNode>());
         Assert.Equal(Constants.ReferenceFramingFitGreen, frame.Method.LiteralAsString());
-        Assert.Equal(VideoStagesWorkflowFixture.Width, frame.Width.LiteralAsInt());
-        Assert.Equal(VideoStagesWorkflowFixture.Height, frame.Height.LiteralAsInt());
+        Assert.Equal(768, frame.Width.LiteralAsInt());
+        Assert.Equal(448, frame.Height.LiteralAsInt());
         ComfyNode framed = frame.ImagesInput.Connection?.Node;
         Assert.NotNull(framed);
         AssertImageSource(framed, "images");

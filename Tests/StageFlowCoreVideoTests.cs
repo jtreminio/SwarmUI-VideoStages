@@ -21,47 +21,6 @@ namespace VideoStages.Tests;
 public partial class StageFlowTests
 {
     [Fact]
-    public void SVD_stage_model_uses_the_host_video_fallback()
-    {
-        using SwarmUiTestContext _ = new();
-        UnitTestStubs.EnsureComfyControlNetParamsRegistered();
-        TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
-        T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
-        {
-            ModelClass = new T2IModelClass()
-            {
-                ID = "unit/controlnet",
-                Name = "Unit ControlNet",
-                CompatClass = models.VideoModel.ModelClass.CompatClass
-            }
-        };
-
-        JObject clip = MakeClip(
-            MakeStage(
-                models.VideoModel.Name,
-                "Generated",
-                upscale: 1.125,
-                upscaleMethod: "latentmodel-unit-upscaler.safetensors",
-                steps: 10));
-        string stagesJson = new JArray(clip).ToString();
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(T2IParamTypes.Controlnets[1].Strength, 0.8);
-        input.Set(T2IParamTypes.Controlnets[1].Model, controlNetModel);
-        input.Set(ComfyUIBackendExtension.ControlNetPreprocessorParams[1], "UnitTestPreprocessor");
-
-        (JObject _workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                BuildCoreVideoWorkflowSteps());
-
-        Assert.Equal(
-            HostVideoArchitectureModule.ArchitectureId,
-            Assert.Single(generator.RequireVideoExecutionPlanContext().Plan.Clips)
-                .Architecture.Id);
-    }
-
-    [Fact]
     public void Clip_shaped_json_without_executable_timeline_does_not_gate_core_generation()
     {
         using SwarmUiTestContext _ = new();

@@ -387,14 +387,20 @@ public class Ltx2IcLoraContractTests
             MakeIcLora("UnitTest_IcLoraA", driveMediaData: DriveVideo));
         clip["refFraming"] = Constants.ReferenceFramingFitGreen;
 
-        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        // Non-square: SwarmFrameImage's own default is 512x512, the fixture's resolution.
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip), post =>
+        {
+            post["width"] = 768;
+            post["height"] = 448;
+        });
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         LTXAddVideoICLoRAGuideNode guide = OnlyGuide(bridge);
         SwarmFrameImageNode frame = Assert.IsType<SwarmFrameImageNode>(GuideFraming(guide));
         Assert.Equal(Constants.ReferenceFramingFitGreen, frame.Method.LiteralAsString());
-        Assert.Equal(VideoStagesWorkflowFixture.Width, frame.Width.LiteralAsInt());
+        Assert.Equal(768, frame.Width.LiteralAsInt());
+        Assert.Equal(448, frame.Height.LiteralAsInt());
         Assert.Empty(bridge.Graph.NodesOfType<ImageScaleNode>());
 
         live.AssertAllLive(guide, frame, StageSampler(bridge, 0));
@@ -806,8 +812,10 @@ public class Ltx2IcLoraContractTests
         Assert.Equal(8, handle.Amount.LiteralAsInt());
         ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
             handle.Image.Connection?.Node);
-        Assert.Equal(0, firstFrame.BatchIndex.LiteralAsInt());
-        Assert.Equal(1, firstFrame.Length.LiteralAsInt());
+        // Both values are ImageFromBatch's codegen defaults; read the shipped JSON so a slice
+        // that was never configured cannot pass as a deliberate first-frame handle.
+        AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
+        AssertShippedLiteral(workflow, firstFrame, "length", 1);
 
         // Which trim belongs to which entry: a guide names its entry through the loader wired to
         // its downscale factor. Counting padded trims would never say that.
@@ -1084,8 +1092,15 @@ public class Ltx2IcLoraContractTests
             [.. bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>()];
         Assert.Equal(2, refTokens.Count);
         Assert.Equal(2, guides.Count);
-        // Each visual guide extends the latent, so each stage crops the guide frames back off.
+        // Each visual guide extends the latent, so each stage crops the guide frames back off —
+        // named by the latent it crops, since a count alone would pass with both crops on one stage.
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXVCropGuidesNode>().Count);
+        Assert.All(
+            new[] { StageSampler(bridge, 0), StageSampler(bridge, 1) },
+            stage => Assert.Single(
+                bridge.Graph.NodesOfType<LTXVCropGuidesNode>(),
+                crop => ReferenceEquals(
+                    crop.LatentInput.Connection?.Node, OutputOf(bridge, stage))));
         // One upload each, and the voice track is encoded once for both stages.
         Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
         Assert.Single(bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());

@@ -661,7 +661,10 @@ public class Ltx2CoreVideoContractTests
         Assert.Same(BaseImage(bridge), FramingOf(preprocess).Image.Connection?.Node);
         LTXVImgToVideoInplaceNode guide = Assert.Single(
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
-        Assert.Equal(1.0, guide.Strength.LiteralAsDouble());
+        // Full strength is also the codegen default and cannot be authored otherwise on an
+        // implicit guide; Stage_controlnet_strength_scales_each_stages_guide is the control that
+        // an authored value reaches this input at all.
+        AssertShippedLiteral(workflow, guide, "strength", 1.0);
         Assert.Same(preprocess.OutputImage, guide.Image.Connection);
 
         live.AssertAllLive(preprocess, guide, StageSampler(bridge, 0));
@@ -789,7 +792,14 @@ public class Ltx2CoreVideoContractTests
                 node => ReferenceEquals(sampler.Positive.Connection?.Node, node));
             Assert.Equal(2, addGuide.FrameIdx.LiteralAsInt());
             Assert.Equal(strengths[stage], addGuide.Strength.LiteralAsDouble());
-            live.AssertAllLive(addGuide, sampler);
+            // "A crop of its own" is the claim the bare count above cannot make: each crop must
+            // undo the guide frames on the latent its own stage produced.
+            LTXVCropGuidesNode crop = Assert.Single(
+                bridge.Graph.NodesOfType<LTXVCropGuidesNode>(),
+                node => ReferenceEquals(
+                    node.LatentInput.Connection?.Node, OutputOf(bridge, sampler)));
+            Assert.Same(addGuide.Positive, crop.PositiveInput.Connection);
+            live.AssertAllLive(addGuide, crop, sampler);
         }
 
         AssertShippable(bridge, workflow, live);
@@ -827,13 +837,24 @@ public class Ltx2CoreVideoContractTests
         LTXVLatentUpsamplerNode upsampler = Assert.Single(
             bridge.Graph.NodesOfType<LTXVLatentUpsamplerNode>());
         Assert.Same(firstCrop.Latent, upsampler.Samples.Connection);
+        SwarmKSamplerNode secondSampler = StageSampler(bridge, 1);
         Assert.Same(
             upsampler.LATENT,
             Assert.IsType<LTXVAddGuideNode>(
-                JointLatentOf(StageSampler(bridge, 1)).VideoLatent.Connection?.Node)
+                JointLatentOf(secondSampler).VideoLatent.Connection?.Node)
                 .LatentInput.Connection);
+        // Stage 1 crops its own output too — otherwise the guide frames the upscale carried
+        // forward would reach the published decode.
+        LTXVCropGuidesNode secondCrop = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVCropGuidesNode>(),
+            crop => ReferenceEquals(
+                crop.LatentInput.Connection?.Node, OutputOf(bridge, secondSampler)));
+        Assert.Same(
+            secondCrop.Latent,
+            Assert.IsType<VAEDecodeTiledNode>(live.FinalVideoSave().Images.Connection?.Node)
+                .Samples.Connection);
 
-        live.AssertAllLive(firstCrop, upsampler, firstSampler, StageSampler(bridge, 1));
+        live.AssertAllLive(firstCrop, secondCrop, upsampler, firstSampler, secondSampler);
         AssertShippable(bridge, workflow, live);
     }
 
@@ -952,7 +973,7 @@ public class Ltx2CoreVideoContractTests
         ResizeImageMaskNodeNode guideResize = GuideResizeOverCorePreprocessor(bridge);
         ImageFromBatchNode guideFrames = GuideFramesOf(bridge);
         Assert.Same(guideResize.Resized, guideFrames.Image.Connection);
-        Assert.Equal(0, guideFrames.BatchIndex.LiteralAsInt());
+        AssertShippedLiteral(workflow, guideFrames, "batch_index", 0);
         Assert.Equal(fixture.ExpectedGeneratedFrames, guideFrames.Length.LiteralAsInt());
 
         // Core's own apply chain conditioned a root the timeline replaced, so it is gone entirely.
@@ -987,7 +1008,10 @@ public class Ltx2CoreVideoContractTests
         ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
             apply.Image.Connection?.Node);
         Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
-        Assert.Equal(1, firstFrame.Length.LiteralAsInt());
+        // A one-frame slice from index 0 is also ImageFromBatch's codegen default, so the
+        // shipped JSON is what proves core configured the wrap rather than leaving it bare.
+        AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
+        AssertShippedLiteral(workflow, firstFrame, "length", 1);
 
         ImageFromBatchNode guideFrames = GuideFramesOf(bridge);
         Assert.Same(guideResize.Resized, guideFrames.Image.Connection);
@@ -1064,7 +1088,10 @@ public class Ltx2CoreVideoContractTests
             Assert.Single(bridge.Graph.NodesOfType<ControlNetApplyAdvancedNode>())
                 .Image.Connection?.Node);
         Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
-        Assert.Equal(1, firstFrame.Length.LiteralAsInt());
+        // A one-frame slice from index 0 is also ImageFromBatch's codegen default, so the
+        // shipped JSON is what proves core configured the wrap rather than leaving it bare.
+        AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
+        AssertShippedLiteral(workflow, firstFrame, "length", 1);
 
         GetImageSizeNode size = Assert.Single(bridge.Graph.NodesOfType<GetImageSizeNode>());
         Assert.Same(guideResize.Resized, size.Image.Connection);
@@ -1102,6 +1129,16 @@ public class Ltx2CoreVideoContractTests
         LTXVLatentUpsamplerNode upsampler = Assert.Single(
             bridge.Graph.NodesOfType<LTXVLatentUpsamplerNode>());
         Assert.Same(firstCrop.Latent, upsampler.Samples.Connection);
+        // Stage 1's own crop, named by its latent rather than counted: the upscaled latent still
+        // carries guide frames, so the published decode has to come off a second crop.
+        SwarmKSamplerNode second = StageSampler(bridge, 1);
+        LTXVCropGuidesNode secondCrop = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVCropGuidesNode>(),
+            crop => ReferenceEquals(crop.LatentInput.Connection?.Node, OutputOf(bridge, second)));
+        Assert.Same(
+            secondCrop.Latent,
+            Assert.IsType<VAEDecodeTiledNode>(live.FinalVideoSave().Images.Connection?.Node)
+                .Samples.Connection);
 
         // Reachability proves nothing here: the captured count already sizes stage 0's empty latent,
         // which stage 1 refines. Every stage's guide batch has to read it directly.
@@ -1115,7 +1152,7 @@ public class Ltx2CoreVideoContractTests
                 size.BatchSize,
                 Assert.IsType<ImageFromBatchNode>(guide.Image.Connection?.Node).Length.Connection));
 
-        live.AssertAllLive(firstCrop, upsampler, first, StageSampler(bridge, 1));
+        live.AssertAllLive(firstCrop, secondCrop, upsampler, first, second);
         AssertShippable(bridge, workflow, live);
     }
 
@@ -1123,12 +1160,19 @@ public class Ltx2CoreVideoContractTests
     /// <c>clipLengthFromControlNet</c> with no ControlNet configured on the request has nothing to
     /// capture a length from. The clip falls back to its authored length and says so: no wired
     /// length anywhere, and the entry that named the missing source is dropped.
+    /// <para>
+    /// The clip runs 2.0s deliberately. At the fixture's 1.0s the snapped length, the request's
+    /// <c>text2videoframes</c> and LTX's own grid all read 25, so "kept the authored length" would
+    /// be indistinguishable from "fell back to the request's". 2.0s at 24 fps is 48, snapped up to
+    /// 49 on the 8k+1 grid, and only the authored path produces that.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task Clip_length_from_an_uncaptured_controlnet_warns_and_keeps_the_authored_length()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         JObject clip = IcLoraClip(fixture.Stage());
+        clip["duration"] = 2.0;
         clip["clipLengthFromControlNet"] = true;
 
         (JObject workflow, WorkflowGenerator generator) =
@@ -1140,10 +1184,11 @@ public class Ltx2CoreVideoContractTests
         Assert.Empty(bridge.Graph.NodesOfType<GetImageSizeNode>());
         Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
         Assert.Equal(
-            fixture.ExpectedGeneratedFrames,
+            49,
             Assert.Single(bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>())
                 .Length.LiteralAsInt());
-        Assert.Contains(
+        // Once, not once per stage or once per IC-LoRA entry: the clip has one length.
+        Assert.Single(
             RequestWarnings(generator.UserInput),
             warning => warning.Contains("ControlNet 1 owns clip 0 length")
                 && warning.Contains("using the authored clip length instead"));
@@ -1358,7 +1403,10 @@ public class Ltx2CoreVideoContractTests
         ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
             apply.Image.Connection?.Node);
         Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
-        Assert.Equal(1, firstFrame.Length.LiteralAsInt());
+        // A one-frame slice from index 0 is also ImageFromBatch's codegen default, so the
+        // shipped JSON is what proves core configured the wrap rather than leaving it bare.
+        AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
+        AssertShippedLiteral(workflow, firstFrame, "length", 1);
 
         // Each stage guides off the full-length resize, which only holds because the normalizer
         // peels core's single-frame wrap before inserting it.
@@ -1435,7 +1483,10 @@ public class Ltx2CoreVideoContractTests
         ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
             apply.Image.Connection?.Node);
         Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
-        Assert.Equal(1, firstFrame.Length.LiteralAsInt());
+        // A one-frame slice from index 0 is also ImageFromBatch's codegen default, so the
+        // shipped JSON is what proves core configured the wrap rather than leaving it bare.
+        AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
+        AssertShippedLiteral(workflow, firstFrame, "length", 1);
 
         ImageFromBatchNode guideFrames = GuideFramesOf(bridge);
         Assert.Same(guideResize.Resized, guideFrames.Image.Connection);

@@ -202,7 +202,7 @@ public class HostVideoContractTests
         Assert.Equal(20, generator.CurrentMedia.Frames);
 
         live.AssertAllLive(trim, audioTrim, first, second);
-        AssertShippable(bridge, workflow, live);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 2);
     }
 
     /// <summary>
@@ -379,7 +379,7 @@ public class HostVideoContractTests
         Assert.Same(OutputOf(bridge, StageSampler(bridge, 2)), PublishedLatentOf(published));
 
         live.AssertAllLive(published);
-        AssertShippable(bridge, workflow, live);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 3);
     }
 
     /// <summary>

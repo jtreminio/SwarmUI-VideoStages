@@ -99,9 +99,14 @@ public class HostVideoRuntimeFlowTests
         Assert.Empty(adapter.PreflightRequest(new(
             plan,
             Ltx2ArchitectureModule.ArchitectureId)));
-        // The prefix the fallback really emits: with Video2VideoCreativity set,
-        // "host-video.creativity.ignored" would fire the moment the root-owner guard stopped
-        // holding the later clip's architecture out of the root request.
+        // The positive control for the line above. Video2VideoCreativity is set, so the fallback's
+        // warning is live in this request — an empty list under a specialized root owner is the
+        // guard doing its job, not a dead emitter.
+        Assert.Contains(
+            adapter.PreflightRequest(new(plan, HostVideoArchitectureModule.ArchitectureId)),
+            diagnostic => diagnostic.Code == "host-video.creativity.ignored");
+        // Compile-time codes only: PreflightRequest's output never reaches the plan, so this pins
+        // that the later generic clip also drew no host-video.stage-control.* error.
         Assert.DoesNotContain(
             plan.Diagnostics,
             diagnostic => diagnostic.Code.StartsWith("host-video.", StringComparison.Ordinal));
@@ -122,6 +127,52 @@ public class HostVideoRuntimeFlowTests
         Assert.NotNull(core.VideoEndFrame);
         Assert.Equal(4, core.StartStep);
         Assert.False(core.HasMatchedModelData);
+    }
+
+    /// <summary>
+    /// The fallback's request-global warnings reach the user only through the lifecycle:
+    /// <c>PreflightRequest</c> runs inside <c>PrepareRequest()</c> and lands in
+    /// <see cref="VideoExecutionPlanContext.PreflightDiagnostics"/> — never in the compiled plan's
+    /// own diagnostics, which are fixed before any architecture is asked.
+    /// </summary>
+    [Fact]
+    public void A_host_video_root_warns_at_preflight_that_request_global_settings_are_ignored()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = HostModel(
+            T2IModelClassSorter.CompatHunyuanVideo1_5,
+            "hunyuan-video-1_5");
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 8)));
+        input.Set(T2IParamTypes.Video2VideoCreativity, 0.25);
+        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
+        WorkflowGenerator generator = new()
+        {
+            UserInput = input,
+            Features = [],
+            ModelFolderFormat = "/",
+            Workflow = [],
+        };
+        VideoExecutionPlanContext request = generator.RequireVideoExecutionPlanContext();
+        Assert.DoesNotContain(
+            request.Plan.Diagnostics,
+            diagnostic => diagnostic.Code.StartsWith("host-video.", StringComparison.Ordinal));
+
+        request.PrepareRequest();
+
+        Assert.Equal(
+            ["host-video.creativity.ignored", "host-video.end-frame.ignored"],
+            request.PreflightDiagnostics
+                .Select(diagnostic => diagnostic.Code)
+                .Order());
+        // Warnings, not errors — PrepareRequest would have thrown on a blocking one.
+        Assert.All(
+            request.PreflightDiagnostics,
+            diagnostic => Assert.Equal(PlanDiagnosticSeverity.Warning, diagnostic.Severity));
+        Assert.Equal(VideoExecutionState.Prepared, request.State);
     }
 
     [Fact]

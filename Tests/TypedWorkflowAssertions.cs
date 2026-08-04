@@ -66,17 +66,56 @@ internal static class TypedWorkflowAssertions
     }
 
     /// <summary>
-    /// The three whole-graph checks every generated-workflow test closes with: nothing built is
-    /// orphaned, no input references a pruned node, and the graph is acyclic.
+    /// The four whole-graph checks every generated-workflow test closes with: nothing built is
+    /// orphaned, no input references a pruned node, the graph is acyclic, and the video is
+    /// published exactly once. Only <c>outputintermediateimages</c> raises
+    /// <paramref name="publishedVideoSaves"/> above one.
     /// </summary>
     public static void AssertShippable(
         WorkflowBridge bridge,
         JObject workflow,
-        WorkflowLivePath live)
+        WorkflowLivePath live,
+        int publishedVideoSaves = 1)
     {
         live.AssertNoOrphanNodes();
+        live.AssertPublishedSaveCount(publishedVideoSaves);
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
+    }
+
+    /// <summary>
+    /// The value the shipped workflow carries for an input, or null when the key is absent.
+    /// <para>
+    /// Reading it off the typed node instead cannot detect an absent key: the generated constructor
+    /// runs its own <c>.Set(default)</c> calls and the wiring pass only overwrites keys the JSON
+    /// carries, so <c>Assert.Equal(&lt;codegen default&gt;, node.Input)</c> holds either way. Nodes
+    /// core builds from raw JSON can genuinely omit an input; this is how that is seen.
+    /// </para>
+    /// </summary>
+    public static JToken ShippedInput(JObject workflow, ComfyNode node, string inputName)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        Assert.True(workflow[node.Id] is JObject, $"Workflow has no node id '{node.Id}'.");
+        return workflow[node.Id]["inputs"]?[inputName];
+    }
+
+    /// <summary>
+    /// Asserts an input whose expected value is also the codegen default. The key must be present,
+    /// so a node reached by a path that never writes the input fails here instead of reading the
+    /// default back as if it had been chosen.
+    /// </summary>
+    public static void AssertShippedLiteral<T>(
+        JObject workflow,
+        ComfyNode node,
+        string inputName,
+        T expected)
+    {
+        JToken shipped = ShippedInput(workflow, node, inputName);
+        Assert.True(
+            shipped is not null,
+            $"{node.ClassTypeName} (node {node.Id}) ships no '{inputName}' input, so the value "
+                + "read back is the codegen default rather than anything production wrote.");
+        Assert.Equal(expected, shipped.Value<T>());
     }
 
     /// <summary>The joint latent a stage sampler consumes.</summary>
@@ -134,7 +173,8 @@ internal static class TypedWorkflowAssertions
         int startFrame,
         int frames,
         int width,
-        int height)
+        int height,
+        double fps = VideoStagesWorkflowFixture.Fps)
     {
         SwarmLoadVideoB64Node load = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
@@ -147,7 +187,10 @@ internal static class TypedWorkflowAssertions
         Assert.Same(components.Images, resample.ImagesInput.Connection);
         // The source fps is wired, not literal — the upload's real rate is only known at runtime.
         Assert.Same(components.Fps, resample.FpsIn.Connection);
-        Assert.Equal((double)VideoStagesWorkflowFixture.Fps, resample.FpsOut.LiteralAsDouble());
+        // 24 is also SwarmVideoResampleFPS's codegen default, so at the fixture rate this alone
+        // cannot fail — A_sourced_clip_conforms_to_a_non_default_timeline_rate is the arm that
+        // proves the timeline rate is what production writes here.
+        Assert.Equal(fps, resample.FpsOut.LiteralAsDouble());
 
         SwarmFrameWindowNode window = Assert.Single(
             bridge.Graph.NodesOfType<SwarmFrameWindowNode>());

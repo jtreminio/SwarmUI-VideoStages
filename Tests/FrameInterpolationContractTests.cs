@@ -112,7 +112,7 @@ public sealed class FrameInterpolationContractTests
         // The intermediate save is an output in its own right, so it is deliberately not asserted
         // to reach the published one.
         live.AssertAllLive(trim, rife, published);
-        AssertShippable(bridge, workflow, live);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 2);
     }
 
     /// <summary>

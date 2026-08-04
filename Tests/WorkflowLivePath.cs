@@ -77,6 +77,23 @@ internal sealed class WorkflowLivePath
     /// <summary>Whatever feeds the published save's audio input, if anything does.</summary>
     public ComfyNode PublishedAudio() => FinalVideoSave().Audio.Connection?.Node;
 
+    /// <summary>
+    /// A duplicate publication is invisible to every other check here: <see cref="FinalVideoSave"/>
+    /// picks the widest save and never counts, and <see cref="OrphanNodes"/> excludes output nodes,
+    /// so a second <c>SwarmSaveAnimationWS</c> would ship the same video twice unnoticed. Only
+    /// <c>outputintermediateimages</c> legitimately produces more than one.
+    /// </summary>
+    public void AssertPublishedSaveCount(int expected)
+    {
+        string[] saves = [.. _bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>()
+            .Select(save => $"{save.ClassTypeName}#{save.Id}")
+            .Order()];
+        Assert.True(
+            saves.Length == expected,
+            $"Workflow publishes {saves.Length} video save(s), expected {expected}:\n  "
+                + string.Join("\n  ", saves));
+    }
+
     /// <summary>A save node satisfies the downstream half itself.</summary>
     public void AssertLive(ComfyNode node, string because = null)
     {

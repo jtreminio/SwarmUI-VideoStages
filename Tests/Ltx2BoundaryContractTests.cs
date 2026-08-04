@@ -469,13 +469,20 @@ public class Ltx2BoundaryContractTests
     /// <summary>
     /// A crossfade overlaps decoded pixels only — no stage freezes the previous clip's tail as
     /// latent context, at any resolution.
+    /// <para>
+    /// The overlap is authored at 16 rather than left at the 8-frame default, which is also
+    /// <c>SwarmRampMaskBatch</c>'s own <c>frames</c> default: at 8 the mask assertion would pass
+    /// even if nothing ever wrote it.
+    /// </para>
     /// </summary>
     [Fact]
     public async Task Crossfade_boundary_anchors_nothing_at_any_stage()
     {
+        const int AuthoredOverlap = 16;
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         JObject first = MakeClip(0.6, fixture.Stage(control: 0.5, steps: 10));
         first["boundaryOut"] = Constants.BoundaryOutCrossfade;
+        first["boundaryOutOverlap"] = AuthoredOverlap;
         JObject second = MakeClip(
             0.6,
             fixture.Stage(control: 0.5, steps: 10),
@@ -491,13 +498,25 @@ public class Ltx2BoundaryContractTests
         IReadOnlyList<LTXVImgToVideoInplaceNode> guides =
             [.. bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>()];
         Assert.NotEmpty(guides);
-        Assert.All(guides, node => Assert.Null(TailGuideScales(node, clipZeroDecode)));
+        // Whole-graph reachability rather than TailGuideScales: that walker steps only through
+        // ImageScale/LTXVPreprocess, so it returns null the moment a slice is in the way — for the
+        // right node id as readily as for the wrong one, which makes it answer "no anchor" always.
+        Assert.All(guides, guide => Assert.False(
+            ReachesUpstream(bridge, guide.Image.Connection?.Node, clipZeroDecode),
+            $"Guide {guide.Id} traces back to clip 0's output — the crossfade froze a tail."));
+        // Positive control: clip 1's upscale stage does carry a guide, off clip 1's own opening
+        // sampler, so "reaches nothing" above is not simply "reaches nowhere".
+        Assert.Contains(
+            guides,
+            guide => ReachesUpstream(
+                bridge, guide.Image.Connection?.Node, StageSampler(bridge, 1).Id));
 
         ImageCompositeMaskedNode blend = Assert.Single(
             bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
-        Assert.Equal(
-            CrossfadeOverlap,
-            Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>()).Frames.LiteralAsInt());
+        SwarmRampMaskBatchNode ramp = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
+        Assert.Equal(AuthoredOverlap, ramp.Frames.LiteralAsInt());
+        Assert.Same(ramp.Mask, blend.Mask.Connection);
 
         live.AssertAllLive(blend);
         AssertShippable(bridge, workflow, live);
