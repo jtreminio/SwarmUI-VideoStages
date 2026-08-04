@@ -13,6 +13,7 @@ internal sealed class RootRuntimeSession
     private readonly IReadOnlySet<string> _hostAnimationSaveIds;
     private readonly IReadOnlySet<string> _capturedRootComponentIds;
     private readonly bool _publishAudio;
+    private readonly Dictionary<string, string> _displacedRootRemovals = [];
 
     private RootRuntimeSession(
         WorkflowGenerator generator,
@@ -62,6 +63,15 @@ internal sealed class RootRuntimeSession
     /// nor available for a stage to take over.
     /// </summary>
     public IReadOnlySet<string> OwnedRootComponentIds => _capturedRootComponentIds;
+
+    /// <summary>
+    /// Every host-root node publishing this timeline deleted, by id and by the class it held when
+    /// it died — empty when every node the host built is one a stage took over. Records the
+    /// shortfall rather than the work: the cleanup is a safety net, and this is how far it was
+    /// stretched. Counts the stale-audio prune too, which runs before the cleanup and removes root
+    /// nodes of its own; leaving it out would report a clean sweep over an unclean one.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> DisplacedRootRemovals => _displacedRootRemovals;
 
     public void PublishTimeline(RuntimeArtifact timeline)
     {
@@ -142,6 +152,7 @@ internal sealed class RootRuntimeSession
             return true;
         }
 
+        Dictionary<string, string> rootClasses = SnapshotRootClasses(bridge);
         HashSet<string> staleAudioNodeIds = [];
         foreach (SwarmSaveAnimationWSNode save in hostSaves)
         {
@@ -167,11 +178,13 @@ internal sealed class RootRuntimeSession
         }
         foreach (string staleAudioNodeId in staleAudioNodeIds)
         {
-            WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(
-                bridge,
-                staleAudioNodeId,
-                protectedNodeIds,
-                _generator.NodeHelpers);
+            RecordRootRemovals(
+                rootClasses,
+                WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(
+                    bridge,
+                    staleAudioNodeId,
+                    protectedNodeIds,
+                    _generator.NodeHelpers));
         }
         return true;
     }
@@ -198,11 +211,34 @@ internal sealed class RootRuntimeSession
             .. bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().Select(save => save.Id)
         ];
         AddArtifactNodeIds(liveRoots, timeline);
-        WorkflowGraphCleanup.RemoveOwnedNodesNotLive(
-            bridge,
-            _capturedRootComponentIds,
-            liveRoots,
-            _generator.NodeHelpers);
+        RecordRootRemovals(
+            SnapshotRootClasses(bridge),
+            WorkflowGraphCleanup.RemoveOwnedNodesNotLive(
+                bridge,
+                _capturedRootComponentIds,
+                liveRoots,
+                _generator.NodeHelpers));
+    }
+
+    /// <summary>
+    /// The class each owned root node holds right now. Taken before a removal because a removed
+    /// node is gone from the workflow, and because the class a node dies as is not always the class
+    /// core built it as — an adopted id carries the stage's node by then.
+    /// </summary>
+    private Dictionary<string, string> SnapshotRootClasses(WorkflowBridge bridge) =>
+        _capturedRootComponentIds
+            .Select(id => (Id: id, Node: bridge.Graph.GetNode(id)))
+            .Where(entry => entry.Node is not null)
+            .ToDictionary(entry => entry.Id, entry => entry.Node.ClassTypeName);
+
+    private void RecordRootRemovals(
+        IReadOnlyDictionary<string, string> rootClasses,
+        IReadOnlySet<string> removed)
+    {
+        foreach (string nodeId in removed.Where(rootClasses.ContainsKey))
+        {
+            _displacedRootRemovals[nodeId] = rootClasses[nodeId];
+        }
     }
 
     private static void AddArtifactNodeIds(ISet<string> ids, RuntimeArtifact artifact)

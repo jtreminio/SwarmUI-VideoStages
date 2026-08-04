@@ -248,6 +248,13 @@ internal sealed class VideoArchitectureExecutionHost
         }
         finalArtifact.PublishTo(_generator);
         rootSession.PublishTimeline(finalArtifact);
+        // Recorded, not acted on. Adoption is meant to leave this empty; a non-empty set says the
+        // timeline built beside one of the host's nodes rather than on it, which is a regression
+        // nothing else in the graph would show — the shipped workflow looks the same either way.
+        VideoGraphHelpers.CacheRemovalRecord(
+            _generator,
+            Constants.SweptHostRootNodesKey,
+            rootSession.DisplacedRootRemovals);
     }
 
     private static void ValidateOutput(

@@ -48,6 +48,29 @@ internal static class VideoGraphHelpers
     public static void CacheMarker(WorkflowGenerator g, string key, IEnumerable<string> parts) =>
         g.NodeHelpers[key] = string.Join(MarkerSeparator, parts);
 
+    /// <summary>
+    /// Records what happened to a set of nodes, rather than a reference to them. Each entry is
+    /// <c>id=class</c> and every entry carries a trailing comma, including the only one: without it
+    /// a single-entry record would read as a bare node reference, and
+    /// <see cref="InvalidateForRemovedNodes"/> would delete the record of a removal when that very
+    /// node was removed.
+    /// </summary>
+    public static void CacheRemovalRecord(
+        WorkflowGenerator g,
+        string key,
+        IEnumerable<KeyValuePair<string, string>> removals) =>
+        g.NodeHelpers[key] = string.Concat(
+            removals.OrderBy(entry => entry.Key).Select(entry => $"{entry.Key}={entry.Value},"));
+
+    /// <summary>Reads back a <see cref="CacheRemovalRecord"/> as node id to class.</summary>
+    public static IReadOnlyDictionary<string, string> ReadRemovalRecord(
+        WorkflowGenerator g,
+        string key) =>
+        (g.NodeHelpers.GetValueOrDefault(key) ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(entry => entry.Split('=', 2))
+            .ToDictionary(parts => parts[0], parts => parts.Length > 1 ? parts[1] : "");
+
     public static bool RemoveCached(WorkflowGenerator g, string key) =>
         g.NodeHelpers.Remove(key);
 

@@ -72,10 +72,13 @@ public sealed class StageRefStoreScopeTests
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
                 fixture.ImageToVideoPost(Fixtures.MakeDocument(clip)));
 
-        // Exclude architecture-neutral ControlNet capture keys.
+        // Exclude the keys no architecture owns: ControlNet capture, and the execution host's
+        // record of what the root cleanup swept.
+        string[] neutralPrefixes = ["videostages.controlnet.", "videostages.host-root."];
         string[] videoStagesKeys = [.. generator.NodeHelpers.Keys
             .Where(key => key.StartsWith("videostages.", StringComparison.Ordinal))
-            .Where(key => !key.StartsWith("videostages.controlnet.", StringComparison.Ordinal))];
+            .Where(key => !neutralPrefixes.Any(
+                prefix => key.StartsWith(prefix, StringComparison.Ordinal)))];
 
         Assert.NotEmpty(videoStagesKeys);
         Assert.All(

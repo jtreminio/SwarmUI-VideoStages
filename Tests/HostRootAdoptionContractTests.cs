@@ -477,4 +477,67 @@ public sealed class HostRootAdoptionContractTests
         // The timeline's own save, plus the two the setting asked for.
         AssertShippable(bridge, workflow, live, publishedVideoSaves: 3);
     }
+
+    /// <summary>
+    /// Every host-root node publishing the timeline had to delete, by id and by the class it held
+    /// when it died. Empty is the goal and the usual answer: every node core built is one a stage
+    /// took over.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string> SweptHostRootNodes(
+        WorkflowGenerator generator) =>
+        VideoGraphHelpers.ReadRemovalRecord(generator, Constants.SweptHostRootNodesKey);
+
+    /// <summary>
+    /// The cleanup is a safety net now, not a step. For a text-to-video timeline whose stage takes
+    /// core's chain over, it deletes nothing at all — the shipped graph is the same graph core
+    /// built, running the stage's settings.
+    /// </summary>
+    [Theory]
+    [InlineData("wan")]
+    [InlineData("host-video")]
+    [InlineData("minimax")]
+    public async Task The_root_cleanup_deletes_nothing_from_an_adopted_text_root(
+        string architecture)
+    {
+        using VideoStagesWorkflowFixture fixture = CreateFixture(architecture);
+
+        (_, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(MakeDocument(MakeClip(1.0, fixture.Stage()))));
+
+        Assert.True(
+            generator.NodeHelpers.ContainsKey(Constants.SweptHostRootNodesKey),
+            "The timeline never recorded what it swept, so an empty sweep proves nothing.");
+        Assert.Empty(SweptHostRootNodes(generator));
+    }
+
+    /// <summary>
+    /// A single-family LTX-2 text root leaves three nodes behind — its conditioning, its A/V split
+    /// and its audio decode — and core would have collected all three itself: it allocates them
+    /// dynamically, so there is no reserved id for a stage to take, and lists their classes in
+    /// <c>AutoCleanupNodeTypes</c>.
+    /// <para>
+    /// Only for this shape. A mixed timeline sweeps more and not all of it is core-collectable —
+    /// WAN beside MiniMax sweeps an <c>EmptyHunyuanLatentVideo</c>, and a MiniMax refine stage a
+    /// <c>VAEDecodeAudio</c>, neither of which core lists. The cleanup is a no-op where one family
+    /// owns the root and still does real work where two do not.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task An_ltx_text_roots_remaining_sweep_is_all_core_would_have_collected()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(MakeDocument(MakeClip(1.0, fixture.Stage()))));
+
+        IReadOnlyDictionary<string, string> swept = SweptHostRootNodes(generator);
+        Assert.All(swept, entry => Assert.False(workflow.ContainsKey(entry.Key)));
+        Assert.All(
+            swept,
+            entry => Assert.Contains(
+                entry.Value,
+                WorkflowGeneratorSteps.AutoCleanupNodeTypes));
+    }
 }

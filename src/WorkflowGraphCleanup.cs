@@ -11,7 +11,7 @@ namespace VideoStages;
 /// </summary>
 internal static class WorkflowGraphCleanup
 {
-    public static void RemoveUnusedUpstreamNodes(
+    public static IReadOnlySet<string> RemoveUnusedUpstreamNodes(
         WorkflowBridge bridge,
         string startNodeId,
         ISet<string> protectedNodeIds = null,
@@ -19,6 +19,7 @@ internal static class WorkflowGraphCleanup
     {
         HashSet<string> removed = RemoveUnusedUpstreamNodesAndCollect(bridge, startNodeId, protectedNodeIds);
         VideoGraphHelpers.InvalidateForRemovedNodes(nodeHelpers, removed);
+        return removed;
     }
 
     public static HashSet<string> RemoveUnusedUpstreamNodesAndCollect(
@@ -135,8 +136,12 @@ internal static class WorkflowGraphCleanup
     /// Removes only nodes explicitly captured as owned, never expanding into adjacent graph
     /// branches. Current terminal sinks and caller-provided live roots protect their upstream
     /// dependencies, including shared loaders that acquired consumers after capture.
+    /// <para>
+    /// Returns what it removed, which is how far the timeline fell short of building on the host's
+    /// own nodes: a stage that takes them over leaves nothing here to remove.
+    /// </para>
     /// </summary>
-    public static void RemoveOwnedNodesNotLive(
+    public static IReadOnlySet<string> RemoveOwnedNodesNotLive(
         WorkflowBridge bridge,
         IEnumerable<string> ownedNodeIds,
         IEnumerable<string> liveRootNodeIds,
@@ -161,6 +166,7 @@ internal static class WorkflowGraphCleanup
             removed.Add(nodeId);
         }
         VideoGraphHelpers.InvalidateForRemovedNodes(nodeHelpers, removed);
+        return removed;
     }
 
     internal static HashSet<string> CollectUpstreamClosure(
