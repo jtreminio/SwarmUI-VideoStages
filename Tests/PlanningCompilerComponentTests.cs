@@ -183,10 +183,11 @@ public class PlanningCompilerComponentTests
         };
 
         PromptRelayPlan prompt = PromptRelayPlanCompiler.Compile(clip, 24);
-        GuideReferencePlan guide = Ltx2ClipPlanCompiler
-            .Compile(clip, new(640, 360, 24, ArchitectureEntryMode.ImageToVideo))
-            .Stages[stage.ClipStageRawIndex]
-            .Guide;
+        ArchitectureClipCompilation compilation = Ltx2ClipPlanCompiler.Compile(
+            clip,
+            new(640, 360, 24, ArchitectureEntryMode.ImageToVideo));
+        GuideReferencePlan guide = Assert.IsType<Ltx2StagePayload>(
+            compilation.StagePayloads[stage.ClipStageRawIndex]).Guide;
         var loras = NormalLoraPlanCompiler.Compile(clip, stage);
         var icLoras = IcLoraPlanCompiler
             .CompileClip(clip, new(640, 360, 24, ArchitectureEntryMode.ImageToVideo))
@@ -403,7 +404,7 @@ public class PlanningCompilerComponentTests
             ],
         };
 
-        Ltx2ClipPlanCompilation compilation = Ltx2ClipPlanCompiler.Compile(
+        ArchitectureClipCompilation compilation = Ltx2ClipPlanCompiler.Compile(
             clip,
             new(640, 360, 24, ArchitectureEntryMode.ImageToVideo));
 
@@ -411,7 +412,8 @@ public class PlanningCompilerComponentTests
             compilation.Diagnostics,
             diagnostic => diagnostic.Code == expectedCode
                 && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
-        Assert.Empty(compilation.Stages[clip.Stages[0].ClipStageRawIndex].IcLoras);
+        Assert.Empty(Assert.IsType<Ltx2StagePayload>(
+            compilation.StagePayloads[clip.Stages[0].ClipStageRawIndex]).IcLoras);
     }
 
     [Fact]
@@ -456,7 +458,7 @@ public class PlanningCompilerComponentTests
     public void ClipPlanCompiler_PlansInitVideoStageChainAndOutputOwnership()
     {
         ClipSpec clip = InitVideoClip(7, Stage(10, control: 0), Stage(11, rawIndex: 1));
-        Ltx2ClipPlanCompilation compilation = Ltx2ClipPlanCompiler.Compile(
+        ArchitectureClipCompilation compilation = Ltx2ClipPlanCompiler.Compile(
             clip,
             new(640, 360, 30, ArchitectureEntryMode.InitVideo));
 
@@ -471,12 +473,7 @@ public class PlanningCompilerComponentTests
                 TotalStageCount: 2,
                 FirstStageOrdinal: 0,
                 EntryMode: ArchitectureEntryMode.InitVideo,
-                ArchitectureCompilation: new(
-                    compilation.Payload,
-                    compilation.Stages.ToDictionary(
-                        pair => pair.Key,
-                        pair => (IArchitectureStagePayload)pair.Value),
-                    compilation.Diagnostics)));
+                ArchitectureCompilation: compilation));
 
         Assert.Equal(ArchitectureEntryMode.InitVideo, plan.EntryMode);
         Assert.True(plan.Stages[0].IsPassthrough);

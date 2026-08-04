@@ -185,18 +185,10 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
     public ArchitectureClipCompilation ValidateAndCompileClip(
         ClipSpec clip,
         IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
-        ArchitectureClipCompileContext context)
-    {
-        WanClipPlanCompilation compilation = WanClipPlanCompiler.Compile(
+        ArchitectureClipCompileContext context) =>
+        WanClipPlanCompiler.Compile(
             clip,
             stageModels,
             context);
-        return new(
-            compilation.Payload,
-            compilation.Stages.ToDictionary(
-                pair => pair.Key,
-                pair => (IArchitectureStagePayload)pair.Value),
-            compilation.Diagnostics);
-    }
 
 }

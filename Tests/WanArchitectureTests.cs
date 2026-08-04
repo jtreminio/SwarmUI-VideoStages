@@ -907,7 +907,7 @@ public class WanArchitectureTests
             ClipStageRawIndex = 1,
         };
 
-        WanClipPlanCompilation compiled = CompileDirect(
+        ArchitectureClipCompilation compiled = CompileDirect(
             GeneratedClip(0, exact, ordinary),
             profilesByModel: new Dictionary<string, ModelProfileId>
             {
@@ -923,9 +923,10 @@ public class WanArchitectureTests
                 WanArchitectureModule.ImageToVideoModelClassId,
                 "wan-2_1-image2video-14b",
             ],
-            compiled.Stages
+            compiled.StagePayloads
                 .OrderBy(pair => pair.Key)
-                .Select(pair => pair.Value.ModelClassId));
+                .Select(pair =>
+                    Assert.IsType<StockHostVideoStagePayload>(pair.Value).ModelClassId));
     }
 
     [Theory]
@@ -949,18 +950,22 @@ public class WanArchitectureTests
             ClipStageRawIndex = 1,
         };
 
-        WanClipPlanCompilation compiled = CompileDirect(
+        ArchitectureClipCompilation compiled = CompileDirect(
             GeneratedClip(0, high, low));
+        StockHostVideoStagePayload first = Assert.IsType<StockHostVideoStagePayload>(
+            compiled.StagePayloads[0]);
+        StockHostVideoStagePayload second = Assert.IsType<StockHostVideoStagePayload>(
+            compiled.StagePayloads[1]);
 
-        Assert.False(compiled.Stages[0].ContinuesSamplingFromPreviousStage);
-        Assert.True(compiled.Stages[1].ContinuesSamplingFromPreviousStage);
+        Assert.False(first.ContinuesSamplingFromPreviousStage);
+        Assert.True(second.ContinuesSamplingFromPreviousStage);
         // The shared run is split where the low-noise stage starts sampling; control is the only
         // authored value that moves that point.
         Assert.Equal(
             splitStep,
             HostVideoStageSchedulePolicy.StartStep(
-                compiled.Stages[1].Core.Steps,
-                compiled.Stages[1].Core.Control));
+                second.Core.Steps,
+                second.Core.Control));
     }
 
     // A shared schedule means shared steps, scheduler and a partial control: the compiler never
@@ -989,10 +994,11 @@ public class WanArchitectureTests
             ClipStageRawIndex = 1,
         };
 
-        WanClipPlanCompilation compiled = CompileDirect(
+        ArchitectureClipCompilation compiled = CompileDirect(
             GeneratedClip(0, high, next));
 
-        Assert.False(compiled.Stages[1].ContinuesSamplingFromPreviousStage);
+        Assert.False(Assert.IsType<StockHostVideoStagePayload>(
+            compiled.StagePayloads[1]).ContinuesSamplingFromPreviousStage);
     }
 
     [Fact]
@@ -1190,7 +1196,7 @@ public class WanArchitectureTests
             WanArchitectureModule.ImageToVideoModelClassId,
             T2IModelClassSorter.CompatWan21_14b.ID);
 
-        WanClipPlanCompilation compilation = WanClipPlanCompiler.Compile(
+        ArchitectureClipCompilation compilation = WanClipPlanCompiler.Compile(
             GeneratedClip(0, stage),
             new Dictionary<int, ResolvedVideoModel>
             {
@@ -1203,7 +1209,8 @@ public class WanArchitectureTests
             diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
         Assert.Equal(
             resolved.ModelClassId,
-            Assert.Single(compilation.Stages).Value.ModelClassId);
+            Assert.IsType<StockHostVideoStagePayload>(
+                Assert.Single(compilation.StagePayloads).Value).ModelClassId);
     }
 
     [Fact]
@@ -1453,7 +1460,7 @@ public class WanArchitectureTests
             ResolveWan(spec));
     }
 
-    private static WanClipPlanCompilation CompileDirect(
+    private static ArchitectureClipCompilation CompileDirect(
         ClipSpec clip,
         ArchitectureEntryMode entryMode = ArchitectureEntryMode.ImageToVideo,
         IReadOnlyDictionary<string, ModelProfileId> profilesByModel = null)

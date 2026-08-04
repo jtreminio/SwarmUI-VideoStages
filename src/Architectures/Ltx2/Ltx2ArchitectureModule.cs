@@ -88,16 +88,8 @@ internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
     public ArchitectureClipCompilation ValidateAndCompileClip(
         ClipSpec clip,
         IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
-        ArchitectureClipCompileContext context)
-    {
-        Ltx2ClipPlanCompilation compilation = Ltx2ClipPlanCompiler.Compile(clip, context);
-        return new(
-            compilation.Payload,
-            compilation.Stages.ToDictionary(
-                pair => pair.Key,
-                pair => (IArchitectureStagePayload)pair.Value),
-            compilation.Diagnostics);
-    }
+        ArchitectureClipCompileContext context) =>
+        Ltx2ClipPlanCompiler.Compile(clip, context);
 
 }
 

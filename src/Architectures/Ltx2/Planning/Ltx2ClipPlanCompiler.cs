@@ -3,15 +3,9 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2.Planning;
 
-/// <summary>Result of compiling LTX-owned clip and stage settings.</summary>
-internal sealed record Ltx2ClipPlanCompilation(
-    Ltx2ClipPayload Payload,
-    IReadOnlyDictionary<int, Ltx2StagePayload> Stages,
-    IReadOnlyList<PlanDiagnostic> Diagnostics);
-
 internal static class Ltx2ClipPlanCompiler
 {
-    internal static Ltx2ClipPlanCompilation Compile(
+    internal static ArchitectureClipCompilation Compile(
         ClipSpec clip,
         ArchitectureClipCompileContext context)
     {
@@ -27,7 +21,7 @@ internal static class Ltx2ClipPlanCompiler
             .. audio.Diagnostics.Select(diagnostic => diagnostic with { ClipId = clip.Id }),
             .. icLoras.Diagnostics,
         ];
-        Dictionary<int, Ltx2StagePayload> stages = [];
+        Dictionary<int, IArchitectureStagePayload> stages = [];
         foreach (StageSpec stage in clip.Stages ?? [])
         {
             RetakePlan retake = CompileRetake(stage.RetakeWindow);

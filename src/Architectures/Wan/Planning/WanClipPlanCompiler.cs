@@ -5,17 +5,12 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan.Planning;
 
-internal sealed record WanClipPlanCompilation(
-    WanClipPayload Payload,
-    IReadOnlyDictionary<int, StockHostVideoStagePayload> Stages,
-    IReadOnlyList<PlanDiagnostic> Diagnostics);
-
 /// <summary>
 /// Compiles Wan-owned clip settings and reports unsupported or normalized options.
 /// </summary>
 internal static class WanClipPlanCompiler
 {
-    internal static WanClipPlanCompilation Compile(
+    internal static ArchitectureClipCompilation Compile(
         ClipSpec clip,
         IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
         ArchitectureClipCompileContext context)
@@ -58,7 +53,7 @@ internal static class WanClipPlanCompiler
             }
         }
 
-        Dictionary<int, StockHostVideoStagePayload> stages = [];
+        Dictionary<int, IArchitectureStagePayload> stages = [];
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
         bool initVideoEntry = context.EntryMode == ArchitectureEntryMode.InitVideo;
         bool previousStageContinuesSampling = false;
