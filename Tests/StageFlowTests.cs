@@ -92,19 +92,6 @@ public partial class StageFlowTests
         }
     }
 
-    private static void AssertLtxFinalTiledDecodeUsesTiling(
-        VAEDecodeTiledNode decodeNode,
-        int tileSize,
-        int overlap,
-        int temporalSize,
-        int temporalOverlap)
-    {
-        Assert.Equal(tileSize, decodeNode.TileSize.LiteralAsInt());
-        Assert.Equal(overlap, decodeNode.Overlap.LiteralAsInt());
-        Assert.Equal(temporalSize, decodeNode.TemporalSize.LiteralAsInt());
-        Assert.Equal(temporalOverlap, decodeNode.TemporalOverlap.LiteralAsInt());
-    }
-
     private static void AssertStageLtxConcatsReuseOriginalAudio(JObject workflow, WorkflowNode originalSeparate)
     {
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -115,33 +102,6 @@ public partial class StageFlowTests
         foreach (LTXVConcatAVLatentNode concatNode in concatNodes)
         {
             Assert.Same(originalSeparateNode.AudioLatent, concatNode.AudioLatent.Connection);
-        }
-    }
-
-    private static void AssertStageLtxConcatsUseProgressiveAudio(JObject workflow, WorkflowNode originalSeparate)
-    {
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        List<LTXVConcatAVLatentNode> concatNodes = GetSamplerConcatNodes(bridge);
-        Assert.True(concatNodes.Count >= 2);
-
-        LTXVSeparateAVLatentNode originalSeparateNode = RequireTypedNode<LTXVSeparateAVLatentNode>(bridge, originalSeparate.Id);
-        Assert.Same(originalSeparateNode.AudioLatent, concatNodes[0].AudioLatent.Connection);
-        Assert.NotSame(originalSeparateNode.AudioLatent, concatNodes[1].AudioLatent.Connection);
-    }
-
-    private static void AssertStageLtxConcatsReuseFirstStageAudio(JObject workflow, WorkflowNode originalSeparate)
-    {
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        List<LTXVConcatAVLatentNode> concatNodes = GetSamplerConcatNodes(bridge);
-        Assert.True(concatNodes.Count >= 3);
-
-        LTXVSeparateAVLatentNode originalSeparateNode = RequireTypedNode<LTXVSeparateAVLatentNode>(bridge, originalSeparate.Id);
-        INodeOutput firstStageAudioLatent = concatNodes[1].AudioLatent.Connection;
-        Assert.NotNull(firstStageAudioLatent);
-        Assert.NotSame(originalSeparateNode.AudioLatent, firstStageAudioLatent);
-        for (int i = 2; i < concatNodes.Count; i++)
-        {
-            Assert.Same(firstStageAudioLatent, concatNodes[i].AudioLatent.Connection);
         }
     }
 
@@ -491,15 +451,6 @@ public partial class StageFlowTests
             .Concat([SeedRefinerImageStep(), SeedNativeLtxVideoChainWithTrimWrapperStep(attachAudioToCurrentMedia)])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildNativeStepsWithLatentBaseCaptureAndDownstreamRefinerPreprocess(bool attachAudioToCurrentMedia) =>
-        new[]
-        {
-            WorkflowTestHarness.MinimalGraphSeedStep(),
-            SeedDownstreamRefinerAndReachableRootVideoGraphStep(),
-            SeedReachableRootVideoCurrentMediaStep(attachAudioToCurrentMedia)
-        }
-        .Concat(WorkflowTestHarness.VideoStagesSteps());
-
     private static WorkflowGenerator.WorkflowGenStep ResetCurrentModelAndVaeToBaseCompatStep(T2IModel baseModel) =>
         new(g =>
         {
@@ -512,120 +463,4 @@ public partial class StageFlowTests
             g.CurrentTextEnc = baseModelNode.GetOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC, baseModel?.ModelClass?.CompatClass);
             g.CurrentVae = baseVaeNode.GetOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE, baseModel?.ModelClass?.CompatClass);
         }, 11.4);
-
-    private static WorkflowGenerator.WorkflowGenStep SeedDownstreamRefinerAndReachableRootVideoGraphStep() =>
-        new(g =>
-        {
-            using var bridge = BridgeSync.For(g);
-
-            VAEDecodeNode baseDecode = new();
-            baseDecode.Vae.ConnectToUntyped(bridge.ResolvePath(g.CurrentVae.Path));
-            baseDecode.Samples.ConnectToUntyped(bridge.ResolvePath(g.CurrentMedia.Path));
-            bridge.AddNode(baseDecode, "24");
-
-            var refinerScale = new ImageScaleNode()
-                .With(Width: 512, Height: 512, UpscaleMethod: "lanczos", Crop: "disabled");
-            refinerScale.Image.ConnectTo(baseDecode.IMAGE);
-            bridge.AddNode(refinerScale, "26");
-
-            VAEEncodeNode refinerEncode = new();
-            refinerEncode.Pixels.ConnectTo(refinerScale.IMAGE);
-            refinerEncode.Vae.ConnectToUntyped(bridge.ResolvePath(g.CurrentVae.Path));
-            bridge.AddNode(refinerEncode, "25");
-
-            UnknownNode refinerSampler = bridge.AddStub("UnitTest_RefinerSampler", "23").WithOutputs("LATENT");
-            refinerSampler.GetInput("latent_image").ConnectToUntyped(refinerEncode.LATENT);
-
-            VAEDecodeNode refinerDecode = new();
-            refinerDecode.Vae.ConnectToUntyped(bridge.ResolvePath(g.CurrentVae.Path));
-            refinerDecode.Samples.ConnectToUntyped(refinerSampler.GetOutput(0));
-            bridge.AddNode(refinerDecode, "8");
-
-            var rootGuideScale = new ImageScaleNode()
-                .With(Width: 512, Height: 512, UpscaleMethod: "lanczos", Crop: "disabled");
-            rootGuideScale.Image.ConnectTo(refinerDecode.IMAGE);
-            bridge.AddNode(rootGuideScale, "102");
-
-            var preprocess = new LTXVPreprocessNode().With(ImgCompression: 25);
-            preprocess.Image.ConnectTo(rootGuideScale.IMAGE);
-            bridge.AddNode(preprocess, "110");
-
-            UnknownNode videoModelStub = bridge.AddStub("UnitTest_VideoModel", "103").WithOutputs(WGNodeData.DT_MODEL, "CLIP");
-            UnknownNode videoVaeStub = bridge.AddStub("UnitTest_VideoVae", "104").WithOutputs(WGNodeData.DT_VAE);
-            UnknownNode audioVaeStub = bridge.AddStub("UnitTest_AudioVae", "105").WithOutputs(WGNodeData.DT_VAE);
-
-            EmptyLTXVLatentVideoNode emptyVideoLatent = new EmptyLTXVLatentVideoNode()
-                .With(Width: 512, Height: 512, Length: 16, BatchSize: 1);
-            bridge.AddNode(emptyVideoLatent, "108");
-
-            // Original used keys "length" and "fps" on LTXVEmptyLatentAudio; the typed node
-            // declares "frames_number" and "frame_rate". Preserve original keys via ExtraInputs.
-            var emptyAudioLatent = new LTXVEmptyLatentAudioNode
-            {
-                ExtraInputs = new JObject { ["length"] = 16, ["fps"] = 24 }
-            }.With(BatchSize: 1);
-            emptyAudioLatent.AudioVae.ConnectToUntyped(audioVaeStub.GetOutput(0));
-            bridge.AddNode(emptyAudioLatent, "109");
-
-            var imgToVideo = new LTXVImgToVideoInplaceNode().With(Strength: 1.0, Bypass: false);
-            imgToVideo.Vae.ConnectToUntyped(videoVaeStub.GetOutput(0));
-            imgToVideo.Image.ConnectTo(preprocess.OutputImage);
-            imgToVideo.LatentInput.ConnectTo(emptyVideoLatent.LATENT);
-            bridge.AddNode(imgToVideo, "111");
-
-            LTXVConcatAVLatentNode concat = new();
-            concat.VideoLatent.ConnectTo(imgToVideo.Latent);
-            concat.AudioLatent.ConnectTo(emptyAudioLatent.Latent);
-            bridge.AddNode(concat, "113");
-
-            LTXVSeparateAVLatentNode separate = new();
-            separate.AvLatent.ConnectTo(concat.Latent);
-            bridge.AddNode(separate, "201");
-
-            var videoDecode = new VAEDecodeTiledNode()
-                .With(TileSize: 2048, Overlap: 256, TemporalSize: 64, TemporalOverlap: 16);
-            videoDecode.Vae.ConnectToUntyped(videoVaeStub.GetOutput(0));
-            videoDecode.Samples.ConnectTo(separate.VideoLatent);
-            bridge.AddNode(videoDecode, "202");
-
-            LTXVAudioVAEDecodeNode audioDecode = new();
-            audioDecode.AudioVae.ConnectToUntyped(audioVaeStub.GetOutput(0));
-            audioDecode.Samples.ConnectTo(separate.AudioLatent);
-            bridge.AddNode(audioDecode, "203");
-
-            var save = new SwarmSaveAnimationWSNode()
-                .With(Fps: 24.0, Lossless: false, Quality: 95, Method: "default", Format: "h264-mp4");
-            save.Images.ConnectTo(videoDecode.IMAGE);
-            save.Audio.ConnectTo(audioDecode.Audio);
-            bridge.AddNode(save, "9");
-
-            g.CurrentMedia = refinerDecode.IMAGE.ToWGMedia(g, WGNodeData.DT_IMAGE,
-                width: 512, height: 512);
-        }, 5);
-
-    private static WorkflowGenerator.WorkflowGenStep SeedReachableRootVideoCurrentMediaStep(bool attachAudioToCurrentMedia) =>
-        new(g =>
-        {
-            T2IModel videoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null);
-            g.FinalLoadedModel = videoModel;
-            g.FinalLoadedModelList = videoModel is null ? [] : [videoModel];
-
-            using var bridge = BridgeSync.For(g);
-            ComfyNode videoModelNode = bridge.Graph.GetNode("103");
-            ComfyNode videoVaeNode = bridge.Graph.GetNode("104");
-            ComfyNode audioVaeNode = bridge.Graph.GetNode("105");
-            ComfyNode videoDecodeNode = bridge.Graph.GetNode("202");
-            ComfyNode audioDecodeNode = bridge.Graph.GetNode("203");
-
-            g.CurrentModel = videoModelNode.FindOutput(0).ToWGNodeData(g, WGNodeData.DT_MODEL);
-            g.CurrentTextEnc = videoModelNode.FindOutput(1).ToWGNodeData(g, WGNodeData.DT_TEXTENC);
-            g.CurrentVae = videoVaeNode.FindOutput(0).ToWGNodeData(g, WGNodeData.DT_VAE);
-            g.CurrentAudioVae = audioVaeNode.FindOutput(0).ToWGNodeData(g, WGNodeData.DT_AUDIOVAE);
-            g.CurrentMedia = videoDecodeNode.FindOutput(0).ToWGMedia(g, WGNodeData.DT_VIDEO,
-                width: 512, height: 512, frames: 16, fps: 24);
-            if (attachAudioToCurrentMedia)
-            {
-                g.CurrentMedia.AttachedAudio = audioDecodeNode.FindOutput(0).ToWGAttachedAudio(g);
-            }
-        }, 11);
 }

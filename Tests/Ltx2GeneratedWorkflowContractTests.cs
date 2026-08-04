@@ -66,6 +66,8 @@ public class Ltx2GeneratedWorkflowContractTests
     [InlineData("global-only words", "global-only words")]
     // A clip section displaces the global text rather than adding to it.
     [InlineData("global-only words <videoclip[0]>clip-zero words", "clip-zero words")]
+    // The request-wide video section displaces it the same way.
+    [InlineData("global-only words <video>video-only words", "video-only words")]
     // Every section matching the stage concatenates: the clip's and the stage's, still not the global.
     [InlineData(
         "global-only words <videoclip[0]>clip-zero words <videoclip[0,0]>stage-zero words",
