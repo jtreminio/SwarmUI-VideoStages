@@ -16,9 +16,21 @@ internal sealed record CapturedHostReference(WGNodeData Media, WGNodeData Vae)
     public static CapturedHostReference From(WorkflowGenerator g)
     {
         ArgumentNullException.ThrowIfNull(g);
-        return g.CurrentMedia is null
-            ? null
-            : new CapturedHostReference(g.CurrentMedia.Duplicate(), g.CurrentVae?.Duplicate());
+        if (g.CurrentMedia is null)
+        {
+            return null;
+        }
+        CapturedHostReference captured = new(
+            g.CurrentMedia.Duplicate(),
+            g.CurrentVae?.Duplicate());
+        // Held in a field, this reference is invisible to anything that reasons about the host
+        // graph from the outside — including HostRootAdoption, which would then overwrite the very
+        // node captured here and hand the keyframe a stage's output instead of the host's.
+        VideoGraphHelpers.CachePath(
+            g,
+            $"{VideoGraphHelpers.ExtensionKeyPrefix}host-reference.{captured.Media.Path[0]}",
+            captured.Media.Path);
+        return captured;
     }
 
     /// <summary>

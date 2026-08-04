@@ -2575,7 +2575,7 @@ public class WanGeneratedWorkflowContractTests
     /// <summary>
     /// Text-to-video hard cuts have no host image to donate, so both 5B clips sample the one bare
     /// native latent and are told apart only by seed. Core's own video root — which the timeline
-    /// replaces — is gone from the shipped graph, and no silent audio track is invented for an
+    /// replaces — leaves nothing of its own behind, and no silent audio track is invented for an
     /// architecture that produces none.
     /// </summary>
     [Fact]
@@ -2603,15 +2603,20 @@ public class WanGeneratedWorkflowContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        Assert.NotNull(coreRootId);
-        Assert.False(workflow.ContainsKey(coreRootId));
-
         Wan22ImageToVideoLatentNode latent = Assert.Single(
             bridge.Graph.NodesOfType<Wan22ImageToVideoLatentNode>());
         // Absent, not merely unconnected: a literal here would still be a donor.
         Assert.False(latent.StartImage.HasValue);
         SwarmKSamplerNode first = StageSampler(bridge, 0);
         SwarmKSamplerNode second = StageSampler(bridge, 1);
+
+        // The first stage takes core's root decode over rather than building beside it, so the id
+        // core published survives — decoding this stage now. Core's own pass is gone all the same:
+        // nothing in the graph decodes anything but a stage sampler.
+        Assert.NotNull(coreRootId);
+        Assert.Same(
+            first,
+            RequireTypedNode<VAEDecodeNode>(bridge, coreRootId).Samples.Connection?.Node);
         Assert.Same(latent, first.LatentImage.Connection?.Node);
         Assert.Same(latent, second.LatentImage.Connection?.Node);
         Assert.Empty(bridge.Graph.NodesOfType<WanImageToVideoNode>());

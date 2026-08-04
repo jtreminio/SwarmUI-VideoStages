@@ -147,7 +147,13 @@ internal sealed class VideoArchitectureExecutionHost
             _plan,
             preparedAudioSources,
             rootPolicy,
-            assembly);
+            assembly)
+        {
+            RootAdoption = new HostRootAdoption(
+                _generator,
+                rootPolicy,
+                rootSession.OwnedRootComponentIds),
+        };
         RuntimeArtifact finalArtifact;
         Dictionary<ArchitectureId, IVideoGenerationSession> sessions = [];
         bool sessionConstructionCompleted = false;

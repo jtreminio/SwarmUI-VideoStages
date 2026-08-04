@@ -56,6 +56,13 @@ internal sealed class RootRuntimeSession
             planContext.Plan.Root.DiscardsRoot || planContext.Plan.Clips.Count > 1);
     }
 
+    /// <summary>
+    /// The root nodes this session owns, and would remove once the timeline displaces them.
+    /// A root node outside this set is one some other sink still holds, so it is neither removed
+    /// nor available for a stage to take over.
+    /// </summary>
+    public IReadOnlySet<string> OwnedRootComponentIds => _capturedRootComponentIds;
+
     public void PublishTimeline(RuntimeArtifact timeline)
     {
         ArgumentNullException.ThrowIfNull(timeline);

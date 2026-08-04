@@ -88,6 +88,9 @@ internal sealed record ArchitectureTimelineSessionContext(
     TimelineAssemblySession Assembly)
 {
     public bool OwnsGeneratedRoot { get; init; }
+
+    /// <summary>Shared across every session: there is one host root, so one claimant.</summary>
+    public HostRootAdoption RootAdoption { get; init; }
 }
 
 /// <summary>

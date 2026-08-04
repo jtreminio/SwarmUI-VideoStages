@@ -20,6 +20,7 @@ internal sealed class StockHostVideoGenerationSession(
     VideoExecutionPlan plan,
     HostVideoRootSources rootSources,
     VideoStageRunner stageRunner,
+    HostRootAdoption rootAdoption,
     ArchitectureId architectureId,
     string architectureLabel,
     WanStockHostVideoBehavior wanBehavior = null) : IVideoGenerationSession
@@ -53,6 +54,7 @@ internal sealed class StockHostVideoGenerationSession(
                 generator,
                 context.Plan,
                 architectureLabel),
+            context.RootAdoption,
             architectureId,
             architectureLabel,
             wanBehavior);
@@ -375,6 +377,7 @@ internal sealed class StockHostVideoGenerationSession(
                     genInfo.Vae,
                     g.CurrentAudioVae);
             }
+            (string samplerId, string decodeId) = rootAdoption.ClaimTextRoot(clip, stage);
             string sampled = g.CreateKSampler(
                 genInfo.Model.Path,
                 genInfo.PosCond,
@@ -391,12 +394,13 @@ internal sealed class StockHostVideoGenerationSession(
                 sigmax: 1000,
                 defsampler: "euler",
                 defscheduler: "simple",
+                id: samplerId,
                 explicitSampler: core.Sampler,
                 explicitScheduler: core.Scheduler,
                 sectionId: genInfo.ContextID);
             g.CurrentMedia = g.CurrentMedia
                 .WithPath([sampled, 0])
-                .AsRawImage(genInfo.Vae);
+                .DecodeLatents(genInfo.Vae, false, decodeId);
         }
         finally
         {

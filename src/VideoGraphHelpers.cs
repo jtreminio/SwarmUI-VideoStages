@@ -19,6 +19,9 @@ internal static class VideoGraphHelpers
 {
     private const string ModelLoaderKeyPrefix = "modelloader_";
 
+    /// <summary>Every cache key this extension writes, and no key SwarmUI writes.</summary>
+    public const string ExtensionKeyPrefix = "videostages.";
+
     /// <summary>The pipe-delimited marker separator, shared with the marker writers.</summary>
     internal const char MarkerSeparator = '|';
 
@@ -61,6 +64,21 @@ internal static class VideoGraphHelpers
         bridge.RemoveNode(nodeId);
         InvalidateForRemovedNodes(g?.NodeHelpers, [nodeId]);
     }
+
+    /// <summary>
+    /// True when one of this extension's own captures still names one of
+    /// <paramref name="nodeIds"/>. Rewriting such a node in place — rather than removing it —
+    /// would hand whoever captured it the replacement instead, silently, so callers that overwrite
+    /// a host node must refuse when this holds. SwarmUI's own entries are deliberately not
+    /// consulted: they describe the root chain, which is what an overwrite supersedes.
+    /// </summary>
+    public static bool IsCapturedByExtension(
+        IDictionary<string, string> nodeHelpers,
+        IReadOnlyCollection<string> nodeIds) =>
+        nodeHelpers is not null
+        && nodeHelpers.Any(entry =>
+            entry.Key.StartsWith(ExtensionKeyPrefix, StringComparison.Ordinal)
+            && ReferencesRemovedNode(entry.Key, entry.Value, nodeIds));
 
     /// <summary>Drops every cache entry whose value references one of
     /// <paramref name="removedNodeIds"/>, in any supported extension or host encoding.</summary>
