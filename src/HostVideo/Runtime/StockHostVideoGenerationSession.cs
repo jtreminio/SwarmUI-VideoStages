@@ -154,7 +154,6 @@ internal sealed class StockHostVideoGenerationSession(
             }
         }
         StockHostVideoStagePayload payload = ResolvePayload(stage);
-        StageCorePlan core = stage.Core;
         StockHostVideoStagePayload continuationPayload = continuation is null
             ? null
             : ResolvePayload(continuation);
@@ -176,84 +175,153 @@ internal sealed class StockHostVideoGenerationSession(
                 continuationStageSectionId,
                 continuationPayload.LoraTargetPolicy,
                 T2IParamInput.SectionID_VideoSwap))
-        using (ParamSnapshot ignoredAudioReference = _wanBehavior is not null
-            ? null
-            : ParamSnapshot.Of(
-                g.UserInput,
-                T2IParamTypes.PromptAudios.Type))
         {
-            if (_wanBehavior is null)
-            {
-                // The generic fallback has no reference-audio input, so keep Prompt Audios out of
-                // the core call. Dropped for this stage only; ParamSnapshot restores it on exit.
-                g.UserInput.InternalSet.ValuesInput.Remove(
-                    T2IParamTypes.PromptAudios.Type.ID);
-            }
-            WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
-                clip,
-                stage,
-                continuation,
-                sectionId,
-                positive,
-                negative);
-            bool materializedFirstFrame =
-                _wanBehavior is not null
-                && stage.Input == StageInputKind.EmptyLatent
-                && g.CurrentMedia is not null;
-            if (stage.Input == StageInputKind.EmptyLatent
-                && !materializedFirstFrame)
-            {
-                ExecuteTextStage(clip, stage, genInfo);
-                stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
-                return false;
-            }
-            int startStep = HostVideoStageSchedulePolicy.StartStep(
-                core.Steps,
-                core.Control);
-            if (!materializedFirstFrame)
-            {
-                stageInput.Configure(clip, stage, genInfo, startStep);
-            }
-            // SwarmUI's generic builder creates latent audio whenever CurrentAudioVae is
-            // set. Stock-host stages advertise video-only output, so isolate every pass.
-            WGNodeData ambientAudioVae = g.CurrentAudioVae;
-            bool ambientImageToVideo = g.IsImageToVideo;
-            bool ambientImageToVideoSwap = g.IsImageToVideoSwap;
-            ISet<string> preHostNodeIds =
-                _wanBehavior?.CapturePreHostNodeIds(stage, genInfo);
-            Exception hostConstructionError = null;
-            try
-            {
-                g.CurrentAudioVae = null;
-                g.CreateImageToVideo(genInfo);
-                if (continuation is not null
-                    && stageRunner.PublishesIntermediateStages)
-                {
-                    PublishSamplingContinuationIntermediate(
-                        stage,
-                        genInfo);
-                }
-            }
-            catch (Exception error)
-            {
-                hostConstructionError = error;
-                throw;
-            }
-            finally
-            {
-                g.CurrentAudioVae = ambientAudioVae;
-                g.IsImageToVideo = ambientImageToVideo;
-                g.IsImageToVideoSwap = ambientImageToVideoSwap;
-                _wanBehavior?.RunPostHostCleanup(
-                    preHostNodeIds,
-                    hostConstructionError);
-            }
-            stageInput.NormalizeDecodedOutput(
-                clip,
-                continuation ?? stage,
-                genInfo);
+            return _wanBehavior is null
+                ? ExecuteGenericGeneratingStage(
+                    clip,
+                    stage,
+                    continuation,
+                    stageInput,
+                    sectionId,
+                    positive,
+                    negative)
+                : ExecuteWanGeneratingStage(
+                    clip,
+                    stage,
+                    continuation,
+                    stageInput,
+                    sectionId,
+                    positive,
+                    negative);
         }
+    }
+
+    private bool ExecuteGenericGeneratingStage(
+        ClipPlan clip,
+        StagePlan stage,
+        StagePlan continuation,
+        HostVideoDecodedStageInput stageInput,
+        int sectionId,
+        string positive,
+        string negative)
+    {
+        using ParamSnapshot ignoredAudioReference = ParamSnapshot.Of(
+            g.UserInput,
+            T2IParamTypes.PromptAudios.Type);
+        g.UserInput.InternalSet.ValuesInput.Remove(
+            T2IParamTypes.PromptAudios.Type.ID);
+        WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
+            clip,
+            stage,
+            continuation,
+            sectionId,
+            positive,
+            negative,
+            ResolveGenericFrames(clip, stage),
+            videoEndFrame: null);
+        if (stage.Input == StageInputKind.EmptyLatent)
+        {
+            ExecuteGenericTextStage(clip, stage, genInfo);
+            stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
+            return false;
+        }
+        int startStep = HostVideoStageSchedulePolicy.StartStep(
+            stage.Core.Steps,
+            stage.Core.Control);
+        stageInput.Configure(clip, stage, genInfo, startStep);
+        RunHostImageBuilder(stage, continuation, genInfo);
+        stageInput.NormalizeDecodedOutput(
+            clip,
+            continuation ?? stage,
+            genInfo);
         return continuation is not null;
+    }
+
+    private bool ExecuteWanGeneratingStage(
+        ClipPlan clip,
+        StagePlan stage,
+        StagePlan continuation,
+        HostVideoDecodedStageInput stageInput,
+        int sectionId,
+        string positive,
+        string negative)
+    {
+        WanStockHostVideoBehavior wanBehavior = _wanBehavior;
+        WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
+            clip,
+            stage,
+            continuation,
+            sectionId,
+            positive,
+            negative,
+            wanBehavior.ResolveGeneratedFrames(clip, stage, sectionId),
+            wanBehavior.ResolveEndFrame(clip, continuation ?? stage));
+        bool materializedFirstFrame =
+            stage.Input == StageInputKind.EmptyLatent
+            && g.CurrentMedia is not null;
+        if (stage.Input == StageInputKind.EmptyLatent
+            && !materializedFirstFrame)
+        {
+            ExecuteWanTextStage(clip, stage, genInfo, wanBehavior);
+            stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
+            return false;
+        }
+        int startStep = HostVideoStageSchedulePolicy.StartStep(
+            stage.Core.Steps,
+            stage.Core.Control);
+        if (!materializedFirstFrame)
+        {
+            stageInput.Configure(clip, stage, genInfo, startStep);
+        }
+        ISet<string> preHostNodeIds =
+            wanBehavior.CapturePreHostNodeIds(stage, genInfo);
+        Exception hostConstructionError = null;
+        try
+        {
+            RunHostImageBuilder(stage, continuation, genInfo);
+        }
+        catch (Exception error)
+        {
+            hostConstructionError = error;
+            throw;
+        }
+        finally
+        {
+            wanBehavior.RunPostHostCleanup(
+                preHostNodeIds,
+                hostConstructionError);
+        }
+        stageInput.NormalizeDecodedOutput(
+            clip,
+            continuation ?? stage,
+            genInfo);
+        return continuation is not null;
+    }
+
+    private void RunHostImageBuilder(
+        StagePlan stage,
+        StagePlan continuation,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        WGNodeData ambientAudioVae = g.CurrentAudioVae;
+        bool ambientImageToVideo = g.IsImageToVideo;
+        bool ambientImageToVideoSwap = g.IsImageToVideoSwap;
+        try
+        {
+            g.CurrentAudioVae = null;
+            g.CreateImageToVideo(genInfo);
+            if (continuation is not null
+                && stageRunner.PublishesIntermediateStages)
+            {
+                PublishSamplingContinuationIntermediate(stage, genInfo);
+            }
+        }
+        finally
+        {
+            g.CurrentAudioVae = ambientAudioVae;
+            g.IsImageToVideo = ambientImageToVideo;
+            g.IsImageToVideoSwap = ambientImageToVideoSwap;
+        }
     }
 
     private static bool TryComposeSamplingContinuationPrompt(
@@ -316,94 +384,116 @@ internal sealed class StockHostVideoGenerationSession(
             genInfo.Vae);
     }
 
-    private void ExecuteTextStage(
+    private void ExecuteGenericTextStage(
         ClipPlan clip,
         StagePlan stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        StageCorePlan core = stage.Core;
         WGNodeData ambientAudioVae = g.CurrentAudioVae;
         bool ambientImageToVideo = g.IsImageToVideo;
         try
         {
-            if (_wanBehavior is not null)
-            {
-                g.CurrentAudioVae = null;
-            }
             g.IsImageToVideo = true;
-            int frames = genInfo.Frames
-                ?? throw VideoStagesInvariant.Failure(
-                    $"Clip {clip.ClipId} stage {stage.StageId} has no "
-                        + $"{architectureLabel} text-video frame count.");
-            using ParamSnapshot genericFrameScope = _wanBehavior is not null
-                ? null
-                : ParamSnapshot.Of(
-                    g.UserInput,
-                    T2IParamTypes.Text2VideoFrames.Type,
-                    T2IParamTypes.VideoFPS.Type);
-            if (_wanBehavior is not null)
-            {
-                genInfo.PrepModelAndCond(g);
-                if (genInfo.VideoEndFrame is not null)
-                {
-                    _wanBehavior.BuildNativeLastFrameConditioning(
-                        stage,
-                        genInfo,
-                        frames);
-                }
-                else
-                {
-                    using ParamSnapshot frameScope = ParamSnapshot.Of(
-                        g.UserInput,
-                        T2IParamTypes.Text2VideoFrames.Type);
-                    g.UserInput.Set(T2IParamTypes.Text2VideoFrames, frames);
-                    BuildEmptyTextLatent(clip, stage, genInfo, frames);
-                }
-            }
-            else
-            {
-                g.UserInput.Set(T2IParamTypes.Text2VideoFrames, frames);
-                g.UserInput.Set(T2IParamTypes.VideoFPS, plan.FramesPerSecond);
-                genInfo.PrepModelAndCond(g);
-                BuildEmptyTextLatent(clip, stage, genInfo, frames);
-            }
+            int frames = RequireTextFrames(clip, stage, genInfo);
+            using ParamSnapshot frameScope = ParamSnapshot.Of(
+                g.UserInput,
+                T2IParamTypes.Text2VideoFrames.Type,
+                T2IParamTypes.VideoFPS.Type);
+            g.UserInput.Set(T2IParamTypes.Text2VideoFrames, frames);
+            g.UserInput.Set(T2IParamTypes.VideoFPS, plan.FramesPerSecond);
+            genInfo.PrepModelAndCond(g);
+            BuildEmptyTextLatent(clip, stage, genInfo, frames);
             g.CurrentMedia.FPS = plan.FramesPerSecond;
-            if (_wanBehavior is null)
-            {
-                g.CurrentMedia = g.CurrentMedia.AsSamplingLatent(
-                    genInfo.Vae,
-                    g.CurrentAudioVae);
-            }
-            HostRootClaim claim = rootAdoption.ClaimTextRoot(clip, stage);
-            string sampled = g.CreateKSampler(
-                genInfo.Model.Path,
-                genInfo.PosCond,
-                genInfo.NegCond,
-                g.CurrentMedia.Path,
-                core.CfgScale,
-                core.Steps,
-                startStep: 0,
-                endStep: 10000,
-                seed: genInfo.Seed,
-                returnWithLeftoverNoise: false,
-                addNoise: true,
-                sigmin: 0.002,
-                sigmax: 1000,
-                defsampler: "euler",
-                defscheduler: "simple",
-                id: claim.Sampler,
-                explicitSampler: core.Sampler,
-                explicitScheduler: core.Scheduler,
-                sectionId: genInfo.ContextID);
-            g.CurrentMedia = g.CurrentMedia
-                .WithPath([sampled, 0])
-                .DecodeLatents(genInfo.Vae, false, claim.Decode);
+            g.CurrentMedia = g.CurrentMedia.AsSamplingLatent(
+                genInfo.Vae,
+                g.CurrentAudioVae);
+            SampleTextStage(clip, stage, genInfo);
         }
         finally
         {
             g.CurrentAudioVae = ambientAudioVae;
             g.IsImageToVideo = ambientImageToVideo;
         }
+    }
+
+    private void ExecuteWanTextStage(
+        ClipPlan clip,
+        StagePlan stage,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        WanStockHostVideoBehavior wanBehavior)
+    {
+        WGNodeData ambientAudioVae = g.CurrentAudioVae;
+        bool ambientImageToVideo = g.IsImageToVideo;
+        try
+        {
+            g.CurrentAudioVae = null;
+            g.IsImageToVideo = true;
+            int frames = RequireTextFrames(clip, stage, genInfo);
+            genInfo.PrepModelAndCond(g);
+            if (genInfo.VideoEndFrame is not null)
+            {
+                wanBehavior.BuildNativeLastFrameConditioning(
+                    stage,
+                    genInfo,
+                    frames);
+            }
+            else
+            {
+                using ParamSnapshot frameScope = ParamSnapshot.Of(
+                    g.UserInput,
+                    T2IParamTypes.Text2VideoFrames.Type);
+                g.UserInput.Set(T2IParamTypes.Text2VideoFrames, frames);
+                BuildEmptyTextLatent(clip, stage, genInfo, frames);
+            }
+            g.CurrentMedia.FPS = plan.FramesPerSecond;
+            SampleTextStage(clip, stage, genInfo);
+        }
+        finally
+        {
+            g.CurrentAudioVae = ambientAudioVae;
+            g.IsImageToVideo = ambientImageToVideo;
+        }
+    }
+
+    private int RequireTextFrames(
+        ClipPlan clip,
+        StagePlan stage,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo) =>
+        genInfo.Frames
+        ?? throw VideoStagesInvariant.Failure(
+            $"Clip {clip.ClipId} stage {stage.StageId} has no "
+                + $"{architectureLabel} text-video frame count.");
+
+    private void SampleTextStage(
+        ClipPlan clip,
+        StagePlan stage,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        StageCorePlan core = stage.Core;
+        HostRootClaim claim = rootAdoption.ClaimTextRoot(clip, stage);
+        string sampled = g.CreateKSampler(
+            genInfo.Model.Path,
+            genInfo.PosCond,
+            genInfo.NegCond,
+            g.CurrentMedia.Path,
+            core.CfgScale,
+            core.Steps,
+            startStep: 0,
+            endStep: 10000,
+            seed: genInfo.Seed,
+            returnWithLeftoverNoise: false,
+            addNoise: true,
+            sigmin: 0.002,
+            sigmax: 1000,
+            defsampler: "euler",
+            defscheduler: "simple",
+            id: claim.Sampler,
+            explicitSampler: core.Sampler,
+            explicitScheduler: core.Scheduler,
+            sectionId: genInfo.ContextID);
+        g.CurrentMedia = g.CurrentMedia
+            .WithPath([sampled, 0])
+            .DecodeLatents(genInfo.Vae, false, claim.Decode);
     }
 
     private void BuildEmptyTextLatent(
@@ -466,9 +556,10 @@ internal sealed class StockHostVideoGenerationSession(
         StagePlan continuation,
         int sectionId,
         string positive,
-        string negative)
+        string negative,
+        int? frames,
+        Image videoEndFrame)
     {
-        StockHostVideoStagePayload payload = ResolvePayload(stage);
         StageCorePlan core = stage.Core;
         T2IModel videoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId)
             ?? throw VideoStagesInvariant.Failure(
@@ -504,12 +595,7 @@ internal sealed class StockHostVideoGenerationSession(
                 : 1d - (double)HostVideoStageSchedulePolicy.StartStep(
                     continuation.Core.Steps,
                     continuation.Core.Control) / continuation.Core.Steps,
-            Frames = _wanBehavior is not null
-                ? _wanBehavior.ResolveGeneratedFrames(
-                    clip,
-                    stage,
-                    sectionId)
-                : ResolveGenericFrames(clip, stage),
+            Frames = frames,
             VideoCFG = core.CfgScale,
             VideoFPS = plan.FramesPerSecond,
             Width = width,
@@ -519,9 +605,7 @@ internal sealed class StockHostVideoGenerationSession(
             Steps = core.Steps,
             Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.StageId,
             ContextID = sectionId,
-            VideoEndFrame = _wanBehavior?.ResolveEndFrame(
-                clip,
-                continuation ?? stage),
+            VideoEndFrame = videoEndFrame,
         };
     }
 
