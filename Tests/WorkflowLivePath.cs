@@ -106,9 +106,12 @@ internal sealed class WorkflowLivePath
         }
     }
 
-    /// <summary>No node reaches no output at all. Weaker than <see cref="AssertLive"/>, which
-    /// requires the published save.</summary>
-    public void AssertNoOrphanNodes()
+    /// <summary>
+    /// Every node that reaches no output at all, as <c>ClassTypeName#Id</c>, sorted. A test pinning
+    /// a known orphan asserts against this rather than dropping
+    /// <see cref="AssertNoOrphanNodes"/>, which would drop coverage of every other orphan too.
+    /// </summary>
+    public string[] OrphanNodes()
     {
         // Every output counts, not just the published one: a node feeding an intermediate save
         // still gets built and still contributes something the user sees.
@@ -118,11 +121,17 @@ internal sealed class WorkflowLivePath
             "Workflow has no output node, so nothing it builds is saved.");
         HashSet<string> live = [.. outputs.SelectMany(
             output => Ancestors(output).Append(output).Select(node => node.Id))];
-        string[] orphans = [.. _bridge.Graph.Nodes.Values
+        return [.. _bridge.Graph.Nodes.Values
             .Where(node => !live.Contains(node.Id) && !IsOutputNode(node))
             .Select(node => $"{node.ClassTypeName}#{node.Id}")
             .Order()];
+    }
 
+    /// <summary>No node reaches no output at all. Weaker than <see cref="AssertLive"/>, which
+    /// requires the published save.</summary>
+    public void AssertNoOrphanNodes()
+    {
+        string[] orphans = OrphanNodes();
         Assert.True(
             orphans.Length == 0,
             "Workflow contains nodes that reach no output — Comfy would build them for nothing:\n  "

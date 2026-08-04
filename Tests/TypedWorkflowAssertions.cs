@@ -92,10 +92,17 @@ internal static class TypedWorkflowAssertions
 
     /// <summary>
     /// Core's base-image decode, the node an authored <c>Base</c> reference must resolve to. Only
-    /// the image-to-video shape has one, and it is the graph's only plain <c>VAEDecode</c>.
+    /// the image-to-video shape has one. This overload identifies it as the graph's only plain
+    /// <c>VAEDecode</c>, which holds on LTX but not on architectures whose video half decodes
+    /// through one too — those must name the base sampler.
     /// </summary>
     public static VAEDecodeNode BaseImage(WorkflowBridge bridge) =>
         Assert.Single(bridge.Graph.NodesOfType<VAEDecodeNode>());
+
+    /// <summary>Core's base-image decode, selected by the base pass it decodes.</summary>
+    public static VAEDecodeNode BaseImage(WorkflowBridge bridge, SwarmKSamplerNode baseSampler) =>
+        Assert.Single(bridge.Graph.NodesOfType<VAEDecodeNode>(),
+            decode => ReferenceEquals(decode.Samples.Connection?.Node, baseSampler));
 
     /// <summary>
     /// Selects a sampler by its seed. Under the production step list core can contribute samplers

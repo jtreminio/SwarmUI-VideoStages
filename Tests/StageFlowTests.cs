@@ -192,11 +192,6 @@ public partial class StageFlowTests
             .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
 
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildCoreVideoWorkflowStepsWithPreVideoSave() =>
-        WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([SeedRefinerImageStep(), WorkflowTestHarness.CorePreVideoSavePrepStep(), WorkflowTestHarness.CoreImageToVideoStep()])
-            .Concat(WorkflowTestHarness.VideoStagesSteps());
-
     private static WorkflowGenerator.WorkflowGenStep SeedRefinerImageStep() =>
         new(g =>
         {
@@ -411,20 +406,12 @@ public partial class StageFlowTests
         }
     }
 
-    private static WorkflowGenerator.WorkflowGenStep SeedTextToVideoLtxVideoChainStep(bool attachAudioToCurrentMedia) =>
-        new(g => SeedTextToVideoLtxVideoChain(g, attachAudioToCurrentMedia), 11);
-
     // Native text-to-video where the main model IS the video model: the full video is produced by
     // core sampling and is already CurrentMedia before VideoStages' pre-core capture (priority
     // 10.95). Seeding at priority 6 mirrors that, so the video becomes the pre-core media that the
     // root-stage resizer and replacement operate on (rather than being dropped as image-to-video).
     private static WorkflowGenerator.WorkflowGenStep SeedNativeTextToVideoChainAsPreCoreMediaStep(bool attachAudioToCurrentMedia) =>
         new(g => SeedTextToVideoLtxVideoChain(g, attachAudioToCurrentMedia), 6);
-
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> BuildTextToVideoSteps(bool attachAudioToCurrentMedia) =>
-        WorkflowTestHarness.Template_BaseOnlyImage()
-            .Concat([SeedTextToVideoLtxVideoChainStep(attachAudioToCurrentMedia)])
-            .Concat(WorkflowTestHarness.VideoStagesSteps());
 
     internal static IEnumerable<WorkflowGenerator.WorkflowGenStep>
         BuildNativeTextToVideoStepsWithPreCoreVideo(bool attachAudioToCurrentMedia) =>
