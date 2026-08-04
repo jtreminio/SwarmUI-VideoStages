@@ -284,9 +284,15 @@ internal static class TypedWorkflowAssertions
     /// The browser-visible warnings <c>PlanDiagnosticReporter.TrackRequestWarning</c> accumulates.
     /// The API route's generator carries the same input, so these are readable off a generated
     /// workflow as well as off a hand-built generator.
+    /// <para>
+    /// A request that warned about nothing never creates the key at all, which is the answer a test
+    /// asserting the absence of a warning wants — not an exception.
+    /// </para>
     /// </summary>
     public static List<string> RequestWarnings(T2IParamInput input) =>
-        Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
+        input.ExtraMeta.TryGetValue("parser_warnings", out object warnings)
+            ? Assert.IsType<List<string>>(warnings)
+            : [];
 
     /// <summary>
     /// Inclusive variant of <see cref="ComfyGraph.IsReachableUpstream"/>: returns true if

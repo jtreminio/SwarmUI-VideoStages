@@ -37,13 +37,20 @@ internal sealed class RootExecutionPolicy
         Plan.UsesGeneratedClipDonor;
 
     /// <summary>
+    /// The host root is the text root the timeline replaces. Nothing may treat it as a reference to
+    /// generate from, because it is the thing being replaced — a sourced clip under image-to-video
+    /// also discards the root, but that root is a real host generation and stays referenceable.
+    /// </summary>
+    public bool DiscardsTextToVideoRoot =>
+        Plan.HostKind == HostRootKind.TextToVideoRoot && Plan.DiscardsRoot;
+
+    /// <summary>
     /// Only the first generated stage of a normal text-to-video timeline replaces the host text
     /// root. A global-refine source is explicitly not that case, even though its final output also
     /// replaces the root publication.
     /// </summary>
     public bool ReplacesTextToVideoRootStage(StagePlan stage, ClipPlan clip) =>
-        Plan.HostKind == HostRootKind.TextToVideoRoot
-        && Plan.DiscardsRoot
+        DiscardsTextToVideoRoot
         && clip?.Input == ClipInputKind.EmptyLatent
         && stage?.Input == StageInputKind.EmptyLatent
         && stage.ClipStageIndex == 0;

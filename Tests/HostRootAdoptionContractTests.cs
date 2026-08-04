@@ -240,6 +240,84 @@ public sealed class HostRootAdoptionContractTests
     }
 
     /// <summary>
+    /// The claim belongs to the timeline, not to an architecture, so an LTX-2 clip that does not
+    /// claim must not stop its neighbour claiming either — in either order. LTX-2 captured the host
+    /// root unconditionally, and since a capture refuses the claim, one LTX-2 clip used to deny it
+    /// to the whole timeline.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task An_ltx_clip_does_not_deny_the_claim_to_its_neighbour(bool ltxLeads)
+    {
+        using LtxAndWanFixture fixture = new();
+        JObject ltxClip = MakeClip(0.6, fixture.Stage());
+        JObject wanClip = MakeClip(0.6, Fixtures.MakeStage(fixture.SecondModel.Name));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(
+            ltxLeads ? ltxClip : wanClip,
+            ltxLeads ? wanClip : ltxClip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmKSamplerNode claimed = RequireTypedNode<SwarmKSamplerNode>(bridge, CoreSamplerId);
+        Assert.Same(claimed, StageSampler(bridge, ltxLeads ? 1 : 0));
+        Assert.Equal(
+            CoreDecodeId,
+            Assert.Single(
+                bridge.Graph.NodesOfType<VAEDecodeNode>(),
+                decode => ReachesUpstream(bridge, decode, claimed.Id)).Id);
+
+        live.AssertLive(claimed);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// An authored reference to the host's base pass costs the timeline nothing on a text-to-video
+    /// request, because there is no host pass to reference: the spec parser rewrites every stage's
+    /// ImageReference to <c>Generated</c>, and <c>LtxClipRefResolver</c> drops every non-upload
+    /// clip ref. Refusing the claim for it would trade a whole extra root pass for a reference that
+    /// is discarded either way.
+    /// </summary>
+    [Fact]
+    public async Task An_ltx_base_clip_ref_costs_the_timeline_nothing_on_text_to_video()
+    {
+        using LtxAndWanFixture fixture = new();
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(
+            MakeClipWithRefs([MakeRef("Base")], fixture.Stage()),
+            MakeClip(0.6, Fixtures.MakeStage(fixture.SecondModel.Name))));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Equal(CoreSamplerId, StageSampler(bridge, 1).Id);
+
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// The timeline replaces the host's text root, so there is deliberately no host generation for
+    /// a stage to reference — and every stage's ImageReference is rewritten to <c>Generated</c> on
+    /// such a request. Reporting that as a missing reference would put a warning on the browser for
+    /// every text-to-video run.
+    /// </summary>
+    [Fact]
+    public async Task A_discarded_text_root_is_not_reported_as_a_missing_generated_reference()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+
+        (_, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(MakeDocument(
+                    MakeClip(1.0, fixture.Stage()),
+                    MakeClip(1.0, fixture.Stage()))));
+
+        Assert.DoesNotContain(
+            RequestWarnings(generator.UserInput),
+            warning => warning.Contains("Generated", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The capture that refuses the claim is only taken when a clip asked for it. Capturing
     /// unconditionally would pin core's nodes for every H3 request and deny the claim outright —
     /// the same timeline, minus the reference, claims normally.

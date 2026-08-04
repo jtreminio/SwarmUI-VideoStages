@@ -38,7 +38,7 @@ internal sealed class StageSequenceRootSetup(
             rootVideoStageResizer.ApplyConfiguredRootStageResolutionToSurvivingRootMedia();
         }
 
-        CaptureGeneratedReference();
+        CaptureGeneratedReference(rootPolicy);
         return new StageSequenceRootSources(
             g.CurrentMedia?.Duplicate(),
             g.CurrentVae?.Duplicate(),
@@ -50,18 +50,28 @@ internal sealed class StageSequenceRootSetup(
                 preparedAudioSources.UploadedAudios));
     }
 
-    public StageSequenceRootSources Snapshot(AudioRuntimeSources preparedAudioSources)
+    public StageSequenceRootSources Snapshot(
+        AudioRuntimeSources preparedAudioSources,
+        RootExecutionPolicy rootPolicy)
     {
         ArgumentNullException.ThrowIfNull(preparedAudioSources);
-        store.Capture(StageRefStore.StageKind.Generated, g.CurrentMedia, g.CurrentVae);
+        ArgumentNullException.ThrowIfNull(rootPolicy);
+        if (!rootPolicy.DiscardsTextToVideoRoot)
+        {
+            store.Capture(StageRefStore.StageKind.Generated, g.CurrentMedia, g.CurrentVae);
+        }
         return new StageSequenceRootSources(
             g.CurrentMedia?.Duplicate(),
             g.CurrentVae?.Duplicate(),
             preparedAudioSources);
     }
 
-    private void CaptureGeneratedReference()
+    private void CaptureGeneratedReference(RootExecutionPolicy rootPolicy)
     {
+        if (rootPolicy.DiscardsTextToVideoRoot)
+        {
+            return;
+        }
         StageRefStore.StageRef reference = store.CaptureCurrentOutputReference();
         store.Capture(
             StageRefStore.StageKind.Generated,

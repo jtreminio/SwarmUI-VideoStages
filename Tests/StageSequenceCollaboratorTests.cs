@@ -179,7 +179,10 @@ public class StageSequenceCollaboratorTests
             input,
             WorkflowTestHarness.Template_BaseOnlyImage());
         StageRefStore store = new(generator);
-        StageGuideReferenceState state = new(generator, store);
+        StageGuideReferenceState state = new(
+            generator,
+            store,
+            new RootExecutionPolicy(TestPlanCompiler.Compile(generator.GetVideoStagesSpec())));
         StagePlan stage = Assert.Single(
             TestPlanCompiler.Compile(generator.GetVideoStagesSpec()).Clips[1].Stages);
         Assert.NotEqual(stage.StageId, stage.ClipStageIndex);

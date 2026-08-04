@@ -7,7 +7,8 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class StageGuideReferenceState(
     WorkflowGenerator g,
-    StageRefStore store)
+    StageRefStore store,
+    RootExecutionPolicy rootPolicy)
 {
     private readonly Dictionary<int, StageRefStore.StageRef> _stageOutputs = [];
     private StageRefStore.StageRef _previousStageRef;
@@ -33,9 +34,16 @@ internal sealed class StageGuideReferenceState(
             StageGuideReferenceKind.Refiner => WarnIfMissing(
                 store.Refiner,
                 "VideoStages: ImageReference 'Refiner' requested, but no refiner reference exists."),
-            StageGuideReferenceKind.Generated => _previousStageRef ?? WarnIfMissing(
-                store.Generated,
-                "VideoStages: ImageReference 'Generated' requested, but no generated reference exists."),
+            // Under a discarded text root there is deliberately no host generation to reference,
+            // and every stage's ImageReference is rewritten to Generated on such a request — so a
+            // miss here is the intended state for the whole timeline, not something to report.
+            StageGuideReferenceKind.Generated => _previousStageRef
+                ?? (rootPolicy.DiscardsTextToVideoRoot
+                    ? null
+                    : WarnIfMissing(
+                        store.Generated,
+                        "VideoStages: ImageReference 'Generated' requested, but no generated "
+                            + "reference exists.")),
             StageGuideReferenceKind.PreviousStage => _previousStageRef,
             StageGuideReferenceKind.ExplicitStage =>
                 _stageOutputs.GetValueOrDefault(payload.Guide.ReferencedStageIndex!.Value),

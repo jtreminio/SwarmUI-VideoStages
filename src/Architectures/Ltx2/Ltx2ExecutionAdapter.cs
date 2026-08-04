@@ -1,5 +1,6 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Execution;
 using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
@@ -45,10 +46,10 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         switch (context.Phase)
         {
             case ArchitectureHostPhase.CaptureBaseReference:
-                new StageRefStore(generator).Capture(StageRefStore.StageKind.Base);
+                CaptureIfReferenced(context.Plan, StageRefStore.StageKind.Base);
                 break;
             case ArchitectureHostPhase.CaptureRefinerReference:
-                new StageRefStore(generator).Capture(StageRefStore.StageKind.Refiner);
+                CaptureIfReferenced(context.Plan, StageRefStore.StageKind.Refiner);
                 break;
             case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
                 new LtxAudioMaskResizer(
@@ -56,6 +57,43 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
                     new RootVideoStageResizer(generator))
                     .ApplyRootAudioMaskDimensionsAfterNativeVideo();
                 break;
+        }
+    }
+
+    /// <summary>
+    /// A capture pins the host node it names for the rest of the request — that is what stops a
+    /// timeline stage taking that node over and handing the reference its own output instead. So an
+    /// unwanted capture is not free: it costs the node, and not only to this architecture's clips.
+    /// Capture only a host stage some authored guide or frame reference actually names.
+    /// </summary>
+    private void CaptureIfReferenced(VideoExecutionPlan plan, StageRefStore.StageKind kind)
+    {
+        if (new RootExecutionPolicy(plan).DiscardsTextToVideoRoot)
+        {
+            // Nothing can consume a host reference here: the spec parser rewrites every stage's
+            // ImageReference to Generated on such a request, and LtxClipRefResolver drops every
+            // non-upload clip ref. Capturing anyway would cost the timeline a node for nothing.
+            return;
+        }
+        (StageGuideReferenceKind guide, ImageReferenceSourceKind reference) = kind switch
+        {
+            StageRefStore.StageKind.Base =>
+                (StageGuideReferenceKind.Base, ImageReferenceSourceKind.Base),
+            StageRefStore.StageKind.Refiner =>
+                (StageGuideReferenceKind.Refiner, ImageReferenceSourceKind.Refiner),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
+        bool referenced = plan.Clips
+            .SelectMany(clip => clip.Stages)
+            .Select(stage => stage.ArchitecturePayload as Ltx2StagePayload)
+            .Where(payload => payload is not null)
+            .Any(payload => payload.Guide?.Kind == guide
+                || (!payload.FrameReferences.IsDefaultOrEmpty
+                    && payload.FrameReferences.Any(
+                        frameRef => frameRef.SourceKind == reference)));
+        if (referenced)
+        {
+            new StageRefStore(generator).Capture(kind);
         }
     }
 
@@ -80,7 +118,8 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             resizer);
         StageGuideReferenceState guideReferences = new(
             generator,
-            stageRefStore);
+            stageRefStore,
+            context.RootPolicy);
         StageClipExecutor clipExecutor = new(
             generator,
             stageRefStore,
@@ -103,7 +142,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         }
         else
         {
-            rootSources = rootSetup.Snapshot(context.AudioSources);
+            rootSources = rootSetup.Snapshot(context.AudioSources, context.RootPolicy);
         }
         return new GenerationSession(
             generator,
