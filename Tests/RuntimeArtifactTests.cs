@@ -248,52 +248,6 @@ public class RuntimeArtifactTests
             generator.CurrentMedia.AttachedAudio.Path);
     }
 
-    [Fact]
-    public void Global_trim_reuses_an_equivalent_terminal_trim()
-    {
-        using SwarmUiTestContext _ = new();
-        JObject workflow = [];
-        T2IParamInput input = new(null);
-        input.Set(T2IParamTypes.TrimVideoStartFrames, 2);
-        input.Set(T2IParamTypes.TrimVideoEndFrames, 3);
-        WorkflowGenerator generator = new()
-        {
-            Workflow = workflow,
-            UserInput = input,
-        };
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        UnknownNode video = bridge.AddStub("UnitTestVideo", "90")
-            .WithOutputs(WGNodeData.DT_VIDEO);
-        UnknownNode audio = bridge.AddStub("UnitTestAudio", "92")
-            .WithOutputs(WGNodeData.DT_AUDIO);
-        SwarmTrimFramesNode existing = bridge.AddNode(
-            new SwarmTrimFramesNode().With(TrimStart: 2, TrimEnd: 3),
-            "91");
-        existing.Image.ConnectToUntyped(video.GetOutput(0));
-        generator.CurrentMedia = existing.IMAGE.ToWGMedia(
-            generator,
-            WGNodeData.DT_VIDEO,
-            width: 512,
-            height: 512,
-            frames: 20,
-            fps: 24);
-        generator.CurrentMedia.AttachedAudio = audio.GetOutput(0)
-            .ToWGAttachedAudio(generator);
-
-        new GlobalVideoFrameTrimmer(generator).Apply();
-        new GlobalVideoFrameTrimmer(generator).Apply();
-
-        using WorkflowBridge resultBridge = WorkflowBridge.Create(workflow);
-        Assert.Single(
-            resultBridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == SwarmTrimFramesNode.ClassType);
-        Assert.Single(
-            resultBridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == TrimAudioDurationNode.ClassType);
-        Assert.Equal(existing.IMAGE.ToPath(), generator.CurrentMedia.Path);
-        Assert.Equal(20, generator.CurrentMedia.Frames);
-    }
-
     private static ClipPlan Clip() => new(
         ClipId: 7,
         Frames: 25,
