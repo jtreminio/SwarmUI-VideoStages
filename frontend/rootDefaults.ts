@@ -108,7 +108,7 @@ export const getRootDefaults = (
         (!model || model.options.length === 0) &&
         isRootTextToVideoModel(modelCatalog)
     ) {
-        model = getVideoStagesHostBridge().getSelect("input_model");
+        model = getRootModelInput();
         modelOptions = getVideoStagesHostBridge().getSelectOptions(model);
         modelCatalog = buildModelCatalog();
     }

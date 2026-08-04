@@ -2,12 +2,16 @@ import { afterEach, describe, expect, it, jest } from "@jest/globals";
 import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectureCatalog";
 import { testArchitectureCatalog } from "../__test_helpers__/architectureFixtures";
 import { minimalClip } from "../__test_helpers__/clipFixtures";
+import { mountSelect } from "../__test_helpers__/dom";
 import {
     setVideoStagesHostBridgeForTests,
     type VideoStagesHostBridge,
 } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
-import { isRootTextToVideoModel } from "../swarmInputs";
+import {
+    getRootGeneratedEntryMode,
+    isRootTextToVideoModel,
+} from "../swarmInputs";
 import {
     ARCHITECTURE_CATALOG_API,
     buildArchitectureModelCatalog,
@@ -61,6 +65,10 @@ const deferred = <T>() => {
         reject = rejectPromise;
     });
     return { promise, resolve, reject };
+};
+
+const mountRootModel = (modelName: string): void => {
+    mountSelect("input_model", { value: modelName, options: [modelName] });
 };
 
 afterEach(() => {
@@ -584,10 +592,7 @@ describe("authoritative catalog repository", () => {
             requestJson: async () => future,
         });
         await loadAuthoritativeArchitectureCatalog();
-        const input = document.createElement("input");
-        input.id = "input_model";
-        input.value = future.models[0].modelName;
-        document.body.appendChild(input);
+        mountRootModel(future.models[0].modelName);
 
         expect(isRootTextToVideoModel()).toBe(true);
     });
@@ -598,10 +603,7 @@ describe("authoritative catalog repository", () => {
             requestJson: async () => dto,
         });
         await loadAuthoritativeArchitectureCatalog();
-        const input = document.createElement("input");
-        input.id = "input_model";
-        input.value = dto.models[1].modelName;
-        document.body.appendChild(input);
+        mountRootModel(dto.models[1].modelName);
 
         expect(dto.architectures[0].capabilities.entryModes).toContain(
             "text-to-video",
@@ -610,5 +612,18 @@ describe("authoritative catalog repository", () => {
             "text-to-video",
         );
         expect(isRootTextToVideoModel()).toBe(false);
+    });
+
+    // The host renders the root model as a dropdown; reading it as a text input
+    // silently reported every request as text-to-video.
+    it("reads the root model dropdown to classify an image root as image-to-video", async () => {
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => dto,
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        mountRootModel("some-image-checkpoint.safetensors");
+
+        expect(getRootGeneratedEntryMode()).toBe("image-to-video");
     });
 });

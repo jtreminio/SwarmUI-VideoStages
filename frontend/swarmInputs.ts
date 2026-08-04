@@ -83,8 +83,9 @@ export const getGroupToggle = (): HTMLInputElement | null =>
         "input_group_content_videostages_toggle",
     );
 
-export const getRootModelInput = (): HTMLInputElement | null =>
-    getVideoStagesHostBridge().getInput("input_model");
+/** The host renders every model param as a dropdown, root model included. */
+export const getRootModelInput = (): HTMLSelectElement | null =>
+    getVideoStagesHostBridge().getSelect("input_model");
 
 export const getBase2EditStageRefs = (): string[] => {
     const snapshot = getVideoStagesHostBridge().getBase2EditRegistry();

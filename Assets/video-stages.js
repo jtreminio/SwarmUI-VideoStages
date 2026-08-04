@@ -1815,7 +1815,7 @@
   var getGroupToggle = () => getVideoStagesHostBridge().getInput(
     "input_group_content_videostages_toggle"
   );
-  var getRootModelInput = () => getVideoStagesHostBridge().getInput("input_model");
+  var getRootModelInput = () => getVideoStagesHostBridge().getSelect("input_model");
   var getBase2EditStageRefs = () => {
     const snapshot = getVideoStagesHostBridge().getBase2EditRegistry();
     if (!snapshot?.enabled || !Array.isArray(snapshot.refs)) {
@@ -1947,7 +1947,7 @@
     );
     let modelCatalog = buildModelCatalog();
     if ((!model || model.options.length === 0) && isRootTextToVideoModel(modelCatalog)) {
-      model = getVideoStagesHostBridge().getSelect("input_model");
+      model = getRootModelInput();
       modelOptions = getVideoStagesHostBridge().getSelectOptions(model);
       modelCatalog = buildModelCatalog();
     }
