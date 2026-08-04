@@ -57,13 +57,10 @@ internal static class WanClipPlanCompiler
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
         bool initVideoEntry = context.EntryMode == ArchitectureEntryMode.InitVideo;
         bool previousStageContinuesSampling = false;
-        // Resolved stage models are a prerequisite; indexing asserts that planning contract.
-        string clipCompatibilityClassId = activeStages.Count == 0
-            ? ""
-            : stageModels[activeStages[0].ClipStageRawIndex].CompatibilityClassId;
         for (int stageIndex = 0; stageIndex < activeStages.Count; stageIndex++)
         {
             StageSpec stage = activeStages[stageIndex];
+            // Resolved stage models are a prerequisite; indexing asserts that planning contract.
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
             bool firstStage = stageIndex == 0;
             bool decodedStageInput = initVideoEntry || !firstStage;
@@ -160,12 +157,8 @@ internal static class WanClipPlanCompiler
                 "WAN");
         return new(
             new WanClipPayload(
-                clip.Id,
                 firstReference,
-                lastReference)
-            {
-                CompatibilityClassId = clipCompatibilityClassId,
-            },
+                lastReference),
             stages,
             diagnostics.AsReadOnly());
     }

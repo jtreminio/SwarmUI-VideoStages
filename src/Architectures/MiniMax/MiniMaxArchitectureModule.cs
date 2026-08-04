@@ -191,7 +191,6 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
 
         return new(
             new MiniMaxClipPayload(
-                clip.Id,
                 clip.ReferenceFraming,
                 clip.ReuseAudio && activeStages.Count >= 3,
                 first,
@@ -202,7 +201,6 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
 }
 
 internal sealed record MiniMaxClipPayload(
-    int ClipId,
     ReferenceFramingMode ReferenceFraming,
     bool ReuseAudio,
     NativeFrameReferencePlan FirstFrameReference,

@@ -84,13 +84,10 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
 
         List<PlanDiagnostic> diagnostics = [];
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
-        // Assignments are resolver-vetted; a missing key is a caller contract violation.
-        string compatibilityClassId = activeStages.Count == 0
-            ? ""
-            : stageModels[activeStages[0].ClipStageRawIndex].CompatibilityClassId;
         Dictionary<int, IArchitectureStagePayload> stages = [];
         foreach (StageSpec stage in activeStages)
         {
+            // Assignments are resolver-vetted; a missing key is a caller contract violation.
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
             bool decodedInput = context.EntryMode == ArchitectureEntryMode.InitVideo
                 || stage.ClipStageIndex > 0;
@@ -144,7 +141,7 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
         }
 
         return new(
-            new HostVideoClipPayload(clip.Id, compatibilityClassId),
+            new HostVideoClipPayload(),
             stages,
             diagnostics.AsReadOnly());
     }
@@ -164,10 +161,7 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
             rawStageIndex);
 }
 
-internal sealed record HostVideoClipPayload(
-    int ClipId,
-    string CompatibilityClassId) :
-    IArchitectureClipPayload
+internal sealed record HostVideoClipPayload : IArchitectureClipPayload
 {
     public ArchitectureId ArchitectureId =>
         HostVideoArchitectureModule.ArchitectureId;

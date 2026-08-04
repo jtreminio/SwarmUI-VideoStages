@@ -30,7 +30,7 @@ internal static class NoneArchitecture
     };
 }
 
-internal sealed record NoneClipPayload(int ClipId) : IArchitectureClipPayload
+internal sealed record NoneClipPayload : IArchitectureClipPayload
 {
     public ArchitectureId ArchitectureId => NoneArchitecture.Id;
 }

@@ -190,7 +190,7 @@ internal static class VideoExecutionPlanCompiler
         if (assignment.Architecture.Id == NoneArchitecture.Id)
         {
             return new(
-                new NoneClipPayload(clip.Id),
+                new NoneClipPayload(),
                 new Dictionary<int, IArchitectureStagePayload>(),
                 []);
         }

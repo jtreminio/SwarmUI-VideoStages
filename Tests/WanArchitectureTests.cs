@@ -191,7 +191,6 @@ public class WanArchitectureTests
         Assert.Equal(
             ["text-to-video", "image-to-video", "init-video"],
             catalogModel["capabilities"]["entryModes"].Values<string>());
-        // The class facts resolution just established are what the model row publishes.
         Assert.Equal(
             WanArchitectureModule.Ti2v5bModelClassId,
             catalogModel.Value<string>("modelClassId"));
@@ -234,8 +233,6 @@ public class WanArchitectureTests
         Assert.Equal(
             "removed-profile-alias",
             model.Value<string>("modelProfileId"));
-        // The alias is republished verbatim but decides nothing: capabilities and the frame grid
-        // come from the descriptor the model resolved against.
         Assert.Equal(
             ["text-to-video", "image-to-video", "init-video"],
             model["capabilities"]["entryModes"].Values<string>());
@@ -327,10 +324,6 @@ public class WanArchitectureTests
             "effective-request.unsupported-audio-source-ignored");
     }
 
-    /// <summary>
-    /// Wan keeps one uploaded reference per bounded position. The middle, duplicate, and
-    /// non-uploaded entries are dropped from the payload with a warning each, never silently.
-    /// </summary>
     [Fact]
     public void Effective_request_keeps_one_uploaded_first_and_last_reference_and_warns_for_the_rest()
     {
@@ -959,8 +952,6 @@ public class WanArchitectureTests
 
         Assert.False(first.ContinuesSamplingFromPreviousStage);
         Assert.True(second.ContinuesSamplingFromPreviousStage);
-        // The shared run is split where the low-noise stage starts sampling; control is the only
-        // authored value that moves that point.
         Assert.Equal(
             splitStep,
             HostVideoStageSchedulePolicy.StartStep(
@@ -968,8 +959,7 @@ public class WanArchitectureTests
                 second.Core.Control));
     }
 
-    // A shared schedule means shared steps, scheduler and a partial control: the compiler never
-    // compares Sampler, so there is no sampler arm to write here.
+    // Sampler is intentionally absent because the continuation rule does not compare it.
     [Theory]
     [InlineData("Wan2.2-I2V-A14B-HighNoise.safetensors", 12, "normal", 0.5)]
     [InlineData("Wan2.2-I2V-A14B-LowNoise.safetensors", 10, "normal", 0.5)]
@@ -1037,7 +1027,7 @@ public class WanArchitectureTests
             compiled.Stages[0].ResolvedModel.ModelProfileId);
         Assert.Equal(
             T2IModelClassSorter.CompatWan21_14b.ID,
-            compiled.RequireWanPayload().CompatibilityClassId);
+            Assert.Single(compiled.Stages).ResolvedModel.CompatibilityClassId);
     }
 
     [Theory]

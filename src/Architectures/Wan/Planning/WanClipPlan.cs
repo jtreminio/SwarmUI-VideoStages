@@ -5,15 +5,11 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Wan.Planning;
 
 internal sealed record WanClipPayload(
-    int ClipId,
     NativeFrameReferencePlan FirstFrameReference = null,
     NativeFrameReferencePlan LastFrameReference = null) :
     IArchitectureClipPayload
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
-
-    public string CompatibilityClassId { get; init; } =
-        WanArchitectureModule.ArchitectureId.Value;
 
     public (int Width, int Height) ProjectFinalDimensions(
         IReadOnlyList<StagePlan> stages,
