@@ -186,8 +186,8 @@ internal sealed class StockHostVideoGenerationSession(
         {
             if (_wanBehavior is null)
             {
-                // LTX v2's stock branch reads this request-global enhancement directly. The
-                // generic fallback does not advertise it, so retain it only in request metadata.
+                // The generic fallback has no reference-audio input, so keep Prompt Audios out of
+                // the core call. Dropped for this stage only; ParamSnapshot restores it on exit.
                 g.UserInput.InternalSet.ValuesInput.Remove(
                     T2IParamTypes.PromptAudios.Type.ID);
             }

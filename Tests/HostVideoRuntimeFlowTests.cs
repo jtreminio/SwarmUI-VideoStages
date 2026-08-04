@@ -562,6 +562,12 @@ public class HostVideoRuntimeFlowTests
             MakeDocument(clip).ToString());
         input.Set(T2IParamTypes.ClipVisionModel, visionModel);
         input.Set(T2IParamTypes.Video2VideoCreativity, 0.2);
+        input.Set(
+            T2IParamTypes.PromptAudios,
+            [AudioFile.FromDataString("data:audio/wav;base64,QUJD")]);
+        input.Set(
+            T2IParamTypes.PromptVideos,
+            [VideoFile.FromDataString("data:video/mp4;base64,QUJD")]);
 
         (JObject workflow, WorkflowGenerator generator) =
             WorkflowTestHarness.GenerateWithStepsAndState(
@@ -597,6 +603,12 @@ public class HostVideoRuntimeFlowTests
             warning => warning.Contains(
                 "'Video2Video Creativity'",
                 StringComparison.Ordinal));
+        Assert.Contains(
+            warnings,
+            warning => warning.Contains("'Prompt Audios'", StringComparison.Ordinal));
+        Assert.Contains(
+            warnings,
+            warning => warning.Contains("'Prompt Videos'", StringComparison.Ordinal));
         // An upscale model is a stock ComfyUI operation, so the generic runtime drives it too.
         Assert.NotEmpty(NodesOfClass(bridge, "UpscaleModelLoader"));
         Assert.NotEmpty(NodesOfClass(bridge, "ImageUpscaleWithModel"));

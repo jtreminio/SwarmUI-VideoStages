@@ -52,6 +52,14 @@ internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
                 "'Prompt Audios' is an architecture-specific enhancement and was "
                     + "ignored by the generic host-video fallback."));
         }
+        if (generator.UserInput.TryGet(T2IParamTypes.PromptVideos, out List<VideoFile> promptVideos)
+            && promptVideos.Count > 0)
+        {
+            diagnostics.Add(Ignored(
+                "host-video.video-reference.ignored",
+                "'Prompt Videos' is an architecture-specific enhancement and was "
+                    + "ignored by the generic host-video fallback."));
+        }
         return diagnostics;
     }
 

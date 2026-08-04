@@ -152,8 +152,8 @@ internal sealed class MiniMaxGenerationSession(
             g.UserInput,
             T2IParamTypes.PromptAudios.Type))
         {
-            // H3 writes its own audio and has no reference-audio input; keep the request-global
-            // enhancement in metadata only.
+            // H3 writes its own audio, so core's reference path must not also wire Prompt Audios
+            // into ref_audios. Dropped for this stage only; ParamSnapshot restores it on exit.
             g.UserInput.InternalSet.ValuesInput.Remove(
                 T2IParamTypes.PromptAudios.Type.ID);
             WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
