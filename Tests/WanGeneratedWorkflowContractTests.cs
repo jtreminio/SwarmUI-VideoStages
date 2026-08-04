@@ -1666,6 +1666,11 @@ public class WanGeneratedWorkflowContractTests
     /// They are separate nodes — folding them together would either encode one frame or condition
     /// on all of them. The request's global trim then shortens the published result, not the
     /// window.
+    /// <para>
+    /// The arms differ only in whether the upload carries a file name: it is metadata on the
+    /// materialized <c>ImageFile</c>, so the same graph must come out either way, and the authored
+    /// name must not appear in it.
+    /// </para>
     /// </summary>
     [Theory]
     [InlineData(true)]
@@ -1690,6 +1695,22 @@ public class WanGeneratedWorkflowContractTests
         Assert.Equal(2, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
         // control 0.5 over 10 steps.
         Assert.Equal(5, stage.StartAtStep.LiteralAsInt());
+
+        // The inline payload is what loads, with or without a name beside it.
+        string authoredData = (string)document["clips"][0]["initVideo"]["data"];
+        Assert.Equal(
+            authoredData[(authoredData.IndexOf(',') + 1)..],
+            Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>())
+                .VideoBase64.LiteralAsString());
+        string authoredFileName = (string)document["clips"][0]["initVideo"]["fileName"];
+        Assert.Equal(withFileName, authoredFileName is not null);
+        if (authoredFileName is not null)
+        {
+            Assert.DoesNotContain(
+                authoredFileName,
+                workflow.ToString(),
+                StringComparison.Ordinal);
+        }
 
         VAEEncodeNode encode = Assert.IsType<VAEEncodeNode>(stage.LatentImage.Connection?.Node);
         ImageFromBatchNode encoded = Assert.IsType<ImageFromBatchNode>(
@@ -2909,20 +2930,13 @@ public class WanGeneratedWorkflowContractTests
     }
 
     /// <summary>
-    /// <c>donotsave</c> strips every output node — the state
-    /// <see cref="WorkflowLivePath.AssertNoOrphanNodes"/> and <c>FinalVideoSave</c> cannot describe,
-    /// since with nothing to reach "orphaned" has no meaning. Pinned as today's behaviour, not as
-    /// intent: ComfyUI rejects an output-less prompt with <c>prompt_no_outputs</c> (P5 in
-    /// <c>nonversioned/20260804-production-findings.md</c>). What must still hold is that nothing
-    /// dangles behind the removal.
-    /// <para>
-    /// Text-to-video is the only shape where this can be asserted at all: core saves the
-    /// image-to-video base pass regardless of <c>donotsave</c>, so an image-to-video request always
-    /// ships one output node the extension does not own.
-    /// </para>
+    /// <c>donotsave</c> is honoured above the graph — <c>T2IAPI</c> returns a data URI rather than
+    /// writing to disk — so a mixed timeline publishes exactly as it would without the flag. It once
+    /// stripped the timeline's own saves, which in text-to-video left ComfyUI with no output node at
+    /// all to reject (P5 in <c>nonversioned/20260804-production-findings.md</c>).
     /// </summary>
     [Fact]
-    public async Task A_do_not_save_mixed_timeline_publishes_nothing_and_leaves_no_dangling_refs()
+    public async Task A_do_not_save_mixed_timeline_publishes_exactly_as_a_saving_request_does()
     {
         using MultiModelFixture fixture = MultiModelFixture.Create(
             Ltx2WorkflowFixture.ModelFixturePath,
@@ -2941,9 +2955,10 @@ public class WanGeneratedWorkflowContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        live.AssertNoPublishedOutput();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        // Two saves, not three: clip 0's intermediate, then the timeline's publication, which is
+        // also clip 1's intermediate rather than a node of its own.
+        live.AssertAllLive(StageSampler(bridge, 0), StageSampler(bridge, 1));
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 2);
     }
 
     /// <summary>
@@ -3001,6 +3016,11 @@ public class WanGeneratedWorkflowContractTests
     /// <see cref="The_global_end_image_belongs_to_the_clips_terminal_generating_stage"/> is the
     /// control that it does reach the graph when it can.
     /// </para>
+    /// <para>
+    /// Entry mode is checked before the model, so the two text-to-video arms are refused for that
+    /// reason alone; what separates them is the entry latent each profile builds instead, which the
+    /// dropped end image must leave untouched.
+    /// </para>
     /// </summary>
     [Theory]
     [InlineData(WanWorkflowFixture.Wan22I2v14bFixturePath, "two-clips")]
@@ -3045,6 +3065,15 @@ public class WanGeneratedWorkflowContractTests
             warning => warning.Contains("'Video End Frame' was ignored", StringComparison.Ordinal));
         Assert.Empty(bridge.Graph.NodesOfType<WanFirstLastFrameToVideoNode>());
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+        // The arm really ran on the checkpoint it names, and the profile still builds its own
+        // entry: 5B its native latent, 14B the conditioning shapes that node never appears in.
+        SwarmKSamplerNode first = StageSampler(bridge, 0);
+        Assert.Equal(
+            Path.GetFileName(modelFixturePath),
+            ModelBranchOf(first).Loader.UnetName.LiteralAsString());
+        Assert.Equal(
+            modelFixturePath == WanWorkflowFixture.Wan22Ti2v5bFixturePath ? 1 : 0,
+            bridge.Graph.NodesOfType<Wan22ImageToVideoLatentNode>().Count);
         // The same instance, not merely some image: "ignored" means untouched, and a path that
         // swapped in a replacement would satisfy a non-null check.
         Assert.NotNull(endFrameBeforeStages);
@@ -3052,7 +3081,7 @@ public class WanGeneratedWorkflowContractTests
             endFrameBeforeStages,
             generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null));
 
-        live.AssertAllLive(StageSampler(bridge, 0));
+        live.AssertAllLive(first);
         AssertShippable(bridge, workflow, live);
     }
 

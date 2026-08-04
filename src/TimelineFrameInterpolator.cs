@@ -152,8 +152,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
                 "VideoStages: frame interpolation metadata exceeds the supported integer range.");
         }
 
-        if (g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false)
-            && !g.UserInput.Get(T2IParamTypes.DoNotSave, false))
+        if (g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false))
         {
             media.ToWGNodeData(g).SaveOutput(
                 artifact.Vae?.ToWGNodeData(g) ?? g.CurrentVae,

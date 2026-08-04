@@ -95,15 +95,21 @@ public class AuthoringDocumentContractTests
         Fixtures.SetVideoStagesConfig(input, FixtureJson());
         KeyLog keyLog = new();
         VideoStagesJsonReader.KeyProbe = keyLog.Observe;
+        VideoStagesSpec spec;
         try
         {
-            return VideoStagesSpecParser.Parse(new WorkflowGenerator { UserInput = input });
+            spec = VideoStagesSpecParser.Parse(new WorkflowGenerator { UserInput = input });
         }
         finally
         {
             VideoStagesJsonReader.KeyProbe = null;
             log = keyLog;
         }
+        // A carrier the backend cannot see (renamed Enabled/Data param key) parses to an empty spec
+        // with an empty probe log, which satisfies the key-contract emptiness assertions vacuously.
+        Assert.Equal(2, spec.Clips.Count);
+        Assert.NotEmpty(keyLog.Read);
+        return spec;
     }
 
     [Fact]

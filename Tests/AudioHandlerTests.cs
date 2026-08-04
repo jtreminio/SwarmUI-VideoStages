@@ -80,6 +80,24 @@ public class AudioHandlerTests
             generator,
             new RootVideoStageResizer(generator)));
 
+    /// <summary>
+    /// These ids are minted by a different extension. SwarmUI-AceStepFun's
+    /// <c>AudioWorkflow.GetTrackNodeId</c> feeds <c>GetStableDynamicID(64100 + branch*1000 +
+    /// track*100 + 60, 0)</c>, and that helper returns <c>1000 + index</c> — so branch 0's decode
+    /// lands on 65160 + track*100, which is what <see cref="AudioHandler"/> recomputes to find it.
+    /// Every other test here seeds through <c>MakeAceStepFunDecodeId</c>, so a drifted base would
+    /// seed the drifted value and still pass while real AceStepFun audio stopped being found.
+    /// Pinning the literal once is the only thing that catches that.
+    /// </summary>
+    [Theory]
+    [InlineData(0, "65160")]
+    [InlineData(1, "65260")]
+    [InlineData(7, "65860")]
+    public void AceStepFun_decode_ids_match_the_sibling_extensions_published_formula(
+        int trackIndex,
+        string expected) =>
+        Assert.Equal(expected, AudioHandler.MakeAceStepFunDecodeId(trackIndex));
+
     [Fact]
     public void DetectAceStepFunAudio_returns_decode_audio_for_matching_track()
     {

@@ -155,24 +155,6 @@ internal sealed class WorkflowLivePath
                 + string.Join("\n  ", orphans));
     }
 
-    /// <summary>
-    /// The counterpart for <c>donotsave</c> requests, which produce a graph with no output node at
-    /// all — the state <see cref="FinalVideoSave"/> and <see cref="AssertNoOrphanNodes"/> both
-    /// hard-fail on. That state is what ships today, not what was intended: ComfyUI rejects an
-    /// output-less prompt with <c>prompt_no_outputs</c>. See P5 in
-    /// <c>nonversioned/20260804-production-findings.md</c>.
-    /// </summary>
-    public void AssertNoPublishedOutput()
-    {
-        string[] outputs = [.. _bridge.Graph.Nodes.Values
-            .Where(IsOutputNode)
-            .Select(node => $"{node.ClassTypeName}#{node.Id}")
-            .Order()];
-        Assert.True(
-            outputs.Length == 0,
-            "Workflow publishes output nodes it was asked not to save:\n  "
-                + string.Join("\n  ", outputs));
-    }
 
     private static bool IsOutputNode(ComfyNode node) =>
         node is SwarmSaveAnimationWSNode or SwarmSaveImageWSNode or SaveImageNode or PreviewImageNode;

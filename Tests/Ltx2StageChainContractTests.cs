@@ -172,8 +172,10 @@ public class Ltx2StageChainContractTests
 
         LTXVImgToVideoInplaceNode guide = Assert.Single(
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
-        AssertShippedLiteral(workflow, guide, "strength", 1.0);
-        Assert.Equal(false, ShippedInput(workflow, guide, "bypass"));
+        Assert.Equal(1.0, guide.Strength.LiteralAsDouble());
+        // LtxConditioningPipeline passes bypass:false at every call site and never true, so this
+        // pins the architecture's choice, not a branch — a guide is either built or absent.
+        Assert.Equal(false, guide.Bypass.LiteralValue);
         // The strength is only worth anything if this guide is the one the stage samples.
         SwarmKSamplerNode sampler = StageSampler(bridge, 0);
         Assert.Same(guide, JointLatentOf(sampler).VideoLatent.Connection?.Node);

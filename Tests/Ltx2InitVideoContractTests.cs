@@ -1296,15 +1296,12 @@ public class Ltx2InitVideoContractTests
     }
 
     /// <summary>
-    /// <c>donotsave</c> strips every output node, which is the one state
-    /// <see cref="WorkflowLivePath.AssertNoOrphanNodes"/> and <c>FinalVideoSave</c> cannot describe —
-    /// with nothing to reach, "orphaned" has no meaning. Pinned as today's behaviour, not as intent:
-    /// ComfyUI rejects an output-less prompt with <c>prompt_no_outputs</c>, so this request fails at
-    /// the backend (P5 in <c>nonversioned/20260804-production-findings.md</c>). What the graph must
-    /// still get right is that the discarded root left nothing behind.
+    /// A text-to-video <c>donotsave</c> request publishes normally and still prunes the discarded
+    /// root. The flag is honoured above the graph — the API returns a data URI instead of writing
+    /// to disk — so dropping the save would only hand ComfyUI a prompt with no output node.
     /// </summary>
     [Fact]
-    public async Task A_do_not_save_request_publishes_nothing_and_still_prunes_the_root()
+    public async Task A_do_not_save_request_publishes_the_timeline_and_still_prunes_the_root()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
 
@@ -1316,15 +1313,16 @@ public class Ltx2InitVideoContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        live.AssertNoPublishedOutput();
-        StageSampler(bridge, 0);
+        SwarmKSamplerNode stage = StageSampler(bridge, 0);
         Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
-        // The clip's decode chain goes with the saves, so the request's media path is left pointing
-        // at a node that no longer exists. Nothing reads it after publication.
-        Assert.Null(bridge.ResolvePath((JArray)generator.CurrentMedia.Path));
 
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        SwarmSaveAnimationWSNode published = live.FinalVideoSave();
+        Assert.Equal(
+            new JArray(published.Images.Connection.Node.Id, 0),
+            generator.CurrentMedia.Path);
+
+        live.AssertAllLive(stage, published);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>

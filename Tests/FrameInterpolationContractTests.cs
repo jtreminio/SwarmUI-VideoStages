@@ -117,17 +117,13 @@ public sealed class FrameInterpolationContractTests
     }
 
     /// <summary>
-    /// <c>donotsave</c> suppresses both video outputs the previous test pins — the intermediate
-    /// pre-interpolation save and the publication — while the interpolation chain is still built.
-    /// <para>
-    /// The graph is not shippable and cannot be: with nothing publishing the timeline, every node
-    /// it built is orphaned by construction, so the orphan set is pinned instead. Nor is it output
-    /// free — core's own base-image save survives, which is why
-    /// <see cref="WorkflowLivePath.AssertNoPublishedOutput"/> does not apply to this shape.
-    /// </para>
+    /// <c>donotsave</c> is honoured above the graph — <c>T2IAPI</c> returns a data URI instead of
+    /// writing to disk — so it must build exactly what the previous test pins. It once suppressed
+    /// the timeline's own saves, which left the interpolation chain orphaned; see P5 in
+    /// nonversioned/20260804-production-findings.md.
     /// </summary>
     [Fact]
-    public async Task Do_not_save_suppresses_both_outputs_without_suppressing_interpolation()
+    public async Task Do_not_save_publishes_the_interpolated_timeline_unchanged()
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
 
@@ -143,10 +139,6 @@ public sealed class FrameInterpolationContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        Assert.Empty(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
-        // Core's base-image save is not the timeline's to suppress, and it still ships.
-        Assert.Single(bridge.Graph.NodesOfType<SwarmSaveImageWSNode>());
-
         RIFEVFINode rife = Assert.Single(bridge.Graph.NodesOfType<RIFEVFINode>());
         SwarmTrimFramesNode trim = Assert.IsType<SwarmTrimFramesNode>(rife.Frames.Connection?.Node);
         Assert.Equal(4, trim.TrimStart.LiteralAsInt());
@@ -154,9 +146,13 @@ public sealed class FrameInterpolationContractTests
         Assert.Equal(48, generator.CurrentMedia.GetRawFPS());
         Assert.Equal(rife.Id, $"{generator.CurrentMedia.Path[0]}");
 
-        Assert.Contains($"{RIFEVFINode.ClassType}#{rife.Id}", live.OrphanNodes());
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        SwarmSaveAnimationWSNode[] saves =
+            [.. bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>()];
+        Assert.Single(saves, save => ReferenceEquals(trim, save.Images.Connection?.Node));
+        Assert.Single(saves, save => ReferenceEquals(rife, save.Images.Connection?.Node));
+
+        live.AssertAllLive(trim, rife);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 2);
     }
 
     /// <summary>

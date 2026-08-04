@@ -629,15 +629,12 @@ public sealed class EffectiveVideoRequestTests
             BoundaryFallbackReason.ArchitectureRuleUnsupported,
             boundary.Fallback);
         Assert.False(boundary.CarryAudio);
-        Assert.Single(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code
-                    == "boundary-cross-architecture-non-cut"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
-        Assert.DoesNotContain(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code == "effective-request.boundary-degraded-to-cut"
-                || diagnostic.Code == "boundary-architectureruleunsupported");
+        // The cross-architecture branch is the sole reporter: no generic
+        // "boundary-architectureruleunsupported" follow-up, and nothing from the projector.
+        PlanDiagnostic reported = Assert.Single(plan.Diagnostics);
+        Assert.Equal("boundary-cross-architecture-non-cut", reported.Code);
+        Assert.Equal(PlanDiagnosticSeverity.Warning, reported.Severity);
+        Assert.Empty(request.Diagnostics);
     }
 
     [Fact]

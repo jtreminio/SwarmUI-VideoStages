@@ -31,10 +31,16 @@ public class MiniMaxArchitectureTests
         Assert.Equal(MiniMaxArchitectureModule.ProfileId, resolved.ModelProfileId);
     }
 
+    // Core registers the checkpoint and both support VAEs under the same compat class, so the
+    // class ID is the only thing separating a generation model from a support model.
     [Theory]
-    [InlineData("minimax-h3/vae")]
-    [InlineData("minimax-h3/audio-vae")]
-    public void Support_model_classes_are_not_generation_models(string modelClassId)
+    [InlineData("minimax-h3", true)]
+    [InlineData("MiniMax-H3", true)]
+    [InlineData("minimax-h3/vae", false)]
+    [InlineData("minimax-h3/audio-vae", false)]
+    public void Only_the_exact_checkpoint_class_is_a_generation_model(
+        string modelClassId,
+        bool expectResolved)
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
@@ -43,9 +49,18 @@ public class MiniMaxArchitectureTests
             ID = modelClassId,
         };
 
-        Assert.False(MiniMaxArchitectureModule.Instance.TryResolveModel(
+        bool didResolve = MiniMaxArchitectureModule.Instance.TryResolveModel(
             models.VideoModel,
-            out _));
+            out ResolvedVideoModel resolved);
+
+        Assert.Equal(expectResolved, didResolve);
+        if (!expectResolved)
+        {
+            Assert.Null(resolved);
+            return;
+        }
+        Assert.Equal(modelClassId, resolved.ModelClassId);
+        Assert.Equal(MiniMaxArchitectureModule.ProfileId, resolved.ModelProfileId);
     }
 
     [Fact]

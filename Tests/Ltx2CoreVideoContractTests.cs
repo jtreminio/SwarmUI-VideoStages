@@ -661,10 +661,11 @@ public class Ltx2CoreVideoContractTests
         Assert.Same(BaseImage(bridge), FramingOf(preprocess).Image.Connection?.Node);
         LTXVImgToVideoInplaceNode guide = Assert.Single(
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
-        // Full strength is also the codegen default and cannot be authored otherwise on an
-        // implicit guide; Stage_controlnet_strength_scales_each_stages_guide is the control that
-        // an authored value reaches this input at all.
-        AssertShippedLiteral(workflow, guide, "strength", 1.0);
+        // Full strength is also the codegen default, the guide is extension-built (so the shipped
+        // JSON carries the default regardless), and an implicit guide cannot be authored otherwise;
+        // Stage_controlnet_strength_scales_each_stages_guide is the control that an authored value
+        // reaches this input at all.
+        Assert.Equal(1.0, guide.Strength.LiteralAsDouble());
         Assert.Same(preprocess.OutputImage, guide.Image.Connection);
 
         live.AssertAllLive(preprocess, guide, StageSampler(bridge, 0));
@@ -973,7 +974,9 @@ public class Ltx2CoreVideoContractTests
         ResizeImageMaskNodeNode guideResize = GuideResizeOverCorePreprocessor(bridge);
         ImageFromBatchNode guideFrames = GuideFramesOf(bridge);
         Assert.Same(guideResize.Resized, guideFrames.Image.Connection);
-        AssertShippedLiteral(workflow, guideFrames, "batch_index", 0);
+        // Extension-built, so index 0 is unfalsifiable here (it is also the codegen default); the
+        // length beside it is not, and is what says the guide takes the whole clip.
+        Assert.Equal(0, guideFrames.BatchIndex.LiteralAsInt());
         Assert.Equal(fixture.ExpectedGeneratedFrames, guideFrames.Length.LiteralAsInt());
 
         // Core's own apply chain conditioned a root the timeline replaced, so it is gone entirely.
@@ -1008,8 +1011,10 @@ public class Ltx2CoreVideoContractTests
         ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
             apply.Image.Connection?.Node);
         Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
-        // A one-frame slice from index 0 is also ImageFromBatch's codegen default, so the
-        // shipped JSON is what proves core configured the wrap rather than leaving it bare.
+        // Core builds this wrap as a raw JObject, so an input it never wrote would be absent
+        // entirely — reading the shipped JSON is what tells a configured slice apart from a bare
+        // one. (The same read on an extension-built node would prove nothing: those serialize
+        // every constructor default.)
         AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
         AssertShippedLiteral(workflow, firstFrame, "length", 1);
 
@@ -1088,8 +1093,10 @@ public class Ltx2CoreVideoContractTests
             Assert.Single(bridge.Graph.NodesOfType<ControlNetApplyAdvancedNode>())
                 .Image.Connection?.Node);
         Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
-        // A one-frame slice from index 0 is also ImageFromBatch's codegen default, so the
-        // shipped JSON is what proves core configured the wrap rather than leaving it bare.
+        // Core builds this wrap as a raw JObject, so an input it never wrote would be absent
+        // entirely — reading the shipped JSON is what tells a configured slice apart from a bare
+        // one. (The same read on an extension-built node would prove nothing: those serialize
+        // every constructor default.)
         AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
         AssertShippedLiteral(workflow, firstFrame, "length", 1);
 
@@ -1403,8 +1410,10 @@ public class Ltx2CoreVideoContractTests
         ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
             apply.Image.Connection?.Node);
         Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
-        // A one-frame slice from index 0 is also ImageFromBatch's codegen default, so the
-        // shipped JSON is what proves core configured the wrap rather than leaving it bare.
+        // Core builds this wrap as a raw JObject, so an input it never wrote would be absent
+        // entirely — reading the shipped JSON is what tells a configured slice apart from a bare
+        // one. (The same read on an extension-built node would prove nothing: those serialize
+        // every constructor default.)
         AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
         AssertShippedLiteral(workflow, firstFrame, "length", 1);
 
@@ -1483,8 +1492,10 @@ public class Ltx2CoreVideoContractTests
         ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
             apply.Image.Connection?.Node);
         Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
-        // A one-frame slice from index 0 is also ImageFromBatch's codegen default, so the
-        // shipped JSON is what proves core configured the wrap rather than leaving it bare.
+        // Core builds this wrap as a raw JObject, so an input it never wrote would be absent
+        // entirely — reading the shipped JSON is what tells a configured slice apart from a bare
+        // one. (The same read on an extension-built node would prove nothing: those serialize
+        // every constructor default.)
         AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
         AssertShippedLiteral(workflow, firstFrame, "length", 1);
 

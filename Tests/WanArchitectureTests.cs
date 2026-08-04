@@ -191,14 +191,31 @@ public class WanArchitectureTests
         Assert.Equal(
             ["text-to-video", "image-to-video", "init-video"],
             catalogModel["capabilities"]["entryModes"].Values<string>());
-        Assert.Null(catalogModel["entryModes"]);
-        Assert.Null(catalogModel["enhancements"]["extras"]);
+        // The class facts resolution just established are what the model row publishes.
+        Assert.Equal(
+            WanArchitectureModule.Ti2v5bModelClassId,
+            catalogModel.Value<string>("modelClassId"));
+        Assert.Equal(
+            T2IModelClassSorter.CompatWan22_5b.ID,
+            catalogModel.Value<string>("compatibilityClassId"));
 
         JObject architecture = Assert.Single(
             catalog["architectures"].Values<JObject>());
-        Assert.NotNull(architecture["capabilities"]);
-        Assert.Null(architecture["extras"]);
-        Assert.Null(architecture["profiles"]);
+        Assert.Equal(
+            WanArchitectureModule.ArchitectureId.Value,
+            architecture.Value<string>("id"));
+        Assert.Equal(
+            ["frameReferences"],
+            architecture["capabilities"]["features"].Values<string>());
+        Assert.Equal(
+            "supported",
+            architecture["boundaryRules"]["cut"].Value<string>("support"));
+        Assert.Equal(
+            "unsupported",
+            architecture["boundaryRules"]["continue"].Value<string>("support"));
+        Assert.Equal(
+            "unsupported",
+            architecture["boundaryRules"]["crossfade"].Value<string>("support"));
     }
 
     [Fact]
@@ -217,7 +234,15 @@ public class WanArchitectureTests
         Assert.Equal(
             "removed-profile-alias",
             model.Value<string>("modelProfileId"));
-        Assert.Null(model["enhancements"]["extras"]);
+        // The alias is republished verbatim but decides nothing: capabilities and the frame grid
+        // come from the descriptor the model resolved against.
+        Assert.Equal(
+            ["text-to-video", "image-to-video", "init-video"],
+            model["capabilities"]["entryModes"].Values<string>());
+        Assert.Equal(
+            ["frameReferences"],
+            model["capabilities"]["features"].Values<string>());
+        Assert.Equal(WanArchitectureModule.FrameGrid, model.Value<int>("frameGrid"));
     }
 
     [Fact]
@@ -719,15 +744,34 @@ public class WanArchitectureTests
             item => item.Code == "clip-aspect-mismatch");
     }
 
+    /// <summary>
+    /// Every WAN compatibility class declares that LoRAs do not target the text encoder, and the
+    /// compiler plans accordingly: a LoRA that would only be effective through its text-encoder
+    /// weight never loads.
+    /// </summary>
     [Fact]
-    public void Catalog_advertises_normal_LoRA_support_without_conditional_rules()
+    public void Normal_LoRAs_target_the_model_only_across_every_Wan_compatibility_class()
     {
-        JObject catalog = ArchitectureCatalogSerializer.Serialize(new WanCatalogRegistry());
-        JObject wan = Assert.Single(
-            catalog["architectures"].Values<JObject>(),
-            item => item.Value<string>("id") == "wan22");
-        Assert.Null(wan["profiles"]);
-        Assert.Null(wan["rules"]);
+        Assert.All(
+            (T2IModelCompatClass[])
+            [
+                T2IModelClassSorter.CompatWan21,
+                T2IModelClassSorter.CompatWan21_1_3b,
+                T2IModelClassSorter.CompatWan21_14b,
+                T2IModelClassSorter.CompatWan22_5b,
+            ],
+            compatibility => Assert.False(compatibility.LorasTargetTextEnc));
+
+        StageSpec stage = Stage(10, "wan-model") with
+        {
+            Loras = [new("stage-text-only", 0, 0.8), new("stage-model", 0.5, 0.9)],
+        };
+        StockHostVideoStagePayload payload = Assert.Single(
+            Assert.Single(Compile(GeneratedClip(0, stage)).Clips).Stages)
+            .RequireStockHostVideoPayload(WanArchitectureModule.ArchitectureId, "Wan");
+
+        Assert.Equal(NormalLoraTargetPolicy.ModelOnly, payload.LoraTargetPolicy);
+        Assert.Equal("stage-model", Assert.Single(payload.Core.Loras).Name);
     }
 
     [Fact]
@@ -886,10 +930,12 @@ public class WanArchitectureTests
     }
 
     [Theory]
-    [InlineData(0.35)]
-    [InlineData(0.5)]
-    [InlineData(0.8)]
-    public void High_to_low_noise_pair_compiles_as_one_sampling_run(double control)
+    [InlineData(0.35, 7)]
+    [InlineData(0.5, 6)]
+    [InlineData(0.8, 2)]
+    public void High_to_low_noise_pair_compiles_as_one_sampling_run(
+        double control,
+        int splitStep)
     {
         StageSpec high = Stage(
             10,
@@ -909,17 +955,25 @@ public class WanArchitectureTests
 
         Assert.False(compiled.Stages[0].ContinuesSamplingFromPreviousStage);
         Assert.True(compiled.Stages[1].ContinuesSamplingFromPreviousStage);
+        // The shared run is split where the low-noise stage starts sampling; control is the only
+        // authored value that moves that point.
+        Assert.Equal(
+            splitStep,
+            HostVideoStageSchedulePolicy.StartStep(
+                compiled.Stages[1].Core.Steps,
+                compiled.Stages[1].Core.Control));
     }
 
+    // A shared schedule means shared steps, scheduler and a partial control: the compiler never
+    // compares Sampler, so there is no sampler arm to write here.
     [Theory]
-    [InlineData("Wan2.2-I2V-A14B-HighNoise.safetensors", 12, "euler", "normal", 0.5)]
-    [InlineData("Wan2.2-I2V-A14B-LowNoise.safetensors", 10, "euler", "normal", 0.5)]
-    [InlineData("Wan2.2-I2V-A14B-LowNoise.safetensors", 12, "euler", "karras", 0.5)]
-    [InlineData("Wan2.2-I2V-A14B-LowNoise.safetensors", 12, "euler", "normal", 1)]
+    [InlineData("Wan2.2-I2V-A14B-HighNoise.safetensors", 12, "normal", 0.5)]
+    [InlineData("Wan2.2-I2V-A14B-LowNoise.safetensors", 10, "normal", 0.5)]
+    [InlineData("Wan2.2-I2V-A14B-LowNoise.safetensors", 12, "karras", 0.5)]
+    [InlineData("Wan2.2-I2V-A14B-LowNoise.safetensors", 12, "normal", 1)]
     public void Sampling_continuation_fails_closed_without_role_order_and_a_shared_schedule(
         string nextModel,
         int nextSteps,
-        string nextSampler,
         string nextScheduler,
         double nextControl)
     {
@@ -930,7 +984,6 @@ public class WanArchitectureTests
         {
             Control = nextControl,
             Steps = nextSteps,
-            Sampler = nextSampler,
             Scheduler = nextScheduler,
             ImageReference = "PreviousStage",
             ClipStageIndex = 1,
@@ -1349,19 +1402,6 @@ public class WanArchitectureTests
         Assert.True(HostVideoStageSchedulePolicy.IsQuantizedZeroPartial(8, 0.9));
         Assert.False(HostVideoStageSchedulePolicy.IsQuantizedZeroPartial(8, 0.87));
         Assert.Equal(1, HostVideoStageSchedulePolicy.StartStep(8, 0.87));
-    }
-
-    private static void AssertRejected(ClipSpec clip, string expectedOption)
-    {
-        VideoExecutionPlan plan = Compile(clip);
-        AssertBlocked(
-            plan,
-            "architecture-capability-unsupported",
-            expectedOption);
-        Assert.DoesNotContain(
-            plan.Diagnostics,
-            item => item.Code == "wan22.option.unsupported"
-                && item.Message.Contains(expectedOption));
     }
 
     private static void AssertIgnored(ClipSpec clip, string code)

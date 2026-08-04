@@ -226,9 +226,11 @@ public class Ltx2GeneratedWorkflowContractTests
         SwarmPromptRelayEncodeNode relay = Assert.Single(
             bridge.Graph.NodesOfType<SwarmPromptRelayEncodeNode>());
         Assert.Equal("global words", relay.GlobalPrompt.LiteralAsString());
-        // The extension's own PromptRelayEpsilon happens to equal the node's codegen default, so
-        // this reads the shipped JSON rather than whatever the constructor left behind.
-        AssertShippedLiteral(workflow, relay, "epsilon", 0.001);
+        // LtxModelPromptPreparer.PromptRelayEpsilon equals SwarmPromptRelayEncode's codegen default,
+        // and the relay is extension-built, so the shipped JSON carries 0.001 whether production
+        // wrote it or not. Nothing in the graph can prove it was written; what this does catch is
+        // the extension's constant drifting away from the value the node was designed around.
+        Assert.Equal(0.001, relay.Epsilon.LiteralAsDouble());
         Assert.NotNull(relay.ModelInput.Connection);
         Assert.NotNull(relay.Clip.Connection);
 

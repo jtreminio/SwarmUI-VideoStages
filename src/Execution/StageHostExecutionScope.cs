@@ -27,8 +27,7 @@ internal sealed class StageHostExecutionScope : IDisposable
         int totalStageCount = plan.Clips.Sum(clip => clip.Stages.Count);
         _publishIntermediateStages =
             totalStageCount > 1
-            && generator.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false)
-            && !generator.UserInput.Get(T2IParamTypes.DoNotSave, false);
+            && generator.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false);
     }
 
     public bool PublishesIntermediateStages => _publishIntermediateStages;

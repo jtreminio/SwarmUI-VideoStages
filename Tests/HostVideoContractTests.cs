@@ -384,24 +384,12 @@ public class HostVideoContractTests
     }
 
     /// <summary>
-    /// <c>DoNotSave</c> removes every publication the timeline owns and nothing else: core's
-    /// base-image save ships either way, because the flag is honoured above the graph rather than
-    /// by omitting nodes.
-    /// <para>
-    /// This pins today's behaviour; it is not the intended design. The suppressed arm leaves the
-    /// whole video half orphaned, and because Comfy only runs an output node's ancestors, the video
-    /// is never executed — the request succeeds and returns core's still image instead. The
-    /// equivalent text-to-video shape has no core save to survive, so it ships zero output nodes
-    /// and ComfyUI rejects it with <c>prompt_no_outputs</c>. See P5 in
-    /// <c>nonversioned/20260804-production-findings.md</c>.
-    /// </para>
+    /// <c>donotsave</c> does not change the graph at all: it is honoured above the graph, where
+    /// the API returns a data URI instead of writing to disk. So the image-to-video shape still
+    /// publishes all three stage videos alongside core's base-image save.
     /// </summary>
-    [Theory]
-    [InlineData(false, 3)]
-    [InlineData(true, 0)]
-    public async Task Do_not_save_drops_the_timelines_publications_and_keeps_cores_image_save(
-        bool doNotSave,
-        int expectedTimelinePublications)
+    [Fact]
+    public async Task Do_not_save_publishes_the_timeline_exactly_as_a_saving_request_does()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
 
@@ -414,40 +402,27 @@ public class HostVideoContractTests
             post =>
             {
                 post["outputintermediateimages"] = true;
-                post["donotsave"] = doNotSave;
+                post["donotsave"] = true;
             });
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        Assert.Equal(
-            expectedTimelinePublications,
-            bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().Count);
+        Assert.Equal(3, bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().Count);
         Assert.Single(bridge.Graph.NodesOfType<SwarmSaveImageWSNode>());
 
-        if (doNotSave)
-        {
-            Assert.Contains(
-                $"SwarmKSampler#{StageSampler(bridge, 2).Id}",
-                live.OrphanNodes());
-        }
-        else
-        {
-            live.AssertNoOrphanNodes();
-        }
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 3);
     }
 
     /// <summary>
     /// The text-to-video shape, where the timeline displaces core's video root entirely and the
     /// root's own save is the only one in the graph: it is retargeted onto whatever the timeline
-    /// ends up publishing, or removed outright under <c>donotsave</c>. Core's base-image save — the
-    /// thing that keeps the image-to-video shape shippable — does not exist here.
+    /// ends up publishing. There is no core base-image save here to carry the request, so a
+    /// suppressed save would leave ComfyUI a prompt with no output node to run at all.
     /// </summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task A_displaced_root_retargets_or_removes_its_own_save(bool doNotSave)
+    public async Task A_displaced_root_retargets_its_own_save(bool doNotSave)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
 
@@ -462,14 +437,6 @@ public class HostVideoContractTests
         // Core's displaced root pass is gone; only the stage's own sampler remains.
         SwarmKSamplerNode stage = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
         Assert.Equal(VideoStagesWorkflowFixture.StageSeed(0), stage.NoiseSeed.LiteralAsLong());
-
-        if (doNotSave)
-        {
-            live.AssertNoPublishedOutput();
-            AssertNoDanglingNodeRefs(workflow);
-            AssertAcyclic(bridge);
-            return;
-        }
 
         SwarmSaveAnimationWSNode published = live.FinalVideoSave();
         Assert.Equal(

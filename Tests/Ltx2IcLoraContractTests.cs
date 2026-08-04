@@ -812,10 +812,13 @@ public class Ltx2IcLoraContractTests
         Assert.Equal(8, handle.Amount.LiteralAsInt());
         ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
             handle.Image.Connection?.Node);
-        // Both values are ImageFromBatch's codegen defaults; read the shipped JSON so a slice
-        // that was never configured cannot pass as a deliberate first-frame handle.
-        AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
-        AssertShippedLiteral(workflow, firstFrame, "length", 1);
+        // Both values are ImageFromBatch's codegen defaults and this wrap is extension-built, so the
+        // shipped JSON carries them either way and a handle that held the wrong slice cannot be
+        // authored into existence here. Ltx2BoundaryContractTests' tail slices are the control that
+        // batch_index/length reach the node at all; what this pins is that the handle repeats one
+        // frame rather than the whole guide.
+        Assert.Equal(0, firstFrame.BatchIndex.LiteralAsInt());
+        Assert.Equal(1, firstFrame.Length.LiteralAsInt());
 
         // Which trim belongs to which entry: a guide names its entry through the loader wired to
         // its downscale factor. Counting padded trims would never say that.

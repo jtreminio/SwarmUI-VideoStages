@@ -88,8 +88,7 @@ internal static class TypedWorkflowAssertions
     /// <para>
     /// Reading it off the typed node instead cannot detect an absent key: the generated constructor
     /// runs its own <c>.Set(default)</c> calls and the wiring pass only overwrites keys the JSON
-    /// carries, so <c>Assert.Equal(&lt;codegen default&gt;, node.Input)</c> holds either way. Nodes
-    /// core builds from raw JSON can genuinely omit an input; this is how that is seen.
+    /// carries, so <c>Assert.Equal(&lt;codegen default&gt;, node.Input)</c> holds either way.
     /// </para>
     /// </summary>
     public static JToken ShippedInput(JObject workflow, ComfyNode node, string inputName)
@@ -100,9 +99,22 @@ internal static class TypedWorkflowAssertions
     }
 
     /// <summary>
-    /// Asserts an input whose expected value is also the codegen default. The key must be present,
-    /// so a node reached by a path that never writes the input fails here instead of reading the
-    /// default back as if it had been chosen.
+    /// Asserts an input whose expected value is also the codegen default, by requiring the key to
+    /// be present in the shipped JSON rather than reading the default back off the typed node.
+    /// <para>
+    /// <b>This only means anything on nodes SwarmUI core builds.</b> Core writes raw JObjects, so an
+    /// input it never sets is genuinely absent and this catches it. A node the extension builds goes
+    /// through <c>WorkflowBridge.AddNode</c> -&gt; <c>ComfyNode.ToWorkflowNode</c>, which serializes
+    /// every slot carrying a literal — and the generated constructor has already <c>.Set</c> the
+    /// defaults. So an extension-built node ships <em>all</em> its defaults even when production
+    /// touched none of them, and presence proves nothing. Verified empirically: a bare
+    /// <c>bridge.AddNode(new ImageFromBatchNode())</c> serializes
+    /// <c>{"batch_index":0,"length":1}</c>.
+    /// </para>
+    /// <para>
+    /// For extension-built nodes, either author a value the constructor does not supply, or read the
+    /// input plainly and name the control test that proves production reaches it.
+    /// </para>
     /// </summary>
     public static void AssertShippedLiteral<T>(
         JObject workflow,

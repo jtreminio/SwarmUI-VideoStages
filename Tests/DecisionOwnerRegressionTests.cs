@@ -341,7 +341,9 @@ public class DecisionOwnerRegressionTests
         Assert.Equal(8, hostResize.ExtraInputs["resize_type.multiple"]?.Value<int>());
         Assert.Equal(64, ltxResize.ExtraInputs["resize_type.multiple"]?.Value<int>());
         Assert.Equal(hostResize.Id, ltxResize.Input.Connection?.Node.Id);
-        // ImageFromBatch defaults to exactly this slice, so read what core actually shipped.
+        // ImageFromBatch defaults to exactly this slice. Core builds the wrap as a raw JObject, so
+        // an unwritten input would be absent from the shipped JSON — which is the only way to tell
+        // a configured slice from a bare node here.
         TypedWorkflowAssertions.AssertShippedLiteral(generator.Workflow, wrapper, "batch_index", 0);
         TypedWorkflowAssertions.AssertShippedLiteral(generator.Workflow, wrapper, "length", 1);
         Assert.Equal(ltxResize.Id, wrapper.Image.Connection?.Node.Id);

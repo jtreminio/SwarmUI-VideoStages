@@ -121,8 +121,13 @@ public class Ltx2AudioContractTests
     /// is a wire off <c>SwarmAudioLengthToFrames</c> rather than a literal, and both the video
     /// latent and the audio the model conditions on come from that same node so they cannot drift.
     /// </summary>
-    [Fact]
-    public async Task Clip_length_from_audio_drives_the_empty_latent_length_from_the_uploaded_track()
+    // 24 is also SwarmAudioLengthToFrames' codegen default, so the 30 arm is what proves the
+    // timeline rate is what production writes into frame_rate.
+    [Theory]
+    [InlineData(VideoStagesWorkflowFixture.Fps)]
+    [InlineData(30)]
+    public async Task Clip_length_from_audio_drives_the_empty_latent_length_from_the_uploaded_track(
+        int rate)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject clip = AudioClip(
@@ -132,7 +137,9 @@ public class Ltx2AudioContractTests
             fixture.Stage(control: 0.5));
         clip["clipLengthFromAudio"] = true;
 
-        JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
+        JObject workflow = await fixture.GenerateImageToVideoAsync(
+            MakeDocument(clip),
+            post => post["videofps"] = rate);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -140,14 +147,18 @@ public class Ltx2AudioContractTests
             bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
         SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
             bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
-        AssertShippedLiteral(workflow, lengthToFrames, "frame_rate", VideoStagesWorkflowFixture.Fps);
+        Assert.Equal(rate, lengthToFrames.FrameRate.LiteralAsInt());
         // The rate is all LTX chooses: unlike MiniMax, it never passes a grid, so the 8k+1 snap is
         // whatever SwarmAudioLengthToFrames itself defaults to. That silent coupling is the claim —
         // the inherited default must still be the grid LTX declares, or clips sized from audio
-        // land off the grid every other part of the architecture snaps to.
-        AssertShippedLiteral(workflow, lengthToFrames, "frame_grid", Ltx2ArchitectureModule.FrameGrid);
-        AssertShippedLiteral(workflow, lengthToFrames, "frame_grid_origin", 1);
-        AssertShippedLiteral(workflow, lengthToFrames, "frame_count_offset", 1);
+        // land off the grid every other part of the architecture snaps to. (Nothing here can prove
+        // the inputs are honoured, since LTX never writes them; MiniMax's
+        // Uploaded_audio_can_drive_the_entry_joint_latent_length is the control that does.)
+        Assert.Equal(
+            Ltx2ArchitectureModule.FrameGrid,
+            lengthToFrames.FrameGrid.LiteralAsInt());
+        Assert.Equal(1, lengthToFrames.FrameGridOrigin.LiteralAsInt());
+        Assert.Equal(1, lengthToFrames.FrameCountOffset.LiteralAsInt());
 
         // The measured track is the padded one, not the raw upload: measuring the raw upload would
         // report a length the graph never generates at.

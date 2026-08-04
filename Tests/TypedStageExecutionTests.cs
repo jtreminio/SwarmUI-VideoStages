@@ -1,3 +1,4 @@
+using System.Reflection;
 using VideoStages.Planning;
 using Xunit;
 
@@ -6,16 +7,22 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class TypedStageExecutionTests
 {
+    /// <summary>Every type here is internal, so the default public-only lookup would let a legacy
+    /// member come back as private/internal without tripping a single guard below.</summary>
+    private const BindingFlags AnyMember =
+        BindingFlags.Instance | BindingFlags.Static
+        | BindingFlags.Public | BindingFlags.NonPublic;
+
     [Fact]
     public void Ltx_stage_execution_has_no_legacy_stage_spec_projection()
     {
-        Assert.Null(typeof(StagePlan).GetMethod("ToLegacyStageSpec"));
+        Assert.Null(typeof(StagePlan).GetMethod("ToLegacyStageSpec", AnyMember));
         Assert.DoesNotContain(
-            typeof(StageRunner).GetMethods(),
+            typeof(StageRunner).GetMethods(AnyMember),
             method => method.Name == nameof(StageRunner.RunStage)
                 && method.GetParameters().FirstOrDefault()?.ParameterType == typeof(StageSpec));
         Assert.DoesNotContain(
-            typeof(StageRunner).GetMethods(),
+            typeof(StageRunner).GetMethods(AnyMember),
             method => method.Name == "RunLegacyStage");
     }
 
@@ -26,15 +33,14 @@ public class TypedStageExecutionTests
         Type resolvedReference = typeof(ResolvedClipRef);
 
         Assert.Contains(
-            resolver.GetMethods(
-                System.Reflection.BindingFlags.Instance
-                | System.Reflection.BindingFlags.NonPublic),
+            resolver.GetMethods(AnyMember),
             method => method.Name == "ResolveStageClipRefs"
                 && method.GetParameters()[0].ParameterType == typeof(ClipPlan));
         Assert.Equal(
             typeof(ImageReferencePlan),
-            resolvedReference.GetProperty(nameof(ResolvedClipRef.Reference))?.PropertyType);
-        Assert.Null(resolvedReference.GetProperty("Spec"));
+            resolvedReference.GetProperty(nameof(ResolvedClipRef.Reference), AnyMember)
+                ?.PropertyType);
+        Assert.Null(resolvedReference.GetProperty("Spec", AnyMember));
     }
 
     [Fact]
@@ -49,9 +55,9 @@ public class TypedStageExecutionTests
     [Fact]
     public void Ltx_stage_length_resolution_accepts_the_architecture_resolved_clip_plan()
     {
-        System.Reflection.MethodInfo resolver = typeof(LtxStageLatentAudioFactory).GetMethod(
+        MethodInfo resolver = typeof(LtxStageLatentAudioFactory).GetMethod(
             "TryResolveControlNetLengthFrames",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            AnyMember);
 
         Assert.NotNull(resolver);
         Assert.Equal(typeof(ClipPlan), Assert.Single(resolver.GetParameters()).ParameterType);
@@ -61,39 +67,25 @@ public class TypedStageExecutionTests
     public void Ltx_stage_executor_is_only_the_stage_lifecycle_coordinator()
     {
         string[] declaredMethods = typeof(LtxStageExecutor)
-            .GetMethods(
-                System.Reflection.BindingFlags.Instance
-                | System.Reflection.BindingFlags.Public
-                | System.Reflection.BindingFlags.NonPublic
-                | System.Reflection.BindingFlags.DeclaredOnly)
+            .GetMethods(AnyMember | BindingFlags.DeclaredOnly)
             .Where(method => !method.IsSpecialName)
             .Select(method => method.Name)
             .ToArray();
 
         Assert.Equal([nameof(LtxStageExecutor.RunStage)], declaredMethods);
-        Assert.NotNull(typeof(LtxModelPromptPreparer).GetMethod(
-            "Prepare",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
-        Assert.NotNull(typeof(LtxStageLatentBuilder).GetMethod(
-            "Build",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
-        Assert.NotNull(typeof(LtxStageSampler).GetMethod(
-            "Execute",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
-        Assert.NotNull(typeof(LtxStageOutputFinalizer).GetMethod(
-            "Complete",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
+        Assert.NotNull(typeof(LtxModelPromptPreparer).GetMethod("Prepare", AnyMember));
+        Assert.NotNull(typeof(LtxStageLatentBuilder).GetMethod("Build", AnyMember));
+        Assert.NotNull(typeof(LtxStageSampler).GetMethod("Execute", AnyMember));
+        Assert.NotNull(typeof(LtxStageOutputFinalizer).GetMethod("Complete", AnyMember));
     }
 
     [Fact]
     public void Ltx_latent_collaborators_keep_typed_plan_boundaries()
     {
-        System.Reflection.MethodInfo retake = typeof(LtxVideoRetakeMasker).GetMethod(
-            "ApplyIfActive",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        System.Reflection.MethodInfo audioLength = typeof(LtxStageLatentAudioFactory).GetMethod(
+        MethodInfo retake = typeof(LtxVideoRetakeMasker).GetMethod("ApplyIfActive", AnyMember);
+        MethodInfo audioLength = typeof(LtxStageLatentAudioFactory).GetMethod(
             "TryResolveControlNetLengthFrames",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            AnyMember);
 
         Assert.NotNull(retake);
         Assert.Equal(typeof(RetakePlan), retake.GetParameters()[2].ParameterType);
@@ -106,11 +98,7 @@ public class TypedStageExecutionTests
                 typeof(LtxStageLatentAudioFactory),
                 typeof(LtxReusableLatentResolver),
                 typeof(LtxVideoRetakeMasker),
-            }.SelectMany(type => type.GetMethods(
-                System.Reflection.BindingFlags.Instance
-                | System.Reflection.BindingFlags.Public
-                | System.Reflection.BindingFlags.NonPublic
-                | System.Reflection.BindingFlags.DeclaredOnly)),
+            }.SelectMany(type => type.GetMethods(AnyMember | BindingFlags.DeclaredOnly)),
             method => method.GetParameters().Any(parameter =>
                 parameter.ParameterType == typeof(StageSpec)
                 || parameter.ParameterType == typeof(ClipSpec)));

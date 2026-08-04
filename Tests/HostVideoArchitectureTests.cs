@@ -117,25 +117,31 @@ public class HostVideoArchitectureTests
     }
 
     [Theory]
-    [InlineData("invented-video", "invented-video")]
-    [InlineData("stable-video-diffusion-img2vid-v1", "stable-video-diffusion-img2vid-v1")]
-    [InlineData("hunyuan-video-1_5-sr", "hunyuan-video-1_5")]
-    [InlineData("hunyuan-video-1_5/lora", "hunyuan-video-1_5")]
-    [InlineData("lightricks-ltx-video/vae", "lightricks-ltx-video")]
-    public void Resolves_new_video_classes_without_an_allowlist_entry(
+    [InlineData("invented-video", "invented-video", true)]
+    [InlineData("stable-video-diffusion-img2vid-v1", "stable-video-diffusion-img2vid-v1", true)]
+    [InlineData("hunyuan-video-1_5-sr", "hunyuan-video-1_5", true)]
+    [InlineData("lightricks-ltx-video/vae", "lightricks-ltx-video", true)]
+    [InlineData("hunyuan-video-1_5/lora", "hunyuan-video-1_5", false)]
+    [InlineData("lightricks-ltx-video/control-lora", "lightricks-ltx-video", false)]
+    public void Unlisted_video_classes_resolve_unless_the_class_is_a_LoRA(
         string modelClassId,
-        string compatibilityClassId)
+        string compatibilityClassId,
+        bool expectResolved)
     {
         using SwarmUiTestContext context = new();
-        T2IModelCompatClass compatibility = Compatibility(compatibilityClassId) with
-        {
-            IsText2Video = true,
-            IsImage2Video = true,
-        };
 
-        Assert.True(HostVideoArchitectureModule.Instance.TryResolveModel(
-            Model(modelClassId, compatibility),
-            out _));
+        bool didResolve = HostVideoArchitectureModule.Instance.TryResolveModel(
+            Model(modelClassId, Compatibility(compatibilityClassId)),
+            out ResolvedVideoModel resolved);
+
+        Assert.Equal(expectResolved, didResolve);
+        if (!expectResolved)
+        {
+            Assert.Null(resolved);
+            return;
+        }
+        Assert.Equal(modelClassId, resolved.ModelClassId);
+        Assert.Equal(compatibilityClassId, resolved.CompatibilityClassId);
     }
 
     [Theory]
@@ -218,6 +224,10 @@ public class HostVideoArchitectureTests
             ID = modelClassId,
             Name = modelClassId,
             CompatClass = compatibility,
+            // A record copy bypasses T2IModelClassSorter.Register, the only place core derives
+            // IsLora from the ID; without this a "/lora" class would look like a checkpoint.
+            IsLora = modelClassId.Contains("/lora")
+                || modelClassId.Contains("/control-lora"),
         };
         return models.VideoModel;
     }

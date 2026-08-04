@@ -2,6 +2,8 @@ using System.Text.Json;
 using VideoStages.Planning;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.HostVideo;
+using VideoStages.Architectures.Wan;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -657,6 +659,46 @@ public class PlanningCompilerComponentTests
             ]),
             new RootEnvironment(HostRootKind.ImageToVideo),
         ];
+
+        // Frame counts too small to fund the authored crossfade, so the budget resolver degrades
+        // and emits "boundary-frame-budget-reconciled". Keeps the facade's exact message text
+        // (no "VideoStages: " prefix) falsifiable.
+        yield return
+        [
+            new VideoStagesSpec(512, 512, 24, false,
+            [
+                GeneratedClip(0, Stage(10)) with
+                {
+                    Frames = 9,
+                    BoundaryOut = Constants.BoundaryOutCrossfade,
+                    BoundaryOutOverlap = 16,
+                },
+                GeneratedClip(1, Stage(11)) with { Frames = 9 },
+            ]),
+            new RootEnvironment(HostRootKind.ImageToVideo),
+        ];
+
+        // Emits a capability warning (unknown upscale mode), a boundary fallback warning, and a
+        // per-clip audio warning at once, so a dropped validator call or a clip-audio diagnostic
+        // appended at the wrong point in the list is visible as an ordering difference.
+        yield return
+        [
+            new VideoStagesSpec(512, 512, 24, false,
+            [
+                GeneratedClip(0, Stage(10) with
+                {
+                    Upscale = 2,
+                    UpscaleMethod = "future-upscale-mode",
+                }) with
+                {
+                    AudioSource = "future-audio-source",
+                    BoundaryOut = Constants.BoundaryOutContinue,
+                    BoundaryOutOverlap = 8,
+                },
+                InitVideoClip(1, Stage(11)),
+            ]),
+            new RootEnvironment(HostRootKind.ImageToVideo),
+        ];
     }
 
     private static VideoExecutionPlan CompileFromComponents(VideoStagesSpec spec, RootEnvironment environment)
@@ -670,10 +712,32 @@ public class PlanningCompilerComponentTests
             .. architecture.Diagnostics,
             .. request.Diagnostics,
         ];
+        if (spec.LegacyVideoSwap?.IsConfigured == true
+            && architecture.Clips.Values.Any(assignment =>
+                assignment?.Architecture.Id == HostVideoArchitectureModule.ArchitectureId
+                || assignment?.Architecture.Id == WanArchitectureModule.ArchitectureId))
+        {
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Warning,
+                "effective-request.video-swap-ignored",
+                "VideoStages ignores SwarmUI's request-global Video Swap Model, Video Swap "
+                    + "Percent, and Video Swap section settings for stock-host video clips. "
+                    + "The authored values remain in request metadata. Create separate timeline "
+                    + "stages instead."));
+        }
+        IReadOnlyList<ClipSpec> executableClips = (spec.Clips ?? []).Where(clip =>
+            clip is not null && (clip.InitVideo is not null || clip.Stages is { Count: > 0 }))
+            .ToArray();
+        if (executableClips.Count != (spec.Clips?.Count ?? 0))
+        {
+            diagnostics.Add(new PlanDiagnostic(
+                PlanDiagnosticSeverity.Warning,
+                "inactive-clips-ignored",
+                "Clips without a source video or active stages were ignored by the execution plan."));
+        }
         List<ClipSpec> clips = [];
         HashSet<int> seenClipIds = [];
-        foreach (ClipSpec clip in (spec.Clips ?? []).Where(clip =>
-                     clip is not null && (clip.InitVideo is not null || clip.Stages is { Count: > 0 })))
+        foreach (ClipSpec clip in executableClips)
         {
             if (!seenClipIds.Add(clip.Id))
             {
@@ -686,39 +750,62 @@ public class PlanningCompilerComponentTests
             }
             clips.Add(clip);
         }
-        if (clips.Count != (spec.Clips?.Count ?? 0))
-        {
-            diagnostics.Insert(0, new PlanDiagnostic(
-                PlanDiagnosticSeverity.Warning,
-                "inactive-clips-ignored",
-                "Clips without a source video or active stages were ignored by the execution plan."));
-        }
 
+        RootPlan root = RootPlanCompiler.Compile(environment, clips);
         int totalStages = clips.Sum(clip => clip.Stages?.Count ?? 0);
         int firstStageOrdinal = 0;
         List<ClipPlan> plans = [];
         for (int i = 0; i < clips.Count; i++)
         {
+            bool architectureResolutionBlocked =
+                architecture.Diagnostics.Any(diagnostic =>
+                    diagnostic.Severity == PlanDiagnosticSeverity.Error
+                    && diagnostic.ClipId == clips[i].Id);
             ClipArchitectureAssignment assignment =
                 architecture.Clips.GetValueOrDefault(clips[i].Id);
-            ArchitectureClipCompilation compilation = assignment is null
-                ? null
-                : assignment.Module is not null
-                    ? assignment.Module.ValidateAndCompileClip(
+            ArchitectureEntryMode entryMode = clips[i].InitVideo is not null
+                ? ArchitectureEntryMode.InitVideo
+                : spec.IsTextToVideo
+                    ? ArchitectureEntryMode.TextToVideo
+                    : ArchitectureEntryMode.ImageToVideo;
+            ArchitectureClipCompilation acceptedCompilation = null;
+            if (assignment is not null && !architectureResolutionBlocked)
+            {
+                IReadOnlyList<PlanDiagnostic> capabilityDiagnostics =
+                    ArchitectureCapabilityValidator.Validate(
                         clips[i],
-                        assignment.StageModels,
-                        new(spec.Width, spec.Height, spec.FPS))
-                    : new(
-                        new NoneClipPayload(clips[i].Id),
-                        new Dictionary<int, IArchitectureStagePayload>(),
-                        []);
-            diagnostics.AddRange(compilation?.Diagnostics ?? []);
-            ArchitectureClipCompilation acceptedCompilation =
-                compilation is not null
-                && !compilation.Diagnostics.Any(diagnostic =>
-                    diagnostic.Severity == PlanDiagnosticSeverity.Error)
-                    ? compilation
-                    : null;
+                        assignment.Architecture,
+                        entryMode,
+                        hasOutgoingBoundary: i < clips.Count - 1);
+                diagnostics.AddRange(capabilityDiagnostics);
+                if (!capabilityDiagnostics.Any(diagnostic =>
+                    diagnostic.Severity == PlanDiagnosticSeverity.Error))
+                {
+                    ArchitectureClipCompilation compilation = assignment.Module is not null
+                        ? assignment.Module.ValidateAndCompileClip(
+                            clips[i],
+                            assignment.StageModels,
+                            new(
+                                spec.Width,
+                                spec.Height,
+                                spec.FPS,
+                                entryMode,
+                                HasPreviousClipOutput: i > 0))
+                        : assignment.Architecture.Id == NoneArchitecture.Id
+                            ? new(
+                                new NoneClipPayload(clips[i].Id),
+                                new Dictionary<int, IArchitectureStagePayload>(),
+                                [])
+                            : throw VideoStagesInvariant.Failure(
+                                $"architecture '{assignment.Architecture.Id}' has no clip compiler");
+                    diagnostics.AddRange(compilation.Diagnostics);
+                    if (!compilation.Diagnostics.Any(diagnostic =>
+                        diagnostic.Severity == PlanDiagnosticSeverity.Error))
+                    {
+                        acceptedCompilation = compilation;
+                    }
+                }
+            }
             plans.Add(ClipPlanCompiler.Compile(clips[i], new ClipPlanCompilationContext(
                 spec.IsTextToVideo,
                 spec.Width,
@@ -728,22 +815,12 @@ public class PlanningCompilerComponentTests
                 clips.Count > 1,
                 totalStages,
                 firstStageOrdinal,
-                clips[i].InitVideo is not null
-                    ? ArchitectureEntryMode.InitVideo
-                    : spec.IsTextToVideo
-                        ? ArchitectureEntryMode.TextToVideo
-                        : ArchitectureEntryMode.ImageToVideo,
+                entryMode,
                 assignment,
                 acceptedCompilation)));
-            diagnostics.AddRange(plans[^1].Audio.Diagnostics.Select(audioDiagnostic =>
-                new PlanDiagnostic(
-                    PlanDiagnosticSeverity.Warning,
-                    audioDiagnostic.Code,
-                    audioDiagnostic.Message,
-                    plans[^1].ClipId)));
             firstStageOrdinal += clips[i].Stages?.Count ?? 0;
         }
-
+        diagnostics.AddRange(ClipGeometryProjection.Validate(plans, spec.Width, spec.Height));
         BoundaryPlanningResult boundaries = BoundaryPlanCompiler.Compile(
             clips,
             plans);
@@ -756,9 +833,8 @@ public class PlanningCompilerComponentTests
             diagnostics.Add(new PlanDiagnostic(
                 PlanDiagnosticSeverity.Warning,
                 "boundary-frame-budget-reconciled",
-                $"VideoStages: {boundaryBudget.Reason}."));
+                $"{boundaryBudget.Reason}."));
         }
-        RootPlan root = RootPlanCompiler.Compile(environment, clips);
         VideoExecutionPlan plan = new(
             spec.Width,
             spec.Height,
@@ -767,19 +843,68 @@ public class PlanningCompilerComponentTests
             Array.AsReadOnly(plans.ToArray()),
             Array.AsReadOnly(boundaryBudget.Boundaries.ToArray()),
             Array.AsReadOnly(diagnostics.ToArray()));
-        AudioTimelinePlan audioTimeline = AudioTimelinePlanCompiler.Compile(plan);
-        diagnostics.AddRange(audioTimeline.Diagnostics.Select(diagnostic => new PlanDiagnostic(
-            diagnostic.Severity switch
+        HashSet<int> audioSegmentUnsupportedClipIds = [
+            .. plan.Clips
+                .Where(clip =>
+                    clip.Architecture is not null
+                    && !clip.Architecture.Features.HasFlag(ArchitectureFeature.AudioSegments))
+                .Select(clip => clip.ClipId),
+        ];
+        bool noClipSupportsAudioSegments =
+            plan.Clips.Count > 0
+            && audioSegmentUnsupportedClipIds.Count == plan.Clips.Count;
+        bool authoredTimelineAudio = spec.TimelineAudioSegments is { Count: > 0 };
+        AudioTimelineCompilation audio = AudioTimelinePlanCompiler.Compile(
+            plan,
+            noClipSupportsAudioSegments ? null : spec.TimelineAudioSegments);
+        AudioTimelinePlan audioTimeline = audio.Plan;
+        HashSet<string> authoredTrackIds = audio.AuthoredTracks
+            .Select(track => track.TrackId)
+            .ToHashSet(StringComparer.Ordinal);
+        HashSet<int> suppressedTimelineAudioClipIds = [
+            .. audioTimeline.Tracks
+                .Where(track => authoredTrackIds.Contains(track.TrackId))
+                .SelectMany(track => track.Windows)
+                .Select(window => window.ClipId)
+                .Where(audioSegmentUnsupportedClipIds.Contains),
+        ];
+        if (noClipSupportsAudioSegments && authoredTimelineAudio)
+        {
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Warning,
+                "effective-request.audio-segments-ignored",
+                "None of the selected video architectures use timeline audio tracks. The "
+                    + "authored tracks remain saved and are ignored for this generation."));
+        }
+        else
+        {
+            foreach (int clipId in suppressedTimelineAudioClipIds)
             {
-                PlanDiagnosticSeverity.Info => PlanDiagnosticSeverity.Info,
-                PlanDiagnosticSeverity.Warning => PlanDiagnosticSeverity.Warning,
-                _ => PlanDiagnosticSeverity.Error,
-            },
-            diagnostic.Code,
-            diagnostic.Message,
-            diagnostic.ClipId)));
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Warning,
+                    "effective-request.audio-segments-ignored",
+                    $"Timeline audio overlaps clip {clipId}, whose selected video architecture "
+                        + "does not use audio segments. The authored track remains saved and is "
+                        + "ignored for that clip.",
+                    clipId));
+            }
+        }
+        IReadOnlyList<ClipPlan> clipsWithTimelineAudio =
+            TimelineAudioSegmentPlanProjector.Apply(
+                plan.Clips,
+                audioTimeline,
+                authoredTrackIds,
+                suppressedTimelineAudioClipIds);
+        foreach (ClipPlan clipPlan in clipsWithTimelineAudio)
+        {
+            diagnostics.AddRange(clipPlan.Audio.Diagnostics.Select(audioDiagnostic =>
+                audioDiagnostic with { ClipId = audioDiagnostic.ClipId ?? clipPlan.ClipId }));
+        }
+        diagnostics.AddRange(audioTimeline.Diagnostics);
         return plan with
         {
+            HasConfiguredResolution = spec.HasConfiguredResolution,
+            Clips = clipsWithTimelineAudio,
             Diagnostics = Array.AsReadOnly(diagnostics.ToArray()),
         };
     }

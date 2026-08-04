@@ -442,22 +442,55 @@ public class TypedBoundaryTests
     public void TryCapture_WithPostDecodeWrappers_DetectsCorrectly()
     {
         JObject workflow = BuildLtxWorkflow();
+        // Splice a scale between the decode and the save so the current media is no longer the
+        // decode itself — the only shape that sets HasPostDecodeWrappers.
+        workflow["8"] = new JObject
+        {
+            ["class_type"] = ImageScaleNode.ClassType,
+            ["inputs"] = new JObject
+            {
+                ["image"] = new JArray("5", 0),
+                ["upscale_method"] = "lanczos",
+                ["width"] = 640,
+                ["height"] = 360,
+                ["crop"] = "center"
+            }
+        };
+        ((JObject)workflow["7"]!)["inputs"]!["images"] = new JArray("8", 0);
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // Point media to save node (downstream of decode) instead of decode output
-        INodeOutput saveOutput = bridge.ResolvePath(new JArray("7", 0));
-        MediaRef media = new() { Output = saveOutput, DataType = WGNodeData.DT_VIDEO };
+        MediaRef media = new()
+        {
+            Output = bridge.ResolvePath(new JArray("8", 0)),
+            DataType = WGNodeData.DT_VIDEO
+        };
 
-        // Save node has no outputs (slot 0 won't resolve), but let's point at decode
-        // and verify HasPostDecodeWrappers when media node != decode node
-        INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
-        MediaRef mediaThroughDecode = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO };
+        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
+            bridge, media, currentAudioVae: null, useReusedAudio: false);
 
-        LtxChainCapture directCapture = LtxPostVideoChainInspector.TryCapture(
-            bridge, mediaThroughDecode, currentAudioVae: null, useReusedAudio: false);
+        Assert.NotNull(capture);
+        Assert.True(capture.HasPostDecodeWrappers);
+        Assert.Equal("5", capture.DecodeId);
+        Assert.Equal("4", capture.SeparateId);
+        Assert.Equal("6", capture.AudioDecodeId);
+    }
 
-        Assert.NotNull(directCapture);
-        Assert.False(directCapture.HasPostDecodeWrappers);
+    [Fact]
+    public void TryCapture_TerminalSaveNodeOutput_ReturnsNull()
+    {
+        JObject workflow = BuildLtxWorkflow();
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        // The save node is terminal, so slot 0 never resolves and the capture has no anchor node.
+        MediaRef media = new()
+        {
+            Output = bridge.ResolvePath(new JArray("7", 0)),
+            DataType = WGNodeData.DT_VIDEO
+        };
+
+        Assert.Null(media.Output);
+        Assert.Null(LtxPostVideoChainInspector.TryCapture(
+            bridge, media, currentAudioVae: null, useReusedAudio: false));
     }
 
     [Fact]

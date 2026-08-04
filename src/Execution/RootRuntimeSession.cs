@@ -2,7 +2,6 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Text2Image;
 using VideoStages.Planning;
 
 namespace VideoStages.Execution;
@@ -104,19 +103,6 @@ internal sealed class RootRuntimeSession
 
     private bool Publish(RuntimeArtifact artifact)
     {
-        if (_generator.UserInput.Get(T2IParamTypes.DoNotSave, false))
-        {
-            using WorkflowBridge suppressionBridge = WorkflowBridge.Create(_generator.Workflow);
-            foreach (string saveId in _hostAnimationSaveIds)
-            {
-                if (suppressionBridge.Graph.GetNode(saveId) is not null)
-                {
-                    VideoGraphHelpers.RemoveNode(_generator, suppressionBridge, saveId);
-                }
-            }
-            return true;
-        }
-
         WGNodeData media = artifact.Media?.ToWGNodeData(_generator);
         if (media?.Path is not JArray { Count: 2 } mediaPath)
         {

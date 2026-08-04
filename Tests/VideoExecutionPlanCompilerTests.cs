@@ -141,9 +141,14 @@ public class VideoExecutionPlanCompilerTests
         Assert.Single(compiled.Stages[0].RequireLtx2Payload().IcLoras);
         Assert.Single(compiled.Stages[0].RequireLtx2Payload().FrameReferences);
         Assert.Empty(compiled.Stages[1].RequireLtx2Payload().IcLoras);
-        // Clips with fewer than three stages silently skip audio reuse.
-        Assert.DoesNotContain(plan.Diagnostics, diagnostic =>
-            diagnostic.Code == "audio.reuse.requires_three_stages");
+        // Audio reuse needs a generate/capture/reuse trio, so this two-stage clip drops the
+        // authored ReuseAudio flag without any stage action and without any diagnostic.
+        Assert.All(
+            compiled.Stages,
+            stage => Assert.Equal(
+                StageAudioAction.None,
+                stage.RequireLtx2Payload().AudioAction));
+        Assert.Empty(plan.Diagnostics);
     }
 
     [Fact]
@@ -394,7 +399,12 @@ public class VideoExecutionPlanCompilerTests
 
         Assert.DoesNotContain(plan.Diagnostics, diagnostic =>
             diagnostic.Severity == PlanDiagnosticSeverity.Error);
-        PromptRelayPlan relay = Assert.Single(plan.Clips)
+        ClipPlan compiled = Assert.Single(plan.Clips);
+        // Both duration owners defer identically; assert the arm actually resolved the one it authored.
+        Assert.Equal(
+            controlNetOwnsLength ? AudioLengthOwner.ControlNet : AudioLengthOwner.Audio,
+            compiled.Audio.Length.Owner);
+        PromptRelayPlan relay = compiled
             .Stages[0].RequireLtx2Payload().PromptRelay;
         // The frame count is only known at runtime, so the authored windows ride along
         // unresolved and LtxModelPromptPreparer tiles them against the real length.
@@ -699,17 +709,12 @@ public class VideoExecutionPlanCompilerTests
 
         Assert.Single(plan.Clips[0].Audio.Segments.Items);
         Assert.Empty(plan.Clips[1].Audio.Segments.Items);
-        Assert.Contains(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code
-                    == "effective-request.audio-segments-ignored"
-                && diagnostic.ClipId == host.Id
-                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
-        Assert.DoesNotContain(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code
-                    == "architecture-capability-unsupported"
-                && diagnostic.Message.Contains("audio segments"));
+        // Segments the architecture cannot use are a per-clip warning, never a capability error:
+        // the authored track stays saved and only its window on the host clip is dropped.
+        PlanDiagnostic reported = Assert.Single(plan.Diagnostics);
+        Assert.Equal("effective-request.audio-segments-ignored", reported.Code);
+        Assert.Equal(host.Id, reported.ClipId);
+        Assert.Equal(PlanDiagnosticSeverity.Warning, reported.Severity);
     }
 
     [Fact]

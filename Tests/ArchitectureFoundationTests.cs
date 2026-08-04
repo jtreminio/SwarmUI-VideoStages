@@ -65,9 +65,9 @@ public class ArchitectureFoundationTests
             RootEnvironment.FromSpec(spec),
             result);
 
-        Assert.DoesNotContain(
-            result.Diagnostics,
-            item => item.Code == "architecture-authored-identity-mismatch");
+        // The resolver derives identity from the stage-0 model alone, so a stale hint is not its
+        // concern at all; only the effective-request projection reports it.
+        Assert.Empty(result.Diagnostics);
         Assert.Contains(
             plan.Diagnostics,
             item => item.Code == "effective-request.stale-architecture-hint"
@@ -264,9 +264,9 @@ public class ArchitectureFoundationTests
             Spec(clip),
             new FakeRegistry(undeclaredFakeProfile: true));
 
-        Assert.DoesNotContain(
-            result.Diagnostics,
-            item => item.Code == "architecture-resolved-profile-not-declared");
+        // A profile the architecture never declared is carried through silently: the resolver
+        // owns architecture identity, not the profile alias, so it says nothing.
+        Assert.Empty(result.Diagnostics);
         Assert.Equal(
             "ghost-profile",
             result.Clips[clip.Id].StageModels[0].ModelProfileId.Value);
@@ -290,15 +290,8 @@ public class ArchitectureFoundationTests
             ArchitecturePlanResolver.Resolve(Spec(clip), new FakeRegistry());
 
         Assert.Equal(NoneArchitecture.Id, result.Clips[0].Architecture.Id);
-        Assert.Contains(
-            result.Diagnostics,
-            item => item.Code == "architecture-mixed-authored-stage-clip");
-        Assert.DoesNotContain(
-            result.Diagnostics,
-            item => item.Code is "architecture-authored-identity-mismatch"
-                or "architecture-authored-profile-mismatch"
-                or "architecture-source-only-identity-mismatch"
-                or "architecture-source-only-profile-mismatch");
+        PlanDiagnostic only = Assert.Single(result.Diagnostics);
+        Assert.Equal("architecture-mixed-authored-stage-clip", only.Code);
     }
 
     [Fact]
@@ -347,12 +340,9 @@ public class ArchitectureFoundationTests
             ArchitecturePlanResolver.Resolve(Spec(clip), new FakeRegistry());
 
         Assert.Equal(NoneArchitecture.Id, result.Clips[0].Architecture.Id);
-        Assert.DoesNotContain(
-            result.Diagnostics,
-            item => item.Code == "architecture-mixed-authored-stage-profile-clip");
-        Assert.DoesNotContain(
-            result.Diagnostics,
-            item => item.Code == "architecture-mixed-authored-stage-clip");
+        // One architecture and one host compatibility class across both dormant stages: differing
+        // profile aliases are not a same-architecture violation of any kind.
+        Assert.Empty(result.Diagnostics);
     }
 
     [Fact]
@@ -604,15 +594,20 @@ public class ArchitectureFoundationTests
             diagnostic => diagnostic.Code
                     == "effective-request.unsupported-audio-derived-duration-ignored"
                 && diagnostic.Message.Contains("audio-derived clip duration"));
-        Assert.DoesNotContain(
-            plan.Diagnostics,
-            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
-                && diagnostic.Message.Contains("clip audio source"));
         Assert.Contains(
             plan.Diagnostics,
             diagnostic => diagnostic.Code
                 == "effective-request.unsupported-audio-output-ignored");
-        Assert.NotNull(Assert.Single(plan.Clips).ArchitecturePayload);
+        // 'none' declares the Upload source kind, so the upload survives planning intact while
+        // only the length flag and the standalone track are refused.
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code
+                == "effective-request.unsupported-audio-source-ignored");
+        ClipPlan compiled = Assert.Single(plan.Clips);
+        Assert.Equal(AudioSourceKind.Upload, compiled.Audio.Base.Kind);
+        Assert.Equal("voice.wav", compiled.Audio.Base.UploadedMedia.FileName);
+        Assert.NotNull(compiled.ArchitecturePayload);
     }
 
     [Fact]
@@ -658,9 +653,9 @@ public class ArchitectureFoundationTests
                 descriptor,
                 ArchitectureEntryMode.ImageToVideo);
 
-        Assert.DoesNotContain(
-            diagnostics,
-            diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        // The audio-duration rule only ever warns, and every external kind can supply a length,
+        // so the whole capability pass has nothing to say about this clip.
+        Assert.Empty(diagnostics);
     }
 
     [Fact]
@@ -684,10 +679,12 @@ public class ArchitectureFoundationTests
             diagnostic => diagnostic.Code
                     == "audio.length.source_cannot_drive_duration"
                 && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
+        // LTX declares AudioDerivedDuration, so the feature itself is never refused; only the
+        // native source's inability to supply a length is reported.
         Assert.DoesNotContain(
             diagnostics,
-            diagnostic => diagnostic.Code == "architecture-capability-unsupported"
-                && diagnostic.Message.Contains("audio-derived clip duration"));
+            diagnostic => diagnostic.Code
+                == "effective-request.unsupported-audio-derived-duration-ignored");
     }
 
     [Fact]
@@ -1244,34 +1241,51 @@ public class ArchitectureFoundationTests
         JObject catalog = await VideoStagesApi.VideoStagesGetArchitectureCatalog(null);
 
         Assert.Equal(2, catalog.Value<int>("schemaVersion"));
+        Assert.Equal(["schemaVersion", "architectures", "models"], Keys(catalog));
         JArray architectures = (JArray)catalog["architectures"];
         Assert.Equal(
             ["none", "ltx2", "minimax", "wan22", "host-video"],
             architectures.Values<JObject>().Select(item => item["id"]?.ToString()));
+        // Every serialized key is a closed literal, so pinning the key sets is what actually keeps
+        // a new field from reaching the frontend unannounced.
+        Assert.All(architectures.Values<JObject>(), item =>
+        {
+            Assert.Equal(["id", "label", "capabilities", "boundaryRules"], Keys(item));
+            Assert.Equal(
+                ["features", "entryModes", "audioSourceKinds"],
+                Keys((JObject)item["capabilities"]));
+            Assert.Equal(
+                ["continue", "crossfade", "cut"],
+                Keys((JObject)item["boundaryRules"]).Order());
+            Assert.All(
+                ((JObject)item["boundaryRules"]).PropertyValues(),
+                rule => Assert.Equal(
+                    ["support", "code", "reason", "constraints"],
+                    Keys((JObject)rule)));
+        });
         JObject none = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "none");
-        Assert.Null(none["defaultProfileId"]);
-        Assert.Null(none["profiles"]);
-        Assert.Null(none["extras"]);
+        Assert.Equal("Decoded source only", none["label"]);
         Assert.Equal(
             ["audioSegments"],
             none["capabilities"]["features"].Values<string>());
         Assert.Equal(
+            ["init-video"],
+            none["capabilities"]["entryModes"].Values<string>());
+        Assert.Equal(
             ["Disabled", "Upload"],
             none["capabilities"]["audioSourceKinds"].Values<string>());
-        Assert.Null(none["capabilities"]["output"]);
+        JObject noneCrossfade = (JObject)none["boundaryRules"]["crossfade"];
+        Assert.Equal("unsupported", noneCrossfade["support"]);
+        // An unsupported rule publishes an explicitly null constraint block, not an empty one.
+        Assert.Equal(JTokenType.Null, noneCrossfade["constraints"].Type);
         JObject ltx = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "ltx2");
-        Assert.Null(ltx["ignoredUnsupportedFeatures"]);
         Assert.Equal("ltx2", ltx["id"]);
         Assert.Equal("LTX Video 2.3", ltx["label"]);
         JObject capabilities = (JObject)ltx["capabilities"];
-        Assert.Null(capabilities["modelProfiles"]);
-        Assert.Null(capabilities["boundaryModes"]);
-        Assert.Null(capabilities["conditionalRules"]);
-        Assert.Null(capabilities["clipAudio"]);
         Assert.Equal(
             [
                 "promptRelay",
@@ -1287,12 +1301,18 @@ public class ArchitectureFoundationTests
                 "icLora",
             ],
             capabilities["features"].Values<string>());
-        Assert.Null(capabilities["initVideo"]);
+        Assert.Equal(
+            ["text-to-video", "image-to-video", "init-video"],
+            capabilities["entryModes"].Values<string>());
+        Assert.Equal(
+            ["Native", "Upload", "ControlNet", "AceStepFun"],
+            capabilities["audioSourceKinds"].Values<string>());
         JObject crossfadeRule = (JObject)ltx["boundaryRules"]["crossfade"];
-        Assert.Null(crossfadeRule["scope"]);
         Assert.Equal("conditional", crossfadeRule["support"]);
         Assert.Equal("ltx2.boundary.crossfade", crossfadeRule["code"]);
-        Assert.Null(crossfadeRule["entityId"]);
+        Assert.Equal(
+            "Crossfade currently uses the LTX-owned decoded transition path.",
+            crossfadeRule["reason"]);
         Assert.True(crossfadeRule["constraints"]["sameArchitecture"].Value<bool>());
         Assert.Equal(8, crossfadeRule["constraints"]["frameStep"]);
         Assert.Equal(8, crossfadeRule["constraints"]["minFrames"]);
@@ -1301,25 +1321,41 @@ public class ArchitectureFoundationTests
         JObject continueRule = (JObject)ltx["boundaryRules"]["continue"];
         Assert.Equal(1, continueRule["constraints"]["continuityExtraFrames"]);
         Assert.True(continueRule["constraints"]["targetRequiresGeneratedEntry"].Value<bool>());
-        Assert.Null(ltx["rules"]);
         JObject wan = Assert.Single(
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "wan22");
-        Assert.Null(wan["ignoredUnsupportedFeatures"]);
         Assert.Equal(
             ["text-to-video", "image-to-video", "init-video"],
             wan["capabilities"]["entryModes"].Values<string>());
         JObject model = Assert.Single(
             ((JArray)catalog["models"]).Values<JObject>(),
             item => item["modelName"]?.ToString() == models.VideoModel.Name);
+        Assert.Equal(
+            [
+                "modelName",
+                "architectureId",
+                "modelProfileId",
+                "modelClassId",
+                "compatibilityClassId",
+                "frameGrid",
+                "frameGridOrigin",
+                "capabilities",
+                "enhancements",
+            ],
+            Keys(model));
         Assert.Equal("ltx2", model["architectureId"]);
         Assert.Equal("ltx-2.3", model["modelProfileId"]);
         Assert.Equal(Ltx2ArchitectureModule.FrameGrid, model["frameGrid"]);
+        // A model republishes its architecture's capability block verbatim; entry modes live
+        // there rather than on the model itself.
         Assert.Equal(
             capabilities["features"].Values<string>(),
             model["capabilities"]["features"].Values<string>());
-        Assert.Null(model["entryModes"]);
-        Assert.Null(model["enhancements"]["extras"]);
+        Assert.Equal(
+            capabilities["entryModes"].Values<string>(),
+            model["capabilities"]["entryModes"].Values<string>());
+        Assert.Equal(["referencePositions"], Keys((JObject)model["enhancements"]));
+        Assert.Equal(["any"], model["enhancements"]["referencePositions"].Values<string>());
     }
 
     [Fact]
@@ -1349,6 +1385,9 @@ public class ArchitectureFoundationTests
                 "MediaRef",
                 StringComparison.OrdinalIgnoreCase));
     }
+
+    private static IEnumerable<string> Keys(JObject value) =>
+        value.Properties().Select(property => property.Name);
 
     private static VideoStagesSpec Spec(params ClipSpec[] clips) =>
         new(512, 512, 24, false, clips);

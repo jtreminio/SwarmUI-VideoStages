@@ -60,12 +60,8 @@ public partial class StageFlowTests
         List<SwarmSaveAnimationWSNode> saves = [
             .. bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>()
         ];
-        if (doNotSave)
-        {
-            Assert.Single(saves);
-            Assert.Same(unrelatedSave, saves[0]);
-        }
-        else
+        // donotsave is honoured above the graph — it makes T2IAPI return a data URI instead of
+        // writing to disk — so it changes nothing here. Both arms assert the same shape.
         {
             Assert.Equal(2, saves.Count);
             Assert.Single(
