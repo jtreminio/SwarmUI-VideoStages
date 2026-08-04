@@ -10,10 +10,6 @@ namespace VideoStages.Architectures.HostVideo;
 internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
     IArchitectureGenerationSessionProvider
 {
-    private readonly RootMediaHandoff _rootHandoff = new(
-        generator,
-        "generic host video");
-
     public ArchitectureId ArchitectureId =>
         HostVideoArchitectureModule.ArchitectureId;
 
@@ -61,10 +57,6 @@ internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
         }
         return diagnostics;
     }
-
-    public void CapturePreCoreMedia() => _rootHandoff.CapturePreCoreMedia();
-
-    public void DropCoreOutput() => _rootHandoff.DropCoreOutput();
 
     public IVideoGenerationSession CreateSession(
         ArchitectureTimelineSessionContext context) =>

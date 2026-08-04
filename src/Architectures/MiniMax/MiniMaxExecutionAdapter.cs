@@ -9,9 +9,6 @@ namespace VideoStages.Architectures.MiniMax;
 internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
     IArchitectureGenerationSessionProvider
 {
-    private readonly RootMediaHandoff _rootHandoff = new(
-        generator,
-        MiniMaxGenerationSession.ArchitectureLabel);
     private CapturedHostReference _baseReference;
     private CapturedHostReference _refinerReference;
 
@@ -81,10 +78,6 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
             _refinerReference = CapturedHostReference.From(generator);
         }
     }
-
-    public void CapturePreCoreMedia() => _rootHandoff.CapturePreCoreMedia();
-
-    public void DropCoreOutput() => _rootHandoff.DropCoreOutput();
 
     /// <summary>
     /// A capture pins the host node it names for the rest of the request, which is why an unwanted

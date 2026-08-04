@@ -437,15 +437,12 @@ never from the current shared apply input, so the result does not depend on whic
 architectures ran before it. Wrapping the shared apply input down to one frame is
 LTX root policy, so it happens only when LTX owns the host root; the source-only
 path retains the raw capture.
-The remaining LTX host phases handle base/refiner references, pre-core handoff,
-core-output drop, and root audio-mask sizing.
-`MiniMaxExecutionAdapter` captures the same base/refiner host reference points
-and uses `RootMediaHandoff` for pre-core capture and discarded-core cleanup.
-When WAN owns the generated host root, `HostVideoRootMediaHandoff` captures the
-resolvable root image, its VAE state (which may be explicitly absent), and a
-node snapshot, then restores them and prunes the host core video pass. Missing
-or corrupt handoff state fails closed and clears all
-`videostages.arch.wan22.*` handoff keys.
+LTX also handles base/refiner references and root audio-mask sizing.
+`MiniMaxExecutionAdapter` captures the same base/refiner host reference points.
+`VideoArchitectureExecutionHost` captures resolvable root media, optional VAE
+state, and the pre-core node set when a generated stage owns the root and the
+root plan permits interception. It restores that state and prunes the discarded core video pass.
+Missing or corrupt handoff state fails closed.
 `PreviousStage` is not a host reference capture: it is the decoded,
 Wan-local handoff between adjacent stages inside one generation session.
 
@@ -635,9 +632,9 @@ clip-authored frame references.
 
 Text entry prepares the selected host model and conditioning, then calls the
 host's family-specific `EmptyImage` video-latent primitive before sampling and
-decoding. `HostVideoRootMediaHandoff`, `HostVideoDecodedStageInput`, and
-`VideoStageRunner` contain the root restoration, decoded-media boundary,
-and stage-loop mechanics shared with WAN. Generic host video retains direct
+decoding. `VideoArchitectureExecutionHost`, `HostVideoDecodedStageInput`, and
+`VideoStageRunner` own root restoration, the decoded-media boundary, and the
+host-style stage loop. Generic host video retains direct
 stock-path scheduling and request isolation. Generic passes clear ambient
 audio, native audio-reference input, swap, and end-frame values inside
 reversible scopes. A core-pass pre-handler also neutralizes request-global swap,
@@ -674,7 +671,7 @@ Publication ends the timeline; no architecture finalization step follows it.
 | Invalid Wan option or unsupported host video parameter | Wan compiler / `WanExecutionAdapter.PreflightRequest` |
 | Invalid common geometry, boundary, or audio plan | Common compiler diagnostics |
 | Missing IC-LoRA dependencies | `Ltx2RequestPreflight` before later VideoStages mutation |
-| Missing or corrupt Wan root handoff | `HostVideoRootMediaHandoff` with complete key cleanup |
+| Missing or corrupt host root handoff | `VideoArchitectureExecutionHost` |
 | Missing provider/session | `VideoArchitectureExecutionHost` |
 | Wrong returned identity or decoded media | Execution-host identity checks / `DecodedClipArtifact.ValidateDecoded` |
 | Invalid cross-architecture non-cut run | `MultiClipParallelMerger` |

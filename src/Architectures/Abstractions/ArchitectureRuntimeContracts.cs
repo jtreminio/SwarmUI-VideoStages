@@ -117,10 +117,6 @@ internal interface IArchitectureGenerationSessionProvider
 
     void CaptureRefinerReference(VideoExecutionPlan plan) { }
 
-    void CapturePreCoreMedia() { }
-
-    void DropCoreOutput() { }
-
     void ApplyRootAudioMaskDimensions() { }
 
     IVideoGenerationSession CreateSession(ArchitectureTimelineSessionContext context);

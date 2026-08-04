@@ -148,8 +148,6 @@ public class DecisionOwnerRegressionTests
             ["videostages.arch.ltx2.stage-ref.base.media"] =
                 "104|0|VIDEO|512|512|97|24|ltxv2",
             ["videostages.controlnet.audio.1"] = new JArray("104", 0).ToString(Formatting.None),
-            // Not a node reference: the pre-core id snapshot.
-            ["videostages.arch.ltx2.pre-core-node-ids"] = "103,104,105",
             // SwarmUI model-loader tuples can reference three independent nodes. Node ids are
             // deliberately non-numeric; only their paired output slots are integers.
             ["modelloader_removed-model_image2video"] =
@@ -206,9 +204,6 @@ public class DecisionOwnerRegressionTests
         Assert.True(nodeHelpers.ContainsKey("modelloader_bad-slot_image2video"));
         Assert.True(nodeHelpers.ContainsKey("modelloader_wrong-part-count_image2video"));
         Assert.True(nodeHelpers.ContainsKey("videostages.opaque.colon-state"));
-        Assert.Equal(
-            "103,104,105",
-            nodeHelpers["videostages.arch.ltx2.pre-core-node-ids"]);
     }
 
     [Fact]
@@ -559,10 +554,6 @@ public class DecisionOwnerRegressionTests
 
         public void CaptureRefinerReference(VideoExecutionPlan plan) =>
             inner.CaptureRefinerReference(plan);
-
-        public void CapturePreCoreMedia() => inner.CapturePreCoreMedia();
-
-        public void DropCoreOutput() => inner.DropCoreOutput();
 
         public void ApplyRootAudioMaskDimensions() =>
             inner.ApplyRootAudioMaskDimensions();

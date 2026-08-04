@@ -29,7 +29,7 @@ public class ArchitectureRuntimeOwnershipTests
     }
 
     [Fact]
-    public void InitVideo_leading_architecture_does_not_claim_root_lifecycle_calls()
+    public void InitVideo_leading_architecture_does_not_claim_root_audio_mask_sizing()
     {
         VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         WorkflowGenerator generator = Generator();
@@ -40,12 +40,10 @@ public class ArchitectureRuntimeOwnershipTests
             plan,
             [initVideoClip, future]);
 
-        host.CapturePreCoreMedia();
-        host.DropCoreOutput();
         host.ApplyRootAudioMaskDimensions();
 
         Assert.Empty(initVideoClip.LifecycleCalls);
-        Assert.Equal(["pre-core", "drop-core", "audio-mask"], future.LifecycleCalls);
+        Assert.Equal(["audio-mask"], future.LifecycleCalls);
     }
 
     [Fact]
@@ -376,10 +374,6 @@ public class ArchitectureRuntimeOwnershipTests
 
         public void CaptureRefinerReference(VideoExecutionPlan plan) =>
             Record("refiner-reference");
-
-        public void CapturePreCoreMedia() => Record("pre-core");
-
-        public void DropCoreOutput() => Record("drop-core");
 
         public void ApplyRootAudioMaskDimensions() => Record("audio-mask");
 

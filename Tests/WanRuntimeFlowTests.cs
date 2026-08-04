@@ -675,7 +675,9 @@ public class WanRuntimeFlowTests
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         WorkflowGenerator.WorkflowGenStep corrupt = new(
-            g => new RootMediaHandoff(g, "Wan test").DropCoreOutput(),
+            g => g.GetVideoExecutionPlanContext()
+                .RequirePreparedExecutionHost()
+                .DropCoreOutput(),
             Constants.WorkflowStepPriority.DropCoreImageToVideoOutput - 0.01);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>

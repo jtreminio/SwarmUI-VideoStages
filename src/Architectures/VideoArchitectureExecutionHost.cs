@@ -21,6 +21,7 @@ internal sealed class VideoArchitectureExecutionHost
         _activeProviders;
     private readonly ArchitectureId? _rootOwner;
     private VideoExecutionPlanContext _executionContext;
+    private RootSnapshot _rootSnapshot;
 
     internal T2IParamInput RequestInput => _generator.UserInput;
 
@@ -124,11 +125,9 @@ internal sealed class VideoArchitectureExecutionHost
         }
     });
 
-    internal void CapturePreCoreMedia() => ExecutePrepared(() =>
-        RootOwnerProvider()?.CapturePreCoreMedia());
+    internal void CapturePreCoreMedia() => ExecutePrepared(CapturePreCoreMediaCore);
 
-    internal void DropCoreOutput() => ExecutePrepared(() =>
-        RootOwnerProvider()?.DropCoreOutput());
+    internal void DropCoreOutput() => ExecutePrepared(DropCoreOutputCore);
 
     internal void ApplyRootAudioMaskDimensions() => ExecutePrepared(() =>
         RootOwnerProvider()?.ApplyRootAudioMaskDimensions());
@@ -375,6 +374,94 @@ internal sealed class VideoArchitectureExecutionHost
         }
     }
 
+    private void CapturePreCoreMediaCore()
+    {
+        _rootSnapshot = null;
+        if (!ShouldHandoffRoot())
+        {
+            return;
+        }
+        using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+        try
+        {
+            RequireResolvableRoot(bridge, _generator.CurrentMedia, "host root media");
+            if (_generator.CurrentVae is not null)
+            {
+                RequireResolvableRoot(bridge, _generator.CurrentVae, "host root VAE");
+            }
+            HashSet<string> preCoreNodeIds = [.. bridge.Graph.Nodes.Keys];
+            if (preCoreNodeIds.Count == 0)
+            {
+                throw RootHandoffError("the pre-core workflow snapshot is empty");
+            }
+            _rootSnapshot = new(
+                _generator.CurrentMedia,
+                _generator.CurrentVae,
+                preCoreNodeIds);
+        }
+        catch
+        {
+            _rootSnapshot = null;
+            throw;
+        }
+    }
+
+    private void DropCoreOutputCore()
+    {
+        if (!ShouldHandoffRoot())
+        {
+            _rootSnapshot = null;
+            return;
+        }
+        try
+        {
+            RootSnapshot snapshot = _rootSnapshot
+                ?? throw RootHandoffError("the captured root state is missing");
+            using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+            RequireResolvableRoot(bridge, snapshot.Media, "host root media");
+            if (snapshot.Vae is not null)
+            {
+                RequireResolvableRoot(bridge, snapshot.Vae, "host root VAE");
+            }
+            if (snapshot.PreCoreNodeIds.Any(id => bridge.Graph.GetNode(id) is null))
+            {
+                throw RootHandoffError(
+                    "the pre-core workflow snapshot references removed nodes");
+            }
+            _generator.CurrentMedia = snapshot.Media;
+            _generator.CurrentVae = snapshot.Vae;
+            WorkflowGraphCleanup.PruneNodesAddedSince(
+                bridge,
+                snapshot.PreCoreNodeIds,
+                _generator.NodeHelpers);
+        }
+        finally
+        {
+            _rootSnapshot = null;
+        }
+    }
+
+    private void RequireResolvableRoot(
+        WorkflowBridge bridge,
+        WGNodeData data,
+        string description)
+    {
+        if (data?.Path is not JArray { Count: 2 } path
+            || path[1].Type != JTokenType.Integer
+            || bridge.ResolvePath(path) is null)
+        {
+            throw RootHandoffError(
+                $"{description} is missing or no longer resolves in the workflow");
+        }
+    }
+
+    private static InvalidOperationException RootHandoffError(string detail) =>
+        VideoStagesInvariant.Failure(
+            $"VideoStages could not restore the host root because {detail}.");
+
+    private bool ShouldHandoffRoot() =>
+        _rootOwner is not null && _plan.Root.InterceptsHostCore;
+
     private VideoExecutionPlanContext RequireExecutionContext() =>
         _executionContext
         ?? throw VideoStagesInvariant.Failure(
@@ -401,6 +488,11 @@ internal sealed class VideoArchitectureExecutionHost
         IReadOnlyList<ArchitectureId> ActiveArchitectureIds,
         IReadOnlyList<IArchitectureGenerationSessionProvider> Providers,
         ArchitectureId? RootOwnerArchitectureId);
+
+    private sealed record RootSnapshot(
+        WGNodeData Media,
+        WGNodeData Vae,
+        HashSet<string> PreCoreNodeIds);
 
     private static RuntimeProviderBinding CreateProductionProviderBinding(
         WorkflowGenerator generator,

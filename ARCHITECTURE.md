@@ -44,15 +44,14 @@ encoding, or decoding, and is still an ordinary stage in the plan.
 ### Host phases
 
 VideoStages registers eight priority-ordered host workflow steps. The first
-compiles and prepares the request without VideoStages graph mutation. Six then
-dispatch an `ArchitectureHostPhase` — ControlNet preprocessor capture, base and
-refiner reference capture, pre-core media capture, core output drop, and root
-audio mask sizing — and the last runs the configured stages. Mutation phases
-require prepared state, so nothing runs against an invalid or partially
-preflighted document.
+compiles and prepares the request without VideoStages graph mutation. Six named
+lifecycle methods then capture ControlNet preprocessors and references, preserve
+and restore the host root, and size the root audio mask. The last step runs the
+configured stages. Mutation requires prepared state, so nothing runs against an
+invalid or partially preflighted document.
 
-Each phase is scoped either to the single root-owning architecture or to every
-active architecture. `ArchitectureRootOwnerResolver` picks the root owner: the
+Architecture-specific capture is scoped either to the single root-owning
+architecture or to every active architecture. `ArchitectureRootOwnerResolver` picks the root owner: the
 first clip with stages whose input is host root media or an empty latent.
 InitVideo clips consume their own media and never claim the host root. The
 ControlNet preprocessor capture is architecture-neutral and therefore runs for

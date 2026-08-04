@@ -8,10 +8,6 @@ namespace VideoStages.Architectures.Ltx2;
 internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
     IArchitectureGenerationSessionProvider
 {
-    private readonly RootMediaHandoff _rootHandoff = new(
-        generator,
-        "LTX");
-
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
 
     public IReadOnlyList<PlanDiagnostic> PreflightRequest(
@@ -29,10 +25,6 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
 
     public void CaptureRefinerReference(VideoExecutionPlan plan) =>
         CaptureIfReferenced(plan, StageRefStore.StageKind.Refiner);
-
-    public void CapturePreCoreMedia() => _rootHandoff.CapturePreCoreMedia();
-
-    public void DropCoreOutput() => _rootHandoff.DropCoreOutput();
 
     public void ApplyRootAudioMaskDimensions() =>
         new LtxAudioMaskResizer(

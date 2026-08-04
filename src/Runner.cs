@@ -12,10 +12,8 @@ namespace VideoStages;
 //                                                                                                        then fans out architecture interpretation
 // 3  -4.2   CaptureBase                                   —                                              architecture reference capture
 // 4   5.89  CaptureRefiner                                —                                              architecture reference capture
-// 5  10.95  CapturePreCoreVideoMedia                      —                                              architecture pre-core capture,
-//                                                                                                        videostages.arch.{id}.pre-core-node-ids
-// 6  11.05  DropCoreImageToVideoOutput                    architecture pre-core state,                  clears both above
-//                                                         videostages.arch.{id}.pre-core-node-ids
+// 5  10.95  CapturePreCoreVideoMedia                      eligible generated-root media/VAE, graph       in-memory root snapshot
+// 6  11.05  DropCoreImageToVideoOutput                    captured root state                            restores root and prunes core video pass
 // 7  11.4   ApplyRootAudioMaskDimensionsAfterNativeVideo  —                                              —
 // 8  11.5   RunConfiguredStages                           architecture references,                     executes planned architecture sessions
 //                                                         videostages.controlnet.fullimage.{i}

@@ -9,10 +9,6 @@ namespace VideoStages.Architectures.Wan;
 internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
     IArchitectureGenerationSessionProvider
 {
-    private readonly RootMediaHandoff _rootHandoff = new(
-        generator,
-        "Wan");
-
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
 
     /// <summary>
@@ -58,10 +54,6 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
         }
         return diagnostics;
     }
-
-    public void CapturePreCoreMedia() => _rootHandoff.CapturePreCoreMedia();
-
-    public void DropCoreOutput() => _rootHandoff.DropCoreOutput();
 
     public IVideoGenerationSession CreateSession(
         ArchitectureTimelineSessionContext context) =>

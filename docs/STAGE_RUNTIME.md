@@ -108,8 +108,8 @@ timeline and clip state belongs to the session it creates.
 | -5.9 | `CaptureCoreVideoControlNetPreprocessors` | common capture once, then all active architecture providers |
 | -4.2 | `CaptureBase` | all active providers may snapshot base reference facts |
 | 5.89 | `CaptureRefiner` | all active providers may snapshot refiner facts |
-| 10.95 | `CapturePreCoreVideoMedia` | root-owner architecture only |
-| 11.05 | `DropCoreImageToVideoOutput` | root-owner architecture only |
+| 10.95 | `CapturePreCoreVideoMedia` | common snapshot when a generated stage owns an interceptable root |
+| 11.05 | `DropCoreImageToVideoOutput` | common restore and discarded-core cleanup for that root |
 | 11.4 | `ApplyRootAudioMaskDimensions` | root-owner architecture only |
 | 11.5 | `RunConfiguredStages` | common timeline execution and publication |
 
