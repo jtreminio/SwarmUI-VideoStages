@@ -4633,7 +4633,7 @@ public class WanRuntimeFlowTests
             handler = new() { ModelType = "LoRA" };
             Program.T2IModelSets["LoRA"] = handler;
         }
-        T2IModel model = new(handler, "/tmp", $"/tmp/{name}", name);
+        T2IModel model = TestStubModel.Create(handler, name);
         handler.Models[model.Name] = model;
         return model;
     }
@@ -4650,7 +4650,7 @@ public class WanRuntimeFlowTests
     private static T2IModel AddDistinctWanModel(T2IModel recognizedModel, string name)
     {
         T2IModelHandler handler = Program.T2IModelSets["Stable-Diffusion"];
-        T2IModel model = new(handler, "/tmp", $"/tmp/{name}", name)
+        T2IModel model = new(handler, TestStubModel.Folder(handler), TestStubModel.File(handler, name), name)
         {
             ModelClass = recognizedModel.ModelClass,
         };
@@ -4661,7 +4661,7 @@ public class WanRuntimeFlowTests
     private static T2IModel AddWan5bModel(string name)
     {
         T2IModelHandler handler = Program.T2IModelSets["Stable-Diffusion"];
-        T2IModel model = new(handler, "/tmp", $"/tmp/{name}", name)
+        T2IModel model = new(handler, TestStubModel.Folder(handler), TestStubModel.File(handler, name), name)
         {
             ModelClass = new T2IModelClass
             {

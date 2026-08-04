@@ -456,11 +456,7 @@ public class DecisionOwnerRegressionTests
     {
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         T2IModelHandler handler = new() { ModelType = "ControlNet" };
-        T2IModel model = new(
-            handler,
-            "/tmp",
-            "/tmp/UnitTest_ControlNet.safetensors",
-            "UnitTest_ControlNet.safetensors");
+        T2IModel model = TestStubModel.Create(handler, "UnitTest_ControlNet.safetensors");
         WorkflowGenerator generator = Generator();
         generator.UserInput.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
         generator.UserInput.Set(T2IParamTypes.Controlnets[0].Model, model);

@@ -122,7 +122,7 @@ public sealed class StageRefStoreScopeTests
             handler = new T2IModelHandler { ModelType = "LoRA" };
             Program.T2IModelSets["LoRA"] = handler;
         }
-        T2IModel lora = new(handler, "/tmp", $"/tmp/{name}.safetensors", $"{name}.safetensors");
+        T2IModel lora = TestStubModel.Create(handler, $"{name}.safetensors");
         handler.Models[lora.Name] = lora;
     }
 

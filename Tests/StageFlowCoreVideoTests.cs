@@ -238,7 +238,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndVideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
         {
             ModelClass = new T2IModelClass()
             {
@@ -280,7 +280,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
         {
             ModelClass = new T2IModelClass()
             {
@@ -361,7 +361,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
         {
             ModelClass = new T2IModelClass()
             {
@@ -372,7 +372,7 @@ public partial class StageFlowTests
         };
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
+        T2IModel loraModel = TestStubModel.Create(loraHandler, "UnitTest_ControlNetLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
@@ -428,7 +428,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
         {
             ModelClass = new T2IModelClass()
             {
@@ -439,7 +439,7 @@ public partial class StageFlowTests
         };
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
+        T2IModel loraModel = TestStubModel.Create(loraHandler, "UnitTest_ControlNetLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject stageA = MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8, cfgScale: 1);
@@ -485,7 +485,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
         {
             ModelClass = new T2IModelClass()
             {
@@ -496,7 +496,7 @@ public partial class StageFlowTests
         };
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
+        T2IModel loraModel = TestStubModel.Create(loraHandler, "UnitTest_ControlNetLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
@@ -546,7 +546,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
         {
             ModelClass = new T2IModelClass()
             {
@@ -557,7 +557,7 @@ public partial class StageFlowTests
         };
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
+        T2IModel loraModel = TestStubModel.Create(loraHandler, "UnitTest_ControlNetLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
@@ -610,7 +610,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
         {
             ModelClass = new T2IModelClass()
             {
@@ -621,7 +621,7 @@ public partial class StageFlowTests
         };
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
+        T2IModel loraModel = TestStubModel.Create(loraHandler, "UnitTest_ControlNetLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
@@ -652,7 +652,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
         {
             ModelClass = new T2IModelClass()
             {
@@ -663,7 +663,7 @@ public partial class StageFlowTests
         };
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
+        T2IModel loraModel = TestStubModel.Create(loraHandler, "UnitTest_ControlNetLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject stageA = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
@@ -702,7 +702,7 @@ public partial class StageFlowTests
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
         {
             ModelClass = new T2IModelClass()
             {
@@ -713,7 +713,7 @@ public partial class StageFlowTests
         };
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
+        T2IModel loraModel = TestStubModel.Create(loraHandler, "UnitTest_ControlNetLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);

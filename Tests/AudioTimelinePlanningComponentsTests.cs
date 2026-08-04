@@ -5,6 +5,7 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
+[Collection("VideoStagesTests")]
 public class AudioTimelinePlanningComponentsTests
 {
     private const int Fps = 24;

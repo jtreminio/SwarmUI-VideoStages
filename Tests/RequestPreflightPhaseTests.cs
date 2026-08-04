@@ -157,11 +157,7 @@ public sealed class RequestPreflightPhaseTests
             handler = new T2IModelHandler() { ModelType = "LoRA" };
             SwarmUI.Core.Program.T2IModelSets["LoRA"] = handler;
         }
-        T2IModel lora = new(
-            handler,
-            "/tmp",
-            "/tmp/UnitTest_PreflightIcLora.safetensors",
-            "UnitTest_PreflightIcLora.safetensors");
+        T2IModel lora = TestStubModel.Create(handler, "UnitTest_PreflightIcLora.safetensors");
         handler.Models[lora.Name] = lora;
     }
 }

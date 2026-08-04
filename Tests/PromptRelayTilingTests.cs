@@ -4,6 +4,7 @@ using Xunit;
 namespace VideoStages.Tests;
 
 /// <summary>Tests prompt-window tiling into relay segments.</summary>
+[Collection("VideoStagesTests")]
 public class PromptRelayTilingTests
 {
     private static PromptWindowPlan Window(string prompt, double start, double duration) =>

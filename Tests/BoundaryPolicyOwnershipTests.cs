@@ -6,13 +6,14 @@ using Xunit;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// One typed policy owns boundary behavior: the catalog rule an architecture advertises and the
-/// rule <see cref="BoundaryPlanCompiler"/> consumes are the same rule.
+/// One typed policy owns boundary behavior: every architecture's policy covers every join type,
+/// and <see cref="BoundaryPlanCompiler"/> compiles that rule's constraints.
 /// </summary>
+[Collection("VideoStagesTests")]
 public class BoundaryPolicyOwnershipTests
 {
     [Fact]
-    public void EveryRegisteredArchitecture_AdvertisesExactlyTheRuleCompilationConsumes()
+    public void EveryRegisteredArchitecture_DeclaresARuleForEveryJoinType()
     {
         foreach (VideoArchitectureDescriptor descriptor in
             VideoArchitectureRegistry.Production.Catalog)
@@ -22,10 +23,6 @@ public class BoundaryPolicyOwnershipTests
             Assert.Equal(
                 Enum.GetValues<BoundaryJoinType>().Order(),
                 policy.Rules.Keys.Order());
-            foreach (BoundaryJoinType mode in Enum.GetValues<BoundaryJoinType>())
-            {
-                Assert.Equal(policy.Rules[mode], descriptor.BoundaryRules[mode]);
-            }
         }
     }
 

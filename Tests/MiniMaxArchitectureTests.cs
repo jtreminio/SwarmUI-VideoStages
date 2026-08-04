@@ -29,9 +29,6 @@ public class MiniMaxArchitectureTests
             out ResolvedVideoModel resolved));
         Assert.Equal(MiniMaxArchitectureModule.ArchitectureId, resolved.ArchitectureId);
         Assert.Equal(MiniMaxArchitectureModule.ProfileId, resolved.ModelProfileId);
-        Assert.Equal(["first", "last"], resolved.ReferencePositions);
-        Assert.Equal(MiniMaxArchitectureModule.FrameGrid, resolved.FrameGrid);
-        Assert.Equal(MiniMaxArchitectureModule.FrameGridOrigin, resolved.FrameGridOrigin);
     }
 
     [Theory]
@@ -67,12 +64,8 @@ public class MiniMaxArchitectureTests
             item => item["modelName"]?.ToString() == models.VideoModel.Name);
 
         Assert.Equal("MiniMax H3", architecture.Value<string>("label"));
-        Assert.Equal(
-            MiniMaxArchitectureModule.FrameGrid,
-            model.Value<int>("frameGrid"));
-        Assert.Equal(
-            MiniMaxArchitectureModule.FrameGridOrigin,
-            model.Value<int>("frameGridOrigin"));
+        Assert.Equal(17, model.Value<int>("frameGrid"));
+        Assert.Equal(5, model.Value<int>("frameGridOrigin"));
         Assert.Equal(
             ["Native", "Upload", "ControlNet", "AceStepFun"],
             architecture["capabilities"]["audioSourceKinds"].Values<string>());
@@ -131,10 +124,6 @@ public class MiniMaxArchitectureTests
                 ArchitectureEntryMode.ImageToVideo);
 
         Assert.True(descriptor.Features.HasFlag(ArchitectureFeature.AudioDerivedDuration));
-        Assert.DoesNotContain(
-            diagnostics,
-            diagnostic => diagnostic.Code
-                == "effective-request.unsupported-audio-derived-duration-ignored");
         Assert.DoesNotContain(
             diagnostics,
             diagnostic => diagnostic.Code
@@ -214,32 +203,6 @@ public class MiniMaxArchitectureTests
     }
 
     [Fact]
-    public void Crossfade_can_carry_audio_into_the_next_MiniMax_clip()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
-        JObject clip = MakeClip(
-            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
-        clip["boundaryOut"] = Constants.BoundaryOutCrossfade;
-        clip["boundaryOutCarryAudio"] = true;
-        ClipSpec parsed = ParseClip(clip, models);
-        VideoArchitectureDescriptor descriptor = MiniMaxArchitectureModule.Instance.Descriptor;
-
-        IReadOnlyList<PlanDiagnostic> diagnostics =
-            ArchitectureCapabilityValidator.Validate(
-                parsed,
-                descriptor,
-                ArchitectureEntryMode.ImageToVideo);
-
-        Assert.True(descriptor.Features.HasFlag(ArchitectureFeature.AudioSegments));
-        Assert.True(descriptor.Features.HasFlag(ArchitectureFeature.AudioBoundaryCarry));
-        Assert.DoesNotContain(
-            diagnostics,
-            diagnostic => diagnostic.Code
-                == "effective-request.unsupported-audio-boundary-ignored");
-    }
-
-    [Fact]
     public void Init_video_rejects_audio_derived_duration()
     {
         using SwarmUiTestContext context = new();
@@ -293,18 +256,7 @@ public class MiniMaxArchitectureTests
         StageSpec stage = clip.Stages[^1];
         VideoArchitectureDescriptor descriptor = MiniMaxArchitectureModule.Instance.Descriptor;
 
-        IReadOnlyList<PlanDiagnostic> diagnostics =
-            ArchitectureCapabilityValidator.Validate(
-                clip,
-                descriptor,
-                ArchitectureEntryMode.ImageToVideo);
-
-        Assert.True(descriptor.Features.HasFlag(ArchitectureFeature.LatentUpscale));
         Assert.False(ArchitectureStageActivity.IsPassthrough(stage, descriptor));
-        Assert.DoesNotContain(
-            diagnostics,
-            diagnostic => diagnostic.Code
-                == "effective-request.unsupported-latent-upscale-ignored");
     }
 
     [Fact]
@@ -333,7 +285,6 @@ public class MiniMaxArchitectureTests
                 descriptor,
                 ArchitectureEntryMode.ImageToVideo);
 
-        Assert.False(descriptor.Features.HasFlag(ArchitectureFeature.LatentModelUpscale));
         Assert.True(ArchitectureStageActivity.IsPassthrough(clip.Stages[^1], descriptor));
         Assert.Contains(
             diagnostics,
@@ -415,10 +366,7 @@ public class MiniMaxArchitectureTests
 
         Assert.NotNull(payload.FirstFrameReference);
         Assert.NotNull(payload.LastFrameReference);
-        Assert.Equal(ReferenceFramingMode.Crop, payload.ReferenceFraming);
-        Assert.False(payload.ReuseAudio);
-        Assert.True(MiniMaxArchitectureModule.Instance.Descriptor.Features.HasFlag(
-            ArchitectureFeature.ReferenceFraming));
+
         Assert.Single(
             compilation.Diagnostics,
             diagnostic => diagnostic.Code

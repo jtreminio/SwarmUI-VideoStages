@@ -642,7 +642,7 @@ public class HostVideoRuntimeFlowTests
         string name)
     {
         T2IModelHandler handler = Program.T2IModelSets["Stable-Diffusion"];
-        T2IModel model = new(handler, "/tmp", $"/tmp/{name}", name)
+        T2IModel model = new(handler, TestStubModel.Folder(handler), TestStubModel.File(handler, name), name)
         {
             ModelClass = existing.ModelClass with
             {
@@ -662,7 +662,7 @@ public class HostVideoRuntimeFlowTests
             handler = new() { ModelType = "LoRA" };
             Program.T2IModelSets["LoRA"] = handler;
         }
-        T2IModel model = new(handler, "/tmp", $"/tmp/{name}", name);
+        T2IModel model = TestStubModel.Create(handler, name);
         handler.Models[model.Name] = model;
         return model;
     }
@@ -752,7 +752,7 @@ public class HostVideoRuntimeFlowTests
     private static T2IModel Install(string modelType, string name)
     {
         T2IModelHandler handler = Program.T2IModelSets[modelType];
-        T2IModel model = new(handler, "/tmp", $"/tmp/{name}", name);
+        T2IModel model = TestStubModel.Create(handler, name);
         handler.Models[name] = model;
         return model;
     }

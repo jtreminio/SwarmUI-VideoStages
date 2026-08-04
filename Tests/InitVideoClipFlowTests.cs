@@ -133,11 +133,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel lipDub = new(
-            loraHandler,
-            "/tmp",
-            "/tmp/UnitTest_LipDub.safetensors",
-            "UnitTest_LipDub.safetensors");
+        T2IModel lipDub = TestStubModel.Create(loraHandler, "UnitTest_LipDub.safetensors");
         loraHandler.Models[lipDub.Name] = lipDub;
 
         JObject initVideoClip = MakeInitVideoClip(models);
@@ -194,11 +190,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel icLora = new(
-            loraHandler,
-            "/tmp",
-            "/tmp/UnitTest_IncomingAudio.safetensors",
-            "UnitTest_IncomingAudio.safetensors");
+        T2IModel icLora = TestStubModel.Create(loraHandler, "UnitTest_IncomingAudio.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
         JObject initVideoClip = MakeInitVideoClip(models);
@@ -233,11 +225,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel icLora = new(
-            loraHandler,
-            "/tmp",
-            "/tmp/UnitTest_PreviousClipAudio.safetensors",
-            "UnitTest_PreviousClipAudio.safetensors");
+        T2IModel icLora = TestStubModel.Create(loraHandler, "UnitTest_PreviousClipAudio.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
         JObject first = MakeInitVideoClip(models);
@@ -275,11 +263,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel icLora = new(
-            loraHandler,
-            "/tmp",
-            "/tmp/UnitTest_MultiStageIncomingAudio.safetensors",
-            "UnitTest_MultiStageIncomingAudio.safetensors");
+        T2IModel icLora = TestStubModel.Create(loraHandler, "UnitTest_MultiStageIncomingAudio.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
         JObject initVideoClip = MakeInitVideoClip(models);
@@ -348,8 +332,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel icLora = new(
-            loraHandler, "/tmp", "/tmp/UnitTest_IcLoraUpscaler.safetensors", "UnitTest_IcLoraUpscaler.safetensors");
+        T2IModel icLora = TestStubModel.Create(loraHandler, "UnitTest_IcLoraUpscaler.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
         // Passthrough stage 0 (Control 0) + a ×2 refine stage. The IC-LoRA explicitly targets the
@@ -397,8 +380,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel icLora = new(
-            loraHandler, "/tmp", "/tmp/UnitTest_IcLoraDrive.safetensors", "UnitTest_IcLoraDrive.safetensors");
+        T2IModel icLora = TestStubModel.Create(loraHandler, "UnitTest_IcLoraDrive.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
         // Single sampling stage (Control 0.5, steps 10) + an Incoming IC-LoRA: the initVideoClip
@@ -450,8 +432,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel icLora = new(
-            loraHandler, "/tmp", "/tmp/UnitTest_IcLoraDrive.safetensors", "UnitTest_IcLoraDrive.safetensors");
+        T2IModel icLora = TestStubModel.Create(loraHandler, "UnitTest_IcLoraDrive.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
         // On a initVideoClip clip, stage 0's Incoming media IS the footage, so that
@@ -485,8 +466,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel icLora = new(
-            loraHandler, "/tmp", "/tmp/UnitTest_IcLoraDrive.safetensors", "UnitTest_IcLoraDrive.safetensors");
+        T2IModel icLora = TestStubModel.Create(loraHandler, "UnitTest_IcLoraDrive.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
         // A LONE initVideoClip clip carrying an IC-LoRA guide takes the root-save retarget path. The guide
@@ -951,8 +931,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel stageLora = new(
-            loraHandler, "/tmp", "/tmp/UnitTest_StageLora.safetensors", "UnitTest_StageLora.safetensors");
+        T2IModel stageLora = TestStubModel.Create(loraHandler, "UnitTest_StageLora.safetensors");
         loraHandler.Models[stageLora.Name] = stageLora;
 
         JObject initVideoClip = MakeInitVideoClip(models);
@@ -1185,8 +1164,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel icLora = new(
-            loraHandler, "/tmp", "/tmp/UnitTest_IcLoraDrive.safetensors", "UnitTest_IcLoraDrive.safetensors");
+        T2IModel icLora = TestStubModel.Create(loraHandler, "UnitTest_IcLoraDrive.safetensors");
         loraHandler.Models[icLora.Name] = icLora;
 
         // A GENERATED clip 0 in the real text-to-video step order (raw undecoded AV latent at

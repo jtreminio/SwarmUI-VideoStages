@@ -8,6 +8,7 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
+[Collection("VideoStagesTests")]
 public class Ltx2ApiRoutesTests
 {
     [Fact]

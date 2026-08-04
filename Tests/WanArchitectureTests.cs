@@ -1510,7 +1510,7 @@ public class WanArchitectureTests
         T2IModelCompatClass compatibility)
     {
         T2IModelHandler handler = Program.T2IModelSets["Stable-Diffusion"];
-        T2IModel model = new(handler, "/tmp", $"/tmp/{name}", name)
+        T2IModel model = new(handler, TestStubModel.Folder(handler), TestStubModel.File(handler, name), name)
         {
             ModelClass = template.ModelClass with
             {

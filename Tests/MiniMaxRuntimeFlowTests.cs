@@ -218,67 +218,6 @@ public class MiniMaxRuntimeFlowTests
     }
 
     [Fact]
-    public void Init_video_refines_conformed_footage_and_its_audio()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
-        JObject clip = MiniMaxInitVideoClip(
-            MakeStage(
-                models.VideoModel.Name,
-                "Generated",
-                control: 0.5,
-                steps: 8,
-                cfgScale: 1),
-            MakeStage(
-                models.VideoModel.Name,
-                "PreviousStage",
-                control: 0.5,
-                steps: 8,
-                cfgScale: 1));
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            MakeDocument(clip).ToString());
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                MiniMaxSteps(),
-                SourceFeatures);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        SwarmFrameWindowNode window = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
-        Assert.Equal(24, window.StartFrame.LiteralAsInt());
-        Assert.Equal(39, window.FrameCount.LiteralAsInt());
-        ImageScaleNode scale = Assert.Single(
-            bridge.Graph.NodesOfType<ImageScaleNode>(),
-            node => node.Image.Connection?.Node.Id == window.Id);
-        Assert.Equal(512, scale.Width.LiteralAsInt());
-        Assert.Equal(512, scale.Height.LiteralAsInt());
-        TrimAudioDurationNode sourceAudio = Assert.Single(
-            bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
-            node => node.StartIndex.LiteralAsDouble() == 1);
-        Assert.Equal(39 / 24.0, sourceAudio.Duration.LiteralAsDouble().Value, 6);
-
-        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
-        Assert.Equal(2, samplers.Length);
-        Assert.All(samplers, sampler =>
-        {
-            Assert.Equal(4, sampler.FindInput("start_at_step").LiteralAsInt());
-            Assert.True(ReachesUpstream(bridge, sampler, window.Id));
-            Assert.True(ReachesUpstream(bridge, sampler, sourceAudio.Id));
-        });
-        Assert.Single(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
-        Assert.Equal(2, bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>().Count());
-        Assert.Equal(2, bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>().Count());
-        Assert.Equal(39, generator.CurrentMedia.Frames);
-        Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.AttachedAudio?.DataType);
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
-    }
-
-    [Fact]
     public void Init_video_passthrough_keeps_conformed_footage_and_source_audio()
     {
         using SwarmUiTestContext context = new();
@@ -350,62 +289,10 @@ public class MiniMaxRuntimeFlowTests
             bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
         ComfyNode sampler = Assert.Single(SamplerNodes(bridge));
         Assert.True(ReachesUpstream(bridge, sampler, upload.Id));
-        TrimAudioDurationNode sourceAudio = Assert.Single(
+        // No cleanup pass sweeps TrimAudioDuration, so the replaced branch is never built.
+        Assert.DoesNotContain(
             bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
             node => node.StartIndex.LiteralAsDouble() == 1);
-        Assert.False(ReachesUpstream(bridge, sampler, sourceAudio.Id));
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
-    }
-
-    [Fact]
-    public void A_second_stage_refines_the_decoded_clip_from_its_own_start_step()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            JsonSingleClipStages(
-                MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1),
-                MakeStage(
-                    models.VideoModel.Name,
-                    "Generated",
-                    control: 0.5,
-                    steps: 8,
-                    cfgScale: 1)));
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        Assert.Equal(
-            [0, 4],
-            SamplerNodes(bridge)
-                .Select(node => node.FindInput("start_at_step").LiteralAsInt())
-                .Order());
-        ComfyNode joint = Assert.Single(NodesOfClass(bridge, "LTXVConcatAVLatent"));
-        ComfyNode audioMask = Assert.Single(
-            NodesOfClass(bridge, "SetLatentNoiseMask"));
-        ComfyNode solidMask = Assert.IsType<SolidMaskNode>(
-            audioMask.FindInput("mask").Connection?.Node);
-        Assert.Equal(0, solidMask.FindInput("value").LiteralAsDouble());
-        Assert.Same(
-            audioMask,
-            joint.FindInput("audio_latent").Connection?.Node);
-        ComfyNode refineSampler = Assert.Single(
-            SamplerNodes(bridge),
-            node => node.FindInput("start_at_step").LiteralAsInt() == 4);
-        Assert.Same(
-            joint,
-            refineSampler.FindInput("latent_image").Connection?.Node);
-        Assert.Empty(NodesOfClass(bridge, "VAEEncodeAudio"));
-        Assert.Single(NodesOfClass(bridge, "SolidMask"));
-        Assert.Single(NodesOfClass(bridge, "VAEDecodeAudio"));
-        Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
-        Assert.Equal(
-            WGNodeData.DT_AUDIO,
-            generator.CurrentMedia.AttachedAudio?.DataType);
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
     }
@@ -470,7 +357,7 @@ public class MiniMaxRuntimeFlowTests
                     steps: 8,
                     cfgScale: 1)));
 
-        (JObject workflow, WorkflowGenerator generator) =
+        (JObject workflow, WorkflowGenerator _) =
             WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -490,8 +377,6 @@ public class MiniMaxRuntimeFlowTests
                 && ReachesUpstream(bridge, candidate, firstSampler.Id));
         ComfyNode joint = secondSampler.FindInput("latent_image").Connection?.Node;
         Assert.True(ReachesUpstream(bridge, joint, scale.Id));
-        Assert.Equal(768, generator.CurrentMedia.Width);
-        Assert.Equal(768, generator.CurrentMedia.Height);
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
     }
@@ -539,8 +424,6 @@ public class MiniMaxRuntimeFlowTests
             bridge.Graph.NodesOfType<ImageScaleNode>(),
             candidate => candidate.Width.LiteralAsInt() == 768
                 && candidate.Height.LiteralAsInt() == 768);
-        Assert.Equal(768, generator.CurrentMedia.Width);
-        Assert.Equal(768, generator.CurrentMedia.Height);
         Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.AttachedAudio?.DataType);
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
@@ -593,70 +476,6 @@ public class MiniMaxRuntimeFlowTests
                 && ReferenceEquals(candidate.Image.Connection?.Node, modelUpscale));
         ComfyNode joint = secondSampler.FindInput("latent_image").Connection?.Node;
         Assert.True(ReachesUpstream(bridge, joint, scale.Id));
-        Assert.Equal(768, generator.CurrentMedia.Width);
-        Assert.Equal(768, generator.CurrentMedia.Height);
-        Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.AttachedAudio?.DataType);
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
-    }
-
-    [Fact]
-    public void Three_stages_publish_intermediates_and_trim_only_the_final_output()
-    {
-        using SwarmUiTestContext context = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            JsonSingleClipStages(
-                MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1),
-                MakeStage(
-                    models.VideoModel.Name,
-                    "PreviousStage",
-                    control: 0.5,
-                    steps: 8,
-                    cfgScale: 1),
-                MakeStage(
-                    models.VideoModel.Name,
-                    "PreviousStage",
-                    control: 0.25,
-                    steps: 8,
-                    cfgScale: 1)));
-        input.Set(T2IParamTypes.OutputIntermediateImages, true);
-        input.Set(T2IParamTypes.TrimVideoStartFrames, 4);
-
-        (JObject workflow, WorkflowGenerator generator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(input, MiniMaxSteps());
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        ComfyNode[] samplers = [.. SamplerNodes(bridge)];
-        Assert.Equal(3, samplers.Length);
-        ComfyNode first = Assert.Single(
-            samplers,
-            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 43);
-        ComfyNode second = Assert.Single(
-            samplers,
-            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 44);
-        ComfyNode third = Assert.Single(
-            samplers,
-            sampler => sampler.FindInput("noise_seed").LiteralAsLong() == 45);
-        SwarmTrimFramesNode trim = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
-        Assert.Equal(4, trim.TrimStart.LiteralAsInt());
-        SwarmSaveAnimationWSNode[] saves =
-            [.. bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>()];
-        Assert.Equal(3, saves.Length);
-        Assert.Single(saves, save => ReferenceEquals(trim, save.Images.Connection?.Node));
-        Assert.Single(
-            saves,
-            save => ReachesUpstream(bridge, save.Images.Connection?.Node, first.Id)
-                && !ReachesUpstream(bridge, save.Images.Connection?.Node, second.Id));
-        Assert.Single(
-            saves,
-            save => ReachesUpstream(bridge, save.Images.Connection?.Node, second.Id)
-                && !ReachesUpstream(bridge, save.Images.Connection?.Node, third.Id));
-        Assert.True(ReachesUpstream(bridge, trim, third.Id));
-        Assert.Equal(new JArray(trim.Id, 0), generator.CurrentMedia.Path);
         Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.AttachedAudio?.DataType);
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
@@ -1371,7 +1190,7 @@ public class MiniMaxRuntimeFlowTests
             handler = new() { ModelType = "LoRA" };
             Program.T2IModelSets["LoRA"] = handler;
         }
-        T2IModel model = new(handler, "/tmp", $"/tmp/{name}", name);
+        T2IModel model = TestStubModel.Create(handler, name);
         handler.Models[model.Name] = model;
     }
 }

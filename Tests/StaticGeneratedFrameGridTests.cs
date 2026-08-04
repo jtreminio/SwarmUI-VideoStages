@@ -3,6 +3,7 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
+[Collection("VideoStagesTests")]
 public class StaticGeneratedFrameGridTests
 {
     [Theory]

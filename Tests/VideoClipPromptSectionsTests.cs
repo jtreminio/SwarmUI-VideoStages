@@ -70,7 +70,7 @@ public partial class StageFlowTests
 
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_VideoClipLora.safetensors", "UnitTest_VideoClipLora.safetensors");
+        T2IModel loraModel = TestStubModel.Create(loraHandler, "UnitTest_VideoClipLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
         string stagesJson = new JArray(
@@ -107,7 +107,7 @@ public partial class StageFlowTests
 
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_VideoClipStageLora.safetensors", "UnitTest_VideoClipStageLora.safetensors");
+        T2IModel loraModel = TestStubModel.Create(loraHandler, "UnitTest_VideoClipStageLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
         string stagesJson = JsonSingleClipStages(
@@ -137,8 +137,8 @@ public partial class StageFlowTests
 
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel stage0Lora = new(loraHandler, "/tmp", "/tmp/UnitTest_Stage0Lora.safetensors", "UnitTest_Stage0Lora.safetensors");
-        T2IModel stage1OrphanLora = new(loraHandler, "/tmp", "/tmp/UnitTest_Stage1OrphanLora.safetensors", "UnitTest_Stage1OrphanLora.safetensors");
+        T2IModel stage0Lora = TestStubModel.Create(loraHandler, "UnitTest_Stage0Lora.safetensors");
+        T2IModel stage1OrphanLora = TestStubModel.Create(loraHandler, "UnitTest_Stage1OrphanLora.safetensors");
         loraHandler.Models[stage0Lora.Name] = stage0Lora;
         loraHandler.Models[stage1OrphanLora.Name] = stage1OrphanLora;
 

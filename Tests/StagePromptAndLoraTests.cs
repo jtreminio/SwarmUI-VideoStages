@@ -103,7 +103,7 @@ public partial class StageFlowTests
 
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_VideoClipLora.safetensors", "UnitTest_VideoClipLora.safetensors");
+        T2IModel loraModel = TestStubModel.Create(loraHandler, "UnitTest_VideoClipLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clipOne = MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 10));
@@ -137,7 +137,7 @@ public partial class StageFlowTests
 
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_VideoClipStageLora.safetensors", "UnitTest_VideoClipStageLora.safetensors");
+        T2IModel loraModel = TestStubModel.Create(loraHandler, "UnitTest_VideoClipStageLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 10);
@@ -164,7 +164,7 @@ public partial class StageFlowTests
 
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
+        T2IModel loraModel = TestStubModel.Create(loraHandler, "UnitTest_ControlNetLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
 
         JObject clip = MakeClip(

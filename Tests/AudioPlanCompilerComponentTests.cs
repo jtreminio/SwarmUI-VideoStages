@@ -4,6 +4,7 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
+[Collection("VideoStagesTests")]
 public class AudioPlanCompilerComponentTests
 {
     private static Ltx2AudioPlan CompileLtxAudio(ClipSpec clip)

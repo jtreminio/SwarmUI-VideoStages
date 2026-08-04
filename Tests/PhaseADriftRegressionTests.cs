@@ -36,11 +36,7 @@ public class PhaseADriftRegressionTests
     public void ControlNet_discovery_recognizes_anima_model_patch_apply()
     {
         T2IModelHandler handler = new() { ModelType = "ControlNet" };
-        T2IModel model = new(
-            handler,
-            "/tmp",
-            "/tmp/UnitTest_Anima_ControlNet.safetensors",
-            "UnitTest_Anima_ControlNet.safetensors");
+        T2IModel model = TestStubModel.Create(handler, "UnitTest_Anima_ControlNet.safetensors");
         WorkflowGenerator generator = new()
         {
             UserInput = new T2IParamInput(null),

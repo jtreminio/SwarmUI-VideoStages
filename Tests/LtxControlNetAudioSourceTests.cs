@@ -127,8 +127,7 @@ public class LtxControlNetAudioSourceTests
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(
-            controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
         {
             ModelClass = new T2IModelClass()
             {
@@ -165,8 +164,7 @@ public class LtxControlNetAudioSourceTests
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(
-            controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
         {
             ModelClass = new T2IModelClass()
             {
@@ -206,8 +204,7 @@ public class LtxControlNetAudioSourceTests
         UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(
-            controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
         {
             ModelClass = new T2IModelClass()
             {

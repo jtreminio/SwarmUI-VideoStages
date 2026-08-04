@@ -41,7 +41,7 @@ internal static class UnitTestStubs
         }
 
         ComfyUIBackendExtension.SamplerParam ??= T2IParamTypes.Register<string>(new T2IParamType(
-            Name: "Sampler (UnitTest Stub)",
+            Name: "Sampler",
             Description: "Stub sampler used by VideoStages unit tests.",
             Default: "euler",
             FeatureFlag: "comfyui",
@@ -51,7 +51,7 @@ internal static class UnitTestStubs
         ));
 
         ComfyUIBackendExtension.SchedulerParam ??= T2IParamTypes.Register<string>(new T2IParamType(
-            Name: "Scheduler (UnitTest Stub)",
+            Name: "Scheduler",
             Description: "Stub scheduler used by VideoStages unit tests.",
             Default: "normal",
             FeatureFlag: "comfyui",
@@ -66,7 +66,7 @@ internal static class UnitTestStubs
         if (ComfyUIBackendExtension.VideoPreviewType is null)
         {
             ComfyUIBackendExtension.VideoPreviewType = T2IParamTypes.Register<string>(new T2IParamType(
-                Name: "Video Preview Type (UnitTest Stub)",
+                Name: "Video Preview Type",
                 Description: "Stub video preview type used by VideoStages unit tests.",
                 Default: "animate",
                 FeatureFlag: "comfyui",
@@ -79,7 +79,7 @@ internal static class UnitTestStubs
         if (ComfyUIBackendExtension.VideoFrameInterpolationMethod is null)
         {
             ComfyUIBackendExtension.VideoFrameInterpolationMethod = T2IParamTypes.Register<string>(new T2IParamType(
-                Name: "Video Frame Interpolation Method (UnitTest Stub)",
+                Name: "Video Frame Interpolation Method",
                 Description: "Stub frame interpolation method used by VideoStages unit tests.",
                 Default: "RIFE",
                 FeatureFlag: "comfyui",
@@ -92,7 +92,7 @@ internal static class UnitTestStubs
         if (ComfyUIBackendExtension.VideoFrameInterpolationMultiplier is null)
         {
             ComfyUIBackendExtension.VideoFrameInterpolationMultiplier = T2IParamTypes.Register<int>(new T2IParamType(
-                Name: "Video Frame Interpolation Multiplier (UnitTest Stub)",
+                Name: "Video Frame Interpolation Multiplier",
                 Description: "Stub frame interpolation multiplier used by VideoStages unit tests.",
                 Default: "1",
                 FeatureFlag: "comfyui",
@@ -107,7 +107,7 @@ internal static class UnitTestStubs
         if (ComfyUIBackendExtension.RefinerUpscaleMethod is null)
         {
             ComfyUIBackendExtension.RefinerUpscaleMethod = T2IParamTypes.Register<string>(new T2IParamType(
-                Name: "Refiner Upscale Method (UnitTest Stub)",
+                Name: "Refiner Upscale Method",
                 Description: "Stub upscale method used by VideoStages unit tests.",
                 Default: "pixel-lanczos",
                 FeatureFlag: "comfyui",
@@ -123,19 +123,24 @@ internal static class UnitTestStubs
     {
         EnsureComfySamplerSchedulerRegistered();
         EnsureComfyVideoParamsRegistered();
+        // Core dereferences ControlNetPreprocessorParams[i] unguarded once a ControlNet model is
+        // set, so these must exist for any POST that configures one.
+        EnsureComfyControlNetParamsRegistered();
 
+        // Names must match ComfyUIBackendExtension's production registrations exactly:
+        // T2IParamType.ID is CleanTypeName(Name), and that ID is the key a POST body uses.
         Ensure(ref ComfyUIBackendExtension.CustomWorkflowParam, "ComfyUI Custom Workflow", "");
-        Ensure(ref ComfyUIBackendExtension.SetClipDevice, "Set Clip Device", "cpu");
-        Ensure(ref ComfyUIBackendExtension.SelfAttentionGuidanceScale, "SAG Scale", "0.5");
-        Ensure(ref ComfyUIBackendExtension.SelfAttentionGuidanceSigmaBlur, "SAG Blur", "2");
-        Ensure(ref ComfyUIBackendExtension.PerturbedAttentionGuidanceScale, "PAG Scale", "3");
-        Ensure(ref ComfyUIBackendExtension.RescaleCFGMultiplier, "Rescale CFG", "0.7");
+        Ensure(ref ComfyUIBackendExtension.SetClipDevice, "Set CLIP Device", "cpu");
+        Ensure(ref ComfyUIBackendExtension.SelfAttentionGuidanceScale, "Self-Attention Guidance Scale", "0.5");
+        Ensure(ref ComfyUIBackendExtension.SelfAttentionGuidanceSigmaBlur, "Self-Attention Guidance Sigma Blur", "2");
+        Ensure(ref ComfyUIBackendExtension.PerturbedAttentionGuidanceScale, "Perturbed-Attention Guidance Scale", "3");
+        Ensure(ref ComfyUIBackendExtension.RescaleCFGMultiplier, "Rescale CFG Multiplier", "0.7");
         Ensure(ref ComfyUIBackendExtension.RenormCFG, "Renorm CFG", "0");
-        Ensure(ref ComfyUIBackendExtension.UseCfgZeroStar, "CFG Zero Star", "false");
-        Ensure(ref ComfyUIBackendExtension.UseTCFG, "TCFG", "false");
-        Ensure(ref ComfyUIBackendExtension.NormalizedAttentionGuidanceScale, "NAG Scale", "0");
-        Ensure(ref ComfyUIBackendExtension.NormalizedAttentionGuidanceAlpha, "NAG Alpha", "0.5");
-        Ensure(ref ComfyUIBackendExtension.NormalizedAttentionGuidanceTau, "NAG Tau", "1.5");
+        Ensure(ref ComfyUIBackendExtension.UseCfgZeroStar, "Use CFG Zero Star", "false");
+        Ensure(ref ComfyUIBackendExtension.UseTCFG, "Use TCFG", "false");
+        Ensure(ref ComfyUIBackendExtension.NormalizedAttentionGuidanceScale, "Normalized Attention Guidance Scale", "0");
+        Ensure(ref ComfyUIBackendExtension.NormalizedAttentionGuidanceAlpha, "Normalized Attention Guidance Alpha", "0.5");
+        Ensure(ref ComfyUIBackendExtension.NormalizedAttentionGuidanceTau, "Normalized Attention Guidance Tau", "1.5");
         Ensure(ref ComfyUIBackendExtension.TeaCacheMode, "TeaCache Mode", "disabled");
         Ensure(ref ComfyUIBackendExtension.TeaCacheThreshold, "TeaCache Threshold", "0.25");
         Ensure(ref ComfyUIBackendExtension.TeaCacheStart, "TeaCache Start", "0");
@@ -143,14 +148,30 @@ internal static class UnitTestStubs
         Ensure(ref ComfyUIBackendExtension.EasyCacheThreshold, "EasyCache Threshold", "0.2");
         Ensure(ref ComfyUIBackendExtension.EasyCacheStart, "EasyCache Start", "0.15");
         Ensure(ref ComfyUIBackendExtension.EasyCacheEnd, "EasyCache End", "0.95");
-        Ensure(ref ComfyUIBackendExtension.AITemplateParam, "AITemplate", "false");
-        Ensure(ref ComfyUIBackendExtension.ShiftedLatentAverageInit, "Shifted Latent Average", "false");
-        Ensure(ref ComfyUIBackendExtension.NunchakuCacheThreshold, "Nunchaku Cache", "0");
+        Ensure(ref ComfyUIBackendExtension.AITemplateParam, "Enable AITemplate", "false");
+        Ensure(ref ComfyUIBackendExtension.ShiftedLatentAverageInit, "Shifted Latent Average Init", "false");
+        Ensure(ref ComfyUIBackendExtension.NunchakuCacheThreshold, "Nunchaku Cache Threshold", "0");
         Ensure(ref ComfyUIBackendExtension.PreferredDType, "Preferred DType", "automatic");
-        Ensure(ref ComfyUIBackendExtension.Sam2PointCoordsPositive, "SAM2 Positive", "[]");
-        Ensure(ref ComfyUIBackendExtension.Sam2PointCoordsNegative, "SAM2 Negative", "[]");
+        Ensure(ref ComfyUIBackendExtension.Sam2PointCoordsPositive, "SAM2 Positive Points", "[]");
+        Ensure(ref ComfyUIBackendExtension.Sam2PointCoordsNegative, "SAM2 Negative Points", "[]");
         Ensure(ref ComfyUIBackendExtension.Sam2BBox, "SAM2 BBox", "");
-        Ensure(ref ComfyUIBackendExtension.PixelDecoderModel, "Pixel Decoder", "");
+        Ensure(ref ComfyUIBackendExtension.PixelDecoderModel, "Pixel Decoder Model", "");
+        // Core reads these through TryGet without a null guard.
+        Ensure(ref ComfyUIBackendExtension.RefinerHyperTile, "Refiner HyperTile", "256");
+        Ensure(ref ComfyUIBackendExtension.RefinerSamplerParam, "Refiner Sampler", "euler");
+        Ensure(ref ComfyUIBackendExtension.RefinerSchedulerParam, "Refiner Scheduler", "normal");
+        Ensure(ref ComfyUIBackendExtension.DebugRegionalPrompting, "Debug Regional Prompting", "false");
+        Ensure(ref ComfyUIBackendExtension.GligenModel, "GLIGEN Model", "None");
+        Ensure(ref ComfyUIBackendExtension.IPAdapterStart, "IP-Adapter Start", "0");
+        Ensure(ref ComfyUIBackendExtension.IPAdapterEnd, "IP-Adapter End", "1");
+        Ensure(ref ComfyUIBackendExtension.IPAdapterWeight, "IP-Adapter Weight", "1");
+        Ensure(ref ComfyUIBackendExtension.IPAdapterWeightType, "IP-Adapter Weight Type", "standard");
+        Ensure(ref ComfyUIBackendExtension.UseIPAdapterForRevision, "Use IP-Adapter", "None");
+        Ensure(ref ComfyUIBackendExtension.UseStyleModel, "Use Style Model", "None");
+        Ensure(ref ComfyUIBackendExtension.StyleModelApplyStart, "Style Model Apply Start", "0");
+        Ensure(ref ComfyUIBackendExtension.StyleModelMergeStrength, "Style Model Merge Strength", "1");
+        Ensure(ref ComfyUIBackendExtension.StyleModelMultiplyStrength, "Style Model Multiply Strength", "1");
+        Ensure(ref ComfyUIBackendExtension.YoloModelInternal, "YOLO Model Internal", "");
     }
 
     private static void Ensure<T>(
@@ -159,7 +180,7 @@ internal static class UnitTestStubs
         string defaultValue)
     {
         parameter ??= T2IParamTypes.Register<T>(new T2IParamType(
-            Name: $"{name} (Workflow Test Stub)",
+            Name: name,
             Description: "Parameter stub used by full SwarmUI workflow contract tests.",
             Default: defaultValue,
             Min: -100,
@@ -187,7 +208,7 @@ internal static class UnitTestStubs
         {
             string suffix = T2IParamTypes.Controlnets[i].NameSuffix;
             ComfyUIBackendExtension.ControlNetPreprocessorParams[i] ??= T2IParamTypes.Register<string>(new T2IParamType(
-                Name: $"ControlNet{suffix} Preprocessor (UnitTest Stub)",
+                Name: $"ControlNet{suffix} Preprocessor",
                 Description: "Stub ControlNet preprocessor used by VideoStages unit tests.",
                 Default: "None",
                 FeatureFlag: "controlnet",
@@ -196,7 +217,7 @@ internal static class UnitTestStubs
                 GetValues: (_) => ["None", "UnitTestPreprocessor"]
             ));
             ComfyUIBackendExtension.ControlNetUnionTypeParams[i] ??= T2IParamTypes.Register<string>(new T2IParamType(
-                Name: $"ControlNet{suffix} Union Type (UnitTest Stub)",
+                Name: $"ControlNet{suffix} Union Type",
                 Description: "Stub ControlNet union type used by VideoStages unit tests.",
                 Default: "auto",
                 FeatureFlag: "controlnet",
@@ -220,7 +241,9 @@ internal sealed class SwarmUiTestContext : IDisposable
         bool resetExtraModelProviders = true,
         bool clearModelGenSteps = true)
     {
-        _priorModelSets = Program.T2IModelSets;
+        // Snapshot by value: tests mutate this dictionary in place (installing support models,
+        // replacing the "VAE" handler), and restoring the same reference would keep those edits.
+        _priorModelSets = new Dictionary<string, T2IModelHandler>(Program.T2IModelSets);
         _priorIncludeHash = Program.ServerSettings.Metadata.ImageMetadataIncludeModelHash;
         _priorModelGenSteps = [.. WorkflowGenerator.ModelGenSteps];
         _priorExtraModelProviders = ModelsAPI.ExtraModelProviders;
@@ -246,7 +269,7 @@ internal sealed class SwarmUiTestContext : IDisposable
     {
         WorkflowGenerator.ModelGenSteps = _priorModelGenSteps;
         ModelsAPI.ExtraModelProviders = _priorExtraModelProviders;
-        Program.T2IModelSets = _priorModelSets;
+        Program.T2IModelSets = new Dictionary<string, T2IModelHandler>(_priorModelSets);
         Program.ServerSettings.Metadata.ImageMetadataIncludeModelHash = _priorIncludeHash;
     }
 }
@@ -355,11 +378,7 @@ internal static class TestModelFactory
     {
         TestModelBundle ltx = CreateBaseAndLtxv2VideoModels();
         T2IModelHandler handler = Program.T2IModelSets["Stable-Diffusion"];
-        T2IModel wan = new(
-            handler,
-            "/tmp",
-            "/tmp/UnitTest_Wan22.safetensors",
-            "UnitTest_Wan22.safetensors")
+        T2IModel wan = new(handler, TestStubModel.Folder(handler), TestStubModel.File(handler, "UnitTest_Wan22.safetensors"), "UnitTest_Wan22.safetensors")
         {
             ModelClass = new T2IModelClass
             {
@@ -382,11 +401,7 @@ internal static class TestModelFactory
     {
         TestModelBundle ltx = CreateBaseAndLtxv2VideoModels();
         T2IModelHandler handler = Program.T2IModelSets["Stable-Diffusion"];
-        T2IModel miniMax = new(
-            handler,
-            "/tmp",
-            "/tmp/UnitTest_MiniMaxH3.safetensors",
-            "UnitTest_MiniMaxH3.safetensors")
+        T2IModel miniMax = new(handler, TestStubModel.Folder(handler), TestStubModel.File(handler, "UnitTest_MiniMaxH3.safetensors"), "UnitTest_MiniMaxH3.safetensors")
         {
             ModelClass = new T2IModelClass
             {
@@ -416,8 +431,7 @@ internal static class TestModelFactory
 
     private static void Install(string modelType, string fileName)
     {
-        T2IModelHandler handler = Program.T2IModelSets[modelType];
-        handler.Models[fileName] = new(handler, "/tmp", $"/tmp/{fileName}", fileName);
+        TestStubModel.Install(Program.T2IModelSets[modelType], fileName);
     }
 
     private static TestModelBundle CreateBaseAndVideoModelsWithClass(T2IModelClass videoClass)
@@ -440,15 +454,15 @@ internal static class TestModelFactory
             StandardHeight = 1024
         };
 
-        T2IModel baseModel = new(sdHandler, "/tmp", "/tmp/UnitTest_Base.safetensors", "UnitTest_Base.safetensors")
+        T2IModel baseModel = new(sdHandler, TestStubModel.Folder(sdHandler), TestStubModel.File(sdHandler, "UnitTest_Base.safetensors"), "UnitTest_Base.safetensors")
         {
             ModelClass = baseClass
         };
-        T2IModel videoModel = new(sdHandler, "/tmp", "/tmp/UnitTest_Video.safetensors", "UnitTest_Video.safetensors")
+        T2IModel videoModel = new(sdHandler, TestStubModel.Folder(sdHandler), TestStubModel.File(sdHandler, "UnitTest_Video.safetensors"), "UnitTest_Video.safetensors")
         {
             ModelClass = videoClass
         };
-        T2IModel gemmaModel = new(clipHandler, "/tmp", "/tmp/gemma_3_12B_it.safetensors", "gemma_3_12B_it.safetensors")
+        T2IModel gemmaModel = new(clipHandler, TestStubModel.Folder(clipHandler), TestStubModel.File(clipHandler, "gemma_3_12B_it.safetensors"), "gemma_3_12B_it.safetensors")
         {
             ModelClass = new T2IModelClass
             {

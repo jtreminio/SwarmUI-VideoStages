@@ -21,8 +21,8 @@ internal sealed class MiniMaxGenerationSession(
     HostVideoRootSources rootSources,
     AudioRuntimeSources audioSources,
     TimelineAssemblySession assembly,
-    WGNodeData baseReference,
-    WGNodeData refinerReference,
+    CapturedHostReference baseReference,
+    CapturedHostReference refinerReference,
     VideoStageRunner stageRunner) : IVideoGenerationSession
 {
     internal const string ArchitectureLabel = "MiniMax H3";
@@ -68,7 +68,11 @@ internal sealed class MiniMaxGenerationSession(
                     TargetHeight = _dimensions.Height,
                 },
             };
-            g.CurrentMedia = _initVideoClipInstaller.TryInstall(sourceInstallPlan)
+            // Any other source replaces the track, and the trim branch would then be built but
+            // never consumed — nothing downstream prunes TrimAudioDuration.
+            g.CurrentMedia = _initVideoClipInstaller.TryInstall(
+                sourceInstallPlan,
+                includeSourceAudio: clip.Audio.Base.Kind == AudioSourceKind.Native)
                 ?? throw VideoStagesInvariant.Failure(
                     $"VideoStages: clip {clip.ClipId} source video could not be installed.");
             PrepareInitVideoAudio(clip);
@@ -595,7 +599,7 @@ internal sealed class MiniMaxGenerationSession(
                 ? null
                 : g.LoadImage(image, "${videostagesminimaxreference}", false);
         }
-        WGNodeData captured = reference?.Source?.Trim() switch
+        CapturedHostReference captured = reference?.Source?.Trim() switch
         {
             string source when StringUtils.Equals(source, "Base") => baseReference,
             string source when StringUtils.Equals(source, "Refiner") => refinerReference,
@@ -607,8 +611,19 @@ internal sealed class MiniMaxGenerationSession(
                 g.UserInput,
                 $"VideoStages: {descriptor} source '{reference.Source}' was not captured; "
                     + "ignoring it for this generation.");
+            return null;
         }
-        return captured?.Duplicate();
+        // The base capture happens before the host decodes its latent, so this may need a VAE
+        // round-trip. Keyframe inputs take images; handing them a latent breaks the graph.
+        WGNodeData decoded = captured?.AsImage();
+        if (captured is not null && decoded is null)
+        {
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
+                $"VideoStages: {descriptor} source '{reference.Source}' was captured as a latent "
+                    + "with no VAE available to decode it; ignoring it for this generation.");
+        }
+        return decoded;
     }
 
     /// <summary>

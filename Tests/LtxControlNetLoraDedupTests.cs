@@ -78,7 +78,7 @@ public sealed class LtxControlNetLoraDedupTests
     private static (T2IModel ControlNetModel, T2IModel LoraModel) RegisterControlNetAndLora(T2IModel videoModel)
     {
         T2IModelHandler controlNetHandler = new() { ModelType = "ControlNet" };
-        T2IModel controlNetModel = new(controlNetHandler, "/tmp", "/tmp/UnitTest_ControlNet.safetensors", "UnitTest_ControlNet.safetensors")
+        T2IModel controlNetModel = new(controlNetHandler, TestStubModel.Folder(controlNetHandler), TestStubModel.File(controlNetHandler, "UnitTest_ControlNet.safetensors"), "UnitTest_ControlNet.safetensors")
         {
             ModelClass = new T2IModelClass()
             {
@@ -89,7 +89,7 @@ public sealed class LtxControlNetLoraDedupTests
         };
         T2IModelHandler loraHandler = new() { ModelType = "LoRA" };
         Program.T2IModelSets["LoRA"] = loraHandler;
-        T2IModel loraModel = new(loraHandler, "/tmp", "/tmp/UnitTest_ControlNetLora.safetensors", "UnitTest_ControlNetLora.safetensors");
+        T2IModel loraModel = TestStubModel.Create(loraHandler, "UnitTest_ControlNetLora.safetensors");
         loraHandler.Models[loraModel.Name] = loraModel;
         return (controlNetModel, loraModel);
     }
@@ -174,7 +174,7 @@ public sealed class LtxControlNetLoraDedupTests
         (T2IModel controlNetModel, _) = RegisterControlNetAndLora(models.VideoModel);
 
         T2IModelHandler loraHandler = Program.T2IModelSets["LoRA"];
-        T2IModel scopedLora = new(loraHandler, "/tmp", "/tmp/UnitTest_ScopedStageLora.safetensors", "UnitTest_ScopedStageLora.safetensors");
+        T2IModel scopedLora = TestStubModel.Create(loraHandler, "UnitTest_ScopedStageLora.safetensors");
         loraHandler.Models[scopedLora.Name] = scopedLora;
 
         JObject stageA = MakeStage(models.VideoModel.Name, "Generated", steps: 10);

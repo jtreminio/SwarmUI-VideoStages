@@ -4,6 +4,7 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
+[Collection("VideoStagesTests")]
 public class GeneratedBindingRetentionTests
 {
     // These bindings are outside the keep manifest because production C# under src/ references

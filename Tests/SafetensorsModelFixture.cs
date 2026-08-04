@@ -112,6 +112,38 @@ internal sealed class SafetensorsModelFixture : IDisposable
     public void Dispose() => Handler.Shutdown();
 }
 
+/// <summary>
+/// Stub <see cref="T2IModel"/> entries that only have to resolve by name — no file is read.
+/// </summary>
+internal static class TestStubModel
+{
+    public static string FolderFor(string modelType) =>
+        Path.Combine(
+            TestFixturePaths.Resolve("models"),
+            (modelType ?? "unknown").ToLowerInvariant());
+
+    public static string Folder(T2IModelHandler handler) =>
+        FolderFor(handler?.ModelType);
+
+    public static string File(T2IModelHandler handler, string fileName) =>
+        Path.Combine(Folder(handler), fileName);
+
+    public static T2IModel Create(T2IModelHandler handler, string fileName)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+        string folder = FolderFor(handler.ModelType);
+        return new T2IModel(handler, folder, Path.Combine(folder, fileName), fileName);
+    }
+
+    public static T2IModel Install(T2IModelHandler handler, string fileName)
+    {
+        T2IModel model = Create(handler, fileName);
+        handler.Models[model.Name] = model;
+        return model;
+    }
+}
+
 internal static class TestFixturePaths
 {
     public static string Resolve(

@@ -38,7 +38,7 @@ public sealed class LtxIcLoraTests
             loraHandler = new T2IModelHandler() { ModelType = "LoRA" };
             Program.T2IModelSets["LoRA"] = loraHandler;
         }
-        T2IModel lora = new(loraHandler, "/tmp", $"/tmp/{name}.safetensors", $"{name}.safetensors");
+        T2IModel lora = TestStubModel.Create(loraHandler, $"{name}.safetensors");
         loraHandler.Models[lora.Name] = lora;
         return lora;
     }
