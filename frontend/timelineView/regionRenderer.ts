@@ -23,11 +23,19 @@ import {
     backgroundImageDataAttr,
     clipInnerWidth,
     headTag,
+    laneVisible,
     renderTrackHead,
     renderWindowSpan,
 } from "./rendering";
 
 const refFrame = (ref: RefImage): number => Math.max(0, ref.frame ?? 0);
+
+const hasRetake = (clip: Clip): boolean => clip.retake != null;
+
+const retakeLaneVisible = (
+    clip: Clip,
+    capabilities?: CapabilityViewResolver,
+): boolean => laneVisible(clip, "retake", hasRetake(clip), capabilities);
 
 const renderRegionThumb = (clip: Clip): string => {
     const withImage = (clip.refs ?? []).filter(
@@ -369,14 +377,16 @@ const renderRegions = (
                 controls +
                 resizeGrip +
                 `</div>` +
-                `<div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs}${retakeSupported || clip.retake ? "" : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` +
-                renderRetakeOverlay(
-                    clip,
-                    layout.index,
-                    layout.durationSeconds,
-                    retakeSupported,
-                ) +
-                `</div>`
+                (retakeLaneVisible(clip, capabilities)
+                    ? `<div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs}${retakeSupported || clip.retake ? "" : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` +
+                      renderRetakeOverlay(
+                          clip,
+                          layout.index,
+                          layout.durationSeconds,
+                          retakeSupported,
+                      ) +
+                      `</div>`
+                    : "")
             );
         })
         .join("");
@@ -390,17 +400,22 @@ export const renderVideoTrackRow = (
     timing?: TimelineTiming,
     pxPerSecond = 1,
 ): string => {
+    const retakeTrack = clips.some((clip) =>
+        retakeLaneVisible(clip, capabilities),
+    );
     const head = renderTrackHead(
         "vst-track-icon-video",
         "▶",
         "Video",
         headTag("clip", "Clip", { active: true }) +
-            headTag("retake", "Retake", {
-                active: clips.some((clip) => clip.retake != null),
-            }),
+            (retakeTrack
+                ? headTag("retake", "Retake", {
+                      active: clips.some(hasRetake),
+                  })
+                : ""),
     );
     return (
-        `<div class="vst-track-row vst-track-video">${head}<div class="vst-track-cell">` +
+        `<div class="vst-track-row vst-track-video${retakeTrack ? "" : " vst-no-retake"}">${head}<div class="vst-track-cell">` +
         renderRegions(clips, layouts, fps, unit, capabilities) +
         renderBoundaryOverlapBands(
             layouts,

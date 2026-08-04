@@ -1,5 +1,26 @@
+import type {
+    AuthoringFeature,
+    CapabilityViewResolver,
+} from "../architectures/policy";
 import { escapeAttr as escapeHtml } from "../renderUtils";
 import { spanGeometry } from "../trackDomUtils";
+import type { Clip } from "../types";
+
+/** A clip keeps a mini-lane while it has data to remove, or a precondition (the code) it could still meet. */
+export const laneVisible = (
+    clip: Clip,
+    feature: AuthoringFeature,
+    persisted: boolean,
+    capabilities?: CapabilityViewResolver,
+): boolean => {
+    const decision = capabilities?.forClip(clip).decision(feature);
+    return (
+        decision === undefined ||
+        decision.supported ||
+        decision.code !== "" ||
+        persisted
+    );
+};
 
 export const clipInnerWidth = (widthPx: number): number =>
     Math.max(1, widthPx - 2);

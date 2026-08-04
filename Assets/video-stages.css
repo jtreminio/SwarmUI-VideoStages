@@ -6,9 +6,11 @@
     --vst-border-strong: var(--border-color, var(--light-border));
     --vst-header-w: 168px;
     --vst-ruler-h: 26px;
-    /* Clip regions + a retake mini-lane beneath them (prompt-track idiom). */
+    /* Clip regions + a retake mini-lane beneath them (prompt-track idiom).
+       --vst-retake-band is what a region leaves clear below itself. */
     --vst-lane-video-h: 118px;
     --vst-retake-lane-h: 20px;
+    --vst-retake-band: calc(var(--vst-retake-lane-h) + 12px);
     /* Audio track: a clip mini-row on top, then one mini lane PER audio
        segment plus a blank add-lane — the row height scales with
        --vst-audio-lane-count (set inline by the renderer). */
@@ -16,6 +18,8 @@
     --vst-audio-seg-lane-h: 26px;
     --vst-lane-audio-h: 72px;
     --vst-lane-prompt-h: 72px;
+    /* Major prompt segment: the top half, or the whole row under .vst-no-relay. */
+    --vst-major-seg-h: calc(50% - 10px);
     --vst-lane-refs-h: 40px;
     --vst-refs-band: 8px;
     --vst-radius: 5px;
@@ -445,7 +449,7 @@
    .vst-minor-lane). */
 .vst-track-prompt .vst-head-tag-major {
     top: 6px;
-    height: calc(50% - 10px);
+    height: var(--vst-major-seg-h);
 }
 .vst-track-prompt .vst-head-tag-relay {
     bottom: 6px;
@@ -455,7 +459,7 @@
    .vst-retake-lane). */
 .vst-track-video .vst-head-tag-clip {
     top: var(--vst-refs-band);
-    bottom: calc(var(--vst-retake-lane-h) + 12px);
+    bottom: var(--vst-retake-band);
 }
 .vst-track-video .vst-head-tag-retake {
     bottom: 6px;
@@ -508,8 +512,7 @@
 .vst-region {
     position: absolute;
     top: var(--vst-refs-band);
-    /* Clear the retake mini-lane below (lane height + 2×6px gaps). */
-    bottom: calc(var(--vst-retake-lane-h) + 12px);
+    bottom: var(--vst-retake-band);
     user-select: none;
     border-radius: var(--vst-radius);
     border: 1.5px solid
@@ -1001,7 +1004,7 @@
 .vst-major-seg {
     position: absolute;
     top: 6px;
-    height: calc(50% - 10px);
+    height: var(--vst-major-seg-h);
     border-radius: var(--vst-radius-sm);
     border: 1px solid var(--vst-hairline);
     background: var(--vst-panel-2);
@@ -1062,6 +1065,14 @@
     height: calc(50% - 10px);
     cursor: copy;
 }
+/* No clip in this timeline has a relay lane: the major segment takes the row,
+   so the half-way divider goes with the lane. */
+.vst-no-relay {
+    --vst-major-seg-h: calc(100% - 12px);
+}
+.vst-no-relay .vst-prompt-cell::after {
+    display: none;
+}
 .vst-minor-seg {
     position: absolute;
     top: 2px;
@@ -1113,6 +1124,10 @@
 }
 .vst-retake-lane[data-vst-retake-add] {
     cursor: copy;
+}
+/* No clip in this timeline has a retake lane: the regions take the row. */
+.vst-no-retake {
+    --vst-retake-band: 6px;
 }
 /* Retake range: hatched window inside its lane. */
 .vst-retake {
@@ -1890,7 +1905,7 @@
 .vst-boundary-overlap {
     position: absolute;
     top: var(--vst-refs-band);
-    bottom: calc(var(--vst-retake-lane-h) + 12px);
+    bottom: var(--vst-retake-band);
     z-index: 5;
     min-width: 2px;
     overflow: hidden;

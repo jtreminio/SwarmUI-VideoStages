@@ -22,6 +22,7 @@ import {
     backgroundImageDataAttr,
     clipInnerWidth,
     headTag,
+    laneVisible,
     renderTrackHead,
     renderWindowSpan,
 } from "./rendering";
@@ -56,6 +57,9 @@ const promptWindowGeom = (
 
 const PROMPT_PLACEHOLDER = "(no prompt)";
 
+const hasRelayWindows = (clip: Clip): boolean =>
+    (clip.promptWindows?.length ?? 0) > 0;
+
 export const renderPromptTrackRow = (
     clips: Clip[],
     layouts: RegionLayout[],
@@ -64,6 +68,9 @@ export const renderPromptTrackRow = (
     capabilities?: CapabilityViewResolver,
 ): string => {
     const globalTrimmed = `${globalPrompt ?? ""}`.trim();
+    const relayLane = (clip: Clip): boolean =>
+        laneVisible(clip, "promptRelay", hasRelayWindows(clip), capabilities);
+    const relayTrack = clips.some(relayLane);
     const parts: string[] = [];
     for (let i = 0; i < layouts.length; i++) {
         const layout = layouts[i];
@@ -124,24 +131,24 @@ export const renderPromptTrackRow = (
                 );
             })
             .join("");
-        if (relaySupported || windows.length > 0) {
+        if (relayLane(clip)) {
             parts.push(
                 `<div class="vst-minor-lane${relaySupported ? "" : " vst-capability-disabled"}"${relaySupported ? " data-vst-prompt-add" : ""} data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${relaySupported ? "Click empty space to add a minor prompt" : "Relay prompts are unsupported; existing windows can be inspected or removed"}">${minorSegments}</div>`,
             );
         }
     }
     return (
-        `<div class="vst-track-row vst-track-prompt">` +
+        `<div class="vst-track-row vst-track-prompt${relayTrack ? "" : " vst-no-relay"}">` +
         renderTrackHead(
             "vst-track-icon-prompt",
             "✎",
             "Prompt",
             headTag("major", "Major", { active: true }) +
-                headTag("relay", "Relay", {
-                    active: clips.some(
-                        (clip) => (clip.promptWindows?.length ?? 0) > 0,
-                    ),
-                }),
+                (relayTrack
+                    ? headTag("relay", "Relay", {
+                          active: clips.some(hasRelayWindows),
+                      })
+                    : ""),
         ) +
         `<div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div>` +
         `</div>`

@@ -9590,6 +9590,10 @@
   var skipTitle = (subject, skipped) => `${skipped ? "Re-enable" : "Skip"} ${subject}`;
 
   // frontend/timelineView/rendering.ts
+  var laneVisible = (clip, feature, persisted, capabilities) => {
+    const decision = capabilities?.forClip(clip).decision(feature);
+    return decision === void 0 || decision.supported || decision.code !== "" || persisted;
+  };
   var clipInnerWidth = (widthPx) => Math.max(1, widthPx - 2);
   var backgroundImageDataAttr = (source) => ` data-vst-background-image="${escapeAttr(source)}"`;
   var applyBackgroundImages = (root) => {
@@ -9623,6 +9627,8 @@
 
   // frontend/timelineView/regionRenderer.ts
   var refFrame = (ref) => Math.max(0, ref.frame ?? 0);
+  var hasRetake = (clip) => clip.retake != null;
+  var retakeLaneVisible = (clip, capabilities) => laneVisible(clip, "retake", hasRetake(clip), capabilities);
   var renderRegionThumb = (clip) => {
     const withImage = (clip.refs ?? []).filter(
       (ref) => !!ref.uploadedImage?.data
@@ -9809,23 +9815,26 @@
       authoredDurationSeconds,
       fps,
       unit
-    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div><div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs}${retakeSupported || clip.retake ? "" : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` + renderRetakeOverlay(
+    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div>` + (retakeLaneVisible(clip, capabilities) ? `<div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs}${retakeSupported || clip.retake ? "" : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${retakeLaneTitle}">` + renderRetakeOverlay(
       clip,
       layout.index,
       layout.durationSeconds,
       retakeSupported
-    ) + `</div>`;
+    ) + `</div>` : "");
   }).join("");
   var renderVideoTrackRow = (clips, layouts, fps, unit, capabilities, timing, pxPerSecond = 1) => {
+    const retakeTrack = clips.some(
+      (clip) => retakeLaneVisible(clip, capabilities)
+    );
     const head = renderTrackHead(
       "vst-track-icon-video",
       "▶",
       "Video",
-      headTag("clip", "Clip", { active: true }) + headTag("retake", "Retake", {
-        active: clips.some((clip) => clip.retake != null)
-      })
+      headTag("clip", "Clip", { active: true }) + (retakeTrack ? headTag("retake", "Retake", {
+        active: clips.some(hasRetake)
+      }) : "")
     );
-    return `<div class="vst-track-row vst-track-video">${head}<div class="vst-track-cell">` + renderRegions(clips, layouts, fps, unit, capabilities) + renderBoundaryOverlapBands(
+    return `<div class="vst-track-row vst-track-video${retakeTrack ? "" : " vst-no-retake"}">${head}<div class="vst-track-cell">` + renderRegions(clips, layouts, fps, unit, capabilities) + renderBoundaryOverlapBands(
       layouts,
       timing?.outputGeometryAvailable === true ? timing.boundaries : [],
       pxPerSecond
@@ -15160,8 +15169,11 @@ The conversion is one undoable change.`;
     };
   };
   var PROMPT_PLACEHOLDER = "(no prompt)";
+  var hasRelayWindows = (clip) => (clip.promptWindows?.length ?? 0) > 0;
   var renderPromptTrackRow = (clips, layouts, pxPerSecond, globalPrompt, capabilities) => {
     const globalTrimmed = `${globalPrompt ?? ""}`.trim();
+    const relayLane = (clip) => laneVisible(clip, "promptRelay", hasRelayWindows(clip), capabilities);
+    const relayTrack = clips.some(relayLane);
     const parts = [];
     for (let i = 0; i < layouts.length; i++) {
       const layout = layouts[i];
@@ -15194,21 +15206,19 @@ The conversion is one undoable change.`;
         const title = relaySupported ? `${text2 || "(empty minor prompt)"} · Shift+click to delete` : "Persisted relay prompt is unsupported by this architecture; click to inspect or Shift+click to delete";
         return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeAttr(title)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
       }).join("");
-      if (relaySupported || windows.length > 0) {
+      if (relayLane(clip)) {
         parts.push(
           `<div class="vst-minor-lane${relaySupported ? "" : " vst-capability-disabled"}"${relaySupported ? " data-vst-prompt-add" : ""} data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${relaySupported ? "Click empty space to add a minor prompt" : "Relay prompts are unsupported; existing windows can be inspected or removed"}">${minorSegments}</div>`
         );
       }
     }
-    return `<div class="vst-track-row vst-track-prompt">` + renderTrackHead(
+    return `<div class="vst-track-row vst-track-prompt${relayTrack ? "" : " vst-no-relay"}">` + renderTrackHead(
       "vst-track-icon-prompt",
       "✎",
       "Prompt",
-      headTag("major", "Major", { active: true }) + headTag("relay", "Relay", {
-        active: clips.some(
-          (clip) => (clip.promptWindows?.length ?? 0) > 0
-        )
-      })
+      headTag("major", "Major", { active: true }) + (relayTrack ? headTag("relay", "Relay", {
+        active: clips.some(hasRelayWindows)
+      }) : "")
     ) + `<div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div></div>`;
   };
   var audioFlagChips = (clip) => {

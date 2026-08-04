@@ -1413,11 +1413,10 @@ describe("unsupported persisted timeline controls", () => {
                 .querySelector('.vst-refs-lane[data-clip-idx="1"]')
                 ?.getAttribute("aria-disabled"),
         ).toBe("true");
+        // Nothing to repair on the empty clip, so its retake lane is dropped outright.
         expect(
-            document
-                .querySelector('.vst-retake-lane[data-clip-idx="1"]')
-                ?.getAttribute("aria-disabled"),
-        ).toBe("true");
+            document.querySelector('.vst-retake-lane[data-clip-idx="1"]'),
+        ).toBeNull();
         const emptyAudio = document.querySelector(
             '.vst-audio-clip[data-clip-idx="1"]',
         );

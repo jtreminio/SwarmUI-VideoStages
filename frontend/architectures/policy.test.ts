@@ -373,6 +373,44 @@ describe("catalog-backed authoring policy", () => {
         expect(body.querySelector("[data-vst-retake-add]")).toBeNull();
     });
 
+    it("drops the relay and retake lanes when no clip architecture offers them", () => {
+        const body = document.createElement("div");
+        renderTimeline(body, [fakeClip()], {
+            capabilities: createCapabilityViewResolver(catalog()),
+        });
+
+        expect(body.querySelector(".vst-minor-lane")).toBeNull();
+        expect(body.querySelector(".vst-retake-lane")).toBeNull();
+        expect(body.querySelector(".vst-head-tag-relay")).toBeNull();
+        expect(body.querySelector(".vst-head-tag-retake")).toBeNull();
+        expect(body.querySelector(".vst-track-prompt")?.className).toContain(
+            "vst-no-relay",
+        );
+        expect(body.querySelector(".vst-track-video")?.className).toContain(
+            "vst-no-retake",
+        );
+    });
+
+    it("leaves a blank slot for the clips an offered lane skips", () => {
+        const body = document.createElement("div");
+        renderTimeline(body, [minimalClip(), fakeClip()], {
+            capabilities: createCapabilityViewResolver(catalog()),
+        });
+
+        for (const selector of [".vst-minor-lane", ".vst-retake-lane"]) {
+            const lanes = body.querySelectorAll(selector);
+            expect(lanes.length).toBe(1);
+            expect(lanes[0].getAttribute("data-clip-idx")).toBe("0");
+        }
+        expect(body.querySelector(".vst-minor-lane")?.className).not.toContain(
+            "vst-capability-disabled",
+        );
+        // LTX offers retake; this clip has no init video, so it keeps a disabled lane.
+        expect(body.querySelector(".vst-retake-lane")?.className).toContain(
+            "vst-capability-disabled",
+        );
+    });
+
     it("keeps a zero-stage source-only clip selectable and labels it plainly", () => {
         const clip = minimalClip({
             architectureHint: "none",
