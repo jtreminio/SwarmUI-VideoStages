@@ -335,10 +335,10 @@ architecture. A source-only executable clip receives
 `NoneArchitectureModule`.
 
 `VideoExecutionPlanCompiler.Compile` is pure and graph-independent. It first
-projects a non-mutating effective request from the resolved assignments.
-Projection preserves clip/stage IDs, raw stage indexes, model names, source
-identity, and topology, so the original assignments remain authoritative. For
-each clip it then:
+projects resolved temporal grids into an immutable request copy and reports
+stale persisted model hints. Clip/stage IDs, raw stage indexes, model names,
+source identity, and topology stay unchanged, so the resolved assignments
+remain authoritative. For each clip it then:
 
 1. resolves `ArchitectureEntryMode`;
 2. runs `ArchitectureCapabilityValidator.Validate`;
@@ -364,11 +364,12 @@ policy preserves LTX/generic text-encoder-only rows. WAN explicitly selects the
 model-only policy at this seam.
 Generic planning preserves same-clip compatibility-class uniformity and
 selects the proven host family's model-only or model-and-text-encoder target
-policy. Unsupported optional data is removed only from the effective request,
-with a browser-visible warning; authored data is unchanged. This includes
-architecture-specific references, prompt relay, retakes, audio options,
-ControlNet strength, IC-LoRA, and advanced upscalers. Ordinary root-image
-entry, source video, decoded stages, pixel resize, and normal LoRA remain.
+policy. Capability validation warns about unsupported optional data, and the
+architecture compiler omits that behavior from its payload without rewriting
+authored data. This includes architecture-specific references, prompt relay,
+retakes, audio options, ControlNet strength, IC-LoRA, and advanced upscalers.
+Ordinary root-image entry, source video, decoded stages, pixel resize, and
+normal LoRA remain.
 For WAN, `WanClipPlanCompiler.Compile` produces the smaller `WanClipPayload`
 and the shared `StockHostVideoStagePayload`; both preserve resolved host
 identity. It requires one host compatibility class throughout a clip. A hard
@@ -406,7 +407,7 @@ diagnostics stop the request before later VideoStages host phases mutate the
 graph.
 `WanExecutionAdapter.PreflightRequest` checks the few request-global host
 options that need special WAN handling. Legacy request-global video-swap
-values are not preflight errors: effective-request projection emits one warning and
+values are not preflight errors: plan compilation emits one warning and
 `WanLegacySwapIsolation` clears them only from host generation info, without
 editing `T2IParamInput`. High- and low-noise work is expressed as ordinary
 authored stages. WAN first/last-frame conditioning is a bounded family

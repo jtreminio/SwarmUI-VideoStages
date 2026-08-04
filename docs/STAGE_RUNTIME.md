@@ -15,7 +15,7 @@ contracts, see [`ARCHITECTURE.md`](../ARCHITECTURE.md).
 hidden authoring document + host request
     → VideoStagesSpecParser
     → ArchitecturePlanResolver
-    → resolved-fact effective-request projection
+    → resolved temporal-grid projection
     → VideoExecutionPlanCompiler
     → cached VideoExecutionPlanContext
     → graph-free request preparation
@@ -47,12 +47,10 @@ The stages before runtime are:
    skipped stages—through the session-authorized backend registry. Resolved
    stage models own architecture, profile, and feature support. Persisted architecture/profile values are diagnostic hints.
 4. `EffectiveVideoRequestProjector`, called inside
-   `VideoExecutionPlanCompiler`, keeps authored data intact while producing the
-   values that this generation can execute from those resolved facts. Common
-   capability omission handles optional unsupported values; an architecture
-   hook handles only its unique graph-free policy. Projection preserves clip
-   and stage IDs, raw stage indexes, model names, source identity, and topology,
-   so the original resolved assignments remain authoritative.
+   `VideoExecutionPlanCompiler`, keeps authored data intact while projecting
+   resolved temporal grids and reporting stale persisted model hints. Clip and
+   stage IDs, raw stage indexes, model names, source identity, and topology stay
+   unchanged, so the resolved assignments remain authoritative.
 5. `VideoExecutionPlanCompiler` compiles common root, geometry, timing,
    boundary, and audio plans and asks the selected module to compile typed
    clip/stage payloads. Every stage payload exposes the common execution core;
@@ -275,8 +273,8 @@ Diagnostics divide responsibility:
 |---|---|
 | JSON version, types, IDs, common structural shape | `VideoStagesJsonReader` / `VideoStagesSpecParser` |
 | Model resolution, clip lock, entry mode, common timing/boundary/audio topology | `ArchitecturePlanResolver` / `VideoExecutionPlanCompiler` |
-| Unsupported optional authored features | Common effective-request projection, using resolved capabilities; warn-and-omit on the effective copy |
-| Architecture-specific options and semantic conflicts | Selected module's graph-free projector/compiler |
+| Unsupported optional authored features | Common capability validation; warn and omit from the compiled plan |
+| Architecture-specific options and semantic conflicts | Selected module's graph-free compiler |
 | Architecture dependencies | Active runtime provider during request preparation |
 | Ordinary model-path validity already owned by a supported SwarmUI primitive | SwarmUI core during graph construction |
 | Returned identity and decoded media shape | `VideoArchitectureExecutionHost` |
