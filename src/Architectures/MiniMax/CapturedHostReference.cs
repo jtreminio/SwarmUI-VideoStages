@@ -35,12 +35,16 @@ internal sealed record CapturedHostReference(WGNodeData Media, WGNodeData Vae)
 
     /// <summary>
     /// Null when the capture was a latent and no VAE came with it.
+    /// <para>
+    /// Raw media passes through and everything else is decoded — asked the other way round, by
+    /// listing the latent types, this drifts the moment a new one appears. It did: H3's own base
+    /// capture is a joint audio/video latent, which no list of image and video latents names, so it
+    /// reached a keyframe input undecoded and failed the request outright.
+    /// </para>
     /// </summary>
     public WGNodeData AsImage()
     {
-        bool isLatent = Media.DataType == WGNodeData.DT_LATENT_IMAGE
-            || Media.DataType == WGNodeData.DT_LATENT_VIDEO;
-        if (!isLatent)
+        if (Media.IsRawMedia)
         {
             return Media.Duplicate();
         }

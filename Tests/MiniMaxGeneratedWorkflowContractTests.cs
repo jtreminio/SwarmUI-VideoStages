@@ -751,6 +751,34 @@ public class MiniMaxGeneratedWorkflowContractTests
     }
 
     /// <summary>
+    /// Text-to-video is the shape where the base capture is H3's own joint audio/video latent
+    /// rather than a decoded image, so it is the shape that proves the capture is decoded before
+    /// it reaches a keyframe input. Handed over raw, it fails the whole request on a LATENT wired
+    /// into an IMAGE — no video, and no warning saying why.
+    /// </summary>
+    [Fact]
+    public async Task A_text_to_video_base_frame_reference_is_decoded_before_it_is_keyframed()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["refs"] = new JArray(MakeRef("Base"));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmMiniMaxH3AddKeyframesNode keyframes = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
+        ComfyNode firstFrame = keyframes.FirstFrame.Connection?.Node;
+        Assert.NotNull(firstFrame);
+        AssertImageSource(firstFrame, "first_frame");
+
+        live.AssertLive(keyframes);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
     /// A mis-dispatch is invisible at plan level and the frontend offers <c>latentmodel-*</c> by
     /// default; the danger is a pixel upscale silently substituted.
     /// </summary>
