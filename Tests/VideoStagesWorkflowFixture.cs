@@ -160,6 +160,13 @@ internal abstract class VideoStagesWorkflowFixture : IDisposable
         ComfyWorkflowApiTestHarness.GenerateAsync(ImageToVideoPost(document, customize));
 
     /// <summary>
+    /// Stage sampler seeds, flat across clips. Core's own image-to-video sampler also seeds
+    /// <c>Seed + 42</c>, so wherever the host root survives, stage 0's seed matches two samplers
+    /// and those tests must select by reachability instead.
+    /// </summary>
+    public static long StageSeed(int stageId) => Seed + 42 + stageId;
+
+    /// <summary>
     /// Core's base pass, which exists only in the image-to-video shape — a text-to-video request
     /// discards the root chain, so core's sampler is swept and the stage sampler is the only one
     /// left. Seeds: core base <see cref="Seed"/>, core refiner <c>Seed + 1</c>, stages

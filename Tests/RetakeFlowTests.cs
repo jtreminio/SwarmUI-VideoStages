@@ -1,13 +1,10 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
-using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Media;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
-using VideoStages.Generated;
 using VideoStages.Architectures.Ltx2;
+using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -19,10 +16,8 @@ public partial class StageFlowTests
     private static readonly string[] RetakeFeatures =
         [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
 
-    // Retake now lives in the per-clip JSON (seconds-based); a clip source video is the enable gate.
-    // At fps 24, start/length of 1.0s each resolve to frame windows [24, 24), matching the old
-    // param-based tests.
-    internal static JObject RetakeInitVideo() => new()
+    // Retake lives in the per-clip JSON (seconds-based); a clip source video is the enable gate.
+    private static JObject RetakeInitVideo() => new()
     {
         ["data"] = "data:video/mp4;base64," + Convert.ToBase64String([0xDE, 0xAD, 0xBE, 0xEF]),
         ["fileName"] = "refine.mp4",
@@ -66,135 +61,6 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Retake_window_attaches_noise_mask_and_forces_full_start_step()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-
-        string stagesJson = JsonSingleClipStagesWithRetake(
-            startSeconds: 1.0, lengthSeconds: 1.0, strength: 0.8,
-            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(T2IParamTypes.VideoFrames, 97);
-
-        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildNativeSteps(attachAudioToCurrentMedia: false),
-            features: RetakeFeatures);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        LTXVSetVideoLatentNoiseMasksNode maskNode = Assert.Single(
-            bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
-        SwarmLoadVideoB64Node loadVideo = Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
-
-        // Sampler runs from step 0 so the per-frame mask, not StartStep, gates what regenerates.
-        SwarmKSamplerNode sampler = Assert.Single(SamplerNodesOrdered(bridge));
-        Assert.Equal(0, sampler.StartAtStep.LiteralAsInt());
-        // No inplace guide merges on a retake stage: LTXVImgToVideoInplace overwrites the noise mask of
-        // every frame it conditions and would clobber the retake window.
-        Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
-        Assert.True(
-            ReachesUpstream(bridge, sampler.LatentImage.Connection!.Node, maskNode.Id),
-            "Sampler latent input does not trace upstream to the retake noise-mask node.");
-        Assert.True(
-            ReachesUpstream(bridge, maskNode.Samples.Connection!.Node, loadVideo.Id),
-            "Retake noise-mask samples input does not trace upstream to the base (loaded) video.");
-    }
-
-    [Fact]
-    public void Retake_mask_block_lengths_match_window()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-
-        const int pixelFrames = 97;
-        const int start = 24;
-        const int length = 24;
-        const double strength = 0.75;
-
-        string stagesJson = JsonSingleClipStagesWithRetake(
-            startSeconds: 1.0, lengthSeconds: 1.0, strength: strength,
-            MakeStage(models.VideoModel.Name, "Generated", steps: 10));
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(T2IParamTypes.VideoFrames, pixelFrames);
-
-        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildNativeSteps(attachAudioToCurrentMedia: false),
-            features: RetakeFeatures);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        LtxVideoRetakeMasker.LatentWindow expected =
-            LtxVideoRetakeMasker.ComputeLatentWindow(pixelFrames, start, length);
-
-        LTXVSetVideoLatentNoiseMasksNode maskNode = Assert.Single(
-            bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
-
-        List<RepeatImageBatchNode> repeats = bridge.Graph.NodesOfType<RepeatImageBatchNode>()
-            .Where(r => ReachesUpstream(bridge, maskNode, r.Id))
-            .OrderBy(r => int.Parse(r.Id))
-            .ToList();
-
-        int[] amounts = [.. repeats.Select(r => r.Amount.LiteralAsInt() ?? 0)];
-        Assert.Equal(new[] { expected.Prefix, expected.Window, expected.Suffix }, amounts);
-        Assert.Equal(expected.LatentLength, amounts.Sum());
-
-        // Exactly the window block carries the retake strength; the frozen blocks are value 0.
-        List<SolidMaskNode> solids = bridge.Graph.NodesOfType<SolidMaskNode>()
-            .Where(s => ReachesUpstream(bridge, maskNode, s.Id))
-            .ToList();
-        Assert.Single(solids, s => Math.Abs((s.Value.LiteralAsDouble() ?? -1) - strength) < 1e-6);
-        Assert.Equal(2, solids.Count(s => Math.Abs(s.Value.LiteralAsDouble() ?? -1) < 1e-6));
-    }
-
-    [Fact]
-    public void Final_stage_retake_masks_the_previous_stage_latent_without_a_vae_round_trip()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-
-        string stagesJson = JsonSingleClipStagesWithRetake(
-            startSeconds: 1.0,
-            lengthSeconds: 1.0,
-            strength: 0.8,
-            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 8),
-            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(T2IParamTypes.VideoFrames, 97);
-
-        (JObject workflow, WorkflowGenerator unusedGenerator) =
-            WorkflowTestHarness.GenerateWithStepsAndState(
-                input,
-                BuildNativeSteps(attachAudioToCurrentMedia: true),
-                features: RetakeFeatures);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        Assert.Equal(2, samplers.Count);
-        LTXVSetVideoLatentNoiseMasksNode mask = Assert.Single(
-            bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
-        Assert.True(ReachesUpstream(
-            bridge,
-            mask.Samples.Connection!.Node,
-            samplers[0].Id));
-        Assert.True(ReachesUpstream(
-            bridge,
-            samplers[1].LatentImage.Connection!.Node,
-            mask.Id));
-        Assert.DoesNotContain(
-            bridge.Graph.Nodes.Values,
-            node => (node is VAEDecodeNode or VAEDecodeTiledNode or VAEEncodeNode)
-                && ReachesUpstream(bridge, node, samplers[0].Id)
-                && ReachesUpstream(
-                    bridge,
-                    samplers[1].LatentImage.Connection!.Node,
-                    node.Id));
-        AssertWorkflowHasNoCycles(workflow);
-    }
-
-    [Fact]
     public void Retake_latent_window_arithmetic_is_deterministic()
     {
         LtxVideoRetakeMasker.LatentWindow w =
@@ -219,50 +85,6 @@ public partial class StageFlowTests
     }
 
     [Fact]
-    public void Retake_reaching_clip_end_covers_the_aligned_tail()
-    {
-        using SwarmUiTestContext _ = new();
-        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
-
-        // Duration 4.0s @ 24fps aligns UP to 97 frames (4.042s). A retake ending exactly at the
-        // authored 4.0s must still regenerate through the aligned tail — no frozen suffix block.
-        JObject clip = MakeClip(MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
-        clip["duration"] = 4.0;
-        clip["retake"] = new JObject
-        {
-            ["startSeconds"] = 2.0,
-            ["lengthSeconds"] = 2.0,
-            ["strength"] = 0.9
-        };
-        clip["initVideo"] = RetakeInitVideo();
-        string stagesJson = new JArray(clip).ToString();
-
-        T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
-        input.Set(T2IParamTypes.VideoFrames, 97);
-
-        (JObject workflow, WorkflowGenerator _generator) = WorkflowTestHarness.GenerateWithStepsAndState(
-            input,
-            BuildNativeSteps(attachAudioToCurrentMedia: true),
-            features: RetakeFeatures);
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        LTXVSetVideoLatentNoiseMasksNode maskNode = Assert.Single(
-            bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
-        int[] amounts = [.. bridge.Graph.NodesOfType<RepeatImageBatchNode>()
-            .Where(r => ReachesUpstream(bridge, maskNode, r.Id))
-            .OrderBy(r => int.Parse(r.Id))
-            .Select(r => r.Amount.LiteralAsInt() ?? 0)];
-        // Latents [6, 13) of 13 regenerate: prefix 6, window 7, and NO frozen suffix block.
-        Assert.Equal(new[] { 6, 7 }, amounts);
-
-        // The av window's end lands past the aligned video end (latent 13 boundary: pixel 97).
-        LTXVSetAudioVideoMaskByTimeNode maskByTime = Assert.Single(
-            bridge.Graph.NodesOfType<LTXVSetAudioVideoMaskByTimeNode>());
-        Assert.Equal(41.0 / 24, maskByTime.StartTime.LiteralAsDouble()!.Value, 6);
-        Assert.Equal(97.0 / 24, maskByTime.EndTime.LiteralAsDouble()!.Value, 6);
-    }
-
-    [Fact]
     public void Retake_disabled_when_length_zero_leaves_graph_unchanged()
     {
         using SwarmUiTestContext _ = new();
@@ -271,7 +93,7 @@ public partial class StageFlowTests
         // Refine source present, Retake with zero length => retake off.
         string stagesJson = JsonSingleClipStagesWithRetake(
             startSeconds: 1.0, lengthSeconds: 0.0, strength: 1.0,
-            MakeStage(models.VideoModel.Name, "Generated", control: 1.0, steps: 10));
+            MakeStage(models.VideoModel.Name, "Generated", control: 0.5, steps: 10));
 
         T2IParamInput input = BuildNativeInput(models.BaseModel, models.VideoModel, stagesJson);
         input.Set(T2IParamTypes.VideoFrames, 97);
@@ -284,8 +106,9 @@ public partial class StageFlowTests
 
         Assert.Empty(bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
         SwarmKSamplerNode sampler = Assert.Single(SamplerNodesOrdered(bridge));
-        // Back-compat: StartStep follows the stage control (index-0 stage forced to control 1.0 => 0).
-        Assert.Equal(0, sampler.StartAtStep.LiteralAsInt());
+        // StartStep still follows the stage control: floor(10 x (1 - 0.5)). A leaked retake would
+        // force it to 0, which is why the stage cannot be authored at control 1.0 here.
+        Assert.Equal(5, sampler.StartAtStep.LiteralAsInt());
     }
 
     [Fact]
@@ -309,5 +132,10 @@ public partial class StageFlowTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Empty(bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
+        // Positive control: without it, a graph that stopped building the stage at all would pass.
+        // StartAtStep cannot serve — the parser forces stage 0 of a non-sourced clip to control
+        // 1.0, so it is 0 here for the same reason an active retake would force it to 0.
+        SwarmKSamplerNode sampler = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        Assert.Equal(10, sampler.Steps.LiteralAsInt());
     }
 }

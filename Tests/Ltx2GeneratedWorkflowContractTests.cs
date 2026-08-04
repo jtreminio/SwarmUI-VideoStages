@@ -12,9 +12,6 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class Ltx2GeneratedWorkflowContractTests
 {
-    /// <summary>Stage sampler seeds run <c>Seed + 42 + StageId</c>, flat across clips.</summary>
-    private const long FirstStageSeed = VideoStagesWorkflowFixture.Seed + 42;
-
     /// <summary>
     /// The smoke test the LTX-2 conversion chunks rest on: an LTX-2.3 request survives the whole
     /// production step list, resolves all four support-model stubs without reaching for a
@@ -87,7 +84,7 @@ public class Ltx2GeneratedWorkflowContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        SwarmKSamplerNode sampler = StageSampler(SamplerNodesOrdered(bridge), FirstStageSeed);
+        SwarmKSamplerNode sampler = StageSampler(bridge, 0);
         LTXVConditioningNode conditioning = Assert.Single(
             bridge.Graph.NodesOfType<LTXVConditioningNode>());
         Assert.Same(conditioning, sampler.Positive.Connection?.Node);
@@ -139,9 +136,8 @@ public class Ltx2GeneratedWorkflowContractTests
         Assert.Equal(0.5, lora.StrengthClip.LiteralAsDouble());
         Assert.Empty(bridge.Graph.NodesOfType<LoraLoaderModelOnlyNode>());
 
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        SwarmKSamplerNode plainSampler = StageSampler(samplers, FirstStageSeed);
-        SwarmKSamplerNode loraSampler = StageSampler(samplers, FirstStageSeed + 1);
+        SwarmKSamplerNode plainSampler = StageSampler(bridge, 0);
+        SwarmKSamplerNode loraSampler = StageSampler(bridge, 1);
         Assert.False(ReachesUpstream(bridge, plainSampler, lora.Id));
         Assert.True(ReachesUpstream(bridge, loraSampler, lora.Id));
 
@@ -173,7 +169,7 @@ public class Ltx2GeneratedWorkflowContractTests
         LoraLoaderNode lora = Assert.Single(bridge.Graph.NodesOfType<LoraLoaderNode>());
         Assert.Equal("UnitTest_VideoClipStageLora.safetensors", lora.LoraName.LiteralAsString());
 
-        SwarmKSamplerNode sampler = StageSampler(SamplerNodesOrdered(bridge), FirstStageSeed);
+        SwarmKSamplerNode sampler = StageSampler(bridge, 0);
         Assert.True(ReachesUpstream(bridge, sampler.Model.Connection?.Node, lora.Id));
         // LorasTargetTextEnc: the patched CLIP has to reach the encoders too, not just the model.
         // The count guard keeps this from passing on an empty conditioning chain.
@@ -217,7 +213,7 @@ public class Ltx2GeneratedWorkflowContractTests
         // An IC-LoRA is never a plain LoRA: it patches through its own loader or not at all.
         Assert.Empty(LoraLoaderNodesOf(bridge));
 
-        SwarmKSamplerNode sampler = StageSampler(SamplerNodesOrdered(bridge), FirstStageSeed);
+        SwarmKSamplerNode sampler = StageSampler(bridge, 0);
         Assert.Same(icLora, sampler.Model.Connection?.Node);
 
         live.AssertAllLive(icLora, sampler);
@@ -275,7 +271,7 @@ public class Ltx2GeneratedWorkflowContractTests
         Assert.Equal(1, conditioning.PositiveInput.Connection.SlotIndex);
         Assert.IsType<SwarmClipTextEncodeAdvancedNode>(conditioning.NegativeInput.Connection?.Node);
 
-        SwarmKSamplerNode sampler = StageSampler(SamplerNodesOrdered(bridge), FirstStageSeed);
+        SwarmKSamplerNode sampler = StageSampler(bridge, 0);
         Assert.Same(conditioning, sampler.Positive.Connection?.Node);
 
         live.AssertAllLive(relay, latent, conditioning, sampler);
@@ -349,9 +345,7 @@ public class Ltx2GeneratedWorkflowContractTests
         Assert.Equal(0.3, windows[0].Value<double>("seconds"), precision: 3);
         Assert.Equal("target opening", windows[1].Value<string>("prompt"));
 
-        SwarmKSamplerNode targetSampler = StageSampler(
-            SamplerNodesOrdered(bridge),
-            FirstStageSeed + 1);
+        SwarmKSamplerNode targetSampler = StageSampler(bridge, 1);
         Assert.True(ReachesUpstream(bridge, targetSampler, relay.Id));
 
         live.AssertAllLive(relay, targetLatent, targetSampler);
@@ -385,7 +379,7 @@ public class Ltx2GeneratedWorkflowContractTests
             conditioning.PositiveInput.Connection?.Node);
         Assert.Equal("whole clip", positive.Prompt.LiteralAsString());
 
-        SwarmKSamplerNode sampler = StageSampler(SamplerNodesOrdered(bridge), FirstStageSeed);
+        SwarmKSamplerNode sampler = StageSampler(bridge, 0);
         Assert.Same(conditioning, sampler.Positive.Connection?.Node);
 
         live.AssertAllLive(positive, conditioning, sampler);

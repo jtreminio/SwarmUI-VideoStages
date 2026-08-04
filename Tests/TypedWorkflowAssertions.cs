@@ -73,6 +73,16 @@ internal static class TypedWorkflowAssertions
         Assert.Single(samplers, sampler => sampler.NoiseSeed.LiteralAsLong() == seed);
 
     /// <summary>
+    /// The sampler for a stage, by its flat-across-clips index. Ambiguous where the host root
+    /// survives — core's own image-to-video sampler shares stage 0's seed — so those tests must
+    /// select by reachability instead.
+    /// </summary>
+    public static SwarmKSamplerNode StageSampler(WorkflowBridge bridge, int stageId) =>
+        StageSampler(
+            bridge.Graph.NodesOfType<SwarmKSamplerNode>(),
+            VideoStagesWorkflowFixture.StageSeed(stageId));
+
+    /// <summary>
     /// For architectures whose compat class sets <c>LorasTargetTextEnc</c> false: the authored
     /// textEncoderWeight is dropped and there is no strength_clip.
     /// </summary>
