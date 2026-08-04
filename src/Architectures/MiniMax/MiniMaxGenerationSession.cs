@@ -23,7 +23,8 @@ internal sealed class MiniMaxGenerationSession(
     TimelineAssemblySession assembly,
     CapturedHostReference baseReference,
     CapturedHostReference refinerReference,
-    VideoStageRunner stageRunner) : IVideoGenerationSession
+    VideoStageRunner stageRunner,
+    HostRootAdoption rootAdoption) : IVideoGenerationSession
 {
     internal const string ArchitectureLabel = "MiniMax H3";
 
@@ -167,6 +168,7 @@ internal sealed class MiniMaxGenerationSession(
                 stageInput.Configure(clip, stage, genInfo, startStep: 0);
                 ExecuteRefineStage(
                     clip,
+                    stage,
                     genInfo,
                     HostVideoStageSchedulePolicy.StartStep(core.Steps, core.Control),
                     core.Upscale);
@@ -175,6 +177,7 @@ internal sealed class MiniMaxGenerationSession(
             {
                 SampleNatively(
                     clip,
+                    stage,
                     genInfo,
                     incoming: null,
                     _entryFirstFrame,
@@ -272,6 +275,7 @@ internal sealed class MiniMaxGenerationSession(
     /// </summary>
     private void ExecuteRefineStage(
         ClipPlan clip,
+        StagePlan stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         int startStep,
         StageUpscalePlan stageUpscale)
@@ -286,6 +290,7 @@ internal sealed class MiniMaxGenerationSession(
         }
         SampleNatively(
             clip,
+            stage,
             genInfo,
             incoming,
             firstFrame: null,
@@ -295,6 +300,7 @@ internal sealed class MiniMaxGenerationSession(
 
     private void SampleNatively(
         ClipPlan clip,
+        StagePlan stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData incoming,
         WGNodeData firstFrame,
@@ -314,6 +320,7 @@ internal sealed class MiniMaxGenerationSession(
                 : JointLatent(incoming, genInfo);
             ApplyLatentInterpolation(stageUpscale);
             AttachKeyframes(genInfo, firstFrame);
+            (string samplerId, string decodeId) = rootAdoption.ClaimTextRoot(clip, stage);
             string sampled = g.CreateKSampler(
                 genInfo.Model.Path,
                 genInfo.PosCond,
@@ -329,13 +336,14 @@ internal sealed class MiniMaxGenerationSession(
                 sigmin: 0.002,
                 sigmax: 1000,
                 previews: g.UserInput.Get(ComfyUIBackendExtension.VideoPreviewType, "animate"),
+                id: samplerId,
                 hadSpecialCond: true,
                 explicitSampler: genInfo.DefaultSampler,
                 explicitScheduler: genInfo.DefaultScheduler,
                 sectionId: genInfo.ContextID);
             g.CurrentMedia = g.CurrentMedia
                 .WithPath([sampled, 0])
-                .AsRawImage(genInfo.Vae);
+                .DecodeLatents(genInfo.Vae, false, decodeId);
         }
         finally
         {

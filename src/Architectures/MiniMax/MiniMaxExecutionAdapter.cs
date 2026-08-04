@@ -79,16 +79,35 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
                 _rootHandoff.DropCoreOutput();
                 break;
             case ArchitectureHostPhase.CaptureBaseReference:
-                _baseReference = CapturedHostReference.From(generator);
+                if (AnyClipReferences(context.Plan, "Base"))
+                {
+                    _baseReference = CapturedHostReference.From(generator);
+                }
                 break;
             case ArchitectureHostPhase.CaptureRefinerReference:
-                _refinerReference = CapturedHostReference.From(generator);
+                if (AnyClipReferences(context.Plan, "Refiner"))
+                {
+                    _refinerReference = CapturedHostReference.From(generator);
+                }
                 break;
             case ArchitectureHostPhase.ApplyRootAudioMaskDimensions:
             case ArchitectureHostPhase.CaptureControlNetPreprocessors:
                 break;
         }
     }
+
+    /// <summary>
+    /// A capture pins the host node it names for the rest of the request, which is why an unwanted
+    /// one is not free: it denies that node to anything that would otherwise take it over. Only
+    /// capture what some clip actually asked to keyframe from.
+    /// </summary>
+    private static bool AnyClipReferences(VideoExecutionPlan plan, string source) =>
+        plan.Clips
+            .Select(clip => clip.ArchitecturePayload as MiniMaxClipPayload)
+            .Where(payload => payload is not null)
+            .SelectMany(payload =>
+                new[] { payload.FirstFrameReference, payload.LastFrameReference })
+            .Any(reference => StringUtils.Equals(reference?.Source, source));
 
     public IVideoGenerationSession CreateSession(
         ArchitectureTimelineSessionContext context)
@@ -109,6 +128,7 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
                 generator,
                 context.Plan,
                 MiniMaxGenerationSession.ArchitectureLabel,
-                preserveAttachedAudio: true));
+                preserveAttachedAudio: true),
+            context.RootAdoption);
     }
 }

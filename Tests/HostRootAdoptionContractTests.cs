@@ -130,6 +130,7 @@ public sealed class HostRootAdoptionContractTests
     [Theory]
     [InlineData("wan")]
     [InlineData("host-video")]
+    [InlineData("minimax")]
     public async Task A_text_stage_claims_cores_sampler_and_decode(string architecture)
     {
         using VideoStagesWorkflowFixture fixture = CreateFixture(architecture);
@@ -143,9 +144,11 @@ public sealed class HostRootAdoptionContractTests
         Assert.Equal(CoreSamplerId, sampler.Id);
         Assert.Same(sampler, StageSampler(bridge, 0));
 
+        // H3 splits its joint latent before decoding, so the decode reads the sampler through the
+        // split rather than straight off it.
         VAEDecodeNode decode = Assert.Single(bridge.Graph.NodesOfType<VAEDecodeNode>());
         Assert.Equal(CoreDecodeId, decode.Id);
-        Assert.Same(sampler, decode.Samples.Connection?.Node);
+        Assert.True(ReachesUpstream(bridge, decode, sampler.Id));
         Assert.Same(decode, live.FinalVideoSave().Images.Connection?.Node);
 
         live.AssertAllLive(sampler, decode);
@@ -232,6 +235,30 @@ public sealed class HostRootAdoptionContractTests
         Assert.False(
             ReachesUpstream(bridge, keyframes.FirstFrame.Connection?.Node, wanStage.Id),
             $"The '{source}' keyframe resolves to the WAN clip's own generation.");
+
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// The capture that refuses the claim is only taken when a clip asked for it. Capturing
+    /// unconditionally would pin core's nodes for every H3 request and deny the claim outright —
+    /// the same timeline, minus the reference, claims normally.
+    /// </summary>
+    [Fact]
+    public async Task An_unreferenced_host_capture_is_not_taken_and_does_not_refuse_the_claim()
+    {
+        using WanAndMiniMaxFixture fixture = new();
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(
+            MakeClip(1.0, fixture.Stage()),
+            MakeClip(1.0, Fixtures.MakeStage(
+                fixture.SecondModel.Name,
+                steps: MiniMaxWorkflowFixture.Steps,
+                cfgScale: MiniMaxWorkflowFixture.CfgScale))));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Equal(CoreSamplerId, StageSampler(bridge, 0).Id);
 
         AssertShippable(bridge, workflow, live);
     }
