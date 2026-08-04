@@ -73,64 +73,13 @@ internal class StageRunner
             clipContext,
             requiresDedicatedOutput,
             rootPolicy);
-        bool incomingIcLoraMediaIncludesContinueHandle =
-            clipContext.ContinueHandleMaterialized;
-        WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
-        Action<WorkflowGenerator.ImageToVideoGenInfo> applyIcLora = currentGenInfo =>
-        {
-            WGNodeData incomingMedia = ResolveIcLoraStageInput(stageFrame);
-            bool needsCrop = new IcLoraApplicator(_generator).ApplyIcLoras(
-                currentGenInfo,
-                clip,
-                stage,
-                currentGenInfo.Frames,
-                incomingMedia,
-                clipContext.IncomingContinueHandleFrames,
-                incomingIcLoraMediaIncludesContinueHandle);
-            if (needsCrop)
-            {
-                stageFrame.NeedsCropGuidesAfterSampler = true;
-            }
-            new IcLoraAudioReferenceApplicator(_generator).ApplyAudioReferenceTokens(
-                currentGenInfo,
-                clip,
-                stageFrame,
-                incomingMedia);
-        };
-
-        RunLtxStage(guideReference, refStore, stageFrame, applyIcLora);
-    }
-
-    private WGNodeData ResolveIcLoraStageInput(StageFrame stageFrame)
-    {
-        bool wantsIncoming = stageFrame.Stage.RequireLtx2Payload().IcLoras.Any(entry =>
-            entry.MediaInput.Source == IcLoraMediaSourceKind.Incoming);
-        if (!wantsIncoming)
-        {
-            return null;
-        }
-        WGNodeData source = stageFrame.ClipContext.IsFirstStage(stageFrame.Stage)
-            ? stageFrame.ClipContext.IcLoraEntryIncomingMedia
-            : stageFrame.SourceMedia;
-        LtxPostVideoChainCapture postVideoChain = stageFrame.PostVideoChain;
-        if (postVideoChain is null || !postVideoChain.ReferencesOutput(source))
-        {
-            return source;
-        }
-        WGNodeData detached = postVideoChain.CreateDetachedGuideMedia(_generator.CurrentVae);
-        if (detached is null)
-        {
-            return source;
-        }
-        detached.AttachedAudio = source?.AttachedAudio;
-        return detached;
+        RunLtxStage(guideReference, refStore, stageFrame);
     }
 
     private void RunLtxStage(
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
-        StageFrame stageFrame,
-        Action<WorkflowGenerator.ImageToVideoGenInfo> applyIcLora)
+        StageFrame stageFrame)
     {
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
         WGNodeData sourceMedia = stageFrame.SourceMedia;
@@ -241,13 +190,9 @@ internal class StageRunner
             }
         }
         _stageExecutor.RunStage(
-            genInfo,
             stageFrame,
-            sourceMedia,
             guideMedia,
             resolveFallbackGuide,
-            postVideoChain,
-            applyIcLora,
             clipRefs,
             primaryGuideClipRef?.Strength ?? 1.0);
     }

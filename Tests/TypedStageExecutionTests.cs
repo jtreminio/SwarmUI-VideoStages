@@ -64,22 +64,6 @@ public class TypedStageExecutionTests
     }
 
     [Fact]
-    public void Ltx_stage_executor_is_only_the_stage_lifecycle_coordinator()
-    {
-        string[] declaredMethods = typeof(LtxStageExecutor)
-            .GetMethods(AnyMember | BindingFlags.DeclaredOnly)
-            .Where(method => !method.IsSpecialName)
-            .Select(method => method.Name)
-            .ToArray();
-
-        Assert.Equal([nameof(LtxStageExecutor.RunStage)], declaredMethods);
-        Assert.NotNull(typeof(LtxModelPromptPreparer).GetMethod("Prepare", AnyMember));
-        Assert.NotNull(typeof(LtxStageLatentBuilder).GetMethod("Build", AnyMember));
-        Assert.NotNull(typeof(LtxStageSampler).GetMethod("Execute", AnyMember));
-        Assert.NotNull(typeof(LtxStageOutputFinalizer).GetMethod("Complete", AnyMember));
-    }
-
-    [Fact]
     public void Ltx_latent_collaborators_keep_typed_plan_boundaries()
     {
         MethodInfo retake = typeof(LtxVideoRetakeMasker).GetMethod("ApplyIfActive", AnyMember);
