@@ -1,40 +1,33 @@
 namespace VideoStages.Architectures.Ltx2.Planning;
 
-/// <summary>
-/// Declarative LTX dimension requirements for curated IC-LoRA weights. Planning resolves this
-/// once; runtime dimension code consumes only the typed factor recorded in <see cref="IcLoraPlan"/>.
-/// </summary>
 internal static class IcLoraDimensionPolicyResolver
 {
-    private static readonly IReadOnlyDictionary<string, int> PresetFactors =
-        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["union-control"] = 2,
-            ["motion-track-control"] = 2,
-            ["pixel-spatial-upscaler-x2"] = 2,
-            ["pixel-spatial-upscaler-x4"] = 4,
-        };
-
     private static readonly IReadOnlyDictionary<string, int> CuratedModelFactors =
         BuildCuratedModelFactors();
 
     private static Dictionary<string, int> BuildCuratedModelFactors()
     {
         Dictionary<string, int> factors = new(StringComparer.OrdinalIgnoreCase);
-        foreach ((string preset, int factor) in PresetFactors)
+        foreach ((string preset, IcLoraWeight weight) in IcLoraWeights.Weights)
         {
-            factors[NormalizeModelName(IcLoraWeights.ModelNameFor(preset))] = factor;
-            factors[NormalizeModelName(IcLoraWeights.LegacyModelNameFor(preset))] = factor;
+            if (weight.DimensionDownscaleFactor > 1)
+            {
+                factors[NormalizeModelName(IcLoraWeights.ModelNameFor(preset))] =
+                    weight.DimensionDownscaleFactor;
+                factors[NormalizeModelName(IcLoraWeights.LegacyModelNameFor(preset))] =
+                    weight.DimensionDownscaleFactor;
+            }
         }
         return factors;
     }
 
     internal static int Resolve(string preset, string modelName)
     {
-        string presetId = $"{preset}".Trim();
-        if (PresetFactors.TryGetValue(presetId, out int presetFactor))
+        string presetId = $"{preset}".Trim().ToLowerInvariant();
+        if (IcLoraWeights.Weights.TryGetValue(presetId, out IcLoraWeight presetWeight)
+            && presetWeight.DimensionDownscaleFactor > 1)
         {
-            return presetFactor;
+            return presetWeight.DimensionDownscaleFactor;
         }
 
         string normalizedModel = NormalizeModelName(modelName);

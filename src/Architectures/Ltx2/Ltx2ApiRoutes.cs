@@ -29,10 +29,7 @@ internal static class Ltx2ApiRoutes
             Permissions.DownloadModels);
 
     /// <summary>
-    /// Downloads a curated IC-LoRA preset's weights. This route exists only to keep the URL
-    /// choice server-side (the client sends a preset id, never a URL); the transfer and its file
-    /// lifecycle are entirely core's. It refuses a second request for a preset it is already
-    /// downloading, which it can only do for its own traffic.
+    /// Downloads a server-curated IC-LoRA preset through core's model transfer.
     /// <para>
     /// Known host dependency: <see cref="ModelsAPI.DoModelDownloadWS"/> keys an unlocked
     /// <c>&lt;name&gt;.download.tmp</c> by model name and leaves it behind after a failed or
@@ -55,7 +52,7 @@ internal static class Ltx2ApiRoutes
         IcLoraCoreDownload download)
     {
         string cleanPresetId = $"{presetId}".Trim();
-        if (!IcLoraWeights.Urls.TryGetValue(cleanPresetId, out string url))
+        if (!IcLoraWeights.Weights.TryGetValue(cleanPresetId, out IcLoraWeight weight))
         {
             await ws.SendJson(
                 new JObject { ["error"] = $"Unknown IC-LoRA preset '{presetId}'." },
@@ -78,7 +75,7 @@ internal static class Ltx2ApiRoutes
         }
         try
         {
-            return await download(session, ws, url, modelName);
+            return await download(session, ws, weight.Url, modelName);
         }
         finally
         {

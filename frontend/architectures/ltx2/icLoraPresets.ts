@@ -16,6 +16,7 @@ export interface IcLoraPreset {
     controlType: IcLoraControlType;
     allowedControlTypes?: readonly IcLoraControlType[];
     weightsUrl: string;
+    dimensionDownscaleFactor?: number;
     note: string;
     driveMedia?: IcLoraDriveMediaContract;
 }
@@ -61,6 +62,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         controlType: "depth",
         allowedControlTypes: ["none", "canny", "depth", "normal"],
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`,
+        dimensionDownscaleFactor: 2,
         note: "Structural control from depth/canny/normal signals; pick the control type to render. Dims snap to multiples of 64.",
     },
     {
@@ -70,6 +72,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control/resolve/main/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors`,
+        dimensionDownscaleFactor: 2,
         note: "Feed an LTXVDrawTracks-rendered track video (e.g. saved from the official workflow) — hand-made dot videos don't match the training format. Dims snap to multiples of 64.",
     },
     {
@@ -107,6 +110,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors`,
+        dimensionDownscaleFactor: 2,
         note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64.",
     },
     {
@@ -116,6 +120,7 @@ export const IC_LORA_PRESETS: readonly IcLoraPreset[] = [
         strength: 1,
         controlType: "none",
         weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors`,
+        dimensionDownscaleFactor: 4,
         note: "Apply on a refine stage with Upscale ×4 and source Incoming media. Dims snap to multiples of 128.",
     },
     {
@@ -267,12 +272,7 @@ const icLoraWeightsStem = (preset: IcLoraPreset): string =>
         .slice(preset.weightsUrl.lastIndexOf("/") + 1)
         .replace(/\.safetensors$/i, "");
 
-/**
- * The model name an [AUTO] entry resolves to — where the preset's weights land in the LoRA
- * folder. Dots become underscores because the core downloader that fetches them strips dots out
- * of model names. Mirrored by the backend's IcLoraWeights, which derives the same name from the
- * same URL.
- */
+/** [AUTO] model name; core's downloader strips dots from the requested name. */
 export const icLoraAutoModelName = (preset: IcLoraPreset): string =>
     `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset).replaceAll(".", "_")}`;
 

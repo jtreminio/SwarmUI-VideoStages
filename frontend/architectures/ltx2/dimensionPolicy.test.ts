@@ -15,10 +15,12 @@ import {
     ltx2DimensionFactor,
     ltx2DimensionMultiple,
 } from "./dimensionPolicy";
+import { findIcLoraPreset } from "./icLoraPresets";
 
 interface PresetCase {
     id: string;
     autoModelName: string;
+    legacyAutoModelName: string;
     dimensionDownscaleFactor?: number;
 }
 
@@ -71,6 +73,8 @@ describe("LTX dimension policy", () => {
     it("matches every curated factor in the shared backend fixture", () => {
         for (const presetCase of presetCases) {
             const expected = presetCase.dimensionDownscaleFactor ?? 1;
+            const preset = findIcLoraPreset(presetCase.id);
+            expect(preset?.dimensionDownscaleFactor ?? 1).toBe(expected);
             expect(
                 icLoraDimensionFactor(
                     icLora({ preset: presetCase.id, lora: "[AUTO]" }),
@@ -84,7 +88,39 @@ describe("LTX dimension policy", () => {
                     }),
                 ),
             ).toBe(expected);
+            expect(
+                icLoraDimensionFactor(
+                    icLora({
+                        preset: "custom",
+                        lora: presetCase.legacyAutoModelName,
+                    }),
+                ),
+            ).toBe(expected);
         }
+    });
+
+    it("normalizes curated aliases without inferring third-party factors", () => {
+        expect(
+            icLoraDimensionFactor(
+                icLora({
+                    lora: "FOLDER\\LTX-2.3-22B-IC-LORA-PIXEL-SPATIAL-UPSCALER-X4-0.9.SAFETENSORS",
+                }),
+            ),
+        ).toBe(4);
+        expect(
+            icLoraDimensionFactor(
+                icLora({
+                    preset: "pixel-spatial-upscaler-x2",
+                    lora:
+                        presetCases.find(
+                            (entry) => entry.id === "pixel-spatial-upscaler-x4",
+                        )?.autoModelName ?? "",
+                }),
+            ),
+        ).toBe(2);
+        expect(icLoraDimensionFactor(icLora({ lora: "third-party-x4" }))).toBe(
+            1,
+        );
     });
 
     it("raises the global grid by the largest active IC-LoRA factor", () => {

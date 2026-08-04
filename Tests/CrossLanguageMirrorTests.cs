@@ -175,7 +175,7 @@ public class CrossLanguageMirrorTests
     [Fact]
     public void IcLoraPresets_MatchSharedFixture()
     {
-        Dictionary<string, (string Url, string ModelName, string LegacyModelName)> fixture =
+        Dictionary<string, (string Url, string ModelName, string LegacyModelName, int Factor)> fixture =
             LoadFixture("ic-lora-presets.json")
             .OfType<JObject>()
             .ToDictionary(
@@ -183,37 +183,52 @@ public class CrossLanguageMirrorTests
                 e => (
                     e.Value<string>("weightsUrl"),
                     e.Value<string>("autoModelName"),
-                    e.Value<string>("legacyAutoModelName")));
+                    e.Value<string>("legacyAutoModelName"),
+                    e.Value<int?>("dimensionDownscaleFactor") ?? 1));
 
         Assert.Equal(
             fixture.Keys.OrderBy(k => k),
-            IcLoraWeights.Urls.Keys.OrderBy(k => k));
+            IcLoraWeights.Weights.Keys.OrderBy(k => k));
 
-        foreach ((string id, (string url, string modelName, string legacyModelName)) in fixture)
+        foreach ((string id, (string url, string modelName, string legacyModelName, int factor)) in fixture)
         {
-            Assert.True(IcLoraWeights.Urls.TryGetValue(id, out string actualUrl),
+            Assert.True(IcLoraWeights.Weights.TryGetValue(id, out IcLoraWeight weight),
                 $"IcLoraWeights is missing preset '{id}' present in the shared fixture.");
-            Assert.Equal(url, actualUrl);
+            Assert.Equal(url, weight.Url);
+            Assert.Equal(factor, weight.DimensionDownscaleFactor);
             Assert.Equal(modelName, IcLoraWeights.ModelNameFor(id));
             Assert.Equal(legacyModelName, IcLoraWeights.LegacyModelNameFor(id));
-            JObject expected = Assert.Single(
-                LoadFixture("ic-lora-presets.json").OfType<JObject>(),
-                entry => entry.Value<string>("id") == id);
-            Assert.Equal(
-                expected.Value<int?>("dimensionDownscaleFactor") ?? 1,
-                IcLoraDimensionPolicyResolver.Resolve(id, modelName));
+            Assert.Equal(factor, IcLoraDimensionPolicyResolver.Resolve(id, modelName));
         }
     }
 
-    /// <summary>
-    /// The auto-download names are handed to core's downloader verbatim, so they must survive its
-    /// filename cleaning untouched and stay distinct from each other once cleaned.
-    /// </summary>
+    [Fact]
+    public void IcLoraDimensionPolicy_ResolvesCuratedModelAliases()
+    {
+        Assert.Equal(
+            4,
+            IcLoraDimensionPolicyResolver.Resolve(
+                "custom",
+                "FOLDER\\LTX-2.3-22B-IC-LORA-PIXEL-SPATIAL-UPSCALER-X4-0.9.SAFETENSORS"));
+        Assert.Equal(
+            2,
+            IcLoraDimensionPolicyResolver.Resolve(
+                "custom",
+                IcLoraWeights.LegacyModelNameFor("union-control")));
+        Assert.Equal(
+            2,
+            IcLoraDimensionPolicyResolver.Resolve(
+                "pixel-spatial-upscaler-x2",
+                IcLoraWeights.ModelNameFor("pixel-spatial-upscaler-x4")));
+        Assert.Equal(1, IcLoraDimensionPolicyResolver.Resolve("custom", "third-party-x4"));
+    }
+
+    /// <summary>Auto-download names must survive core filename cleaning and remain distinct.</summary>
     [Fact]
     public void IcLoraAutoModelNames_SurviveCoreFilenameCleaning()
     {
         HashSet<string> names = new(StringComparer.OrdinalIgnoreCase);
-        foreach (string id in IcLoraWeights.Urls.Keys)
+        foreach (string id in IcLoraWeights.Weights.Keys)
         {
             string name = IcLoraWeights.ModelNameFor(id);
             Assert.Equal(

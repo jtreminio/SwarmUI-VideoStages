@@ -47,7 +47,7 @@ public class Ltx2ApiRoutesTests
             });
 
         Assert.True((bool)result["success"]);
-        Assert.Equal(IcLoraWeights.Urls["deblur"], receivedUrl);
+        Assert.Equal(IcLoraWeights.Weights["deblur"].Url, receivedUrl);
         Assert.Equal(IcLoraWeights.ModelNameFor("deblur"), receivedModelName);
         Assert.Empty(socket.Messages);
     }

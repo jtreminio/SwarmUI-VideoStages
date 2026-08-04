@@ -1,17 +1,10 @@
 import { ROOT_DIMENSION_STEP } from "../../constants";
 import type { Clip, IcLora } from "../../types";
 import {
-    findIcLoraPreset,
+    IC_LORA_PRESETS,
     icLoraAutoModelName,
     icLoraLegacyAutoModelName,
 } from "./icLoraPresets";
-
-const presetFactors = new Map<string, number>([
-    ["union-control", 2],
-    ["motion-track-control", 2],
-    ["pixel-spatial-upscaler-x2", 2],
-    ["pixel-spatial-upscaler-x4", 4],
-]);
 
 const normalizeModelName = (value: string): string => {
     const normalized = `${value ?? ""}`.trim().replaceAll("\\", "/");
@@ -19,13 +12,18 @@ const normalizeModelName = (value: string): string => {
     return basename.replace(/\.safetensors$/i, "").toLowerCase();
 };
 
+const presetFactors = new Map<string, number>();
 const curatedModelFactors = new Map<string, number>();
-for (const [presetId, factor] of presetFactors) {
-    const preset = findIcLoraPreset(presetId);
-    for (const name of preset
-        ? [icLoraAutoModelName(preset), icLoraLegacyAutoModelName(preset)]
-        : []) {
-        curatedModelFactors.set(normalizeModelName(name), factor);
+for (const preset of IC_LORA_PRESETS) {
+    const factor = preset.dimensionDownscaleFactor;
+    if (factor) {
+        presetFactors.set(preset.id, factor);
+        for (const name of [
+            icLoraAutoModelName(preset),
+            icLoraLegacyAutoModelName(preset),
+        ]) {
+            curatedModelFactors.set(normalizeModelName(name), factor);
+        }
     }
 }
 
