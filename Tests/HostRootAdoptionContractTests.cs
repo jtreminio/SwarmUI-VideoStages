@@ -47,6 +47,8 @@ public sealed class HostRootAdoptionContractTests
 
     private const string CoreDecodeId = "8";
 
+    private const string CoreLatentId = "5";
+
     private static UNETLoaderNode AssertSingleCoreBaseLoader(WorkflowBridge bridge)
     {
         UNETLoaderNode loader = Assert.Single(bridge.Graph.NodesOfType<UNETLoaderNode>());
@@ -145,6 +147,10 @@ public sealed class HostRootAdoptionContractTests
         SwarmKSamplerNode sampler = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
         Assert.Equal(CoreSamplerId, sampler.Id);
         Assert.Same(sampler, StageSampler(bridge, 0));
+        // Each family names its empty latent differently, so the id is the common ground.
+        Assert.True(
+            ReachesUpstream(bridge, sampler, CoreLatentId),
+            "The stage does not sample core's own empty latent.");
 
         // By interface, not by node class: LTX-2 decodes tiled and H3 splits its joint latent
         // first, so neither the class nor a direct connection to the sampler is common ground.
@@ -155,6 +161,67 @@ public sealed class HostRootAdoptionContractTests
         Assert.Same(decode, live.FinalVideoSave().Images.Connection?.Node);
 
         live.AssertAllLive(sampler, decode);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// LTX-2 builds its latent through the typed bridge, which never consults the dedup cache the
+    /// other families' latents collapse through, so it takes core's id outright. What sits above it
+    /// then collapses unaided: with core's video and audio latents on both inputs, the stage's joint
+    /// latent is byte-identical to core's and dedups onto it.
+    /// </summary>
+    [Fact]
+    public async Task An_ltx_text_stage_claims_cores_latent_and_its_joint_latent_follows()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+
+        JObject workflow = await fixture.GenerateAsync(
+            MakeDocument(MakeClip(1.0, fixture.Stage())));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        EmptyLTXVLatentVideoNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>());
+        Assert.Equal(CoreLatentId, latent.Id);
+
+        LTXVConcatAVLatentNode joint = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        Assert.Same(latent, joint.VideoLatent.Connection?.Node);
+        Assert.Same(joint, StageSampler(bridge, 0).LatentImage.Connection?.Node);
+        // Core allocated the concat dynamically rather than at a reserved id, so it is only ever
+        // adopted by collapse — nothing claims it.
+        Assert.True(int.Parse(joint.Id) < Constants.StagedNodeIdReservationFloor);
+
+        live.AssertAllLive(latent, joint);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// Claiming core's latent has to retire its dedup entry, or the next family's latent collapses
+    /// onto the claiming family's. The collision needs the request's own model to be the second
+    /// family's: core then builds that family's latent at the reserved id, and a clip of the same
+    /// length asks for a byte-identical one — the dedup key of the node LTX-2 has already taken
+    /// over.
+    /// </summary>
+    [Fact]
+    public async Task Claiming_cores_latent_retires_the_dedup_entry_another_family_would_hit()
+    {
+        using LtxAndWanFixture fixture = new();
+
+        JObject workflow = await fixture.GenerateAsync(
+            MakeDocument(
+                MakeClip(1.0, fixture.Stage()),
+                MakeClip(1.0, Fixtures.MakeStage(fixture.SecondModel.Name))),
+            post => post["model"] = fixture.SecondModel.Name);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Equal(CoreLatentId, Assert.Single(
+            bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>()).Id);
+        Assert.False(
+            ReachesUpstream(bridge, StageSampler(bridge, 1), CoreLatentId),
+            "The WAN clip samples the latent the LTX-2 clip claimed.");
+
         AssertShippable(bridge, workflow, live);
     }
 

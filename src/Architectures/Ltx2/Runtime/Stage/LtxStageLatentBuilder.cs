@@ -53,7 +53,8 @@ internal sealed class LtxStageLatentBuilder
                 genInfo,
                 stageFrame,
                 sourceMedia,
-                controlNetLengthFrames);
+                controlNetLengthFrames,
+                stageFrame.ClaimedLatentId);
             if (stageFrame.ClipContext.IncomingContinueHandleFrames > 0)
             {
                 stageFrame.ClipContext.ContinueHandleMaterialized = true;

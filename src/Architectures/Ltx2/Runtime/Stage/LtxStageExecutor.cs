@@ -59,6 +59,12 @@ internal sealed class LtxStageExecutor
                 handler(genInfo);
             }
 
+            // Claimed before the latent is built, which is the earliest of the three nodes.
+            (stageFrame.ClaimedSamplerId,
+                stageFrame.ClaimedDecodeId,
+                stageFrame.ClaimedLatentId) = rootAdoption.ClaimTextRootWithLatent(
+                    stageFrame.ClipContext.PlannedClip,
+                    stageFrame.Stage);
             WGNodeData effectiveSourceMedia = g.CurrentMedia ?? sourceMedia;
             modelPromptPreparer.Prepare(genInfo, stageFrame, effectiveSourceMedia);
             bool canReuseLatent =
@@ -121,8 +127,6 @@ internal sealed class LtxStageExecutor
                         == postVideoChain.State.VideoDecodeNodeId;
             }
 
-            (stageFrame.ClaimedSamplerId, stageFrame.ClaimedDecodeId) =
-                rootAdoption.ClaimTextRoot(stageFrame.ClipContext.PlannedClip, stageFrame.Stage);
             sampler.Execute(genInfo, stageFrame);
             outputFinalizer.Complete(genInfo, stageFrame, postVideoChain,
                 stageFrame.RequiresDedicatedOutput || forceDedicatedOutput);

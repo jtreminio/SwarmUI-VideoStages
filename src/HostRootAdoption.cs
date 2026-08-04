@@ -7,10 +7,11 @@ namespace VideoStages;
 /// Lets the first generated stage of a text-to-video timeline build on SwarmUI's own root chain
 /// instead of beside it, by taking over the node ids core reserves for its base sampler and decode.
 /// <para>
-/// The stage already loads its model through core's loader, and already samples core's empty latent
-/// and conditioning pair — <see cref="WorkflowGenerator.CreateNode"/>'s dedup cache collapses those
-/// onto core's nodes on its own. The sampler and decode cannot collapse that way, because a stage's
-/// seed and step range differ from the request's, so they are claimed by id instead.
+/// The stage already loads its model through core's loader — <see cref="WorkflowGenerator.CreateNode"/>'s
+/// dedup cache collapses that onto core's node on its own, as it does for the empty latent and the
+/// conditioning pair of every family that builds them through it. The sampler and decode cannot
+/// collapse that way, because a stage's seed and step range differ from the request's, so they are
+/// claimed by id instead — as is anything a family builds outside the dedup cache's reach.
 /// </para>
 /// <para>
 /// A claim is only ever offered on a node the root cleanup already owns — one it would delete as
@@ -30,7 +31,7 @@ internal sealed class HostRootAdoption(
 
     private const string DecodeNodeId = "8";
 
-    private static readonly string[] ClaimedNodeIds = [SamplerNodeId, DecodeNodeId];
+    private const string LatentNodeId = "5";
 
     private bool _claimed;
 
@@ -40,19 +41,42 @@ internal sealed class HostRootAdoption(
     /// </summary>
     internal (string Sampler, string Decode) ClaimTextRoot(ClipPlan clip, StagePlan stage)
     {
+        string[] ids = [SamplerNodeId, DecodeNodeId];
+        return TryClaim(clip, stage, ids)
+            ? (SamplerNodeId, DecodeNodeId)
+            : (null, null);
+    }
+
+    /// <summary>
+    /// The same claim, plus core's empty latent — for a stage that builds its latent through the
+    /// typed bridge, which never consults <see cref="WorkflowGenerator.CreateNode"/>'s dedup cache.
+    /// Every other architecture builds its latent through that cache and lands on core's node
+    /// unaided, so taking the id from them would only cost them the collapse they already get.
+    /// </summary>
+    internal (string Sampler, string Decode, string Latent) ClaimTextRootWithLatent(
+        ClipPlan clip,
+        StagePlan stage)
+    {
+        string[] ids = [SamplerNodeId, DecodeNodeId, LatentNodeId];
+        return TryClaim(clip, stage, ids)
+            ? (SamplerNodeId, DecodeNodeId, LatentNodeId)
+            : (null, null, null);
+    }
+
+    private bool TryClaim(ClipPlan clip, StagePlan stage, IReadOnlyCollection<string> ids)
+    {
         if (_claimed
             || !rootPolicy.ReplacesTextToVideoRootStage(stage, clip)
-            || !ClaimedNodeIds.All(id => generator.HasNode(id) && ownedRootNodeIds.Contains(id))
+            || !ids.All(id => generator.HasNode(id) && ownedRootNodeIds.Contains(id))
             // A capture resolves to a node id rather than to a graph edge, so it survives the
             // ownership test above and has to be excluded on its own.
-            || VideoGraphHelpers.IsCapturedByExtension(generator.NodeHelpers, ClaimedNodeIds))
+            || VideoGraphHelpers.IsCapturedByExtension(generator.NodeHelpers, ids))
         {
-            return (null, null);
+            return false;
         }
         _claimed = true;
-        // The dedup entries still describe core's sampler and decode, which these ids are about to
-        // stop being.
-        VideoGraphHelpers.InvalidateForRemovedNodes(generator.NodeHelpers, ClaimedNodeIds);
-        return (SamplerNodeId, DecodeNodeId);
+        // The dedup entries still describe core's nodes, which these ids are about to stop being.
+        VideoGraphHelpers.InvalidateForRemovedNodes(generator.NodeHelpers, ids);
+        return true;
     }
 }

@@ -15,7 +15,8 @@ internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         StageFrame stageFrame,
         WGNodeData sourceMedia,
-        JArray controlNetLengthFrames = null)
+        JArray controlNetLengthFrames = null,
+        string latentNodeId = null)
     {
         (int width, int height) = ResolveStageLatentDims(stageFrame, sourceMedia);
         int frames = genInfo.Frames
@@ -35,7 +36,8 @@ internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
             height,
             frames,
             attachedAudio,
-            controlNetLengthFrames);
+            controlNetLengthFrames,
+            latentNodeId);
     }
 
     internal WGNodeData CreateEmpty(
@@ -46,7 +48,8 @@ internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
         int height,
         int frames,
         WGNodeData attachedAudio,
-        JArray controlNetLengthFrames = null)
+        JArray controlNetLengthFrames = null,
+        string latentNodeId = null)
     {
         int fps = LtxStageRuntimeSettings.ResolveFps(g, genInfo, sourceMedia);
         JArray audioLengthFrames = null;
@@ -68,7 +71,9 @@ internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
             ? new JValue(frames)
             : dynamicLengthFrames?.DeepClone() as JArray;
 
-        EmptyLTXVLatentVideoNode emptyNode = bridge.AddNode(new EmptyLTXVLatentVideoNode());
+        EmptyLTXVLatentVideoNode emptyNode = latentNodeId is null
+            ? bridge.AddNode(new EmptyLTXVLatentVideoNode())
+            : bridge.AddNode(new EmptyLTXVLatentVideoNode(), latentNodeId);
         emptyNode.With(
             Width: width,
             Height: height,
